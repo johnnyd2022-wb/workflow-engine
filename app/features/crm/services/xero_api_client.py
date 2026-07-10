@@ -299,13 +299,10 @@ class XeroAPIClient:
             pass
 
         if live_type and live_type != "ACCREC":
-            raise ValueError(
-                f"Xero only renders ACCREC invoices as PDF via API (this invoice type is {live_type})."
-            )
+            raise ValueError(f"Xero only renders ACCREC invoices as PDF via API (this invoice type is {live_type}).")
         if live_status and live_status not in {"SUBMITTED", "AUTHORISED", "PAID"}:
             raise ValueError(
-                f"Xero does not render PDF for invoice status {live_status}. "
-                "Use SUBMITTED, AUTHORISED, or PAID."
+                f"Xero does not render PDF for invoice status {live_status}. " "Use SUBMITTED, AUTHORISED, or PAID."
             )
         access_token, tenant_id = self._oauth_service.get_valid_token(self.org_id)
         headers = {

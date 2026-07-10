@@ -68,14 +68,11 @@ class XeroInvoiceRepository:
 
     def mark_missing_as_deleted(self, org_id: UUID, xero_tenant_id: str, seen_xero_invoice_ids: set[str]) -> int:
         """During a full sync, mark local ACCREC invoices as DELETED if they are absent from Xero snapshot."""
-        q = (
-            self.db.query(XeroInvoice)
-            .filter(
-                XeroInvoice.org_id == org_id,
-                XeroInvoice.xero_tenant_id == xero_tenant_id,
-                XeroInvoice.invoice_type == "ACCREC",
-                XeroInvoice.status.in_(["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED"]),
-            )
+        q = self.db.query(XeroInvoice).filter(
+            XeroInvoice.org_id == org_id,
+            XeroInvoice.xero_tenant_id == xero_tenant_id,
+            XeroInvoice.invoice_type == "ACCREC",
+            XeroInvoice.status.in_(["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED"]),
         )
         if seen_xero_invoice_ids:
             q = q.filter(~XeroInvoice.xero_invoice_id.in_(list(seen_xero_invoice_ids)))
@@ -127,12 +124,9 @@ class XeroInvoiceRepository:
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[XeroInvoice], int]:
-        q = (
-            self.db.query(XeroInvoice)
-            .filter(
-                XeroInvoice.org_id == org_id,
-                XeroInvoice.invoice_type == "ACCREC",
-            )
+        q = self.db.query(XeroInvoice).filter(
+            XeroInvoice.org_id == org_id,
+            XeroInvoice.invoice_type == "ACCREC",
         )
         if start_date:
             q = q.filter(XeroInvoice.date >= start_date)
@@ -173,7 +167,9 @@ class XeroInvoiceRepository:
                 ),
             )
             .group_by(XeroInvoiceLineItem.description, XeroInvoiceLineItem.item_code)
-            .order_by(XeroInvoiceLineItem.description.asc().nulls_last(), XeroInvoiceLineItem.item_code.asc().nulls_last())
+            .order_by(
+                XeroInvoiceLineItem.description.asc().nulls_last(), XeroInvoiceLineItem.item_code.asc().nulls_last()
+            )
             .all()
         )
         return [
@@ -202,7 +198,9 @@ class XeroInvoiceRepository:
                 ),
             )
             .group_by(XeroInvoiceLineItem.description, XeroInvoiceLineItem.item_code)
-            .order_by(XeroInvoiceLineItem.description.asc().nulls_last(), XeroInvoiceLineItem.item_code.asc().nulls_last())
+            .order_by(
+                XeroInvoiceLineItem.description.asc().nulls_last(), XeroInvoiceLineItem.item_code.asc().nulls_last()
+            )
             .all()
         )
         return [
@@ -419,25 +417,26 @@ class XeroInvoiceRepository:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> list[dict]:
-        q = (
-            self.db.query(
-                func.date_trunc("month", XeroInvoice.date).label("month"),
-                func.sum(XeroInvoice.total).label("total"),
-                func.count(XeroInvoice.id).label("invoice_count"),
-            )
-            .filter(
-                XeroInvoice.org_id == org_id,
-                XeroInvoice.contact_id == contact_id,
-                XeroInvoice.invoice_type == "ACCREC",
-                XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
-                XeroInvoice.date.isnot(None),
-            )
+        q = self.db.query(
+            func.date_trunc("month", XeroInvoice.date).label("month"),
+            func.sum(XeroInvoice.total).label("total"),
+            func.count(XeroInvoice.id).label("invoice_count"),
+        ).filter(
+            XeroInvoice.org_id == org_id,
+            XeroInvoice.contact_id == contact_id,
+            XeroInvoice.invoice_type == "ACCREC",
+            XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
+            XeroInvoice.date.isnot(None),
         )
         if start_date:
             q = q.filter(XeroInvoice.date >= start_date)
         if end_date:
             q = q.filter(XeroInvoice.date < end_date)
-        rows = q.group_by(func.date_trunc("month", XeroInvoice.date)).order_by(func.date_trunc("month", XeroInvoice.date).asc()).all()
+        rows = (
+            q.group_by(func.date_trunc("month", XeroInvoice.date))
+            .order_by(func.date_trunc("month", XeroInvoice.date).asc())
+            .all()
+        )
         return [
             {
                 "month": row.month.strftime("%Y-%m") if row.month else None,

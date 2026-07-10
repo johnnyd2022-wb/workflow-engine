@@ -1,6 +1,5 @@
 """OAuth2 routes — connect, callback, tenant picker, status, disconnect, manual sync."""
 
-import logging
 from uuid import UUID
 
 from flask import Blueprint, g, jsonify, make_response, redirect, render_template, request, session
@@ -8,13 +7,13 @@ from flask import Blueprint, g, jsonify, make_response, redirect, render_templat
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.core.utils.emit_event import emit_event
-from app.core.utils.log_action import log_action
 from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
 from app.features.crm.services.xero_oauth_service import XeroOAuthService, XeroTokenExpiredError
 from app.features.crm.services.xero_sync_service import XeroSyncService
+from app.observability import get_logger
 from app.utils.config_loader import config
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 oauth_bp = Blueprint("crm_oauth", __name__)
 
@@ -31,10 +30,10 @@ def xero_auth():
     redirect_uri = config.xero_redirect_uri
     if not client_id or not redirect_uri:
         logger.error(
-            "Xero OAuth config missing (env=%s, has_client_id=%s, has_redirect_uri=%s)",
-            config.environment,
-            bool(client_id),
-            bool(redirect_uri),
+            "xero_oauth_config_missing",
+            environment=config.environment,
+            has_client_id=bool(client_id),
+            has_redirect_uri=bool(redirect_uri),
         )
         return redirect("/crm/configuration?error=xero_not_configured")
 
@@ -53,18 +52,20 @@ def xero_auth_url():
     redirect_uri = config.xero_redirect_uri
     if not client_id or not redirect_uri:
         logger.error(
-            "Xero auth-url unavailable due to missing config (env=%s, has_client_id=%s, has_redirect_uri=%s)",
-            config.environment,
-            bool(client_id),
-            bool(redirect_uri),
+            "xero_auth_url_config_missing",
+            environment=config.environment,
+            has_client_id=bool(client_id),
+            has_redirect_uri=bool(redirect_uri),
         )
-        return jsonify({"error": "xero_not_configured", "message": "Xero client_id/redirect_uri is not configured"}), 400
+        return jsonify(
+            {"error": "xero_not_configured", "message": "Xero client_id/redirect_uri is not configured"}
+        ), 400
 
     logger.info(
-        "Xero auth-url requested (env=%s, client_id_suffix=%s, redirect_uri=%s)",
-        config.environment,
-        client_id[-6:] if len(client_id) >= 6 else client_id,
-        redirect_uri,
+        "xero_auth_url_requested",
+        environment=config.environment,
+        client_id_suffix=client_id[-6:] if len(client_id) >= 6 else client_id,
+        redirect_uri=redirect_uri,
     )
 
     state = XeroOAuthService.generate_state()
@@ -89,12 +90,12 @@ def xero_callback():
     state_param = request.args.get("state", "")
     expected_state = session.pop(_XERO_STATE_SESSION_KEY, None)
     if not expected_state or state_param != expected_state:
-        logger.warning("Xero OAuth callback: state mismatch for org %s", org_id)
+        logger.warning("xero_oauth_state_mismatch", org_id=str(org_id))
         return redirect("/crm/configuration?error=xero_state_mismatch")
 
     error = request.args.get("error")
     if error:
-        logger.warning("Xero OAuth callback error: %s for org %s", error, org_id)
+        logger.warning("xero_oauth_callback_error", org_id=str(org_id), error=error)
         return redirect(f"/crm/configuration?error=xero_{error}")
 
     code = request.args.get("code")
@@ -111,7 +112,7 @@ def xero_callback():
             return redirect("/crm/configuration?error=xero_no_tenant")
 
     except Exception:
-        logger.exception("Xero OAuth exchange failed for org %s", org_id)
+        logger.exception("xero_oauth_exchange_failed", org_id=str(org_id))
         return redirect("/crm/configuration?error=xero_exchange_failed")
 
     if len(connections) == 1:
@@ -123,7 +124,7 @@ def xero_callback():
     try:
         service.store_tokens(org_id, token_data, connections[0])
     except Exception:
-        logger.exception("Failed to store pending Xero tokens for org %s", org_id)
+        logger.exception("xero_pending_token_store_failed", org_id=str(org_id))
         return redirect("/crm/configuration?error=xero_exchange_failed")
 
     # Store only non-sensitive connection metadata in the session cookie
@@ -176,7 +177,7 @@ def xero_select_tenant_submit():
     try:
         service.finalize_tenant_selection(org_id, connection)
     except Exception:
-        logger.exception("Failed to finalise Xero tenant selection for org %s", org_id)
+        logger.exception("xero_tenant_selection_finalize_failed", org_id=str(org_id))
         return render_template(
             "crm/select_tenant.html",
             connections=connections,
@@ -187,7 +188,7 @@ def xero_select_tenant_submit():
     session.pop(_XERO_PENDING_CONNECTIONS_KEY, None)
 
     emit_event(
-        event_type="xero.connected",
+        event_type="crm_xero.connected",
         entity_type="xero_tenant",
         entity_id=org_id,
         payload={"tenant_name": connection.get("tenantName"), "org_id": str(org_id)},
@@ -195,13 +196,12 @@ def xero_select_tenant_submit():
         actor_id=UUID(g.user_id) if g.user_id else None,
         actor_label=g.user_email,
     )
-    log_action("connect", "xero_tenant", org_id, {"tenant": connection.get("tenantName")})
 
     try:
         sync_service = XeroSyncService(db)
         sync_service.full_sync(org_id, triggered_by="oauth_connect")
     except Exception:
-        logger.exception("Initial Xero sync failed for org %s (continuing anyway)", org_id)
+        logger.exception("xero_initial_sync_failed", org_id=str(org_id))
 
     return redirect("/crm/customers?xero_connected=1")
 
@@ -212,7 +212,7 @@ def _complete_connection(org_id: UUID, service: XeroOAuthService, token_data: di
         service.store_tokens(org_id, token_data, connection)
 
         emit_event(
-            event_type="xero.connected",
+            event_type="crm_xero.connected",
             entity_type="xero_tenant",
             entity_id=org_id,
             payload={"tenant_name": connection.get("tenantName"), "org_id": str(org_id)},
@@ -220,17 +220,16 @@ def _complete_connection(org_id: UUID, service: XeroOAuthService, token_data: di
             actor_id=UUID(g.user_id) if g.user_id else None,
             actor_label=g.user_email,
         )
-        log_action("connect", "xero_tenant", org_id, {"tenant": connection.get("tenantName")})
     except Exception:
-        logger.exception("Xero OAuth exchange failed for org %s", org_id)
+        logger.exception("xero_oauth_complete_connection_failed", org_id=str(org_id))
         return redirect("/crm/configuration?error=xero_exchange_failed")
 
     try:
         sync_service = XeroSyncService(service.db)
         sync_service.full_sync(org_id, triggered_by="oauth_connect")
-        logger.info("Initial Xero sync completed for org %s", org_id)
+        logger.info("xero_initial_sync_completed", org_id=str(org_id))
     except Exception:
-        logger.exception("Initial Xero sync failed for org %s (continuing anyway)", org_id)
+        logger.exception("xero_initial_sync_failed", org_id=str(org_id))
 
     return redirect("/crm/customers?xero_connected=1")
 
@@ -263,9 +262,6 @@ def xero_sync():
             result = sync_service.incremental_sync(org_id, triggered_by="manual_incremental")
         else:
             result = sync_service.full_sync(org_id, triggered_by="manual_full")
-        log_action(
-            "sync", "xero_tenant", org_id, {"contacts": result.contacts_synced, "invoices": result.invoices_synced}
-        )
         return jsonify(
             {
                 "ok": True,
@@ -281,7 +277,7 @@ def xero_sync():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logger.exception("Manual sync failed for org %s", org_id)
+        logger.exception("xero_manual_sync_failed", org_id=str(org_id))
         return jsonify({"error": "Sync failed", "message": str(e)}), 500
 
 
@@ -296,7 +292,7 @@ def xero_disconnect():
         service.disconnect(org_id)
 
         emit_event(
-            event_type="xero.disconnected",
+            event_type="crm_xero.disconnected",
             entity_type="xero_tenant",
             entity_id=org_id,
             payload={"org_id": str(org_id)},
@@ -304,8 +300,7 @@ def xero_disconnect():
             actor_id=UUID(g.user_id) if g.user_id else None,
             actor_label=g.user_email,
         )
-        log_action("disconnect", "xero_tenant", org_id)
         return jsonify({"ok": True}), 200
     except Exception as e:
-        logger.exception("Xero disconnect failed for org %s", org_id)
+        logger.exception("xero_disconnect_failed", org_id=str(org_id))
         return jsonify({"error": str(e)}), 500

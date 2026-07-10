@@ -1,10 +1,12 @@
 """CRMService — high-level CRM queries, notes, tasks, and product mapping."""
 
 from datetime import date, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.backend.event_writer import EventWriter
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.features.crm.repositories.crm_task_repo import CRMNoteRepository, CRMTaskRepository
 from app.features.crm.repositories.product_mapping_repo import ProductMappingRepository
@@ -15,6 +17,7 @@ from app.features.crm.repositories.xero_sync_job_repo import XeroSyncJobReposito
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
 from app.features.crm.services.xero_oauth_service import XeroOAuthService, XeroTokenExpiredError
+from app.observability import start_span
 
 
 class CRMService:
@@ -29,6 +32,29 @@ class CRMService:
         self.tenant_repo = XeroTenantRepository(db)
         self.token_repo = XeroTokenRepository(db)
         self.sync_job_repo = XeroSyncJobRepository(db)
+
+    def _emit_event(
+        self,
+        *,
+        org_id: UUID,
+        event_type: str,
+        entity_type: str,
+        entity_id: UUID,
+        payload: dict[str, Any],
+        diff: dict[str, Any] | None = None,
+        actor_id: UUID | None = None,
+        actor_label: str | None = None,
+    ) -> None:
+        """Emit one CRM entity event in the current transaction."""
+        EventWriter(self.db, org_id).emit(
+            event_type=event_type,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            payload=payload,
+            diff=diff,
+            actor_id=actor_id,
+            actor_label=actor_label,
+        )
 
     # ------------------------------------------------------------------
     # Connection status
@@ -282,6 +308,7 @@ class CRMService:
         }
 
     def update_traceability_config(self, org_id: UUID, data: dict) -> dict:
+        before = self.get_traceability_config(org_id)
         strategy = (data.get("matching_strategy") or "fifo").strip().lower()
         if strategy not in {"fifo", "manual", "hybrid"}:
             raise ValueError("matching_strategy must be fifo, manual, or hybrid")
@@ -306,8 +333,8 @@ class CRMService:
             task_done_archive_days=task_done_archive_days,
             revenue_baseline_target_mtd=revenue_baseline_target_mtd,
         )
-        self.db.commit()
-        return {
+        self.db.flush()  # populate row.id (client-side default) when upsert inserted a new row
+        updated = {
             "matching_strategy": row.matching_strategy,
             "matching_key": row.matching_key,
             "manual_review_days": row.manual_review_days,
@@ -317,118 +344,180 @@ class CRMService:
             if getattr(row, "revenue_baseline_target_mtd", None) is not None
             else None,
         }
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_traceability_config.updated",
+            entity_type="crm_traceability_config",
+            entity_id=row.id,
+            payload=updated,
+            diff=_dict_diff(before, updated),
+        )
+        self.db.commit()
+        return updated
 
     def create_customer_invoice(self, contact_id: UUID, org_id: UUID, data: dict) -> dict:
         from datetime import date
 
-        contact = self.contact_repo.get_by_id(contact_id, org_id)
-        if not contact:
-            raise ValueError("Customer not found")
-        if not contact.xero_contact_id:
-            raise ValueError("Customer is missing Xero contact id")
-
-        invoice_date_raw = data.get("invoice_date")
-        if not invoice_date_raw:
-            raise ValueError("invoice_date is required")
-        invoice_date = date.fromisoformat(invoice_date_raw) if isinstance(invoice_date_raw, str) else invoice_date_raw
-
-        due_date = None
-        if data.get("due_date"):
-            due_date = date.fromisoformat(data["due_date"]) if isinstance(data["due_date"], str) else data["due_date"]
-        if due_date is None:
-            due_date = _suggest_due_date_from_terms(invoice_date, contact.payment_terms)
-
-        invoice_status = (data.get("invoice_status") or "DRAFT").strip().upper()
-        if invoice_status not in {"DRAFT", "AUTHORISED"}:
-            raise ValueError("invoice_status must be DRAFT or AUTHORISED")
-
         rows = data.get("line_items") or []
-        if not rows:
-            raise ValueError("At least one line item is required")
+        with start_span(
+            "crm.invoice.create",
+            attributes={
+                "org_id": str(org_id),
+                "contact_id": str(contact_id),
+                "line_item_count": len(rows),
+            },
+        ):
+            contact = self.contact_repo.get_by_id(contact_id, org_id)
+            if not contact:
+                raise ValueError("Customer not found")
+            if not contact.xero_contact_id:
+                raise ValueError("Customer is missing Xero contact id")
 
-        line_items = []
-        for idx, row in enumerate(rows):
-            description = (row.get("description") or "").strip()
-            item_code = (row.get("item_code") or "").strip() or None
-            quantity = row.get("quantity")
-            unit_amount = row.get("unit_amount")
-            if not description:
-                raise ValueError(f"line_items[{idx}].description is required")
-            if quantity is None or float(quantity) <= 0:
-                raise ValueError(f"line_items[{idx}].quantity must be > 0")
-            if unit_amount is None:
-                raise ValueError(f"line_items[{idx}].unit_amount is required")
-            line_items.append(
-                {
-                    "description": description,
-                    "item_code": item_code,
-                    "quantity": float(quantity),
-                    "unit_amount": float(unit_amount),
-                    "tax_type": (row.get("tax_type") or "").strip() or None,
-                    "account_code": (row.get("account_code") or "").strip() or None,
-                }
+            invoice_date_raw = data.get("invoice_date")
+            if not invoice_date_raw:
+                raise ValueError("invoice_date is required")
+            invoice_date = (
+                date.fromisoformat(invoice_date_raw) if isinstance(invoice_date_raw, str) else invoice_date_raw
             )
 
-        from app.features.crm.services.xero_api_client import XeroAPIClient
-        from app.features.crm.services.xero_sync_service import XeroSyncService
+            due_date = None
+            if data.get("due_date"):
+                due_date = (
+                    date.fromisoformat(data["due_date"]) if isinstance(data["due_date"], str) else data["due_date"]
+                )
+            if due_date is None:
+                due_date = _suggest_due_date_from_terms(invoice_date, contact.payment_terms)
 
-        created = XeroAPIClient(self.db, org_id).create_invoice(
-            contact_xero_id=contact.xero_contact_id,
-            invoice_date=invoice_date,
-            due_date=due_date,
-            line_items=line_items,
-            status=invoice_status,
-        )
-        # Refresh local records so the new invoice appears in CRM without waiting for manual sync.
-        try:
-            XeroSyncService(self.db).incremental_sync(org_id, triggered_by="crm_invoice_create")
-        except Exception:
-            # Keep created invoice response even if sync fails.
-            pass
+            invoice_status = (data.get("invoice_status") or "DRAFT").strip().upper()
+            if invoice_status not in {"DRAFT", "AUTHORISED"}:
+                raise ValueError("invoice_status must be DRAFT or AUTHORISED")
 
-        return {
-            "xero_invoice_id": str(getattr(created, "invoice_id", "") or ""),
-            "invoice_number": getattr(created, "invoice_number", None),
-            "status": getattr(created, "status", None),
-            "date": created.date.isoformat() if getattr(created, "date", None) else None,
-            "due_date": created.due_date.isoformat() if getattr(created, "due_date", None) else None,
-            "total": float(getattr(created, "total", 0) or 0),
-        }
+            if not rows:
+                raise ValueError("At least one line item is required")
+
+            line_items = []
+            for idx, row in enumerate(rows):
+                description = (row.get("description") or "").strip()
+                item_code = (row.get("item_code") or "").strip() or None
+                quantity = row.get("quantity")
+                unit_amount = row.get("unit_amount")
+                if not description:
+                    raise ValueError(f"line_items[{idx}].description is required")
+                if quantity is None or float(quantity) <= 0:
+                    raise ValueError(f"line_items[{idx}].quantity must be > 0")
+                if unit_amount is None:
+                    raise ValueError(f"line_items[{idx}].unit_amount is required")
+                line_items.append(
+                    {
+                        "description": description,
+                        "item_code": item_code,
+                        "quantity": float(quantity),
+                        "unit_amount": float(unit_amount),
+                        "tax_type": (row.get("tax_type") or "").strip() or None,
+                        "account_code": (row.get("account_code") or "").strip() or None,
+                    }
+                )
+
+            from app.features.crm.services.xero_api_client import XeroAPIClient
+            from app.features.crm.services.xero_sync_service import XeroSyncService
+
+            created = XeroAPIClient(self.db, org_id).create_invoice(
+                contact_xero_id=contact.xero_contact_id,
+                invoice_date=invoice_date,
+                due_date=due_date,
+                line_items=line_items,
+                status=invoice_status,
+            )
+
+            xero_invoice_id = str(getattr(created, "invoice_id", "") or "")
+            event_entity_id = _safe_event_uuid(xero_invoice_id, fallback=org_id)
+            event_payload = {
+                "xero_invoice_id": xero_invoice_id,
+                "invoice_number": getattr(created, "invoice_number", None),
+                "status": getattr(created, "status", None),
+                "invoice_date": created.date.isoformat() if getattr(created, "date", None) else None,
+                "due_date": created.due_date.isoformat() if getattr(created, "due_date", None) else None,
+                "total": float(getattr(created, "total", 0) or 0),
+                "line_item_count": len(line_items),
+                "contact_id": str(contact_id),
+            }
+            self._emit_event(
+                org_id=org_id,
+                event_type="crm_invoice.created",
+                entity_type="crm_invoice",
+                entity_id=event_entity_id,
+                payload=event_payload,
+            )
+            self.db.commit()
+
+            # Refresh local records so the new invoice appears in CRM without waiting for manual sync.
+            try:
+                XeroSyncService(self.db).incremental_sync(org_id, triggered_by="crm_invoice_create")
+            except Exception:
+                # Keep created invoice response even if sync fails.
+                pass
+
+            return {
+                "xero_invoice_id": xero_invoice_id,
+                "invoice_number": getattr(created, "invoice_number", None),
+                "status": getattr(created, "status", None),
+                "date": created.date.isoformat() if getattr(created, "date", None) else None,
+                "due_date": created.due_date.isoformat() if getattr(created, "due_date", None) else None,
+                "total": float(getattr(created, "total", 0) or 0),
+            }
 
     def authorise_invoice(self, invoice_id: UUID, org_id: UUID) -> dict:
         from app.features.crm.services.xero_api_client import XeroAPIClient
         from app.features.crm.services.xero_sync_service import XeroSyncService
 
-        inv = self.invoice_repo.get_by_id(invoice_id, org_id)
-        if not inv:
-            raise ValueError("Invoice not found")
-        if not inv.xero_invoice_id:
-            raise ValueError("Invoice is missing Xero invoice id")
+        with start_span(
+            "crm.invoice.authorise",
+            attributes={"org_id": str(org_id), "invoice_id": str(invoice_id)},
+        ):
+            inv = self.invoice_repo.get_by_id(invoice_id, org_id)
+            if not inv:
+                raise ValueError("Invoice not found")
+            if not inv.xero_invoice_id:
+                raise ValueError("Invoice is missing Xero invoice id")
 
-        current = (inv.status or "").strip().upper()
-        if current in {"AUTHORISED", "PAID"}:
+            current = (inv.status or "").strip().upper()
+            if current in {"AUTHORISED", "PAID"}:
+                return _serialise_invoice(inv, with_line_items=True, db=self.db)
+            if current and current != "DRAFT":
+                raise ValueError(f"Only draft invoices can be authorised (current status: {current}).")
+
+            updated = XeroAPIClient(self.db, org_id).authorise_invoice(xero_invoice_id=inv.xero_invoice_id)
+
+            # Update local copy immediately, then refresh from Xero in background for full fidelity.
+            updated_status = getattr(updated, "status", None)
+            if updated_status:
+                status_before = current
+                inv.status = str(updated_status)
+                inv.updated_at = datetime.utcnow()
+                self._emit_event(
+                    org_id=org_id,
+                    event_type="crm_invoice.authorised",
+                    entity_type="crm_invoice",
+                    entity_id=inv.id,
+                    payload={
+                        "invoice_id": str(inv.id),
+                        "xero_invoice_id": inv.xero_invoice_id,
+                        "status_before": status_before,
+                        "status_after": inv.status,
+                    },
+                    diff={"status": {"before": status_before, "after": inv.status}},
+                )
+                self.db.commit()
+
+            try:
+                XeroSyncService(self.db).incremental_sync(org_id, triggered_by="crm_invoice_authorise")
+                refreshed = self.invoice_repo.get_by_id(invoice_id, org_id)
+                if refreshed:
+                    return _serialise_invoice(refreshed, with_line_items=True, db=self.db)
+            except Exception:
+                pass
+
             return _serialise_invoice(inv, with_line_items=True, db=self.db)
-        if current and current != "DRAFT":
-            raise ValueError(f"Only draft invoices can be authorised (current status: {current}).")
-
-        updated = XeroAPIClient(self.db, org_id).authorise_invoice(xero_invoice_id=inv.xero_invoice_id)
-
-        # Update local copy immediately, then refresh from Xero in background for full fidelity.
-        updated_status = getattr(updated, "status", None)
-        if updated_status:
-            inv.status = str(updated_status)
-            inv.updated_at = datetime.utcnow()
-            self.db.commit()
-
-        try:
-            XeroSyncService(self.db).incremental_sync(org_id, triggered_by="crm_invoice_authorise")
-            refreshed = self.invoice_repo.get_by_id(invoice_id, org_id)
-            if refreshed:
-                return _serialise_invoice(refreshed, with_line_items=True, db=self.db)
-        except Exception:
-            pass
-
-        return _serialise_invoice(inv, with_line_items=True, db=self.db)
 
     def get_invoice_pdf(self, invoice_id: UUID, org_id: UUID) -> tuple[bytes, str]:
         from app.features.crm.services.xero_api_client import XeroAPIClient
@@ -475,6 +564,19 @@ class CRMService:
 
     def create_note(self, org_id: UUID, contact_id: UUID, content: str, user_id: UUID | None) -> dict:
         note = self.note_repo.create(org_id, contact_id, content, user_id)
+        self.db.flush()  # populate note.id (client-side default) before event emission
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_note.created",
+            entity_type="crm_note",
+            entity_id=note.id,
+            payload={
+                "note_id": str(note.id),
+                "contact_id": str(contact_id),
+                "content_length": len(content),
+            },
+            actor_id=user_id,
+        )
         self.db.commit()
         return _serialise_note(note)
 
@@ -482,7 +584,21 @@ class CRMService:
         note = self.note_repo.get_by_id(note_id, org_id)
         if not note:
             return None
+        before = {"content_length": len(note.content or "")}
         self.note_repo.update(note, content)
+        after = {"content_length": len(note.content or "")}
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_note.updated",
+            entity_type="crm_note",
+            entity_id=note.id,
+            payload={
+                "note_id": str(note.id),
+                "contact_id": str(note.contact_id),
+                "content_length": after["content_length"],
+            },
+            diff=_dict_diff(before, after),
+        )
         self.db.commit()
         return _serialise_note(note)
 
@@ -490,7 +606,19 @@ class CRMService:
         note = self.note_repo.get_by_id(note_id, org_id)
         if not note:
             return False
+        payload = {
+            "note_id": str(note.id),
+            "contact_id": str(note.contact_id),
+            "content_length": len(note.content or ""),
+        }
         self.note_repo.delete(note)
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_note.deleted",
+            entity_type="crm_note",
+            entity_id=note.id,
+            payload=payload,
+        )
         self.db.commit()
         return True
 
@@ -549,6 +677,22 @@ class CRMService:
             assigned_to_user_id=UUID(assigned_raw) if assigned_raw else None,
             created_by_user_id=user_id,
         )
+        self.db.flush()  # populate task.id (client-side default) before event emission
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_task.created",
+            entity_type="crm_task",
+            entity_id=task.id,
+            payload={
+                "task_id": str(task.id),
+                "title": task.title,
+                "status": task.status,
+                "priority": task.priority,
+                "contact_id": str(task.contact_id) if task.contact_id else None,
+                "assigned_to_user_id": str(task.assigned_to_user_id) if task.assigned_to_user_id else None,
+            },
+            actor_id=user_id,
+        )
         self.db.commit()
         return _serialise_task(task, db=self.db)
 
@@ -557,6 +701,7 @@ class CRMService:
         if not task:
             return None
 
+        before = _task_event_snapshot(task)
         allowed = {"title", "description", "due_date", "status", "priority", "assigned_to_user_id", "contact_id"}
         updates = {k: v for k, v in data.items() if k in allowed}
 
@@ -585,6 +730,15 @@ class CRMService:
                 updates["contact_id"] = None
 
         self.task_repo.update(task, **updates)
+        after = _task_event_snapshot(task)
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_task.updated",
+            entity_type="crm_task",
+            entity_id=task.id,
+            payload=after,
+            diff=_dict_diff(before, after),
+        )
         self.db.commit()
         return _serialise_task(task, db=self.db)
 
@@ -592,7 +746,15 @@ class CRMService:
         task = self.task_repo.get_by_id(task_id, org_id)
         if not task:
             return False
+        payload = _task_event_snapshot(task)
         self.task_repo.delete(task)
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_task.deleted",
+            entity_type="crm_task",
+            entity_id=task.id,
+            payload=payload,
+        )
         self.db.commit()
         return True
 
@@ -668,7 +830,9 @@ class CRMService:
         current_month = self.invoice_repo.sales_totals_for_period(org_id, current_month_start, next_month_start)
         previous_month = self.invoice_repo.sales_totals_for_period(org_id, previous_month_start, current_month_start)
         outstanding = self.invoice_repo.outstanding_receivables(org_id)
-        monthly_trend = sorted(self.invoice_repo.monthly_sales_totals(org_id, months=6), key=lambda row: row["month"] or "")
+        monthly_trend = sorted(
+            self.invoice_repo.monthly_sales_totals(org_id, months=6), key=lambda row: row["month"] or ""
+        )
         top_products = self.invoice_repo.top_products(org_id, limit=200)
         top_customers = self.invoice_repo.customer_sales_breakdown(org_id, top_n=200)
         top_customers_by_product = self.invoice_repo.top_customers_by_product(org_id, limit_products=50)
@@ -783,6 +947,15 @@ class CRMService:
             notes=data.get("notes"),
             created_by_user_id=user_id,
         )
+        self.db.flush()  # populate m.id (client-side default) before event emission
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_product_mapping.created",
+            entity_type="crm_product_mapping",
+            entity_id=m.id,
+            payload=_mapping_event_snapshot(m),
+            actor_id=user_id,
+        )
         self.db.commit()
         return _serialise_mapping(m)
 
@@ -790,6 +963,7 @@ class CRMService:
         m = self.mapping_repo.get_by_id(mapping_id, org_id)
         if not m:
             return None
+        before = _mapping_event_snapshot(m)
         allowed = {
             "biz_e_source_output_id",
             "biz_e_product_name",
@@ -800,8 +974,19 @@ class CRMService:
         }
         updates = {k: v for k, v in data.items() if k in allowed}
         if "biz_e_source_output_id" in updates:
-            updates["biz_e_source_output_id"] = UUID(updates["biz_e_source_output_id"]) if updates["biz_e_source_output_id"] else None
+            updates["biz_e_source_output_id"] = (
+                UUID(updates["biz_e_source_output_id"]) if updates["biz_e_source_output_id"] else None
+            )
         self.mapping_repo.update(m, **updates)
+        after = _mapping_event_snapshot(m)
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_product_mapping.updated",
+            entity_type="crm_product_mapping",
+            entity_id=m.id,
+            payload=after,
+            diff=_dict_diff(before, after),
+        )
         self.db.commit()
         return _serialise_mapping(m)
 
@@ -809,7 +994,15 @@ class CRMService:
         m = self.mapping_repo.get_by_id(mapping_id, org_id)
         if not m:
             return False
+        payload = _mapping_event_snapshot(m)
         self.mapping_repo.delete(m)
+        self._emit_event(
+            org_id=org_id,
+            event_type="crm_product_mapping.deleted",
+            entity_type="crm_product_mapping",
+            entity_id=m.id,
+            payload=payload,
+        )
         self.db.commit()
         return True
 
@@ -817,6 +1010,48 @@ class CRMService:
 # ------------------------------------------------------------------
 # Serialisers
 # ------------------------------------------------------------------
+
+
+def _safe_event_uuid(raw: str | None, *, fallback: UUID) -> UUID:
+    if raw:
+        try:
+            return UUID(raw)
+        except ValueError:
+            return fallback
+    return fallback
+
+
+def _dict_diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, dict[str, Any]] | None:
+    diff: dict[str, dict[str, Any]] = {}
+    for key in sorted(set(before) | set(after)):
+        if before.get(key) != after.get(key):
+            diff[key] = {"before": before.get(key), "after": after.get(key)}
+    return diff or None
+
+
+def _task_event_snapshot(task) -> dict[str, Any]:
+    return {
+        "task_id": str(task.id),
+        "title": task.title,
+        "status": task.status,
+        "priority": task.priority,
+        "contact_id": str(task.contact_id) if task.contact_id else None,
+        "assigned_to_user_id": str(task.assigned_to_user_id) if task.assigned_to_user_id else None,
+        "due_date": task.due_date.isoformat() if task.due_date else None,
+        "description_length": len(task.description or ""),
+    }
+
+
+def _mapping_event_snapshot(mapping) -> dict[str, Any]:
+    return {
+        "mapping_id": str(mapping.id),
+        "biz_e_source_output_id": str(mapping.biz_e_source_output_id) if mapping.biz_e_source_output_id else None,
+        "biz_e_product_name": mapping.biz_e_product_name,
+        "xero_description_pattern": mapping.xero_description_pattern,
+        "match_type": mapping.match_type,
+        "is_active": bool(mapping.is_active),
+        "notes_length": len(mapping.notes or ""),
+    }
 
 
 def _serialise_contact(c) -> dict:
@@ -919,7 +1154,9 @@ def _serialise_task(t, db=None) -> dict:
     }
 
 
-def _serialise_mapping(m, *, valid_source_output_ids: set[str] | None = None, valid_product_names: set[str] | None = None) -> dict:
+def _serialise_mapping(
+    m, *, valid_source_output_ids: set[str] | None = None, valid_product_names: set[str] | None = None
+) -> dict:
     source_output_id = str(m.biz_e_source_output_id) if m.biz_e_source_output_id else None
     status = "active"
     if source_output_id and valid_source_output_ids is not None and source_output_id not in valid_source_output_ids:

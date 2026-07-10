@@ -1,20 +1,22 @@
 """XeroSyncService — orchestrates contact and invoice sync from Xero."""
 
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.backend.event_writer import EventWriter
 from app.features.crm.repositories.xero_contact_repo import XeroContactRepository
 from app.features.crm.repositories.xero_invoice_repo import XeroInvoiceRepository
 from app.features.crm.repositories.xero_sync_job_repo import XeroSyncJobRepository
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 from app.features.crm.services.xero_api_client import XeroAPIClient
 from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
+from app.observability import get_logger, start_span
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -48,74 +50,98 @@ class XeroSyncService:
 
     def full_sync(self, org_id: UUID, triggered_by: str = "manual") -> SyncResult:
         """Run a full contacts + invoices sync."""
-        tenant = self.tenant_repo.get_connected(org_id)
-        if not tenant:
-            raise ValueError("No connected Xero tenant for this org.")
+        with start_span(
+            "xero.sync",
+            attributes={"org_id": str(org_id), "sync_type": "full", "triggered_by": triggered_by},
+        ):
+            tenant = self.tenant_repo.get_connected(org_id)
+            if not tenant:
+                raise ValueError("No connected Xero tenant for this org.")
 
-        job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "full", triggered_by)
-        self.db.commit()
+            job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "full", triggered_by)
+            self.db.commit()
 
-        result = SyncResult()
-        api_client = XeroAPIClient(self.db, org_id)
+            result = SyncResult()
+            api_client = XeroAPIClient(self.db, org_id)
 
-        try:
-            contacts_result = self._sync_contacts(api_client, org_id, tenant.xero_tenant_id, incremental=False)
-            result.contacts_synced = contacts_result.contacts_synced
-            result.errors.extend(contacts_result.errors)
-        except XeroTokenExpiredError:
-            raise
-        except Exception as e:
-            logger.exception("Contact sync failed for org %s", org_id)
-            result.errors.append(f"Contact sync error: {e}")
+            try:
+                with start_span(
+                    "xero.sync.contacts",
+                    attributes={"org_id": str(org_id), "sync_type": "full"},
+                ):
+                    contacts_result = self._sync_contacts(api_client, org_id, tenant.xero_tenant_id, incremental=False)
+                result.contacts_synced = contacts_result.contacts_synced
+                result.errors.extend(contacts_result.errors)
+            except XeroTokenExpiredError:
+                raise
+            except Exception as e:
+                logger.exception("xero_contact_sync_failed", org_id=str(org_id))
+                result.errors.append(f"Contact sync error: {e}")
 
-        try:
-            invoices_result = self._sync_invoices(api_client, org_id, tenant.xero_tenant_id, incremental=False)
-            result.invoices_synced = invoices_result.invoices_synced
-            result.errors.extend(invoices_result.errors)
-        except XeroTokenExpiredError:
-            raise
-        except Exception as e:
-            logger.exception("Invoice sync failed for org %s", org_id)
-            result.errors.append(f"Invoice sync error: {e}")
+            try:
+                with start_span(
+                    "xero.sync.invoices",
+                    attributes={"org_id": str(org_id), "sync_type": "full"},
+                ):
+                    invoices_result = self._sync_invoices(api_client, org_id, tenant.xero_tenant_id, incremental=False)
+                result.invoices_synced = invoices_result.invoices_synced
+                result.errors.extend(invoices_result.errors)
+            except XeroTokenExpiredError:
+                raise
+            except Exception as e:
+                logger.exception("xero_invoice_sync_failed", org_id=str(org_id))
+                result.errors.append(f"Invoice sync error: {e}")
 
-        self._finalise_job(job.id, org_id, result)
-        return result
+            self._finalise_job(job.id, org_id, result)
+            return result
 
     def incremental_sync(self, org_id: UUID, triggered_by: str = "manual") -> SyncResult:
         """Sync only records modified since last successful sync."""
-        tenant = self.tenant_repo.get_connected(org_id)
-        if not tenant:
-            raise ValueError("No connected Xero tenant for this org.")
+        with start_span(
+            "xero.sync",
+            attributes={"org_id": str(org_id), "sync_type": "incremental", "triggered_by": triggered_by},
+        ):
+            tenant = self.tenant_repo.get_connected(org_id)
+            if not tenant:
+                raise ValueError("No connected Xero tenant for this org.")
 
-        modified_after = tenant.last_successful_sync_at
-        job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "full", triggered_by)
-        self.db.commit()
+            modified_after = tenant.last_successful_sync_at
+            job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "full", triggered_by)
+            self.db.commit()
 
-        result = SyncResult()
-        api_client = XeroAPIClient(self.db, org_id)
+            result = SyncResult()
+            api_client = XeroAPIClient(self.db, org_id)
 
-        try:
-            r = self._sync_contacts(
-                api_client, org_id, tenant.xero_tenant_id, incremental=True, modified_after=modified_after
-            )
-            result.contacts_synced = r.contacts_synced
-            result.errors.extend(r.errors)
-        except Exception as e:
-            logger.exception("Incremental contact sync failed for org %s", org_id)
-            result.errors.append(str(e))
+            try:
+                with start_span(
+                    "xero.sync.contacts",
+                    attributes={"org_id": str(org_id), "sync_type": "incremental"},
+                ):
+                    r = self._sync_contacts(
+                        api_client, org_id, tenant.xero_tenant_id, incremental=True, modified_after=modified_after
+                    )
+                result.contacts_synced = r.contacts_synced
+                result.errors.extend(r.errors)
+            except Exception as e:
+                logger.exception("xero_incremental_contact_sync_failed", org_id=str(org_id))
+                result.errors.append(str(e))
 
-        try:
-            r = self._sync_invoices(
-                api_client, org_id, tenant.xero_tenant_id, incremental=True, modified_after=modified_after
-            )
-            result.invoices_synced = r.invoices_synced
-            result.errors.extend(r.errors)
-        except Exception as e:
-            logger.exception("Incremental invoice sync failed for org %s", org_id)
-            result.errors.append(str(e))
+            try:
+                with start_span(
+                    "xero.sync.invoices",
+                    attributes={"org_id": str(org_id), "sync_type": "incremental"},
+                ):
+                    r = self._sync_invoices(
+                        api_client, org_id, tenant.xero_tenant_id, incremental=True, modified_after=modified_after
+                    )
+                result.invoices_synced = r.invoices_synced
+                result.errors.extend(r.errors)
+            except Exception as e:
+                logger.exception("xero_incremental_invoice_sync_failed", org_id=str(org_id))
+                result.errors.append(str(e))
 
-        self._finalise_job(job.id, org_id, result)
-        return result
+            self._finalise_job(job.id, org_id, result)
+            return result
 
     # ------------------------------------------------------------------
     # Internal: contacts
@@ -131,7 +157,7 @@ class XeroSyncService:
     ) -> SyncResult:
         result = SyncResult()
         contacts = api_client.get_all_contacts(modified_after=modified_after if incremental else None)
-        logger.info("Syncing %d contacts for org %s", len(contacts), org_id)
+        logger.info("xero_contacts_sync_started", org_id=str(org_id), contacts_count=len(contacts))
 
         for xc in contacts:
             try:
@@ -181,7 +207,11 @@ class XeroSyncService:
                 )
                 result.contacts_synced += 1
             except Exception as e:
-                logger.warning("Failed to sync contact %s: %s", getattr(xc, "contact_id", "?"), e)
+                logger.warning(
+                    "xero_contact_sync_record_failed",
+                    contact_id=str(getattr(xc, "contact_id", "?")),
+                    error=str(e),
+                )
                 result.errors.append(f"contact {getattr(xc, 'contact_id', '?')}: {e}")
 
         # Flush after all contacts so FK lookups work for invoices
@@ -202,7 +232,7 @@ class XeroSyncService:
     ) -> SyncResult:
         result = SyncResult()
         invoices = api_client.get_all_invoices(modified_after=modified_after if incremental else None)
-        logger.info("Syncing %d invoices for org %s", len(invoices), org_id)
+        logger.info("xero_invoices_sync_started", org_id=str(org_id), invoices_count=len(invoices))
         seen_invoice_ids: set[str] = set()
 
         for xi in invoices:
@@ -261,13 +291,17 @@ class XeroSyncService:
                 result.invoices_synced += 1
 
             except Exception as e:
-                logger.warning("Failed to sync invoice %s: %s", getattr(xi, "invoice_id", "?"), e)
+                logger.warning(
+                    "xero_invoice_sync_record_failed",
+                    invoice_id=str(getattr(xi, "invoice_id", "?")),
+                    error=str(e),
+                )
                 result.errors.append(f"invoice {getattr(xi, 'invoice_id', '?')}: {e}")
 
         if not incremental:
             deleted_count = self.invoice_repo.mark_missing_as_deleted(org_id, tenant_id, seen_invoice_ids)
             if deleted_count:
-                logger.info("Marked %d local invoices as DELETED during full sync for org %s", deleted_count, org_id)
+                logger.info("xero_sync_marked_deleted", org_id=str(org_id), deleted_count=deleted_count)
 
         self.db.flush()
         return result
@@ -277,9 +311,11 @@ class XeroSyncService:
     # ------------------------------------------------------------------
 
     def _finalise_job(self, job_id: UUID, org_id: UUID, result: SyncResult) -> None:
+        status = "failed"
         if result.success:
             self.sync_job_repo.mark_completed(job_id, result.contacts_synced, result.invoices_synced)
             self.tenant_repo.update_last_sync(org_id, datetime.now(timezone.utc))
+            status = "completed"
         elif result.partial:
             self.sync_job_repo.mark_partial(
                 job_id,
@@ -289,13 +325,33 @@ class XeroSyncService:
                 error_details={"errors": result.errors},
             )
             self.tenant_repo.update_last_sync(org_id, datetime.now(timezone.utc))
+            status = "partial"
         else:
             self.sync_job_repo.mark_failed(
                 job_id,
                 error_message=result.errors[0] if result.errors else "Unknown error",
                 error_details={"errors": result.errors},
             )
+        self._emit_sync_event(job_id=job_id, org_id=org_id, status=status, result=result)
         self.db.commit()
+
+    def _emit_sync_event(self, *, job_id: UUID, org_id: UUID, status: str, result: SyncResult) -> None:
+        event_type = "crm_xero.sync_completed" if status == "completed" else "crm_xero.sync_failed"
+        payload: dict[str, Any] = {
+            "sync_job_id": str(job_id),
+            "status": status,
+            "contacts_synced": int(result.contacts_synced or 0),
+            "invoices_synced": int(result.invoices_synced or 0),
+            "errors_count": len(result.errors),
+        }
+        if result.errors:
+            payload["errors"] = result.errors[:5]
+        EventWriter(self.db, org_id).emit(
+            event_type=event_type,
+            entity_type="xero_sync_job",
+            entity_id=job_id,
+            payload=payload,
+        )
 
 
 def _serialise_xero_payment_terms(raw) -> dict | None:

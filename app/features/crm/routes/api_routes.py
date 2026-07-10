@@ -1,6 +1,5 @@
 """CRM JSON API routes — customers, invoices, notes, tasks, analytics, product mappings."""
 
-import logging
 from datetime import date, timedelta
 from io import BytesIO
 from uuid import UUID
@@ -9,11 +8,8 @@ from flask import Blueprint, g, jsonify, request, send_file
 
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
-from app.core.utils.log_action import log_action
 from app.features.crm.services.crm_service import CRMService
 from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
-
-logger = logging.getLogger(__name__)
 
 api_bp = Blueprint("crm_api", __name__)
 
@@ -275,7 +271,6 @@ def create_note(contact_id: str):
 
     svc = _crm_service()
     note = svc.create_note(org_id, UUID(contact_id), content, UUID(g.user_id) if g.user_id else None)
-    log_action("create", "crm_note", None, {"contact_id": contact_id})
     return jsonify({"note": note}), 201
 
 
@@ -338,7 +333,6 @@ def create_task():
         task = _crm_service().create_task(org_id, data, UUID(g.user_id) if g.user_id else None)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    log_action("create", "crm_task", None, {"title": data.get("title")})
     return jsonify({"task": task}), 201
 
 
@@ -353,7 +347,6 @@ def update_task(task_id: str):
         return jsonify({"error": str(e)}), 400
     if not task:
         return jsonify({"error": "Task not found"}), 404
-    log_action("update", "crm_task", UUID(task_id), {"status": data.get("status")})
     return jsonify({"task": task}), 200
 
 
@@ -527,7 +520,6 @@ def update_traceability_config():
         updated = _crm_service().update_traceability_config(org_id, data)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    log_action("update", "crm_traceability_config", None, {"matching_strategy": updated.get("matching_strategy")})
     return jsonify(updated), 200
 
 
@@ -567,7 +559,6 @@ def create_mapping():
 
     try:
         mapping = _crm_service().create_mapping(org_id, data, UUID(g.user_id) if g.user_id else None)
-        log_action("create", "product_mapping", None, {"biz_e": data.get("biz_e_product_name")})
         return jsonify({"product_mapping": mapping}), 201
     except ValueError as e:
         if "already exists" in str(e).lower():
@@ -591,7 +582,6 @@ def update_mapping(mapping_id: str):
     mapping = _crm_service().update_mapping(UUID(mapping_id), org_id, data)
     if not mapping:
         return jsonify({"error": "Mapping not found"}), 404
-    log_action("update", "product_mapping", UUID(mapping_id))
     return jsonify({"product_mapping": mapping}), 200
 
 
@@ -602,5 +592,4 @@ def delete_mapping(mapping_id: str):
     ok = _crm_service().delete_mapping(UUID(mapping_id), org_id)
     if not ok:
         return jsonify({"error": "Mapping not found"}), 404
-    log_action("delete", "product_mapping", UUID(mapping_id))
     return jsonify({"ok": True}), 200
