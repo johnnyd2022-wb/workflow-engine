@@ -1,0 +1,354 @@
+version: "3.9"
+
+name: workflow-observability-posthog
+
+services:
+  posthog-db:
+    image: postgres:15.12-alpine
+    container_name: workflow-posthog-db
+    environment:
+      POSTGRES_USER: posthog
+      POSTGRES_PASSWORD: posthog
+      POSTGRES_DB: posthog
+    volumes:
+      - posthog-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U posthog"]
+      interval: 5s
+      timeout: 30s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-redis:
+    image: redis:7.2-alpine
+    container_name: workflow-posthog-redis
+    command: redis-server --maxmemory-policy allkeys-lru --maxmemory 200mb
+    volumes:
+      - posthog-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-zookeeper:
+    image: zookeeper:3.7.0
+    container_name: workflow-posthog-zookeeper
+    volumes:
+      - posthog-zookeeper-data:/data
+      - posthog-zookeeper-datalog:/datalog
+      - posthog-zookeeper-logs:/logs
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-kafka:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.1.9
+    container_name: workflow-posthog-kafka
+    command:
+      - redpanda
+      - start
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://posthog-kafka:9092,external://localhost:19092
+      - --pandaproxy-addr
+      - internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr
+      - internal://posthog-kafka:8082,external://localhost:18082
+      - --schema-registry-addr
+      - internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr
+      - posthog-kafka:33145
+      - --advertise-rpc-addr
+      - posthog-kafka:33145
+      - --mode
+      - dev-container
+      - --smp
+      - "2"
+      - --memory
+      - 2G
+      - --reserve-memory
+      - 256M
+      - --overprovisioned
+      - --set
+      - redpanda.empty_seed_starts_cluster=false
+      - --seeds
+      - posthog-kafka:33145
+      - --set
+      - redpanda.auto_create_topics_enabled=true
+    volumes:
+      - posthog-kafka-data:/var/lib/redpanda/data
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9644/v1/status/ready || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+    depends_on:
+      - posthog-zookeeper
+    ports:
+      - "19092:19092"
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-kafka-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.1.9
+    container_name: workflow-posthog-kafka-init
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -e
+        until rpk topic list --brokers posthog-kafka:9092 >/dev/null 2>&1; do
+          sleep 2
+        done
+        for topic in clickhouse_events_json session_recording_snapshot_item_events; do
+          rpk topic create "$$topic" --brokers posthog-kafka:9092 -p 1 -r 1 || true
+        done
+    depends_on:
+      posthog-kafka:
+        condition: service_healthy
+    networks:
+      - observability
+
+  posthog-clickhouse:
+    image: clickhouse/clickhouse-server:26.3.10.60
+    container_name: workflow-posthog-clickhouse
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+      KAFKA_HOSTS: "posthog-kafka:9092"
+    depends_on:
+      - posthog-kafka
+      - posthog-zookeeper
+    volumes:
+      - posthog-clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 3s
+      timeout: 10s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-objectstorage:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: workflow-posthog-objectstorage
+    entrypoint: sh
+    command:
+      - -c
+      - mkdir -p /data/posthog && minio server --address ":19000" --console-address ":19001" /data
+    environment:
+      MINIO_ROOT_USER: object_storage_root_user
+      MINIO_ROOT_PASSWORD: object_storage_root_password
+    volumes:
+      - posthog-objectstorage-data:/data
+    ports:
+      - "19000:19000"
+      - "19001:19001"
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-web:
+    image: posthog/posthog@sha256:04cb280020653debb9d0361c8fef17c29567a93946f310ffaf73ddf683b70ca4
+    container_name: workflow-posthog-web
+    # The published image does not include the source-checkout-only
+    # /compose/start helper. This entrypoint runs Django migrations before
+    # serving the local PostHog UI on port 8000.
+    command: ./bin/docker-backend
+    environment:
+      SITE_URL: ${POSTHOG_SITE_URL:?Run obs-secrets check and configure local.ini.}
+      SECRET_KEY: ${POSTHOG_SECRET:?Run obs-secrets check and create the KeePassXC entry.}
+      ENCRYPTION_SALT_KEYS: ${ENCRYPTION_SALT_KEYS:?Run obs-secrets check and create the KeePassXC entry.}
+      DEPLOYMENT: hobby
+      OTEL_SDK_DISABLED: "true"
+      KAFKA_HOSTS: posthog-kafka:9092
+      DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      REDIS_URL: redis://posthog-redis:6379/
+      CLICKHOUSE_HOST: posthog-clickhouse
+      CLICKHOUSE_DATABASE: posthog
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      OBJECT_STORAGE_ENABLED: "true"
+      OBJECT_STORAGE_ENDPOINT: http://posthog-objectstorage:19000
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: http://localhost:19000
+      OBJECT_STORAGE_ACCESS_KEY_ID: object_storage_root_user
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: object_storage_root_password
+      SESSION_RECORDING_V2_S3_ENDPOINT: http://posthog-objectstorage:19000
+      SESSION_RECORDING_V2_S3_ACCESS_KEY_ID: object_storage_root_user
+      SESSION_RECORDING_V2_S3_SECRET_ACCESS_KEY: object_storage_root_password
+      POSTHOG_SKIP_MIGRATION_CHECKS: "1"
+      OPT_OUT_CAPTURE: "false"
+    depends_on:
+      posthog-db:
+        condition: service_healthy
+      posthog-redis:
+        condition: service_healthy
+      posthog-clickhouse:
+        condition: service_healthy
+      posthog-kafka-init:
+        condition: service_completed_successfully
+      posthog-objectstorage:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-worker:
+    image: posthog/posthog@sha256:04cb280020653debb9d0361c8fef17c29567a93946f310ffaf73ddf683b70ca4
+    container_name: workflow-posthog-worker
+    command: ./bin/docker-worker-celery --with-scheduler
+    environment:
+      SITE_URL: ${POSTHOG_SITE_URL:?Run obs-secrets check and configure local.ini.}
+      SECRET_KEY: ${POSTHOG_SECRET:?Run obs-secrets check and create the KeePassXC entry.}
+      ENCRYPTION_SALT_KEYS: ${ENCRYPTION_SALT_KEYS:?Run obs-secrets check and create the KeePassXC entry.}
+      DEPLOYMENT: hobby
+      OTEL_SDK_DISABLED: "true"
+      KAFKA_HOSTS: posthog-kafka:9092
+      DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      REDIS_URL: redis://posthog-redis:6379/
+      CLICKHOUSE_HOST: posthog-clickhouse
+      CLICKHOUSE_DATABASE: posthog
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      OBJECT_STORAGE_ENABLED: "true"
+      OBJECT_STORAGE_ENDPOINT: http://posthog-objectstorage:19000
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: http://localhost:19000
+      OBJECT_STORAGE_ACCESS_KEY_ID: object_storage_root_user
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: object_storage_root_password
+      SESSION_RECORDING_V2_S3_ENDPOINT: http://posthog-objectstorage:19000
+      SESSION_RECORDING_V2_S3_ACCESS_KEY_ID: object_storage_root_user
+      SESSION_RECORDING_V2_S3_SECRET_ACCESS_KEY: object_storage_root_password
+      POSTHOG_SKIP_MIGRATION_CHECKS: "1"
+    depends_on:
+      posthog-db:
+        condition: service_healthy
+      posthog-redis:
+        condition: service_healthy
+      posthog-clickhouse:
+        condition: service_healthy
+      posthog-kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-plugins:
+    image: posthog/posthog-node@sha256:863e76e040ad41aef79f605c33ec71f1529bddf94cfd88941c935da9bde97235
+    container_name: workflow-posthog-plugins
+    command: ./bin/docker-plugins
+    environment:
+      SITE_URL: ${POSTHOG_SITE_URL:-http://localhost:8000}
+      SECRET_KEY: ${POSTHOG_SECRET:-change-me-in-env}
+      ENCRYPTION_SALT_KEYS: ${ENCRYPTION_SALT_KEYS:-change-me-in-env}
+      KAFKA_HOSTS: posthog-kafka:9092
+      CDP_REDIS_HOST: posthog-redis
+      CDP_REDIS_PORT: 6379
+      LOGS_REDIS_HOST: posthog-redis
+      LOGS_REDIS_PORT: 6379
+      LOGS_REDIS_TLS: "false"
+      CYCLOTRON_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      PERSONS_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      BEHAVIORAL_COHORTS_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      OBJECT_STORAGE_ENABLED: "true"
+      OBJECT_STORAGE_ENDPOINT: http://posthog-objectstorage:19000
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: http://localhost:19000
+      OBJECT_STORAGE_ACCESS_KEY_ID: object_storage_root_user
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: object_storage_root_password
+      SESSION_RECORDING_V2_S3_ENDPOINT: http://posthog-objectstorage:19000
+      SESSION_RECORDING_V2_S3_ACCESS_KEY_ID: object_storage_root_user
+      SESSION_RECORDING_V2_S3_SECRET_ACCESS_KEY: object_storage_root_password
+    depends_on:
+      posthog-db:
+        condition: service_healthy
+      posthog-redis:
+        condition: service_healthy
+      posthog-clickhouse:
+        condition: service_healthy
+      posthog-kafka-init:
+        condition: service_completed_successfully
+      posthog-objectstorage:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-feature-flags:
+    image: ghcr.io/posthog/posthog/feature-flags@sha256:ad46da4ad20fe5597f4175bed8f6d5e6297d6e5729d2bd689c9c09c042eaf3bc
+    container_name: workflow-posthog-feature-flags
+    environment:
+      WRITE_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      READ_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      PERSONS_WRITE_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      PERSONS_READ_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      REDIS_URL: redis://posthog-redis:6379/
+    depends_on:
+      posthog-db:
+        condition: service_healthy
+      posthog-redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-capture:
+    image: ghcr.io/posthog/posthog/capture@sha256:0253908cf7bed05eb887dd5b111aa20c1fb5a563311845ff277ad8836253092a
+    container_name: workflow-posthog-capture
+    environment:
+      ADDRESS: 0.0.0.0:3000
+      CAPTURE_MODE: events
+      KAFKA_HOSTS: posthog-kafka:9092
+      KAFKA_TOPIC: clickhouse_events_json
+      REDIS_URL: redis://posthog-redis:6379/
+    depends_on:
+      posthog-kafka-init:
+        condition: service_completed_successfully
+      posthog-redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-replay-capture:
+    image: ghcr.io/posthog/posthog/capture@sha256:0253908cf7bed05eb887dd5b111aa20c1fb5a563311845ff277ad8836253092a
+    container_name: workflow-posthog-replay-capture
+    environment:
+      ADDRESS: 0.0.0.0:3000
+      CAPTURE_MODE: recordings
+      KAFKA_HOSTS: posthog-kafka:9092
+      KAFKA_TOPIC: session_recording_snapshot_item_events
+      REDIS_URL: redis://posthog-redis:6379/
+    depends_on:
+      posthog-kafka-init:
+        condition: service_completed_successfully
+      posthog-redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - observability
+
+volumes:
+  posthog-postgres-data:
+  posthog-redis-data:
+  posthog-zookeeper-data:
+  posthog-zookeeper-datalog:
+  posthog-zookeeper-logs:
+  posthog-kafka-data:
+  posthog-clickhouse-data:
+  posthog-objectstorage-data:
+
+networks:
+  observability:
+    name: workflow-observability

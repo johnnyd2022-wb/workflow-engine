@@ -2,7 +2,7 @@
 
 import click
 
-from . import admin, api, lint, migrations
+from . import admin, api, lint, migrations, observability
 
 
 @click.group()
@@ -25,6 +25,7 @@ cli.add_command(admin.get_backup_codes)
 cli.add_command(lint.lint, name="lint")
 cli.add_command(lint.format_code, name="format")
 cli.add_command(lint.fix_all, name="fix-all")
+cli.add_command(observability.observability)
 
 if __name__ == "__main__":
     cli()

@@ -1,0 +1,138 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+otelcol.exporter.loki "to_loki" {
+  forward_to = [loki.write.local.receiver]
+}
+
+otelcol.exporter.otlp "to_tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure             = true
+      insecure_skip_verify = true
+    }
+  }
+}
+
+prometheus.remote_write "to_mimir" {
+  endpoint {
+    url = "http://mimir:9009/api/v1/push"
+  }
+}
+
+otelcol.exporter.prometheus "to_mimir" {
+  forward_to = [prometheus.remote_write.to_mimir.receiver]
+}
+
+otelcol.processor.attributes "loki_hints" {
+  action {
+    key    = "loki.resource.labels"
+    action = "insert"
+    value  = "service.name,service.namespace,deployment.environment,host.name"
+  }
+
+  output {
+    logs = [otelcol.exporter.loki.to_loki.input]
+  }
+}
+
+otelcol.processor.deltatocumulative "metrics" {
+  output {
+    metrics = [otelcol.exporter.prometheus.to_mimir.input]
+  }
+}
+
+otelcol.processor.tail_sampling "errors_and_slow" {
+  decision_wait = "10s"
+  num_traces = 50000
+  expected_new_traces_per_sec = 200
+
+  policy {
+    name = "errors"
+    type = "status_code"
+
+    status_code {
+      status_codes = ["ERROR"]
+    }
+  }
+
+  policy {
+    name = "slow"
+    type = "latency"
+
+    latency {
+      threshold_ms = 1000
+    }
+  }
+
+  policy {
+    name = "baseline"
+    type = "probabilistic"
+
+    probabilistic {
+      sampling_percentage = 10
+    }
+  }
+
+  output {
+    traces = [otelcol.exporter.otlp.to_tempo.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    logs    = [otelcol.processor.attributes.loki_hints.input]
+    metrics = [otelcol.processor.deltatocumulative.metrics.input]
+    traces  = [otelcol.processor.tail_sampling.errors_and_slow.input]
+  }
+}
+
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    logs    = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+faro.receiver "frontend" {
+  log_format = "json"
+  extra_log_labels = {
+    source = "faro",
+  }
+
+  server {
+    listen_address = "0.0.0.0"
+    listen_port = 12347
+    cors_allowed_origins = ["*"]
+  }
+
+  output {
+    logs   = [loki.write.local.receiver]
+    traces = [otelcol.processor.tail_sampling.errors_and_slow.input]
+  }
+}
+
+prometheus.exporter.self "alloy" {
+}
+
+prometheus.scrape "alloy" {
+  targets    = prometheus.exporter.self.alloy.targets
+  forward_to = [prometheus.remote_write.to_mimir.receiver]
+}
