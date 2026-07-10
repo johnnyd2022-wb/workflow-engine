@@ -146,6 +146,45 @@ services:
     networks:
       - observability
 
+  # One-shot setup, mirroring the posthog-kafka-init pattern above: creates the
+  # ClickHouse schema. bin/docker-backend (used by posthog-web) only runs
+  # Django/Postgres migrations, never `migrate_clickhouse`.
+  posthog-migrate:
+    image: posthog/posthog@sha256:04cb280020653debb9d0361c8fef17c29567a93946f310ffaf73ddf683b70ca4
+    container_name: workflow-posthog-migrate
+    # migrate_clickhouse itself reads Postgres (posthog_instancesetting), so
+    # Postgres must be migrated in this same job, not left to posthog-web's
+    # own (redundant, idempotent) `python manage.py migrate` on startup.
+    # Two separate bin/migrate invocations, not `--scope=postgres --scope=clickhouse`
+    # in one call: bin/migrate runs multiple scopes in parallel, and on a brand
+    # new database ClickHouse migration 0026 queries posthog_instancesetting
+    # (Postgres) well before the Postgres migration reaches it.
+    command: ["sh", "-c", "./bin/migrate --scope=postgres && ./bin/migrate --scope=clickhouse"]
+    environment:
+      SITE_URL: ${POSTHOG_SITE_URL:?Run obs-secrets check and configure local.ini.}
+      SECRET_KEY: ${POSTHOG_SECRET:?Run obs-secrets check and create the KeePassXC entry.}
+      ENCRYPTION_SALT_KEYS: ${ENCRYPTION_SALT_KEYS:?Run obs-secrets check and create the KeePassXC entry.}
+      DEPLOYMENT: hobby
+      OTEL_SDK_DISABLED: "true"
+      DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      REDIS_URL: redis://posthog-redis:6379/
+      CLICKHOUSE_HOST: posthog-clickhouse
+      CLICKHOUSE_DATABASE: posthog
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_SECURE: "false"
+      POSTHOG_SKIP_MIGRATION_CHECKS: "1"
+    depends_on:
+      posthog-db:
+        condition: service_healthy
+      posthog-redis:
+        condition: service_healthy
+      posthog-clickhouse:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - observability
+
   posthog-objectstorage:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: workflow-posthog-objectstorage
@@ -205,6 +244,8 @@ services:
         condition: service_healthy
       posthog-clickhouse:
         condition: service_healthy
+      posthog-migrate:
+        condition: service_completed_successfully
       posthog-kafka-init:
         condition: service_completed_successfully
       posthog-objectstorage:
@@ -251,6 +292,8 @@ services:
         condition: service_healthy
       posthog-clickhouse:
         condition: service_healthy
+      posthog-migrate:
+        condition: service_completed_successfully
       posthog-kafka-init:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -289,6 +332,8 @@ services:
         condition: service_healthy
       posthog-clickhouse:
         condition: service_healthy
+      posthog-migrate:
+        condition: service_completed_successfully
       posthog-kafka-init:
         condition: service_completed_successfully
       posthog-objectstorage:
@@ -311,6 +356,8 @@ services:
         condition: service_healthy
       posthog-redis:
         condition: service_healthy
+      posthog-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - observability
