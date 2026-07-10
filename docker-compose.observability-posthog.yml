@@ -222,6 +222,10 @@ services:
       # which redirects this plain-HTTP dev server to https:// and would drop
       # Secure-flagged cookies over http.
       SECURE_COOKIES: "false"
+      # The preflight page's "Plugin server" check calls CDP_API_URL/_health;
+      # unset, it defaults to a Kubernetes-internal hostname that doesn't
+      # exist in this Docker network.
+      CDP_API_URL: http://posthog-plugins:6738
       KAFKA_HOSTS: posthog-kafka:9092
       DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       REDIS_URL: redis://posthog-redis:6379/
