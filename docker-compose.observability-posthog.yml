@@ -307,12 +307,23 @@ services:
   posthog-plugins:
     image: posthog/posthog-node@sha256:863e76e040ad41aef79f605c33ec71f1529bddf94cfd88941c935da9bde97235
     container_name: workflow-posthog-plugins
-    command: ./bin/docker-plugins
+    # This pinned image has no bin/docker-plugins helper (no /code/bin at all);
+    # its own entrypoint runs `node nodejs/dist/index.js` directly, which
+    # requires DATABASE_URL (the CYCLOTRON/PERSONS/BEHAVIORAL_COHORTS URLs
+    # below are not sufficient on their own).
     environment:
       SITE_URL: ${POSTHOG_SITE_URL:-http://localhost:8000}
       SECRET_KEY: ${POSTHOG_SECRET:-change-me-in-env}
       ENCRYPTION_SALT_KEYS: ${ENCRYPTION_SALT_KEYS:-change-me-in-env}
+      DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       KAFKA_HOSTS: posthog-kafka:9092
+      # The ingestion producer path reads its own KAFKA_PRODUCER_* env vars
+      # (ingestion/common/producers.js) rather than KAFKA_HOSTS, and otherwise
+      # defaults metadata.broker.list to the unresolvable hostname "kafka".
+      KAFKA_PRODUCER_METADATA_BROKER_LIST: posthog-kafka:9092
+      # The shared "ingestion-redis" pool (PluginServer.createSharedInfrastructure)
+      # reads REDIS_URL directly and otherwise defaults to redis://127.0.0.1.
+      REDIS_URL: redis://posthog-redis:6379/
       CDP_REDIS_HOST: posthog-redis
       CDP_REDIS_PORT: 6379
       LOGS_REDIS_HOST: posthog-redis
