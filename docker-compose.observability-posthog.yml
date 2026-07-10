@@ -332,12 +332,14 @@ services:
       KAFKA_PRODUCER_METADATA_BROKER_LIST: posthog-kafka:9092
       # The shared "ingestion-redis" pool (PluginServer.createSharedInfrastructure)
       # reads REDIS_URL directly and otherwise defaults to redis://127.0.0.1.
+      # CDP_REDIS_HOST / LOGS_REDIS_HOST are NOT bare hostnames despite the
+      # name: cdp-services.js and logs-ingestion-consumer.js pass their value
+      # straight through as the ioredis connection `url` (e.g. "posthog-redis"
+      # is invalid as a URL and gets misinterpreted, causing silent ETIMEDOUT
+      # loops on the cdp-redis/cdp-api-redis/logs-redis/hog-transformer-redis
+      # pools). Leaving them unset makes every pool correctly fall back to
+      # REDIS_URL, which is already a well-formed redis:// URL.
       REDIS_URL: redis://posthog-redis:6379/
-      CDP_REDIS_HOST: posthog-redis
-      CDP_REDIS_PORT: 6379
-      LOGS_REDIS_HOST: posthog-redis
-      LOGS_REDIS_PORT: 6379
-      LOGS_REDIS_TLS: "false"
       CYCLOTRON_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       PERSONS_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       BEHAVIORAL_COHORTS_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
