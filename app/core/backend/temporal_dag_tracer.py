@@ -11,6 +11,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.observability import traced
+
 
 class TemporalDAGTracer:
     """Reconstruct the provenance graph at a point in time using entity_events.
@@ -28,6 +30,15 @@ class TemporalDAGTracer:
         self.as_of = as_of
         self.max_depth = min(max_depth, 10)
 
+    @traced(
+        "dag.temporal_trace",
+        attributes_fn=lambda self, root_id, root_type="inventory_item": {
+            "org_id": str(self.org_id),
+            "root_id": str(root_id),
+            "root_type": root_type,
+            "max_depth": self.max_depth,
+        },
+    )
     def trace(self, root_id: UUID, root_type: str = "inventory_item") -> dict:
         """Return temporal graph rooted at root_id, as of self.as_of."""
         from app.core.db.models.entity_event import EntityEvent

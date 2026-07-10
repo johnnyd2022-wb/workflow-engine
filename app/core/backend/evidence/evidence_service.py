@@ -17,6 +17,7 @@ from app.core.db import db_session
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, EVIDENCE_STATUS_PENDING
 from app.core.db.repositories.evidence_repo import EvidenceRepository
 from app.core.db.repositories.execution_repo import ExecutionRepository
+from app.observability import start_span
 
 logger = logging.getLogger(__name__)
 
@@ -36,125 +37,149 @@ def upload_evidence_from_temp(
     atomically move temp to final path. No file at final path until after commit (no orphan files).
     Returns (response_dict, error_message, status_code).
     """
-    repo = ExecutionRepository(db_session)
-    execution = repo.get_execution_with_steps(execution_id, org_id)
-    if not execution:
-        logger.warning(
-            "Evidence upload_evidence_from_temp: execution not found execution_id=%s org_id=%s",
-            execution_id,
-            org_id,
-        )
-        return None, "Execution not found or access denied", 404
-
-    try:
-        checksum = compute_checksum(temp_path)
-    except Exception as e:
-        logger.exception("Evidence compute_checksum failed: %s", e)
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
-        return None, "Failed to process file", 500
-
-    rel_path, filename = prepare_final_path(str(org_id), str(execution_id), content_type)
-    evidence_repo = EvidenceRepository(db_session)
-    # Transaction 1: metadata commit first, then storage (session already has active transaction)
-    record = evidence_repo.create(
-        org_id=org_id,
-        execution_id=execution_id,
-        step_id=step_id,
-        file_name=file_name,
-        storage_path=rel_path,
-        mime_type=content_type,
-        file_size=file_size,
-        checksum_sha256=checksum,
-        uploaded_by=uploaded_by,
-        evidence_status=EVIDENCE_STATUS_PENDING,
-    )
-    try:
-        db_session.commit()
-    except Exception as e:
-        logger.exception("Evidence upload_evidence_from_temp: create/commit failed: %s", e)
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
-        return None, "Failed to save evidence record", 500
-
-    full_path = None
-    try:
-        full_path = finalize_from_temp(temp_path, str(org_id), str(execution_id), filename)
-    except Exception as e:
-        logger.exception("Evidence finalize_from_temp failed (record already committed): %s", e)
-        try:
-            evidence_repo.delete_by_id(record.id, org_id)
-            db_session.commit()
-        except Exception:
-            logger.exception("Cleanup record deletion failed")
-            db_session.rollback()
-        try:
-            if temp_path.exists():
-                os.unlink(temp_path)
-        except OSError:
-            pass
-        return None, "Failed to finalize file", 500
-
-    if not verify_checksum_at_path(full_path, checksum):
-        logger.error("Evidence verify_checksum_at_path failed after move: %s", full_path)
-        try:
-            evidence_repo.delete_by_id(record.id, org_id)
-            db_session.commit()
-        except Exception:
-            logger.exception("Cleanup record deletion failed")
-            db_session.rollback()
-        try:
-            if full_path.exists():
-                os.unlink(full_path)
-        except OSError:
-            pass
-        return None, "File verification failed after save", 500
-
-    # Transaction 2: mark ACTIVE only after storage is finalized and verified
-    try:
-        evidence_repo.update_status(record.id, org_id, EVIDENCE_STATUS_ACTIVE)
-        db_session.commit()
-    except Exception as e:
-        logger.exception("Evidence update_status to ACTIVE failed: %s", e)
-        try:
-            evidence_repo.delete_by_id(record.id, org_id)
-            db_session.commit()
-        except Exception:
-            logger.exception("Cleanup record deletion failed")
-            db_session.rollback()
-        try:
-            if full_path.exists():
-                os.unlink(full_path)
-        except OSError:
-            pass
-        return None, "Failed to activate evidence record", 500
-
-    # Canonical shape so frontend never infers mapping (step_definition_id, execution_step_id, execution_id)
-    step_definition_id = str(record.step_id) if record.step_id else None
-    execution_step_id = None
-    if execution.execution_steps and step_definition_id:
-        step_map = {str(es.step_id): str(es.id) for es in execution.execution_steps if es.step_id}
-        execution_step_id = step_map.get(step_definition_id)
-
-    logger.info("Evidence upload_evidence_from_temp: success evidence_id=%s storage_path=%s", record.id, rel_path)
-    return (
-        {
-            "id": str(record.id),
-            "file_name": record.file_name,
-            "mime_type": record.mime_type,
-            "file_size": record.file_size,
-            "step_definition_id": step_definition_id,
-            "execution_step_id": execution_step_id,
+    with start_span(
+        "evidence.upload",
+        attributes={
+            "org_id": str(org_id),
             "execution_id": str(execution_id),
-            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "step_id": str(step_id) if step_id else None,
+            "file_size": int(file_size or 0),
         },
-        "",
-        201,
-    )
+    ) as span:
+        repo = ExecutionRepository(db_session)
+        execution = repo.get_execution_with_steps(execution_id, org_id)
+        if not execution:
+            logger.warning(
+                "Evidence upload_evidence_from_temp: execution not found execution_id=%s org_id=%s",
+                execution_id,
+                org_id,
+            )
+            if span is not None:
+                span.set_attribute("result", "not_found")
+            return None, "Execution not found or access denied", 404
+
+        try:
+            checksum = compute_checksum(temp_path)
+        except Exception as e:
+            logger.exception("Evidence compute_checksum failed: %s", e)
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            if span is not None:
+                span.set_attribute("result", "checksum_failed")
+            return None, "Failed to process file", 500
+
+        rel_path, filename = prepare_final_path(str(org_id), str(execution_id), content_type)
+        evidence_repo = EvidenceRepository(db_session)
+        # Transaction 1: metadata commit first, then storage (session already has active transaction)
+        record = evidence_repo.create(
+            org_id=org_id,
+            execution_id=execution_id,
+            step_id=step_id,
+            file_name=file_name,
+            storage_path=rel_path,
+            mime_type=content_type,
+            file_size=file_size,
+            checksum_sha256=checksum,
+            uploaded_by=uploaded_by,
+            evidence_status=EVIDENCE_STATUS_PENDING,
+        )
+        try:
+            db_session.commit()
+        except Exception as e:
+            logger.exception("Evidence upload_evidence_from_temp: create/commit failed: %s", e)
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            if span is not None:
+                span.set_attribute("result", "db_commit_failed")
+            return None, "Failed to save evidence record", 500
+
+        full_path = None
+        try:
+            full_path = finalize_from_temp(temp_path, str(org_id), str(execution_id), filename)
+        except Exception as e:
+            logger.exception("Evidence finalize_from_temp failed (record already committed): %s", e)
+            try:
+                evidence_repo.delete_by_id(record.id, org_id)
+                db_session.commit()
+            except Exception:
+                logger.exception("Cleanup record deletion failed")
+                db_session.rollback()
+            try:
+                if temp_path.exists():
+                    os.unlink(temp_path)
+            except OSError:
+                pass
+            if span is not None:
+                span.set_attribute("result", "finalize_failed")
+            return None, "Failed to finalize file", 500
+
+        if not verify_checksum_at_path(full_path, checksum):
+            logger.error("Evidence verify_checksum_at_path failed after move: %s", full_path)
+            try:
+                evidence_repo.delete_by_id(record.id, org_id)
+                db_session.commit()
+            except Exception:
+                logger.exception("Cleanup record deletion failed")
+                db_session.rollback()
+            try:
+                if full_path.exists():
+                    os.unlink(full_path)
+            except OSError:
+                pass
+            if span is not None:
+                span.set_attribute("result", "verify_failed")
+            return None, "File verification failed after save", 500
+
+        # Transaction 2: mark ACTIVE only after storage is finalized and verified
+        try:
+            evidence_repo.update_status(record.id, org_id, EVIDENCE_STATUS_ACTIVE)
+            db_session.commit()
+        except Exception as e:
+            logger.exception("Evidence update_status to ACTIVE failed: %s", e)
+            try:
+                evidence_repo.delete_by_id(record.id, org_id)
+                db_session.commit()
+            except Exception:
+                logger.exception("Cleanup record deletion failed")
+                db_session.rollback()
+            try:
+                if full_path.exists():
+                    os.unlink(full_path)
+            except OSError:
+                pass
+            if span is not None:
+                span.set_attribute("result", "activate_failed")
+            return None, "Failed to activate evidence record", 500
+
+        # Canonical shape so frontend never infers mapping (step_definition_id, execution_step_id, execution_id)
+        step_definition_id = str(record.step_id) if record.step_id else None
+        execution_step_id = None
+        if execution.execution_steps and step_definition_id:
+            step_map = {str(es.step_id): str(es.id) for es in execution.execution_steps if es.step_id}
+            execution_step_id = step_map.get(step_definition_id)
+
+        logger.info("Evidence upload_evidence_from_temp: success evidence_id=%s storage_path=%s", record.id, rel_path)
+        if span is not None:
+            span.set_attribute("evidence_id", str(record.id))
+            span.set_attribute("result", "ok")
+        return (
+            {
+                "id": str(record.id),
+                "file_name": record.file_name,
+                "mime_type": record.mime_type,
+                "file_size": record.file_size,
+                "step_definition_id": step_definition_id,
+                "execution_step_id": execution_step_id,
+                "execution_id": str(execution_id),
+                "created_at": record.created_at.isoformat() if record.created_at else None,
+            },
+            "",
+            201,
+        )
 
 
 def list_evidence_for_execution(execution_id: UUID, org_id: UUID, execution=None) -> list[dict]:
@@ -276,20 +301,33 @@ def delete_evidence(evidence_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
     Idempotent: if the record is already missing, returns success so retries get 200.
     Returns (success, error_message, status_code).
     """
-    evidence_repo = EvidenceRepository(db_session)
-    record = evidence_repo.get_by_id(evidence_id, org_id, active_only=False)
-    if not record:
-        return True, "", 200  # already gone: idempotent success
-    parts = record.storage_path.replace("\\", "/").split("/")
-    if len(parts) >= 3:
-        filename = parts[-1]
-        delete_file(str(record.org_id), str(record.execution_id), filename)
-    try:
-        evidence_repo.delete_by_id(evidence_id, org_id)
-        db_session.commit()
-    except Exception as e:
-        logger.exception("Evidence delete_evidence failed: %s", e)
-        db_session.rollback()
-        return False, "Failed to delete evidence record", 500
-    logger.info("Evidence delete_evidence: removed evidence_id=%s", evidence_id)
-    return True, "", 200
+    with start_span(
+        "evidence.delete",
+        attributes={
+            "org_id": str(org_id),
+            "evidence_id": str(evidence_id),
+        },
+    ) as span:
+        evidence_repo = EvidenceRepository(db_session)
+        record = evidence_repo.get_by_id(evidence_id, org_id, active_only=False)
+        if not record:
+            if span is not None:
+                span.set_attribute("result", "already_deleted")
+            return True, "", 200  # already gone: idempotent success
+        parts = record.storage_path.replace("\\", "/").split("/")
+        if len(parts) >= 3:
+            filename = parts[-1]
+            delete_file(str(record.org_id), str(record.execution_id), filename)
+        try:
+            evidence_repo.delete_by_id(evidence_id, org_id)
+            db_session.commit()
+        except Exception as e:
+            logger.exception("Evidence delete_evidence failed: %s", e)
+            db_session.rollback()
+            if span is not None:
+                span.set_attribute("result", "db_delete_failed")
+            return False, "Failed to delete evidence record", 500
+        logger.info("Evidence delete_evidence: removed evidence_id=%s", evidence_id)
+        if span is not None:
+            span.set_attribute("result", "ok")
+        return True, "", 200

@@ -44,15 +44,48 @@ def _get_g_attr(name: str, default=None):
 
 
 def _request_metadata() -> dict:
+    metadata: dict = {}
     try:
         from flask import request
 
-        return {
-            "ip": request.remote_addr,
-            "user_agent": (request.user_agent.string[:200] if request.user_agent else None),
-        }
+        metadata["ip"] = request.remote_addr
+        metadata["user_agent"] = request.user_agent.string[:200] if request.user_agent else None
     except RuntimeError:
-        return {}
+        pass
+
+    correlation_id = _get_g_attr("correlation_id")
+    if correlation_id:
+        metadata["correlation_id"] = str(correlation_id)
+
+    trace_id, span_id = _otel_trace_ids()
+    if trace_id:
+        metadata["trace_id"] = trace_id
+    if span_id:
+        metadata["span_id"] = span_id
+
+    return metadata
+
+
+def _otel_trace_ids() -> tuple[str | None, str | None]:
+    """Return active OTel trace/span ids as hex strings when available."""
+    try:
+        from opentelemetry import trace
+    except Exception:
+        return None, None
+
+    span = trace.get_current_span()
+    if span is None:
+        return None, None
+
+    span_context = span.get_span_context()
+    if not getattr(span_context, "is_valid", False):
+        return None, None
+
+    trace_id = getattr(span_context, "trace_id", 0)
+    span_id = getattr(span_context, "span_id", 0)
+    if not trace_id or not span_id:
+        return None, None
+    return f"{trace_id:032x}", f"{span_id:016x}"
 
 
 def _safe_uuid(value) -> UUID | None:

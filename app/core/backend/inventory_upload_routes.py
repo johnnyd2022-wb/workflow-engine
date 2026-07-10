@@ -23,6 +23,7 @@ from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.security.permissions import requires_auth
 from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.core.utils.unit_conversion import CONVERSION_FACTORS, UNIT_DISPLAY_LABELS
+from app.observability import start_span
 
 logger = logging.getLogger(__name__)
 
@@ -119,24 +120,25 @@ def register_routes(bp):
     @requires_auth
     def barcode_lookup(code):
         """Look up product-level data by barcode. Returns exists and canonical name/unit/supplier for prefilling."""
-        if not code or not (code.strip()):
-            return jsonify({"exists": False}), 200
-        org_id = UUID(g.org_id)
-        repo = InventoryRepository(db_session)
-        existing = repo.find_by_barcode(org_id, code.strip())
-        if not existing:
-            return jsonify({"exists": False}), 200
-        return jsonify(
-            {
-                "exists": True,
-                "product": {
-                    "name": existing.name,
-                    "unit": existing.unit,
-                    "supplier": existing.supplier or "",
-                    "quantity": quantity_to_api_str(existing.quantity),
-                },
-            }
-        ), 200
+        with start_span("inventory.barcode_lookup", attributes={"org_id": str(UUID(g.org_id))}):
+            if not code or not (code.strip()):
+                return jsonify({"exists": False}), 200
+            org_id = UUID(g.org_id)
+            repo = InventoryRepository(db_session)
+            existing = repo.find_by_barcode(org_id, code.strip())
+            if not existing:
+                return jsonify({"exists": False}), 200
+            return jsonify(
+                {
+                    "exists": True,
+                    "product": {
+                        "name": existing.name,
+                        "unit": existing.unit,
+                        "supplier": existing.supplier or "",
+                        "quantity": quantity_to_api_str(existing.quantity),
+                    },
+                }
+            ), 200
 
     @bp.route("/api/core/config/units", methods=["GET"])
     @requires_auth
@@ -160,85 +162,89 @@ def register_routes(bp):
         - On commit (csv_commit): same checks re-applied; duplicate batch (same org + name + batch number)
           skips that row; other rows still commit (see csv_commit).
         """
-        file = request.files.get("file")
-        raw = request.get_data(as_text=True) if not file else None
-        if file:
-            content = file.read()
-            if len(content) > CSV_MAX_BYTES:
-                return jsonify({"error": "File too large. Maximum size is 2MB."}), 400
-            try:
-                text = content.decode("utf-8-sig")
-            except UnicodeDecodeError:
-                return jsonify({"error": "File must be UTF-8 encoded."}), 400
-        elif raw is not None:
-            text = raw
-        else:
-            return jsonify({"error": "Provide 'file' (multipart) or request body as CSV text."}), 400
+        with start_span(
+            "inventory.csv_validate",
+            attributes={"org_id": str(UUID(g.org_id)), "max_rows": CSV_MAX_ROWS},
+        ):
+            file = request.files.get("file")
+            raw = request.get_data(as_text=True) if not file else None
+            if file:
+                content = file.read()
+                if len(content) > CSV_MAX_BYTES:
+                    return jsonify({"error": "File too large. Maximum size is 2MB."}), 400
+                try:
+                    text = content.decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    return jsonify({"error": "File must be UTF-8 encoded."}), 400
+            elif raw is not None:
+                text = raw
+            else:
+                return jsonify({"error": "Provide 'file' (multipart) or request body as CSV text."}), 400
 
-        reader = csv.DictReader(io.StringIO(text))
-        # Normalize headers: strip and case-insensitive match
-        required = {"item name": "name", "quantity": "qty", "unit": "unit"}
-        optional = {
-            "supplier name": "supplier",
-            "purchase date": "purchase_date",
-            "batch number": "batch_number",
-            "expiry date": "expiry_date",
-        }
-        col_map = {}
-        for h in reader.fieldnames or []:
-            key = (h or "").strip().lower()
-            if key in required:
-                col_map[required[key]] = h
-            elif key in optional:
-                col_map[optional[key]] = h
+            reader = csv.DictReader(io.StringIO(text))
+            # Normalize headers: strip and case-insensitive match
+            required = {"item name": "name", "quantity": "qty", "unit": "unit"}
+            optional = {
+                "supplier name": "supplier",
+                "purchase date": "purchase_date",
+                "batch number": "batch_number",
+                "expiry date": "expiry_date",
+            }
+            col_map = {}
+            for h in reader.fieldnames or []:
+                key = (h or "").strip().lower()
+                if key in required:
+                    col_map[required[key]] = h
+                elif key in optional:
+                    col_map[optional[key]] = h
 
-        missing = [k for k in required if required[k] not in col_map]
-        if missing:
-            return jsonify({"error": f"Missing required columns: {', '.join(missing)}"}), 400
+            missing = [k for k in required if required[k] not in col_map]
+            if missing:
+                return jsonify({"error": f"Missing required columns: {', '.join(missing)}"}), 400
 
-        rows = []
-        validation = []
-        truncated = False
-        for i, row in enumerate(reader):
-            if i >= CSV_MAX_ROWS:
-                truncated = True
-                break
-            row_index = i + 2  # 1-based + header
-            name = _sanitize(row.get(col_map["name"], ""), 255)
-            qty_str = (row.get(col_map["qty"], "") or "").strip()
-            unit_raw = (row.get(col_map["unit"], "") or "").strip()
-            supplier = _sanitize(row.get(col_map.get("supplier") or "", ""), 255) or None
-            purchase_date = _parse_date(row.get(col_map.get("purchase_date") or ""))
-            batch_number = _sanitize(row.get(col_map.get("batch_number") or "", ""), 255) or None
-            expiry_date = _parse_date(row.get(col_map.get("expiry_date") or ""))
+            rows = []
+            validation = []
+            truncated = False
+            for i, row in enumerate(reader):
+                if i >= CSV_MAX_ROWS:
+                    truncated = True
+                    break
+                row_index = i + 2  # 1-based + header
+                name = _sanitize(row.get(col_map["name"], ""), 255)
+                qty_str = (row.get(col_map["qty"], "") or "").strip()
+                unit_raw = (row.get(col_map["unit"], "") or "").strip()
+                supplier = _sanitize(row.get(col_map.get("supplier") or "", ""), 255) or None
+                purchase_date = _parse_date(row.get(col_map.get("purchase_date") or ""))
+                batch_number = _sanitize(row.get(col_map.get("batch_number") or "", ""), 255) or None
+                expiry_date = _parse_date(row.get(col_map.get("expiry_date") or ""))
 
-            status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
-            unit = canonical_unit if canonical_unit else unit_raw
+                status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
+                unit = canonical_unit if canonical_unit else unit_raw
 
-            validation.append({"row_index": row_index, "status": status, "message": message})
-            rows.append(
+                validation.append({"row_index": row_index, "status": status, "message": message})
+                rows.append(
+                    {
+                        "row_index": row_index,
+                        "name": name,
+                        "quantity": quantity_str_for_storage or qty_str,
+                        "unit": unit,
+                        "supplier": supplier,
+                        "purchase_date": purchase_date.isoformat() if purchase_date else None,
+                        "batch_number": batch_number,
+                        "expiry_date": expiry_date.isoformat() if expiry_date else None,
+                    }
+                )
+
+            return jsonify(
                 {
-                    "row_index": row_index,
-                    "name": name,
-                    "quantity": quantity_str_for_storage or qty_str,
-                    "unit": unit,
-                    "supplier": supplier,
-                    "purchase_date": purchase_date.isoformat() if purchase_date else None,
-                    "batch_number": batch_number,
-                    "expiry_date": expiry_date.isoformat() if expiry_date else None,
+                    "rows": rows,
+                    "validation": validation,
+                    "allowed_units": _allowed_units_list(),
+                    "validated_count": len(rows),
+                    "truncated": truncated,
+                    "max_rows_allowed": CSV_MAX_ROWS,
                 }
             )
-
-        return jsonify(
-            {
-                "rows": rows,
-                "validation": validation,
-                "allowed_units": _allowed_units_list(),
-                "validated_count": len(rows),
-                "truncated": truncated,
-                "max_rows_allowed": CSV_MAX_ROWS,
-            }
-        )
 
     @bp.route("/api/core/inventory/csv-commit", methods=["POST"])
     @requires_auth
@@ -249,141 +255,143 @@ def register_routes(bp):
         """
         org_id = UUID(g.org_id)
         data = request.get_json()
-        if not data or not isinstance(data.get("rows"), list):
-            return jsonify({"error": "Expected JSON body with 'rows' array."}), 400
+        with start_span("inventory.csv_commit", attributes={"org_id": str(org_id), "max_rows": CSV_MAX_ROWS}):
+            if not data or not isinstance(data.get("rows"), list):
+                return jsonify({"error": "Expected JSON body with 'rows' array."}), 400
 
-        rows = data["rows"]
-        if len(rows) > CSV_MAX_ROWS:
-            return jsonify({"error": f"Maximum {CSV_MAX_ROWS} rows per upload."}), 400
+            rows = data["rows"]
+            if len(rows) > CSV_MAX_ROWS:
+                return jsonify({"error": f"Maximum {CSV_MAX_ROWS} rows per upload."}), 400
 
-        repo = InventoryRepository(db_session)
-        errors = []
-        # Phase 1: validate all rows with shared logic; do not create yet
-        validated = []
-        for r in rows:
-            name = _sanitize(r.get("name"), 255)
-            qty_str = (r.get("quantity") or "").strip()
-            unit_raw = (r.get("unit") or "").strip()
-            status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
-            if status != "ok":
-                errors.append({"row_index": r.get("row_index"), "error": message or "Validation failed"})
-                continue
-            validated.append(
-                {
-                    "row": r,
-                    "name": name,
-                    "quantity_str": quantity_str_for_storage,
-                    "canonical_unit": canonical_unit,
-                }
-            )
-
-        if errors:
-            return jsonify({"error": "Validation failed.", "created": [], "errors": errors}), 400
-
-        logger.info(
-            "CSV commit batch start org_id=%s source=csv_upload rows=%d",
-            org_id,
-            len(validated),
-        )
-        created = []
-        commit_errors: list[dict] = []
-        dup_msg = "Duplicate batch (org + name + batch already exists)"
-
-        for v in validated:
-            r = v["row"]
-            name = v["name"]
-            quantity_str = v["quantity_str"]
-            canonical_unit = v["canonical_unit"]
-            purchase_date = _parse_date(r.get("purchase_date") or "")
-            expiry_date = _parse_date(r.get("expiry_date") or "")
-            supplier = _sanitize(r.get("supplier"), 255) or None
-            batch_number = _sanitize(r.get("batch_number"), 255) or None
-
-            extra_data = {
-                "inventory_audit_history": [
+            repo = InventoryRepository(db_session)
+            errors = []
+            # Phase 1: validate all rows with shared logic; do not create yet
+            validated = []
+            for r in rows:
+                name = _sanitize(r.get("name"), 255)
+                qty_str = (r.get("quantity") or "").strip()
+                unit_raw = (r.get("unit") or "").strip()
+                status, message, canonical_unit, quantity_str_for_storage = _validate_row(name, qty_str, unit_raw)
+                if status != "ok":
+                    errors.append({"row_index": r.get("row_index"), "error": message or "Validation failed"})
+                    continue
+                validated.append(
                     {
-                        "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
-                        "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        "source_method": "csv_upload",
-                        "csv_row_index": r.get("row_index"),
+                        "row": r,
+                        "name": name,
+                        "quantity_str": quantity_str_for_storage,
+                        "canonical_unit": canonical_unit,
                     }
-                ]
-            }
+                )
+
+            if errors:
+                return jsonify({"error": "Validation failed.", "created": [], "errors": errors}), 400
+
+            logger.info(
+                "CSV commit batch start org_id=%s source=csv_upload rows=%d",
+                org_id,
+                len(validated),
+            )
+            created = []
+            commit_errors: list[dict] = []
+            dup_msg = "Duplicate batch (org + name + batch already exists)"
+
+            for v in validated:
+                r = v["row"]
+                name = v["name"]
+                quantity_str = v["quantity_str"]
+                canonical_unit = v["canonical_unit"]
+                purchase_date = _parse_date(r.get("purchase_date") or "")
+                expiry_date = _parse_date(r.get("expiry_date") or "")
+                supplier = _sanitize(r.get("supplier"), 255) or None
+                batch_number = _sanitize(r.get("batch_number"), 255) or None
+
+                extra_data = {
+                    "inventory_audit_history": [
+                        {
+                            "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
+                            "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            "source_method": "csv_upload",
+                            "csv_row_index": r.get("row_index"),
+                        }
+                    ]
+                }
+
+                try:
+                    with db_session.begin_nested():
+                        item = repo.create_inventory_item(
+                            org_id=org_id,
+                            name=name,
+                            quantity=quantity_str,
+                            unit=canonical_unit,
+                            inventory_type=InventoryType.RAW_MATERIAL.value,
+                            supplier=supplier,
+                            purchase_date=purchase_date,
+                            supplier_batch_number=batch_number,
+                            expiry_date=expiry_date,
+                            extra_data=extra_data,
+                            commit=False,
+                        )
+                        created.append(
+                            {
+                                "id": str(item.id),
+                                "name": item.name,
+                                "quantity": quantity_to_api_str(item.quantity),
+                                "unit": item.unit,
+                                "row_index": r.get("row_index"),
+                            }
+                        )
+                except IntegrityError:
+                    commit_errors.append(
+                        {"row_index": r.get("row_index"), "error": dup_msg},
+                    )
+                    logger.warning(
+                        "CSV commit row skipped (duplicate batch) org_id=%s row_index=%s name=%r batch=%r",
+                        org_id,
+                        r.get("row_index"),
+                        name,
+                        batch_number,
+                    )
 
             try:
-                with db_session.begin_nested():
-                    item = repo.create_inventory_item(
-                        org_id=org_id,
-                        name=name,
-                        quantity=quantity_str,
-                        unit=canonical_unit,
-                        inventory_type=InventoryType.RAW_MATERIAL.value,
-                        supplier=supplier,
-                        purchase_date=purchase_date,
-                        supplier_batch_number=batch_number,
-                        expiry_date=expiry_date,
-                        extra_data=extra_data,
-                        commit=False,
-                    )
-                    created.append(
-                        {
-                            "id": str(item.id),
-                            "name": item.name,
-                            "quantity": quantity_to_api_str(item.quantity),
-                            "unit": item.unit,
-                            "row_index": r.get("row_index"),
-                        }
-                    )
-            except IntegrityError:
-                commit_errors.append(
-                    {"row_index": r.get("row_index"), "error": dup_msg},
-                )
-                logger.warning(
-                    "CSV commit row skipped (duplicate batch) org_id=%s row_index=%s name=%r batch=%r",
+                db_session.commit()
+                logger.info(
+                    "CSV commit batch success org_id=%s source=csv_upload created=%d skipped=%d",
                     org_id,
-                    r.get("row_index"),
-                    name,
-                    batch_number,
+                    len(created),
+                    len(commit_errors),
                 )
+            except Exception:
+                db_session.rollback()
+                logger.exception("CSV commit batch rollback (exception) org_id=%s source=csv_upload", org_id)
+                return jsonify({"error": "Commit failed; no rows committed.", "created": [], "errors": []}), 500
 
-        try:
-            db_session.commit()
-            logger.info(
-                "CSV commit batch success org_id=%s source=csv_upload created=%d skipped=%d",
-                org_id,
-                len(created),
-                len(commit_errors),
-            )
-        except Exception:
-            db_session.rollback()
-            logger.exception("CSV commit batch rollback (exception) org_id=%s source=csv_upload", org_id)
-            return jsonify({"error": "Commit failed; no rows committed.", "created": [], "errors": []}), 500
-
-        body: dict = {"created": created, "errors": commit_errors}
-        if commit_errors and not created:
-            body["error"] = (
-                "No rows could be added: duplicate batch for each row "
-                "(same organisation, item name, and batch number must be unique when batch is set)."
-            )
-        elif commit_errors:
-            body["error"] = (
-                "Some rows were skipped because that item name and batch number already exist for your organisation."
-            )
-        return jsonify(body)
+            body: dict = {"created": created, "errors": commit_errors}
+            if commit_errors and not created:
+                body["error"] = (
+                    "No rows could be added: duplicate batch for each row "
+                    "(same organisation, item name, and batch number must be unique when batch is set)."
+                )
+            elif commit_errors:
+                body["error"] = (
+                    "Some rows were skipped because that item name and batch number already exist for your organisation."
+                )
+            return jsonify(body)
 
     @bp.route("/api/core/inventory/decode-barcode", methods=["POST"])
     @requires_auth
     def decode_barcode():
         """Barcode decoding is done in the browser (BarcodeDetector + ZXing). This endpoint is deprecated."""
-        logger.warning(
-            "Deprecated decode-barcode endpoint accessed; client should use scanner UI (user_id=%s)",
-            getattr(g, "user_id", None),
-        )
-        return (
-            jsonify(
-                {
-                    "error": "Barcode decoding is performed in the browser. Use the scanner UI; no server-side decoding.",
-                }
-            ),
-            410,
-        )
+        with start_span("inventory.barcode_decode_deprecated", attributes={"org_id": str(UUID(g.org_id))}):
+            logger.warning(
+                "Deprecated decode-barcode endpoint accessed; client should use scanner UI (user_id=%s)",
+                getattr(g, "user_id", None),
+            )
+            return (
+                jsonify(
+                    {
+                        "error": "Barcode decoding is performed in the browser. Use the scanner UI; no server-side decoding.",
+                    }
+                ),
+                410,
+            )

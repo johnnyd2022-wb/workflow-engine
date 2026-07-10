@@ -9,6 +9,7 @@ from app.core.backend.event_writer import EventWriter
 from app.core.db.models.process import Process, ProcessCategory
 from app.core.db.models.process_version import ProcessVersion
 from app.core.db.models.step import Step
+from app.observability import start_span
 
 
 def _step_snapshot(step: Step) -> dict:
@@ -93,26 +94,30 @@ class ProcessRepository:
         is_draft: bool = False,
     ) -> Process:
         """Create a new process"""
-        process = Process(org_id=org_id, name=name, description=description, category=category, is_draft=is_draft)
-        self.db.add(process)
-        self.db.flush()
-        _ = process.id
+        with start_span(
+            "process.create",
+            attributes={"org_id": str(org_id), "category": category.value if category else None},
+        ):
+            process = Process(org_id=org_id, name=name, description=description, category=category, is_draft=is_draft)
+            self.db.add(process)
+            self.db.flush()
+            _ = process.id
 
-        pv = _insert_process_version(self.db, org_id, process, [], change_summary="Process created")
+            pv = _insert_process_version(self.db, org_id, process, [], change_summary="Process created")
 
-        ew = EventWriter(self.db, org_id)
-        ew.emit(
-            event_type="process.created",
-            entity_type="process",
-            entity_id=process.id,
-            payload={
-                **_process_snapshot(process, []),
-                "process_version_id": str(pv.id),
-                "version_number": pv.version_number,
-            },
-        )
-        self.db.commit()
-        return process
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="process.created",
+                entity_type="process",
+                entity_id=process.id,
+                payload={
+                    **_process_snapshot(process, []),
+                    "process_version_id": str(pv.id),
+                    "version_number": pv.version_number,
+                },
+            )
+            self.db.commit()
+            return process
 
     def get_process_by_id(self, process_id: UUID, org_id: UUID) -> Process | None:
         """Get process by ID (must be scoped to org)."""
@@ -132,68 +137,76 @@ class ProcessRepository:
         is_draft: bool | None = None,
     ) -> Process | None:
         """Update process (must belong to org)"""
-        process = self.get_process_by_id(process_id, org_id)
-        if not process:
-            return None
+        with start_span(
+            "process.update",
+            attributes={"org_id": str(org_id), "process_id": str(process_id)},
+        ):
+            process = self.get_process_by_id(process_id, org_id)
+            if not process:
+                return None
 
-        diff: dict = {}
-        if name is not None and name != process.name:
-            diff["name"] = {"before": process.name, "after": name}
-            process.name = name
-        if description is not None and description != process.description:
-            diff["description"] = {"before": process.description, "after": description}
-            process.description = description
-        if category is not None and category != process.category:
-            diff["category"] = {
-                "before": process.category.value if process.category else None,
-                "after": category.value if category else None,
-            }
-            process.category = category
-        if is_draft is not None and is_draft != process.is_draft:
-            diff["is_draft"] = {"before": process.is_draft, "after": is_draft}
-            process.is_draft = is_draft
+            diff: dict = {}
+            if name is not None and name != process.name:
+                diff["name"] = {"before": process.name, "after": name}
+                process.name = name
+            if description is not None and description != process.description:
+                diff["description"] = {"before": process.description, "after": description}
+                process.description = description
+            if category is not None and category != process.category:
+                diff["category"] = {
+                    "before": process.category.value if process.category else None,
+                    "after": category.value if category else None,
+                }
+                process.category = category
+            if is_draft is not None and is_draft != process.is_draft:
+                diff["is_draft"] = {"before": process.is_draft, "after": is_draft}
+                process.is_draft = is_draft
 
-        if not diff:
+            if not diff:
+                return process
+
+            steps = _current_steps(self.db, process_id)
+            pv = _insert_process_version(self.db, org_id, process, steps, change_summary="Process updated")
+
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="process.updated",
+                entity_type="process",
+                entity_id=process.id,
+                payload={
+                    **_process_snapshot(process, steps),
+                    "process_version_id": str(pv.id),
+                    "version_number": pv.version_number,
+                    "change_summary": "Process updated",
+                },
+                diff=diff,
+            )
+            self.db.commit()
+            self.db.expire(process, ["updated_at"])
+            _ = process.updated_at
             return process
-
-        steps = _current_steps(self.db, process_id)
-        pv = _insert_process_version(self.db, org_id, process, steps, change_summary="Process updated")
-
-        ew = EventWriter(self.db, org_id)
-        ew.emit(
-            event_type="process.updated",
-            entity_type="process",
-            entity_id=process.id,
-            payload={
-                **_process_snapshot(process, steps),
-                "process_version_id": str(pv.id),
-                "version_number": pv.version_number,
-                "change_summary": "Process updated",
-            },
-            diff=diff,
-        )
-        self.db.commit()
-        self.db.expire(process, ["updated_at"])
-        _ = process.updated_at
-        return process
 
     def delete_process(self, process_id: UUID, org_id: UUID) -> bool:
         """Delete process (cascade deletes steps)"""
-        process = self.get_process_by_id(process_id, org_id)
-        if not process:
-            return False
+        with start_span(
+            "process.delete",
+            attributes={"org_id": str(org_id), "process_id": str(process_id)},
+        ):
+            process = self.get_process_by_id(process_id, org_id)
+            if not process:
+                return False
 
-        steps = _current_steps(self.db, process_id)
-        ew = EventWriter(self.db, org_id)
-        ew.emit(
-            event_type="process.deleted",
-            entity_type="process",
-            entity_id=process.id,
-            payload=_process_snapshot(process, steps),
-        )
-        self.db.delete(process)
-        self.db.commit()
-        return True
+            steps = _current_steps(self.db, process_id)
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="process.deleted",
+                entity_type="process",
+                entity_id=process.id,
+                payload=_process_snapshot(process, steps),
+            )
+            self.db.delete(process)
+            self.db.commit()
+            return True
 
     def add_step(
         self,
@@ -208,41 +221,45 @@ class ProcessRepository:
         execution_prompts: list | None = None,
     ) -> Step | None:
         """Add a step to a process"""
-        process = self.get_process_by_id(process_id, org_id)
-        if not process:
-            return None
+        with start_span(
+            "process.step_add",
+            attributes={"org_id": str(org_id), "process_id": str(process_id), "step_number": step_number},
+        ):
+            process = self.get_process_by_id(process_id, org_id)
+            if not process:
+                return None
 
-        step = Step(
-            process_id=process_id,
-            step_number=step_number,
-            position=position,
-            name=name,
-            description=description,
-            inputs=inputs or [],
-            outputs=outputs or [],
-            execution_prompts=execution_prompts or [],
-        )
-        self.db.add(step)
-        self.db.flush()
-        _ = step.id
+            step = Step(
+                process_id=process_id,
+                step_number=step_number,
+                position=position,
+                name=name,
+                description=description,
+                inputs=inputs or [],
+                outputs=outputs or [],
+                execution_prompts=execution_prompts or [],
+            )
+            self.db.add(step)
+            self.db.flush()
+            _ = step.id
 
-        all_steps = _current_steps(self.db, process_id)
-        pv = _insert_process_version(self.db, org_id, process, all_steps, change_summary=f"Added step: {name}")
+            all_steps = _current_steps(self.db, process_id)
+            pv = _insert_process_version(self.db, org_id, process, all_steps, change_summary=f"Added step: {name}")
 
-        ew = EventWriter(self.db, org_id)
-        ew.emit(
-            event_type="process.step_added",
-            entity_type="process",
-            entity_id=process.id,
-            payload={
-                "step": _step_snapshot(step),
-                "process_version_id": str(pv.id),
-                "version_number": pv.version_number,
-                "change_summary": f"Added step: {name}",
-            },
-        )
-        self.db.commit()
-        return step
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="process.step_added",
+                entity_type="process",
+                entity_id=process.id,
+                payload={
+                    "step": _step_snapshot(step),
+                    "process_version_id": str(pv.id),
+                    "version_number": pv.version_number,
+                    "change_summary": f"Added step: {name}",
+                },
+            )
+            self.db.commit()
+            return step
 
     def update_step(
         self,
@@ -258,92 +275,102 @@ class ProcessRepository:
         execution_prompts: list | None = None,
     ) -> Step | None:
         """Update a step"""
-        process = self.get_process_by_id(process_id, org_id)
-        if not process:
-            return None
+        with start_span(
+            "process.step_update",
+            attributes={"org_id": str(org_id), "process_id": str(process_id), "step_id": str(step_id)},
+        ):
+            process = self.get_process_by_id(process_id, org_id)
+            if not process:
+                return None
 
-        step = self.db.query(Step).filter(Step.id == step_id, Step.process_id == process_id).first()
-        if not step:
-            return None
+            step = self.db.query(Step).filter(Step.id == step_id, Step.process_id == process_id).first()
+            if not step:
+                return None
 
-        # Capture before state for diff
-        before = _step_snapshot(step)
+            # Capture before state for diff
+            before = _step_snapshot(step)
 
-        if step_number is not None:
-            step.step_number = step_number
-        if position is not None:
-            step.position = position
-        if name is not None:
-            step.name = name
-        if description is not None:
-            step.description = description
-        if inputs is not None:
-            step.inputs = inputs
-        if outputs is not None:
-            step.outputs = outputs
-        if execution_prompts is not None:
-            step.execution_prompts = execution_prompts
+            if step_number is not None:
+                step.step_number = step_number
+            if position is not None:
+                step.position = position
+            if name is not None:
+                step.name = name
+            if description is not None:
+                step.description = description
+            if inputs is not None:
+                step.inputs = inputs
+            if outputs is not None:
+                step.outputs = outputs
+            if execution_prompts is not None:
+                step.execution_prompts = execution_prompts
 
-        after = _step_snapshot(step)
-        diff = {k: {"before": before[k], "after": after[k]} for k in before if before[k] != after[k]}
+            after = _step_snapshot(step)
+            diff = {k: {"before": before[k], "after": after[k]} for k in before if before[k] != after[k]}
 
-        if not diff:
+            if not diff:
+                return step
+
+            all_steps = _current_steps(self.db, process_id)
+            pv = _insert_process_version(
+                self.db, org_id, process, all_steps, change_summary=f"Updated step: {step.name}"
+            )
+
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="process.step_updated",
+                entity_type="process",
+                entity_id=process.id,
+                payload={
+                    "step": after,
+                    "process_version_id": str(pv.id),
+                    "version_number": pv.version_number,
+                    "change_summary": f"Updated step: {step.name}",
+                },
+                diff={"step": diff},
+            )
+            self.db.commit()
+            self.db.expire(step, ["updated_at"])
+            _ = step.updated_at
             return step
-
-        all_steps = _current_steps(self.db, process_id)
-        pv = _insert_process_version(self.db, org_id, process, all_steps, change_summary=f"Updated step: {step.name}")
-
-        ew = EventWriter(self.db, org_id)
-        ew.emit(
-            event_type="process.step_updated",
-            entity_type="process",
-            entity_id=process.id,
-            payload={
-                "step": after,
-                "process_version_id": str(pv.id),
-                "version_number": pv.version_number,
-                "change_summary": f"Updated step: {step.name}",
-            },
-            diff={"step": diff},
-        )
-        self.db.commit()
-        self.db.expire(step, ["updated_at"])
-        _ = step.updated_at
-        return step
 
     def delete_step(self, step_id: UUID, process_id: UUID, org_id: UUID) -> bool:
         """Delete a step from a process"""
-        process = self.get_process_by_id(process_id, org_id)
-        if not process:
-            return False
+        with start_span(
+            "process.step_delete",
+            attributes={"org_id": str(org_id), "process_id": str(process_id), "step_id": str(step_id)},
+        ):
+            process = self.get_process_by_id(process_id, org_id)
+            if not process:
+                return False
 
-        step = self.db.query(Step).filter(Step.id == step_id, Step.process_id == process_id).first()
-        if not step:
-            return False
+            step = self.db.query(Step).filter(Step.id == step_id, Step.process_id == process_id).first()
+            if not step:
+                return False
 
-        step_snap = _step_snapshot(step)
-        self.db.delete(step)
-        self.db.flush()
+            step_snap = _step_snapshot(step)
+            self.db.delete(step)
+            self.db.flush()
 
-        remaining_steps = _current_steps(self.db, process_id)
-        pv = _insert_process_version(
-            self.db, org_id, process, remaining_steps, change_summary=f"Deleted step: {step_snap['name']}"
-        )
+            remaining_steps = _current_steps(self.db, process_id)
+            pv = _insert_process_version(
+                self.db, org_id, process, remaining_steps, change_summary=f"Deleted step: {step_snap['name']}"
+            )
 
-        ew = EventWriter(self.db, org_id)
-        ew.emit(
-            event_type="process.step_deleted",
-            entity_type="process",
-            entity_id=process.id,
-            payload={
-                "deleted_step": step_snap,
-                "process_version_id": str(pv.id),
-                "version_number": pv.version_number,
-                "change_summary": f"Deleted step: {step_snap['name']}",
-            },
-        )
-        self.db.commit()
-        return True
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="process.step_deleted",
+                entity_type="process",
+                entity_id=process.id,
+                payload={
+                    "deleted_step": step_snap,
+                    "process_version_id": str(pv.id),
+                    "version_number": pv.version_number,
+                    "change_summary": f"Deleted step: {step_snap['name']}",
+                },
+            )
+            self.db.commit()
+            return True
 
     def get_process_with_steps(self, process_id: UUID, org_id: UUID) -> Process | None:
         """Get process with all its steps loaded in a single query."""
