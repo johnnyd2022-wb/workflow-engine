@@ -366,6 +366,8 @@ services:
       PERSONS_WRITE_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       PERSONS_READ_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       REDIS_URL: redis://posthog-redis:6379/
+      COOKIELESS_REDIS_HOST: posthog-redis
+      COOKIELESS_REDIS_PORT: "6379"
     volumes:
       - ./observability/posthog-stack/geoip/GeoLite2-City.mmdb:/share/GeoLite2-City.mmdb:ro
     depends_on:
