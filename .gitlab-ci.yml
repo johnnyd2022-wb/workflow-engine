@@ -91,3 +91,13 @@ semgrep:
     - merge_requests
     - main
   allow_failure: true
+
+semgrep_observability:
+  stage: security
+  image: semgrep/semgrep:latest
+  script:
+    - semgrep --config .semgrep/rules/observability.yml app/ --include="*.py" --severity ERROR --error
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
