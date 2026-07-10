@@ -11,7 +11,6 @@ Explicit non-goals (intentionally deferred for current product maturity):
   role-based session controls. Session invalidation forces full re-login (2FA required if enabled).
 """
 
-import logging
 import os
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -21,8 +20,9 @@ from flask import g, make_response, render_template_string, request, session
 from app.api.middleware.tenant_context import PUBLIC_ENDPOINTS
 from app.core.db import db_session
 from app.core.db.repositories.user_repo import UserRepository
+from app.observability import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Conservative defaults (Google-style): 24h default; long sessions only with explicit user choice.
 DEFAULT_SESSION_TIMEOUT_MINUTES = 24 * 60  # 24 hours
@@ -67,7 +67,7 @@ def setup_session_security(app):
                     else:
                         timeout_minutes = DEFAULT_SESSION_TIMEOUT_MINUTES
                 except Exception as e:
-                    logger.warning(f"Failed to load user session timeout: {e}")
+                    logger.warning("user_session_timeout_load_failed", error=str(e))
                     timeout_minutes = DEFAULT_SESSION_TIMEOUT_MINUTES
 
         timeout_minutes = max(MIN_SESSION_TIMEOUT_MINUTES, min(MAX_SESSION_TIMEOUT_MINUTES, timeout_minutes))
@@ -80,7 +80,7 @@ def setup_session_security(app):
                 last_activity = datetime.fromisoformat(last_activity_str)
                 time_since_activity = datetime.utcnow() - last_activity
                 if time_since_activity > timedelta(minutes=timeout_minutes):
-                    logger.info(f"Session expired due to inactivity for user {user_id}")
+                    logger.info("session_expired_due_to_inactivity", user_id=user_id)
                     session.clear()
                     session.modified = True
 
@@ -108,7 +108,7 @@ def setup_session_security(app):
                         return response
 
             except (ValueError, TypeError) as e:
-                logger.warning(f"Invalid last_activity_at format: {e}")
+                logger.warning("invalid_last_activity_at_format", error=str(e))
                 # Reset on invalid format (only write in before_request when correcting bad data)
                 session["last_activity_at"] = datetime.utcnow().isoformat()
                 session.modified = True

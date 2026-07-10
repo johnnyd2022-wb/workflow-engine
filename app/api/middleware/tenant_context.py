@@ -10,11 +10,14 @@ Rules:
 
 from uuid import UUID, uuid4
 
-from flask import abort, current_app, g, request, session
+from flask import abort, g, request, session
 
 from app.core.db import db_session
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
+from app.observability import get_logger
+
+LOGGER = get_logger(__name__)
 
 # Public endpoints that do not require tenant context
 PUBLIC_ENDPOINTS = {
@@ -23,6 +26,8 @@ PUBLIC_ENDPOINTS = {
     "auth.verify_two_factor",  # 2FA verification during login (pending session only)
     "auth.cancel_2fa",  # Cancel pending 2FA session (no auth required)
     "healthcheck",
+    "ingest_faro_telemetry",
+    "ingest_posthog_telemetry",
     "static",
 }
 
@@ -61,7 +66,7 @@ def setup_tenant_context(app):
         try:
             user_uuid = UUID(raw_user_id)
         except Exception:
-            current_app.logger.warning("Invalid user_id UUID in session")
+            LOGGER.warning("invalid_session_user_id_uuid")
             abort(403, "Invalid session")
 
         db = db_session()
@@ -70,14 +75,14 @@ def setup_tenant_context(app):
             user_repo = UserRepository(db)
             user = user_repo.get_user_by_id(user_uuid)
             if not user or not getattr(user, "is_active", False):
-                current_app.logger.warning("Unknown or inactive user attempt", extra={"user_id": str(user_uuid)})
+                LOGGER.warning("unknown_or_inactive_user_attempt", user_id=str(user_uuid))
                 abort(403, "Access denied")
 
             # Load organisation
             org_repo = OrganisationRepository(db)
             org = org_repo.get_org_by_id(user.org_id)
             if not org:
-                current_app.logger.error("User belongs to missing organisation", extra={"user_id": str(user_uuid)})
+                LOGGER.error("user_belongs_to_missing_organisation", user_id=str(user_uuid))
                 abort(403, "Invalid organisation")
 
             # Populate g: lightweight primitives + ORM objects
@@ -107,7 +112,7 @@ def setup_tenant_context(app):
             }
 
         except Exception:
-            current_app.logger.exception("Failed to load tenant context")
+            LOGGER.exception("failed_to_load_tenant_context")
             abort(500, "Failed to load tenant context")
 
     @app.teardown_appcontext

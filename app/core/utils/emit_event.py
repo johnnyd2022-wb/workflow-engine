@@ -8,6 +8,9 @@ never fails the calling request.
 from uuid import UUID
 
 from app.core.db import SessionLocal
+from app.observability import get_logger
+
+LOGGER = get_logger(__name__)
 
 
 def emit_event(
@@ -43,9 +46,7 @@ def emit_event(
         )
         db.commit()
     except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).warning("emit_event failed for %s: %s", event_type, e)
+        LOGGER.warning("emit_event_failed", event_type=event_type, error=str(e))
         db.rollback()
     finally:
         db.close()
