@@ -115,7 +115,7 @@ services:
         until rpk topic list --brokers posthog-kafka:9092 >/dev/null 2>&1; do
           sleep 2
         done
-        for topic in clickhouse_events_json clickhouse_ai_events_json clickhouse_heatmap_events clickhouse_ingestion_warnings clickhouse_person_distinct_id events_plugin_ingestion events_plugin_ingestion_async events_plugin_ingestion_historical events_plugin_ingestion_overflow events_plugin_ingestion_dlq ingestion-errortracking-main log_entries session_recording_snapshot_item_events; do
+        for topic in clickhouse_events_json clickhouse_ai_events_json clickhouse_heatmap_events clickhouse_ingestion_warnings clickhouse_person_distinct_id events_plugin_ingestion events_plugin_ingestion_async events_plugin_ingestion_historical events_plugin_ingestion_overflow events_plugin_ingestion_dlq ingestion-errortracking-main log_entries session_recording_snapshot_item_events session_recording_snapshot_item_overflow session_recording_snapshot_item_dlq clickhouse_session_replay_events; do
           rpk topic create "$$topic" --brokers posthog-kafka:9092 -p 1 -r 1 || true
         done
     depends_on:
@@ -508,6 +508,40 @@ services:
         condition: service_completed_successfully
       posthog-kafka-init:
         condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - observability
+
+  # Consumes raw rrweb snapshot payloads produced by posthog-replay-capture,
+  # batches and writes compressed session blocks to MinIO, and publishes
+  # session metadata to clickhouse_session_replay_events. Without this
+  # consumer, recordings never reach the ClickHouse tables the UI queries,
+  # even though the browser SDK and posthog-replay-capture are both working.
+  posthog-recordings-blob-ingestion:
+    image: posthog/posthog-node@sha256:863e76e040ad41aef79f605c33ec71f1529bddf94cfd88941c935da9bde97235
+    container_name: workflow-posthog-recordings-blob-ingestion
+    command: node nodejs/dist/index.js
+    environment:
+      PLUGIN_SERVER_MODE: recordings-blob-ingestion-v2
+      DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      KAFKA_HOSTS: posthog-kafka:9092
+      KAFKA_PRODUCER_METADATA_BROKER_LIST: posthog-kafka:9092
+      REDIS_URL: redis://posthog-redis:6379/
+      SESSION_RECORDING_V2_S3_ENDPOINT: http://posthog-objectstorage:19000
+      SESSION_RECORDING_V2_S3_ACCESS_KEY_ID: object_storage_root_user
+      SESSION_RECORDING_V2_S3_SECRET_ACCESS_KEY: object_storage_root_password
+      ENCRYPTION_SALT_KEYS: ${ENCRYPTION_SALT_KEYS:?Run obs-secrets check and create the KeePassXC entry.}
+    depends_on:
+      posthog-db:
+        condition: service_healthy
+      posthog-redis:
+        condition: service_healthy
+      posthog-migrate:
+        condition: service_completed_successfully
+      posthog-kafka-init:
+        condition: service_completed_successfully
+      posthog-objectstorage:
+        condition: service_started
     restart: unless-stopped
     networks:
       - observability
