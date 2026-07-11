@@ -148,8 +148,10 @@ Frontend SDK bundles are vendored in `app/ui/shared/` and loaded from `base_spa.
 - `faro-web-tracing.iife.js`
 - `posthog-array.full.js`
 - `observability-rum.js` bootstrap (standard PostHog `$pageview`/`$pageleave`, HTMX dwell,
-  JS errors, web-vitals, trace header helper). PostHog feature flags are not
-  enabled, so the optional remote-configuration loader is disabled.
+  JS errors, web-vitals, trace header helper, session replay). The SDK's `/flags/`
+  remote-config call is left enabled even though this deployment doesn't use
+  PostHog feature flags — that response is also how the SDK learns whether
+  session recording should activate.
 
 Python structured logs are exported as OTLP logs alongside traces and metrics.
 Alloy keeps only bounded resource labels (`service`, namespace, and environment)

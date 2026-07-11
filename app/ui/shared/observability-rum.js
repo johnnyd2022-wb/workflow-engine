@@ -325,10 +325,11 @@
         capture_pageview: false,
         capture_pageleave: false,
         autocapture: true,
-        // This deployment does not use PostHog feature flags. Disabling their
-        // optional remote-configuration loader avoids requests for the
-        // unneeded /array/<token>/config SDK dependency.
-        advanced_disable_flags: true,
+        // Despite the name, the /flags/ remote-config response is not just
+        // feature-flag evaluation: it's also how the SDK learns whether
+        // session recording should activate server-side. Disabling it (via
+        // advanced_disable_flags) silently prevented session replay from
+        // ever starting, even with disable_session_recording left false.
         disable_session_recording: false,
         mask_all_text: maskInputs,
         mask_all_element_attributes: true,

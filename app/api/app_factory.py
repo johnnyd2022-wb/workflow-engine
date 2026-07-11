@@ -1,5 +1,6 @@
 """Flask application factory"""
 
+import json
 import os
 import re
 
@@ -203,14 +204,33 @@ def create_app():
             return config.rum_posthog_replay_upstream, "s/"
         if normalized == "flags":
             return config.rum_posthog_feature_flags_upstream, "flags/"
-        if re.fullmatch(r"array/[^/]+/config(?:\.js)?", normalized):
-            return config.rum_posthog_feature_flags_upstream, normalized
+        # Static SDK assets (e.g. the lazy-loaded session-recording recorder)
+        # are Django-served files, unlike the array/config endpoint below.
+        if normalized.startswith("static/"):
+            return config.rum_posthog_upstream, normalized
         return None
 
     @app.route("/telemetry/posthog/<path:endpoint>", methods=["GET", "POST"])
     @limiter.limit("120 per minute")
     def ingest_posthog_telemetry(endpoint):
         """Forward only the PostHog SDK endpoints required by the browser bundle."""
+        normalized = endpoint.strip("/")
+        # Self-hosted PostHog's Django app has no route for this SDK asset
+        # (it's cloud/CDN-only infrastructure); requests fall through to its
+        # login-redirect catch-all. The SDK loads this as a <script> tag and
+        # only reads one thing from the resulting global (`sessionRecording`,
+        # checked truthy) before it will ever arm the recorder, so synthesize
+        # the minimal shape as executable JS rather than proxy to a route
+        # that doesn't exist.
+        config_match = re.fullmatch(r"array/([^/]+)/config(?:\.js)?", normalized)
+        if config_match:
+            token = json.dumps(config_match.group(1))
+            remote_config = json.dumps({"sessionRecording": {}, "supportedCompression": ["gzip-js"]})
+            script = (
+                "window._POSTHOG_REMOTE_CONFIG = window._POSTHOG_REMOTE_CONFIG || {};"
+                f"window._POSTHOG_REMOTE_CONFIG[{token}] = {{config: {remote_config}}};"
+            )
+            return Response(script, mimetype="application/javascript")
         target = _posthog_telemetry_upstream(endpoint)
         if target is None:
             return jsonify({"error": "Unknown telemetry endpoint"}), 404
@@ -304,7 +324,12 @@ def create_app():
                 "font-src 'self' https://fonts.gstatic.com; "
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
                 "img-src 'self' data:; "
-                "connect-src 'self'"
+                "connect-src 'self'; "
+                # PostHog's vendored session-recording bundle spins up its rrweb
+                # compression worker from a data: URI rather than a same-origin
+                # script file; without this, browsers silently refuse to create
+                # the worker and no recording snapshots are ever captured.
+                "worker-src 'self' data: blob:"
             )
 
         # HSTS (HTTP Strict Transport Security) - Force HTTPS for 1 year
