@@ -249,6 +249,7 @@ services:
       SESSION_RECORDING_V2_S3_ACCESS_KEY_ID: object_storage_root_user
       SESSION_RECORDING_V2_S3_SECRET_ACCESS_KEY: object_storage_root_password
       POSTHOG_SKIP_MIGRATION_CHECKS: "1"
+      PERSONHOG_ADDR: posthog-personhog-router:50052
       OPT_OUT_CAPTURE: "false"
     volumes:
       - ./observability/posthog-stack/geoip/GeoLite2-City.mmdb:/code/share/GeoLite2-City.mmdb:ro
@@ -261,6 +262,8 @@ services:
         condition: service_healthy
       posthog-migrate:
         condition: service_completed_successfully
+      posthog-personhog-router:
+        condition: service_started
       posthog-kafka-init:
         condition: service_completed_successfully
       posthog-objectstorage:
@@ -300,6 +303,7 @@ services:
       SESSION_RECORDING_V2_S3_ACCESS_KEY_ID: object_storage_root_user
       SESSION_RECORDING_V2_S3_SECRET_ACCESS_KEY: object_storage_root_password
       POSTHOG_SKIP_MIGRATION_CHECKS: "1"
+      PERSONHOG_ADDR: posthog-personhog-router:50052
     volumes:
       - ./observability/posthog-stack/geoip/GeoLite2-City.mmdb:/code/share/GeoLite2-City.mmdb:ro
     depends_on:
@@ -311,8 +315,44 @@ services:
         condition: service_healthy
       posthog-migrate:
         condition: service_completed_successfully
+      posthog-personhog-router:
+        condition: service_started
       posthog-kafka-init:
         condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - observability
+
+  # Current PostHog releases access person, group, and cohort data through
+  # PersonHog gRPC. The Django app has no ORM fallback for these queries.
+  posthog-personhog-replica:
+    image: ghcr.io/posthog/posthog/personhog-replica@sha256:ffa6a4284a1f94c384e87b8b501fef5dbe1b594c8dd253ec3f9cf4bb5ee718ff
+    container_name: workflow-posthog-personhog-replica
+    environment:
+      GRPC_ADDRESS: 0.0.0.0:50051
+      PRIMARY_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      METRICS_PORT: "9100"
+      RUST_LOG: info
+    depends_on:
+      posthog-db:
+        condition: service_healthy
+      posthog-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - observability
+
+  posthog-personhog-router:
+    image: ghcr.io/posthog/posthog/personhog-router@sha256:2b12bdf2cc410a579248387b6c7235dfcd3be97983e0b0cfeabf3714deac8e39
+    container_name: workflow-posthog-personhog-router
+    environment:
+      GRPC_ADDRESS: 0.0.0.0:50052
+      REPLICA_URL: http://posthog-personhog-replica:50051
+      BACKEND_TIMEOUT_MS: "5000"
+      RUST_LOG: info
+    depends_on:
+      posthog-personhog-replica:
+        condition: service_started
     restart: unless-stopped
     networks:
       - observability
