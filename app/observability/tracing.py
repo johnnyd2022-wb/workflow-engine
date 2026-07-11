@@ -20,6 +20,8 @@ def configure_tracing(app: Any, config: Any) -> None:
 
     if not bool(getattr(config, "otel_enabled", False)):
         return
+    if not bool(getattr(config, "grafana_data_enabled", False)):
+        return
 
     try:
         from opentelemetry import trace

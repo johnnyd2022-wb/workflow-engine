@@ -311,10 +311,12 @@
   <script src="/ui/shared/sidebar-v2.js"></script>
   <script src="/ui/shared/password-policy.js"></script>
   <script src="/ui/shared/workflow-engine-settings.js"></script>
-  {% if rum_enabled %}
+  {% if rum_enabled and (grafana_data_enabled or posthog_data_enabled) %}
   <script>
     window.__RUM_CONFIG__ = {
       enabled: true,
+      grafanaDataEnabled: {{ grafana_data_enabled|tojson }},
+      posthogDataEnabled: {{ posthog_data_enabled|tojson }},
       collectorUrl: {{ rum_collector_url|tojson }},
       sampleRate: {{ rum_sample_rate|tojson }},
       maskInputs: {{ rum_mask_inputs|tojson }},
@@ -323,9 +325,13 @@
       posthogApiKey: {{ rum_posthog_api_key|tojson }}
     };
   </script>
+  {% if grafana_data_enabled %}
   <script src="/ui/shared/faro-web-sdk.iife.js"></script>
   <script src="/ui/shared/faro-web-tracing.iife.js"></script>
+  {% endif %}
+  {% if posthog_data_enabled %}
   <script src="/ui/shared/posthog-array.full.js"></script>
+  {% endif %}
   <script src="/ui/shared/observability-rum.js"></script>
   {% endif %}
 

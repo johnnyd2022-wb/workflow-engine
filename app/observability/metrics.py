@@ -24,6 +24,8 @@ def configure_metrics(config: Any) -> None:
         return
     if not bool(getattr(config, "otel_enabled", False)):
         return
+    if not bool(getattr(config, "grafana_data_enabled", False)):
+        return
     if not bool(getattr(config, "otel_capture_metrics", True)):
         return
     if str(getattr(config, "environment", "")).strip().lower() == "test":

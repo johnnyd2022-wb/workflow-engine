@@ -69,7 +69,7 @@ def create_app():
     # blueprint registration so request hooks and spans are available to all routes.
     configure_tracing(app, config)
     configure_metrics(config)
-    if config.otel_enabled:
+    if config.otel_enabled and config.grafana_data_enabled:
         try:
             from opentelemetry.instrumentation.requests import RequestsInstrumentor
             from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
@@ -147,9 +147,9 @@ def create_app():
             logger.exception(f"Unexpected error serving static file: {filename}")
             abort(500, "Internal server error")
 
-    def _telemetry_response(upstream_base, endpoint_path):
+    def _telemetry_response(upstream_base, endpoint_path, data_enabled):
         """Forward a constrained telemetry payload to one configured collector endpoint."""
-        if not config.rum_enabled:
+        if not config.rum_enabled or not data_enabled:
             return jsonify({"error": "Telemetry disabled"}), 404
 
         upstream_url = f"{upstream_base.rstrip('/')}/{endpoint_path.lstrip('/')}"
@@ -193,7 +193,7 @@ def create_app():
     @limiter.limit("120 per minute")
     def ingest_faro_telemetry():
         """Accept Faro's fixed collect endpoint without exposing a general HTTP proxy."""
-        return _telemetry_response(config.rum_faro_upstream, "collect")
+        return _telemetry_response(config.rum_faro_upstream, "collect", config.grafana_data_enabled)
 
     def _posthog_telemetry_upstream(endpoint: str):
         """Return the dedicated PostHog ingestion service for an SDK endpoint."""
@@ -214,6 +214,8 @@ def create_app():
     @limiter.limit("120 per minute")
     def ingest_posthog_telemetry(endpoint):
         """Forward only the PostHog SDK endpoints required by the browser bundle."""
+        if not config.rum_enabled or not config.posthog_data_enabled:
+            return jsonify({"error": "Telemetry disabled"}), 404
         normalized = endpoint.strip("/")
         # Self-hosted PostHog's Django app has no route for this SDK asset
         # (it's cloud/CDN-only infrastructure); requests fall through to its
@@ -235,7 +237,7 @@ def create_app():
         if target is None:
             return jsonify({"error": "Unknown telemetry endpoint"}), 404
         upstream_base, endpoint_path = target
-        return _telemetry_response(upstream_base, endpoint_path)
+        return _telemetry_response(upstream_base, endpoint_path, config.posthog_data_enabled)
 
     # Global 401 handler: clear session; redirect browser requests, return JSON for API calls.
     # This dual-mode behavior is intentional (SPA + API usage): browser GETs redirect to login,
@@ -376,6 +378,8 @@ def create_app():
         return dict(
             crm_enabled=config.crm_enabled,
             rum_enabled=config.rum_enabled,
+            grafana_data_enabled=config.grafana_data_enabled,
+            posthog_data_enabled=config.posthog_data_enabled,
             rum_collector_url=config.rum_collector_url,
             rum_sample_rate=config.rum_sample_rate,
             rum_mask_inputs=config.rum_mask_inputs,

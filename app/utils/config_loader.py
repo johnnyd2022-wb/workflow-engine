@@ -286,6 +286,16 @@ class Config:
         return self.get("observability", "log_format", "json")
 
     @property
+    def grafana_data_enabled(self) -> bool:
+        """Allow sending server and browser observability data to Grafana."""
+        return self.getboolean("observability", "grafana_data_enabled", False)
+
+    @property
+    def posthog_data_enabled(self) -> bool:
+        """Allow sending browser analytics and replay data to PostHog."""
+        return self.getboolean("observability", "posthog_data_enabled", False)
+
+    @property
     def otel_enabled(self) -> bool:
         return self.getboolean("observability", "otel_enabled", True)
 
