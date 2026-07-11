@@ -115,7 +115,7 @@ services:
         until rpk topic list --brokers posthog-kafka:9092 >/dev/null 2>&1; do
           sleep 2
         done
-        for topic in clickhouse_events_json session_recording_snapshot_item_events; do
+        for topic in clickhouse_events_json clickhouse_ai_events_json clickhouse_heatmap_events clickhouse_ingestion_warnings clickhouse_person_distinct_id events_plugin_ingestion events_plugin_ingestion_async events_plugin_ingestion_historical events_plugin_ingestion_overflow events_plugin_ingestion_dlq ingestion-errortracking-main log_entries session_recording_snapshot_item_events; do
           rpk topic create "$$topic" --brokers posthog-kafka:9092 -p 1 -r 1 || true
         done
     depends_on:
@@ -205,6 +205,34 @@ services:
       - "19000:19000"
       - "19001:19001"
     restart: unless-stopped
+    networks:
+      - observability
+
+  # posthog-node's current ingestion-v2 consumer still reads this column,
+  # whereas the pinned PostHog application image does not create it. Keep the
+  # compatibility adjustment idempotent so a volume reset boots cleanly too.
+  posthog-ingestion-schema-compat:
+    image: posthog/posthog@sha256:04cb280020653debb9d0361c8fef17c29567a93946f310ffaf73ddf683b70ca4
+    container_name: workflow-posthog-ingestion-schema-compat
+    command:
+      - python
+      - -c
+      - |
+        import os
+        import psycopg
+        with psycopg.connect(os.environ["DATABASE_URL"]) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "ALTER TABLE posthog_person "
+                    "ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NULL"
+                )
+            connection.commit()
+    environment:
+      DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+    depends_on:
+      posthog-migrate:
+        condition: service_completed_successfully
+    restart: "no"
     networks:
       - observability
 
@@ -420,6 +448,8 @@ services:
     image: ghcr.io/posthog/posthog/feature-flags@sha256:ad46da4ad20fe5597f4175bed8f6d5e6297d6e5729d2bd689c9c09c042eaf3bc
     container_name: workflow-posthog-feature-flags
     environment:
+      ADDRESS: 0.0.0.0:3001
+      SECRET_KEY: ${POSTHOG_SECRET:?Run obs-secrets check and create the KeePassXC entry.}
       WRITE_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       READ_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       PERSONS_WRITE_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
@@ -437,6 +467,48 @@ services:
       posthog-migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:13002:3001"
+    networks:
+      - observability
+
+  # Current PostHog ingestion enriches raw Capture events (including person
+  # data) before writing the fully-shaped rows to clickhouse_events_json.
+  # The general plugin server does not run this consumer mode.
+  posthog-ingestion-general:
+    image: posthog/posthog-node@sha256:863e76e040ad41aef79f605c33ec71f1529bddf94cfd88941c935da9bde97235
+    container_name: workflow-posthog-ingestion-general
+    command: node nodejs/dist/index.js
+    environment:
+      PLUGIN_SERVER_MODE: ingestion-v2-combined
+      DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      PERSONS_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      BEHAVIORAL_COHORTS_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
+      KAFKA_HOSTS: posthog-kafka:9092
+      KAFKA_PRODUCER_METADATA_BROKER_LIST: posthog-kafka:9092
+      REDIS_URL: redis://posthog-redis:6379/
+      COOKIELESS_REDIS_HOST: posthog-redis
+      COOKIELESS_REDIS_PORT: "6379"
+      CDP_REDIS_HOST: redis://posthog-redis:6379/
+      CLICKHOUSE_HOST: posthog-clickhouse
+      CLICKHOUSE_DATABASE: posthog
+      CLICKHOUSE_SECURE: "false"
+      CLICKHOUSE_VERIFY: "false"
+      ENCRYPTION_SALT_KEYS: ${ENCRYPTION_SALT_KEYS:?Run obs-secrets check and create the KeePassXC entry.}
+    depends_on:
+      posthog-db:
+        condition: service_healthy
+      posthog-redis:
+        condition: service_healthy
+      posthog-clickhouse:
+        condition: service_healthy
+      posthog-migrate:
+        condition: service_completed_successfully
+      posthog-ingestion-schema-compat:
+        condition: service_completed_successfully
+      posthog-kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
     networks:
       - observability
 
@@ -447,7 +519,7 @@ services:
       ADDRESS: 0.0.0.0:3000
       CAPTURE_MODE: events
       KAFKA_HOSTS: posthog-kafka:9092
-      KAFKA_TOPIC: clickhouse_events_json
+      KAFKA_TOPIC: events_plugin_ingestion
       REDIS_URL: redis://posthog-redis:6379/
     depends_on:
       posthog-kafka-init:
@@ -455,6 +527,8 @@ services:
       posthog-redis:
         condition: service_healthy
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:13000:3000"
     networks:
       - observability
 
@@ -473,6 +547,8 @@ services:
       posthog-redis:
         condition: service_healthy
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:13001:3000"
     networks:
       - observability
 
