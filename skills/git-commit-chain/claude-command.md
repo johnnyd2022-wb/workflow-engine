@@ -207,20 +207,21 @@ Use `glab mr create` or `glab mr update` with the written description. Do not re
 
 ### Step 8.6 — Monitor and repair the pipeline
 
-Monitor the MR pipeline to a terminal state with:
+Identify the MR head pipeline and SHA with `glab mr view --output json`. Monitor that exact pipeline to a terminal state. `glab ci status --live` may select a branch pipeline instead; use it only when its SHA matches the MR head SHA. Otherwise poll:
 
 ```
-glab ci status --live
+glab api projects/:id/pipelines/<pipeline-id>
+glab api projects/:id/pipelines/<pipeline-id>/jobs
 ```
 
-If it fails, inspect the failed jobs and logs using `glab ci status --output json`, `glab ci view`, and `glab ci trace <job>`. First establish whether each failure is related to this branch.
+If the MR head pipeline fails, inspect its jobs and logs with `glab api projects/:id/pipelines/<pipeline-id>/jobs`, `glab ci view`, and `glab ci trace <job>`. First establish whether each failure is related to this branch.
 
 For a related implementation, test, lint, security, or dependency failure:
 
 1. Diagnose the root cause and fix production code, configuration, or dependencies. Never change a test merely to pass; only align fixtures or expectations with intentionally changed behaviour while preserving the assertion's protection.
 2. If a job reports missing, incompatible, vulnerable, or outdated dependencies, update the declared dependency and lockfile with the project package manager. Run the relevant install, lint, and test checks.
 3. Create a focused follow-up commit, run the relevant local checks and the full suite where available, push it, and update the MR description with the repair and validation.
-4. Run `glab ci status --live` again. Repeat this repair-and-monitor loop until the pipeline passes or the remaining failure is demonstrably unrelated or externally blocked.
+4. Re-identify and monitor the new MR head pipeline. Repeat this repair-and-monitor loop until the pipeline passes or the remaining failure is demonstrably unrelated or externally blocked.
 
 Prefer a new follow-up commit to rewriting a pushed branch. Obtain explicit user approval before any `git push --force-with-lease`.
 
