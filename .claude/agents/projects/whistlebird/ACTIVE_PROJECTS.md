@@ -11,6 +11,7 @@ Manager** skill. Statuses seeded from the context pack — **confirm before rely
 | Liqueur range (post-Green Gold) | planned | Johnny | — | — | Sequence after Green Gold launch |
 | Pink gin experiment | R&D | Johnny | — | Stability under UV | Decide if this becomes a launch project |
 | Zero% gin / Dry July concept | idea | Johnny | — | Feasibility (hydrosol/vacuum/filtration) | Decide go/no-go for next Dry July |
+| **Duty manager's cert — Inspector interview prep** | **active** (evenings) | Johnny | TBD _(set interview date)_ | First drill session | Run `licence-study-coach` — see `LICENCE_STUDY.md` |
 
 ## How to add a project
 Use `skills/project-manager/templates/project-brief.md` (or `product-launch-plan.md` for a
