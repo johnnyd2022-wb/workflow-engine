@@ -72,3 +72,36 @@ Vanilla JS SPA — no React/Vue. HTML templates live alongside their feature blu
 ### Testing
 
 Tests use a real PostgreSQL instance (not mocks). The test suite covers execution workflows, DAG traversal, business logic, login/2FA flows, and multi-tenant API isolation. See `tests/TEST_DOCUMENTATION.md` for details.
+
+## Observability
+
+Structured logging (`structlog`, JSON), OpenTelemetry traces/metrics, and privacy-masked
+browser RUM (pageviews, dwell, clicks, web-vitals, session replay) are wired into the app
+factory and config-driven per environment (`app/config/*.ini`, `[observability]` section).
+Same-origin `/telemetry` routes proxy only the specific SDK endpoints needed to Faro and
+PostHog — nothing talks to a third-party collector directly.
+
+A full local stack — Grafana LGTM (Loki/Tempo/Mimir/Pyroscope) + Alloy, and self-hosted
+PostHog (event capture, session replay, feature flags) — runs via Docker Compose and a CLI:
+
+```bash
+uv run workflow observability secrets  # verify required KeePassXC entries exist
+uv run workflow observability start    # start the full stack
+uv run workflow observability status
+uv run workflow observability stop     # stop containers, retain data
+```
+
+Stack secrets (PostHog secret key, encryption salt, Grafana admin password) live in
+KeePassXC, not plaintext env files — `observability secrets` will tell you what's missing.
+Full details, ports, and RUM config reference: `docs/observability-local-dev.md`.
+
+## Founder operating workspace (`.claude/agents/`)
+
+`.claude/agents/` is a separate, unrelated workspace for running the founder's two
+businesses (Whistlebird, Biz-E) — project plans, marketing, sales, compliance — not part
+of this codebase's engineering surface. Its skills are registered as project-level Claude
+Code skills via symlinks in `.claude/skills/` (e.g. `/sales-manager`, `/business-operator`)
+so they're invocable from any session in this repo. See `.claude/agents/README.md` for
+the full skill roster and `.claude/agents/AGENTS.md` for how those skills should behave.
+`.claude/skills/{html,js,python}-review` are this codebase's own review skills and are
+unrelated to that workspace.
