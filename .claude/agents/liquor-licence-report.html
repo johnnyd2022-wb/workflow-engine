@@ -1,0 +1,1390 @@
+<title>NZ Gin Distillery — Liquor Licensing Guide</title>
+<style>
+  :root {
+    --ink:         #182435;
+    --ink-light:   #3D5270;
+    --ground:      #F5F6F8;
+    --surface:     #FFFFFF;
+    --rule:        #DDE1E8;
+    --text:        #374151;
+    --muted:       #6B7B8D;
+    --green:       #2B7A55;
+    --green-tint:  #EAF4EE;
+    --blue:        #2B5F8E;
+    --blue-tint:   #EAF0F8;
+    --amber:       #9A6318;
+    --amber-tint:  #FAF3E6;
+    --red:         #B33030;
+    --red-tint:    #FDECEA;
+    --purple:      #5B3FA6;
+    --purple-tint: #F0ECFA;
+    --grey:        #6B7B8D;
+    --grey-tint:   #F0F2F4;
+    --teal:        #1E7A7A;
+    --teal-tint:   #E6F4F4;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* ─── Page shell ─── */
+  .page {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 36px 88px;
+  }
+
+  /* ─── Shared header ─── */
+  .site-header {
+    padding: 44px 0 0;
+    margin-bottom: 0;
+  }
+
+  .eyebrow {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--green);
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 27px;
+    font-weight: normal;
+    color: var(--ink);
+    line-height: 1.28;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+
+  .meta-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-bottom: 0;
+  }
+
+  /* ─── Tab bar ─── */
+  .tab-bar-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--ground);
+    padding: 20px 0 0;
+    margin-bottom: 36px;
+  }
+
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    padding: 10px 20px 11px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    position: relative;
+    bottom: -2px;
+    border-bottom: 2px solid transparent;
+    letter-spacing: 0.01em;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+
+  .tab-btn:hover { color: var(--ink); }
+
+  .tab-btn.active {
+    color: var(--ink);
+    border-bottom-color: var(--green);
+  }
+
+  .tab-btn:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 2px;
+    border-radius: 3px 3px 0 0;
+  }
+
+  /* ─── Tab panels ─── */
+  .tab-panel { display: block; }
+  .tab-panel.hidden { display: none; }
+
+  /* ─── Shared section styles ─── */
+  .section { margin-bottom: 52px; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 18px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  h2 {
+    font-family: 'Georgia', serif;
+    font-size: 18px;
+    font-weight: normal;
+    color: var(--ink);
+    margin: 0 0 16px;
+  }
+
+  /* ─── Dark summary/situation boxes ─── */
+  .summary-box,
+  .situation-box {
+    background: var(--ink);
+    color: #CBD8E6;
+    border-radius: 5px;
+    padding: 22px 26px;
+    margin-bottom: 36px;
+    font-size: 14.5px;
+    line-height: 1.72;
+  }
+
+  .summary-box p, .situation-box p { margin: 0; }
+  .summary-box strong, .situation-box strong { color: #E2EAF2; font-weight: 600; }
+
+  .summary-label, .situation-box .sl {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #5A9A78;
+    margin: 0 0 8px;
+  }
+
+  /* ─── Confidence chips ─── */
+  .legend {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 13px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .chip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .chip-high   { background: var(--green-tint); color: var(--green); }
+  .chip-high   .chip-dot { background: var(--green); }
+  .chip-medium { background: var(--blue-tint);  color: var(--blue); }
+  .chip-medium .chip-dot { background: var(--blue); }
+  .chip-low    { background: var(--amber-tint); color: var(--amber); }
+  .chip-low    .chip-dot { background: var(--amber); }
+  .chip-grey   { background: var(--grey-tint);  color: var(--grey); }
+  .chip-grey   .chip-dot { background: var(--grey); }
+
+  /* ─── Action steps (tab 1) ─── */
+  .action-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .action-item {
+    display: flex;
+    gap: 18px;
+    padding: 17px 20px;
+    background: var(--surface);
+    border-radius: 4px;
+    border: 1px solid var(--rule);
+    align-items: flex-start;
+  }
+
+  .action-n {
+    font-family: 'Georgia', serif;
+    font-size: 22px;
+    color: var(--green);
+    line-height: 1;
+    min-width: 22px;
+    padding-top: 1px;
+  }
+
+  .action-body { flex: 1; }
+  .action-body strong { display: block; font-size: 14.5px; color: var(--ink); margin-bottom: 3px; }
+  .action-body span { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .action-body a { color: var(--blue); }
+
+  /* ─── Finding cards ─── */
+  .finding {
+    border-left: 3px solid var(--rule);
+    border-radius: 0 4px 4px 0;
+    background: var(--surface);
+    padding: 18px 20px 18px 22px;
+    margin-bottom: 12px;
+  }
+
+  .finding.high    { border-left-color: var(--green); }
+  .finding.medium  { border-left-color: var(--blue); }
+  .finding.low     { border-left-color: var(--amber); }
+  .finding.unver   { border-left-color: var(--grey); }
+  .finding.refuted { border-left-color: var(--red); background: var(--red-tint); }
+
+  .finding-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .badge {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    margin-top: 3px;
+    white-space: nowrap;
+  }
+
+  .badge-high    { background: var(--green-tint); color: var(--green); }
+  .badge-medium  { background: var(--blue-tint);  color: var(--blue); }
+  .badge-low     { background: var(--amber-tint); color: var(--amber); }
+  .badge-unver   { background: var(--grey-tint);  color: var(--grey); }
+  .badge-refuted { background: var(--red-tint);   color: var(--red); }
+
+  .finding-claim {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 14.5px;
+    line-height: 1.58;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .finding-evidence {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.62;
+    margin: 9px 0 0;
+  }
+
+  .finding-sources {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .src-link {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
+    color: var(--blue);
+    text-decoration: none;
+    word-break: break-all;
+    opacity: 0.8;
+  }
+  .src-link:hover { opacity: 1; text-decoration: underline; }
+
+  /* ─── Open questions ─── */
+  .q-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .q-item {
+    display: flex;
+    gap: 13px;
+    align-items: flex-start;
+    padding: 13px 17px;
+    background: var(--amber-tint);
+    border-left: 3px solid var(--amber);
+    border-radius: 0 4px 4px 0;
+    font-size: 13.5px;
+    line-height: 1.62;
+    color: var(--text);
+  }
+
+  .q-icon {
+    color: var(--amber);
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-style: normal;
+  }
+
+  /* ─── Contact / info box ─── */
+  .contact-box {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 18px 22px;
+    font-size: 13.5px;
+    line-height: 1.65;
+  }
+
+  .contact-box strong { color: var(--ink); }
+  .contact-box a { color: var(--blue); }
+
+  /* ─── Sources table ─── */
+  .table-wrap { overflow-x: auto; }
+
+  .src-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .src-table th {
+    text-align: left;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 14px 9px 0;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+
+  .src-table td {
+    padding: 9px 14px 9px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+
+  .src-table td a {
+    color: var(--blue);
+    text-decoration: none;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 10.5px;
+    word-break: break-all;
+  }
+  .src-table td a:hover { text-decoration: underline; }
+
+  .q-badge {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .q-primary { background: var(--green-tint); color: var(--green); }
+  .q-blog    { background: var(--blue-tint);  color: var(--blue); }
+  .q-fail    { background: var(--grey-tint);  color: var(--grey); }
+
+  /* ─── Caveat ─── */
+  .caveat {
+    background: var(--grey-tint);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 18px 22px;
+    font-size: 12.5px;
+    line-height: 1.68;
+    color: var(--muted);
+  }
+
+  .caveat p { margin: 0 0 7px; }
+  .caveat p:last-child { margin: 0; }
+
+  /* ─── Process steps (tab 2) ─── */
+  .steps { display: flex; flex-direction: column; }
+
+  .step { display: flex; position: relative; }
+
+  .step-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 44px;
+    flex-shrink: 0;
+  }
+
+  .step-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: #fff;
+    font-family: 'Georgia', serif;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-line {
+    width: 1px;
+    flex: 1;
+    background: var(--rule);
+    margin: 4px 0;
+    min-height: 20px;
+  }
+
+  .step:last-child .step-line { display: none; }
+
+  .step-body {
+    flex: 1;
+    padding: 4px 0 28px 18px;
+  }
+
+  .step-title {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0 0 5px;
+    line-height: 1.35;
+  }
+
+  .step-detail {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.62;
+    margin: 0;
+  }
+
+  .step-detail a { color: var(--blue); text-decoration: none; }
+  .step-detail a:hover { text-decoration: underline; }
+
+  .step-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-left: 8px;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+  }
+
+  .tag-done { background: var(--green-tint); color: var(--green); }
+  .tag-next { background: var(--amber-tint); color: var(--amber); }
+  .tag-week { background: var(--blue-tint);  color: var(--blue); }
+
+  /* ─── Interview grid ─── */
+  .interview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 16px 18px;
+  }
+
+  .info-card .ic-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+
+  .info-card .ic-value {
+    font-size: 14.5px;
+    color: var(--ink);
+    font-weight: 500;
+    margin: 0;
+  }
+
+  /* ─── Scenario list ─── */
+  .scenario-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .scenario-item {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 14px 18px;
+  }
+
+  .scenario-q {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0 0 6px;
+  }
+
+  .scenario-q::before {
+    content: "Q  ";
+    color: var(--amber);
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    margin-right: 2px;
+  }
+
+  .scenario-a {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.62;
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  .scenario-a::before {
+    content: "→  ";
+    color: var(--green);
+    font-weight: 600;
+    margin-left: -20px;
+  }
+
+  /* ─── Resource list ─── */
+  .resource-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .resource-item {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 13px 16px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+  }
+
+  .resource-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .resource-body { flex: 1; }
+
+  .resource-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0 0 2px;
+  }
+
+  .resource-url {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Menlo', 'Courier New', monospace;
+    color: var(--blue);
+    text-decoration: none;
+    word-break: break-all;
+    opacity: 0.85;
+    display: block;
+  }
+  .resource-url:hover { opacity: 1; text-decoration: underline; }
+
+  .resource-note { font-size: 12px; color: var(--muted); margin: 3px 0 0; }
+
+  /* ─── Cheat sheet ─── */
+  .cheatsheet {
+    background: var(--ink);
+    border-radius: 6px;
+    padding: 28px 28px 32px;
+  }
+
+  .cheatsheet .cs-title {
+    font-family: 'Georgia', serif;
+    font-size: 18px;
+    font-weight: normal;
+    color: #E2EAF2;
+    margin: 0 0 4px;
+  }
+
+  .cheatsheet .cs-sub {
+    font-size: 12px;
+    color: #7A98B4;
+    margin: 0 0 24px;
+  }
+
+  .cs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .cs-full { grid-column: 1 / -1; }
+
+  .cs-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 5px;
+    padding: 14px 16px;
+  }
+
+  .cs-card-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .cs-card-label.green  { color: #5DBF8A; }
+  .cs-card-label.amber  { color: #D4A245; }
+  .cs-card-label.blue   { color: #7AB4E0; }
+  .cs-card-label.red    { color: #E07A7A; }
+  .cs-card-label.purple { color: #B49AE8; }
+  .cs-card-label.teal   { color: #6DCECE; }
+
+  .cs-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px 0;
+    font-size: 12.5px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .cs-row:last-child { border-bottom: none; }
+  .cs-key { color: #8AAEC8; flex-shrink: 0; }
+  .cs-val { color: #E2EAF2; text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  .cs-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 4px 0;
+    font-size: 12.5px;
+    color: #CBD8E6;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    line-height: 1.5;
+  }
+
+  .cs-item:last-child { border-bottom: none; }
+
+  .cs-bullet {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 5px;
+  }
+
+  .b-green  { background: #5DBF8A; }
+  .b-amber  { background: #D4A245; }
+  .b-blue   { background: #7AB4E0; }
+  .b-red    { background: #E07A7A; }
+  .b-teal   { background: #6DCECE; }
+
+  .cs-section-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 5px 0;
+    font-size: 12.5px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    line-height: 1.5;
+  }
+
+  .cs-section-row:last-child { border-bottom: none; }
+
+  .cs-sec-num {
+    color: #7AB4E0;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 46px;
+    flex-shrink: 0;
+    padding-top: 1px;
+  }
+
+  .cs-sec-desc { color: #CBD8E6; }
+
+  .scenario-mini {
+    font-size: 12px;
+    color: #CBD8E6;
+    line-height: 1.58;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .scenario-mini:last-child { border-bottom: none; }
+
+  .scenario-mini .sm-q {
+    color: #D4A245;
+    font-weight: 600;
+    font-size: 11.5px;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .scenario-mini .sm-a {
+    color: #9BBDD6;
+    display: block;
+    padding-left: 10px;
+    border-left: 2px solid rgba(93,191,138,0.4);
+  }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 600px) {
+    .page { padding: 0 20px 64px; }
+    .site-header { padding-top: 32px; }
+    h1 { font-size: 22px; }
+    .legend { gap: 6px; }
+    .finding-top { flex-wrap: wrap; }
+    .interview-grid { grid-template-columns: 1fr; }
+    .cs-grid { grid-template-columns: 1fr; }
+    .cs-full { grid-column: 1 / -1; }
+    .cheatsheet { padding: 20px 18px 24px; }
+    .tab-btn { padding: 10px 14px 11px; font-size: 12px; }
+  }
+</style>
+
+<div class="page">
+
+  <!-- Shared header -->
+  <header class="site-header">
+    <p class="eyebrow">Liquor Licensing Guide · New Zealand · Lower Hutt Distillery</p>
+    <h1>NZ Gin Distillery — Licensing Guide</h1>
+    <div class="meta-row">
+      <span>Prepared 30 June 2026 · Fact-checked 2 July 2026</span>
+      <span>Sale and Supply of Alcohol Act 2012</span>
+      <span>Hutt City District Licensing Committee</span>
+    </div>
+  </header>
+
+  <!-- Tab bar -->
+  <div class="tab-bar-wrap">
+    <div class="tab-bar" role="tablist">
+      <button class="tab-btn active" role="tab" aria-selected="true"  aria-controls="panel-1" id="tab-1" onclick="switchTab(1)">Off-Licence Research</button>
+      <button class="tab-btn"        role="tab" aria-selected="false" aria-controls="panel-2" id="tab-2" onclick="switchTab(2)">Duty Manager's Certificate</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       TAB 1 — Off-Licence Research
+  ════════════════════════════════════════════ -->
+  <div class="tab-panel" id="panel-1" role="tabpanel" aria-labelledby="tab-1">
+
+    <div class="summary-box">
+      <p class="summary-label">Key finding</p>
+      <p>To sell gin online directly to the public, you need an <strong>off-licence with a Section 40 remote seller endorsement</strong> under the Sale and Supply of Alcohol Act 2012. This is applied for through <strong>Hutt City Council's District Licensing Committee (DLC)</strong> — not ARLA, which is an appellate body only. A real-world precedent from November 2025 (Harrier Springs Distillery) confirms distilleries successfully obtain this licence with <strong>sales permitted at any time on any day</strong> and delivery hours set by condition (e.g. 7 am–7 pm, Mon–Sun). Your existing customs controlled area licence is relevant background but is separate from the off-licence application.</p>
+    </div>
+
+    <div class="legend">
+      <div class="chip chip-high"><span class="chip-dot"></span> High confidence</div>
+      <div class="chip chip-medium"><span class="chip-dot"></span> Medium confidence</div>
+      <div class="chip chip-low"><span class="chip-dot"></span> Low — verify</div>
+      <div class="chip chip-grey"><span class="chip-dot"></span> Unverified</div>
+    </div>
+
+    <section class="section">
+      <p class="section-label">Your action steps</p>
+      <ul class="action-list">
+        <li class="action-item">
+          <span class="action-n">1</span>
+          <div class="action-body">
+            <strong>Contact Hutt City Council's licensing team</strong>
+            <span>Email <a href="mailto:sol@huttcity.govt.nz">sol@huttcity.govt.nz</a> to confirm the application form, current fee schedule (fees changed July 2025 under the Alcohol Fees Bylaw 2024), and what supporting documents the Hutt City DLC requires for a remote seller application.</span>
+          </div>
+        </li>
+        <li class="action-item">
+          <span class="action-n">2</span>
+          <div class="action-body">
+            <strong>Apply for an off-licence with a Section 40 remote seller endorsement</strong>
+            <span>This is a single application to the DLC — not a separate endorsement added later. The licence covers online sales of your distilled spirits. Your physical distillery address is the premise for the application, even though sales are remote.</span>
+          </div>
+        </li>
+        <li class="action-item">
+          <span class="action-n">3</span>
+          <div class="action-body">
+            <strong>Prepare for the 25-working-day public notification period</strong>
+            <span>Applications are publicly notified; any affected party may object under sections 105(1) and 131 of the Act. The DLC hears the application and sets licence conditions including delivery hours.</span>
+          </div>
+        </li>
+        <li class="action-item">
+          <span class="action-n">4</span>
+          <div class="action-body">
+            <strong>Build your host responsibility policy and age verification process</strong>
+            <span>Age verification prompts are required once at site entry and again immediately before checkout, plus an age check at delivery. Receipts and catalogues must display the licensee name, licence number, and expiry; your website must display an image of (or link to an image of) the licence itself. Delivery providers must participate in your age-check process.</span>
+          </div>
+        </li>
+        <li class="action-item">
+          <span class="action-n">5</span>
+          <div class="action-body">
+            <strong>Check whether the Hutt City Local Alcohol Policy 2024 affects your application</strong>
+            <span>Adopted October 2024, it may restrict off-licence trading hours (potentially 7 am–10 pm) and could limit further licences in parts of the district. Confirm directly with the DLC whether remote sellers are treated differently from walk-in off-licences under the LAP.</span>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <p class="section-label">Research findings</p>
+
+      <div class="finding high">
+        <div class="finding-top">
+          <span class="badge badge-high">High confidence</span>
+          <p class="finding-claim">Apply to the Hutt City District Licensing Committee, not ARLA. ARLA is an appellate body only and does not process first-instance licence applications.</p>
+        </div>
+        <p class="finding-evidence">Confirmed 2–0 by independent verifiers against the official Waikato District Council public notice (November 2025), which shows a distillery remote seller application processed by the local DLC. The structural principle — DLCs decide first-instance applications, ARLA hears appeals — is consistent across all sources.</p>
+        <div class="finding-sources">
+          <a class="src-link" href="https://www.waikatodistrict.govt.nz/public-notices/notice/2025/11/27/application-for-off-licence---harrier-springs-distillery-limited" target="_blank" rel="noopener">waikatodistrict.govt.nz — Harrier Springs Distillery public notice</a>
+        </div>
+      </div>
+
+      <div class="finding high">
+        <div class="finding-top">
+          <span class="badge badge-high">High confidence</span>
+          <p class="finding-claim">A distillery (Harrier Springs Distillery Ltd, November 2025) successfully applied for a remote seller off-licence for distilled spirits. Sales: "at any time on any day." Delivery: Monday–Sunday 7:00 am–7:00 pm. Objections assessed under ss 105(1) and 131 of the Act.</p>
+        </div>
+        <p class="finding-evidence">Confirmed 3–0 by independent verifiers. The official council public notice is an unambiguous primary government source confirming the applicant, licence type, product category, sales hours, and delivery hours. The physical distillery address demonstrates a production site can apply for a remote seller off-licence separately from any on-premises licence.</p>
+        <div class="finding-sources">
+          <a class="src-link" href="https://www.waikatodistrict.govt.nz/public-notices/notice/2025/11/27/application-for-off-licence---harrier-springs-distillery-limited" target="_blank" rel="noopener">waikatodistrict.govt.nz — Harrier Springs Distillery public notice (Nov 2025)</a>
+        </div>
+      </div>
+
+      <div class="finding medium">
+        <div class="finding-top">
+          <span class="badge badge-medium">Medium confidence</span>
+          <p class="finding-claim">The correct structure is an <em>off-licence with a Section 40 endorsement</em> designating it as a remote seller — not a standalone "remote seller's licence" as a separate category. The DLC must direct this endorsement when granting an off-licence to a business that only sells remotely.</p>
+        </div>
+        <p class="finding-evidence">Two adversarial verifiers (2–0) refuted a contrary framing, citing s 40 of the Act explicitly as an endorsement mechanism. The Harrier Springs public notice labels the licence as "Off Licence" with "Remote seller" as the nature of business — consistent with the endorsement model.</p>
+        <div class="finding-sources">
+          <a class="src-link" href="https://pervinderdavieslaw.co.nz/blog/remote-alcohol-sales-in-new-zealand-same-rules-new-challenges/" target="_blank" rel="noopener">pervinderdavieslaw.co.nz — Remote alcohol sales in NZ</a>
+          <a class="src-link" href="https://legalvision.co.nz/e-commerce/open-online-liquor-store/" target="_blank" rel="noopener">legalvision.co.nz — Open an online liquor store</a>
+        </div>
+      </div>
+
+      <div class="finding low">
+        <div class="finding-top">
+          <span class="badge badge-low">Low — verify</span>
+          <p class="finding-claim">Standard conditions on remote seller off-licences include: no delivery between 11 pm–6 am; no delivery on Good Friday, Easter Sunday, Christmas Day, or before 1 pm on Anzac Day; age verification prompts at site entry and again at checkout (plus age check at delivery); licensee name, licence number and expiry on receipts/catalogues and an image of the licence displayed on the website; no advertised discounts of 25% or more (note s 237 carves out a s 40 holder's own catalogue/price-list).</p>
+        </div>
+        <p class="finding-evidence">Delivery-day and display conditions confirmed verbatim (2 July 2026) against an issued s 40 remote-seller off-licence — Craft Subscription Ltd, Auckland DLC, Nov 2024 — which prohibits delivery "on Good Friday, Easter Sunday, Christmas Day, or before 1pm on Anzac Day; or at any time after 11pm on any day and before 6am on the next day." The 25% rule sits in s 237 (irresponsible promotion).</p>
+        <div class="finding-sources">
+          <a class="src-link" href="https://pervinderdavieslaw.co.nz/blog/remote-alcohol-sales-in-new-zealand-same-rules-new-challenges/" target="_blank" rel="noopener">pervinderdavieslaw.co.nz</a>
+          <a class="src-link" href="https://legalvision.co.nz/e-commerce/open-online-liquor-store/" target="_blank" rel="noopener">legalvision.co.nz</a>
+        </div>
+      </div>
+
+      <div class="finding low">
+        <div class="finding-top">
+          <span class="badge badge-low">Low — verify</span>
+          <p class="finding-claim">Hutt City Council adopted a Local Alcohol Policy (October 2024) that may set off-licence trading hours at 7 am–10 pm and can restrict further licences in parts of the district. A revised Alcohol Fees Bylaw 2024 (commencing 1 July 2025) introduced tiered fees by risk category, with 20–80% increases above prior fees, rising 3% annually until 2035.</p>
+        </div>
+        <p class="finding-evidence">Sourced from official Hutt City Council consultation pages. Specifics are unconfirmed — fee amounts, specific hour restrictions, and LAP provisions must be confirmed directly with Hutt City DLC before lodging.</p>
+        <div class="finding-sources">
+          <a class="src-link" href="https://haveyoursay.huttcity.govt.nz/local-alcohol-policy-2024" target="_blank" rel="noopener">haveyoursay.huttcity.govt.nz — Local Alcohol Policy 2024</a>
+          <a class="src-link" href="https://haveyoursay.huttcity.govt.nz/alcohol-fees-bylaw-2024" target="_blank" rel="noopener">haveyoursay.huttcity.govt.nz — Alcohol Fees Bylaw 2024</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-label">Open questions — confirm with Hutt City DLC before applying</p>
+      <ul class="q-list">
+        <li class="q-item"><em class="q-icon">?</em>Does the Hutt City DLC treat the remote seller application as a Section 40 endorsement on an off-licence, or process it differently? Does holding a customs controlled area licence simplify or affect the application?</li>
+        <li class="q-item"><em class="q-icon">?</em>What documents does the DLC specifically require? (e.g. host responsibility policy, website screenshots, delivery contractor agreements, certified manager certificate, identity documents, site plan)</li>
+        <li class="q-item"><em class="q-icon">?</em>What are the current application fees for a remote seller off-licence post-July 2025 under the new Alcohol Fees Bylaw, and how is your distillery's risk category assessed?</li>
+        <li class="q-item"><em class="q-icon">?</em>Does the Hutt City Local Alcohol Policy 2024 impose trading hour restrictions on remote sellers, or does it apply only to physical off-licences?</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <p class="section-label">Who to contact</p>
+      <div class="contact-box">
+        <strong>Hutt City District Licensing Committee</strong><br>
+        Applications submitted via email: <a href="mailto:sol@huttcity.govt.nz">sol@huttcity.govt.nz</a><br>
+        Applications are publicly notified for 25 working days. Third parties (Police, Medical Officer of Health, Inspector) are automatically served and may report or object.
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-label">Useful reading — go straight to the source</p>
+      <ul class="resource-list">
+
+        <li class="resource-item">
+          <span class="resource-icon">🏛️</span>
+          <div class="resource-body">
+            <p class="resource-title">Hutt City Council — Apply for an alcohol licence</p>
+            <a class="resource-url" href="https://www.huttcity.govt.nz/services/licences-and-permits/alcohol-licences/apply-for-an-alcohol-licence" target="_blank" rel="noopener">huttcity.govt.nz — Apply for an alcohol licence</a>
+            <p class="resource-note">Your DLC's own forms, current fees, and lodgement process — the application starts here. This page couldn't be auto-fetched during research, so open it manually and cross-check everything in this report against it.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">⚖️</span>
+          <div class="resource-body">
+            <p class="resource-title">Sale and Supply of Alcohol Act 2012, s 40 — Off-licences for remote sellers</p>
+            <a class="resource-url" href="https://www.legislation.govt.nz/act/public/2012/0120/latest/DLM3924800.html" target="_blank" rel="noopener">legislation.govt.nz — s 40</a>
+            <p class="resource-note">The exact section your endorsement is granted under: how the endorsement works, sale permitted any time/any day, and the delivery restrictions that come with it.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">📋</span>
+          <div class="resource-body">
+            <p class="resource-title">Example issued s 40 licence — Craft Box Direct (Auckland DLC, Nov 2024)</p>
+            <a class="resource-url" href="https://www.craftboxdirect.com/wp-content/uploads/2024/11/Issued-OFF-Licence.pdf" target="_blank" rel="noopener">craftboxdirect.com — Issued OFF-Licence (PDF)</a>
+            <p class="resource-note">A real remote-seller off-licence with the standard conditions verbatim: delivery-day bans (Good Friday, Easter Sunday, Christmas Day, pre-1pm Anzac Day, 11pm–6am), the two age-verification prompts, receipt/catalogue display, and the licence image on the website. Yours should look very much like this.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">📄</span>
+          <div class="resource-body">
+            <p class="resource-title">Remote Sales Guide — Health Promotion Agency</p>
+            <a class="resource-url" href="https://resources.alcohol.org.nz/assets/1060-AL-Remote-Sales-Guide_Online.pdf" target="_blank" rel="noopener">resources.alcohol.org.nz — Remote Sales Guide (PDF)</a>
+            <p class="resource-note">The national guidance for online alcohol sellers: age verification at sale and delivery, website requirements, delivery hours. Couldn't be auto-fetched — download and read before building the web checkout.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">⚖️</span>
+          <div class="resource-body">
+            <p class="resource-title">Sale and Supply of Alcohol Regulations 2013, reg 4 — approved evidence-of-age documents</p>
+            <a class="resource-url" href="https://www.legislation.govt.nz/regulation/public/2013/0459/latest/DLM5736982.html" target="_blank" rel="noopener">legislation.govt.nz — Regulations 2013, reg 4</a>
+            <p class="resource-note">The definitive ID list: any current passport (NZ or overseas), NZ driver licence, Kiwi Access / HNZ 18+ card. Regulation 14 of the same regulations covers the "reasonable steps" standard for verifying age on remote sales.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">🏛️</span>
+          <div class="resource-body">
+            <p class="resource-title">Hutt City Local Alcohol Policy 2024</p>
+            <a class="resource-url" href="https://haveyoursay.huttcity.govt.nz/local-alcohol-policy-2024" target="_blank" rel="noopener">haveyoursay.huttcity.govt.nz — Local Alcohol Policy 2024</a>
+            <p class="resource-note">Whether local trading-hour limits or licence caps affect your application — and the open question of how the LAP treats remote sellers vs walk-in off-licences. Confirm with the DLC.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">🏛️</span>
+          <div class="resource-body">
+            <p class="resource-title">Hutt City Alcohol Fees Bylaw 2024</p>
+            <a class="resource-url" href="https://haveyoursay.huttcity.govt.nz/alcohol-fees-bylaw-2024" target="_blank" rel="noopener">haveyoursay.huttcity.govt.nz — Alcohol Fees Bylaw 2024</a>
+            <p class="resource-note">The tiered, risk-rated fees in force since 1 July 2025 — this determines what the application and annual fees actually cost, and how your distillery's risk category is assessed.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">📋</span>
+          <div class="resource-body">
+            <p class="resource-title">Harrier Springs Distillery — off-licence public notice (Waikato, Nov 2025)</p>
+            <a class="resource-url" href="https://www.waikatodistrict.govt.nz/public-notices/notice/2025/11/27/application-for-off-licence---harrier-springs-distillery-limited" target="_blank" rel="noopener">waikatodistrict.govt.nz — Harrier Springs public notice</a>
+            <p class="resource-note">The precedent this report leans on: what a distillery's publicly notified remote-seller application looks like, including the sales hours ("any time on any day") and delivery hours granted.</p>
+          </div>
+        </li>
+
+      </ul>
+    </section>
+
+    <section class="section">
+      <p class="section-label">Sources consulted</p>
+      <div class="table-wrap">
+        <table class="src-table">
+          <thead>
+            <tr><th>Source</th><th>Quality</th><th>Angle</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><a href="https://www.waikatodistrict.govt.nz/public-notices/notice/2025/11/27/application-for-off-licence---harrier-springs-distillery-limited" target="_blank" rel="noopener">Harrier Springs Distillery off-licence public notice (Nov 2025)</a></td><td><span class="q-badge q-primary">Primary</span></td><td>Precedent / process</td></tr>
+            <tr><td><a href="https://haveyoursay.huttcity.govt.nz/local-alcohol-policy-2024" target="_blank" rel="noopener">Hutt City Council — Local Alcohol Policy 2024</a></td><td><span class="q-badge q-primary">Primary</span></td><td>Local policy</td></tr>
+            <tr><td><a href="https://haveyoursay.huttcity.govt.nz/alcohol-fees-bylaw-2024" target="_blank" rel="noopener">Hutt City Council — Alcohol Fees Bylaw 2024</a></td><td><span class="q-badge q-primary">Primary</span></td><td>Fees</td></tr>
+            <tr><td><a href="https://www.huttcity.govt.nz/services/licences-and-permits/alcohol-licences/apply-for-an-alcohol-licence" target="_blank" rel="noopener">Hutt City Council — Apply for an alcohol licence</a></td><td><span class="q-badge q-fail">Could not fetch</span></td><td>Application process</td></tr>
+            <tr><td><a href="https://pervinderdavieslaw.co.nz/blog/remote-alcohol-sales-in-new-zealand-same-rules-new-challenges/" target="_blank" rel="noopener">Pervinder Davies Law — Remote alcohol sales in NZ</a></td><td><span class="q-badge q-blog">Blog</span></td><td>Conditions / s.40</td></tr>
+            <tr><td><a href="https://legalvision.co.nz/e-commerce/open-online-liquor-store/" target="_blank" rel="noopener">LegalVision NZ — Open an online liquor store</a></td><td><span class="q-badge q-blog">Blog</span></td><td>Process overview</td></tr>
+            <tr><td><a href="https://resources.alcohol.org.nz/assets/1060-AL-Remote-Sales-Guide_Online.pdf" target="_blank" rel="noopener">Health Promotion Agency — National Remote Sales Guide (PDF)</a></td><td><span class="q-badge q-fail">Could not fetch</span></td><td>National guidance</td></tr>
+            <tr><td><a href="https://www.legislation.govt.nz/act/public/2012/0120/latest/DLM3924800.html" target="_blank" rel="noopener">Sale and Supply of Alcohol Act 2012, s 40</a></td><td><span class="q-badge q-fail">Could not fetch</span></td><td>Statutory basis</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="caveat">
+      <p><strong style="color:var(--text);">Research limitations.</strong> 18 of 21 adversarial verification votes errored due to infrastructure issues — most claims are unverified secondary-source information only. Two high-confidence findings derive from a single primary source (Waikato District Council, November 2025), which is analogous but not identical to a Lower Hutt application.</p>
+      <p>The HPA national guidance PDF and NZ Legislation website could not be fetched — read these directly. The Hutt City DLC application page also could not be fetched.</p>
+      <p><strong style="color:var(--text);">Fact-check update (2 July 2026).</strong> Key statutory claims were re-verified against legislation.govt.nz, an issued s 40 remote-seller off-licence (Craft Subscription Ltd, Auckland DLC, Nov 2024), and HPA guidance. Corrections applied: the object of the Act is <strong>s 4</strong> (not s 5); minors offence is <strong>s 239</strong>, intoxicated persons <strong>s 248</strong>, allowing intoxication <strong>s 249</strong> (s 237 is irresponsible promotion; s 218 is the LCQ requirement; name display is s 214(4)); delivery is also prohibited on <strong>Good Friday and Christmas Day</strong>; and <strong>any current passport</strong> (not only NZ) is approved evidence of age. The Hutt City email address (sol@huttcity.govt.nz) remains unverified — confirm on first contact.</p>
+      <p>This report is research assistance, not legal advice. Confirm all conditions, fees, and document requirements with Hutt City Council's licensing team before lodging an application.</p>
+    </div>
+
+  </div><!-- /panel-1 -->
+
+  <!-- ═══════════════════════════════════════════
+       TAB 2 — Duty Manager's Certificate
+  ════════════════════════════════════════════ -->
+  <div class="tab-panel hidden" id="panel-2" role="tabpanel" aria-labelledby="tab-2">
+
+    <div class="situation-box">
+      <p class="sl">Your starting point</p>
+      <p>You have your <strong>LCQ (Licence Controller Qualification)</strong> — unit standards 4646 and 16705 are done. This means you've cleared the biggest study hurdle. What remains is gathering documents, submitting to Hutt City DLC, passing the Inspector interview, and waiting for the DLC decision. You do <strong>not</strong> need to redo the LCQ — it's a one-time qualification that stays with you. And the certificate is genuinely needed: a s 40 remote-seller licence must be exercised through <strong>appointed certified manager(s)</strong> (Subpart 7 of Part 2), though under s 215 the manager need not be on duty at all times.</p>
+    </div>
+
+    <section class="section">
+      <p class="section-label">Step-by-step process</p>
+      <div class="steps">
+
+        <div class="step">
+          <div class="step-left"><div class="step-num">✓</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <p class="step-title">LCQ complete <span class="step-tag tag-done">Done</span></p>
+            <p class="step-detail">Unit standards 4646 (Act knowledge) and 16705 (host responsibility) are completed. Gather your LCQ certificate or confirmation from ServiceIQ — you'll need this as a supporting document.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-left"><div class="step-num">2</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <p class="step-title">Line up the licensed-premises link — lodge both applications together <span class="step-tag tag-next">Action needed</span></p>
+            <p class="step-detail">DLCs expect applicants to be working (or about to work) in licensed premises. Note: a customs controlled area licence is a Customs &amp; Excise Act licence — it is <strong>not</strong> "licensed premises" under the Sale and Supply of Alcohol Act until the off-licence is granted. The standard owner-operator route: lodge the off-licence (s 40) application and the manager's certificate application <strong>together</strong>, naming yourself as the proposed appointed manager (a s 40 licence must be exercised through appointed manager(s), though under s 215 they need not be on duty at all times). Confirm sequencing with Hutt City DLC.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-left"><div class="step-num">3</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <p class="step-title">Gather supporting documents <span class="step-tag tag-next">Action needed</span></p>
+            <p class="step-detail">Collect: photo ID (passport or NZ Driver's Licence), LCQ certificate, employment letter confirming your role at the licensed premises, and a character reference. Some councils also ask for a CV — confirm with Hutt City DLC at <a href="mailto:sol@huttcity.govt.nz">sol@huttcity.govt.nz</a>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-left"><div class="step-num">4</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <p class="step-title">Submit application to Hutt City DLC <span class="step-tag tag-next">Action needed</span></p>
+            <p class="step-detail">Complete the "Application for a Manager's Certificate" form from Hutt City Council. Submit by email to <a href="mailto:sol@huttcity.govt.nz">sol@huttcity.govt.nz</a> with your documents and the application fee of <strong>~$316.25 (incl. GST)</strong> — confirm current amount as fees changed July 2025.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-left"><div class="step-num">5</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <p class="step-title">Police and Inspector review <span class="step-tag tag-week">~3 weeks</span></p>
+            <p class="step-detail">Your application is forwarded to NZ Police (up to 15 working days to respond; if no response, they're deemed to have no opposition) and to the Licensing Inspector who conducts their own suitability assessment.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-left"><div class="step-num">6</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <p class="step-title">Inspector interview <span class="step-tag tag-week">Up to 1 hour</span></p>
+            <p class="step-detail">The Licensing Inspector conducts an interview — typically online via MS Teams, occasionally in-person. Scenario-based questions covering your knowledge of the Act and suitability to manage a licensed premises. See the interview section below.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-left"><div class="step-num">7</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <p class="step-title">DLC decision <span class="step-tag tag-week">~2 weeks after interview</span></p>
+            <p class="step-detail">The Inspector reports to the DLC within 2 weeks of your interview. <strong>If unopposed</strong>: the DLC approves without a hearing and issues the certificate by post. <strong>If there is opposition</strong>: the DLC schedules a public hearing.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-left"><div class="step-num">8</div><div class="step-line"></div></div>
+          <div class="step-body">
+            <p class="step-title">Certificate issued</p>
+            <p class="step-detail">Your Manager's Certificate arrives by post. Valid for <strong>12 months initially</strong>, then renewable for up to <strong>3 years</strong> at a time. Renewals consider your ongoing involvement with licensed premises. Once certified, appointments (and changes) of managers must be notified to the DLC and Police within 2 working days. Total timeline: 6–8 weeks if unopposed.</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="section-label">The Inspector interview</p>
+
+      <div class="interview-grid">
+        <div class="info-card"><p class="ic-label">Duration</p><p class="ic-value">Up to 1 hour</p></div>
+        <div class="info-card"><p class="ic-label">Format</p><p class="ic-value">Online (MS Teams) or in-person</p></div>
+        <div class="info-card"><p class="ic-label">Style</p><p class="ic-value">Scenario-based — practical situations, not a written test</p></div>
+        <div class="info-card"><p class="ic-label">Legal basis</p><p class="ic-value">Section 222, Sale and Supply of Alcohol Act 2012</p></div>
+      </div>
+
+      <p style="font-size:13.5px; color:var(--muted); margin: 0 0 18px; line-height:1.6;">The Inspector assesses your knowledge of the Act and its purposes, suitability to manage a licensed premises, and practical responses to real situations. They're not trying to trick you — they want to know you can handle the common scenarios a manager faces.</p>
+
+      <h2>Common interview scenarios</h2>
+      <ul class="scenario-list">
+        <li class="scenario-item">
+          <p class="scenario-q">A customer appears intoxicated and asks for another drink. What do you do?</p>
+          <p class="scenario-a">Politely refuse service. You cannot supply alcohol to someone who is, or appears to be, intoxicated. Offer water or food instead. If they become disorderly, you have authority to ask them to leave. Document the incident. You're personally liable if you serve them.</p>
+        </li>
+        <li class="scenario-item">
+          <p class="scenario-q">Someone who looks under 25 tries to purchase alcohol without ID. What do you do?</p>
+          <p class="scenario-a">Refuse sale. The challenge-25 principle means you ask for ID if there's any doubt. Only valid IDs are accepted: a current passport (NZ or overseas), NZ Driver's Licence, Kiwi Access Card, or Hospitality NZ 18+ Card. If they can't produce one of these, no sale. No exceptions.</p>
+        </li>
+        <li class="scenario-item">
+          <p class="scenario-q">A staff member serves an intoxicated person while you're on duty. What happens?</p>
+          <p class="scenario-a">Both you and the staff member may be liable. As the on-duty manager you're responsible for your team's compliance. Address it immediately — stop further service to that person. Retrain the staff member. Review your host responsibility procedures. Document everything.</p>
+        </li>
+        <li class="scenario-item">
+          <p class="scenario-q">Someone asks for a drink 5 minutes after your licensed hours end. What do you do?</p>
+          <p class="scenario-a">Refuse. Trading hours are a licence condition — serving outside them is an offence regardless of circumstances. The customer already having paid doesn't change this. Politely explain the premises' closing time.</p>
+        </li>
+        <li class="scenario-item">
+          <p class="scenario-q">A minor enters a restricted area of the premises. What do you do?</p>
+          <p class="scenario-a">Ask them to leave the restricted area immediately. Minors are prohibited from restricted areas (where the principal purpose is the sale or supply of alcohol). They may be in supervised areas if accompanied by a parent/guardian.</p>
+        </li>
+        <li class="scenario-item">
+          <p class="scenario-q">How do you implement your host responsibility policy for an online/remote sale?</p>
+          <p class="scenario-a">Age verification at point of sale (date of birth declaration plus ID upload or check-at-delivery). Delivery must include an age check — driver confirms recipient is 18+. No delivery to intoxicated persons. Display licence details on website. No delivery between 11 pm–6 am. Maintain records of refusals.</p>
+        </li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <p class="section-label">Study resources</p>
+      <ul class="resource-list">
+
+        <li class="resource-item">
+          <span class="resource-icon">📄</span>
+          <div class="resource-body">
+            <p class="resource-title">The Manager's Guide to the Sale and Supply of Alcohol Act 2012</p>
+            <a class="resource-url" href="https://resources.alcohol.org.nz/assets/Uploads/7.2-AL575_The_Managers_Guide_Oct-2023.pdf" target="_blank" rel="noopener">resources.alcohol.org.nz — The Manager's Guide (PDF, Oct 2023)</a>
+            <p class="resource-note">Start here. The official HPA guide written specifically for managers — covers everything you'll be asked about in the interview.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">📋</span>
+          <div class="resource-body">
+            <p class="resource-title">Sample interview questions — Waikato District Council</p>
+            <a class="resource-url" href="https://www.waikatodistrict.govt.nz/docs/default-source/services-and-facilities/food-and-alcohol/alcohol-licensing/test-questions-for-manager-s-certificate-application.pdf" target="_blank" rel="noopener">waikatodistrict.govt.nz — Manager's Certificate Test Questions (PDF)</a>
+            <p class="resource-note">Practice questions from a real DLC. Hutt City doesn't publish theirs but content is consistent across NZ — work through these.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">📋</span>
+          <div class="resource-body">
+            <p class="resource-title">Sample interview questions — Christchurch City Council</p>
+            <a class="resource-url" href="https://ccc.govt.nz/assets/Documents/Consents-and-Licences/business-licences-and-consents/Alcohol/Info-SampleQuestions.pdf" target="_blank" rel="noopener">ccc.govt.nz — Sample Test Questions (PDF)</a>
+            <p class="resource-note">Second set of practice questions — useful to cross-reference different angles on the same topics.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">📄</span>
+          <div class="resource-body">
+            <p class="resource-title">Host Responsibility Guidelines</p>
+            <a class="resource-url" href="https://resources.alcohol.org.nz/assets/Uploads/Publications/2.7-AL452_Host_responsibility_Guidelines_AUG-2022.pdf" target="_blank" rel="noopener">resources.alcohol.org.nz — Host Responsibility Guidelines (PDF, Aug 2022)</a>
+            <p class="resource-note">What a host responsibility policy must contain — especially relevant for your remote seller context.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">📄</span>
+          <div class="resource-body">
+            <p class="resource-title">Remote Sales Guide — Health Promotion Agency</p>
+            <a class="resource-url" href="https://resources.alcohol.org.nz/assets/1060-AL-Remote-Sales-Guide_Online.pdf" target="_blank" rel="noopener">resources.alcohol.org.nz — Remote Sales Guide (PDF)</a>
+            <p class="resource-note">Specific to online/remote sellers — age verification at delivery, website requirements, delivery hour restrictions. Read alongside the Manager's Guide.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">⚖️</span>
+          <div class="resource-body">
+            <p class="resource-title">Sale and Supply of Alcohol Act 2012 — full text</p>
+            <a class="resource-url" href="https://www.legislation.govt.nz/act/public/2012/0120/latest/whole.html" target="_blank" rel="noopener">legislation.govt.nz — Sale and Supply of Alcohol Act 2012</a>
+            <p class="resource-note">Key sections for managers: s 4 (object), ss 214–215 (manager on duty + exemptions), s 218 (LCQ requirement), s 222 (certificate criteria), s 237 (irresponsible promotion), s 239 (minors), s 248 (intoxicated persons), s 249 (allowing intoxication). The Manager's Guide quotes the relevant sections throughout.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">🎓</span>
+          <div class="resource-body">
+            <p class="resource-title">GETLCQ.co.nz — Duty Manager's Certificate process guide</p>
+            <a class="resource-url" href="https://www.getlcq.co.nz/managerscertificate" target="_blank" rel="noopener">getlcq.co.nz — Manager's Certificate</a>
+            <p class="resource-note">Plain-English walkthrough of the process with FAQs — good for filling in gaps after reading the official materials.</p>
+          </div>
+        </li>
+
+        <li class="resource-item">
+          <span class="resource-icon">📄</span>
+          <div class="resource-body">
+            <p class="resource-title">Managers of licensed premises — alcohol.org.nz</p>
+            <a class="resource-url" href="https://resources.alcohol.org.nz/alcohol-management-laws/licensing-local-policies/managers-of-licensed-premises" target="_blank" rel="noopener">resources.alcohol.org.nz — Managers of licensed premises</a>
+            <p class="resource-note">Plain-English overview of duty vs temporary vs acting managers, the appointment rules, and the 2-working-day DLC/Police notification duty — the operational side you'll run once certified.</p>
+          </div>
+        </li>
+
+      </ul>
+    </section>
+
+    <section class="section">
+      <p class="section-label">Quick reference cheat sheet</p>
+      <div class="cheatsheet">
+        <p class="cs-title">Manager's Certificate — Key Facts at a Glance</p>
+        <p class="cs-sub">Study this until it's automatic. These are the facts that come up most in interviews.</p>
+
+        <div class="cs-grid">
+
+          <div class="cs-card">
+            <p class="cs-card-label green">Key numbers</p>
+            <div class="cs-row"><span class="cs-key">Legal drinking age</span><span class="cs-val">18 years</span></div>
+            <div class="cs-row"><span class="cs-key">Challenge age (best practice)</span><span class="cs-val">25 years</span></div>
+            <div class="cs-row"><span class="cs-key">Application fee</span><span class="cs-val">~$316.25 incl. GST</span></div>
+            <div class="cs-row"><span class="cs-key">Police response window</span><span class="cs-val">15 working days</span></div>
+            <div class="cs-row"><span class="cs-key">Certificate validity (initial)</span><span class="cs-val">12 months</span></div>
+            <div class="cs-row"><span class="cs-key">Certificate validity (renewal)</span><span class="cs-val">Up to 3 years</span></div>
+            <div class="cs-row"><span class="cs-key">Total process time</span><span class="cs-val">6–8 weeks (if unopposed)</span></div>
+            <div class="cs-row"><span class="cs-key">Max on-licence hours (national)</span><span class="cs-val">8 am – 4 am</span></div>
+            <div class="cs-row"><span class="cs-key">Max off-licence hours (national)</span><span class="cs-val">7 am – 11 pm</span></div>
+            <div class="cs-row"><span class="cs-key">Remote sales (s 40)</span><span class="cs-val">any time, any day</span></div>
+            <div class="cs-row"><span class="cs-key">Remote delivery prohibited</span><span class="cs-val">11 pm – 6 am</span></div>
+          </div>
+
+          <div class="cs-card">
+            <p class="cs-card-label blue">Valid evidence of age — only these 4 kinds</p>
+            <div class="cs-item"><span class="cs-bullet b-blue"></span><span>Any current passport (NZ <em>or overseas</em>)</span></div>
+            <div class="cs-item"><span class="cs-bullet b-blue"></span><span>NZ Driver's Licence (with photo)</span></div>
+            <div class="cs-item"><span class="cs-bullet b-blue"></span><span>Kiwi Access Card (18+ card)</span></div>
+            <div class="cs-item"><span class="cs-bullet b-blue"></span><span>Hospitality NZ 18+ Card</span></div>
+            <div class="cs-item" style="margin-top:6px;"><span class="cs-bullet b-amber"></span><span style="color:#D4A245;">Not valid: overseas DL, student ID, loyalty cards, bank cards</span></div>
+            <div class="cs-item"><span class="cs-bullet b-amber"></span><span style="color:#D4A245;">Expired ID — not valid regardless of how recent</span></div>
+            <div class="cs-item"><span class="cs-bullet b-amber"></span><span style="color:#D4A245;">"I forgot it" — refuse sale, no exceptions</span></div>
+          </div>
+
+          <div class="cs-card">
+            <p class="cs-card-label amber">Signs of intoxication — need 2+ to refuse</p>
+            <div class="cs-item"><span class="cs-bullet b-amber"></span><span><strong style="color:#E2EAF2;">Appearance affected</strong> — flushed, glassy/red eyes, dishevelled</span></div>
+            <div class="cs-item"><span class="cs-bullet b-amber"></span><span><strong style="color:#E2EAF2;">Behaviour impaired</strong> — aggressive, overly friendly, loud, confused</span></div>
+            <div class="cs-item"><span class="cs-bullet b-amber"></span><span><strong style="color:#E2EAF2;">Coordination impaired</strong> — stumbling, spilling drinks, bumping</span></div>
+            <div class="cs-item"><span class="cs-bullet b-amber"></span><span><strong style="color:#E2EAF2;">Speech impaired</strong> — slurred, incoherent, repetitive</span></div>
+            <div class="cs-item" style="margin-top:6px; color:#8AAEC8; font-size:11.5px;"><span class="cs-bullet b-teal"></span><span>Also refuse if further alcohol would <em>result in</em> intoxication — don't wait for signs</span></div>
+          </div>
+
+          <div class="cs-card">
+            <p class="cs-card-label purple">Key Act sections</p>
+            <div class="cs-section-row"><span class="cs-sec-num">s 4</span><span class="cs-sec-desc">Object of the Act — (a) safe &amp; responsible sale/supply/consumption; (b) minimise harm from excessive or inappropriate consumption</span></div>
+            <div class="cs-section-row"><span class="cs-sec-num">s 40</span><span class="cs-sec-desc">Remote seller off-licence endorsement</span></div>
+            <div class="cs-section-row"><span class="cs-sec-num">s 214</span><span class="cs-sec-desc">Manager on duty whenever alcohol sold/supplied; s 214(4) name displayed. (s 215 relaxes "on duty at all times" for s 40 remote sellers — a manager must still be <em>appointed</em>)</span></div>
+            <div class="cs-section-row"><span class="cs-sec-num">s 218</span><span class="cs-sec-desc">Manager must hold the prescribed qualification (LCQ)</span></div>
+            <div class="cs-section-row"><span class="cs-sec-num">s 222</span><span class="cs-sec-desc">Criteria for granting a manager's certificate</span></div>
+            <div class="cs-section-row"><span class="cs-sec-num">s 237</span><span class="cs-sec-desc">Irresponsible promotion of alcohol (incl. advertising 25%+ discounts)</span></div>
+            <div class="cs-section-row"><span class="cs-sec-num">s 239</span><span class="cs-sec-desc">Must not sell/supply to persons under 18</span></div>
+            <div class="cs-section-row"><span class="cs-sec-num">s 248</span><span class="cs-sec-desc">Must not sell/supply to intoxicated persons</span></div>
+            <div class="cs-section-row"><span class="cs-sec-num">s 249</span><span class="cs-sec-desc">Must not allow people to become intoxicated on premises</span></div>
+          </div>
+
+          <div class="cs-card">
+            <p class="cs-card-label teal">Manager's on-duty obligations</p>
+            <div class="cs-item"><span class="cs-bullet b-teal"></span><span>Be physically present whenever alcohol is sold or supplied</span></div>
+            <div class="cs-item"><span class="cs-bullet b-teal"></span><span>Display your name prominently at the premises</span></div>
+            <div class="cs-item"><span class="cs-bullet b-teal"></span><span>Ensure all staff comply with licence conditions</span></div>
+            <div class="cs-item"><span class="cs-bullet b-teal"></span><span>Refuse service to intoxicated or underage persons</span></div>
+            <div class="cs-item"><span class="cs-bullet b-teal"></span><span>Implement and oversee your host responsibility policy</span></div>
+            <div class="cs-item"><span class="cs-bullet b-teal"></span><span>Keep trading within licensed hours only</span></div>
+            <div class="cs-item"><span class="cs-bullet b-teal"></span><span>Record refusals and incidents</span></div>
+          </div>
+
+          <div class="cs-card">
+            <p class="cs-card-label red">Prohibited — you or staff must never</p>
+            <div class="cs-item"><span class="cs-bullet b-red"></span><span>Supply alcohol to anyone under 18</span></div>
+            <div class="cs-item"><span class="cs-bullet b-red"></span><span>Supply to a visibly intoxicated person</span></div>
+            <div class="cs-item"><span class="cs-bullet b-red"></span><span>Allow intoxication to occur on premises</span></div>
+            <div class="cs-item"><span class="cs-bullet b-red"></span><span>Allow disorderly conduct</span></div>
+            <div class="cs-item"><span class="cs-bullet b-red"></span><span>Operate outside licensed trading hours</span></div>
+            <div class="cs-item"><span class="cs-bullet b-red"></span><span>Deliver remotely 11 pm–6 am, or on Good Friday, Easter Sunday, Christmas Day, or before 1 pm Anzac Day</span></div>
+            <div class="cs-item"><span class="cs-bullet b-red"></span><span>Advertise discounts of 25% or more off regular price (s 237 — carve-out for a s 40 holder's own catalogue/price-list)</span></div>
+            <div class="cs-item"><span class="cs-bullet b-red"></span><span>Accept expired or non-approved ID</span></div>
+          </div>
+
+          <div class="cs-card cs-full">
+            <p class="cs-card-label green">Remote seller specifics — your situation</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0;">
+              <div>
+                <div class="cs-item"><span class="cs-bullet b-green"></span><span>Age verify at checkout <em>and</em> at delivery — both required</span></div>
+                <div class="cs-item"><span class="cs-bullet b-green"></span><span>Website must show licence holder name, number, and expiry</span></div>
+                <div class="cs-item"><span class="cs-bullet b-green"></span><span>No delivery Good Friday, Easter Sunday, Christmas Day, or before 1 pm Anzac Day</span></div>
+              </div>
+              <div>
+                <div class="cs-item"><span class="cs-bullet b-green"></span><span>Delivery driver must refuse delivery to intoxicated recipient</span></div>
+                <div class="cs-item"><span class="cs-bullet b-green"></span><span>Keep records of all delivery refusals</span></div>
+                <div class="cs-item"><span class="cs-bullet b-green"></span><span>Host responsibility policy must cover the online purchase flow</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="cs-card cs-full">
+            <p class="cs-card-label amber">Interview — quick answer framework</p>
+            <div class="scenario-mini">
+              <span class="sm-q">Intoxicated customer asks for a drink</span>
+              <span class="sm-a">Identify signs (2+ present) → refuse politely → offer water/food → ask to leave if disorderly → document → you are liable if you serve them</span>
+            </div>
+            <div class="scenario-mini">
+              <span class="sm-q">Under-25, no ID</span>
+              <span class="sm-a">Refuse sale → explain which IDs are accepted → no exceptions, no workarounds → no ID = no alcohol</span>
+            </div>
+            <div class="scenario-mini">
+              <span class="sm-q">Staff member serves intoxicated/underage person</span>
+              <span class="sm-a">Stop further service immediately → you share liability as on-duty manager → address with staff → retrain → document → review procedures</span>
+            </div>
+            <div class="scenario-mini">
+              <span class="sm-q">Request after trading hours</span>
+              <span class="sm-a">Refuse — no exceptions — licence conditions are absolute — politely explain closing time</span>
+            </div>
+            <div class="scenario-mini" style="border-bottom:none;">
+              <span class="sm-q">What is the object of the Act?</span>
+              <span class="sm-a">Section 4 — two limbs: (a) the sale, supply, and consumption of alcohol should be undertaken safely and responsibly; and (b) the harm caused by excessive or inappropriate consumption should be minimised</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /panel-2 -->
+
+</div><!-- /page -->
+
+<script>
+  function switchTab(n) {
+    document.querySelectorAll('.tab-btn').forEach(function(btn, i) {
+      var active = (i + 1 === n);
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    document.querySelectorAll('.tab-panel').forEach(function(panel, i) {
+      panel.classList.toggle('hidden', i + 1 !== n);
+    });
+    // Scroll to top of content on tab switch
+    document.querySelector('.tab-bar-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+</script>
