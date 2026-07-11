@@ -76,8 +76,11 @@ After the first `workflow observability start`:
 2. Open PostHog at `http://localhost:8000`, create the initial PostHog user and
    project, then copy that project's public API key into the
    `posthog_project_api_key` KeePassXC entry.
-3. Restart the local Flask app. With `ENVIRONMENT=local`, the config loader
-   reads that entry automatically and supplies it to the RUM bootstrap.
+3. Restart the local Flask app. With `ENVIRONMENT=local` or `ENVIRONMENT=test`,
+   the config loader reads that entry automatically and supplies it to the RUM
+   bootstrap. The test environment sends browser telemetry to the local stack,
+   but continues to disable backend OpenTelemetry exporters so pytest does not
+   emit backend telemetry.
 
 The old `observability/posthog-stack/.env` pattern is not used by this local
 CLI. The `.env.example` remains only as a reference for a
@@ -130,6 +133,14 @@ Local observability config is pre-wired in `app/config/local.ini`:
 - `rum_faro_upstream = http://localhost:12347`
 - `rum_posthog_upstream = http://localhost:8000`
 - `rum_posthog_api_key` is read from the KeePassXC PostHog project API-key entry
+
+The Dockerised test deployment also sends browser telemetry to this local stack.
+`scripts/run_test.sh` and `scripts/deploy_test_simple.sh` join it to the
+`workflow-observability` network, pass the KeePassXC project token as a
+container environment variable, and use `http://alloy:12347` and
+`http://posthog-web:8000` as internal collector addresses. Do not use
+`localhost` for those test-container upstreams: it refers to the test
+container itself.
 
 Frontend SDK bundles are vendored in `app/ui/shared/` and loaded from `base_spa.html` when `rum_enabled=true`:
 

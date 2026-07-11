@@ -97,7 +97,9 @@ class Config:
 
         # Browser telemetry uses a public project key, but keeping it in the
         # local KeePassXC database avoids another secret-bearing shell/env file.
-        if self.environment == "local":
+        # The test environment deliberately uses the same local stack when its
+        # browser telemetry is enabled.
+        if self.environment in {"local", "test"}:
             try:
                 scripts_dir = Path(__file__).parent.parent.parent / "scripts"
                 if (scripts_dir / "local_secrets.py").exists():
@@ -345,7 +347,7 @@ class Config:
 
     @property
     def rum_posthog_api_key(self) -> str:
-        if self.environment == "local":
+        if self.environment in {"local", "test"}:
             return self._clean_config_secret(
                 os.getenv("POSTHOG_PROJECT_API_KEY")
                 or self._observability_keepass_creds.get("posthog_project_api_key")

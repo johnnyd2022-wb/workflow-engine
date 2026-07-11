@@ -35,10 +35,16 @@ otel_sample_rate = 0.0
 otel_exporter_endpoint = http://localhost:4317
 otel_exporter_protocol = grpc
 otel_capture_metrics = false
-rum_enabled = false
+rum_enabled = true
 rum_collector_url = /telemetry
-rum_sample_rate = 0.0
+rum_sample_rate = 1.0
 rum_mask_inputs = true
-rum_faro_upstream = http://localhost:12347
-rum_posthog_upstream = http://localhost:8000
+# The test app runs in Docker. These names resolve to the local observability
+# stack after the test deployment joins the workflow-observability network.
+rum_faro_upstream = http://alloy:12347
+rum_posthog_upstream = http://posthog-web:8000
+rum_posthog_capture_upstream = http://posthog-capture:3000
+rum_posthog_replay_upstream = http://posthog-replay-capture:3000
+rum_posthog_feature_flags_upstream = http://posthog-feature-flags:3001
 rum_posthog_api_key =
+keepass_posthog_project_api_key_entry = workflow-engine/observability/posthog_project_api_key
