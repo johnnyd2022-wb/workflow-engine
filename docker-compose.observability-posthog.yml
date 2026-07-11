@@ -35,7 +35,9 @@ services:
       retries: 10
     restart: unless-stopped
     networks:
-      - observability
+      observability:
+        aliases:
+          - redis
 
   posthog-zookeeper:
     image: zookeeper:3.7.0
@@ -98,7 +100,9 @@ services:
       - "19092:19092"
     restart: unless-stopped
     networks:
-      - observability
+      observability:
+        aliases:
+          - kafka
 
   posthog-kafka-init:
     image: docker.redpanda.com/redpandadata/redpanda:v25.1.9
