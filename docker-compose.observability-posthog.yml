@@ -334,16 +334,12 @@ services:
       # (ingestion/common/producers.js) rather than KAFKA_HOSTS, and otherwise
       # defaults metadata.broker.list to the unresolvable hostname "kafka".
       KAFKA_PRODUCER_METADATA_BROKER_LIST: posthog-kafka:9092
-      # The shared "ingestion-redis" pool (PluginServer.createSharedInfrastructure)
-      # reads REDIS_URL directly and otherwise defaults to redis://127.0.0.1.
-      # CDP_REDIS_HOST / LOGS_REDIS_HOST are NOT bare hostnames despite the
-      # name: cdp-services.js and logs-ingestion-consumer.js pass their value
-      # straight through as the ioredis connection `url` (e.g. "posthog-redis"
-      # is invalid as a URL and gets misinterpreted, causing silent ETIMEDOUT
-      # loops on the cdp-redis/cdp-api-redis/logs-redis/hog-transformer-redis
-      # pools). Leaving them unset makes every pool correctly fall back to
-      # REDIS_URL, which is already a well-formed redis:// URL.
+      # This Node build uses 127.0.0.1 as the default for its CDP and log
+      # Redis pools. These values are passed directly to ioredis as URLs, so
+      # they must be full redis:// URLs rather than bare Docker hostnames.
       REDIS_URL: redis://posthog-redis:6379/
+      CDP_REDIS_HOST: redis://posthog-redis:6379/
+      LOGS_REDIS_HOST: redis://posthog-redis:6379/
       CYCLOTRON_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       PERSONS_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
       BEHAVIORAL_COHORTS_DATABASE_URL: postgres://posthog:posthog@posthog-db:5432/posthog
