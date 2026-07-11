@@ -144,10 +144,32 @@
     _captureToPosthog(name, payload);
   }
 
+  function _capturePageview(attributes) {
+    if (!sampledIn) {
+      return;
+    }
+    var payload = _baseAttributes(attributes);
+    _captureToFaro('rum.pageview', payload);
+    _captureToPosthog('$pageview', Object.assign({}, payload, {
+      $current_url: window.location.href,
+    }));
+  }
+
+  function _capturePageleave(attributes) {
+    if (!sampledIn) {
+      return;
+    }
+    var payload = _baseAttributes(attributes);
+    _captureToFaro('rum.dwell', payload);
+    _captureToPosthog('$pageleave', Object.assign({}, payload, {
+      $current_url: window.location.href,
+    }));
+  }
+
   function _flushDwell(nextPath, reason) {
     var now = Date.now();
     var dwellMs = Math.max(0, now - pageEnteredAt);
-    _capture('rum.dwell', {
+    _capturePageleave({
       from_path: pagePath,
       to_path: _normalizePath(nextPath || pagePath),
       dwell_ms: dwellMs,
@@ -166,7 +188,7 @@
       pagePath = normalized;
     }
     lastPageviewPath = normalized;
-    _capture('rum.pageview', {
+    _capturePageview({
       page_path: normalized,
       reason: reason || 'navigation',
       referrer: document.referrer || null,
@@ -303,6 +325,10 @@
         capture_pageview: false,
         capture_pageleave: false,
         autocapture: true,
+        // This deployment does not use PostHog feature flags. Disabling their
+        // optional remote-configuration loader avoids requests for the
+        // unneeded /array/<token>/config SDK dependency.
+        advanced_disable_flags: true,
         disable_session_recording: false,
         mask_all_text: maskInputs,
         mask_all_element_attributes: true,
