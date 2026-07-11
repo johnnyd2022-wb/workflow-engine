@@ -1,0 +1,109 @@
+version: "3.9"
+
+name: workflow-observability-grafana
+
+services:
+  loki:
+    image: grafana/loki@sha256:70b9f699fc9bb868b62f1cfd4f787dfa50242f1fd92e6089787d5d7daea75fe8
+    container_name: workflow-observability-loki
+    command: ["-config.file=/etc/loki/local-config.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/grafana-stack/loki/loki-config.yml:/etc/loki/local-config.yml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+    networks:
+      - observability
+
+  tempo:
+    image: grafana/tempo@sha256:1ce31d6d7ffab62189685e8c47881d4a561c5d38bd0dbd66e40ca83cef07923d
+    container_name: workflow-observability-tempo
+    command: ["-config.file=/etc/tempo/tempo-config.yml"]
+    ports:
+      - "3200:3200"
+      - "4319:4317"
+      - "4320:4318"
+    volumes:
+      - ./observability/grafana-stack/tempo/tempo-config.yml:/etc/tempo/tempo-config.yml:ro
+      - tempo-data:/var/tempo
+    restart: unless-stopped
+    networks:
+      - observability
+
+  mimir:
+    image: grafana/mimir@sha256:39cc23910bbaa60d0280fd162265a22c39120ff61b02bc993f3fd3701fb8606d
+    container_name: workflow-observability-mimir
+    command: ["-config.file=/etc/mimir/mimir-config.yml"]
+    ports:
+      - "9009:9009"
+    volumes:
+      - ./observability/grafana-stack/mimir/mimir-config.yml:/etc/mimir/mimir-config.yml:ro
+      - mimir-data:/data/mimir
+    restart: unless-stopped
+    networks:
+      - observability
+
+  pyroscope:
+    image: grafana/pyroscope@sha256:73b23dbb99f154a0803c136abafdff825475f415dd4d4587538d014c672b5a55
+    container_name: workflow-observability-pyroscope
+    command: ["server"]
+    ports:
+      - "4040:4040"
+    volumes:
+      - pyroscope-data:/data
+    restart: unless-stopped
+    networks:
+      - observability
+
+  alloy:
+    image: grafana/alloy@sha256:4f6ddc56ffdcf8a6316748fc5162972e20cb301523cac1bb4a31957df733ae9b
+    container_name: workflow-observability-alloy
+    command: ["run", "--stability.level=experimental", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "12345:12345"
+      - "12347:12347"
+    volumes:
+      - ./observability/grafana-stack/alloy/config.alloy:/etc/alloy/config.alloy:ro
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+    restart: unless-stopped
+    networks:
+      - observability
+
+  grafana:
+    image: grafana/grafana@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63
+    container_name: workflow-observability-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Run obs-secrets check and configure local.ini.}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Run obs-secrets check and create the KeePassXC entry.}
+      GF_USERS_DEFAULT_THEME: light
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - ./observability/grafana-stack/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+      - pyroscope
+    restart: unless-stopped
+    networks:
+      - observability
+
+volumes:
+  loki-data:
+  tempo-data:
+  mimir-data:
+  pyroscope-data:
+  grafana-data:
+
+networks:
+  observability:
+    name: workflow-observability

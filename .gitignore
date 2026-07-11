@@ -50,6 +50,8 @@ Thumbs.db
 
 # Docker
 .dockerignore
+observability/posthog-stack/.env
+observability/posthog-stack/geoip/
 
 # Temporary files
 *.tmp

@@ -38,6 +38,7 @@ from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.process import Process
 from app.core.utils.inventory_quantity import quantity_to_api_str
+from app.observability import traced
 
 try:
     from dateutil import parser as dateutil_parser
@@ -46,6 +47,15 @@ except ImportError:
 
 # Internal fields to exclude from execution_prompts
 _EXECUTION_PROMPTS_INTERNAL = {"completed_by_email", "completed_by_user_id", "completed_at"}
+
+
+def _traverse_span_attrs(self, start_nodes: list[UUID], direction: str, *_, **kwargs) -> dict[str, Any]:
+    return {
+        "org_id": str(self.org_id),
+        "direction": direction,
+        "start_nodes_count": len(start_nodes),
+        "traversal_order": kwargs.get("traversal_order", "dfs"),
+    }
 
 
 def _normalize_date(val: Any) -> date | None:
@@ -241,6 +251,7 @@ class DAGTracer:
         self._log = logging.getLogger(__name__)
         self._enrichment_cache: dict[UUID, dict[str, Any]] = {}
 
+    @traced("dag.traverse", attributes_fn=_traverse_span_attrs)
     def traverse(
         self,
         start_nodes: list[UUID],

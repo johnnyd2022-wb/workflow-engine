@@ -1,8 +1,11 @@
 """Flask application factory"""
 
+import json
 import os
+import re
 
-from flask import Flask, jsonify, redirect, request, send_from_directory
+import requests
+from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api.middleware.session_security import setup_session_security
@@ -10,11 +13,21 @@ from app.api.middleware.tenant_context import setup_tenant_context
 from app.api.routes.auth_routes import auth_bp
 from app.api.routes.org_routes import org_bp
 from app.core.security.permissions import requires_auth
+from app.observability import (
+    configure_logging,
+    configure_metrics,
+    configure_tracing,
+    get_logger,
+    setup_observability,
+)
 from app.utils.config_loader import config
 
 
 def create_app():
     """Create and configure Flask application"""
+    configure_logging(config)
+    logger = get_logger(__name__)
+
     # Get the path to app/ui/templates for shared components
     current_file = os.path.abspath(__file__)  # app/api/app_factory.py
     api_dir = os.path.dirname(current_file)  # app/api/
@@ -51,6 +64,22 @@ def create_app():
 
     limiter.init_app(app)
     app.limiter = limiter
+
+    # Observability providers and automatic instrumentation are configured before
+    # blueprint registration so request hooks and spans are available to all routes.
+    configure_tracing(app, config)
+    configure_metrics(config)
+    if config.otel_enabled:
+        try:
+            from opentelemetry.instrumentation.requests import RequestsInstrumentor
+            from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+            from app.core.db import engine
+
+            SQLAlchemyInstrumentor().instrument(engine=engine)
+            RequestsInstrumentor().instrument()
+        except Exception:
+            logger.exception("Failed to initialize OpenTelemetry auto-instrumentors")
 
     # Register multi-tenant blueprints
     app.register_blueprint(auth_bp)
@@ -111,18 +140,102 @@ def create_app():
             return response
         except FileNotFoundError:
             # Missing static file - log at info level (not error)
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.info(f"Static file not found: {filename} from {shared_dir}")
             abort(404, "File not found")
         except Exception:
             # Unexpected exception - log at exception level
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.exception(f"Unexpected error serving static file: {filename}")
             abort(500, "Internal server error")
+
+    def _telemetry_response(upstream_base, endpoint_path):
+        """Forward a constrained telemetry payload to one configured collector endpoint."""
+        if not config.rum_enabled:
+            return jsonify({"error": "Telemetry disabled"}), 404
+
+        upstream_url = f"{upstream_base.rstrip('/')}/{endpoint_path.lstrip('/')}"
+        if request.query_string:
+            upstream_url = f"{upstream_url}?{request.query_string.decode('utf-8')}"
+
+        allowed_headers = {
+            "accept",
+            "content-encoding",
+            "content-type",
+            "user-agent",
+            "x-requested-with",
+        }
+        outbound_headers = {
+            header: value
+            for header, value in request.headers.items()
+            if header.lower() in allowed_headers or header.lower().startswith("x-posthog-")
+        }
+
+        try:
+            upstream_response = requests.request(
+                method=request.method,
+                url=upstream_url,
+                headers=outbound_headers,
+                data=request.get_data(),
+                allow_redirects=False,
+                timeout=(3.05, 15),
+            )
+        except requests.RequestException:
+            logger.exception("Telemetry proxy request failed")
+            return jsonify({"error": "Telemetry collector unavailable"}), 503
+
+        response_headers = [
+            (header, value)
+            for header, value in upstream_response.headers.items()
+            if header.lower() in {"cache-control", "content-type", "etag"}
+        ]
+        return Response(upstream_response.content, status=upstream_response.status_code, headers=response_headers)
+
+    @app.post("/telemetry")
+    @limiter.limit("120 per minute")
+    def ingest_faro_telemetry():
+        """Accept Faro's fixed collect endpoint without exposing a general HTTP proxy."""
+        return _telemetry_response(config.rum_faro_upstream, "collect")
+
+    def _posthog_telemetry_upstream(endpoint: str):
+        """Return the dedicated PostHog ingestion service for an SDK endpoint."""
+        normalized = endpoint.strip("/")
+        if normalized in {"e", "i/v0/e"}:
+            return config.rum_posthog_capture_upstream, f"{normalized}/"
+        if normalized == "s":
+            return config.rum_posthog_replay_upstream, "s/"
+        if normalized == "flags":
+            return config.rum_posthog_feature_flags_upstream, "flags/"
+        # Static SDK assets (e.g. the lazy-loaded session-recording recorder)
+        # are Django-served files, unlike the array/config endpoint below.
+        if normalized.startswith("static/"):
+            return config.rum_posthog_upstream, normalized
+        return None
+
+    @app.route("/telemetry/posthog/<path:endpoint>", methods=["GET", "POST"])
+    @limiter.limit("120 per minute")
+    def ingest_posthog_telemetry(endpoint):
+        """Forward only the PostHog SDK endpoints required by the browser bundle."""
+        normalized = endpoint.strip("/")
+        # Self-hosted PostHog's Django app has no route for this SDK asset
+        # (it's cloud/CDN-only infrastructure); requests fall through to its
+        # login-redirect catch-all. The SDK loads this as a <script> tag and
+        # only reads one thing from the resulting global (`sessionRecording`,
+        # checked truthy) before it will ever arm the recorder, so synthesize
+        # the minimal shape as executable JS rather than proxy to a route
+        # that doesn't exist.
+        config_match = re.fullmatch(r"array/([^/]+)/config(?:\.js)?", normalized)
+        if config_match:
+            token = json.dumps(config_match.group(1))
+            remote_config = json.dumps({"sessionRecording": {}, "supportedCompression": ["gzip-js"]})
+            script = (
+                "window._POSTHOG_REMOTE_CONFIG = window._POSTHOG_REMOTE_CONFIG || {};"
+                f"window._POSTHOG_REMOTE_CONFIG[{token}] = {{config: {remote_config}}};"
+            )
+            return Response(script, mimetype="application/javascript")
+        target = _posthog_telemetry_upstream(endpoint)
+        if target is None:
+            return jsonify({"error": "Unknown telemetry endpoint"}), 404
+        upstream_base, endpoint_path = target
+        return _telemetry_response(upstream_base, endpoint_path)
 
     # Global 401 handler: clear session; redirect browser requests, return JSON for API calls.
     # This dual-mode behavior is intentional (SPA + API usage): browser GETs redirect to login,
@@ -146,6 +259,7 @@ def create_app():
     # Set up middleware
     setup_tenant_context(app)
     setup_session_security(app)
+    setup_observability(app)
 
     # CRITICAL: HTTPS Enforcement - Redirect all HTTP traffic to HTTPS
     # This ensures all connections are encrypted, preventing man-in-the-middle attacks
@@ -210,7 +324,12 @@ def create_app():
                 "font-src 'self' https://fonts.gstatic.com; "
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
                 "img-src 'self' data:; "
-                "connect-src 'self'"
+                "connect-src 'self'; "
+                # PostHog's vendored session-recording bundle spins up its rrweb
+                # compression worker from a data: URI rather than a same-origin
+                # script file; without this, browsers silently refuse to create
+                # the worker and no recording snapshots are ever captured.
+                "worker-src 'self' data: blob:"
             )
 
         # HSTS (HTTP Strict Transport Security) - Force HTTPS for 1 year
@@ -232,13 +351,10 @@ def create_app():
         # a CSRF header. The SPA may still send X-CSRFToken; exemption only skips validation.
         # SameSite=Strict on the session cookie limits cross-site cookie use in browsers.
         for endpoint, view in app.view_functions.items():
-            if endpoint.startswith("auth."):
+            if endpoint.startswith("auth.") or endpoint in {"ingest_faro_telemetry", "ingest_posthog_telemetry"}:
                 csrf.exempt(view)
     except ImportError:
         # Unsafe to run session-backed mutating APIs without CSRF outside local dev / CI test.
-        import logging
-
-        logger = logging.getLogger(__name__)
         if config.environment not in ("local", "test"):
             raise RuntimeError(
                 "Flask-WTF is required in this environment for CSRF protection. Install with: pip install Flask-WTF"
@@ -257,7 +373,16 @@ def create_app():
 
     @app.context_processor
     def _inject_feature_flags():
-        return dict(crm_enabled=config.crm_enabled)
+        return dict(
+            crm_enabled=config.crm_enabled,
+            rum_enabled=config.rum_enabled,
+            rum_collector_url=config.rum_collector_url,
+            rum_sample_rate=config.rum_sample_rate,
+            rum_mask_inputs=config.rum_mask_inputs,
+            rum_posthog_api_key=config.rum_posthog_api_key,
+            rum_user_id=getattr(g, "user_id", None),
+            rum_org_id=getattr(g, "org_id", None),
+        )
 
     # Trust Cloudflare's forwarded headers (1 proxy hop)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)

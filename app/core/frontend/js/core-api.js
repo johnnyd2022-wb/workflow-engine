@@ -1,5 +1,17 @@
 // Core API client for connecting frontend to backend
 
+function _getRumTraceHeaders(url, method) {
+    if (typeof window === 'undefined' || !window.ObservabilityRUM) {
+        return {};
+    }
+    try {
+        const headers = window.ObservabilityRUM.getTraceHeaders(url, method);
+        return headers && typeof headers === 'object' ? headers : {};
+    } catch (_err) {
+        return {};
+    }
+}
+
 window.CoreAPI = window.CoreAPI || {
     baseURL: '/api/core',
     
@@ -11,7 +23,9 @@ window.CoreAPI = window.CoreAPI || {
             ? document.querySelector('meta[name="csrf-token"]')
             : null;
         const csrfTok = csrfMeta && csrfMeta.getAttribute('content');
+        const traceHeaders = _getRumTraceHeaders(url, method);
         const mergedHeaders = {
+            ...(traceHeaders || {}),
             'Content-Type': 'application/json',
             ...(options.headers || {}),
         };
@@ -338,6 +352,8 @@ window.CoreAPI = window.CoreAPI || {
             : null;
         const csrfTok = csrfMeta && csrfMeta.getAttribute('content');
         const headers = {};
+        const traceHeaders = _getRumTraceHeaders(url, 'POST');
+        Object.assign(headers, traceHeaders || {});
         if (csrfTok) {
             headers['X-CSRFToken'] = csrfTok;
         }
@@ -407,6 +423,8 @@ window.CoreAPI = window.CoreAPI || {
             : null;
         const csrfTok = csrfMeta && csrfMeta.getAttribute('content');
         const headers = {};
+        const traceHeaders = _getRumTraceHeaders(url, 'POST');
+        Object.assign(headers, traceHeaders || {});
         if (csrfTok) {
             headers['X-CSRFToken'] = csrfTok;
         }
@@ -915,4 +933,3 @@ if (typeof window !== 'undefined') {
         });
     };
 }
-

@@ -22,10 +22,7 @@ XERO_REVOKE_URL = "https://identity.xero.com/connect/revocation"
 XERO_CONNECTIONS_URL = "https://api.xero.com/connections"
 XERO_AUTH_URL = "https://login.xero.com/identity/connect/authorize"
 XERO_SCOPES = (
-    "openid profile email "
-    "accounting.contacts.read "
-    "accounting.invoices accounting.invoices.read "
-    "offline_access"
+    "openid profile email " "accounting.contacts.read " "accounting.invoices accounting.invoices.read " "offline_access"
 )
 
 
@@ -207,14 +204,20 @@ class XeroOAuthService:
                 # and persisted a newer refresh token.
                 self.db.expire_all()
                 latest = self.token_repo.get(org_id)
-                if latest and latest.refresh_token_encrypted and latest.refresh_token_encrypted != token_record.refresh_token_encrypted:
+                if (
+                    latest
+                    and latest.refresh_token_encrypted
+                    and latest.refresh_token_encrypted != token_record.refresh_token_encrypted
+                ):
                     try:
                         token_data, prior_refresh_token = _refresh_with_record(latest)
                     except requests.HTTPError as retry_err:
                         if retry_err.response is not None and retry_err.response.status_code in (400, 401):
                             self.token_repo.invalidate(org_id)
                             self.db.commit()
-                            raise XeroTokenExpiredError("Xero refresh token rejected — reconnect required.") from retry_err
+                            raise XeroTokenExpiredError(
+                                "Xero refresh token rejected — reconnect required."
+                            ) from retry_err
                         raise
                 else:
                     self.token_repo.invalidate(org_id)

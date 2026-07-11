@@ -25,6 +25,7 @@ from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
+from app.observability import start_span, traced
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ def rotate_session():
 
 @auth_bp.route("/signup", methods=["POST"])
 @limiter.limit("1000 per minute" if USE_RELAXED_AUTH_RATE_LIMITS else "5 per 1 minute")
+@traced("auth.signup")
 def signup():
     """Create a new organisation with an admin user. Rate limited to prevent abuse."""
     data = request.get_json()
@@ -232,6 +234,7 @@ def signup():
 @limiter.limit(
     "1000 per minute" if USE_RELAXED_AUTH_RATE_LIMITS else "5 per 1 minute"
 )  # Allow 5 attempts to trigger account lockout, then 6th attempt gets rate limited (higher limit for CI)
+@traced("auth.login")
 def login():
     """Login with email and password
 
@@ -341,7 +344,15 @@ def login():
 
                 # Lock account after 5 failed attempts for 1 minute
                 if failed_attempts >= 5:
-                    user_repo.lock_account(user_id, lockout_duration_minutes=1)
+                    with start_span(
+                        "auth.account_lock",
+                        attributes={
+                            "org_id": str(user_org_id),
+                            "user_id": str(user_id),
+                            "failed_attempts": int(failed_attempts),
+                        },
+                    ):
+                        user_repo.lock_account(user_id, lockout_duration_minutes=1)
                     db.commit()
 
                     # Log account lockout event with IP and User-Agent
@@ -392,7 +403,15 @@ def login():
         # CRITICAL: Account Lockout - Reset failed attempts on successful authentication
         # If password reset flag is set, unlock the account
         if is_password_reset:
-            user_repo.unlock_account(user.id)
+            with start_span(
+                "auth.account_unlock",
+                attributes={
+                    "org_id": str(user.org_id),
+                    "user_id": str(user.id),
+                    "reason": "password_reset",
+                },
+            ):
+                user_repo.unlock_account(user.id)
             db.commit()
             logger.info(f"Account unlocked via password reset for user {user.id}")
 
@@ -640,6 +659,7 @@ def get_current_user():
 
 
 @auth_bp.route("/verify-2fa", methods=["POST"])
+@traced("auth.verify_2fa")
 def verify_two_factor():
     """Verify TOTP token during login.
 

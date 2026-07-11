@@ -24,3 +24,20 @@ invoice_button_enabled = true
 schedule_enabled = true
 crm_enabled = true
 workflow_engine_enabled = true
+
+[observability]
+log_level = INFO
+log_format = json
+otel_enabled = true
+otel_service_name = workflow-engine
+otel_sample_rate = 0.1
+otel_exporter_endpoint = http://localhost:4317
+otel_exporter_protocol = grpc
+otel_capture_metrics = true
+rum_enabled = true
+rum_collector_url = /telemetry
+rum_sample_rate = 1.0
+rum_mask_inputs = true
+rum_faro_upstream = http://localhost:12347
+rum_posthog_upstream = http://localhost:8000
+rum_posthog_api_key =

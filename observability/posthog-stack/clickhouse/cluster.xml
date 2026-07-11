@@ -1,0 +1,143 @@
+<?xml version="1.0"?>
+<!--
+  Single-node cluster topology for local dev. PostHog's `migrate_clickhouse`
+  management command creates migration-history and event tables with
+  `ON CLUSTER <name>` using Replicated table engines against several
+  differently-named clusters (CLICKHOUSE_CLUSTER, CLICKHOUSE_MIGRATIONS_CLUSTER,
+  etc. — see app/config/data_stores.py in the posthog image for the full list
+  of *_CLUSTER env vars and their defaults). A real multi-node deployment
+  would give each of these a distinct topology; for one local node, every
+  name below just aliases the same host, and a Keeper/ZooKeeper connection is
+  required for Replicated engines even with a single replica.
+-->
+<clickhouse>
+  <remote_servers>
+    <posthog>
+      <shard>
+        <replica>
+          <host>posthog-clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </posthog>
+    <posthog_migrations>
+      <shard>
+        <replica>
+          <host>posthog-clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </posthog_migrations>
+    <posthog_single_shard>
+      <shard>
+        <replica>
+          <host>posthog-clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </posthog_single_shard>
+    <posthog_writable>
+      <shard>
+        <replica>
+          <host>posthog-clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </posthog_writable>
+    <posthog_primary_replica>
+      <shard>
+        <replica>
+          <host>posthog-clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </posthog_primary_replica>
+    <aux>
+      <shard>
+        <replica>
+          <host>posthog-clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </aux>
+    <ai_events>
+      <shard>
+        <replica>
+          <host>posthog-clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </ai_events>
+    <ops>
+      <shard>
+        <replica>
+          <host>posthog-clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </ops>
+    <sessions>
+      <shard>
+        <replica>
+          <host>posthog-clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </sessions>
+  </remote_servers>
+
+  <!-- CLICKHOUSE_KAFKA_NAMED_COLLECTION and CLICKHOUSE_KAFKA_WARPSTREAM_*_NAMED_COLLECTION
+       (posthog/settings/data_stores.py) name these server-side connection
+       profiles for Kafka table engines. In production these point at AWS MSK /
+       WarpStream; locally they all point at the one redpanda broker. -->
+  <named_collections>
+    <msk_cluster>
+      <kafka_broker_list>posthog-kafka:9092</kafka_broker_list>
+    </msk_cluster>
+    <warpstream_ingestion>
+      <kafka_broker_list>posthog-kafka:9092</kafka_broker_list>
+    </warpstream_ingestion>
+    <warpstream_calculated_events>
+      <kafka_broker_list>posthog-kafka:9092</kafka_broker_list>
+    </warpstream_calculated_events>
+    <warpstream_replay>
+      <kafka_broker_list>posthog-kafka:9092</kafka_broker_list>
+    </warpstream_replay>
+    <warpstream_shared>
+      <kafka_broker_list>posthog-kafka:9092</kafka_broker_list>
+    </warpstream_shared>
+    <warpstream_cyclotron>
+      <kafka_broker_list>posthog-kafka:9092</kafka_broker_list>
+    </warpstream_cyclotron>
+    <warpstream_logs>
+      <kafka_broker_list>posthog-kafka:9092</kafka_broker_list>
+    </warpstream_logs>
+  </named_collections>
+
+  <zookeeper>
+    <node>
+      <host>posthog-zookeeper</host>
+      <port>2181</port>
+    </node>
+  </zookeeper>
+
+  <macros>
+    <shard>01</shard>
+    <replica>01</replica>
+    <cluster>posthog</cluster>
+    <!-- Matches posthog.clickhouse.client.connection.NodeRole.DATA and
+         posthog.clickhouse.workload.Workload.DEFAULT — this single node
+         serves every workload/role in a local hobby deployment. -->
+    <hostClusterRole>data</hostClusterRole>
+    <hostClusterType>default</hostClusterType>
+  </macros>
+
+  <!-- posthog/clickhouse/custom_metrics.py defines a Prometheus metric view
+       over system.crash_log, which (unlike query_log/trace_log/etc.) this
+       image's default config does not enable without this section. -->
+  <crash_log>
+    <database>system</database>
+    <table>crash_log</table>
+    <flush_interval_milliseconds>1000</flush_interval_milliseconds>
+  </crash_log>
+</clickhouse>

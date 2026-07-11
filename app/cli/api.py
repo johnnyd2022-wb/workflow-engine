@@ -16,11 +16,6 @@ if parent_dir not in sys.path:
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
 
-# Import the Flask app and config (after path setup)
-from app.app import app  # noqa: E402
-from app.utils.config_loader import config  # noqa: E402
-
-
 def get_ssl_context():
     """Get SSL context paths relative to app directory"""
     app_dir_path = Path(__file__).parent.parent
@@ -32,6 +27,10 @@ def get_ssl_context():
 @click.command()
 def start():
     """Start the Flask application"""
+    # Import lazily so unrelated admin commands do not construct a Flask app.
+    from app.app import app
+    from app.utils.config_loader import config
+
     # Run the app using the same configuration as app.py
     app.run(host=config.host, port=config.port, debug=config.debug, ssl_context=get_ssl_context())
 
@@ -42,6 +41,10 @@ def start():
 @click.option("--debug/--no-debug", default=None, help="Enable/disable debug mode (overrides config)")
 def serve(host, port, debug):
     """Start the Flask application with optional overrides"""
+    # Import lazily so unrelated admin commands do not construct a Flask app.
+    from app.app import app
+    from app.utils.config_loader import config
+
     # Use provided options or fall back to config
     host = host or config.host
     port = port or config.port

@@ -4171,7 +4171,10 @@ def _dashboard_priority_rank(priority: Any) -> int:
 
 
 def _dashboard_summarize_tasks(
-    open_tasks: list[dict[str, Any]], today: date, week_start: date | None = None, week_end_exclusive: date | None = None
+    open_tasks: list[dict[str, Any]],
+    today: date,
+    week_start: date | None = None,
+    week_end_exclusive: date | None = None,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for task in open_tasks or []:
@@ -4326,7 +4329,9 @@ def _dashboard_event_log_period(
     return {"total": total, "items": items}
 
 
-def _dashboard_operations_summary(org_id: UUID, session, day_start: datetime, next_day_start: datetime) -> dict[str, int]:
+def _dashboard_operations_summary(
+    org_id: UUID, session, day_start: datetime, next_day_start: datetime
+) -> dict[str, int]:
     active_executions = (
         session.query(Execution)
         .filter(Execution.org_id == org_id)
@@ -4470,7 +4475,9 @@ def _dashboard_execution_counts_by_day(
     return out
 
 
-def _dashboard_open_action_item_dates(check_results: list[Any], open_tasks: list[dict[str, Any]], today: date) -> list[date]:
+def _dashboard_open_action_item_dates(
+    check_results: list[Any], open_tasks: list[dict[str, Any]], today: date
+) -> list[date]:
     by_id = {r.check_id: r for r in check_results or []}
     dates: list[date] = []
 
@@ -4712,7 +4719,9 @@ def get_dashboard_summary():
                     baseline_target = float(baseline_target)
                     baseline_variance = float((crm_overview.get("current_month_revenue") or 0.0) - baseline_target)
                     if baseline_target > 0:
-                        baseline_attainment = round(((crm_overview.get("current_month_revenue") or 0.0) / baseline_target) * 100, 1)
+                        baseline_attainment = round(
+                            ((crm_overview.get("current_month_revenue") or 0.0) / baseline_target) * 100, 1
+                        )
                 except (TypeError, ValueError):
                     baseline_target = None
             sales_summary = {

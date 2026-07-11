@@ -17,6 +17,7 @@ from app.core.backend.process_docs.process_docs_storage import (
 from app.core.db import db_session
 from app.core.db.models.step import Step
 from app.core.db.repositories.process_step_document_repo import ProcessStepDocumentRepository
+from app.observability import start_span
 
 logger = logging.getLogger(__name__)
 
@@ -71,72 +72,88 @@ def upload_sop_file(
     Save uploaded SOP file: insert record, commit, then finalize file to storage.
     Returns (response_dict, error_message, status_code).
     """
-    repo = ProcessStepDocumentRepository(db_session)
-    rel_path, filename = prepare_final_path(str(org_id), str(process_id), str(step_id), content_type)
-    # Title from original filename if not provided
-    doc_title = (title or "").strip() or original_filename or "SOP document"
-    record = repo.create(
-        org_id=org_id,
-        process_id=process_id,
-        step_id=step_id,
-        title=doc_title,
-        storage_path=rel_path,
-        content_markdown=None,
-        mime_type=content_type,
-        file_size=file_size,
-        created_by=created_by,
-    )
-    try:
-        db_session.commit()
-    except Exception as e:
-        logger.exception("Process docs upload_sop_file: create/commit failed: %s", e)
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
-        return None, "Failed to save document record", 500
-
-    try:
-        finalize_from_temp(temp_path, str(org_id), str(process_id), str(step_id), filename)
-    except Exception as e:
-        logger.exception("Process docs finalize_from_temp failed (record already committed): %s", e)
-        try:
-            repo.soft_delete(record.id, org_id)
-            db_session.commit()
-        except Exception:
-            logger.exception("Cleanup soft_delete failed")
-            db_session.rollback()
-        try:
-            if temp_path.exists():
-                os.unlink(temp_path)
-        except OSError:
-            pass
-        return None, "Failed to finalize file", 500
-
-    logger.info("Process docs upload_sop_file: success doc_id=%s storage_path=%s", record.id, rel_path)
-    _emit_doc_event(
-        "process.step_doc_uploaded",
-        org_id,
-        process_id,
-        step_id,
-        record.id,
-        doc_title,
-        {"mime_type": content_type, "file_size": file_size},
-    )
-    return (
-        {
-            "id": str(record.id),
-            "title": record.title,
-            "storage_path": rel_path,
-            "mime_type": record.mime_type,
-            "file_size": record.file_size,
+    with start_span(
+        "process_docs.upload",
+        attributes={
+            "org_id": str(org_id),
             "process_id": str(process_id),
             "step_id": str(step_id),
-            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "file_size": int(file_size or 0),
         },
-        "",
-        201,
-    )
+    ) as span:
+        repo = ProcessStepDocumentRepository(db_session)
+        rel_path, filename = prepare_final_path(str(org_id), str(process_id), str(step_id), content_type)
+        # Title from original filename if not provided
+        doc_title = (title or "").strip() or original_filename or "SOP document"
+        record = repo.create(
+            org_id=org_id,
+            process_id=process_id,
+            step_id=step_id,
+            title=doc_title,
+            storage_path=rel_path,
+            content_markdown=None,
+            mime_type=content_type,
+            file_size=file_size,
+            created_by=created_by,
+        )
+        try:
+            db_session.commit()
+        except Exception as e:
+            logger.exception("Process docs upload_sop_file: create/commit failed: %s", e)
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            if span is not None:
+                span.set_attribute("result", "db_commit_failed")
+            return None, "Failed to save document record", 500
+
+        try:
+            finalize_from_temp(temp_path, str(org_id), str(process_id), str(step_id), filename)
+        except Exception as e:
+            logger.exception("Process docs finalize_from_temp failed (record already committed): %s", e)
+            try:
+                repo.soft_delete(record.id, org_id)
+                db_session.commit()
+            except Exception:
+                logger.exception("Cleanup soft_delete failed")
+                db_session.rollback()
+            try:
+                if temp_path.exists():
+                    os.unlink(temp_path)
+            except OSError:
+                pass
+            if span is not None:
+                span.set_attribute("result", "finalize_failed")
+            return None, "Failed to finalize file", 500
+
+        logger.info("Process docs upload_sop_file: success doc_id=%s storage_path=%s", record.id, rel_path)
+        _emit_doc_event(
+            "process.step_doc_uploaded",
+            org_id,
+            process_id,
+            step_id,
+            record.id,
+            doc_title,
+            {"mime_type": content_type, "file_size": file_size},
+        )
+        if span is not None:
+            span.set_attribute("doc_id", str(record.id))
+            span.set_attribute("result", "ok")
+        return (
+            {
+                "id": str(record.id),
+                "title": record.title,
+                "storage_path": rel_path,
+                "mime_type": record.mime_type,
+                "file_size": record.file_size,
+                "process_id": str(process_id),
+                "step_id": str(step_id),
+                "created_at": record.created_at.isoformat() if record.created_at else None,
+            },
+            "",
+            201,
+        )
 
 
 def create_or_update_inline(
@@ -251,39 +268,52 @@ def delete_document(doc_id: UUID, org_id: UUID) -> tuple[bool, str, int]:
     Order: soft-delete record, commit, then delete file — so a failed commit does not orphan the file.
     Returns (success, error_message, status_code).
     """
-    repo = ProcessStepDocumentRepository(db_session)
-    doc = repo.get_by_id(doc_id, org_id)
-    if not doc:
-        return True, "", 200  # idempotent
-    # Capture path info before soft-delete (record may be updated)
-    storage_path = doc.storage_path
-    doc_title_snap = doc.title or "document"
-    doc_process_id = doc.process_id
-    doc_step_id = doc.step_id
-    org_id_s, process_id_s, step_id_s = str(doc.org_id), str(doc.process_id), str(doc.step_id)
-    repo.soft_delete(doc_id, org_id)
-    try:
-        db_session.commit()
-    except Exception as e:
-        logger.exception("Process docs delete_document failed: %s", e)
-        db_session.rollback()
-        return False, "Failed to delete document record", 500
-    _emit_doc_event(
-        "process.step_doc_deleted",
-        org_id,
-        doc_process_id,
-        doc_step_id,
-        doc_id,
-        doc_title_snap,
-    )
-    # Best-effort file deletion after commit (avoids storage leak; file delete failure is logged only)
-    if storage_path:
-        parts = storage_path.replace("\\", "/").split("/")
-        if len(parts) >= 4:
-            filename = parts[-1]
-            storage_delete_file(org_id_s, process_id_s, step_id_s, filename)
-    logger.info("Process docs delete_document: removed doc_id=%s", doc_id)
-    return True, "", 200
+    with start_span(
+        "process_docs.delete",
+        attributes={
+            "org_id": str(org_id),
+            "doc_id": str(doc_id),
+        },
+    ) as span:
+        repo = ProcessStepDocumentRepository(db_session)
+        doc = repo.get_by_id(doc_id, org_id)
+        if not doc:
+            if span is not None:
+                span.set_attribute("result", "already_deleted")
+            return True, "", 200  # idempotent
+        # Capture path info before soft-delete (record may be updated)
+        storage_path = doc.storage_path
+        doc_title_snap = doc.title or "document"
+        doc_process_id = doc.process_id
+        doc_step_id = doc.step_id
+        org_id_s, process_id_s, step_id_s = str(doc.org_id), str(doc.process_id), str(doc.step_id)
+        repo.soft_delete(doc_id, org_id)
+        try:
+            db_session.commit()
+        except Exception as e:
+            logger.exception("Process docs delete_document failed: %s", e)
+            db_session.rollback()
+            if span is not None:
+                span.set_attribute("result", "db_delete_failed")
+            return False, "Failed to delete document record", 500
+        _emit_doc_event(
+            "process.step_doc_deleted",
+            org_id,
+            doc_process_id,
+            doc_step_id,
+            doc_id,
+            doc_title_snap,
+        )
+        # Best-effort file deletion after commit (avoids storage leak; file delete failure is logged only)
+        if storage_path:
+            parts = storage_path.replace("\\", "/").split("/")
+            if len(parts) >= 4:
+                filename = parts[-1]
+                storage_delete_file(org_id_s, process_id_s, step_id_s, filename)
+        logger.info("Process docs delete_document: removed doc_id=%s", doc_id)
+        if span is not None:
+            span.set_attribute("result", "ok")
+        return True, "", 200
 
 
 def get_file_for_download(doc_id: UUID, org_id: UUID) -> tuple[bytes | None, str | None, str | None, str | None]:

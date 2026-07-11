@@ -311,6 +311,23 @@
   <script src="/ui/shared/sidebar-v2.js"></script>
   <script src="/ui/shared/password-policy.js"></script>
   <script src="/ui/shared/workflow-engine-settings.js"></script>
+  {% if rum_enabled %}
+  <script>
+    window.__RUM_CONFIG__ = {
+      enabled: true,
+      collectorUrl: {{ rum_collector_url|tojson }},
+      sampleRate: {{ rum_sample_rate|tojson }},
+      maskInputs: {{ rum_mask_inputs|tojson }},
+      userId: {{ rum_user_id|tojson }},
+      orgId: {{ rum_org_id|tojson }},
+      posthogApiKey: {{ rum_posthog_api_key|tojson }}
+    };
+  </script>
+  <script src="/ui/shared/faro-web-sdk.iife.js"></script>
+  <script src="/ui/shared/faro-web-tracing.iife.js"></script>
+  <script src="/ui/shared/posthog-array.full.js"></script>
+  <script src="/ui/shared/observability-rum.js"></script>
+  {% endif %}
 
   {# HTMX & Alpine — self-hosted to avoid CDN dependency and floating-version risk. #}
   <script src="{{ url_for('core.serve_core_js', filename='htmx.min.js') }}"></script>

@@ -17,6 +17,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.db import db_session
+from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.organisation import Organisation
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
@@ -25,6 +26,15 @@ from app.core.security.auth_service import AuthService
 # ─────────────────────────────────────────────
 # Fixtures
 # ─────────────────────────────────────────────
+
+
+def _latest_event(db, org_id, event_type: str) -> EntityEvent | None:
+    return (
+        db.query(EntityEvent)
+        .filter(EntityEvent.org_id == org_id, EntityEvent.event_type == event_type)
+        .order_by(EntityEvent.created_at.desc())
+        .first()
+    )
 
 
 @pytest.fixture()
@@ -250,6 +260,11 @@ class TestCRMNotes:
 
         assert note["content"] == "Test note content"
         assert note["id"] is not None
+        created_event = _latest_event(db, org.id, "crm_note.created")
+        assert created_event is not None
+        assert str(created_event.entity_id) == note["id"]
+        assert created_event.payload["contact_id"] == str(contact.id)
+        assert int(created_event.payload["content_length"]) == len("Test note content")
 
         # Retrieve via get_customer
         detail = svc.get_customer(contact_id=contact.id, org_id=org.id)
@@ -267,6 +282,11 @@ class TestCRMNotes:
 
         updated = svc.update_note(note_id=_UUID(note["id"]), org_id=org.id, content="Updated content")
         assert updated["content"] == "Updated content"
+        updated_event = _latest_event(db, org.id, "crm_note.updated")
+        assert updated_event is not None
+        assert str(updated_event.entity_id) == note["id"]
+        assert int(updated_event.payload["content_length"]) == len("Updated content")
+        assert updated_event.diff["content_length"]["after"] == len("Updated content")
 
     def test_delete_note(self, db, org, user):
         from app.features.crm.services.crm_service import CRMService
@@ -282,6 +302,10 @@ class TestCRMNotes:
         detail = svc.get_customer(contact_id=contact.id, org_id=org.id)
         note_ids = [n["id"] for n in detail["notes"]]
         assert note["id"] not in note_ids
+        deleted_event = _latest_event(db, org.id, "crm_note.deleted")
+        assert deleted_event is not None
+        assert str(deleted_event.entity_id) == note["id"]
+        assert deleted_event.payload["contact_id"] == str(contact.id)
 
     def test_note_org_isolation(self, db, org, user):
         """Notes for org A must not appear for org B."""
@@ -322,6 +346,10 @@ class TestCRMTasks:
         assert task["title"] == "Follow up call"
         assert task["priority"] == "high"
         assert task["status"] == "pending"
+        created_event = _latest_event(db, org.id, "crm_task.created")
+        assert created_event is not None
+        assert str(created_event.entity_id) == task["id"]
+        assert created_event.payload["title"] == "Follow up call"
 
     def test_update_task_status(self, db, org, user):
         from uuid import UUID as _UUID
@@ -334,6 +362,10 @@ class TestCRMTasks:
 
         assert updated["status"] == "completed"
         assert updated["completed_at"] is not None
+        updated_event = _latest_event(db, org.id, "crm_task.updated")
+        assert updated_event is not None
+        assert str(updated_event.entity_id) == task["id"]
+        assert updated_event.diff["status"]["after"] == "completed"
 
     def test_delete_task(self, db, org, user):
         from uuid import UUID as _UUID
@@ -347,6 +379,9 @@ class TestCRMTasks:
         tasks = svc.list_tasks(org.id, {})
         task_ids = [t["id"] for t in tasks["tasks"]]
         assert task["id"] not in task_ids
+        deleted_event = _latest_event(db, org.id, "crm_task.deleted")
+        assert deleted_event is not None
+        assert str(deleted_event.entity_id) == task["id"]
 
     def test_list_tasks_org_isolation(self, db, org, user):
         from app.features.crm.services.crm_service import CRMService
@@ -362,6 +397,69 @@ class TestCRMTasks:
 
         db.query(Organisation).filter(Organisation.id == org_b.id).delete(synchronize_session=False)
         db.commit()
+
+
+# ─────────────────────────────────────────────
+# CRM Service — Mapping + Traceability Events
+# ─────────────────────────────────────────────
+
+
+class TestCRMEvents:
+    def test_traceability_config_update_emits_event(self, db, org):
+        from app.features.crm.services.crm_service import CRMService
+
+        svc = CRMService(db)
+        updated = svc.update_traceability_config(
+            org.id,
+            {
+                "matching_strategy": "hybrid",
+                "manual_review_days": 14,
+                "strict_mapping": False,
+                "task_done_archive_days": 10,
+            },
+        )
+
+        assert updated["matching_strategy"] == "hybrid"
+        event = _latest_event(db, org.id, "crm_traceability_config.updated")
+        assert event is not None
+        assert event.payload["matching_strategy"] == "hybrid"
+        assert event.diff["matching_strategy"]["after"] == "hybrid"
+
+    def test_product_mapping_lifecycle_emits_events(self, db, org, user):
+        from uuid import UUID as _UUID
+
+        from app.features.crm.services.crm_service import CRMService
+
+        svc = CRMService(db)
+        mapping = svc.create_mapping(
+            org.id,
+            {
+                "biz_e_product_name": f"Mapped Product {uuid4()}",
+                "xero_description_pattern": f"Mapped Pattern {uuid4()}",
+                "match_type": "contains",
+            },
+            user.id,
+        )
+        created = _latest_event(db, org.id, "crm_product_mapping.created")
+        assert created is not None
+        assert str(created.entity_id) == mapping["id"]
+
+        updated = svc.update_mapping(
+            _UUID(mapping["id"]),
+            org.id,
+            {"notes": "notes-updated", "is_active": False},
+        )
+        assert updated is not None
+        updated_event = _latest_event(db, org.id, "crm_product_mapping.updated")
+        assert updated_event is not None
+        assert str(updated_event.entity_id) == mapping["id"]
+        assert updated_event.diff["is_active"]["after"] is False
+
+        ok = svc.delete_mapping(_UUID(mapping["id"]), org.id)
+        assert ok is True
+        deleted = _latest_event(db, org.id, "crm_product_mapping.deleted")
+        assert deleted is not None
+        assert str(deleted.entity_id) == mapping["id"]
 
 
 # ─────────────────────────────────────────────

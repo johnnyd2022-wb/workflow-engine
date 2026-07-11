@@ -17,56 +17,46 @@ from initialize import db_conn
 
 from app.api.app_factory import create_app
 from app.core.security.permissions import requires_auth
+from app.observability import get_logger
 from app.utils.config_loader import config
 
 # Create app using factory (blueprints are registered in create_app)
 app = create_app()
+LOGGER = get_logger(__name__)
 
 
 # Log feature status from configuration
 def log_feature_status():
     """Log configuration sections and values with ZERO maintenance required"""
-    print("🔧 FEATURE STATUS FROM CONFIGURATION:")
-    print()
-
     # Access the underlying ConfigParser object from config
     configparser_obj = config.config
 
+    section_snapshot: dict[str, dict] = {}
     # Process each section dynamically - NO HARDCODED LOGIC
     for section_name in sorted(configparser_obj.sections()):
-        print(f"⚙️ {section_name.upper()}:")
+        section_snapshot[section_name] = {}
 
         for key, value in configparser_obj[section_name].items():
             # Convert snake_case to readable format
-            readable_key = key.replace("_", " ").title()
-
             # Handle boolean values (true/false) - ONLY check the value itself
             if value.lower() in ["true", "false"]:
-                is_enabled = value.lower() == "true"
-                status = "✅" if is_enabled else "❌"
-                print(f"   {status} {readable_key}")
+                section_snapshot[section_name][key] = value.lower() == "true"
             else:
                 # Hide sensitive information
                 if any(sensitive_word in key.lower() for sensitive_word in ["password", "secret", "token", "key"]):
-                    print(f"   🔒 {readable_key}: ***HIDDEN***")
+                    section_snapshot[section_name][key] = "***HIDDEN***"
                 else:
-                    print(f"   📄 {readable_key}: {value}")
-        print()
+                    section_snapshot[section_name][key] = value
 
     # Dynamically detect and log blueprint registrations by checking Flask app
-    print("🔗 REGISTERED BLUEPRINTS:")
-    blueprint_count = 0
+    blueprints = []
     for blueprint_name, blueprint in app.blueprints.items():
+        _ = blueprint
         # Skip the default Flask blueprints and only show custom blueprints
         if blueprint_name not in ["static", "url_defaults"]:
-            friendly_name = blueprint_name.replace("_", " ").upper()
-            print(f"   ✅ {friendly_name}")
-            blueprint_count += 1
+            blueprints.append(blueprint_name)
 
-    if blueprint_count == 0:
-        print("   ⚠️ No custom blueprints registered")
-
-    print("=" * 50)
+    LOGGER.info("feature_status", sections=section_snapshot, blueprints=blueprints)
 
 
 # Call the logging function
@@ -152,23 +142,25 @@ def initialize_database():
     result = subprocess.run([python_executable, initialize_script], capture_output=True, text=True)
 
     if result.returncode != 0:
-        print(f"❌ Initialize script failed with return code {result.returncode}")
-        print(f"STDOUT: {result.stdout}")
-        print(f"STDERR: {result.stderr}")
+        LOGGER.error(
+            "initialize_script_failed",
+            return_code=result.returncode,
+            stdout=result.stdout,
+            stderr=result.stderr,
+        )
         raise Exception(f"Database initialization failed: {result.stderr}")
     else:
-        print("✅ Database initialization completed successfully")
-        print(f"Output: {result.stdout}")
+        LOGGER.info("initialize_script_completed", output=result.stdout)
 
 
 @app.route("/initialize", methods=["POST"])
 def initialize():
-    print("Accessed /initialize route")
+    LOGGER.info("initialize_route_accessed")
     try:
         initialize_database()
         return redirect(url_for("index"))
     except Exception as e:
-        print(f"❌ Initialize failed: {e}")
+        LOGGER.exception("initialize_route_failed", error=str(e))
         return f"Database initialization failed: {str(e)}", 500
 
 
@@ -185,8 +177,8 @@ if __name__ == "__main__":
     ssl_context = None
     if os.path.exists(cert_file) and os.path.exists(key_file):
         ssl_context = (cert_file, key_file)
-        print(f"✅ SSL enabled with certificates: {cert_file}")
+        LOGGER.info("ssl_enabled", cert_file=cert_file, key_file=key_file)
     else:
-        print(f"⚠️  SSL certificates not found at {cert_file} or {key_file}, running without SSL")
+        LOGGER.warning("ssl_certificates_missing", cert_file=cert_file, key_file=key_file)
 
     app.run(host=config.host, port=config.port, debug=config.debug, ssl_context=ssl_context)

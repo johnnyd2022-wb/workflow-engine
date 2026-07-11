@@ -1,0 +1,39 @@
+rules:
+  - id: no-print-in-app
+    languages: [python]
+    severity: ERROR
+    message: >
+      print() is not structured logging. Use `from app.observability import get_logger`
+      and emit a structured event (logger.info("event_name", key=value)). print() bypasses
+      JSON formatting, the feature tag, and trace correlation.
+    pattern: print(...)
+    paths:
+      include: ["app/"]
+      exclude:
+        [
+          "app/cli/**",
+          "app/main.py",
+          "app/initialize.py",
+          "scripts/**",
+          "app/core/db/migrations/**",
+          "tests/**",
+        ]
+
+  - id: no-stdlib-getlogger
+    languages: [python]
+    severity: WARNING
+    message: >
+      Use structlog via `from app.observability import get_logger` instead of
+      logging.getLogger(...) so logs carry feature/correlation/trace context.
+    pattern: logging.getLogger(...)
+    paths:
+      include: ["app/"]
+      exclude: ["app/observability/**", "scripts/**"]
+
+  - id: prefer-structlog-over-current-app-logger
+    languages: [python]
+    severity: INFO
+    message: Prefer get_logger() over current_app.logger for consistent structured context.
+    pattern: current_app.logger.$METHOD(...)
+    paths:
+      include: ["app/"]

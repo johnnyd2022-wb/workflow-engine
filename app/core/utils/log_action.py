@@ -6,6 +6,9 @@ from flask import g
 
 from app.core.db import SessionLocal
 from app.core.db.repositories.audit_repo import AuditRepository
+from app.observability import get_logger
+
+LOGGER = get_logger(__name__)
 
 
 def log_action(
@@ -46,8 +49,7 @@ def log_action(
         db.commit()
     except Exception as e:
         # Log error but don't fail the operation
-        # In production, you might want to use proper logging
-        print(f"Error logging action: {e}")
+        LOGGER.warning("audit_write_failed", error=str(e), action=action, entity=entity)
         db.rollback()
     finally:
         db.close()
