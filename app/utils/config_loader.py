@@ -332,6 +332,18 @@ class Config:
         return self.get("observability", "rum_posthog_upstream", "http://localhost:8000")
 
     @property
+    def rum_posthog_capture_upstream(self) -> str:
+        return self.get("observability", "rum_posthog_capture_upstream", self.rum_posthog_upstream)
+
+    @property
+    def rum_posthog_replay_upstream(self) -> str:
+        return self.get("observability", "rum_posthog_replay_upstream", self.rum_posthog_upstream)
+
+    @property
+    def rum_posthog_feature_flags_upstream(self) -> str:
+        return self.get("observability", "rum_posthog_feature_flags_upstream", self.rum_posthog_upstream)
+
+    @property
     def rum_posthog_api_key(self) -> str:
         if self.environment == "local":
             return self._clean_config_secret(

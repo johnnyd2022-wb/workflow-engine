@@ -1,6 +1,7 @@
 """Flask application factory"""
 
 import os
+import re
 
 import requests
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
@@ -193,16 +194,28 @@ def create_app():
         """Accept Faro's fixed collect endpoint without exposing a general HTTP proxy."""
         return _telemetry_response(config.rum_faro_upstream, "collect")
 
-    posthog_telemetry_endpoints = {"e", "flags", "s"}
+    def _posthog_telemetry_upstream(endpoint: str):
+        """Return the dedicated PostHog ingestion service for an SDK endpoint."""
+        normalized = endpoint.strip("/")
+        if normalized in {"e", "i/v0/e"}:
+            return config.rum_posthog_capture_upstream, f"{normalized}/"
+        if normalized == "s":
+            return config.rum_posthog_replay_upstream, "s/"
+        if normalized == "flags":
+            return config.rum_posthog_feature_flags_upstream, "flags/"
+        if re.fullmatch(r"array/[^/]+/config(?:\.js)?", normalized):
+            return config.rum_posthog_feature_flags_upstream, normalized
+        return None
 
     @app.route("/telemetry/posthog/<path:endpoint>", methods=["GET", "POST"])
     @limiter.limit("120 per minute")
     def ingest_posthog_telemetry(endpoint):
-        """Forward only PostHog SDK endpoints used by the vendored browser bundle."""
-        normalized_endpoint = endpoint.strip("/")
-        if normalized_endpoint not in posthog_telemetry_endpoints:
+        """Forward only the PostHog SDK endpoints required by the browser bundle."""
+        target = _posthog_telemetry_upstream(endpoint)
+        if target is None:
             return jsonify({"error": "Unknown telemetry endpoint"}), 404
-        return _telemetry_response(config.rum_posthog_upstream, f"{normalized_endpoint}/")
+        upstream_base, endpoint_path = target
+        return _telemetry_response(upstream_base, endpoint_path)
 
     # Global 401 handler: clear session; redirect browser requests, return JSON for API calls.
     # This dual-mode behavior is intentional (SPA + API usage): browser GETs redirect to login,

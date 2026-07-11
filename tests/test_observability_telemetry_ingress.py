@@ -28,6 +28,9 @@ def _build_app(monkeypatch, captured_requests):
     monkeypatch.setattr(Config, "rum_enabled", property(lambda _self: True))
     monkeypatch.setattr(Config, "rum_faro_upstream", property(lambda _self: "http://faro.test"))
     monkeypatch.setattr(Config, "rum_posthog_upstream", property(lambda _self: "http://posthog.test"))
+    monkeypatch.setattr(Config, "rum_posthog_capture_upstream", property(lambda _self: "http://capture.test"))
+    monkeypatch.setattr(Config, "rum_posthog_replay_upstream", property(lambda _self: "http://replay.test"))
+    monkeypatch.setattr(Config, "rum_posthog_feature_flags_upstream", property(lambda _self: "http://flags.test"))
 
     def fake_request(**kwargs):
         captured_requests.append(kwargs)
@@ -68,6 +71,6 @@ def test_posthog_ingest_allows_only_known_sdk_paths(monkeypatch):
         rejected = client.post("/telemetry/posthog/http://metadata.internal/latest", data=b"{}", headers=headers)
 
     assert allowed.status_code == 202
-    assert captured_requests[0]["url"] == "http://posthog.test/e/?ip=1"
+    assert captured_requests[0]["url"] == "http://capture.test/e/?ip=1"
     assert rejected.status_code == 404
     assert len(captured_requests) == 1
