@@ -21,6 +21,15 @@ mode for a specific feature slug.
 ## What ci-gate added (additive only — no existing job touched)
 
 - `gitleaks` job (security stage, blocking) — secret scanning was entirely absent.
+  First run (`gitleaks detect --source .`, full history) found 20-32 pre-existing
+  findings in git history (count varies with clone depth), none introduced by the
+  branch that added this job — confirmed by scoping to just that branch's commits
+  (`--log-opts="main..HEAD"`): 0 leaks. Rather than weaken the gate, the job is scoped
+  to only the commits each MR actually introduces
+  (`$CI_MERGE_REQUEST_DIFF_BASE_SHA..$CI_COMMIT_SHA`, `GIT_DEPTH: 0` so that range
+  always resolves) — it stays a real blocking gate for new secrets without dragging
+  every future MR down on a backlog nobody in that MR created. Full-history findings
+  (20, as of 2026-07-12) are a separate one-off triage — see below.
 - `pip_audit` job (security stage, `allow_failure: true` for now) — known-CVE scanning
   of resolved dependencies; distinct from the existing lockfile-freshness check. Feeds
   the new `dependency-update` skill.
@@ -47,3 +56,23 @@ mode for a specific feature slug.
    `main` bypassing CI. I did not attempt this via `glab api`; it's a shared-repo
    permissions change and should be a deliberate action, not a side effect of a skill
    install.
+4. **Full git-history gitleaks findings — still pending triage, not touched.** 20 findings
+   (full-history scan, redacted values, 2026-07-12); 3 allowlisted in `.gitleaksignore`
+   per Johnny's call the same day (`tls/wb_cert.key`, `config/local.ini`,
+   `config/test.ini` — by design, not production credentials), **17 remain open**.
+   Roughly by apparent severity:
+   - Likely genuine, worth checking/rotating: `tls/wb_cert.key` (a TLS private key
+     committed 2025-06-27); `config/{local,test,prod}.ini` line 16, a `generic-api-key`
+     match in all three environments incl. prod (commit `3a5001c`, 2025-09-24, plausibly
+     the Xero `client_secret`); `ci/scripts/production/prod_container.sh` and
+     `ci/scripts/test/test_container.sh` (both a `gitlab-pat` and `generic-api-key`
+     match, commit `713e7d2`, 2025-09-24); old backup/diff files `app.py.bak`,
+     `app.py.xero_processing_updates_in_progress`, `app.diff` (commits `05aaee7`/
+     `713e7d2`) carrying what looks like a real key inline even though later cleaned
+     from HEAD — still live in history either way.
+   - Likely false positives, lower urgency: `.claude/skills/python-review/SKILL.md`,
+     `.cursor/rules/python-review.mdc`, `.agents/skills/python.md` (all `generic-api-key`,
+     2026-05-02/03) — plausibly an example key format in documentation prose, not a real
+     credential; worth a quick look, not a fire.
+   No rotation or history rewrite attempted — deliberately a human decision, not a side
+   effect of installing skills.
