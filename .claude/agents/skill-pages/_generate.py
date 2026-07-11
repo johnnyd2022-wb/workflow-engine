@@ -74,6 +74,24 @@ CSS = """
   @media (max-width:600px) {{ .page {{ padding:32px 20px 60px; }} h1 {{ font-size:22px; }} }}
 """
 
+def wrap_document(title, css, body):
+    """Full standalone HTML5 document: doctype/head/charset/viewport, so pages
+    render correctly (no mis-decoded em-dashes/curly-quotes/bullets, no quirks
+    mode) whether opened directly as a file, served, or turned into an artifact."""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<style>{css}</style>
+</head>
+<body>
+{body}
+</body>
+</html>
+"""
+
 def render(s):
     accent, tint, biz_label = ACCENTS[s["business"]]
     css = CSS.format(accent=accent, tint=tint)
@@ -85,10 +103,7 @@ def render(s):
         f'      <li><span>{item} <em>→ {who}</em></span></li>'
         for item, who in s["not_do"])
     knows = "\n".join(f'      <li><span>{k}</span></li>' for k in s["good_to_know"])
-    return f"""<title>{s['title']} — Founder Ops Skill</title>
-<style>{css}</style>
-
-<div class="page">
+    body = f"""<div class="page">
   <header>
     <p class="eyebrow">Founder Ops Skill · {biz_label}</p>
     <h1>{s['title']}</h1>
@@ -133,8 +148,8 @@ def render(s):
   Every skill follows the same ground rules: never invent facts, protect the Whistlebird
   recipes, keep the two brands' voices separate, and end every output with concrete next
   actions (owner + date).</p>
-</div>
-"""
+</div>"""
+    return wrap_document(f"{s['title']} — Founder Ops Skill", css, body)
 
 SKILLS = [
  dict(n="01", slug="business-operator", business="both",
@@ -465,10 +480,7 @@ def render_overview():
     </table>
   </section>
 """
-    return f"""<title>Founder Ops — The Skill Library</title>
-<style>{css}</style>
-
-<div class="page">
+    body = f"""<div class="page">
   <header>
     <p class="eyebrow">Founder Ops · Whistlebird + Biz-E</p>
     <h1>The Skill Library — how we run two businesses on founder time</h1>
@@ -511,8 +523,8 @@ def render_overview():
   themselves live in the workspace under <code>skills/&lt;name&gt;/SKILL.md</code>, the
   shared business facts under <code>context/</code>, and the live project state under
   <code>projects/</code>.</p>
-</div>
-"""
+</div>"""
+    return wrap_document("Founder Ops — The Skill Library", css, body)
 
 os.makedirs(OUT, exist_ok=True)
 with open(os.path.join(OUT, "00-overview.html"), "w") as f:
