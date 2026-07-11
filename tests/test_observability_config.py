@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import configparser
+from pathlib import Path
 
 from app.utils.config_loader import Config
 
@@ -35,3 +36,21 @@ def test_local_posthog_api_key_prefers_environment_then_keepass_then_ini(monkeyp
 
 def test_local_posthog_keepass_entry_path_is_configured():
     assert _local_config().keepass_posthog_project_api_key_entry == "custom/observability/posthog-key"
+
+
+def test_observability_data_exports_default_to_disabled():
+    config = _local_config()
+
+    assert config.grafana_data_enabled is False
+    assert config.posthog_data_enabled is False
+
+
+def test_all_environment_configs_disable_observability_data_exports():
+    config_dir = Path(__file__).resolve().parents[1] / "app" / "config"
+
+    for environment in ("local", "prod", "test"):
+        parser = configparser.ConfigParser()
+        parser.read(config_dir / f"{environment}.ini")
+
+        assert parser.getboolean("observability", "grafana_data_enabled") is False
+        assert parser.getboolean("observability", "posthog_data_enabled") is False

@@ -7,7 +7,9 @@
   }
 
   var config = window.__RUM_CONFIG__ || {};
-  var enabled = Boolean(config.enabled);
+  var grafanaDataEnabled = Boolean(config.grafanaDataEnabled);
+  var posthogDataEnabled = Boolean(config.posthogDataEnabled);
+  var enabled = Boolean(config.enabled) && (grafanaDataEnabled || posthogDataEnabled);
   var noop = function () {};
   var api = {
     capture: noop,
@@ -120,6 +122,9 @@
   }
 
   function _captureToFaro(name, attributes) {
+    if (!grafanaDataEnabled) {
+      return;
+    }
     try {
       if (faro && faro.api && typeof faro.api.pushEvent === 'function') {
         faro.api.pushEvent(name, attributes, 'frontend');
@@ -128,6 +133,9 @@
   }
 
   function _captureToPosthog(name, attributes) {
+    if (!posthogDataEnabled) {
+      return;
+    }
     try {
       if (posthog && typeof posthog.capture === 'function') {
         posthog.capture(name, attributes);
@@ -274,6 +282,9 @@
   }
 
   function _initFaro() {
+    if (!grafanaDataEnabled) {
+      return;
+    }
     if (!window.GrafanaFaroWebSdk || typeof window.GrafanaFaroWebSdk.initializeFaro !== 'function') {
       return;
     }
@@ -312,6 +323,9 @@
   }
 
   function _initPosthog() {
+    if (!posthogDataEnabled) {
+      return;
+    }
     var projectApiKey = String(config.posthogApiKey || '').trim();
     if (!projectApiKey) {
       return;
@@ -372,7 +386,7 @@
     _trackPageview(path || window.location.pathname, reason || 'virtual_navigation', false);
   };
   api.getTraceHeaders = function () {
-    if (!sampledIn) {
+    if (!sampledIn || !grafanaDataEnabled) {
       return {};
     }
     return {

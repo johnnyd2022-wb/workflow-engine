@@ -143,6 +143,8 @@ def _configure_otel_log_handler(config: Any, formatter: logging.Formatter, level
         return _OTEL_LOG_HANDLER
     if not bool(getattr(config, "otel_enabled", False)):
         return None
+    if not bool(getattr(config, "grafana_data_enabled", False)):
+        return None
     if str(getattr(config, "environment", "")).strip().lower() == "test":
         return None
 

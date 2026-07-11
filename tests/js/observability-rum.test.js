@@ -18,7 +18,12 @@ const rumSource = fs.readFileSync(
 function runRum(sampleRate) {
   const calls = { faro: [] };
   const window = {
-    __RUM_CONFIG__: { enabled: true, sampleRate, collectorUrl: '/telemetry' },
+    __RUM_CONFIG__: {
+      enabled: true,
+      grafanaDataEnabled: true,
+      sampleRate,
+      collectorUrl: '/telemetry',
+    },
     location: { origin: 'https://app.example.test', pathname: '/core/dashboard' },
     localStorage: { getItem: () => null, setItem: () => {} },
     addEventListener: () => {},

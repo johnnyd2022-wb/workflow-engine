@@ -16,7 +16,7 @@ def _upstream_response(status_code: int = 202, content: bytes = b'"accepted"') -
     return response
 
 
-def _build_app(monkeypatch, captured_requests):
+def _build_app(monkeypatch, captured_requests, *, grafana_data_enabled=True, posthog_data_enabled=True):
     # Earlier capsys-based logging tests intentionally replace the root stream
     # with a capture object that pytest then closes. Start this app integration
     # test with a clean root logger before importing the app/config modules.
@@ -26,6 +26,8 @@ def _build_app(monkeypatch, captured_requests):
     from app.utils.config_loader import Config
 
     monkeypatch.setattr(Config, "rum_enabled", property(lambda _self: True))
+    monkeypatch.setattr(Config, "grafana_data_enabled", property(lambda _self: grafana_data_enabled))
+    monkeypatch.setattr(Config, "posthog_data_enabled", property(lambda _self: posthog_data_enabled))
     monkeypatch.setattr(Config, "rum_faro_upstream", property(lambda _self: "http://faro.test"))
     monkeypatch.setattr(Config, "rum_posthog_upstream", property(lambda _self: "http://posthog.test"))
     monkeypatch.setattr(Config, "rum_posthog_capture_upstream", property(lambda _self: "http://capture.test"))
@@ -74,3 +76,17 @@ def test_posthog_ingest_allows_only_known_sdk_paths(monkeypatch):
     assert captured_requests[0]["url"] == "http://capture.test/e/?ip=1"
     assert rejected.status_code == 404
     assert len(captured_requests) == 1
+
+
+def test_telemetry_ingest_respects_independent_destination_toggles(monkeypatch):
+    captured_requests = []
+    app = _build_app(monkeypatch, captured_requests, grafana_data_enabled=False, posthog_data_enabled=False)
+
+    with app.test_client() as client:
+        headers = {"X-Forwarded-Proto": "https"}
+        faro = client.post("/telemetry", data=b"{}", headers=headers)
+        posthog = client.post("/telemetry/posthog/e/", data=b"{}", headers=headers)
+
+    assert faro.status_code == 404
+    assert posthog.status_code == 404
+    assert captured_requests == []
