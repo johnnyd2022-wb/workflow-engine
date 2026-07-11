@@ -19,19 +19,23 @@ agents/                     ← workspace root (location-independent; currently 
     founder.md  whistlebird.md  bize.md
     brand-whistlebird.md  brand-bize.md
     audiences.md  offers-pricing.md  operating-principles.md
-  skills/                   ← the playbooks (all 16 built)
+  skills/                   ← the playbooks (20 built)
     business-operator/      ← "what should I do next?" chief-of-staff
     project-manager/        ← lightweight project plans, milestones, next actions
     calendar-planner/       ← turns priorities into a realistic week
     marketing-director/     ← positioning, calendar, campaign & content briefs
     content-producer/       ← briefs → finished posts/newsletters/copy
-    sales-manager/          ← pipeline discipline, follow-ups, outreach
+    sales-manager/          ← pipeline discipline, follow-ups, outreach, stalled-thread scan, pre-call prep
     sales-watches/          ← Gmail inbox triage + reply drafts (drafts only, never sends)
     outbound-sales/         ← cold first-touch email drafts (drafts only, never sends)
     crm-updater/            ← pipeline hygiene after sales actions
+    community-triage/       ← subreddit scan for Biz-E angles, drafted replies (never posts)
+    discovery-synthesis/    ← call transcript → pains/objections/feature asks/quotes
+    competitor-watch/       ← weekly diff of competitor pricing/changelog/reviews
     finance-advisor/        ← margins, MRR, cashflow, runway, time/$ decisions
     distillery-strategy-advisor/  ← Whistlebird product/growth strategy
     compliance-project-assistant/ ← licence/label projects (not legal advice)
+    licence-study-coach/    ← duty manager's cert Inspector-interview drilling
     bize-product-manager/   ← Biz-E roadmap, PRDs, prioritisation
     cto-software-architect/ ← Biz-E architecture, ADRs, security/data review
     release-manager/        ← ship Biz-E safely; changelog; GTM handoffs
@@ -45,7 +49,7 @@ agents/                     ← workspace root (location-independent; currently 
 
 ## How to use these skills
 
-All 16 skills are **registered as project-level Claude Code skills** via symlinks in
+All 20 skills are **registered as project-level Claude Code skills** via symlinks in
 `.claude/skills/` (each links back to `agents/skills/<name>/`, so this directory stays
 the single source of truth). In any Claude Code session in this repo you can invoke them
 directly:
@@ -64,7 +68,7 @@ for s in ../agents/skills/*/; do
 done
 ```
 
-## The skill roster (all 16)
+## The skill roster (20)
 
 ### Cross-business — decide & coordinate
 | Skill | Owns | Typical trigger |
@@ -79,16 +83,20 @@ done
 |---|---|---|
 | Marketing Director | Positioning, calendar, campaign/content briefs | Weekly marketing pack |
 | Content Producer | Briefs → finished content assets | After a marketing brief |
-| Sales Manager | Pipeline, follow-ups, outreach, objections | Daily/weekly sales review |
+| Sales Manager | Pipeline, follow-ups, outreach, objections, daily stalled-thread scan, pre-call prep | Daily/weekly sales review |
 | Sales Watches | Gmail inbox triage; reply drafts in the founder's voice (never sends) | "Check my email", catch-up after days away |
 | Outbound Sales | Cold first-touch email drafts from a contact list + topic (never sends) | New stockist/prospect list to approach |
 | CRM Updater | Pipeline hygiene, stale-lead flags, follow-up tasks | After an email/call/demo |
+| Community Triage | Subreddit scan for Biz-E angles; scored fit; drafted replies (never posts) | Daily community scan |
+| Discovery Synthesis | Demo/call transcript → pains, objections, feature asks, quotes | After a demo/discovery call |
+| Competitor Watch | Weekly diff of competitor pricing/changelog/reviews | Weekly / "what are competitors doing" |
 
 ### Whistlebird
 | Skill | Owns | Typical trigger |
 |---|---|---|
 | Distillery Strategy Advisor | Product/growth strategy, awards, retail, events | "Should we launch X?" |
 | Compliance Project Assistant | Licence/label projects (organises & drafts; not legal advice) | Compliance deadline |
+| Licence Study Coach | Duty manager's cert Inspector-interview drilling and readiness tracking | "Quiz me", mock interview |
 
 ### Biz-E
 | Skill | Owns | Typical trigger |
@@ -100,7 +108,12 @@ done
 
 The pack recommends adopting them in phases — the first 5 (Business Operator, Project
 Manager, Marketing Director, Content Producer, Sales Manager) carry the most leverage; the
-rest are there when you need them. Don't feel obliged to run all 16.
+rest are there when you need them. Don't feel obliged to run all 20. The **biz-e code
+suite** (new-feature, review-feature, fix-bug, repo-conventions, test-fixtures,
+merge-request, deploy-runner, dependency-update, ci-gate, security-audit, e2e-playwright,
+migration-safety, observability, spec-first) is a separate, code-facing skill set
+registered directly in `.claude/skills/` at the repo root — see `.claude/skills/*/SKILL.md`
+and `.agents/conventions.md`, not this roster.
 
 ### Email skills — the standing rule
 

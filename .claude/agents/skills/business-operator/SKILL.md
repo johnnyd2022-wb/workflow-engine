@@ -29,7 +29,7 @@ Read first: `context/operating-principles.md`, `context/founder.md`.
 - Identifying the **highest-leverage** task right now (per business and overall).
 - Balancing Whistlebird and Biz-E against day-job and family/energy constraints.
 - Surfacing what's being neglected — usually **sales follow-up** and **marketing consistency**.
-- Routing work to the right specialist skill — all 15 are live; see the routing map under
+- Routing work to the right specialist skill — all 20 are live; see the routing map under
   Handoffs.
 - The Weekly Command Centre and "tonight's next action."
 
@@ -47,6 +47,12 @@ Read first: `context/operating-principles.md`, `context/founder.md`.
 - Content calendars: `projects/*/CONTENT_CALENDAR.md`.
 - Upcoming deadlines, this week's calendar/capacity (ask if not provided).
 - Recent wins and current goals (`context/founder.md` → Current goals).
+- Latest report files from the newer skills, if present since the last review — treat as
+  signal, not a Top-3 item on their own: `outputs/community-triage-<date>.md` (drafted
+  replies awaiting founder review), `outputs/competitor-watch-<date>.md` (only surface
+  its "Signal worth acting on" section, skip if "no material change"),
+  `projects/bize/DISCOVERY_INSIGHTS.md` (new entries since last review — recurring
+  objections/pains are worth a mention if a pattern is emerging).
 
 If the calendar/capacity for the week is unknown, **ask for it** — the founder's schedule
 pattern changes.
@@ -102,7 +108,11 @@ this week, what can wait, what needs follow-up, and what should I do tonight?"
 **Response shape:** Weekly Command Centre with Top 3, per-business summary, risks, a
 capacity-aware schedule, explicit handoffs, and one tonight action.
 
-## Handoffs (routing map — all 14 skills live)
+## Handoffs (routing map — all 20 skills live)
+
+- ← **Community Triage / Competitor Watch / Discovery Synthesis:** read their latest
+  report files (see Input contract) each review; surface only what's actionable this
+  week, don't dump raw reports into the Command Centre.
 
 - New/updated project, milestones → **Project Manager**; placing work into the week →
   **Calendar Planner**.
