@@ -277,7 +277,15 @@ services:
   posthog-worker:
     image: posthog/posthog@sha256:04cb280020653debb9d0361c8fef17c29567a93946f310ffaf73ddf683b70ca4
     container_name: workflow-posthog-worker
-    command: ./bin/docker-worker-celery --with-scheduler
+    # The stock entrypoint hard-codes async-migration setup on. The hobby
+    # stack does not run those long-running backfills, so patch that one
+    # startup flag before running the normal worker + scheduler command.
+    command:
+      - sh
+      - -c
+      - >-
+        sed -i 's/SKIP_ASYNC_MIGRATIONS_SETUP=0/SKIP_ASYNC_MIGRATIONS_SETUP=1/g'
+        ./bin/docker-worker-celery && exec ./bin/docker-worker-celery --with-scheduler
     environment:
       SITE_URL: ${POSTHOG_SITE_URL:?Run obs-secrets check and configure local.ini.}
       SECRET_KEY: ${POSTHOG_SECRET:?Run obs-secrets check and create the KeePassXC entry.}
