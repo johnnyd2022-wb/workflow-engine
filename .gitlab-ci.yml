@@ -5,9 +5,18 @@
 # Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
 # Note that environment variables can be set in several places
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+#
+# ci-gate discovery mapping (2026-07-12), see .claude/skills/ci-gate/SKILL.md:
+#   app db url:   assembled from app/config/<ENVIRONMENT>.ini [database] host/port/name/user/password
+#                 (app/utils/config_loader.py), not a single DATABASE_URL env var
+#   alembic url:  same app/config/<ENVIRONMENT>.ini, built in app/core/db/migrations/env.py:40+
+#                 (alembic.ini's sqlalchemy.url is an unused placeholder)
+#   test config:  ENVIRONMENT=test selects app/config/test.ini; ci/setup_database.sh sed-patches
+#                 host->postgres, port->5432 for the GitLab service container before migrating
 stages:
 - test
 - security
+- migrations
 
 include:
 - template: Security/SAST.gitlab-ci.yml
@@ -97,6 +106,83 @@ semgrep_observability:
   image: semgrep/semgrep:latest
   script:
     - semgrep --config .semgrep/rules/observability.yml app/ --include="*.py" --severity ERROR --error
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
+
+# Secret scanning — added by ci-gate. First run scanning full history found 32
+# pre-existing findings that predate this job (git history was never scanned before).
+# Rather than weaken the gate, this job is scoped to only the commits actually being
+# introduced (the MR's diff range, or the pushed range on main) — full-history scanning
+# stays a separate, deliberate one-off (see .agents/ci-gate-setup.md), not a per-MR gate
+# that would keep blocking everyone on a backlog they didn't create. GIT_DEPTH: 0 (full
+# clone) so the diff base commit is always present to compute the range against.
+gitleaks:
+  stage: security
+  image:
+    name: zricethezav/gitleaks:latest
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: 0
+  script:
+    - |
+      if [ -n "$CI_MERGE_REQUEST_DIFF_BASE_SHA" ]; then
+        RANGE="$CI_MERGE_REQUEST_DIFF_BASE_SHA..$CI_COMMIT_SHA"
+      elif [ -n "$CI_COMMIT_BEFORE_SHA" ] && [ "$CI_COMMIT_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+        RANGE="$CI_COMMIT_BEFORE_SHA..$CI_COMMIT_SHA"
+      else
+        RANGE="$CI_COMMIT_SHA"
+      fi
+      echo "gitleaks scanning commit range: $RANGE"
+      gitleaks detect --source . --no-banner --log-opts="$RANGE"
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
+
+# Known-vulnerability scanning of resolved dependencies — added by ci-gate. Distinct
+# from check_dependency_updates above, which only checks the lockfile is up to date.
+# allow_failure: true until the first run's findings are triaged (see dependency-update
+# skill); flip to false once the backlog is clear.
+pip_audit:
+  stage: security
+  image: python:3.12-bullseye
+  script:
+    - pip install uv
+    - uv sync --extra dev
+    - uv pip install pip-audit
+    - uv run pip-audit --strict
+  only:
+    - merge_requests
+    - main
+  allow_failure: true
+
+# Proves migrations are reversible, not just applicable — added by ci-gate.
+# ci/setup_database.sh already brings the schema to head; this then proves one step
+# down and back up round-trips cleanly.
+migration_reversibility:
+  stage: migrations
+  image: python:3.12-bullseye
+  services:
+    - name: postgres:16
+      alias: postgres
+      command: ["postgres", "-c", "max_connections=200"]
+  variables:
+    ENVIRONMENT: test
+    POSTGRES_DB: workflow-engine-test
+    POSTGRES_USER: workflow_rw
+    POSTGRES_PASSWORD: secret
+    POSTGRES_HOST_AUTH_METHOD: trust
+  before_script:
+    - pip install uv
+    - uv sync --extra dev
+    - apt-get update -o Acquire::AllowInsecureRepositories=true -qq && apt-get install -y -qq postgresql-client
+    - chmod +x ci/*.sh
+    - ./ci/setup_database.sh
+  script:
+    - ENVIRONMENT=test uv run alembic downgrade -1
+    - ENVIRONMENT=test uv run alembic upgrade head
   only:
     - merge_requests
     - main

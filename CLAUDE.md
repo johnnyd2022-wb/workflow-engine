@@ -104,4 +104,5 @@ Code skills via symlinks in `.claude/skills/` (e.g. `/sales-manager`, `/business
 so they're invocable from any session in this repo. See `.claude/agents/README.md` for
 the full skill roster and `.claude/agents/AGENTS.md` for how those skills should behave.
 `.claude/skills/{html,js,python}-review` are this codebase's own review skills and are
-unrelated to that workspace.
+unrelated to that workspace. Not sure which of the 38+ registered skills (engineering or
+business) fits an ask? `/entrypoint` routes across both.

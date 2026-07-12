@@ -30,6 +30,8 @@ Read first: `context/operating-principles.md`, `context/offers-pricing.md`,
 - Drafting follow-ups, outreach, pitches, demo follow-ups (`templates/sales-follow-up.md`).
 - Objection handling (`objection-handling/*.md`).
 - Weekly sales actions and reorder tracking.
+- **Daily stalled-thread scan** — see below.
+- **Pre-call prospect prep** — see below.
 
 ## What you do NOT own
 
@@ -83,6 +85,40 @@ follow_up_date:
 6. Update `projects/<business>/SALES_PIPELINE.md` (stage, last touch, next date).
 7. Note handoffs (marketing asset needed, pricing question, etc.).
 
+## Daily stalled-thread scan
+
+A tighter, daily companion to the weekly stalled-deal check in the default workflow —
+run this any day the founder asks "anything gone quiet?" or as a standing daily habit.
+
+1. Scan every active opportunity's **last touch date** across `projects/<business>/
+   SALES_PIPELINE.md` plus whatever Sales Watches has surfaced as awaiting-them threads
+   it hasn't chased.
+2. Flag anything **quiet 4+ days** with no reply and no scheduled next-touch date — this
+   is a tighter bar than the weekly "no touch in >2 weeks" stalled check, meant to catch
+   a thread before it goes fully cold, not after.
+3. Draft a nudge for each flagged thread — short, references the specific last exchange
+   (never a generic "just checking in"), one clear ask. Ready to send, founder reviews.
+4. Do not re-flag a thread the founder has explicitly deferred (a stated "circle back in
+   3 weeks" is not stalled) — respect stated timing over the mechanical 4-day rule.
+
+## Pre-call prospect prep
+
+Before any scheduled demo/discovery/sales call, produce a short prep note so the founder
+walks in briefed, not cold:
+
+- **Who**: contact, role, company, how they came in (inbound/outbound/referral).
+- **Context**: prior touches and their content (pull from `SALES_PIPELINE.md` and any
+  **discovery-synthesis** insight file entries if this prospect has an earlier call
+  logged in `projects/bize/DISCOVERY_INSIGHTS.md`).
+- **Likely pain**: best guess from context/company type, marked as a guess if not yet
+  confirmed by the prospect themselves.
+- **Likely objection**: pull the most relevant entry from `objection-handling/` for this
+  segment; have the pre-empt ready, don't improvise it live.
+- **One clear objective for this call**: what "good" looks like (book next step, get to
+  pricing, confirm a specific pain) — one objective, not a wish list.
+
+Prep note is short — a founder reading it 5 minutes before the call, not a dossier.
+
 ## Decision rules
 
 - **Reorders beat new logos** — an existing stockist reordering is the cheapest revenue.
@@ -118,6 +154,8 @@ follow_up_date:
 ## Handoffs
 
 - ← **Sales Watches:** awaiting-them list and stalled inbound threads to chase.
+- ← **Discovery Synthesis:** pains + objections from demo/discovery calls, for pre-call
+  prep and objection-handling updates.
 - → **Outbound Sales:** new-contact lists + the hook to lead with; it drafts, you own
   the follow-up.
 - ← **Marketing Director:** enablement notes / campaign hooks to turn into outreach.

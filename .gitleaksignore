@@ -1,0 +1,23 @@
+# gitleaks fingerprint allowlist. Format: <commit>:<file>:<rule-id>:<start-line>
+# One entry per accepted finding, with a reason — never a blanket path/rule ignore.
+# Adding an entry here requires the same sign-off as weakening any other gate: it's a
+# deliberate, reviewed exception, not a place to dump unreviewed findings to get green.
+#
+# The scoped per-MR gitleaks job (.gitlab-ci.yml) only scans each MR's own diff range,
+# so it will never re-surface these historical commits anyway. This file exists for the
+# separate full-history audit (see .agents/ci-gate-setup.md) so that audit's output
+# stays limited to genuinely open findings.
+
+# tls/wb_cert.key — local/test TLS cert key, by design (Johnny, 2026-07-12): not a
+# production credential, generated for local HTTPS dev per docs/observability etc.
+05aaee7bb9063c8655728c01ab752dcbe3ba94ea:tls/wb_cert.key:private-key:1
+
+# config/local.ini — local-dev-only config, by design (Johnny, 2026-07-12).
+3a5001ca9153cf81113ae3143ffb116b98cde4ad:config/local.ini:generic-api-key:16
+
+# config/test.ini — test-environment-only config, by design (Johnny, 2026-07-12).
+3a5001ca9153cf81113ae3143ffb116b98cde4ad:config/test.ini:generic-api-key:16
+
+# NOTE: config/prod.ini's matching finding at the same commit is deliberately NOT
+# listed here — that one is a real production credential and stays open pending
+# Johnny's review/rotation. Do not add it without an explicit decision recorded here.
