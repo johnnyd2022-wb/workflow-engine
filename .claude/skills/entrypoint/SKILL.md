@@ -17,6 +17,33 @@ to, and it does not out-rank `business-operator` on business *prioritization* ca
 ("what should I work on this week" is business-operator's call once you're in the
 founder-ops world — entrypoint's job ends at getting you there).
 
+## No specific ask yet
+
+If the command is invoked bare, or with something as open as "help", "where do I
+start", or "list the skills" — don't respond with an open-ended question like "what are
+you trying to do?". Lead with the category menu below instead, then route from whatever
+comes back, even if that answer is still broad. A generic answer is enough to act on; it
+doesn't need to be narrowed to a specific skill name first.
+
+**Categories:**
+
+1. **Build/fix/ship code on this repo** — features, bugs, reviews, deploys, CI, security, dependencies
+2. **Run the businesses day-to-day (Whistlebird / Biz-E)** — "what should I work on", sales, marketing, finance, planning → `business-operator`
+3. **Whistlebird-specific** — distillery strategy, compliance/licensing, duty manager study
+4. **Biz-E-specific** — product roadmap, architecture review, releases, customer onboarding
+5. **Claude Code / harness tools** — config, keybindings, code review, scheduling, artifacts
+
+Present these five (a one-line label each is enough, don't dump the full tables yet),
+then map whatever the user says back onto them:
+- A category number or name ("2", "the business stuff") → jump straight to that
+  category's front door (`business-operator` for #2, ask build/fix/review for #1 since
+  those three front doors genuinely need that much to pick, etc.).
+- A description of actual work ("the Xero sync is throwing 500s") → skip the category
+  menu entirely and match directly against the tables below, same as any other request.
+- Still nothing usable ("I don't know", "surprise me") → for code work default to
+  `repo-conventions` or ask what area of the app; for business work, `business-operator`
+  is built for exactly this and will run its own weekly-review triage.
+
 ## Two surfaces, one map
 
 ### 1. Code work on this repo (Flask/SQLAlchemy/Postgres, multi-tenant)
@@ -83,6 +110,8 @@ there instead of going through business-operator first.
 
 ## How to route
 
+0. **No ask yet?** Use the category menu in "No specific ask yet" above instead of a
+   generic question. Skip this step entirely if the user already gave you a real ask.
 1. **Read the ask for domain first**: is this about *this codebase* (files, bugs,
    features, CI, deploys) or about *running the businesses* (Whistlebird, Biz-E as
    companies — sales, marketing, product, compliance, finance)? The two tables above

@@ -24,6 +24,14 @@ Baseline before touching anything: `git status` clean, `ENVIRONMENT=test uv run 
 
 Same subagent prompt template as new-feature (skill path, slug, spec, report path, `VERDICT:` line). Spawn in this order:
 
+**If running inside Herdr with a Codex pane** (`HERDR_ENV=1` and a partner exists): route
+stages 1-5 below through the herdr-multi-agent-collab protocol instead of spawning
+subagents — same division of labor as new-feature. Claude stays Architect (patches what
+gets found); Codex-as-Breaker runs the migration audit, security-audit, e2e-playwright,
+unit coverage check, and observability pass in its own pane per its Workflow A, and
+reports findings back via the handoff file. Otherwise use subagents as described; the
+chain and verdicts are identical either way.
+
 1. **migration audit** (migration-safety skill, only if the feature has models/migrations): verify every revision touching its tables has a real downgrade and survives up/down/up; flag any historical destructive change with no permit file.
 2. **security-audit** and **e2e-playwright** in the same turn, parallel:
    - security-audit scoped to the slug; on existing code expect findings, that is the point.
