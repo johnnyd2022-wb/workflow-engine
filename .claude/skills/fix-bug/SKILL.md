@@ -82,6 +82,14 @@ plausibly affects:
 - Touched the data model or added a migration → **migration-safety**.
 - Always: **ci-gate** in verify mode, last.
 
+**If running inside Herdr with a Codex pane** (`HERDR_ENV=1` and a partner exists): route
+the chain subset above through the herdr-multi-agent-collab protocol instead of spawning
+subagents, same division of labor as new-feature. Claude stays Architect (owns triage,
+the repro test, and the fix); Codex-as-Breaker runs the applicable stages
+(security-audit, e2e-playwright, migration-safety, ci-gate) in its own pane per its
+Workflow A, and reports findings back via the handoff file. Otherwise use subagents as
+described; the chain subset and verdicts are identical either way.
+
 State which stages you skipped and why in the report, same rule as `new-feature` — silent
 skips are not allowed, stated ones are fine.
 
