@@ -23,7 +23,7 @@ and secret — no browser step. A custom connection binds to **one Xero organisa
       "env": {
         "XERO_CLIENT_ID": "${XERO_CLIENT_ID}",
         "XERO_CLIENT_SECRET": "${XERO_CLIENT_SECRET}",
-        "XERO_SCOPES": "accounting.transactions.read accounting.contacts.read accounting.settings.read"
+        "XERO_SCOPES": "accounting.invoices accounting.contacts.read accounting.payments.read accounting.reports.profitandloss.read accounting.reports.aged.read accounting.settings.read"
       }
     }
   }
@@ -36,32 +36,33 @@ variable names are checked in.
 
 ### Scopes
 
-`XERO_SCOPES` uses Xero's actual OAuth2 accounting scopes (see the
-[Xero scopes reference](https://developer.xero.com/documentation/guides/oauth2/scopes)) —
-there is no per-report or per-object scope like "invoices" or "payments"; invoices,
-payments, credit notes, and other sales/purchase documents are all covered by the single
-`accounting.transactions` scope:
+`XERO_SCOPES` uses Xero's **granular** accounting scopes (see the
+[Xero scopes reference](https://developer.xero.com/documentation/guides/oauth2/scopes)
+and the [granular scopes FAQ](https://developer.xero.com/faq/granular-scopes)). In 2026
+Xero replaced the old broad scopes (`accounting.transactions`, `accounting.reports.read`)
+with granular per-object scopes; apps/custom connections created on or after
+**2 March 2026** can only use the granular ones.
 
 | Scope | Access | Purpose |
 |---|---|---|
-| `accounting.transactions.read` | read-only | Invoices, payments, sales/purchase data |
+| `accounting.invoices` | read/**write** | Invoices, credit notes, quotes, purchase orders, repeating invoices, items — Claude can create/update these |
 | `accounting.contacts.read` | read-only | Look up customers/suppliers |
-| `accounting.settings.read` | read-only | Org/tax settings, items/products |
+| `accounting.payments.read` | read-only | Payment status against invoices |
+| `accounting.reports.profitandloss.read` | read-only | P&L report data |
+| `accounting.reports.aged.read` | read-only | Aged receivables/payables reports |
+| `accounting.settings.read` | read-only | Org/tax settings |
 
-This is currently **read-only** — no scope here allows Claude to create, update, or
-delete anything in Xero. The Xero Custom Connection itself must also be configured with
-at least these same scopes in the Xero Developer portal; the connection's granted scopes
-are the hard ceiling — `XERO_SCOPES` cannot request more than the connection allows.
+`accounting.invoices` is the only write grant — a session can create and update invoices
+(and the other sales documents that scope covers) in the live Xero org. Contacts are
+read-only: Claude can invoice **existing** customers but cannot create new contacts; bump
+`accounting.contacts.read` to `accounting.contacts` if creating customers is needed.
 
-> **Note on prior scope names:** an earlier version of this config used
-> `accounting.invoices`, `accounting.payments.read`,
-> `accounting.reports.profitandloss.read`, and `accounting.reports.aged.read`. None of
-> these are valid Xero scopes — Xero's OAuth token exchange silently granted **no**
-> accounting scopes at all when they were requested, which surfaced later as "no valid
-> accounting scopes" errors on every API call. If write access to contacts/transactions
-> is needed again, use the real scope names (`accounting.contacts`,
-> `accounting.transactions`, no `.read` suffix), not invented ones — and reconnect the
-> Custom Connection afterward (see below).
+The scopes requested here must also be **selected on the Custom Connection in the Xero
+Developer portal** — the connection's authorized scopes are the hard ceiling, and Xero's
+token exchange grants only the intersection. Requesting scopes the connection doesn't
+have authorized results in a token with **no accounting scopes at all**, which surfaces
+as "no valid accounting scopes" errors on every API call (easily mistaken for a network
+or proxy problem).
 
 ## Setting the real secret values
 
