@@ -3,7 +3,7 @@
 This repo ships a committed `.mcp.json` at the repo root that wires the **official Xero
 MCP server** (`@xeroapi/xero-mcp-server`) into Claude Code sessions. Once the two secrets
 below are set in the Claude Code web environment, any session in this repo can query Xero
-(invoices, contacts, sales, reports).
+(invoices, contacts, sales, reports) within the read-only scopes configured in `.mcp.json`.
 
 Because Claude Code on the web runs in a **headless container**, we cannot use Xero's
 interactive OAuth browser login. Instead we use a Xero **Custom Connection**
@@ -22,7 +22,8 @@ and secret — no browser step. A custom connection binds to **one Xero organisa
       "args": ["-y", "@xeroapi/xero-mcp-server@latest"],
       "env": {
         "XERO_CLIENT_ID": "${XERO_CLIENT_ID}",
-        "XERO_CLIENT_SECRET": "${XERO_CLIENT_SECRET}"
+        "XERO_CLIENT_SECRET": "${XERO_CLIENT_SECRET}",
+        "XERO_SCOPES": "accounting.contacts.read accounting.invoices.read accounting.payments.read accounting.reports.profitandloss.read accounting.reports.aged.read accounting.settings.read"
       }
     }
   }
@@ -32,6 +33,26 @@ and secret — no browser step. A custom connection binds to **one Xero organisa
 The `${...}` placeholders are resolved from environment variables at MCP server startup.
 **No secret value is ever committed to this file or to git history** — only the two
 variable names are checked in.
+
+### Scopes
+
+`XERO_SCOPES` is deliberately **read-only**, limited to what Claude actually needs to
+answer accounting questions:
+
+| Scope | Purpose |
+|---|---|
+| `accounting.contacts.read` | Look up customers/suppliers |
+| `accounting.invoices.read` | Query sales and purchase invoices |
+| `accounting.payments.read` | Check payment status against invoices |
+| `accounting.reports.profitandloss.read` | Pull P&L report data |
+| `accounting.reports.aged.read` | Pull aged receivables/payables reports |
+| `accounting.settings.read` | Read org/tax settings needed to interpret the above |
+
+No write scopes (e.g. `accounting.transactions`, `accounting.contacts` without `.read`)
+are granted — a Claude Code session cannot create, modify, or delete anything in Xero
+through this MCP server. The Xero Custom Connection itself must also be configured with
+these same scopes in the Xero Developer portal; the connection's granted scopes are the
+hard ceiling; `XERO_SCOPES` cannot request more than the connection allows.
 
 ## Setting the real secret values
 
