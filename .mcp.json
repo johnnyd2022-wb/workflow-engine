@@ -5,7 +5,8 @@
       "args": ["-y", "@xeroapi/xero-mcp-server@latest"],
       "env": {
         "XERO_CLIENT_ID": "${XERO_CLIENT_ID}",
-        "XERO_CLIENT_SECRET": "${XERO_CLIENT_SECRET}"
+        "XERO_CLIENT_SECRET": "${XERO_CLIENT_SECRET}",
+        "XERO_SCOPES": "accounting.contacts accounting.invoices accounting.payments.read accounting.reports.profitandloss.read accounting.reports.aged.read accounting.settings.read"
       }
     }
   }
