@@ -134,9 +134,17 @@ Suited to a weekly routine (`/schedule`). A sweep run:
 3. remediates the top new finding class (one MR), logs the rest
 4. reports the standing total honestly, including what it couldn't scan
 
-The standing count matters: at the time of writing, a bare `semgrep --config=auto` over this repo reports **68 findings**, all pre-existing. The one that proves the point is `app/tls/app_cert.key` (`detected-private-key`): it is tracked in git, has been since the initial commit, and its modulus matches `app/tls/app_cert.pem` — a **CloudFlare Origin Certificate** valid to Jan 2028. That is a live credential, not a dev artifact, and it is `escalate + rotate` class: deletion cannot unpublish what is in history, so the key must be reissued at CloudFlare. Full write-up: `.agents/reports/security-audit/2026-07-17-committed-origin-key.md`.
+The standing count matters: at the time of writing, a bare `semgrep --config=auto` over this repo reports **68 findings**, all pre-existing. It sat unread because nobody diffed the count. That is what a sweep is for.
 
-It sat in plain sight through every previous audit because nobody diffed the standing count. That is what a sweep is for.
+The worked example — and the whole loop, including the ending an agent doesn't get to write — is `app/tls/app_cert.key` (`detected-private-key`), tracked since the initial commit, whose modulus matches `app/tls/app_cert.pem`: a **CloudFlare Origin Certificate** for `*.whistlebird.co.nz`, valid to Jan 2028. Escalated as `escalate + rotate` class. The owner then **accepted the risk and declined rotation** — correctly, on facts the audit hadn't weighed: the repo is private, unforked, single-member, so the key has never been disclosed and rotation would protect against nothing.
+
+Three things that generalise from it:
+
+- **`accepted-risk` is granted by a human, never taken by you.** The audit's job ended at handing over accurate facts. Recommending rotation was right; the owner overriding it was also right; an agent self-approving would have been wrong even though the outcome matches.
+- **Check the blast radius before you price the severity.** "Private key in git" reads as critical until you learn the repo is private with one member. Report visibility, forks, and member count alongside any secret finding — severity without exposure is theatre, and an audit that cries critical at a non-exposure is an audit people stop reading.
+- **Verify the owner's basis, not just their verdict.** The stated reason here ("self-generated local dev cert") was wrong — the SAN is the production domain and the issuer is CloudFlare's Origin CA. The decision survived the correction; the *conditions under which it should be revisited* only exist because someone checked. Record those conditions, and don't re-raise an accepted signature until one trips.
+
+Full write-up, including what voids the acceptance: `.agents/reports/security-audit/2026-07-17-committed-origin-key.md`.
 
 ## Rules
 

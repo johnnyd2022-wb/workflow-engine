@@ -1,67 +1,80 @@
-# SECURITY ESCALATION: CloudFlare Origin private key committed to git
+# SECURITY: CloudFlare Origin private key committed to git — ACCEPTED RISK
 
 date: 2026-07-17
 found_by: security-audit (incidental, during the skill-buildout that added §5 remediation)
-class: secret-in-history → **escalate + rotate** (never patched by an agent)
-verdict: findings-open — needs a human action an agent must not take
+class: secret-in-history
+verdict: **accepted-risk** — signed off by the repo owner (johnny), 2026-07-17
+review_by: on any change to the conditions below, else before the cert expires 2028-01-14
 
-## Finding
+## Decision
 
-`app/tls/app_cert.key` is a private key tracked in git. It is not a throwaway dev key.
+The owner has accepted this risk and declined rotation. That is a human call, correctly
+made by a human: `.agents/autonomy.md` forbids an agent from granting `accepted-risk` or
+rotating a credential. No further action — do **not** re-raise this signature on future
+sweeps unless a condition below changes.
 
-Evidence (no secret material printed, per `.agents/autonomy.md`):
+**Owner's stated basis was that this is a self-generated local dev cert. That is not what
+it is** (see Findings). The decision still holds on the risk math, but for a different
+reason than the one given — which is why the real conditions are written down below
+rather than left implicit.
+
+## Why the risk is low *today*
+
+| Factor | State |
+|---|---|
+| Repo visibility | **private** (`glab api projects/:id` → `visibility: private`) |
+| Forks | **0** |
+| Members with access | **1** (`johnny105` — the owner) |
+
+Nobody but the owner holds the key. There is no disclosure to remediate. Rotation would
+protect against an exposure that has not occurred.
+
+## Findings (the facts, since the basis was mistaken)
+
+Evidence, no secret material printed:
 
 | check | result |
 |---|---|
-| `git ls-files app/tls/` | `app_cert.cer`, `app_cert.key`, `app_cert.pem` all tracked |
+| `git ls-files app/tls/` | `app_cert.cer`, `app_cert.key`, `app_cert.pem` tracked |
 | `git check-ignore app/tls/app_cert.key` | not ignored |
-| `semgrep --config=auto` | `detected-private-key` on that path |
-| `openssl x509 -in app_cert.pem -subject` | `O = "CloudFlare, Inc.", OU = CloudFlare Origin CA, CN = CloudFlare Origin Certificate` |
-| validity | `notBefore=Jan 14 08:27:00 2025 GMT` → `notAfter=Jan 14 08:27:00 2028 GMT` |
-| key ↔ cert modulus (MD5 of modulus, not the key) | identical — `85bcd768e7ae4577aa2e075a12c5a9f5` — the committed key **is** that certificate's private key |
-| `git log --follow app/tls/app_cert.key` | 3 commits, earliest `05aaee7 initial-app-storange-in-git` — present since the repo began |
+| `semgrep --config=auto` | `detected-private-key` |
+| issuer | `O = "CloudFlare, Inc.", OU = CloudFlare Origin SSL Certificate Authority` |
+| subject | `CN = CloudFlare Origin Certificate` |
+| **SAN** | **`DNS:*.whistlebird.co.nz, DNS:whistlebird.co.nz`** — the live domain, not `localhost` |
+| validity | `Jan 14 2025` → **`Jan 14 2028`** |
+| key ↔ cert modulus (MD5 of modulus) | identical (`85bcd768…`) — the committed key is that certificate's private key |
+| history | 3 commits, earliest `05aaee7 initial-app-storange-in-git` |
 
-## Why it matters
+Two corrections to the record, because they change *when* this should be revisited:
 
-A CloudFlare Origin Certificate authenticates the **origin server to CloudFlare**. Whoever
-holds this key can present itself as the legitimate origin for the domains the cert
-covers, to anyone who trusts the CloudFlare Origin CA for that hostname. It is a live
-production-shaped credential with ~18 months of validity remaining, readable by anyone
-with repo access — including anyone who has ever cloned it.
+1. **It was not self-generated.** CloudFlare Origin certificates are issued by CloudFlare
+   (dashboard → SSL/TLS → Origin Server). This one is a wildcard for the production zone.
+2. **It cannot be what silences Chrome on localhost.** Chrome does not trust the
+   CloudFlare Origin CA, and the cert's SAN does not cover `localhost` — it would fail
+   on both trust *and* hostname. `app/app.py:173-174` does load it for local HTTPS, so
+   the warning is presumably being clicked through.
 
-Deleting the file does **not** fix this. The key is in git history, in every clone, and in
-GitLab's stored objects. History rewriting also does not fix it: assume it is disclosed.
+## Conditions that void this acceptance
 
-## Required action (human — an agent must not do these)
+Re-raise immediately if any becomes true — the key stays valid until **2028-01-14**:
 
-1. **Reissue the origin certificate at CloudFlare** and revoke the current one
-   (CloudFlare dashboard → SSL/TLS → Origin Server → revoke + create new). This is the
-   step that actually closes the exposure.
-2. Install the new key on the origin **out of band** — not in git. It belongs in the
-   deployment's secret store (this repo already has the KeePassXC pattern for local and
-   env vars for CI, `app/utils/config_loader.py`).
-3. Remove `app/tls/*.key` from the working tree and add it to `.gitignore`. Cosmetic
-   relative to step 1, but it stops recurrence.
-4. Decide on history: rewriting (`git filter-repo`) is optional once the key is revoked,
-   and disruptive on a shared repo. Revocation is what matters.
+- The repo gains **any** additional member, or is forked.
+- The repo becomes **public** or is mirrored anywhere.
+- A clone, backup, or CI artifact containing it leaves the owner's control.
+- The key is deployed to, or reused by, the live origin (see open question).
 
-## Notes and open questions for the human
+## Open question (not blocking, worth knowing)
 
-- `ci/setup_server.sh:13-14` **generates a fresh self-signed cert** into these same paths,
-  so CI does not depend on the committed key. Local dev (`app/app.py:173-174`,
-  `app/main.py:20-21`, `app/cli/api.py:22-23`) reads whatever is at those paths and would
-  work with a self-signed cert too.
-- **Unverified, and the thing to check first:** whether the live deployment currently
-  serves this exact key. If yes, step 1 is urgent and needs a coordinated swap. If the
-  origin was reconfigured at some point and this key is stale, revoke it anyway — a
-  disclosed unused key costs nothing to kill.
-- Why an agent stops here: rotating a credential is irreversible, coordinated, and
-  outside the repo. `.agents/autonomy.md` forbids it, and this report is the escalation
-  path that policy prescribes.
+Whether the live origin currently serves this same key. If yes, an exposure would be
+directly usable to impersonate the origin to CloudFlare for `*.whistlebird.co.nz`; if the
+origin was reconfigured at some point, this copy is stale and the acceptance is even safer.
+Nobody has checked. `ci/setup_server.sh:13-14` generates its own self-signed cert, so CI
+does not depend on this key.
 
-## Not done
+## Zero-effort alternative, if ever wanted
 
-- No key material was printed, logged, or copied anywhere. The modulus MD5 above is a
-  fingerprint used to prove key↔cert correspondence; it does not disclose the key.
-- No file was deleted, no history rewritten, no `.gitignore` change made — all of that
-  should follow the rotation, not precede it, or it just creates a false sense of closure.
+Local HTTPS is the only thing in this repo using it (`app/app.py:173-174`,
+`app/main.py:20-21`, `app/cli/api.py:22-23`). A self-signed `localhost` cert would serve
+that purpose *better* — correct hostname, no production credential involved — and
+`ci/setup_server.sh` already contains the openssl invocation that generates one. Noted as
+an option, not a recommendation to action; the owner has decided.
