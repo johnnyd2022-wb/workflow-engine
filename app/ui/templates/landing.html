@@ -1170,28 +1170,33 @@
     function openModal(modalId) {
       const modal = document.getElementById(modalId);
       if (modal) {
+        // The deferred resets below re-assert DISPLAY STATE only (2FA hidden, errors
+        // cleared, button enabled). They must never clear field values: a password
+        // manager autofills the instant the modal appears, and the previous code — a
+        // full reset at 50ms (login) and at 100ms/300ms (signup) — wiped exactly that,
+        // leaving the user staring at an empty form or submitting a blank one. Timers
+        // stay because they fix a real stuck-state bug; they are just no longer allowed
+        // to destroy credentials.
         if (modalId === 'loginModal') {
           resetLoginModalUI();
           modal.classList.add('active');
           document.body.style.overflow = 'hidden';
-          setTimeout(() => { resetLoginModalUI(); }, 50);
+          setTimeout(() => { resetLoginModalState(); }, 50);
         } else if (modalId === 'signupModal') {
           // Reset signup modal UI state when opening
           resetSignupModalUI();
-          
+
           // Show modal
           modal.classList.add('active');
           document.body.style.overflow = 'hidden';
-          
-          // Reset again after modal is visible (defensive - ensures state is correct)
-          // Use longer timeout to ensure browser autofill doesn't interfere
+
+          // Re-assert state once the modal is visible (defensive), without touching input
           setTimeout(() => {
-            resetSignupModalUI();
+            resetSignupModalState();
           }, 100);
-          
-          // Reset one more time after a longer delay to catch any autofill
+
           setTimeout(() => {
-            resetSignupModalUI();
+            resetSignupModalState();
           }, 300);
         } else {
           // For other modals, just show them
@@ -1201,7 +1206,10 @@
       }
     }
     
-    function resetLoginModalUI() {
+    // Re-assert the modal's display mode WITHOUT touching what the user (or their
+    // password manager) has typed. Split out of resetLoginModalUI so openModal can
+    // re-assert state on a timer without wiping credentials mid-entry.
+    function resetLoginModalState() {
       const emailInput = document.getElementById('login-email');
       const passwordInput = document.getElementById('login-password');
       const emailDiv = emailInput ? emailInput.closest('div') : null;
@@ -1211,7 +1219,7 @@
       const submitButton = document.getElementById('login-submit-btn');
       const modalTitle = document.querySelector('#loginModal h2');
       const errorDiv = document.getElementById('login-error');
-      
+
       // CRITICAL: Force hide 2FA FIRST (most important)
       if (login2FASection) {
         login2FASection.style.display = 'none';
@@ -1246,7 +1254,17 @@
         errorDiv.style.display = 'none';
         errorDiv.textContent = '';
       }
-      
+    }
+
+    // Full reset: mode + credentials. Correct when the modal is first opened or when a
+    // stuck 2FA state has to be torn down. NOT safe to run on a timer after the modal is
+    // visible — see openModal.
+    function resetLoginModalUI() {
+      resetLoginModalState();
+
+      const emailInput = document.getElementById('login-email');
+      const passwordInput = document.getElementById('login-password');
+
       // Clear form values - explicitly clear each input
       const form = document.getElementById('login-form');
       if (form) {
@@ -1259,18 +1277,45 @@
         passwordInput.value = '';
       }
     }
-    
+
+    // Signup counterpart of resetLoginModalState: errors, warnings and button only.
+    // Leaves typed/autofilled values alone.
+    function resetSignupModalState() {
+      const errorDiv = document.getElementById('signup-error');
+      const warningsDiv = document.getElementById('signup-password-warnings');
+      const form = document.getElementById('signupForm');
+      const submitButton = form ? form.querySelector('button[type="submit"]') : null;
+
+      // Clear errors
+      if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+      }
+
+      // Clear password warnings
+      if (warningsDiv) {
+        warningsDiv.style.display = 'none';
+        warningsDiv.innerHTML = '';
+      }
+
+      // Reset submit button
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Create Account';
+      }
+    }
+
+    // Full reset: state + every field. Safe on open, destructive on a timer.
     function resetSignupModalUI() {
       // Get all form elements - matching the pattern from resetLoginModalUI
       const orgNameInput = document.getElementById('signup-org-name');
       const emailInput = document.getElementById('signup-email');
       const passwordInput = document.getElementById('signup-password');
       const passwordConfirmInput = document.getElementById('signup-password-confirm');
-      const errorDiv = document.getElementById('signup-error');
-      const warningsDiv = document.getElementById('signup-password-warnings');
       const form = document.getElementById('signupForm');
-      const submitButton = form ? form.querySelector('button[type="submit"]') : null;
-      
+
+      resetSignupModalState();
+
       // Clear form values - explicitly clear each input (matching login modal pattern)
       if (form) {
         form.reset();
@@ -1286,24 +1331,6 @@
       }
       if (passwordConfirmInput) {
         passwordConfirmInput.value = '';
-      }
-      
-      // Clear errors
-      if (errorDiv) {
-        errorDiv.style.display = 'none';
-        errorDiv.textContent = '';
-      }
-      
-      // Clear password warnings
-      if (warningsDiv) {
-        warningsDiv.style.display = 'none';
-        warningsDiv.innerHTML = '';
-      }
-      
-      // Reset submit button
-      if (submitButton) {
-        submitButton.disabled = false;
-        submitButton.textContent = 'Create Account';
       }
     }
     
