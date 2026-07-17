@@ -9,7 +9,11 @@ Same gates as new-feature, pointed backwards: instead of verifying fresh work, y
 
 ## Step 1: Identify the target (inline, interactive)
 
+Run **preflight** first (`python3 scripts/preflight.py --json`, or use the report the caller passed you). Repair `blockers` per its table; take `verification_mode` and `live_server_tests` from `decisions` instead of probing. An audit that opens by misreading a down test DB as a broken feature wastes the whole chain.
+
 Ask the user which feature. Offer the candidates rather than making them type: list registered blueprints (grep the app factory for `register_blueprint`, or `ls app/features/`). Confirm the slug and scope (a blueprint, or a wider slice the user names).
+
+**Unattended** (scheduled sweep, or called by another skill — `.agents/autonomy.md`): take the scope from the caller's input. If none was given, pick the highest-risk candidate rather than asking — most recently changed (`git log --since=30d --name-only -- app/features/`), then most tenant-scoped surface — and state the choice and why in the report. Review one feature well; don't sweep the whole app in one unattended run.
 
 ## Step 2: Establish or reconstruct the spec
 
@@ -18,7 +22,7 @@ The chain needs acceptance criteria to audit against.
 - Spec exists at `.agents/specs/<slug>.md`: read it, confirm with the user it still matches reality, note drift.
 - No spec: reconstruct one by reading the code. Routes become behavior statements, validations become criteria, models become the data section. Write it in the spec-first format with `status: reconstructed` and one `ASSUMPTION:` line per inference, then show the user for a quick confirm. Reviewing against criteria the code trivially satisfies is circular, so flag any AC you derived purely from what the code already does.
 
-Baseline before touching anything: `git status` clean, `ENVIRONMENT=test uv run pytest tests/test_<slug>.py -v` (see `.agents/conventions.md` §6 — flat `tests/test_<slug>.py`, no `tests/unit`/`tests/integration` split in this repo) result recorded in `.agents/reports/<slug>/baseline.md`. If tests are already red, that is finding number one and gets fixed before the audit stages run, or the stage reports drown in pre-existing noise.
+Baseline before touching anything: `git status` clean, `uv run pytest tests/test_<slug>.py -v` (see `.agents/conventions.md` §6 — flat `tests/test_<slug>.py`, no `tests/unit`/`tests/integration` split in this repo) result recorded in `.agents/reports/<slug>/baseline.md`. If tests are already red, that is finding number one and gets fixed before the audit stages run, or the stage reports drown in pre-existing noise — **unless the failures never reached an assertion** (connection errors, missing service), which is **suite-warden**'s problem, not this feature's. Don't open an audit by blaming a feature for an absent app server.
 
 ## Step 3: Run the chain via subagents
 

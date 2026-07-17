@@ -1,6 +1,6 @@
 ---
 name: security-audit
-description: "Audit the Flask codebase (or one feature blueprint) for security vulnerabilities: run semgrep with Flask/OWASP plus custom repo rules, gitleaks, pip-audit, then hunt the class scanners miss, especially tenant isolation and missing auth. Use this skill whenever the user mentions security, vulnerabilities, semgrep, secrets, dependency CVEs, auth review, or tenant isolation, and whenever new-feature or review-feature calls it after a build. Produces a report and patches; writes new semgrep rules so each finding class is caught deterministically next time."
+description: "Audit the Flask codebase (or one feature blueprint) for security vulnerabilities: run semgrep with Flask/OWASP plus custom repo rules, gitleaks, pip-audit, then hunt the class scanners miss, especially tenant isolation and missing auth. Findings don't stop at a report — this skill drives remediation to an MR (itself when scoped, via fix-bug/dependency-update when wider), through the normal adversarial verification. Use this skill whenever the user mentions security, vulnerabilities, semgrep, secrets, dependency CVEs, auth review, or tenant isolation, whenever new-feature or review-feature calls it after a build, or on a scheduled security sweep. Autonomous: opens at most one MR per finding class; the MR is the human gate."
 ---
 
 # Security Audit
@@ -9,7 +9,17 @@ Two layers, and the order matters. Scanners (semgrep, gitleaks, pip-audit) catch
 
 Every audit ends with a rule: when you find a vulnerability class by reading code, write a custom semgrep rule for it so the NEXT occurrence is caught by machine, not by hoping an agent reads carefully. That is how this skill compounds.
 
-## 0. Scope
+And every audit ends with **remediation, not a report**. A findings list nobody actions is a record of known-unfixed vulnerabilities — arguably worse than not looking, because it converts ignorance into documented negligence. Section 5 is not optional.
+
+Read `.agents/autonomy.md`: this skill runs unattended, ships via MR, and never merges.
+
+## 0. Scope and preflight
+
+```bash
+python3 scripts/preflight.py --json    # tools.absent tells you which scanners exist
+```
+
+If `semgrep` or `gitleaks` is absent, **say which layer didn't run** rather than reporting a clean scan. (`gitleaks` is not currently installed here — an audit that skips it has not checked for secrets, and must say so.) Pass `decisions.verification_mode` down to whatever you hand remediation to.
 
 Called with a feature slug: audit `app/features/<slug>/` plus anything it imports or migrates. Called bare: audit the whole app. Read `.agents/specs/<slug>.md` if it exists; `External surfaces` and `tenant_scoped` tell you where to concentrate.
 
@@ -82,7 +92,59 @@ manual_checklist: 7/7 completed
 - <what you probed that found nothing, so "clean" is auditable>
 ```
 
-Patch `fix` items yourself when scoped to the audited feature; for architectural findings that ripple wider, report and hand back to the caller rather than refactoring half the app inside an audit.
+Patch `fix` items yourself when scoped to the audited feature; for architectural findings that ripple wider, route them per section 5 rather than refactoring half the app inside an audit.
+
+## 5. Remediate to an MR (the step that makes this real)
+
+Every `fix`-bucket finding gets routed. Which route depends on the finding, not on convenience:
+
+| Finding class | Route | Why |
+|---|---|---|
+| Scoped to the audited feature, small patch | **fix it here**, with a test proving the hole is closed | you have the context; a round trip costs more than the fix |
+| Tenant isolation / auth bypass / data leak | **fix-bug**, flagged as security | it needs a red-then-green repro test *first* — "org A can read org B's row" must fail before it passes, or the fix isn't proven |
+| CVE / vulnerable or outdated package | **dependency-update** | it owns changelog reading, the bump, and the affected-chain rerun |
+| Architectural (auth model, session design, a pattern repeated app-wide) | **escalate** — report with hypotheses, don't fix | this is a design decision; `.agents/autonomy.md`'s escalation ladder, not a 3am refactor |
+| Secret in git history | **escalate immediately, and name the credential to rotate** | deletion doesn't unpublish it. Never paste the value into the report, MR, or commit message |
+
+Invoke the target skill with the finding as its input:
+
+```
+symptom/finding: <F-id> <file:line> <one-line description>
+evidence: <repro command, scanner rule id, or the query that leaks>
+severity: <why this matters — what an attacker gets>
+report: .agents/reports/<slug>/security.md
+```
+
+**The adversarial flow comes for free, and that's the point.** `fix-bug` and `dependency-update` both run their own verification chain, and inside Herdr with a Codex partner they route it through `herdr-multi-agent-collab` — so the Architect writes the security fix and the Breaker attacks it, in a pane that didn't write it. A security patch reviewed only by its author is the weakest link in this whole system; this is how it gets a hostile second reader without a human in the loop. Outside Herdr the same work happens via subagents. Don't re-derive which — preflight's `verification_mode` already said.
+
+Then: **write the semgrep rule first, fix second** where the class is mechanically detectable (section 3). A rule that fires on the pre-patch code and goes silent after is a regression test for the vulnerability class, and it's the artifact that stops the same hole reappearing in the next feature.
+
+Caps and honesty, per `.agents/autonomy.md`:
+
+- **At most one MR per finding class per run.** Ten instances of a missing org filter is one MR ("scope these ten queries"), not ten. Unbounded MR generation on a schedule is how a security tool gets muted.
+- Log every finding you did not action — with its bucket and why — to the report. A deferred finding is tracked debt; an unrecorded one is a lie of omission.
+- Never mark a finding `false-positive` or `accepted-risk` to clear the board. `accepted-risk` needs a human; you may recommend it, not grant it.
+
+## 6. Scheduled sweeps
+
+Suited to a weekly routine (`/schedule`). A sweep run:
+
+1. preflight → scanners → `.agents/reports/security-audit/<date>.md`
+2. diffs against the previous sweep — **new** findings are the signal; a standing count that never moves is what people stop reading
+3. remediates the top new finding class (one MR), logs the rest
+4. reports the standing total honestly, including what it couldn't scan
+
+The standing count matters: at the time of writing, a bare `semgrep --config=auto` over this repo reports **68 findings**, all pre-existing. It sat unread because nobody diffed the count. That is what a sweep is for.
+
+The worked example — and the whole loop, including the ending an agent doesn't get to write — is `app/tls/app_cert.key` (`detected-private-key`), tracked since the initial commit, whose modulus matches `app/tls/app_cert.pem`: a **CloudFlare Origin Certificate** for `*.whistlebird.co.nz`, valid to Jan 2028. Escalated as `escalate + rotate` class. The owner then **accepted the risk and declined rotation** — correctly, on facts the audit hadn't weighed: the repo is private, unforked, single-member, so the key has never been disclosed and rotation would protect against nothing.
+
+Three things that generalise from it:
+
+- **`accepted-risk` is granted by a human, never taken by you.** The audit's job ended at handing over accurate facts. Recommending rotation was right; the owner overriding it was also right; an agent self-approving would have been wrong even though the outcome matches.
+- **Check the blast radius before you price the severity.** "Private key in git" reads as critical until you learn the repo is private with one member. Report visibility, forks, and member count alongside any secret finding — severity without exposure is theatre, and an audit that cries critical at a non-exposure is an audit people stop reading.
+- **Verify the owner's basis, not just their verdict.** The stated reason here ("self-generated local dev cert") was wrong — the SAN is the production domain and the issuer is CloudFlare's Origin CA. The decision survived the correction; the *conditions under which it should be revisited* only exist because someone checked. Record those conditions, and don't re-raise an accepted signature until one trips.
+
+Full write-up, including what voids the acceptance: `.agents/reports/security-audit/2026-07-17-committed-origin-key.md`.
 
 ## Rules
 

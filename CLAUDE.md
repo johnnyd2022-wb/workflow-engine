@@ -18,15 +18,28 @@ uv run ruff check app/
 uv run ruff format app/
 uv run workflow fix-all      # fix all ruff issues
 
+# Preflight (what's actually up: env, DB, app server, herdr, tooling)
+python3 scripts/preflight.py          # add --json for machine-readable
+
 # Tests (requires test DB)
 docker-compose -f docker-compose.test.yml up -d
-ENVIRONMENT=test uv run pytest tests/ -v
-ENVIRONMENT=test uv run pytest tests/test_executions.py -v   # single file
+uv run pytest tests/ -v
+uv run pytest tests/test_executions.py -v   # single file
 
 # Database
-uv run workflow init-db      # create schema
-uv run workflow upgrade-db   # run pending migrations
+uv run workflow init-db          # create schema
+uv run alembic upgrade head      # run pending migrations
 ```
+
+Run pytest from the host with **`ENVIRONMENT` unset**. It resolves to `local`
+(`app/utils/config_loader.py:16`), and `local.ini` points at the test database on
+`localhost:8401` — the same one `docker-compose.test.yml` starts. Setting
+`ENVIRONMENT=test` from a host shell **hangs**: `test.ini` targets
+`host.docker.internal`, which only resolves for the test app running inside Docker.
+
+Expect `252 passed, 30 skipped` with no dev server running. The 30 skips are the
+live-server 2FA suites (`pytest.mark.live_server`), which auto-skip with a reason unless
+`uv run workflow start` is up — start it and they run. See the **suite-warden** skill.
 
 The test PostgreSQL instance runs on port 8401 (`workflow-engine-test` DB, user `workflow_rw`, password `secret`).
 

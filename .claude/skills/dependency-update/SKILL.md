@@ -46,14 +46,21 @@ against the `postgres:16` used in CI and `docker-compose.test.yml`).
 
 ## 4. Run the affected chain subset
 
-Not the full new-feature chain — a dependency bump isn't a feature. Run:
+Not the full new-feature chain — a dependency bump isn't a feature. Run **preflight**
+first (`python3 scripts/preflight.py --json`, or inherit the caller's report) — a bump
+that appears to break the suite when the test DB is simply down is the most expensive
+possible way to read a connection error. Then:
 
 ```bash
-ENVIRONMENT=test uv run pytest tests/ -v      # full suite; a bump can break anything
+uv run pytest tests/ -v      # full suite; a bump can break anything
 uv run ruff check app/                         # catches API signature drift ruff's
                                                 # rules happen to cover, not a substitute
                                                 # for reading the changelog
 ```
+
+Expect `252 passed, 30 skipped` with no dev server up. Failures that never reached an
+assertion belong to **suite-warden**; failures that assert wrongly are the bump's, and
+they are the ones you own.
 
 If the package is security-relevant (the list in step 3) or touches request handling,
 also run **security-audit** bare (whole-app scope, not a slug) rather than skipping it —

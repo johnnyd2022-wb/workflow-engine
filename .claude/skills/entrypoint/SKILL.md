@@ -1,6 +1,6 @@
 ---
 name: entrypoint
-description: "Top-level router across every registered skill in this repo — both the biz-e code suite (new-feature, review-feature, fix-bug, and their specialists) and the founder-ops pack (business-operator and its specialists). Self-updating: syncs a cached category index (skill-index.md) against the live .claude/skills/ roster on every run, so new/renamed/retired skills are picked up automatically. Use this when the user doesn't know which skill to reach for: 'which skill should I use', 'help', 'where do I start', 'I want to build/fix/ship X' with no named skill, or any request that could plausibly map to more than one skill. Not for requests that already clearly name their skill (e.g. 'run sales-manager') — invoke that skill directly instead."
+description: "Top-level router across every registered skill in this repo — both the biz-e code suite (new-feature, review-feature, fix-bug, and their specialists) and the founder-ops pack (business-operator and its specialists). Self-updating on two axes: syncs a cached category index (skill-index.md) against the live .claude/skills/ roster, AND checks the wiring graph (scripts/skill_graph.py) so a skill nothing routes to gets caught instead of silently never firing. Also runs preflight once and hands its report to the front door. Use this when the user doesn't know which skill to reach for: 'which skill should I use', 'help', 'where do I start', 'I want to build/fix/ship X' with no named skill, or any request that could plausibly map to more than one skill. Not for requests that already clearly name their skill (e.g. 'run sales-manager') — invoke that skill directly instead."
 ---
 
 # Entrypoint
@@ -23,11 +23,13 @@ map. Never route from memory of the index; read it after syncing it.
 ## Step 0: Sync the index (every run, before anything else)
 
 The index is a cache and caches drift. Skills live in more than one place under
-`.claude/`, so the scan has three tiers:
+`.claude/`, so the scan has four tiers — three about *existence*, one about *wiring*:
 
 ```bash
-# 1. Registered roster — the only skills the Skill tool can actually invoke
-ls -1 .claude/skills/ | sort
+# Tiers 1 + 4 in one deterministic command (~0.2s): fingerprint drift, unindexed
+# skills, orphans, stale roots. Don't hand-roll a sed over the fingerprint block —
+# skill-index.md has several code fences and a naive match reads the wrong one.
+python3 scripts/skill_graph.py --check
 
 # 2. Founder-ops source dir — anything here NOT symlinked into .claude/skills/
 #    exists but is unregistered (invisible to the harness)
@@ -40,6 +42,19 @@ find .claude -name SKILL.md \
   -not -path ".claude/agents/skills/*" \
   -not -path ".claude/takeaway/*"
 ```
+
+`skill_graph.py --check` exits 0 when the roster is clean and 1 with a report when it
+isn't, covering: `fingerprint_drift` (roster vs index), `unindexed`, `orphans`,
+`unknown_roots`. Tiers 2 and 3 stay shell because they look *outside* `.claude/skills/`,
+which the graph doesn't see.
+
+**Tier 4 is the one that catches the failure the other three can't see.** A skill can be
+present, registered, and indexed, and still never fire, because nothing routes to it —
+and nothing errors when that's true. That is not hypothetical: `suite-warden` and
+`docs-truth` shipped as orphans and were only caught because someone asked the right
+question by hand. `scripts/skill_graph.py` walks every SKILL.md, builds the reference
+graph, and reports skills with no inbound edge that aren't declared roots. Existence is
+cheap to verify; reachability is what decides whether the skill was worth writing.
 
 **`.claude/takeaway/` is always excluded**: it holds export copies of skills for
 sharing outside this repo (including the Codex-side `herdr-multi-agent-collab-breaker`,
@@ -57,9 +72,24 @@ Act on each tier:
   ```
 
 - **Tier 3 non-empty** (stray skill outside both homes) → do NOT auto-register or
-  auto-index it; you can't tell a real skill from a draft or a copy. Tell the user what
-  you found and where, and ask whether it should be moved into `.claude/skills/` (or
-  symlinked) — then it gets indexed on the next sync like anything else.
+  auto-index it; you can't tell a real skill from a draft or a copy. Report what you
+  found and where, and hand it to **skill-smith** — it owns whether a SKILL.md meets the
+  house standard and belongs in the roster. Interactively, ask the user; unattended,
+  leave skill-smith's finding in the report rather than registering something that might
+  be a draft.
+
+- **Tier 4 non-zero** (`--check` exited 1) → the roster has a reachability problem:
+  - `orphans` — nothing routes to it. **Do not fix the wiring yourself**: where a wire
+    belongs is a design judgment (does a test failure go to suite-warden or fix-bug?),
+    and that is **skill-smith**'s call. Report the orphan, route it there, and carry on
+    routing the user's actual ask — a wiring gap is not a reason to refuse their request.
+  - `unindexed` — you fix this one; it's the index repair below.
+  - `unknown_roots` — a declared root in `scripts/skill_graph.py`'s `ROOTS` no longer
+    exists. Prune it (a stale root silently exempts a name from orphan detection).
+
+  A new skill will *always* be an orphan for one run — it's added before it's wired. Say
+  so plainly rather than treating it as breakage; the point is that it can't stay that
+  way unnoticed.
 
 Then compare the tier-1 output to the `## Roster fingerprint` block in
 `.claude/skills/entrypoint/skill-index.md`.
@@ -130,30 +160,57 @@ interview for the details it owns (e.g. spec-first).
 5. **Nothing fits** → say so plainly. A genuinely new kind of request may mean a skill
    is missing — flag it, don't paper over with the closest-but-wrong skill.
 
-## Step 3: Herdr mode — adversarial pairing for code work
+## Step 3: Preflight once, then hand it down
 
 Before invoking any **code** front door (`new-feature`, `review-feature`, `fix-bug`,
-`dependency-update`, `deploy-runner`), check for Herdr:
+`dependency-update`, `deploy-runner`), run **preflight** — once, here, at the top:
 
 ```bash
-test "${HERDR_ENV:-}" = 1 && echo IN_HERDR
+python3 scripts/preflight.py --json
 ```
 
-If inside Herdr, the front doors run their verification through the
-**`herdr-multi-agent-collab`** protocol instead of (or alongside) subagents: Claude is
-the Architect (design, build, fix), the Codex pane is the Breaker (adversarial review,
-test execution, edge-case attack), talking over the herdr socket API
-(`herdr pane` / `herdr wait`) with handoffs in `.herdr-collab/`. The front doors already
-know this — each carries an "If running inside Herdr" clause — so your job is only to
-**say it in the handoff**: append to the context you pass the front door a line like
+~3s, and it replaces every ad-hoc probe a downstream skill would otherwise make.
+**Pass the report into the front door's context verbatim.** One run, one set of facts:
+a router that lets each skill re-derive its own environment is a router that lets them
+disagree about it.
 
-> Running inside Herdr with a Codex partner pane — route verification through
-> herdr-multi-agent-collab (Architect/Breaker, Workflow A/B, two-round circuit breaker).
+Two things in the report change how you route:
 
-If `HERDR_ENV=1` but no Codex partner pane exists, the front door / collab skill will
-ask the user before creating one; don't pre-create panes from the router.
+- **`blockers` non-empty** → the environment can't do the work yet. Repair per the
+  **preflight** skill's table (`uv sync --extra dev`, start the test DB, `alembic upgrade
+  head`) *before* invoking the front door, rather than handing it a broken environment
+  and letting it fail three steps in. If a documented command is what's broken, that's
+  **docs-truth**, not a repair.
+- **`decisions.verification_mode`** → `herdr-adversarial` when a Codex partner pane
+  exists, else `subagents`. When it's `herdr-adversarial`, append to the handoff:
 
-Outside Herdr, say nothing — the front doors default to their subagent chains.
+  > Running inside Herdr with a Codex partner pane — route verification through
+  > herdr-multi-agent-collab (Architect/Breaker, Workflow A/B, two-round circuit breaker).
+
+  The front doors each carry their own "If running inside Herdr" clause, so this line is
+  a confirmation, not an instruction. Outside Herdr, say nothing — they default to
+  subagents. Don't probe `HERDR_ENV` yourself; preflight already did.
+
+Also hand down `decisions.live_server_tests` — a front door that knows the live suites
+will skip won't misread `30 skipped` as a problem.
+
+## Step 4: Route the meta-skills when the ask is really about the tooling
+
+Some asks look like work but are actually about the machinery. Catch these — they're the
+ones that otherwise get papered over with a wrong-but-plausible front door:
+
+| Signal | Route to |
+|---|---|
+| A documented command fails/hangs; "the docs say X but Y happens"; CLAUDE.md looks wrong | `docs-truth` |
+| Test failures that never reached an assertion (connection errors), a flake, "are these failures real" | `suite-warden` |
+| "Create a skill for X"; a SKILL.md's instructions look stale; Step 0 found a stray SKILL.md | `skill-smith` |
+| "Anything broken in prod"; a scheduled error sweep | `prod-sentinel` |
+| "Is my environment set up"; unexplained connection errors | `preflight` |
+
+The failure mode this table prevents: routing "the tests are failing" to `fix-bug`, which
+then hunts for a bug in code that is fine, because the real answer was "no app server is
+running". Preflight's report usually settles which of the two it is before you have to
+guess — check `decisions.live_server_tests` and `blockers` first.
 
 ## Keeping this honest
 

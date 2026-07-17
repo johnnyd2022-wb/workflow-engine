@@ -13,6 +13,9 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BASE_URL = "https://localhost:8005"
 
+# Drives a real server; skipped with a reason when none is listening (tests/conftest.py).
+pytestmark = pytest.mark.live_server
+
 
 class Test2FATOTP:
     """Test suite for TOTP 2FA functionality - optimized version"""

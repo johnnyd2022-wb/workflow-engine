@@ -11,9 +11,20 @@ stack trace, a request_id, a "this used to work." The discipline that makes a bu
 trustworthy is proving it was actually a bug before touching anything, and proving it's
 actually fixed after — both via a test, not narration.
 
+Read `.agents/autonomy.md`. Unattended (called by `prod-sentinel`/`security-audit`, or scheduled), the MR is the gate.
+
+## Step 0: Preflight
+
+```bash
+python3 scripts/preflight.py --json    # skip if the caller passed you a report — don't re-probe
+```
+
+Repair `blockers` per the **preflight** skill; take `verification_mode` and `live_server_tests` from `decisions` rather than probing. This matters most here: a "bug" that is really a down test DB or an absent app server wastes a whole triage on code that is fine.
+
 ## The chain
 
 ```
+0. preflight       (script, ~3s, or inherited from the caller)     -> capabilities
 1. triage          (inline, via observability skill's Triage mode) -> root cause + evidence
 2. repro test      (inline, written FIRST, proven red)              -> tests/test_<area>.py
 3. fix             (inline)                                          -> minimal patch
@@ -32,6 +43,13 @@ with recent commits (`git log --since`) or migrations (`alembic history`). If th
 has no request_id or timeframe, ask for one before guessing — triage without evidence is
 just a different way of writing narration instead of a diagnosis.
 
+**Unattended** (called by `prod-sentinel`, `security-audit`, or a schedule —
+`.agents/autonomy.md`): the caller supplies the evidence, so there is normally nothing to
+ask for. When the evidence still isn't enough to reproduce, do **not** invent a root cause
+to have something to fix: report `could-not-reproduce` with what you tried and what
+evidence would settle it. An unattended agent guessing at a fix is exactly the failure this
+skill's red-test-first rule exists to prevent.
+
 If the bug is a tenant-isolation leak (org A sees org B's data) or an auth bypass, stop
 triage and escalate to **security-audit** immediately alongside the fix; those get a
 security report even when the "bug" framing undersells the severity.
@@ -42,7 +60,7 @@ Before changing any production code, write the test that reproduces the bug and 
 it's red:
 
 ```bash
-ENVIRONMENT=test uv run pytest tests/test_<area>.py::test_<bug>_repro -v   # must fail
+uv run pytest tests/test_<area>.py::test_<bug>_repro -v   # must fail
 ```
 
 - Name it for the bug, not the fix (`test_dashboard_summary_leaks_across_org` not
@@ -67,9 +85,16 @@ reported bug, don't refactor the surrounding function unless the refactor is the
 ## Step 4: Verify
 
 ```bash
-ENVIRONMENT=test uv run pytest tests/test_<area>.py -v   # repro test green
-ENVIRONMENT=test uv run pytest tests/ -v                 # nothing else broke
+uv run pytest tests/test_<area>.py -v   # repro test green
+uv run pytest tests/ -v                 # nothing else broke
 ```
+
+Expect `252 passed, 30 skipped` when no dev server is running — the 30 are the
+`live_server`-marked 2FA suites, and preflight's `decisions.live_server_tests` already
+told you whether they'd run. **Any failure that never reached an assertion** (connection
+error, missing service, `OperationalError`) is not your bug: hand it to **suite-warden**
+rather than debugging code that is fine. A red suite you didn't cause is a signal problem,
+and suite-warden owns the signal.
 
 ## Step 5: Chain subset, not the whole chain
 

@@ -59,6 +59,6 @@ Append to `.agents/reports/<slug>/migrations.md`: revision id, tables touched, d
 
 ## Rules
 
-- Never run alembic against a production DATABASE_URL from an agent session. If the only configured URL looks production-like, stop and ask.
+- Never run alembic against a production DATABASE_URL from an agent session — this is absolute (`.agents/autonomy.md`: production databases are never touched, in any mode, attended or not). If the only configured URL looks production-like, stop and report; do not look for a way around it. `python3 scripts/preflight.py --json` reports `environment.is_production` and `decisions.db_writes_allowed` if you need to check.
 - Never edit an already-applied revision; add a new one.
-- Backups are the user's confirmation to give: before the first destructive migration ever runs in a real environment, ask the user to confirm their backup/restore story actually restores. An untested backup is a hope.
+- Backups are the user's confirmation to give — and this does **not** block an unattended run, because an agent's up/down/up rehearsal happens against the local/test database, where the blast radius is a container. What it blocks is the *human's* first destructive migration in a real environment: flag it in the MR description ("this migration drops `x`; confirm your restore story before deploying") so the confirmation happens where the deploy decision does. An untested backup is a hope, but it is a hope about an environment agents don't run in.

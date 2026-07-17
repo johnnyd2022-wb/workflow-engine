@@ -56,6 +56,16 @@ include = ["app*"]
 [tool.uv]
 package = true
 
+[tool.pytest.ini_options]
+# Markers are declared so an unknown one is an error, not a silent typo that makes a
+# gate quietly stop applying. Owned by the suite-warden skill.
+markers = [
+    "live_server: drives a real dev server over HTTPS; auto-skipped by tests/conftest.py when none is listening",
+    "quarantined: known-broken/flaky, excluded from default runs; every entry needs a row in .agents/test-quarantine.md",
+]
+# Quarantined tests are opt-in: `-m quarantined` to run them, nothing by default.
+addopts = "-m 'not quarantined'"
+
 [tool.ruff]
 # Set the maximum line length
 line-length = 120

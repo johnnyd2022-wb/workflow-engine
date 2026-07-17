@@ -26,6 +26,13 @@ def _build_app(monkeypatch, captured_requests, *, grafana_data_enabled=True, pos
     from app.utils.config_loader import Config
 
     monkeypatch.setattr(Config, "rum_enabled", property(lambda _self: True))
+    # These tests cover the /telemetry browser-RUM proxy, not server-side OTel export.
+    # configure_tracing() fires on (otel_enabled and grafana_data_enabled); leaving
+    # otel_enabled at local.ini's `true` while forcing grafana_data_enabled on below
+    # starts a real gRPC span exporter whose background worker then retries against a
+    # collector that isn't running, spraying export errors across every later test in
+    # the session and logging into streams pytest has already closed.
+    monkeypatch.setattr(Config, "otel_enabled", property(lambda _self: False))
     monkeypatch.setattr(Config, "grafana_data_enabled", property(lambda _self: grafana_data_enabled))
     monkeypatch.setattr(Config, "posthog_data_enabled", property(lambda _self: posthog_data_enabled))
     monkeypatch.setattr(Config, "rum_faro_upstream", property(lambda _self: "http://faro.test"))
