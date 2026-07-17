@@ -70,6 +70,14 @@ without asking:
 | `observability_stack` down | only if the task needs it (`prod-sentinel`, RUM work): `uv run workflow observability start` |
 | `git` on main | branch before committing; git-commit-chain does this itself |
 
+**If the thing that's broken is a *documented* command** — a step in CLAUDE.md, the
+README, or `.agents/conventions.md` that errors or hangs — repairing your shell isn't
+enough: the doc will send the next agent into the same wall. Hand it to **docs-truth**,
+which executes documentation and fixes what's provably wrong. (This is how the
+`ENVIRONMENT=test` hang survived long enough to reach a skill's "known limitations"
+section.) A SKILL.md with a broken command goes to **skill-smith** instead — same idea,
+different owner.
+
 Do **not** repair these — report them and continue with reduced scope:
 
 - `app_server` down → do not start a server as a side effect of a test run. Tell
@@ -85,7 +93,7 @@ Do **not** repair these — report them and continue with reduced scope:
 ```
 1. python3 scripts/preflight.py --json
 2. blockers non-empty? repair per the table, re-run, still blocked -> escalate per .agents/autonomy.md
-3. read decisions.* and pass them down (verification_mode, live_server_tests, otel_env_override)
+3. read decisions.* and pass them down (verification_mode, live_server_tests)
 4. proceed
 ```
 
@@ -115,3 +123,13 @@ that takes 30s stops getting run, and a check nobody runs protects nothing.
 - Preflight never touches production: it reads local config files and probes localhost
   ports. `db_writes_allowed` is false for `ENVIRONMENT=production` and no skill in this
   suite runs there (`.agents/autonomy.md`).
+
+## Handoffs
+
+- → **every code front door** (`new-feature` §0, `review-feature` §1, `fix-bug` §0,
+  `dependency-update` §4, `security-audit` §0) and `entrypoint` §3: they run this first
+  and inherit `decisions` rather than probing.
+- → **suite-warden**: `decisions.live_server_tests` is what it gates the 2FA suites on.
+- → **docs-truth**: when the blocker is a *documented* command that doesn't work.
+- → **skill-smith**: when the broken command lives in a SKILL.md.
+- → **prod-sentinel**: `capabilities.observability_stack` decides whether it has a source.

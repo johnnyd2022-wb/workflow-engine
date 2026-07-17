@@ -57,9 +57,11 @@ Act on each tier:
   ```
 
 - **Tier 3 non-empty** (stray skill outside both homes) → do NOT auto-register or
-  auto-index it; you can't tell a real skill from a draft or a copy. Tell the user what
-  you found and where, and ask whether it should be moved into `.claude/skills/` (or
-  symlinked) — then it gets indexed on the next sync like anything else.
+  auto-index it; you can't tell a real skill from a draft or a copy. Report what you
+  found and where, and hand it to **skill-smith** — it owns whether a SKILL.md meets the
+  house standard and belongs in the roster. Interactively, ask the user; unattended,
+  leave skill-smith's finding in the report rather than registering something that might
+  be a draft.
 
 Then compare the tier-1 output to the `## Roster fingerprint` block in
 `.claude/skills/entrypoint/skill-index.md`.
@@ -130,30 +132,57 @@ interview for the details it owns (e.g. spec-first).
 5. **Nothing fits** → say so plainly. A genuinely new kind of request may mean a skill
    is missing — flag it, don't paper over with the closest-but-wrong skill.
 
-## Step 3: Herdr mode — adversarial pairing for code work
+## Step 3: Preflight once, then hand it down
 
 Before invoking any **code** front door (`new-feature`, `review-feature`, `fix-bug`,
-`dependency-update`, `deploy-runner`), check for Herdr:
+`dependency-update`, `deploy-runner`), run **preflight** — once, here, at the top:
 
 ```bash
-test "${HERDR_ENV:-}" = 1 && echo IN_HERDR
+python3 scripts/preflight.py --json
 ```
 
-If inside Herdr, the front doors run their verification through the
-**`herdr-multi-agent-collab`** protocol instead of (or alongside) subagents: Claude is
-the Architect (design, build, fix), the Codex pane is the Breaker (adversarial review,
-test execution, edge-case attack), talking over the herdr socket API
-(`herdr pane` / `herdr wait`) with handoffs in `.herdr-collab/`. The front doors already
-know this — each carries an "If running inside Herdr" clause — so your job is only to
-**say it in the handoff**: append to the context you pass the front door a line like
+~3s, and it replaces every ad-hoc probe a downstream skill would otherwise make.
+**Pass the report into the front door's context verbatim.** One run, one set of facts:
+a router that lets each skill re-derive its own environment is a router that lets them
+disagree about it.
 
-> Running inside Herdr with a Codex partner pane — route verification through
-> herdr-multi-agent-collab (Architect/Breaker, Workflow A/B, two-round circuit breaker).
+Two things in the report change how you route:
 
-If `HERDR_ENV=1` but no Codex partner pane exists, the front door / collab skill will
-ask the user before creating one; don't pre-create panes from the router.
+- **`blockers` non-empty** → the environment can't do the work yet. Repair per the
+  **preflight** skill's table (`uv sync --extra dev`, start the test DB, `alembic upgrade
+  head`) *before* invoking the front door, rather than handing it a broken environment
+  and letting it fail three steps in. If a documented command is what's broken, that's
+  **docs-truth**, not a repair.
+- **`decisions.verification_mode`** → `herdr-adversarial` when a Codex partner pane
+  exists, else `subagents`. When it's `herdr-adversarial`, append to the handoff:
 
-Outside Herdr, say nothing — the front doors default to their subagent chains.
+  > Running inside Herdr with a Codex partner pane — route verification through
+  > herdr-multi-agent-collab (Architect/Breaker, Workflow A/B, two-round circuit breaker).
+
+  The front doors each carry their own "If running inside Herdr" clause, so this line is
+  a confirmation, not an instruction. Outside Herdr, say nothing — they default to
+  subagents. Don't probe `HERDR_ENV` yourself; preflight already did.
+
+Also hand down `decisions.live_server_tests` — a front door that knows the live suites
+will skip won't misread `30 skipped` as a problem.
+
+## Step 4: Route the meta-skills when the ask is really about the tooling
+
+Some asks look like work but are actually about the machinery. Catch these — they're the
+ones that otherwise get papered over with a wrong-but-plausible front door:
+
+| Signal | Route to |
+|---|---|
+| A documented command fails/hangs; "the docs say X but Y happens"; CLAUDE.md looks wrong | `docs-truth` |
+| Test failures that never reached an assertion (connection errors), a flake, "are these failures real" | `suite-warden` |
+| "Create a skill for X"; a SKILL.md's instructions look stale; Step 0 found a stray SKILL.md | `skill-smith` |
+| "Anything broken in prod"; a scheduled error sweep | `prod-sentinel` |
+| "Is my environment set up"; unexplained connection errors | `preflight` |
+
+The failure mode this table prevents: routing "the tests are failing" to `fix-bug`, which
+then hunts for a bug in code that is fine, because the real answer was "no app server is
+running". Preflight's report usually settles which of the two it is before you have to
+guess — check `decisions.live_server_tests` and `blockers` first.
 
 ## Keeping this honest
 

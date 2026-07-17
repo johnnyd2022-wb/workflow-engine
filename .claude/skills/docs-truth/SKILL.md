@@ -139,3 +139,11 @@ verdict: clean | patched | findings-open
 - ← **preflight**: distinguishes "environment down" from "doc wrong" before you accuse a doc.
 - → **skill-smith**: if the drift is in a SKILL.md, hand it over rather than fixing it here.
 - → **git-commit-chain**: ships the doc fixes as an MR.
+
+## Triggered by
+
+- ← **preflight**: a blocker that is a *documented* command failing or hanging.
+- ← any skill that hits a CLAUDE.md/README/conventions step that doesn't work.
+- ← **entrypoint**: "the docs say X but Y happens" routes straight here.
+- ← a schedule: docs rot silently, so a periodic run is the only thing that catches it
+  before an agent does.

@@ -126,3 +126,12 @@ decision, not a repair.
   with evidence; don't `rm` it.
 - Keep `.claude/takeaway/` out of scope — those are export copies, and the Codex-side
   breaker skill there is not this registry's to edit.
+
+## Triggered by
+
+- ← **entrypoint** Step 0: a stray SKILL.md outside the known homes, or a skill whose
+  description won't route.
+- ← **preflight** / any skill: a command inside a SKILL.md that doesn't work.
+- ← **docs-truth**: drift it found that lives in a SKILL.md (out of its scope, in yours).
+- ← the user: "create a skill for X".
+- ← a schedule: skill rot is invisible until an agent executes the wrong instruction.

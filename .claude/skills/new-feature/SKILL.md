@@ -63,7 +63,7 @@ Register the blueprint in the app factory. Then build to the spec:
   `org_id` explicitly and filters inline (`Model.query.filter(Model.org_id == org_id)`)
   from the first line, not patched in later. The security audit will check this; write
   it so the audit is boring.
-- Unit tests named to ACs (`test_ac1_...`), one per criterion minimum, plus the unhappy paths. Run until green: `ENVIRONMENT=test uv run pytest tests/test_<slug>.py -v`.
+- Unit tests named to ACs (`test_ac1_...`), one per criterion minimum, plus the unhappy paths. Run until green: `uv run pytest tests/test_<slug>.py -v`. (Run pytest with `ENVIRONMENT` unset — it resolves to local, which points at the test DB on `localhost:8401`. `ENVIRONMENT=test` hangs from a host shell; see preflight's `test_db` check.) A failure that never reached an assertion — connection error, missing service — is **suite-warden**'s, not a bug in your build.
 - Log state changes per the observability event convention (`<slug>.<verb_past>`); it is cheaper to emit them now than to retrofit in step 5.
 - Commit on a feature branch `feat/<slug>`. Verification agents audit the tree, not your intentions.
 

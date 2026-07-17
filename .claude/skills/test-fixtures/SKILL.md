@@ -64,14 +64,21 @@ dependency rather than reseeding orgs/users again.
   other tests will need to seed, add its factory here as part of the build, not inline
   in the feature's own test file.
 
-## Known limitation
+## Verified against the real test database
 
-Verified by static/import checks and `ruff`; a live round-trip against the test Postgres
-instance could not be run in the environment this skill was built in (`host.docker.internal`
-was unreachable from the sandbox — confirmed pre-existing and unrelated to this skill by
-reproducing the same failure on an existing, previously-passing test). Run
-`ENVIRONMENT=test uv run pytest tests/ -v` in a normal dev environment before relying on
-`two_org_two_user` in a real feature build.
+`two_org_two_user` round-trips for real: seeds two orgs with one user each, distinct ids,
+correct `org_id` linkage, cleaned up after. Confirmed by running it against the test
+Postgres on `localhost:8401`, not by import checks.
+
+This section previously recorded a "known limitation" — that a live round-trip couldn't be
+run because `host.docker.internal` was unreachable. That diagnosis was right about the
+symptom and wrong about the cause, and it is worth knowing why, because the same trap is
+still there for the next agent: `test.ini` targets `host.docker.internal` because the test
+app runs **inside Docker**, so `ENVIRONMENT=test` from a host shell hangs. With
+`ENVIRONMENT` unset the loader falls back to `local` (`app/utils/config_loader.py:16`),
+whose ini points at the same test database on `localhost:8401`, and everything works. The
+fixture was never broken; the command was. Run `python3 scripts/preflight.py` if a DB
+connection ever looks unreachable again — its `test_db` check names this exact trap.
 
 ## Rules
 

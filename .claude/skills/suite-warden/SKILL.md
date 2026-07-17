@@ -172,3 +172,13 @@ changes go out via `git-commit-chain`.
   the live suites; starting a server mid-run makes results depend on run order.
 - A test that has been quarantined twice for the same cause is a design problem, not a
   test problem: escalate it rather than quarantining a third time.
+
+## Handoffs
+
+- ← **preflight**: `decisions.live_server_tests` and `capabilities.test_db`.
+- ← **new-feature / fix-bug / review-feature / dependency-update**: any test failure that
+  never reached an assertion (connection error, missing service) is routed here rather
+  than debugged as a code bug.
+- → **fix-bug**: real failures — one MR per bug, never a batch.
+- → **test-fixtures**: when the fix is a missing/incorrect factory rather than a gate.
+- → **git-commit-chain**: ships gating and quarantine changes.
