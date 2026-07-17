@@ -13,10 +13,10 @@ import datetime
 import subprocess
 
 from flask import redirect, url_for
-from initialize import db_conn
 
 from app.api.app_factory import create_app
 from app.core.security.permissions import requires_auth
+from app.initialize import db_conn
 from app.observability import get_logger
 from app.utils.config_loader import config
 
