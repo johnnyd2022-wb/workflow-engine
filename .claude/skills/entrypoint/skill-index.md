@@ -8,6 +8,21 @@ only if the skill still exists; rows for deleted skills get pruned, new skills g
 last_synced: 2026-07-17
 skill_count: 44
 
+## Wiring
+
+Existence is not reachability. This index proves a skill *exists*; it cannot prove
+anything *routes* to it — and a skill nothing routes to never fires, silently.
+`scripts/skill_graph.py` is the check for that, run by entrypoint's Step 0 tier 4:
+
+```bash
+python3 scripts/skill_graph.py --check          # orphans / unindexed / stale roots
+python3 scripts/skill_graph.py --skill <name>   # who calls it, what it calls
+```
+
+The graph is derived live from the SKILL.md files, so it never goes stale — the only
+curated part is the `ROOTS` list in that script (skills legitimately invoked by a human
+or a schedule rather than by another skill). Orphan fixes belong to `skill-smith`.
+
 ## Roster fingerprint
 
 Sorted output of `ls -1 .claude/skills/`. If the live listing differs from this block,

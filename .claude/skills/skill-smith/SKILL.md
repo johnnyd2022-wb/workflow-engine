@@ -77,9 +77,17 @@ grep -oE '(app|tests|scripts|docs|\.agents|\.claude)/[A-Za-z0-9_./-]+' .claude/s
   | sort -u | while read -r p; do [ -e "${p%%:*}" ] || echo "MISSING: $p"; done
 
 # 3. every file:line citation still points at what it claims
-# 4. is it in the index?
-grep -c '<name>' .claude/skills/entrypoint/skill-index.md
+# 4. is it in the index, and does anything route to it?
+python3 scripts/skill_graph.py --check          # orphans, unindexed, stale roots
+python3 scripts/skill_graph.py --skill <name>   # who calls it, what it calls
 ```
+
+`skill_graph.py` answers the orphan question deterministically, so don't grep for it by
+hand. When it reports an orphan, **you** own the fix — entrypoint detects and routes it
+here precisely because "where does this wire belong" is a design judgment, not a lookup.
+Wire it into the workflow that should trigger it, in that skill's own file, and add the
+skill to `ROOTS` **only** if it's genuinely user- or schedule-invoked. Padding `ROOTS` to
+silence the check is the same move as deleting a failing test.
 
 Audit checklist per skill:
 

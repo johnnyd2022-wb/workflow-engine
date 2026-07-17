@@ -1,6 +1,6 @@
 ---
 name: entrypoint
-description: "Top-level router across every registered skill in this repo — both the biz-e code suite (new-feature, review-feature, fix-bug, and their specialists) and the founder-ops pack (business-operator and its specialists). Self-updating: syncs a cached category index (skill-index.md) against the live .claude/skills/ roster on every run, so new/renamed/retired skills are picked up automatically. Use this when the user doesn't know which skill to reach for: 'which skill should I use', 'help', 'where do I start', 'I want to build/fix/ship X' with no named skill, or any request that could plausibly map to more than one skill. Not for requests that already clearly name their skill (e.g. 'run sales-manager') — invoke that skill directly instead."
+description: "Top-level router across every registered skill in this repo — both the biz-e code suite (new-feature, review-feature, fix-bug, and their specialists) and the founder-ops pack (business-operator and its specialists). Self-updating on two axes: syncs a cached category index (skill-index.md) against the live .claude/skills/ roster, AND checks the wiring graph (scripts/skill_graph.py) so a skill nothing routes to gets caught instead of silently never firing. Also runs preflight once and hands its report to the front door. Use this when the user doesn't know which skill to reach for: 'which skill should I use', 'help', 'where do I start', 'I want to build/fix/ship X' with no named skill, or any request that could plausibly map to more than one skill. Not for requests that already clearly name their skill (e.g. 'run sales-manager') — invoke that skill directly instead."
 ---
 
 # Entrypoint
@@ -23,11 +23,13 @@ map. Never route from memory of the index; read it after syncing it.
 ## Step 0: Sync the index (every run, before anything else)
 
 The index is a cache and caches drift. Skills live in more than one place under
-`.claude/`, so the scan has three tiers:
+`.claude/`, so the scan has four tiers — three about *existence*, one about *wiring*:
 
 ```bash
-# 1. Registered roster — the only skills the Skill tool can actually invoke
-ls -1 .claude/skills/ | sort
+# Tiers 1 + 4 in one deterministic command (~0.2s): fingerprint drift, unindexed
+# skills, orphans, stale roots. Don't hand-roll a sed over the fingerprint block —
+# skill-index.md has several code fences and a naive match reads the wrong one.
+python3 scripts/skill_graph.py --check
 
 # 2. Founder-ops source dir — anything here NOT symlinked into .claude/skills/
 #    exists but is unregistered (invisible to the harness)
@@ -40,6 +42,19 @@ find .claude -name SKILL.md \
   -not -path ".claude/agents/skills/*" \
   -not -path ".claude/takeaway/*"
 ```
+
+`skill_graph.py --check` exits 0 when the roster is clean and 1 with a report when it
+isn't, covering: `fingerprint_drift` (roster vs index), `unindexed`, `orphans`,
+`unknown_roots`. Tiers 2 and 3 stay shell because they look *outside* `.claude/skills/`,
+which the graph doesn't see.
+
+**Tier 4 is the one that catches the failure the other three can't see.** A skill can be
+present, registered, and indexed, and still never fire, because nothing routes to it —
+and nothing errors when that's true. That is not hypothetical: `suite-warden` and
+`docs-truth` shipped as orphans and were only caught because someone asked the right
+question by hand. `scripts/skill_graph.py` walks every SKILL.md, builds the reference
+graph, and reports skills with no inbound edge that aren't declared roots. Existence is
+cheap to verify; reachability is what decides whether the skill was worth writing.
 
 **`.claude/takeaway/` is always excluded**: it holds export copies of skills for
 sharing outside this repo (including the Codex-side `herdr-multi-agent-collab-breaker`,
@@ -62,6 +77,19 @@ Act on each tier:
   house standard and belongs in the roster. Interactively, ask the user; unattended,
   leave skill-smith's finding in the report rather than registering something that might
   be a draft.
+
+- **Tier 4 non-zero** (`--check` exited 1) → the roster has a reachability problem:
+  - `orphans` — nothing routes to it. **Do not fix the wiring yourself**: where a wire
+    belongs is a design judgment (does a test failure go to suite-warden or fix-bug?),
+    and that is **skill-smith**'s call. Report the orphan, route it there, and carry on
+    routing the user's actual ask — a wiring gap is not a reason to refuse their request.
+  - `unindexed` — you fix this one; it's the index repair below.
+  - `unknown_roots` — a declared root in `scripts/skill_graph.py`'s `ROOTS` no longer
+    exists. Prune it (a stale root silently exempts a name from orphan detection).
+
+  A new skill will *always* be an orphan for one run — it's added before it's wired. Say
+  so plainly rather than treating it as breakage; the point is that it can't stay that
+  way unnoticed.
 
 Then compare the tier-1 output to the `## Roster fingerprint` block in
 `.claude/skills/entrypoint/skill-index.md`.
