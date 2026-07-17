@@ -56,7 +56,7 @@ Register the blueprint in the app factory. Then build to the spec:
 - Log state changes per the observability event convention (`<slug>.<verb_past>`); it is cheaper to emit them now than to retrofit in step 5.
 - Commit on a feature branch `feat/<slug>`. Verification agents audit the tree, not your intentions.
 
-**If running inside Herdr with a Codex pane** (`HERDR_ENV=1` and a partner exists): you may route the build through the herdr-multi-agent-collab protocol, with the Architect building and the Breaker taking the verification stages below in its own pane. Otherwise use subagents as described; the chain is identical either way.
+**If running inside Herdr with a Codex pane** (`HERDR_ENV=1` and a partner exists): route the verification stages below through the herdr-multi-agent-collab protocol instead of spawning subagents. Claude stays Architect (builds, patches findings); Codex-as-Breaker runs the verification stages in its own pane per its Workflow A, reporting findings back via the handoff file, with the protocol's two-round circuit breaker in place of step 7's. Otherwise use subagents as described; the chain is identical either way.
 
 ## Steps 3-6: Verification by subagents
 
