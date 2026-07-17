@@ -7,9 +7,12 @@ description: "End-to-end orchestrator for building a new feature in the Flask ap
 
 You are the orchestrator. You interview, scaffold, build, then delegate verification to subagents running the specialist skills, and you do not declare the feature done until every gate reports green. The chain and its order exist for a reason: each stage consumes the previous stage's artifact, and verification is done by agents that did not write the code.
 
+Read `.agents/autonomy.md` before starting. In an unattended run the MR is the gate: build to a reviewable MR with assumptions surfaced rather than stopping to ask.
+
 ## The chain
 
 ```
+0. preflight           (script, ~3s)             -> capabilities + decisions
 1. spec-first          (inline, interactive)     -> .agents/specs/<slug>.md [approved]
 2. scaffold + build    (this agent / Architect)  -> blueprint + unit tests passing
 3. migration-safety    (subagent, only if spec says data model changes)
@@ -22,9 +25,17 @@ You are the orchestrator. You interview, scaffold, build, then delegate verifica
 
 Skill locations: resolve each skill's SKILL.md from the installed skills directories before spawning; pass the absolute path to the subagent.
 
+## Step 0: Preflight (once, then pass it down)
+
+```bash
+python3 scripts/preflight.py --json
+```
+
+Repair blockers per the **preflight** skill's table, then read `decisions`: `verification_mode` (`herdr-adversarial` | `subagents`) settles how steps 3-6 run, and `live_server_tests` tells you whether the live suites will run or skip. Pass the report to subagents in their prompt instead of having each re-probe — one environment, one opinion about it.
+
 ## Step 1: Spec (inline, never delegated)
 
-Run the **spec-first** skill yourself; it interviews the user, and subagents cannot talk to the user. Do not proceed past this step until the spec file exists with `status: approved`. The slug from the spec drives everything downstream.
+Run the **spec-first** skill yourself; it interviews the user, and subagents cannot talk to the user. Do not proceed past this step until the spec file exists with `status: approved` — or, in an unattended run, `status: approved-unattended` with its assumptions listed (see spec-first §3; those assumptions must lead the MR description). The slug from the spec drives everything downstream.
 
 ## Step 2: Scaffold and build
 

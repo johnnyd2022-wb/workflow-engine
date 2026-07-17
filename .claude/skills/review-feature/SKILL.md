@@ -11,6 +11,8 @@ Same gates as new-feature, pointed backwards: instead of verifying fresh work, y
 
 Ask the user which feature. Offer the candidates rather than making them type: list registered blueprints (grep the app factory for `register_blueprint`, or `ls app/features/`). Confirm the slug and scope (a blueprint, or a wider slice the user names).
 
+**Unattended** (scheduled sweep, or called by another skill — `.agents/autonomy.md`): take the scope from the caller's input. If none was given, pick the highest-risk candidate rather than asking — most recently changed (`git log --since=30d --name-only -- app/features/`), then most tenant-scoped surface — and state the choice and why in the report. Review one feature well; don't sweep the whole app in one unattended run.
+
 ## Step 2: Establish or reconstruct the spec
 
 The chain needs acceptance criteria to audit against.

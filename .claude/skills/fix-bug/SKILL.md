@@ -32,6 +32,13 @@ with recent commits (`git log --since`) or migrations (`alembic history`). If th
 has no request_id or timeframe, ask for one before guessing — triage without evidence is
 just a different way of writing narration instead of a diagnosis.
 
+**Unattended** (called by `prod-sentinel`, `security-audit`, or a schedule —
+`.agents/autonomy.md`): the caller supplies the evidence, so there is normally nothing to
+ask for. When the evidence still isn't enough to reproduce, do **not** invent a root cause
+to have something to fix: report `could-not-reproduce` with what you tried and what
+evidence would settle it. An unattended agent guessing at a fix is exactly the failure this
+skill's red-test-first rule exists to prevent.
+
 If the bug is a tenant-isolation leak (org A sees org B's data) or an auth bypass, stop
 triage and escalate to **security-audit** immediately alongside the fix; those get a
 security report even when the "bug" framing undersells the severity.

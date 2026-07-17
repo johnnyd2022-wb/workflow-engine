@@ -57,12 +57,23 @@ url_prefix: /<slug>
 
 Every acceptance criterion gets an `AC<n>` ID. Downstream skills reference these IDs: unit tests name themselves `test_ac1_...`, Playwright tests map to ACs, and review-feature audits coverage per AC. That traceability is the whole point.
 
-## 3. Get approval
+## 3. Get approval — or make the assumptions reviewable
 
-Show the spec to the user and ask for approval or edits. Only set `status: approved` after explicit sign-off. Downstream skills must refuse to build from a spec still in `draft`.
+**Interactive run** (the user is there): show the spec, ask for approval or edits, set `status: approved` only after explicit sign-off.
+
+**Unattended run** (scheduled, chained from another skill, or the user has walked away — see `.agents/autonomy.md`): there is nobody to sign off, and blocking here would stop the whole chain to wait for a person who isn't coming. Instead:
+
+1. Write the spec with **every** open question resolved into an explicit `ASSUMPTION:` line — the default you chose *and* what you rejected.
+2. Set `status: approved-unattended`. Downstream skills treat this as buildable.
+3. The assumptions block goes at the **top of the MR description**, verbatim. That is where sign-off happens now: the human reads the assumptions next to the diff and rejects the MR if one is wrong.
+
+This trades "approve a spec you can't see the consequences of" for "review a working change with its assumptions listed". The gate moved; it did not disappear.
+
+Never use `approved-unattended` to dodge an interview the user is available for — a live user is always better evidence than your best guess.
 
 ## Rules
 
 - Never write code in this skill. Spec only.
-- Never mark your own spec approved without the user.
-- If the user resists the interview ("just build it"), compress to the two non-negotiables: slug and acceptance criteria. Everything else can carry stated assumptions, written into the spec as `ASSUMPTION:` lines the user can veto later.
+- Never mark a spec plain `approved` without the user. `approved-unattended` is a different, honest status — use it rather than blurring the two.
+- An `ASSUMPTION:` line that isn't surfaced in the MR description is a silent decision, which `.agents/autonomy.md` prohibits. Surfacing them is what earns the autonomy.
+- If the user resists the interview ("just build it"), compress to the two non-negotiables: slug and acceptance criteria. Everything else carries stated assumptions the user can veto later.

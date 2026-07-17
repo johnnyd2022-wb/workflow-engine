@@ -63,7 +63,7 @@ Pane records include `agent` (e.g. `claude`, `codex`), `agent_status` (`idle`, `
 herdr pane rename <partner-pane-id> "breaker-codex"
 ```
 
-If no partner pane exists, ask the user before creating one. If they say yes, split without stealing their focus, launch the agent's normal interactive executable, and wait for it to reach its prompt:
+If no partner pane exists: ask the user when they're there; **when unattended, just create it** — a split pane is local and reversible, and blocking an autonomous run to ask permission for one defeats the purpose (`.agents/autonomy.md`). Either way, split without stealing focus, launch the agent's normal interactive executable, and wait for it to reach its prompt:
 
 ```bash
 herdr pane split --current --direction right --no-focus
