@@ -35,6 +35,7 @@ dependencies = [
 dev = [
     "ruff>=0.1.0",
     "factory-boy>=3.3.0",
+    "pytest-playwright>=0.8.0",
 ]
 
 # System Dependencies (not managed by uv):
@@ -62,6 +63,7 @@ package = true
 markers = [
     "live_server: drives a real dev server over HTTPS; auto-skipped by tests/conftest.py when none is listening",
     "quarantined: known-broken/flaky, excluded from default runs; every entry needs a row in .agents/test-quarantine.md",
+    "e2e: drives a real browser against an app booted by tests/e2e/conftest.py; auto-skipped with a reason when chromium, the TLS cert, or the test DB is absent",
 ]
 # Quarantined tests are opt-in: `-m quarantined` to run them, nothing by default.
 addopts = "-m 'not quarantined'"
