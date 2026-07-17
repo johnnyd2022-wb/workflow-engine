@@ -1,157 +1,180 @@
 ---
 name: entrypoint
-description: "Top-level router across every registered skill in this repo — both the biz-e code suite (new-feature, review-feature, fix-bug, and their specialists) and the founder-ops pack (business-operator and its 19 specialists). Use this when the user doesn't know which skill to reach for: 'which skill should I use', 'help', 'where do I start', 'I want to build/fix/ship X' with no named skill, or any request that could plausibly map to more than one skill. Not for requests that already clearly name their skill (e.g. 'run sales-manager') — invoke that skill directly instead."
+description: "Top-level router across every registered skill in this repo — both the biz-e code suite (new-feature, review-feature, fix-bug, and their specialists) and the founder-ops pack (business-operator and its specialists). Self-updating: syncs a cached category index (skill-index.md) against the live .claude/skills/ roster on every run, so new/renamed/retired skills are picked up automatically. Use this when the user doesn't know which skill to reach for: 'which skill should I use', 'help', 'where do I start', 'I want to build/fix/ship X' with no named skill, or any request that could plausibly map to more than one skill. Not for requests that already clearly name their skill (e.g. 'run sales-manager') — invoke that skill directly instead."
 ---
 
 # Entrypoint
 
-One door in front of 38 registered skills across two unrelated surfaces — this repo's
-engineering work (`.claude/skills/`) and the founder's two businesses
-(`.claude/agents/skills/`, symlinked into the same `.claude/skills/` directory). Nobody
-should have to know the roster to get started. Your job is triage: read the request,
-name the one skill (or short chain) that actually answers it, say why, and invoke it —
-don't just print a menu and stop.
+One door in front of every registered skill in this repo — the engineering suite and the
+founder-ops pack (Whistlebird / Biz-E), symlinked together into `.claude/skills/`. Nobody
+should have to know the roster to get started. Your job is triage: sync the index, read
+the request (or interview for one), name the one skill (or short chain) that answers it,
+gather the context that skill will need, and invoke it — don't just print a menu and stop.
 
 This is a router, not a decision-maker. It does not do the work of the skill it routes
 to, and it does not out-rank `business-operator` on business *prioritization* calls
 ("what should I work on this week" is business-operator's call once you're in the
 founder-ops world — entrypoint's job ends at getting you there).
 
-## No specific ask yet
+The routing tables live in **`skill-index.md`** (same directory as this file) — a cached,
+categorized snapshot of the roster. This file defines the procedure; the index holds the
+map. Never route from memory of the index; read it after syncing it.
 
-If the command is invoked bare, or with something as open as "help", "where do I
-start", or "list the skills" — don't respond with an open-ended question like "what are
-you trying to do?". Lead with the category menu below instead, then route from whatever
-comes back, even if that answer is still broad. A generic answer is enough to act on; it
-doesn't need to be narrowed to a specific skill name first.
+## Step 0: Sync the index (every run, before anything else)
 
-**Categories:**
+The index is a cache and caches drift. Skills live in more than one place under
+`.claude/`, so the scan has three tiers:
+
+```bash
+# 1. Registered roster — the only skills the Skill tool can actually invoke
+ls -1 .claude/skills/ | sort
+
+# 2. Founder-ops source dir — anything here NOT symlinked into .claude/skills/
+#    exists but is unregistered (invisible to the harness)
+comm -23 <(ls -1 .claude/agents/skills/ | sort) <(ls -1 .claude/skills/ | sort)
+
+# 3. Stray SKILL.md anywhere else under .claude/ — a skill someone parked outside
+#    both known homes
+find .claude -name SKILL.md \
+  -not -path ".claude/skills/*" \
+  -not -path ".claude/agents/skills/*" \
+  -not -path ".claude/takeaway/*"
+```
+
+**`.claude/takeaway/` is always excluded**: it holds export copies of skills for
+sharing outside this repo (including the Codex-side `herdr-multi-agent-collab-breaker`,
+which belongs to the Codex agent, not this registry). Never index or register anything
+from there; duplicates in takeaway are expected, not drift.
+
+Act on each tier:
+
+- **Tier 2 non-empty** (founder-ops skill exists but isn't registered) → register it by
+  symlinking, matching the existing pattern, then treat it as a new skill in the index
+  repair below:
+
+  ```bash
+  ln -s ../agents/skills/<name> .claude/skills/<name>
+  ```
+
+- **Tier 3 non-empty** (stray skill outside both homes) → do NOT auto-register or
+  auto-index it; you can't tell a real skill from a draft or a copy. Tell the user what
+  you found and where, and ask whether it should be moved into `.claude/skills/` (or
+  symlinked) — then it gets indexed on the next sync like anything else.
+
+Then compare the tier-1 output to the `## Roster fingerprint` block in
+`.claude/skills/entrypoint/skill-index.md`.
+
+- **Match** (and tiers 2–3 empty) → the index is fresh. Proceed to Step 1.
+- **Drift** (skills added, removed, or renamed) → repair the index before routing:
+  1. For each **new** name, read its `SKILL.md` frontmatter (`name:` + `description:` —
+     the first ~10 lines are enough) and assign it to the existing category whose other
+     members it most resembles. If none fits, add a new category section rather than
+     forcing a bad match.
+  2. For each **removed** name, delete its row(s) and, if that empties a category,
+     the category.
+  3. Rewrite the fingerprint block with the new sorted listing, update `last_synced`
+     to today and `skill_count` to the new count.
+  4. Tell the user in one line what changed ("index updated: +deploy-verifier,
+     −old-skill") — then continue routing. The sync must never become the errand;
+     it's a toll booth, not the destination.
+
+A one-row description is enough for a new skill's index entry — the "ask sounds like"
+phrasing can be distilled from its description's trigger sentences.
+
+## Step 1: Get a routable ask
+
+If the user gave a real ask ("the Xero sync is throwing 500s"), skip straight to Step 2.
+
+If invoked bare, or with something as open as "help" / "where do I start": don't ask an
+open-ended "what are you trying to do?". Present the category menu — one line per
+category, drawn from the index's category headings — as a **selection** (use
+AskUserQuestion where available: one question for the category, and if it's code work, a
+follow-up selection for build / review / fix / ship, since those front doors genuinely
+need that much to pick). Current categories:
 
 1. **Build/fix/ship code on this repo** — features, bugs, reviews, deploys, CI, security, dependencies
-2. **Run the businesses day-to-day (Whistlebird / Biz-E)** — "what should I work on", sales, marketing, finance, planning → `business-operator`
+2. **Run the businesses day-to-day (Whistlebird / Biz-E)** — priorities, sales, marketing, finance, planning → `business-operator`
 3. **Whistlebird-specific** — distillery strategy, compliance/licensing, duty manager study
 4. **Biz-E-specific** — product roadmap, architecture review, releases, customer onboarding
-5. **Claude Code / harness tools** — config, keybindings, code review, scheduling, artifacts
+5. **Claude Code / harness tools** — config, keybindings, code review, scheduling
 
-Present these five (a one-line label each is enough, don't dump the full tables yet),
-then map whatever the user says back onto them:
-- A category number or name ("2", "the business stuff") → jump straight to that
-  category's front door (`business-operator` for #2, ask build/fix/review for #1 since
-  those three front doors genuinely need that much to pick, etc.).
-- A description of actual work ("the Xero sync is throwing 500s") → skip the category
-  menu entirely and match directly against the tables below, same as any other request.
-- Still nothing usable ("I don't know", "surprise me") → for code work default to
-  `repo-conventions` or ask what area of the app; for business work, `business-operator`
-  is built for exactly this and will run its own weekly-review triage.
+Map whatever comes back onto the index:
+- A category number or name → jump to that category's front door.
+- A description of actual work → match directly against the index tables.
+- Still nothing usable ("I don't know") → for code work default to `repo-conventions`
+  or ask what area of the app; for business work `business-operator` is built for
+  exactly this.
 
-## Two surfaces, one map
+**Then collect the handoff context.** Before invoking, ask (as selections/short
+questions, not an essay prompt) for whatever the target skill's first step would
+otherwise have to re-ask: for `new-feature` a one-line feature statement; for `fix-bug`
+the symptom, where it was seen, and any request_id/trace; for `review-feature` which
+blueprint/area; for business skills the business (Whistlebird or Biz-E) and the concrete
+artifact wanted. One round of questions, not an interrogation — the skill runs its own
+interview for the details it owns (e.g. spec-first).
 
-### 1. Code work on this repo (Flask/SQLAlchemy/Postgres, multi-tenant)
+## Step 2: Route from the index
 
-**Front doors — pick exactly one, it chains the rest itself:**
+1. **Domain first**: is this about *this codebase* (files, bugs, features, CI, deploys)
+   or *running the businesses*? The index's categories 1–4 vs 5–8 rarely overlap; get
+   this call right and the rest is a lookup.
+2. **Most specific row wins** when the ask already names the work. "Draft a follow-up to
+   Liquorland Petone" goes straight to `sales-manager`, not through `business-operator`.
+   Front doors (`new-feature`/`review-feature`/`fix-bug`/`business-operator`) are for
+   broad asks.
+3. **Genuinely ambiguous** (spans two skills or both surfaces) → one short clarifying
+   question, or name the primary skill and note the follow-on handoff so nothing drops.
+4. **State the match and why in one sentence, then invoke the skill** with the context
+   from Step 1 passed as its args/opening message. Routing that ends in a description
+   instead of an action isn't routing.
+5. **Nothing fits** → say so plainly. A genuinely new kind of request may mean a skill
+   is missing — flag it, don't paper over with the closest-but-wrong skill.
 
-| Ask sounds like | Skill |
-|---|---|
-| "Build/add a new feature, endpoint, page, capability" | `new-feature` |
-| "Review/audit/harden an existing feature", "is X solid", "check X before launch" | `review-feature` |
-| "This is broken", a bug report, a stack trace, a request_id, a regression | `fix-bug` |
-| A CVE/pip-audit finding, "bump this dependency" | `dependency-update` |
-| "Deploy this", "ship to prod/test", "roll this back" | `deploy-runner` (technical) → hands off to `release-manager` (readiness/changelog/GTM) |
-| Already built + verified, needs the MR opened/pushed/watched | `merge-request` (front doors call this themselves — rarely invoked directly) |
+## Step 3: Herdr mode — adversarial pairing for code work
 
-**Specialists — normally chained automatically by a front door above; invoke directly only for a narrow, standalone ask:**
+Before invoking any **code** front door (`new-feature`, `review-feature`, `fix-bug`,
+`dependency-update`, `deploy-runner`), check for Herdr:
 
-| Ask sounds like | Skill |
-|---|---|
-| "What's the convention for X here", "how do we normally do Y" | `repo-conventions` |
-| Need seeded test data / org+user fixtures for a new test | `test-fixtures` |
-| Set up or modify CI, `.gitlab-ci.yml`, pre-commit, protected branches | `ci-gate` |
-| Security review, semgrep/gitleaks/pip-audit, tenant isolation | `security-audit` |
-| Browser/E2E tests, Playwright, "does the app actually work" | `e2e-playwright` |
-| Migration reversibility, schema change safety | `migration-safety` |
-| Logging, monitoring, "why did this fail in prod" (triage mode) | `observability` |
-| Turn a feature request into a written spec before building | `spec-first` |
+```bash
+test "${HERDR_ENV:-}" = 1 && echo IN_HERDR
+```
 
-**Ad hoc file review (not a workflow, just a lint pass on a specific file):**
-`html-review`, `js-review`, `python-review` — point at a specific template/script/module
-someone wants a second pair of eyes on, outside the new-feature/review-feature chain.
+If inside Herdr, the front doors run their verification through the
+**`herdr-multi-agent-collab`** protocol instead of (or alongside) subagents: Claude is
+the Architect (design, build, fix), the Codex pane is the Breaker (adversarial review,
+test execution, edge-case attack), talking over the herdr socket API
+(`herdr pane` / `herdr wait`) with handoffs in `.herdr-collab/`. The front doors already
+know this — each carries an "If running inside Herdr" clause — so your job is only to
+**say it in the handoff**: append to the context you pass the front door a line like
 
-**Multi-agent build/verify pairing (Herdr + Codex only):** `herdr-multi-agent-collab` —
-niche, only relevant with a Codex pane running alongside.
+> Running inside Herdr with a Codex partner pane — route verification through
+> herdr-multi-agent-collab (Architect/Breaker, Workflow A/B, two-round circuit breaker).
 
-### 2. Running Whistlebird / Biz-E (the businesses, not the codebase)
+If `HERDR_ENV=1` but no Codex partner pane exists, the front door / collab skill will
+ask the user before creating one; don't pre-create panes from the router.
 
-**Front door:** "What should I do next/this week", Monday review, overwhelm, or
-anything spanning both businesses → **`business-operator`**. It routes onward to the
-specialists below — if the ask already clearly belongs to one of them, skip straight
-there instead of going through business-operator first.
+Outside Herdr, say nothing — the front doors default to their subagent chains.
 
-| Domain | Ask sounds like | Skill |
-|---|---|---|
-| Cross-business | New project, milestones, next actions | `project-manager` |
-| Cross-business | "Plan my week", tonight's next action | `calendar-planner` |
-| Cross-business | Margins, MRR, cashflow, runway, time/$ decisions | `finance-advisor` |
-| Demand & revenue | Positioning, campaign, content calendar | `marketing-director` |
-| Demand & revenue | Turn a brief into finished posts/copy/newsletter | `content-producer` |
-| Demand & revenue | Pipeline review, follow-ups, outreach, objections | `sales-manager` |
-| Demand & revenue | "Check my email", inbox triage (Gmail, drafts only) | `sales-watches` |
-| Demand & revenue | Cold first-touch drafts from a new contact list | `outbound-sales` |
-| Demand & revenue | Log a sales action, flag a stale lead | `crm-updater` |
-| Demand & revenue | Daily subreddit/community scan for Biz-E angles | `community-triage` |
-| Demand & revenue | Debrief a demo/discovery call transcript | `discovery-synthesis` |
-| Demand & revenue | Weekly competitor pricing/changelog/review check | `competitor-watch` |
-| Whistlebird | "Should we launch X", awards, retail, events strategy | `distillery-strategy-advisor` |
-| Whistlebird | Licence/label project tracking (not legal advice) | `compliance-project-assistant` |
-| Whistlebird | "Quiz me", mock interview for the duty manager's cert | `licence-study-coach` |
-| Biz-E | Roadmap, PRDs, "should we build this", prioritisation | `bize-product-manager` |
-| Biz-E | Architecture review, ADRs, before a build starts | `cto-software-architect` |
-| Biz-E | Pre-release checklist, changelog, GTM handoff | `release-manager` |
-| Biz-E | Onboarding, demo scripts, support drafts | `customer-success-onboarding` |
+## Keeping this honest
 
-## How to route
-
-0. **No ask yet?** Use the category menu in "No specific ask yet" above instead of a
-   generic question. Skip this step entirely if the user already gave you a real ask.
-1. **Read the ask for domain first**: is this about *this codebase* (files, bugs,
-   features, CI, deploys) or about *running the businesses* (Whistlebird, Biz-E as
-   companies — sales, marketing, product, compliance, finance)? The two tables above
-   rarely overlap; get this call right and the rest is a lookup.
-2. **Match to the most specific row, not the front door, if the ask already names the
-   specific work.** "Draft a follow-up to Liquorland Petone" goes straight to
-   `sales-manager`, not through `business-operator` first. Front doors
-   (`new-feature`/`review-feature`/`fix-bug`/`business-operator`) are for when the ask
-   is broad or the user genuinely doesn't know where it lands.
-3. **If it's genuinely ambiguous** (could be two skills, or spans both surfaces —
-   e.g. "the Xero integration is broken and customers are asking about it" is both
-   `fix-bug` and arguably a `sales-manager`/`customer-success-onboarding` concern), ask
-   one short clarifying question rather than guessing, or name the primary skill and
-   note the likely follow-on handoff so nothing gets dropped.
-4. **State the match and why in one sentence**, then invoke the skill — don't just
-   describe it and stop. Routing that ends in a description instead of an action isn't
-   routing.
-5. **If nothing on this map fits**, say so plainly rather than forcing a bad match —
-   this roster changes (see below); a genuinely new kind of request might mean a skill
-   is missing, which is worth flagging back to whoever maintains this workspace rather
-   than papering over with the closest-but-wrong skill.
-
-## Keeping this map honest
-
-This table is a snapshot, not a live query — it will drift as skills are added, renamed,
-or retired. If a routing decision feels off, or the user names a skill not listed here,
-cross-check against the live roster before trusting this file over reality:
-
-- Code suite skills: `ls .claude/skills/` (this repo's actual registered skills).
-- Founder-ops pack: `.claude/agents/README.md`'s roster table is the maintained source;
-  `.claude/agents/skills/` is the underlying directory.
-
-Whoever adds a new skill to either surface should add one row here in the same change —
-treat an unrouted skill as a broken handoff, not a documentation nicety.
+- **The index is the single roster source.** Whoever adds a skill to either surface
+  should add its row to `skill-index.md` in the same change — but Step 0 exists
+  precisely because they won't always remember. Treat an unrouted skill as a broken
+  handoff the sync repairs, not an error to complain about.
+- Founder-ops pack documentation lives at `.claude/agents/README.md` (roster table) and
+  `.claude/agents/AGENTS.md` (behavior) — cross-check there when categorizing a new
+  business skill.
+- Harness/built-in skills (`code-review`, `verify`, `loop`, `schedule`, `update-config`,
+  …) are not in `.claude/skills/` and not in the index; route harness asks to them by
+  name (category 5 in the menu).
 
 ## What this skill does NOT do
 
 - Doesn't replace `business-operator`'s prioritisation judgment once you're in the
   founder-ops world — it gets you to business-operator, not past it.
 - Doesn't replace a front door's own chaining (`new-feature` still runs its full
-  spec → build → verify → merge-request sequence) — entrypoint's job is choosing the
-  front door, not re-implementing what happens after.
+  spec → build → verify → merge-request sequence, with Breaker rounds when in Herdr) —
+  entrypoint chooses the front door, it doesn't re-implement what happens after.
 - Doesn't invent a skill that doesn't exist. If the ask has no home, say that.
+- Doesn't drive the Herdr panes itself — `herdr-multi-agent-collab` owns the pane
+  protocol; entrypoint only flags that the session is in Herdr.
