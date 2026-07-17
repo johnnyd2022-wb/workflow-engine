@@ -6,7 +6,7 @@ directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be p
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
 last_synced: 2026-07-17
-skill_count: 39
+skill_count: 44
 
 ## Roster fingerprint
 
@@ -36,6 +36,7 @@ dependency-update
 deploy-runner
 discovery-synthesis
 distillery-strategy-advisor
+docs-truth
 e2e-playwright
 entrypoint
 finance-advisor
@@ -50,6 +51,8 @@ migration-safety
 new-feature
 observability
 outbound-sales
+preflight
+prod-sentinel
 project-manager
 python-review
 release-manager
@@ -58,7 +61,9 @@ review-feature
 sales-manager
 sales-watches
 security-audit
+skill-smith
 spec-first
+suite-warden
 test-fixtures
 ```
 
@@ -79,14 +84,26 @@ test-fixtures
 
 | Ask sounds like | Skill |
 |---|---|
+| "Is my environment set up", "why won't the tests even start", unexplained connection errors | `preflight` |
 | "What's the convention for X here" | `repo-conventions` |
 | Need seeded test data / org+user fixtures | `test-fixtures` |
 | Set up/modify CI, `.gitlab-ci.yml`, pre-commit, protected branches | `ci-gate` |
-| Security review, semgrep/gitleaks/pip-audit, tenant isolation | `security-audit` |
+| Security review, semgrep/gitleaks/pip-audit, tenant isolation, scheduled security sweep | `security-audit` |
 | Browser/E2E tests, Playwright, "does the app actually work" | `e2e-playwright` |
 | Migration reversibility, schema change safety | `migration-safety` |
 | Logging, monitoring, "why did this fail in prod" | `observability` |
 | Turn a feature request into a written spec | `spec-first` |
+| "Are these failures real", flaky test, a test needing a live server, suite health | `suite-warden` |
+
+### 2b. Code — autonomous watchers (built for `/schedule`; run unattended, MR is the gate)
+
+| Ask sounds like | Skill |
+|---|---|
+| "Anything broken in prod", scheduled error sweep, post-deploy watch | `prod-sentinel` |
+| Weekly security sweep that remediates, not just reports | `security-audit` (§6) |
+| Scheduled suite-health check | `suite-warden` |
+| Docs/commands drifted from reality, "the docs say X but Y happens" | `docs-truth` |
+| Skill rot audit, "create a skill for X" | `skill-smith` |
 
 ### 3. Code — ad hoc file review (single-file lint pass, outside any chain)
 
@@ -151,6 +168,14 @@ Front door for "what should I work on" / weekly review / overwhelm: **`business-
 | Skill | Role |
 |---|---|
 | `entrypoint` | This router itself — never route to it. |
+| `skill-smith` | Creates/audits the skills themselves (also listed in 2b). |
+
+## Autonomy
+
+Engineering skills run unattended under `.agents/autonomy.md`: the MR is the human gate,
+no skill touches a production database, and none merges or deploys. Interactive steps have
+defined unattended substitutes (see that file's table) — a scheduled run never blocks on a
+question. The founder-ops pack keeps its own rules (drafts only, never send/post).
 
 ## Outside this index
 
