@@ -7,6 +7,16 @@ description: "Write and run headless Playwright end-to-end tests for the Flask a
 
 Unit tests prove functions work; E2E proves the app works. For an agent, a passing headless flow is the closest thing to a human saying "yes, I clicked through it and it's fine". Every test here traces to an `AC<n>` from `.agents/specs/<slug>.md` so coverage is auditable, not vibes.
 
+## 0a. Map coverage BEFORE writing anything (deterministic, cheap)
+
+Do not re-derive what is already tested by reading the app and the suite — that burns tokens rediscovering a map a script computes in one pass. Run:
+
+```bash
+python3 scripts/e2e_coverage.py --json     # {summary, gaps[], routes[]}; human: drop --json
+```
+
+It reports, per `(method, route)`, whether an E2E test exercises it, by matching the real `app.url_map` against the route literals in `tests/e2e/*.py`. Use its `gaps` list to decide what to add; a route already `covered` needs no new test. `--check` exits non-zero if any non-excluded gap remains (a scriptable gate). Static/health/telemetry routes are excluded; form-driven auth endpoints (login/signup/verify-2fa) are marked covered via a small `UI_DRIVEN_COVERAGE` map in the script — extend that map (never add API literals to it) if you cover another endpoint purely through a form. The living page/flow view is `.agents/reports/e2e/coverage-index.md`; `e2e_coverage.py` is the deterministic source of truth behind it.
+
 ## 0. One-time setup (skip if present)
 
 Stack: `pytest-playwright`, Chromium, headless. Check `pyproject.toml`'s `dev` extra and `tests/e2e/conftest.py`; create if missing:

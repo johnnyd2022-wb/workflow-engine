@@ -1,7 +1,10 @@
 # E2E coverage index — page & flow status
 
 Living status of what the Playwright suite actually exercises, page by page and flow by
-flow. Updated as coverage is built. Legend:
+flow. This markdown is the human-readable view; the **deterministic source of truth** is
+`scripts/e2e_coverage.py` (`--json` for machine output, `--check` to gate on gaps), which
+matches the real `app.url_map` against the route literals in `tests/e2e/*.py`. Run it
+before writing tests rather than re-deriving this by hand. Legend:
 
 - ✅ **flow** — a real action is driven and its outcome asserted (create/edit/delete/run)
 - 🟡 **partial** — some actions covered, others not
