@@ -63,33 +63,47 @@ def _tcp_open(host: str, port: int, timeout: float = 1.0) -> bool:
         return False
 
 
+_CHROMIUM_PROBE = (
+    "import sys;"
+    "from pathlib import Path;"
+    "from playwright.sync_api import sync_playwright;"
+    "p=sync_playwright().start();"
+    "exe=p.chromium.executable_path;"
+    "p.stop();"
+    "sys.exit(0 if exe and Path(exe).exists() else 3)"
+)
+
+
 def _chromium_available() -> tuple[bool, str]:
     """True only when the chromium binary actually exists on disk.
 
     Resolving the real executable path is the only reliable check: a filesystem glob has
-    to guess the cache layout, and pytest-playwright/playwright ship the browser under
-    different directory names across versions (`chromium-<rev>` vs
-    `chromium_headless_shell-<rev>`) — CI installed the headless shell, which a
-    `chromium-*` glob missed, so the guard passed and the launch then failed with 35
-    errors. This resolves the path via playwright's own registry; it is called from
-    `pytest_collection_modifyitems`, before pytest-playwright starts its event loop, so
-    `sync_playwright()` is safe here (the "Sync API inside the asyncio loop" error only
-    happens once that loop is running, e.g. from inside a fixture).
+    to guess the cache layout, and playwright ships the browser under different directory
+    names across versions (`chromium-<rev>` vs `chromium_headless_shell-<rev>`) — CI
+    installed the headless shell, which a `chromium-*` glob missed, so the guard passed and
+    the launch then failed with 35 errors.
+
+    The resolution runs in a **clean subprocess**, not in-process: pytest-playwright has an
+    asyncio loop live by the time any hook or fixture runs, and `sync_playwright()` in that
+    loop raises "Sync API inside the asyncio loop". A fresh interpreter has no loop, so the
+    probe is reliable there. Cost is one ~1s subprocess, once per session.
     """
     try:
-        from playwright.sync_api import sync_playwright
+        import playwright  # noqa: F401
     except ImportError:
         return False, "playwright is not installed — run `uv sync --extra dev`"
 
-    try:
-        with sync_playwright() as p:
-            exe = p.chromium.executable_path
-    except Exception as exc:
-        return False, f"chromium is not runnable ({exc}) — run `uv run playwright install chromium`"
+    import subprocess
+    import sys
 
-    if not exe or not Path(exe).exists():
-        return False, "chromium is not installed — run `uv run playwright install chromium`"
-    return True, ""
+    try:
+        result = subprocess.run([sys.executable, "-c", _CHROMIUM_PROBE], capture_output=True, timeout=30)
+    except Exception as exc:
+        return False, f"could not probe chromium ({exc}) — run `uv run playwright install chromium`"
+
+    if result.returncode == 0:
+        return True, ""
+    return False, "chromium is not installed — run `uv run playwright install chromium`"
 
 
 def _e2e_skip_reason() -> str | None:
@@ -245,7 +259,7 @@ def purge_org(session, org_id, user_id) -> None:
     reverse dependency order means a new model is covered the day it is added, instead of
     breaking this teardown and getting "fixed" by someone deleting the cleanup.
     """
-    from sqlalchemy import or_
+    from sqlalchemy import or_, select
 
     from app.core.db.models.models import Base
 
@@ -257,9 +271,41 @@ def purge_org(session, org_id, user_id) -> None:
             conditions.append(table.c.org_id == org_id)
         if "user_id" in table.c:
             conditions.append(table.c.user_id == user_id)
+        # Transitive scope: a child like execution_steps has no org_id of its own — it
+        # belongs to the org only through its parent execution. Delete its rows whose FK
+        # points at a parent row we are deleting, so the parent delete below does not hit a
+        # foreign-key violation. reversed(sorted_tables) already visits children first.
+        for fk in table.foreign_keys:
+            parent = fk.column.table
+            if parent is table:
+                continue
+            if "org_id" in parent.c:
+                conditions.append(
+                    table.c[fk.parent.name].in_(select(parent.c[fk.column.name]).where(parent.c.org_id == org_id))
+                )
+            elif "user_id" in parent.c:
+                conditions.append(
+                    table.c[fk.parent.name].in_(select(parent.c[fk.column.name]).where(parent.c.user_id == user_id))
+                )
         if conditions:
             session.execute(table.delete().where(or_(*conditions)))
     session.commit()
+
+
+def csrf_headers(page) -> dict:
+    """Headers a mutating core-API call needs, read the way core-api.js reads them.
+
+    The core API enforces CSRF (Flask-WTF; only /auth/* is exempt) with strict HTTPS
+    referrer checking. The SPA sends X-CSRFToken from the meta tag on its shell and the
+    browser sends Referer automatically; `page.request` does not send Referer, so we add
+    both here. Lifting the token from the page keeps CSRF armed and under test rather than
+    disabling it. Navigates to a real SPA shell page to read the token.
+    """
+    if "/core" not in page.url:
+        page.goto("/core/dashboard")
+    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+    assert token, "no csrf-token meta tag on the SPA shell"
+    return {"X-CSRFToken": token, "Referer": page.url}
 
 
 @pytest.fixture()
@@ -273,19 +319,24 @@ def fresh_user(app_url):
     """
     from app.core.db import db_session
     from app.core.db.models.organisation import Organisation
-    from app.core.db.models.user import User
+    from app.core.db.models.user import User, UserRole
     from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory, UserFactory
 
     session = db_session()
     created: list[tuple] = []
 
-    def _make() -> dict:
+    def _make(role: UserRole = UserRole.MEMBER) -> dict:
         run_id = uuid.uuid4().hex[:8]
         org = OrganisationFactory(name=f"E2E Fresh Org {run_id}")
-        user = UserFactory(org_id=org.id, email=f"e2e-fresh-{run_id}@example.test")
+        user = UserFactory(org_id=org.id, email=f"e2e-fresh-{run_id}@example.test", role=role)
         session.commit()
         created.append((org.id, user.id))
-        return {"email": user.email, "password": DEFAULT_TEST_PASSWORD, "org_id": str(org.id)}
+        return {
+            "email": user.email,
+            "password": DEFAULT_TEST_PASSWORD,
+            "org_id": str(org.id),
+            "user_id": str(user.id),
+        }
 
     yield _make
 

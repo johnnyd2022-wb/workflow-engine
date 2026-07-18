@@ -14,7 +14,7 @@ import uuid
 
 import pytest
 
-from tests.e2e.conftest import login_through_ui
+from tests.e2e.conftest import csrf_headers, login_through_ui
 
 pytestmark = pytest.mark.e2e
 
@@ -36,23 +36,6 @@ def two_tenants(browser, app_url, fresh_user):
     yield pages
     for context in contexts:
         context.close()
-
-
-def csrf_headers(page) -> dict:
-    """Read the CSRF token the way core-api.js does: the meta tag on the SPA shell.
-
-    Mutating core API calls require X-CSRFToken (app_factory.py sets WTF_CSRF_HEADERS;
-    only /auth/* is exempt). Lifting it from the page rather than disabling CSRF for the
-    test run keeps the protection armed and under test.
-
-    Referer is sent because Flask-WTF enforces strict referrer checking over HTTPS — a
-    real browser always sends it, `page.request` does not. Supplying it here makes the
-    probe behave like the client it is imitating rather than like a bare HTTP tool.
-    """
-    page.goto("/core/dashboard")
-    token = page.locator('meta[name="csrf-token"]').get_attribute("content")
-    assert token, "no csrf-token meta tag on the SPA shell"
-    return {"X-CSRFToken": token, "Referer": page.url}
 
 
 def _create_inventory_item(page, name: str, barcode: str | None = None) -> str:
