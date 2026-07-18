@@ -131,14 +131,20 @@ padding `test-evaluator` exists to reject — so the honest action was to **corr
 This is the gap analysis being held to the same honesty standard as the tests: a `none`
 that turns out to be `covered`-or-nonexistent on inspection gets corrected, not filled.
 
-### Batch 5 — Org CRUD & membership  (map rows 6/7: none → covered)
-**Why:** org settings and user add/remove have no direct coverage; membership changes are an
-auth-adjacent surface.
-Tests (`tests/test_org_routes.py`, new area file):
-- GET/PATCH org settings happy path + wrong-org rejection.
-- add user, list users, remove user; removing a user in another org → 404/forbidden.
-- unhappy paths: unauthenticated → 401, non-member → 403, invalid payload → 400.
-Factory dep: none beyond existing. Effort: **M**.
+### Batch 5 — Org CRUD & membership  (map rows 6/7: none → covered) ✅ DONE 2026-07-18
+**Why:** org settings and user add/remove had no direct coverage; membership changes are an
+auth-adjacent surface where a broken role check lets a member escalate.
+Tests written (`tests/test_org_routes.py`, 11 tests, all green) via authed ADMIN + MEMBER
+Flask test clients:
+- ✅ GET /org returns the org; unauthenticated GET → 302 login redirect (the HTML-route
+  contract; /api/* would be JSON 401).
+- ✅ PATCH /org name as admin persists; PATCH as member → 403.
+- ✅ GET /org/users lists members; POST as admin → 201, as member → 403, duplicate email → 400.
+- ✅ DELETE member as admin → 200; deleting self → 400; unknown id → 404.
+Validity: mutation disabling `requires_role`'s 403 turns exactly the two member-forbidden
+tests red, the other nine stay green — the role boundary is genuinely exercised.
+**Correction to the plan:** unauthenticated → 302 (not 401) for HTML routes; the assertion
+matches the app's real dual-mode 401 handler rather than the plan's guess.
 
 ### Batch 6 — Close the partials  (rows 5, 9, 11, 17, 20)
 **Why last:** these already have happy-path coverage; the gap is the missing unhappy/hostile

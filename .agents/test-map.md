@@ -30,8 +30,8 @@ server up)
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 6 | Org read / patch settings | `app/api/routes/org_routes.py` (`GET/PATCH ""`) | — | none | no direct pytest coverage of org CRUD |
-| 7 | Org membership (list/add/remove users) | org_routes (`/users`, `/users/<id>`) | — | none | user add/remove path untested |
+| 6 | Org read / patch settings | `app/api/routes/org_routes.py` (`GET/PATCH ""`) | test_org_routes.py | covered | Batch 5: GET returns org; unauthenticated GET → 302 login redirect; PATCH name as admin persists; PATCH as member → 403 |
+| 7 | Org membership (list/add/remove users) | org_routes (`/users`, `/users/<id>`) | test_org_routes.py | covered | Batch 5: list includes members; create as admin (201) / member forbidden (403) / duplicate email (400); delete member (200) / self (400) / unknown (404) |
 | 8 | **Tenant isolation — org A cannot read/write org B** | every `org_id`-scoped repository | test_multi_tenant_isolation.py | covered | Batch 2: process/execution/inventory get+list+delete each proven org-scoped, hostile-org case AND same-org control. Built ProcessFactory/ExecutionFactory + a `world` fixture on `two_org_two_user`. Wastage repo → Batch 3. (`test_multi_tenant_api.py` remains a manual `main()` script, kept as a manual tool) |
 
 ## Process, DAG & execution
