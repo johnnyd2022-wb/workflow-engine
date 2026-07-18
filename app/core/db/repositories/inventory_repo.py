@@ -249,6 +249,10 @@ class InventoryRepository:
                 return item
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.MANUAL_API_UPDATE):
                 item.quantity = coerce_stored_quantity(target)
+                # Flush while the write reason is active: the guard authorizes quantity
+                # writes at flush time, and EventWriter.emit() below flushes outside this
+                # context, where the guard would reject the pending change.
+                self.db.flush()
             ew = EventWriter(self.db, org_id)
             ew.emit(
                 event_type="inventory_item.quantity_adjusted",

@@ -12,7 +12,6 @@ from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
 from app.api.routes.auth_routes import auth_bp
 from app.api.routes.org_routes import org_bp
-from app.core.security.permissions import requires_auth
 from app.observability import (
     configure_logging,
     configure_metrics,
@@ -21,6 +20,15 @@ from app.observability import (
     setup_observability,
 )
 from app.utils.config_loader import config
+
+# Assets under /ui/shared that the logged-out landing page needs. Everything else in that
+# directory stays authenticated. password-policy.js is only a thin client for
+# /auth/password-policy-check, which is itself public (auth_routes.py) because signup must
+# call it before a session exists — gating the script but not its endpoint left the signup
+# form with no live password guidance at all. Add here only for assets a logged-out page
+# genuinely loads, and only when the asset is not org-specific: these bytes are
+# world-readable.
+PUBLIC_UI_SHARED_FILES = frozenset({"password-policy.js"})
 
 
 def create_app():
@@ -99,11 +107,19 @@ def create_app():
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
     @limiter.exempt
-    @requires_auth
     def serve_ui_shared(filename):
-        """Serve shared UI files (JavaScript and CSS) - requires authentication"""
+        """Serve shared UI files (JS/CSS): authenticated by default, public by allowlist.
+
+        Auth is enforced inside the view rather than via @requires_auth so the allowlist
+        can be honoured. A 401 here would be turned into a 302 to "/" by the global 401
+        handler, so a gated script returns HTML and the browser refuses to execute it —
+        which is exactly the bug this allowlist fixes for password-policy.js.
+        """
         from flask import abort
         from werkzeug.security import safe_join
+
+        if filename not in PUBLIC_UI_SHARED_FILES and (not hasattr(g, "current_user") or not g.current_user):
+            abort(401, description="Authentication required")
 
         # Path traversal protection: reject filenames with .. or /
         if ".." in filename or "/" in filename or "\\" in filename:

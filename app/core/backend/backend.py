@@ -3760,6 +3760,12 @@ def update_inventory_item(item_id):
         item.name = name
         with allow_inventory_quantity_write(InventoryQuantityWriteReason.MANUAL_API_UPDATE):
             item.quantity = coerce_stored_quantity(quantity)
+            # Flush the quantity change while the write reason is still active. The guard
+            # (inventory_quantity_guard._before_flush) authorizes quantity writes at FLUSH
+            # time, not at assignment time. Without this flush the change stays pending and
+            # is first written during EventWriter.emit() below — outside this context —
+            # where the guard rejects it and every quantity-changing edit 500s.
+            db_session.flush()
         item.unit = unit
         item.inventory_type = inventory_type
         item.supplier = data.get("supplier")

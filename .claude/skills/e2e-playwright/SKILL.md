@@ -7,6 +7,16 @@ description: "Write and run headless Playwright end-to-end tests for the Flask a
 
 Unit tests prove functions work; E2E proves the app works. For an agent, a passing headless flow is the closest thing to a human saying "yes, I clicked through it and it's fine". Every test here traces to an `AC<n>` from `.agents/specs/<slug>.md` so coverage is auditable, not vibes.
 
+## 0a. Map coverage BEFORE writing anything (deterministic, cheap)
+
+Do not re-derive what is already tested by reading the app and the suite — that burns tokens rediscovering a map a script computes in one pass. Run:
+
+```bash
+python3 scripts/e2e_coverage.py --json     # {summary, gaps[], routes[]}; human: drop --json
+```
+
+It reports, per `(method, route)`, whether an E2E test exercises it, by matching the real `app.url_map` against the route literals in `tests/e2e/*.py`. Use its `gaps` list to decide what to add; a route already `covered` needs no new test. `--check` exits non-zero if any non-excluded gap remains (a scriptable gate). Static/health/telemetry routes are excluded; form-driven auth endpoints (login/signup/verify-2fa) are marked covered via a small `UI_DRIVEN_COVERAGE` map in the script — extend that map (never add API literals to it) if you cover another endpoint purely through a form. The living page/flow view is `.agents/reports/e2e/coverage-index.md`; `e2e_coverage.py` is the deterministic source of truth behind it.
+
 ## 0. One-time setup (skip if present)
 
 Stack: `pytest-playwright`, Chromium, headless. Check `pyproject.toml`'s `dev` extra and `tests/e2e/conftest.py`; create if missing:
@@ -15,13 +25,28 @@ Stack: `pytest-playwright`, Chromium, headless. Check `pyproject.toml`'s `dev` e
 uv add --optional dev pytest-playwright && uv run playwright install --with-deps chromium
 ```
 
-This repo's app factory is `create_app()` — no environment-string argument, it reads
-`ENVIRONMENT` from the process env. Boot it with `ENVIRONMENT=test` set, not
-`create_app("testing")`.
+**Boot the app as `from app.app import app`, with `ENVIRONMENT` unset, over TLS.** All
+three parts are load-bearing, and each was wrong in an earlier version of this skill:
+
+- **`app.app:app`, not `create_app()`.** `app/app.py:24` calls `create_app()` and then
+  registers `/`, `/dashboard`, `/landing-diagram`, `/healthcheck` and `/initialize` on
+  that instance. A bare `create_app()` is blueprint-only: no landing page, so no login
+  modal, and every navigation 404s.
+- **`ENVIRONMENT` unset, not `ENVIRONMENT=test`.** Unset resolves to `local`
+  (`app/utils/config_loader.py:16`), whose `local.ini` points at the test DB on
+  `localhost:8401`. `test.ini` targets `host.docker.internal`, which only resolves inside
+  Docker, so `ENVIRONMENT=test` **hangs** from a host shell — and Playwright needs a
+  host-reachable URL. This matches how pytest is already run here (see CLAUDE.md).
+- **Real TLS, not plain HTTP.** `SESSION_COOKIE_SECURE` defaults True and HSTS is only
+  set on secure requests (`app/api/app_factory.py:51,337`), so an HTTP boot breaks auth
+  and makes the cookie/HSTS assertions untestable. Serve `app/tls/app_cert.pem` and pass
+  `ignore_https_errors=True` to the browser context.
 
 `tests/e2e/conftest.py` responsibilities:
-- boot the Flask app once per session against a throwaway test database
-  (`ENVIRONMENT=test`, `create_app()`), on an ephemeral port, torn down after
+- boot the Flask app once per session on an ephemeral port, torn down after (see above
+  for exactly how — it is not `create_app()`)
+- skip the suite with a stated reason when chromium, the TLS cert, or the test DB is
+  absent; an absent dependency is never a failure (suite-warden's rule)
 - seed fixtures: at least two orgs and one user per org (tenant tests need a hostile
   neighbor to exist) — import `two_org_two_user` / `OrganisationFactory` /
   `UserFactory` from `tests/factories.py` / `tests/conftest.py` (owned by the

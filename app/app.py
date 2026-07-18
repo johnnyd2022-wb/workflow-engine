@@ -13,10 +13,10 @@ import datetime
 import subprocess
 
 from flask import redirect, url_for
-from initialize import db_conn
 
 from app.api.app_factory import create_app
 from app.core.security.permissions import requires_auth
+from app.initialize import db_conn
 from app.observability import get_logger
 from app.utils.config_loader import config
 
@@ -65,19 +65,22 @@ log_feature_status()
 
 @app.route("/")
 def index():
-    """Landing page with sign-up and login"""
+    """Landing page with sign-up and login.
+
+    Served as a static file, like /landing-diagram below. It was previously read from disk
+    and passed through render_template_string on every request, which re-compiled the
+    whole page each hit and gave semgrep a server-side-template-injection finding
+    (python.flask.security.audit.render-template-string) — all to render a file that
+    contains no Jinja syntax at all. send_from_directory adds conditional-GET/etag
+    handling for free on the app's most-hit public page.
+    """
     import os
 
-    from flask import render_template_string
+    from flask import send_from_directory
 
-    # Get the path to the landing.html file in ui/templates
     app_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(app_dir, "ui", "templates", "landing.html")
-
-    with open(template_path, encoding="utf-8") as f:
-        template_content = f.read()
-
-    return render_template_string(template_content)
+    templates_dir = os.path.join(app_dir, "ui", "templates")
+    return send_from_directory(templates_dir, "landing.html")
 
 
 @app.route("/landing-diagram")
