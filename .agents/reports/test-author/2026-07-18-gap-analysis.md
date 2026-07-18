@@ -64,14 +64,18 @@ Tests written (`tests/test_inventory_quantity_guard.py`, 6 tests, all green):
   failure mode a leaked token would hide.
 Factory added: `InventoryItemFactory` (tests/factories.py).
 
-**🐞 Real bug found and fixed (separate commit).** The `set_inventory_item_quantity` test
-failed on correct code: the method set `item.quantity` inside the `allow` block but emitted
-its audit event (which calls `session.flush()`) *outside* it, so the guard had re-armed and
-every call raised `InventoryQuantityWriteForbiddenError`. This is reachable —
-`POST /api/core/inventory/<item_id>/adjust` (backend.py:3845) — so manual quantity
-adjustment was broken in production, undetected precisely because row 14 had zero coverage.
-Fix mirrors the working sibling `add_quantity_to_inventory_item`: move the emit + commit
-inside the allow block. This is the gap analysis paying for itself on the first batch.
+**🐞 Real bug found — fixed in parallel on main.** The `set_inventory_item_quantity` test
+failed on the code as it stood when this branch started: the method set `item.quantity`
+inside the `allow` block but emitted its audit event (which calls `session.flush()`)
+*outside* it, so the guard had re-armed and every call raised
+`InventoryQuantityWriteForbiddenError`. Reachable via `POST /api/core/inventory/<id>/adjust`
+(backend.py:3845), so manual quantity adjustment was broken, undetected precisely because
+row 14 had zero coverage. I fixed it independently — but while this branch was in flight,
+the E2E-suite work fixed the same bug on main a different way (commit `db19c7e`: add
+`self.db.flush()` inside the allow block instead of moving the emit). On rebase onto the
+updated main my redundant fix commit was dropped; **these tests now validate main's fix**
+and pass against it. Two independent efforts converging on the same untested bug is the
+strongest possible evidence the gap was real.
 
 ### Batch 2 — Tenant isolation harness  (map row 8: none → covered) ✅ DONE 2026-07-18
 **Why:** multi-tenancy is the product's core security boundary; a cross-org leak is silent
