@@ -42,8 +42,9 @@ chain and verdicts are identical either way.
    - e2e-playwright in gap-fill mode: run whatever exists under `tests/e2e/<slug>`, then write tests for every AC with no coverage, including the mandatory cross-tenant probe and unhappy paths.
 3. **unit coverage check**: `pytest --cov=app/features/<slug> --cov-report=term-missing` to find uncovered branches; hand the gaps to **test-author** to write the missing tests against the flows in `.agents/test-map.md` (it also updates the map's status rows for this feature) rather than hand-rolling them here. Every uncovered branch in routes/service is a gap.
 4. **test-evaluator**: grades the tests test-author added (and any this review changed) — an audit that closes a coverage gap with a test that asserts nothing has hardened nothing. Verdict must be `valid`.
-5. **observability** in instrument mode: add the event logging the feature is missing, especially `access_denied` warnings.
-6. **ci-gate verify** last, always: everything added above must be collected and enforced or it evaporates.
+5. **perf-guardrails** after e2e passes, when the feature has pages/API routes: run `scripts/perf_triage.py` for the priority checklist, measure the feature's routes against `.agents/perf/budgets.json` (adding them to the measure lists if absent), and remediate or hand off ceiling breaches.
+6. **observability** in instrument mode: add the event logging the feature is missing, especially `access_denied` warnings.
+7. **ci-gate verify** last, always: everything added above must be collected and enforced or it evaporates.
 
 ## Step 4: Aggregate, patch, re-verify
 

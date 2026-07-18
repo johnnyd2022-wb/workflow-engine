@@ -18,6 +18,8 @@ Read `.agents/autonomy.md` before starting. In an unattended run the MR is the g
 3. migration-safety    (subagent, only if spec says data model changes)
 4. security-audit      (subagent)  \  parallel after build is green
    e2e-playwright      (subagent)  /
+4b. perf-guardrails    (subagent, only if the spec touches a page/API route: measure
+                        budgets on the touched routes after e2e passes)
 5. observability       (subagent)
 6. ci-gate verify      (subagent, always last)
 7. patch loop          (back to 2 with findings; max 2 rounds, then escalate)

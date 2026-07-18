@@ -54,6 +54,11 @@ If the bug is a tenant-isolation leak (org A sees org B's data) or an auth bypas
 triage and escalate to **security-audit** immediately alongside the fix; those get a
 security report even when the "bug" framing undersells the severity.
 
+If the bug is "X is slow" rather than "X is wrong", triage through **perf-guardrails**
+first: `scripts/perf_triage.py` and a run of `tests/e2e/test_perf_budgets.py` turn "slow"
+into a measured query count or duration on a named route — that measurement is the
+failing-test evidence, and the post-fix re-measure is the green.
+
 ## Step 2: Write the failing test first
 
 Before changing any production code, write the test that reproduces the bug and confirm

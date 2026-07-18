@@ -54,6 +54,7 @@ ROOTS = {
     "prod-sentinel",
     "security-audit",
     "suite-warden",
+    "perf-guardrails",
     "docs-truth",
     "skill-smith",
     "preflight",

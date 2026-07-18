@@ -164,7 +164,10 @@ Performance (generous budgets — catch collapse, not jitter):
 - [ ] Visual diff against baselines — surfaced as a report; baseline drift never fails a push
 - [ ] Agent review of screenshots for "something looks off" — genuinely catches what rules miss, precisely because it isn't rule-bound
 - [ ] Full a11y scan (axe) beyond the blocking handle check
-- [ ] Tight perf budgets that would be too noisy to block on
+- [x] Tight perf budgets that would be too noisy to block on — built as the
+      **perf-guardrails** skill (2026-07-18): `tests/e2e/test_perf_budgets.py` against
+      `.agents/perf/budgets.json`; budgets warn (advisory), only generous ceilings and
+      deterministic query counts block, per this spec's D2
 - [ ] Output: `.agents/reports/e2e/advisory.md` — read by a human, or by the agent as evidence when something is already suspected
 - [ ] Advisory findings that prove reliable get **promoted** to the blocking tier; that promotion is a deliberate decision, not a default
 

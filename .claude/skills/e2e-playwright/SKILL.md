@@ -99,6 +99,7 @@ Write `.agents/reports/<slug>/e2e.md`: table of AC to test to pass/fail, flake c
 
 ## Rules
 
+- Performance budgets are NOT this skill's job: `tests/e2e/test_perf_budgets.py` is owned by **perf-guardrails** (spec D2's advisory tier, budgets in `.agents/perf/budgets.json`). When a new flow adds a significant page or API route, tell perf-guardrails (or its caller) so the measure lists grow with the app.
 - Keep the suite lean: critical flows per feature plus signup/login/billing smoke tests globally. E2E minutes are expensive; depth belongs in unit and integration tests.
 - Never mark an AC covered by a test that does not genuinely exercise it end to end.
 - Do not screenshot-diff by default; visual regression is a separate decision with real maintenance cost.
