@@ -51,6 +51,12 @@ class InventoryItem(Base):
     source_step_name = Column(String(255), nullable=True)  # Denormalized for easier querying
     # Additional metadata (renamed from 'metadata' to avoid SQLAlchemy reserved name)
     extra_data = Column(JSONB, nullable=True)  # For storing additional flexible data
+    # Pre-computed human-readable label for sourcemap selectors. The column was added by
+    # migration event_sourcing_process_versions_001 and the repository reads/writes it
+    # (_item_snapshot, _build_display_label), but the model never declared it — so loading
+    # an item and reading item.display_label raised AttributeError and 500'd quantity
+    # adjust and any other path that snapshots an item. Declared here to match the DB.
+    display_label = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
