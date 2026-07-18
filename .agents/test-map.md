@@ -32,7 +32,7 @@ server up)
 |---|---|---|---|---|---|
 | 6 | Org read / patch settings | `app/api/routes/org_routes.py` (`GET/PATCH ""`) | — | none | no direct pytest coverage of org CRUD |
 | 7 | Org membership (list/add/remove users) | org_routes (`/users`, `/users/<id>`) | — | none | user add/remove path untested |
-| 8 | **Tenant isolation — org A cannot read/write org B** | every `org_id`-scoped repository | test_multi_tenant_api.py | none | that file is a manual `main()` script, **0 pytest tests**; `two_org_two_user` fixture exists but is used by no test yet — highest-value gap |
+| 8 | **Tenant isolation — org A cannot read/write org B** | every `org_id`-scoped repository | test_multi_tenant_isolation.py | covered | Batch 2: process/execution/inventory get+list+delete each proven org-scoped, hostile-org case AND same-org control. Built ProcessFactory/ExecutionFactory + a `world` fixture on `two_org_two_user`. Wastage repo → Batch 3. (`test_multi_tenant_api.py` remains a manual `main()` script, kept as a manual tool) |
 
 ## Process, DAG & execution
 

@@ -70,19 +70,21 @@ adjustment was broken in production, undetected precisely because row 14 had zer
 Fix mirrors the working sibling `add_quantity_to_inventory_item`: move the emit + commit
 inside the allow block. This is the gap analysis paying for itself on the first batch.
 
-### Batch 2 — Tenant isolation harness  (map row 8: none → covered)
+### Batch 2 — Tenant isolation harness  (map row 8: none → covered) ✅ DONE 2026-07-18
 **Why:** multi-tenancy is the product's core security boundary; a cross-org leak is silent
-and catastrophic, and there is currently *no* automated proof any scoped repo enforces it.
-This batch also establishes the reusable pattern rows 9/11/20 will copy.
-Tests (`tests/test_multi_tenant_isolation.py` — a real pytest suite; the existing
-`test_multi_tenant_api.py` is a manual `main()` script and stays as a manual tool):
-- parametrised across the high-value scoped repos (process, execution, inventory, wastage):
-  user in org A requesting org B's record by id → `None`/404; `list_*` for org A never
-  returns org B's rows; a write/update targeting org B's id from org A is rejected.
-- one negative control: same-org access **succeeds**, so the test proves scoping, not a
-  blanket-deny bug.
-Factory dep: `ProcessFactory`, `ExecutionFactory`, `InventoryItemFactory` + the
-`two_org_two_world` fixture. Effort: **L** (foundational; unblocks later isolation cases).
+and catastrophic, and there was *no* automated proof any scoped repo enforced it.
+Tests written (`tests/test_multi_tenant_isolation.py`, 7 tests, all green):
+- ✅ process get-by-id / list / delete each proven org-scoped.
+- ✅ execution get-by-id / list each proven org-scoped.
+- ✅ inventory get-by-id / list each proven org-scoped.
+- ✅ every test pairs the hostile-org case (org A gets `None` / empty for org B's row)
+  with a same-org control that succeeds, so none passes vacuously.
+Factories added: `ProcessFactory`, `ExecutionFactory` (tests/factories.py); a `world`
+fixture composes them on top of `two_org_two_user`.
+Validity: mutation probe stripped the org filter from the process repo — exactly the 3
+process tests went red, execution/inventory stayed green.
+**Scope note:** wastage-repo isolation moves to Batch 3, where `WastageFactory` is built.
+The manual `test_multi_tenant_api.py` script is left in place as a manual tool.
 
 ### Batch 3 — Wastage idempotency + entry  (map row 16: none → covered)
 **Why:** duplicate wastage on a retry corrupts stock and audit numbers; the advisory-lock +
