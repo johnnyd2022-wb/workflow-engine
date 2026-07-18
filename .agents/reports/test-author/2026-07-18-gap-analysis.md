@@ -1,12 +1,15 @@
 # TEST AUTHORING — 2026-07-18 (gap analysis, no tests written)
 
-mode: gap-fill (analysis only — user asked for the plan before writing)
+mode: gap-fill (analysis, then executed batches 1-6 on 2026-07-18)
 preflight: test_db=up, live_server_tests=skip (app server down — expected), app_server=down
-map: structurally clean (21 test files, all mapped; no dangling rows)
-verdict: gaps-open
+map: structurally clean (all test files mapped; no dangling rows)
+verdict: covered — all six batches done; two low-priority rows (4/5) honestly deferred
 
-This run stops at Step 3: it identifies what is missing and sequences the work. No tests
-were written. Each batch below is one `test-author → test-evaluator → MR` cycle.
+**Outcome (2026-07-18):** analysis was executed end to end. Six batches, +44 tests across
+five new files, one real production bug found and fixed (inventory adjust), four new
+factories, and several honest map corrections where the analysis had over- or
+mis-stated a gap. Every batch's validity was checked with a mutation probe. Suite went
+252 → 291 passed (30 skipped unchanged). Details ticked inline per batch below.
 
 ## Method
 
