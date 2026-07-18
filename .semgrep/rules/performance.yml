@@ -30,10 +30,13 @@ rules:
       - pattern-inside: |
           for $VAR in $ITERABLE:
             ...
-      - pattern-either:
-          - pattern: $REPO.get_$METHOD($ID, ...)
-          - pattern: $REPO.find_$METHOD($ID, ...)
-          - pattern: $REPO.list_$METHOD(..., $KEY=$VAR.$ATTR, ...)
+      - pattern: $REPO.$METHOD(...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(get|find|list)_\w+$
+      - metavariable-regex:
+          metavariable: $REPO
+          regex: ^\w*(repo|repository)\w*$
 
   # ── PYTHON: UNBOUNDED QUERIES ────────────────────────────────────────────────
 
@@ -98,9 +101,8 @@ rules:
       Otherwise, add a bulk endpoint (e.g. POST /api/core/items/bulk or ?ids=a,b,c)
       and replace this pattern with a single request.
     patterns:
-      - pattern: Promise.all($LIST.map(async ($ITEM) => { ... await $API.$METHOD($ITEM.$ID) ... }))
-      - pattern-not-inside: |
-          // N+1 acceptable: ...
+      - pattern-inside: Promise.all($LIST.map(...))
+      - pattern: await $API.$METHOD($ITEM.$ID, ...)
 
   - id: await-in-map-without-promise-all
     languages: [javascript]
@@ -110,8 +112,9 @@ rules:
       not concurrently. Wrap with `Promise.all(items.map(async item => ...))` if
       the requests are independent, or restructure to use a bulk endpoint.
     patterns:
-      - pattern: $LIST.map(async ($ITEM) => { ... await $EXPR ... })
+      - pattern-inside: $LIST.map(async ($ITEM) => { ... })
       - pattern-not-inside: Promise.all(...)
+      - pattern: await $EXPR
 
   # ── JAVASCRIPT: UNCLEARED INTERVALS ─────────────────────────────────────────
 
