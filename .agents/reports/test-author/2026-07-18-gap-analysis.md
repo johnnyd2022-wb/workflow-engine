@@ -146,14 +146,25 @@ tests red, the other nine stay green — the role boundary is genuinely exercise
 **Correction to the plan:** unauthenticated → 302 (not 401) for HTML routes; the assertion
 matches the app's real dual-mode 401 handler rather than the plan's guess.
 
-### Batch 6 — Close the partials  (rows 5, 9, 11, 17, 20)
-**Why last:** these already have happy-path coverage; the gap is the missing unhappy/hostile
-cases. Lower risk per row, but this is where `partial` becomes honest `covered`.
-- Row 20 dashboard: cross-org leak test (org A's dashboard never counts org B's rows).
-- Row 9 process CRUD: org-isolation cases on create/update/delete.
-- Row 11 execution lifecycle: failure + partial-completion paths.
-- Row 17 unit conversion: server-side utils in `app/core/utils/` (JS side already covered).
-- Row 5 session: `session-timeout` PUT, password-change server path (row 4).
+### Batch 6 — Close the partials  (rows 5, 9, 11, 17, 20) ✅ DONE 2026-07-18
+Re-assessed each partial against reality; most were already closed by earlier batches, one
+was a genuine gap now filled, two remain as low-priority deferrals.
+- ✅ **Row 17 unit conversion** — genuine gap, filled. New `tests/test_unit_conversion.py`
+  (11 tests): compatibility rules (same-category, case-insensitive, count-exact,
+  cross-category refusal), float + decimal conversion, storage-aligned 4dp quantization
+  with ROUND_HALF_UP, and incompatible-unit refusals. Mutation probe (corrupt the `g`
+  factor) fails exactly the mass tests. This was the only true `none` left in the partials.
+- ✅ **Row 9 process CRUD** partial → covered: org-isolation of get/list/delete was added in
+  Batch 2; CRUD happy paths already in test_executions/corechecks.
+- ✅ **Row 11 execution lifecycle** → covered in Batch 4's re-assessment (step-failure,
+  ordering, double-completion, full lifecycle all in test_executions.py).
+- ✅ **Row 20 dashboard** partial → covered: `test_dashboard_operations_summary_org_isolated`
+  already proves cross-org isolation — the original "no cross-org test" note was wrong.
+- ⏸️ **Rows 4/5 deferred** (still open): password-policy/change-password server path and
+  the `session-timeout` PUT. Lower risk — the auth surface is heavily exercised by the
+  live 2FA suites (rows 1-3), and these are route-level extras rather than an untested
+  integrity invariant. Left as the next coverage-sweep's starting point, honestly marked
+  `none`/`partial` in the map rather than claimed.
 Factory dep: covered by earlier batches. Effort: **M**, splittable.
 
 ## Sequencing & dependencies

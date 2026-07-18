@@ -38,7 +38,7 @@ server up)
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 9 | Process CRUD + steps (add/reorder/delete) | core_bp `/api/core/processes*` | test_executions.py, test_corechecks.py | partial | CRUD exercised; org-isolation cases thin |
+| 9 | Process CRUD + steps (add/reorder/delete) | core_bp `/api/core/processes*` | test_executions.py, test_corechecks.py, test_multi_tenant_isolation.py | covered | CRUD in test_executions/corechecks; org-isolation of get/list/delete added in Batch 2 |
 | 10 | DAG traversal | `app/core/backend/dagtraversal.py` | test_dag_traversal.py | covered | 29 tests, cycles + ordering |
 | 11 | Execution lifecycle (create → complete step) | core_bp `/api/core/executions*` | test_executions.py, test_complete_step_payload.py | covered | Batch 4 re-assessment: create-materialises-steps, in-order advancement, full completion, out-of-order rejected, double-completion rejected, step-failure does not advance, wrong-org → None — all in test_executions.py (45 tests) |
 | 12 | ~~Idempotency (`ApiIdempotencyKey`) on executions~~ | n/a | test_wastage.py (the real user) | covered | **Gap-analysis correction (Batch 4):** there is no execution idempotency-key mechanism — `ApiIdempotencyKey` is used only by the wastage route (row 16, covered in Batch 3). create_execution has no dedup; execution replay-safety is the `complete_step` state guard in row 11. No new test owed |
@@ -51,7 +51,7 @@ server up)
 | 14 | **Quantity-write guard** (every `InventoryQuantityWriteReason`) | `app/core/domain/inventory_quantity_guard.py` | test_inventory_quantity_guard.py | covered | Batch 1: direct write rejected, create/add/set repository paths accepted, nested-allow rejected, guard re-arms. **Found + fixed a real bug**: `set_inventory_item_quantity` flushed its event outside the allow block, so `POST /api/core/inventory/<id>/adjust` raised on every call |
 | 15 | Inventory read / add / out-of-stock | core_bp `/api/core/inventory*` | test_corechecks.py | partial | reads covered; write reasons per row 14 |
 | 16 | Wastage entry + batch-hash idempotency | core_bp `/api/core/inventory/wastage` | test_wastage.py | covered | Batch 3: records+deducts, idempotent replay does not double-deduct, key reuse with a different payload → 409, wastage rows org-scoped. Idempotency driven through an authenticated Flask test client; org-scoping via `WastageFactory` |
-| 17 | Unit conversion | `app/core/utils/` | test_execution_modal_frontend_assets.py, tests/js/ | partial | JS-side conversion asserted; server-side utils untested |
+| 17 | Unit conversion | `app/core/utils/unit_conversion.py` | test_unit_conversion.py, tests/js/ | covered | Batch 6: server-side compatibility rules + float/decimal conversion + storage-aligned quantization + refusals; JS side already covered |
 
 ## CRM & Xero (feature flag `crm_enabled`)
 
@@ -64,7 +64,7 @@ server up)
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 20 | Dashboard summary | core_bp `/core/dashboard` | test_dashboard_summary.py | partial | 4 tests; single-org only, no cross-org leak test |
+| 20 | Dashboard summary | core_bp `/core/dashboard` | test_dashboard_summary.py | covered | Batch 6 re-assessment: `test_dashboard_operations_summary_org_isolated` already proves cross-org isolation; task/compliance/action-board summaries covered too. Original "no cross-org test" note was wrong |
 | 21 | Core system checks | `app/core/backend/corechecks.py` | test_corechecks.py | covered | 23 tests |
 | 22 | Frontend asset/guards (execution modal, batches) | core frontend JS/templates | test_execution_modal_frontend_assets.py, test_batches_refactor_frontend_guards.py, test_execution_shared_utils_js.py | covered | asset-presence + guard tests |
 | 23 | Observability (logging/tracing/telemetry ingress/CLI) | `app/observability/*` | test_observability_*.py (10 files) | covered | broad; owned jointly with observability skill |
