@@ -1,0 +1,153 @@
+{
+  "generated": "2026-07-18T07:43:55+00:00",
+  "budgets_file": ".agents/perf/budgets.json",
+  "results": [
+    {
+      "route": "/api/core/dashboard/summary",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 36.0,
+        "queries": 38
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/core/executions",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 4.3,
+        "queries": 3
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/core/inventory",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 9.7,
+        "queries": 8
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/core/inventory/wastage",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 4.3,
+        "queries": 3
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/core/processes",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 5.4,
+        "queries": 4
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/crm/overview",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 11.6,
+        "queries": 11
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/auth/me",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 3.4,
+        "queries": 2
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/core/dashboard",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 3.8,
+        "queries": 2,
+        "lcp_ms": 104
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/core/executions/live",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 4.7,
+        "queries": 2,
+        "lcp_ms": 68
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/core/flows",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 3.9,
+        "queries": 2,
+        "lcp_ms": 68
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/core/inventory/view",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 3.7,
+        "queries": 2,
+        "lcp_ms": 68
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/core/processes",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 3.8,
+        "queries": 2,
+        "lcp_ms": 56
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/core/settings",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 3.9,
+        "queries": 2,
+        "lcp_ms": 60
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/crm",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 3.7,
+        "queries": 2,
+        "lcp_ms": 60
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    }
+  ]
+}
