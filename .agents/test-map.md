@@ -23,35 +23,35 @@ server up)
 | 1 | Signup → account created | `app/api/routes/auth_routes.py` (`/signup`) | test_login_2fa_flow.py | live | driven over real HTTPS server; skips without `uv run workflow start` |
 | 2 | Login / logout / `/me` session | auth_routes (`/login`,`/logout`,`/me`) | test_login_2fa_flow.py | live | same live-server gate |
 | 3 | 2FA enroll → enable → verify → disable | auth_routes (`/2fa/*`,`/verify-2fa`), pyotp | test_2fa_totp_optimized.py, test_login_2fa_flow.py | live | TOTP time-window logic; both `live_server`-marked |
-| 4 | Password policy + change-password | auth_routes (`/password-policy-check`,`/change-password`) | — | none | policy JS served (see safe-flow); server path untested |
-| 5 | Session timeout + safe return-to | auth_routes (`/session-timeout`), middleware | test_safe_flow_return_to.py | partial | return-to open-redirect guard covered; timeout PUT not |
+| 4 | Password policy + change-password | auth_routes (`/password-policy-check`,`/change-password`) | test_auth_password_session.py | covered | Batch 7: policy flags weak / accepts strong; change-password success (new pw logs in, old rejected), wrong-current 400, confirm-mismatch 400, same-as-current 400 |
+| 5 | Session timeout + safe return-to | auth_routes (`/session-timeout`), middleware | test_auth_password_session.py, test_safe_flow_return_to.py | covered | Batch 7: GET returns bounds; PUT valid accepted, below-min 400, missing 400. Return-to open-redirect guard in test_safe_flow_return_to.py |
 
 ## Organisation & tenancy
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 6 | Org read / patch settings | `app/api/routes/org_routes.py` (`GET/PATCH ""`) | — | none | no direct pytest coverage of org CRUD |
-| 7 | Org membership (list/add/remove users) | org_routes (`/users`, `/users/<id>`) | — | none | user add/remove path untested |
-| 8 | **Tenant isolation — org A cannot read/write org B** | every `org_id`-scoped repository | test_multi_tenant_api.py | none | that file is a manual `main()` script, **0 pytest tests**; `two_org_two_user` fixture exists but is used by no test yet — highest-value gap |
+| 6 | Org read / patch settings | `app/api/routes/org_routes.py` (`GET/PATCH ""`) | test_org_routes.py | covered | Batch 5: GET returns org; unauthenticated GET → 302 login redirect; PATCH name as admin persists; PATCH as member → 403 |
+| 7 | Org membership (list/add/remove users) | org_routes (`/users`, `/users/<id>`) | test_org_routes.py | covered | Batch 5: list includes members; create as admin (201) / member forbidden (403) / duplicate email (400); delete member (200) / self (400) / unknown (404) |
+| 8 | **Tenant isolation — org A cannot read/write org B** | every `org_id`-scoped repository | test_multi_tenant_isolation.py | covered | Batch 2: process/execution/inventory get+list+delete each proven org-scoped, hostile-org case AND same-org control. Built ProcessFactory/ExecutionFactory + a `world` fixture on `two_org_two_user`. Wastage repo → Batch 3. (`test_multi_tenant_api.py` remains a manual `main()` script, kept as a manual tool) |
 
 ## Process, DAG & execution
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 9 | Process CRUD + steps (add/reorder/delete) | core_bp `/api/core/processes*` | test_executions.py, test_corechecks.py | partial | CRUD exercised; org-isolation cases thin |
+| 9 | Process CRUD + steps (add/reorder/delete) | core_bp `/api/core/processes*` | test_executions.py, test_corechecks.py, test_multi_tenant_isolation.py | covered | CRUD in test_executions/corechecks; org-isolation of get/list/delete added in Batch 2 |
 | 10 | DAG traversal | `app/core/backend/dagtraversal.py` | test_dag_traversal.py | covered | 29 tests, cycles + ordering |
-| 11 | Execution lifecycle (create → complete step) | core_bp `/api/core/executions*` | test_executions.py, test_complete_step_payload.py | partial | happy path strong; failure/partial-completion cases thin |
-| 12 | Idempotency (`ApiIdempotencyKey`) on executions | idempotency key handling | — | none | idempotency tested for CRM only, not execution replays |
+| 11 | Execution lifecycle (create → complete step) | core_bp `/api/core/executions*` | test_executions.py, test_complete_step_payload.py | covered | Batch 4 re-assessment: create-materialises-steps, in-order advancement, full completion, out-of-order rejected, double-completion rejected, step-failure does not advance, wrong-org → None — all in test_executions.py (45 tests) |
+| 12 | ~~Idempotency (`ApiIdempotencyKey`) on executions~~ | n/a | test_wastage.py (the real user) | covered | **Gap-analysis correction (Batch 4):** there is no execution idempotency-key mechanism — `ApiIdempotencyKey` is used only by the wastage route (row 16, covered in Batch 3). create_execution has no dedup; execution replay-safety is the `complete_step` state guard in row 11. No new test owed |
 | 13 | Execution lineage (parent→child) | `workflow_execution_lineage`, reconciliation_service | test_dag_traversal.py (helpers) | partial | traversal helpers touch it; lineage-record assertions absent |
 
 ## Inventory
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 14 | **Quantity-write guard** (every `InventoryQuantityWriteReason`) | `app/core/domain/inventory_quantity_guard.py` | — | none | guard + `allow_inventory_quantity_write` have **zero** tests; the mechanism that prevents untracked mutations is itself unproven |
+| 14 | **Quantity-write guard** (every `InventoryQuantityWriteReason`) | `app/core/domain/inventory_quantity_guard.py` | test_inventory_quantity_guard.py | covered | Batch 1: direct write rejected, create/add/set repository paths accepted, nested-allow rejected, guard re-arms. **Found + fixed a real bug**: `set_inventory_item_quantity` flushed its event outside the allow block, so `POST /api/core/inventory/<id>/adjust` raised on every call |
 | 15 | Inventory read / add / out-of-stock | core_bp `/api/core/inventory*` | test_corechecks.py | partial | reads covered; write reasons per row 14 |
-| 16 | Wastage entry + batch-hash idempotency | core_bp `/api/core/inventory/wastage` | — | none | no wastage test at all; batch-hash idempotency unproven |
-| 17 | Unit conversion | `app/core/utils/` | test_execution_modal_frontend_assets.py, tests/js/ | partial | JS-side conversion asserted; server-side utils untested |
+| 16 | Wastage entry + batch-hash idempotency | core_bp `/api/core/inventory/wastage` | test_wastage.py | covered | Batch 3: records+deducts, idempotent replay does not double-deduct, key reuse with a different payload → 409, wastage rows org-scoped. Idempotency driven through an authenticated Flask test client; org-scoping via `WastageFactory` |
+| 17 | Unit conversion | `app/core/utils/unit_conversion.py` | test_unit_conversion.py, tests/js/ | covered | Batch 6: server-side compatibility rules + float/decimal conversion + storage-aligned quantization + refusals; JS side already covered |
 
 ## CRM & Xero (feature flag `crm_enabled`)
 
@@ -64,7 +64,7 @@ server up)
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 20 | Dashboard summary | core_bp `/core/dashboard` | test_dashboard_summary.py | partial | 4 tests; single-org only, no cross-org leak test |
+| 20 | Dashboard summary | core_bp `/core/dashboard` | test_dashboard_summary.py | covered | Batch 6 re-assessment: `test_dashboard_operations_summary_org_isolated` already proves cross-org isolation; task/compliance/action-board summaries covered too. Original "no cross-org test" note was wrong |
 | 21 | Core system checks | `app/core/backend/corechecks.py` | test_corechecks.py | covered | 23 tests |
 | 22 | Frontend asset/guards (execution modal, batches) | core frontend JS/templates | test_execution_modal_frontend_assets.py, test_batches_refactor_frontend_guards.py, test_execution_shared_utils_js.py | covered | asset-presence + guard tests |
 | 23 | Observability (logging/tracing/telemetry ingress/CLI) | `app/observability/*` | test_observability_*.py (10 files) | covered | broad; owned jointly with observability skill |
