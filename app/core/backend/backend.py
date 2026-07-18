@@ -1245,12 +1245,26 @@ def list_processes():
         proc_ees = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(proc_ids_all)).all()
         proc_summary_by_id = {str(r.entity_id): r.summary for r in proc_ees}
 
+    # Batch-fetch all steps for the org's processes once, then group by process_id in
+    # Python. `process.steps` is a lazy relationship — accessing it per-process below
+    # would be one SELECT per process (N+1); this replaces that with a single query.
+    steps_by_process: dict = defaultdict(list)
+    if proc_ids_all:
+        all_steps = (
+            db_session.query(Step)
+            .filter(Step.process_id.in_(proc_ids_all))
+            .order_by(Step.position, Step.step_number)
+            .all()
+        )
+        for s in all_steps:
+            steps_by_process[s.process_id].append(s)
+
     result = []
     for process in processes:
         proc_execs = execs_by_process.get(process.id, [])
         active_count = sum(1 for e in proc_execs if e.status == ExecutionStatus.IN_PROGRESS)
         completed_count = sum(1 for e in proc_execs if e.status == ExecutionStatus.COMPLETED)
-        step_list = process.steps or []
+        step_list = steps_by_process.get(process.id, [])
         step_count = len(step_list)
 
         entry = {
@@ -1789,9 +1803,11 @@ def list_executions():
         exec_ees = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(exec_ids_all)).all()
         exec_summary_by_id = {str(r.entity_id): r.summary for r in exec_ees}
 
+    # execution_steps is already joinedload'd by ExecutionRepository.list_executions
+    # above, so the access below is in-memory, not a per-iteration query.
     result = []
     for execution in executions:
-        execution_steps = execution.execution_steps if execution.execution_steps else []
+        execution_steps = execution.execution_steps or []  # nosemgrep: orm-relationship-access-in-loop
         execution_steps_sorted = sorted(execution_steps, key=lambda es: es.step_number)
         current_step = None
         ready_steps = [es for es in execution_steps_sorted if es.status.value == "ready"]
@@ -2136,6 +2152,11 @@ def complete_step(execution_id: str, execution_step_id: str):
                     execution_errors.append(f"Invalid inventory item id: {item_id_str}")
                     continue
                 try:
+                    # Per-item FOR UPDATE lock with per-entry error accumulation
+                    # (execution_errors above); batching would change lock-acquisition
+                    # order and continue-on-error semantics for a small, bounded
+                    # per-execution input list.
+                    # nosemgrep: repository-get-in-for-loop
                     inventory_item = inventory_repo.get_inventory_item_by_id_for_update(inventory_item_id, org_id)
                     if not inventory_item:
                         execution_warnings.append(f"Inventory item {item_id_str} not found for input(s)")
@@ -2811,9 +2832,9 @@ def list_inventory():
 
                     # Look up the input inventory item
                     input_inventory_item = (
-                        db_session.query(
+                        db_session.query(  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
                             InventoryItem
-                        )  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
+                        )
                         .filter(InventoryItem.id == UUID(inventory_item_id), InventoryItem.org_id == org_id)
                         .first()
                     )
@@ -2823,9 +2844,9 @@ def list_inventory():
 
                     # Look up the execution step that produced this input
                     input_execution_step = (
-                        db_session.query(
+                        db_session.query(  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
                             ExecutionStep
-                        )  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
+                        )
                         .filter(ExecutionStep.id == input_inventory_item.source_execution_step_id)
                         .first()
                     )
@@ -3223,7 +3244,11 @@ def record_wastage():
         validation_errors: list[str] = []
         staged: list[tuple[InventoryItem, Decimal, int, str | None, str]] = []
 
+        # Per-item FOR UPDATE lock with per-entry error accumulation (validation_errors
+        # above); batching would change lock-acquisition order and continue-on-error
+        # semantics for a small, bounded per-request wastage batch.
         for entry_idx, item_id, waste_decimal, req_unit, reason in lines:
+            # nosemgrep: repository-get-in-for-loop
             item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
             if not item:
                 validation_errors.append(f"Entry {entry_idx}: inventory item not found or access denied")
@@ -4095,10 +4120,12 @@ def get_execution_metadata():
     # Fields to exclude from metadata display
     exclude_fields = {"completed_by_email", "completed_by_user_id", "execution_errors"}
 
+    # execution_steps is already joinedload'd by ExecutionRepository.list_executions
+    # above, so every access below is in-memory, not a per-iteration query.
     for execution in executions:
-        if not execution.execution_steps:
+        if not execution.execution_steps:  # nosemgrep: orm-relationship-access-in-loop
             continue
-        for step in execution.execution_steps:
+        for step in execution.execution_steps:  # nosemgrep: orm-relationship-access-in-loop
             if not step.execution_data:
                 continue
             for key, value in step.execution_data.items():
