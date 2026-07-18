@@ -50,7 +50,7 @@ this skill exists to prevent:
 | **real** | An assertion failed. The code returned the wrong answer. | Hand to `fix-bug`. Never touch the test. |
 | **environmental** | `ConnectionRefusedError`, `OperationalError`, missing binary, DNS. The test never reached an assertion. | Gate it (Step 3). It is not red — it is unrun. |
 | **flaky** | Passes and fails on the same code. Time, ordering, randomness, shared state. | Step 4. |
-| **stale** | Asserts behavior that intentionally changed. | The change's author updates it, with the intent stated in the MR. Suite-warden confirms the assertion still protects something. |
+| **stale** | Asserts behavior that intentionally changed. | Route to **test-author** to update it deliberately, with the intended change named as justification; **test-evaluator** then confirms the updated assertion still protects something rather than having been loosened to pass. Not suite-warden's to edit — this skill owns the signal, not the test's content. |
 
 The tell for *environmental* is simple: **did the test reach an assertion?** A connection
 error means the test never got to make a claim about the code.
@@ -180,5 +180,7 @@ changes go out via `git-commit-chain`.
   never reached an assertion (connection error, missing service) is routed here rather
   than debugged as a code bug.
 - → **fix-bug**: real failures — one MR per bug, never a batch.
+- → **test-author**: the **stale** bucket — a test asserting behaviour that intentionally changed gets updated there, not here.
+- → **test-evaluator**: to confirm a stale test's updated assertion still protects something (this skill owns runtime signal; the validity of a test's content is the evaluator's).
 - → **test-fixtures**: when the fix is a missing/incorrect factory rather than a gate.
 - → **git-commit-chain**: ships gating and quarantine changes.

@@ -70,6 +70,13 @@ turns into a real finding.
 If the package has migrations of its own (rare) or the bump changes SQLAlchemy/Alembic
 behavior, run **migration-safety**.
 
+If the bump changes observable behaviour the suite pins (a serialization format, a
+validation rule, a date/locale default), a green suite may mean the *tests* silently
+drifted to match the new behaviour rather than the behaviour being intended — hand the
+changed tests to **test-author** to update deliberately (with the changelog change named
+as justification) and to **test-evaluator** to confirm they still assert the real
+contract. Don't let a dependency quietly rewrite what the suite considers correct.
+
 ## 5. Report and hand off
 
 ```markdown

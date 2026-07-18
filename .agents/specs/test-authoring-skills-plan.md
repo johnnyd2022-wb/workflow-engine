@@ -1,6 +1,6 @@
 # Plan: `test-author` + `test-evaluator` skills
 
-status: planned (awaiting execution)
+status: built (executed 2026-07-18 — both skills created, wired, registered, verified)
 branch: plan/test-authoring-skills
 author: Claude (Fable 5) — planning pass only; execution to follow on Opus
 date: 2026-07-18

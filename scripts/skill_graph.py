@@ -57,6 +57,10 @@ ROOTS = {
     "docs-truth",
     "skill-smith",
     "preflight",
+    # user- or schedule-invoked test coverage authoring (test-evaluator is NOT a root:
+    # it only ever runs when a caller hands it a batch, so its reachability is proven by
+    # inbound edges, not by declaration)
+    "test-author",
     # ad hoc, pointed at a file by a human
     "html-review",
     "js-review",

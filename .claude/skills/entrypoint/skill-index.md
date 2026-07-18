@@ -5,8 +5,8 @@ Cached, categorized roster of every registered skill in `.claude/skills/`. This 
 directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be preserved
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
-last_synced: 2026-07-17
-skill_count: 44
+last_synced: 2026-07-18
+skill_count: 46
 
 ## Wiring
 
@@ -79,6 +79,8 @@ security-audit
 skill-smith
 spec-first
 suite-warden
+test-author
+test-evaluator
 test-fixtures
 ```
 
@@ -102,6 +104,8 @@ test-fixtures
 | "Is my environment set up", "why won't the tests even start", unexplained connection errors | `preflight` |
 | "What's the convention for X here" | `repo-conventions` |
 | Need seeded test data / org+user fixtures | `test-fixtures` |
+| "Write tests for X", "update the tests after this change", "is <flow> covered" | `test-author` |
+| "Are these tests real", "did the test actually test anything", "check these tests aren't gamed" | `test-evaluator` |
 | Set up/modify CI, `.gitlab-ci.yml`, pre-commit, protected branches | `ci-gate` |
 | Security review, semgrep/gitleaks/pip-audit, tenant isolation, scheduled security sweep | `security-audit` |
 | Browser/E2E tests, Playwright, "does the app actually work" | `e2e-playwright` |
@@ -117,6 +121,7 @@ test-fixtures
 | "Anything broken in prod", scheduled error sweep, post-deploy watch | `prod-sentinel` |
 | Weekly security sweep that remediates, not just reports | `security-audit` (§6) |
 | Scheduled suite-health check | `suite-warden` |
+| Scheduled core-flow coverage sweep, filling test gaps | `test-author` |
 | Docs/commands drifted from reality, "the docs say X but Y happens" | `docs-truth` |
 | Skill rot audit, "create a skill for X" | `skill-smith` |
 

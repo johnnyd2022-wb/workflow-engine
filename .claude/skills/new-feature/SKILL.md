@@ -63,7 +63,7 @@ Register the blueprint in the app factory. Then build to the spec:
   `org_id` explicitly and filters inline (`Model.query.filter(Model.org_id == org_id)`)
   from the first line, not patched in later. The security audit will check this; write
   it so the audit is boring.
-- Unit tests named to ACs (`test_ac1_...`), one per criterion minimum, plus the unhappy paths. Run until green: `uv run pytest tests/test_<slug>.py -v`. (Run pytest with `ENVIRONMENT` unset — it resolves to local, which points at the test DB on `localhost:8401`. `ENVIRONMENT=test` hangs from a host shell; see preflight's `test_db` check.) A failure that never reached an assertion — connection error, missing service — is **suite-warden**'s, not a bug in your build.
+- Unit tests named to ACs (`test_ac1_...`), one per criterion minimum, plus the unhappy paths. Run until green: `uv run pytest tests/test_<slug>.py -v`. (Run pytest with `ENVIRONMENT` unset — it resolves to local, which points at the test DB on `localhost:8401`. `ENVIRONMENT=test` hangs from a host shell; see preflight's `test_db` check.) A failure that never reached an assertion — connection error, missing service — is **suite-warden**'s, not a bug in your build. These inline AC tests are graded by **test-evaluator** in the chain below before the MR — write them to be falsifiable (each would go red if its AC broke), not merely green.
 - Log state changes per the observability event convention (`<slug>.<verb_past>`); it is cheaper to emit them now than to retrofit in step 5.
 - Commit on a feature branch `feat/<slug>`. Verification agents audit the tree, not your intentions.
 
@@ -87,6 +87,8 @@ Sequencing rules:
 - **migration-safety** runs before security/e2e whenever the spec's data model section says changes (both need a migratable schema to test against). Skip it, and say you skipped it, when the spec says `changes: none`.
 - **security-audit** and **e2e-playwright** are independent; spawn them in the same turn so they run in parallel.
 - **observability** runs after those pass, instrumenting anything the build missed.
+- **test-author** runs after observability: it reconciles the *rest* of the suite against this feature's diff (tests in other areas the change rippled into) and refreshes `.agents/test-map.md` — the build wrote this feature's own tests; this stage catches what those tests didn't know they touched.
+- **test-evaluator** grades every new or changed test in the diff (this feature's inline AC tests plus anything test-author added) for validity — falsifiability, no silently-widened assertions, no tautologies. Its verdict must be `valid` before ci-gate; treat `weakened`/`gamed`/`inconclusive` as a `findings-open` returned to you.
 - **ci-gate** in verify mode is always last, because it checks that everything the other stages produced (tests, rules, migrations) is actually collected and enforced. Parse its `GATE <name>: pass|fail` lines.
 
 Read each subagent's report file, not just its verdict line. A `patched` verdict means code changed: re-run the unit suite before moving on, since one stage's patch can break another's assumptions.
@@ -97,7 +99,7 @@ Read each subagent's report file, not just its verdict line. A `patched` verdict
 
 ## Step 8: Done means demonstrated
 
-Confirm true before proceeding: spec approved, unit tests green with AC coverage, migrations up/down/up verified (or none), security verdict clean/patched, E2E green and flake-checked, observability instrumented, all ci gates passing. Set the spec's `status: built`. Then call the **merge-request** skill to write the MR from the spec and stage reports, push, open it, and watch the pipeline — do not assemble the MR description yourself. Present the summary as a short table of stage -> verdict -> report path, then the MR link merge-request returns.
+Confirm true before proceeding: spec approved, unit tests green with AC coverage, migrations up/down/up verified (or none), security verdict clean/patched, E2E green and flake-checked, observability instrumented, test-map reconciled and **test-evaluator verdict `valid`**, all ci gates passing. Set the spec's `status: built`. Then call the **merge-request** skill to write the MR from the spec and stage reports, push, open it, and watch the pipeline — do not assemble the MR description yourself. Present the summary as a short table of stage -> verdict -> report path, then the MR link merge-request returns.
 
 ## Rules
 

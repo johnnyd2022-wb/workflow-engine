@@ -63,6 +63,10 @@ dependency rather than reseeding orgs/users again.
 - **new-feature / review-feature / fix-bug**: when a spec introduces a new model that
   other tests will need to seed, add its factory here as part of the build, not inline
   in the feature's own test file.
+- **test-author**: the heaviest consumer — it writes core-flow and tenant-isolation tests
+  and must use these factories and `two_org_two_user` rather than hand-seeding. When it
+  finds no factory for a model it needs (e.g. inventory items, wastage rows, executions),
+  the factory gets added here, not inline in the test it happened to be writing.
 
 ## Verified against the real test database
 

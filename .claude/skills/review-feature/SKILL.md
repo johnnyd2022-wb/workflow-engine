@@ -40,9 +40,10 @@ chain and verdicts are identical either way.
 2. **security-audit** and **e2e-playwright** in the same turn, parallel:
    - security-audit scoped to the slug; on existing code expect findings, that is the point.
    - e2e-playwright in gap-fill mode: run whatever exists under `tests/e2e/<slug>`, then write tests for every AC with no coverage, including the mandatory cross-tenant probe and unhappy paths.
-3. **unit coverage check** (inline, no dedicated skill): `pytest --cov=app/features/<slug> --cov-report=term-missing`; every uncovered branch in routes/service is a gap; write the missing tests or delegate to the builder step.
-4. **observability** in instrument mode: add the event logging the feature is missing, especially `access_denied` warnings.
-5. **ci-gate verify** last, always: everything added above must be collected and enforced or it evaporates.
+3. **unit coverage check**: `pytest --cov=app/features/<slug> --cov-report=term-missing` to find uncovered branches; hand the gaps to **test-author** to write the missing tests against the flows in `.agents/test-map.md` (it also updates the map's status rows for this feature) rather than hand-rolling them here. Every uncovered branch in routes/service is a gap.
+4. **test-evaluator**: grades the tests test-author added (and any this review changed) — an audit that closes a coverage gap with a test that asserts nothing has hardened nothing. Verdict must be `valid`.
+5. **observability** in instrument mode: add the event logging the feature is missing, especially `access_denied` warnings.
+6. **ci-gate verify** last, always: everything added above must be collected and enforced or it evaporates.
 
 ## Step 4: Aggregate, patch, re-verify
 

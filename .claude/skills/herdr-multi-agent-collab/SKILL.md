@@ -47,6 +47,7 @@ Division of labor rules:
 
 - The Architect does not merge or declare work finished until the Breaker has run it.
 - The Breaker does not refactor. It reports findings with file, line, repro command, and observed vs expected behavior, then hands back.
+- When the handoff `ask` is to grade tests (the **test-evaluator** checklist — falsifiability probes, assertion-diff review, tautology hunt), the Breaker pane is the natural executor: same contract as running that skill in a subagent, different engine. It returns the same `valid | weakened | gamed | inconclusive` verdict via the handoff file, and the Architect's ship stays blocked on `valid`.
 - Either agent can do small self-contained work solo. Cross-pane handoffs are for changes worth verifying, not for every keystroke.
 
 ## 2. Finding your partner

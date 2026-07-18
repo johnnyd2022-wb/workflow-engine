@@ -105,6 +105,8 @@ plausibly affects:
 - Touched a user-visible flow → **e2e-playwright**, the relevant existing flow's test
   (don't write a new E2E suite for a bug fix unless the bug was E2E-only reproducible).
 - Touched the data model or added a migration → **migration-safety**.
+- If the fix changed behaviour that tests in *other* areas assert → **test-author**, to reconcile those neighbouring tests and update `.agents/test-map.md`. The repro test is yours; ripple into the rest of the suite is test-author's.
+- Always: **test-evaluator** on the repro test (and anything test-author changed) before ci-gate — a repro test that no longer goes red on the un-fixed code is a fix that proves nothing; the grader confirms it still would. Verdict must be `valid`.
 - Always: **ci-gate** in verify mode, last.
 
 **If running inside Herdr with a Codex pane** (`HERDR_ENV=1` and a partner exists): route
