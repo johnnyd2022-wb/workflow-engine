@@ -50,7 +50,7 @@ server up)
 |---|---|---|---|---|---|
 | 14 | **Quantity-write guard** (every `InventoryQuantityWriteReason`) | `app/core/domain/inventory_quantity_guard.py` | test_inventory_quantity_guard.py | covered | Batch 1: direct write rejected, create/add/set repository paths accepted, nested-allow rejected, guard re-arms. **Found + fixed a real bug**: `set_inventory_item_quantity` flushed its event outside the allow block, so `POST /api/core/inventory/<id>/adjust` raised on every call |
 | 15 | Inventory read / add / out-of-stock | core_bp `/api/core/inventory*` | test_corechecks.py | partial | reads covered; write reasons per row 14 |
-| 16 | Wastage entry + batch-hash idempotency | core_bp `/api/core/inventory/wastage` | — | none | no wastage test at all; batch-hash idempotency unproven |
+| 16 | Wastage entry + batch-hash idempotency | core_bp `/api/core/inventory/wastage` | test_wastage.py | covered | Batch 3: records+deducts, idempotent replay does not double-deduct, key reuse with a different payload → 409, wastage rows org-scoped. Idempotency driven through an authenticated Flask test client; org-scoping via `WastageFactory` |
 | 17 | Unit conversion | `app/core/utils/` | test_execution_modal_frontend_assets.py, tests/js/ | partial | JS-side conversion asserted; server-side utils untested |
 
 ## CRM & Xero (feature flag `crm_enabled`)

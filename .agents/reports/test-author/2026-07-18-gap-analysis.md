@@ -86,17 +86,31 @@ process tests went red, execution/inventory stayed green.
 **Scope note:** wastage-repo isolation moves to Batch 3, where `WastageFactory` is built.
 The manual `test_multi_tenant_api.py` script is left in place as a manual tool.
 
-### Batch 3 — Wastage idempotency + entry  (map row 16: none → covered)
+### Batch 3 — Wastage idempotency + entry  (map row 16: none → covered) ✅ DONE 2026-07-18
 **Why:** duplicate wastage on a retry corrupts stock and audit numbers; the advisory-lock +
-payload-hash idempotency is entirely unproven.
-Tests (`tests/test_wastage.py`, new area file):
-- same wastage payload + same idempotency key submitted twice → one record, second returns
-  the first (no double-decrement).
-- different payload, same key → the conflict behaviour the code actually implements
-  (characterise it, then assert it).
-- wastage record is org-scoped (org A cannot list/read org B's wastage) — reuses Batch 2's
-  harness.
-Factory dep: `InventoryItemFactory`, `WastageFactory`. Effort: **M**.
+payload-hash idempotency was entirely unproven.
+Tests written (`tests/test_wastage.py`, 4 tests, all green):
+- ✅ records wastage and deducts the item quantity (201, one wastage row).
+- ✅ same payload + same idempotency key twice → `idempotent_replay: True`, deducted once
+  (not twice), still one wastage row.
+- ✅ same key + different payload → `409 IDEMPOTENCY_PAYLOAD_MISMATCH`, only the first applied.
+- ✅ wastage rows are org-scoped (completes the wastage isolation deferred from Batch 2).
+Factory added: `WastageFactory`. Idempotency is a route-handler property, so those three
+tests drive it through an authenticated Flask test client (the `test_crm` app_client
+pattern); org-scoping is a repository property, tested directly.
+Validity: mutation probe forcing `idem_key = None` (dedup fully off) turns both idempotency
+tests red while the no-key and repo tests stay green. Disabling only the *upfront* lookup
+did **not** break the replay test — the DB unique constraint on `(org_id, key)` plus the
+commit-conflict handler still dedup, i.e. the behaviour is defended in depth and the test
+asserts the observable contract, not one mechanism.
+
+**Fixture lessons banked (paid for by three false starts here):**
+- Test-client requests call `db_session.remove()`, detaching fixture-loaded ORM objects —
+  capture ids as plain values before `yield` or teardown raises `DetachedInstanceError`.
+- `organisations <- users` is `ON DELETE CASCADE` but `users <- audit_logs` is `NO ACTION`;
+  delete the org (cascades users+audit), not the user directly.
+- A teardown that raises leaves orphans, and `OrganisationFactory`'s sequence names then
+  collide next run. Teardowns must be rollback-first and FK-ordered.
 
 ### Batch 4 — Execution idempotency  (map row 12: none → covered)
 **Why:** a retried execution that double-applies is a data-integrity bug; `ApiIdempotencyKey`

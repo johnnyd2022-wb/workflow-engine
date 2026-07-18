@@ -14,6 +14,7 @@ import factory
 from app.core.db import db_session
 from app.core.db.models.execution import Execution
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.process import Process
 from app.core.db.models.user import User, UserRole
@@ -22,6 +23,7 @@ from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.user_repo import UserRepository
+from app.core.db.repositories.wastage_repo import WastageRepository
 
 # Low bcrypt cost in tests only — bcrypt encodes its own cost factor in the hash, so a
 # password hashed here still verifies correctly through the real login flow; this only
@@ -124,3 +126,33 @@ class ExecutionFactory(factory.Factory):
         if org_id is None or process_id is None:
             raise ValueError("ExecutionFactory requires org_id and process_id")
         return ExecutionRepository(db_session()).create_execution(org_id=org_id, process_id=process_id, **kwargs)
+
+
+class WastageFactory(factory.Factory):
+    """A wastage record created through the repository. Requires the org and the inventory
+    item it is wasting. The repository records the wastage row only; it does not deduct the
+    item's quantity (that is the route handler's job) — so this factory is for exercising
+    wastage records themselves (e.g. org isolation), not the full disposal flow.
+    """
+
+    class Meta:
+        model = InventoryWastage
+
+    org_id = None
+    inventory_item_id = None
+    quantity_wasted = "1"
+    unit = "kg"
+    reason = "test wastage"
+
+    @classmethod
+    def _create(cls, model_class, org_id, inventory_item_id, quantity_wasted, unit, reason, **kwargs):
+        if org_id is None or inventory_item_id is None:
+            raise ValueError("WastageFactory requires org_id and inventory_item_id")
+        return WastageRepository(db_session()).create_wastage_record(
+            org_id=org_id,
+            inventory_item_id=inventory_item_id,
+            quantity_wasted=quantity_wasted,
+            unit=unit,
+            reason=reason,
+            **kwargs,
+        )
