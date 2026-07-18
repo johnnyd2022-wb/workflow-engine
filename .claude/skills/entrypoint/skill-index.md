@@ -6,7 +6,7 @@ directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be p
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
 last_synced: 2026-07-18
-skill_count: 46
+skill_count: 47
 
 ## Wiring
 
@@ -66,6 +66,7 @@ migration-safety
 new-feature
 observability
 outbound-sales
+perf-guardrails
 preflight
 prod-sentinel
 project-manager
@@ -109,6 +110,7 @@ test-fixtures
 | Set up/modify CI, `.gitlab-ci.yml`, pre-commit, protected branches | `ci-gate` |
 | Security review, semgrep/gitleaks/pip-audit, tenant isolation, scheduled security sweep | `security-audit` |
 | Browser/E2E tests, Playwright, "does the app actually work" | `e2e-playwright` |
+| "The app is slow", "this page is slow", LCP, load times, perf budgets, N+1 triage | `perf-guardrails` |
 | Migration reversibility, schema change safety | `migration-safety` |
 | Logging, monitoring, "why did this fail in prod" | `observability` |
 | Turn a feature request into a written spec | `spec-first` |
@@ -122,6 +124,7 @@ test-fixtures
 | Weekly security sweep that remediates, not just reports | `security-audit` (§6) |
 | Scheduled suite-health check | `suite-warden` |
 | Scheduled core-flow coverage sweep, filling test gaps | `test-author` |
+| Scheduled perf sweep: measure budgets, triage, remediate top item | `perf-guardrails` |
 | Docs/commands drifted from reality, "the docs say X but Y happens" | `docs-truth` |
 | Skill rot audit, "create a skill for X" | `skill-smith` |
 

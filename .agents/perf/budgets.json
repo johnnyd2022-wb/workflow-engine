@@ -1,0 +1,58 @@
+{
+  "_doc": [
+    "Performance budgets for the perf-guardrails skill. Consumed by",
+    "tests/e2e/test_perf_budgets.py (measurement + gating) and scripts/perf_triage.py",
+    "(priority checklist). Two levels per metric, per spec D2 (.agents/specs/playwright-e2e.md):",
+    "  budget  — advisory. A breach is reported in .agents/reports/perf/last-run.json and",
+    "            raises the route's priority in the triage checklist. It never fails a test.",
+    "  ceiling — blocking. Generous enough that only a real regression (an N+1 explosion,",
+    "            a hung query, a render stall) trips it; a breach fails the perf test.",
+    "Units: *_ms are milliseconds; queries is DB statements per request (deterministic, so",
+    "its ceiling can be tight). backend_ms is measured SERVER-SIDE (request_started ->",
+    "request_finished inside the app process), not client wall-clock. lcp_ms is Chromium's",
+    "largest-contentful-paint on a warm cache, median of 3 — a local regression tripwire,",
+    "NOT a real-user metric; production LCP truth is the Faro RUM web-vitals stream.",
+    "Calibrated 2026-07-18 from a real run on an empty-org baseline (last-run.json):",
+    "API medians 3.6-34ms, page shells ~4ms, LCP 56-108ms, queries 2-11. Budgets sit at",
+    "roughly 4x the worst observed value; ceilings where only a real regression lands.",
+    "The /api/core/dashboard/summary override RATCHETS its known 38-query debt: any new",
+    "query trips the advisory, and the number must only ever go down. Recalibrate with the",
+    "procedure in the SKILL.md rather than hand-tuning numbers to make a red run green."
+  ],
+  "defaults": {
+    "page": {
+      "backend_ms": { "budget": 50, "ceiling": 500 },
+      "lcp_ms": { "budget": 1000, "ceiling": 5000 },
+      "queries": { "budget": 5, "ceiling": 20 }
+    },
+    "api": {
+      "backend_ms": { "budget": 150, "ceiling": 1000 },
+      "queries": { "budget": 15, "ceiling": 60 }
+    }
+  },
+  "measure": {
+    "pages": [
+      "/core/dashboard",
+      "/core/processes",
+      "/core/flows",
+      "/core/inventory/view",
+      "/core/executions/live",
+      "/core/settings",
+      "/crm"
+    ],
+    "api": [
+      "/api/core/dashboard/summary",
+      "/api/core/processes",
+      "/api/core/executions",
+      "/api/core/inventory",
+      "/api/core/inventory/wastage",
+      "/api/crm/overview",
+      "/auth/me"
+    ]
+  },
+  "overrides": {
+    "/api/core/dashboard/summary": {
+      "queries": { "budget": 38, "ceiling": 60 }
+    }
+  }
+}
