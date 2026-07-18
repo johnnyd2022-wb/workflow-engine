@@ -23,8 +23,8 @@ server up)
 | 1 | Signup → account created | `app/api/routes/auth_routes.py` (`/signup`) | test_login_2fa_flow.py | live | driven over real HTTPS server; skips without `uv run workflow start` |
 | 2 | Login / logout / `/me` session | auth_routes (`/login`,`/logout`,`/me`) | test_login_2fa_flow.py | live | same live-server gate |
 | 3 | 2FA enroll → enable → verify → disable | auth_routes (`/2fa/*`,`/verify-2fa`), pyotp | test_2fa_totp_optimized.py, test_login_2fa_flow.py | live | TOTP time-window logic; both `live_server`-marked |
-| 4 | Password policy + change-password | auth_routes (`/password-policy-check`,`/change-password`) | — | none | policy JS served (see safe-flow); server path untested |
-| 5 | Session timeout + safe return-to | auth_routes (`/session-timeout`), middleware | test_safe_flow_return_to.py | partial | return-to open-redirect guard covered; timeout PUT not |
+| 4 | Password policy + change-password | auth_routes (`/password-policy-check`,`/change-password`) | test_auth_password_session.py | covered | Batch 7: policy flags weak / accepts strong; change-password success (new pw logs in, old rejected), wrong-current 400, confirm-mismatch 400, same-as-current 400 |
+| 5 | Session timeout + safe return-to | auth_routes (`/session-timeout`), middleware | test_auth_password_session.py, test_safe_flow_return_to.py | covered | Batch 7: GET returns bounds; PUT valid accepted, below-min 400, missing 400. Return-to open-redirect guard in test_safe_flow_return_to.py |
 
 ## Organisation & tenancy
 

@@ -163,11 +163,16 @@ was a genuine gap now filled, two remain as low-priority deferrals.
   ordering, double-completion, full lifecycle all in test_executions.py).
 - ✅ **Row 20 dashboard** partial → covered: `test_dashboard_operations_summary_org_isolated`
   already proves cross-org isolation — the original "no cross-org test" note was wrong.
-- ⏸️ **Rows 4/5 deferred** (still open): password-policy/change-password server path and
-  the `session-timeout` PUT. Lower risk — the auth surface is heavily exercised by the
-  live 2FA suites (rows 1-3), and these are route-level extras rather than an untested
-  integrity invariant. Left as the next coverage-sweep's starting point, honestly marked
-  `none`/`partial` in the map rather than claimed.
+- ✅ **Rows 4/5 (Batch 7)** — now covered. New `tests/test_auth_password_session.py`
+  (10 tests): password-policy flags weak / accepts strong; change-password success (new
+  password logs in, old is rejected — an end-to-end check that the hash actually changed),
+  wrong-current 400, confirm-mismatch 400, same-as-current 400; session-timeout GET returns
+  bounds, PUT valid accepted, below-min 400, missing 400. Mutation disabling the
+  current-password verification fails exactly the wrong-current test. These were deferred at
+  the end of the first pass and closed on the follow-up request.
+
+**Final tally: rows 4-9, 11, 12, 14, 16, 17, 20 all covered or corrected; +54 tests across
+six new files; one production bug fixed. No `none` rows remain in the map.**
 Factory dep: covered by earlier batches. Effort: **M**, splittable.
 
 ## Sequencing & dependencies
