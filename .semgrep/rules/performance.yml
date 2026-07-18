@@ -157,12 +157,17 @@ rules:
       call `clearInterval(intervalId)` on cleanup/navigation.
     patterns:
       - pattern: setInterval(...)
-      - pattern-not: $VAR = setInterval(...)
-      - pattern-not: let $VAR = setInterval(...)
-      - pattern-not: const $VAR = setInterval(...)
-      - pattern-not: var $VAR = setInterval(...)
-      - pattern-not: window.$VAR = setInterval(...)
-      - pattern-not: this.$VAR = setInterval(...)
+      # pattern-not (not pattern-not-inside) only excludes a match whose range is IDENTICAL
+      # to the negative pattern's — `setInterval(...)` matches just the call expression,
+      # while `const $VAR = setInterval(...)` matches the whole enclosing declaration, so
+      # those ranges never coincide and pattern-not silently never excluded the assigned
+      # form. pattern-not-inside excludes on containment instead, which is what this needs.
+      - pattern-not-inside: $VAR = setInterval(...)
+      - pattern-not-inside: let $VAR = setInterval(...)
+      - pattern-not-inside: const $VAR = setInterval(...)
+      - pattern-not-inside: var $VAR = setInterval(...)
+      - pattern-not-inside: window.$VAR = setInterval(...)
+      - pattern-not-inside: this.$VAR = setInterval(...)
 
   # ── JAVASCRIPT: SEQUENTIAL INDEPENDENT AWAITS ────────────────────────────────
 
