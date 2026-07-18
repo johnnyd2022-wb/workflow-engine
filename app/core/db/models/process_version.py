@@ -5,7 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 
 from app.core.db.models.models import Base
 
@@ -38,7 +38,15 @@ class ProcessVersion(Base):
 
     __table_args__ = (UniqueConstraint("process_id", "version_number", name="uq_process_versions_process_version"),)
 
-    process = relationship("Process", backref="versions")
+    # process_id is NOT NULL with a DB-level ON DELETE CASCADE. Without cascade on the ORM
+    # relationship, deleting a Process makes SQLAlchemy try to NULL process_versions.process_id
+    # to disassociate the rows — which violates the NOT NULL constraint and 500s every
+    # process deletion. cascade="all, delete-orphan" + passive_deletes=True makes the ORM
+    # defer to the DB's ON DELETE CASCADE and delete the version rows instead of nulling them.
+    process = relationship(
+        "Process",
+        backref=backref("versions", cascade="all, delete-orphan", passive_deletes=True),
+    )
 
     def __repr__(self) -> str:
         return f"<ProcessVersion(id={self.id}, process_id={self.process_id}, v{self.version_number})>"
