@@ -112,13 +112,24 @@ asserts the observable contract, not one mechanism.
 - A teardown that raises leaves orphans, and `OrganisationFactory`'s sequence names then
   collide next run. Teardowns must be rollback-first and FK-ordered.
 
-### Batch 4 — Execution idempotency  (map row 12: none → covered)
-**Why:** a retried execution that double-applies is a data-integrity bug; `ApiIdempotencyKey`
-guards it and is untested outside CRM.
-Tests (extend `tests/test_executions.py`):
-- create-execution with a repeated idempotency key → same execution id, no duplicate row.
-- complete-step replay with the same key → idempotent, no double state advance.
-Factory dep: `ProcessFactory`, `ExecutionFactory`. Effort: **M**.
+### Batch 4 — Execution idempotency  (map row 12) ✅ DONE 2026-07-18 — NO NEW TESTS (gap analysis was wrong)
+**What I expected:** an `ApiIdempotencyKey`-guarded execution create/complete path, untested.
+**What the code actually is:** there is no execution idempotency-key mechanism at all.
+`ApiIdempotencyKey` is referenced only by the wastage route (row 16, covered in Batch 3);
+`create_execution` does a plain insert with no dedup. Row 12 was a misdiagnosis in the
+original analysis — it conflated the wastage idempotency key with executions.
+
+Execution *replay-safety* is instead the `complete_step` state machine, and that is already
+well covered by `test_executions.py` (45 tests): out-of-order completion rejected
+(`test_cannot_complete_step_2_before_step_1`), double-completion rejected
+(`test_complete_step_already_completed_raises`), step-failure does not advance
+(`test_complete_step_failure_does_not_advance_execution`), full-lifecycle completion, and
+wrong-org → None. Writing new tests here would duplicate existing coverage — the exact
+padding `test-evaluator` exists to reject — so the honest action was to **correct the map**
+(row 11 → covered, row 12 → struck as non-existent), not to invent tests.
+
+This is the gap analysis being held to the same honesty standard as the tests: a `none`
+that turns out to be `covered`-or-nonexistent on inspection gets corrected, not filled.
 
 ### Batch 5 — Org CRUD & membership  (map rows 6/7: none → covered)
 **Why:** org settings and user add/remove have no direct coverage; membership changes are an

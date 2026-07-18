@@ -40,8 +40,8 @@ server up)
 |---|---|---|---|---|---|
 | 9 | Process CRUD + steps (add/reorder/delete) | core_bp `/api/core/processes*` | test_executions.py, test_corechecks.py | partial | CRUD exercised; org-isolation cases thin |
 | 10 | DAG traversal | `app/core/backend/dagtraversal.py` | test_dag_traversal.py | covered | 29 tests, cycles + ordering |
-| 11 | Execution lifecycle (create → complete step) | core_bp `/api/core/executions*` | test_executions.py, test_complete_step_payload.py | partial | happy path strong; failure/partial-completion cases thin |
-| 12 | Idempotency (`ApiIdempotencyKey`) on executions | idempotency key handling | — | none | idempotency tested for CRM only, not execution replays |
+| 11 | Execution lifecycle (create → complete step) | core_bp `/api/core/executions*` | test_executions.py, test_complete_step_payload.py | covered | Batch 4 re-assessment: create-materialises-steps, in-order advancement, full completion, out-of-order rejected, double-completion rejected, step-failure does not advance, wrong-org → None — all in test_executions.py (45 tests) |
+| 12 | ~~Idempotency (`ApiIdempotencyKey`) on executions~~ | n/a | test_wastage.py (the real user) | covered | **Gap-analysis correction (Batch 4):** there is no execution idempotency-key mechanism — `ApiIdempotencyKey` is used only by the wastage route (row 16, covered in Batch 3). create_execution has no dedup; execution replay-safety is the `complete_step` state guard in row 11. No new test owed |
 | 13 | Execution lineage (parent→child) | `workflow_execution_lineage`, reconciliation_service | test_dag_traversal.py (helpers) | partial | traversal helpers touch it; lineage-record assertions absent |
 
 ## Inventory
