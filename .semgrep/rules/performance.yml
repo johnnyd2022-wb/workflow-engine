@@ -188,3 +188,10 @@ rules:
       - pattern-not: |
           const $A = await $EXPR1;
           const $B = await $EXPR2($A.$FIELD, ...);
+      # `const data = await response.json()` — $B calls a method ON $A (not passing $A as an
+      # arg), which is exactly as dependent as the two cases above but wasn't covered by
+      # either. This was the fetch()-then-.json()/.text() pattern flagging as "independent"
+      # across every fetch call site in the frontend.
+      - pattern-not: |
+          const $A = await $EXPR1;
+          const $B = await $A.$METHOD(...);

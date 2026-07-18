@@ -314,7 +314,7 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
     # 1) DB-level filter: only execution_step IDs whose step has ready_date in outputs (no Python scan).
     step_ids_with_ready_date = [
         row[0]
-        for row in (
+        for row in (  # nosemgrep: sqlalchemy-all-without-limit — DB-side jsonb_path_exists filter already scopes this to the small subset of steps that use ready_date; a LIMIT would silently drop qualifying items from a correctness check
             session.query(ExecutionStep.id)
             .join(Execution, ExecutionStep.execution_id == Execution.id)
             .join(Step, ExecutionStep.step_id == Step.id)

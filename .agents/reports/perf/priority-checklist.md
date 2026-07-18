@@ -1,21 +1,15 @@
 # Performance priority checklist — GENERATED
 
-Generated 2026-07-18T22:03:04+00:00 by `scripts/perf_triage.py --write-index`. Do not
+Generated 2026-07-18T22:08:48+00:00 by `scripts/perf_triage.py --write-index`. Do not
 hand-edit; rerun the script after a page/flow changes or after a perf-test run.
 Budgets: `.agents/perf/budgets.json`; measurements: `tests/e2e/test_perf_budgets.py`;
 raw last run: `.agents/reports/perf/last-run.json`. Owned by the **perf-guardrails** skill.
 
-- static rules: **ok** (7 findings, shared-frontend score 1)
+- static rules: **ok** (0 findings, shared-frontend score 0)
 - routes measured: **14** of 151 considered
-- last measured run: 2026-07-18T21:59:35+00:00
+- last measured run: 2026-07-18T22:08:36+00:00
 - breaches: **0 ceiling (blocking)**, 0 budget (advisory)
 
 | # | priority | kind | where | evidence | action |
 |---|---|---|---|---|---|
-| 1 | 13 | static-finding | `[core] app/core/utils/resetdb.py` | repository-get-in-for-loop:360(W) | fix the pattern or justify with a scoped `# nosemgrep` + reason |
-| 2 | 11 | static-finding | `[core] app/core/backend/checks/expired_materials.py` | sqlalchemy-all-without-limit:31(I) | fix the pattern or justify with a scoped `# nosemgrep` + reason |
-| 3 | 11 | static-finding | `[core] app/core/backend/checks/output_ready_date_check.py` | sqlalchemy-all-without-limit:317(I) | fix the pattern or justify with a scoped `# nosemgrep` + reason |
-| 4 | 11 | static-finding | `[core] app/core/backend/dagtraversal.py` | sqlalchemy-all-without-limit:314(I) | fix the pattern or justify with a scoped `# nosemgrep` + reason |
-| 5 | 11 | static-finding | `[core] app/core/frontend/js/core-api.js` | sequential-independent-awaits:364(I) | fix the pattern or justify with a scoped `# nosemgrep` + reason |
-| 6 | 11 | static-finding | `[core] app/core/frontend/js/execution-modal.js` | sequential-independent-awaits:49(I) | fix the pattern or justify with a scoped `# nosemgrep` + reason |
-| 7 | 11 | static-finding | `[shared-frontend] app/ui/shared/password-policy.js` | sequential-independent-awaits:27(I) | fix the pattern or justify with a scoped `# nosemgrep` + reason |
+| – | – | – | – | nothing to triage | – |

@@ -310,8 +310,9 @@ class DAGTracer:
                 metadata=TraversalMetadata(),
             )
 
-        # Bulk-load all execution steps for org (and items produced by them for forward)
-        steps = (
+        # Bulk-load all execution steps for org (and items produced by them for forward).
+        # DAG traversal needs the complete graph in memory — a LIMIT would silently truncate it.
+        steps = (  # nosemgrep: sqlalchemy-all-without-limit
             self.session.query(ExecutionStep)
             .join(Execution, ExecutionStep.execution_id == Execution.id)
             .filter(Execution.org_id == self.org_id)

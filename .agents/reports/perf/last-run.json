@@ -1,12 +1,12 @@
 {
-  "generated": "2026-07-18T21:59:35+00:00",
+  "generated": "2026-07-18T22:08:36+00:00",
   "budgets_file": ".agents/perf/budgets.json",
   "results": [
     {
       "route": "/api/core/dashboard/summary",
       "kind": "api",
       "metrics": {
-        "backend_ms": 32.6,
+        "backend_ms": 39.1,
         "queries": 38
       },
       "over_budget": [],
@@ -16,7 +16,7 @@
       "route": "/api/core/executions",
       "kind": "api",
       "metrics": {
-        "backend_ms": 4.6,
+        "backend_ms": 4.4,
         "queries": 3
       },
       "over_budget": [],
@@ -26,7 +26,7 @@
       "route": "/api/core/inventory",
       "kind": "api",
       "metrics": {
-        "backend_ms": 9.1,
+        "backend_ms": 9.3,
         "queries": 8
       },
       "over_budget": [],
@@ -46,7 +46,7 @@
       "route": "/api/core/processes",
       "kind": "api",
       "metrics": {
-        "backend_ms": 5.6,
+        "backend_ms": 5.2,
         "queries": 4
       },
       "over_budget": [],
@@ -56,7 +56,7 @@
       "route": "/api/crm/overview",
       "kind": "api",
       "metrics": {
-        "backend_ms": 11.7,
+        "backend_ms": 12.2,
         "queries": 11
       },
       "over_budget": [],
@@ -66,7 +66,7 @@
       "route": "/auth/me",
       "kind": "api",
       "metrics": {
-        "backend_ms": 3.7,
+        "backend_ms": 3.4,
         "queries": 2
       },
       "over_budget": [],
@@ -76,26 +76,15 @@
       "route": "/core/dashboard",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.7,
+        "backend_ms": 3.6,
         "queries": 2,
-        "lcp_ms": 104
+        "lcp_ms": 92
       },
       "over_budget": [],
       "over_ceiling": []
     },
     {
       "route": "/core/executions/live",
-      "kind": "page",
-      "metrics": {
-        "backend_ms": 4.0,
-        "queries": 2,
-        "lcp_ms": 76
-      },
-      "over_budget": [],
-      "over_ceiling": []
-    },
-    {
-      "route": "/core/flows",
       "kind": "page",
       "metrics": {
         "backend_ms": 3.9,
@@ -106,12 +95,23 @@
       "over_ceiling": []
     },
     {
+      "route": "/core/flows",
+      "kind": "page",
+      "metrics": {
+        "backend_ms": 4.1,
+        "queries": 2,
+        "lcp_ms": 76
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
       "route": "/core/inventory/view",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.7,
+        "backend_ms": 4.1,
         "queries": 2,
-        "lcp_ms": 56
+        "lcp_ms": 64
       },
       "over_budget": [],
       "over_ceiling": []
@@ -120,7 +120,7 @@
       "route": "/core/processes",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.6,
+        "backend_ms": 4.0,
         "queries": 2,
         "lcp_ms": 56
       },
@@ -131,9 +131,9 @@
       "route": "/core/settings",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.7,
+        "backend_ms": 4.9,
         "queries": 2,
-        "lcp_ms": 56
+        "lcp_ms": 60
       },
       "over_budget": [],
       "over_ceiling": []
@@ -142,9 +142,9 @@
       "route": "/crm",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.5,
+        "backend_ms": 4.2,
         "queries": 2,
-        "lcp_ms": 60
+        "lcp_ms": 64
       },
       "over_budget": [],
       "over_ceiling": []
