@@ -48,7 +48,7 @@ server up)
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 14 | **Quantity-write guard** (every `InventoryQuantityWriteReason`) | `app/core/domain/inventory_quantity_guard.py` | — | none | guard + `allow_inventory_quantity_write` have **zero** tests; the mechanism that prevents untracked mutations is itself unproven |
+| 14 | **Quantity-write guard** (every `InventoryQuantityWriteReason`) | `app/core/domain/inventory_quantity_guard.py` | test_inventory_quantity_guard.py | covered | Batch 1: direct write rejected, create/add/set repository paths accepted, nested-allow rejected, guard re-arms. **Found + fixed a real bug**: `set_inventory_item_quantity` flushed its event outside the allow block, so `POST /api/core/inventory/<id>/adjust` raised on every call |
 | 15 | Inventory read / add / out-of-stock | core_bp `/api/core/inventory*` | test_corechecks.py | partial | reads covered; write reasons per row 14 |
 | 16 | Wastage entry + batch-hash idempotency | core_bp `/api/core/inventory/wastage` | — | none | no wastage test at all; batch-hash idempotency unproven |
 | 17 | Unit conversion | `app/core/utils/` | test_execution_modal_frontend_assets.py, tests/js/ | partial | JS-side conversion asserted; server-side utils untested |

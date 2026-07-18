@@ -46,20 +46,29 @@ proves the shape.
 
 ## The plan — prioritised by risk × exposure
 
-### Batch 1 — Inventory quantity-write guard  (map row 14: none → covered)
+### Batch 1 — Inventory quantity-write guard  (map row 14: none → covered) ✅ DONE 2026-07-18
 **Why first:** it is the mechanism that prevents untracked inventory mutations — the guard
 itself is unproven, so every "the guard protects us" claim elsewhere rests on faith. Small,
 self-contained, no cross-tenant surface.
-Tests (`tests/test_inventory_quantity_guard.py`, new area file):
-- direct `item.quantity = X` + flush **outside** any `allow_` block → raises
-  `InventoryQuantityWriteForbiddenError`.
-- each legitimate path succeeds under its reason: `create_inventory_item`
+Tests written (`tests/test_inventory_quantity_guard.py`, 6 tests, all green):
+- ✅ direct `item.quantity = X` + flush **outside** any `allow_` block → raises
+  `InventoryQuantityWriteForbiddenError`, and the change never reaches the DB.
+- ✅ each legitimate path succeeds under its reason: `create_inventory_item`
   (REPOSITORY_CREATE), `add_quantity_to_inventory_item` (REPOSITORY_ADD_QUANTITY),
   `set_inventory_item_quantity` (MANUAL_API_UPDATE).
-- nested `allow_inventory_quantity_write(...)` → raises `RuntimeError` (ContextVar safety).
-- the ContextVar resets after the block (a second unguarded write still raises) — proves
-  the guard re-arms, the failure mode a leaked token would hide.
-Factory dep: `InventoryItemFactory`. Effort: **S**.
+- ✅ nested `allow_inventory_quantity_write(...)` → raises `RuntimeError` (ContextVar safety).
+- ✅ the ContextVar re-arms after the block (a second unguarded write still raises) — the
+  failure mode a leaked token would hide.
+Factory added: `InventoryItemFactory` (tests/factories.py).
+
+**🐞 Real bug found and fixed (separate commit).** The `set_inventory_item_quantity` test
+failed on correct code: the method set `item.quantity` inside the `allow` block but emitted
+its audit event (which calls `session.flush()`) *outside* it, so the guard had re-armed and
+every call raised `InventoryQuantityWriteForbiddenError`. This is reachable —
+`POST /api/core/inventory/<item_id>/adjust` (backend.py:3845) — so manual quantity
+adjustment was broken in production, undetected precisely because row 14 had zero coverage.
+Fix mirrors the working sibling `add_quantity_to_inventory_item`: move the emit + commit
+inside the allow block. This is the gap analysis paying for itself on the first batch.
 
 ### Batch 2 — Tenant isolation harness  (map row 8: none → covered)
 **Why:** multi-tenancy is the product's core security boundary; a cross-org leak is silent
