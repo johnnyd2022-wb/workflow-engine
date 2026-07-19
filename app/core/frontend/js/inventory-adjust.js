@@ -166,6 +166,7 @@
     };
 
     var savedId = activeItemId;
+    // nosemgrep: raw-fetch-post -- X-CSRFToken already attached below via getCsrf()
     fetch('/api/core/inventory/' + encodeURIComponent(savedId), {
       method: 'PUT',
       credentials: 'same-origin',

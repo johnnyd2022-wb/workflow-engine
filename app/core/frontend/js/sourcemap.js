@@ -672,6 +672,7 @@
   async function smRunTemporalTrace(itemId, itemName) {
     smShowAreaLoading();
     try {
+      // nosemgrep: raw-fetch-post -- X-CSRFToken already attached via smCsrfHeader()
       const res = await fetch('/api/core/sourcemap/trace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...smCsrfHeader() },

@@ -24,6 +24,9 @@
     }
     
     try {
+      // /auth/* is CSRF-exempt by design (called before a session exists during
+      // signup); see app_factory.py CSRFProtect setup.
+      // nosemgrep: raw-fetch-post
       const response = await fetch('/auth/password-policy-check', {
         method: 'POST',
         headers: {

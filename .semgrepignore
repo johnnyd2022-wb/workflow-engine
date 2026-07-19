@@ -1,0 +1,9 @@
+# A custom .semgrepignore replaces semgrep's built-in default ignore list rather than
+# extending it, so the usual defaults (minified bundles, lockfiles, VCS dirs, etc.) must
+# be restated here explicitly.
+*.min.js
+.git/
+
+# Vendored/third-party bundles that don't match the pattern above — not our code,
+# don't hand-edit for scanner findings.
+app/ui/shared/posthog-array.full.js

@@ -466,6 +466,7 @@
       var orders = orderedIds.map(function (id, idx) {
         return { id: id, position: spacing * (idx + 1) };
       });
+      // nosemgrep: raw-fetch-post -- X-CSRFToken already attached above (headers)
       var res = await fetch(
         '/api/core/processes/' + encodeURIComponent(processId) + '/steps/reorder',
         {
