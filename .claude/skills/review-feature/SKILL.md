@@ -68,6 +68,8 @@ Patch priority: security `fix` items first, then broken/missing tests, then obse
 
 Present the table, the before/after (coverage %, findings fixed, tests added, rules added to `.semgrep/`), and what remains open with your recommendation. Set the spec `status: reviewed`. If the review changed code, call the **merge-request** skill to write the MR (from this report and the spec), push, open it, and watch the pipeline — same as new-feature's final step, do not assemble the MR yourself. No direct commits to main.
 
+**Record the run** (`.agents/autonomy.md` → Measure yourself): append a metrics row per stage that ran, so the scorecard sees this audit — `python scripts/skill_metrics.py record --skill <stage> --run-type chained --scope <slug> --verdict <v> --findings <n> --ref <branch>`. Finding verdicts already went to the history store in Step 4; the MR's merge/close is recorded later as an `outcome` on the same `--ref`.
+
 ## Rules
 
 - A review that only reads code and writes prose is half a review; the deliverables are tests, rules, and patches that outlive the conversation.

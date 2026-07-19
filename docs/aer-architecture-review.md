@@ -161,11 +161,21 @@ they land on this branch.
 - [x] `data_stores` CI job guards the ledgers; feeds the Phase 1 scorecard
       (accepted-vs-rejected signal); 11 DB-free tests (`tests/test_finding_history.py`)
 
-### Phase 4 — Declarative capability metadata + wiring
-- [ ] Add `cost`/`confidence` metadata to skill frontmatter (feeds the scorecard)
-- [ ] Wire the orchestrators + `.agents/autonomy.md` so every skill run appends to the
-      ledger without ceremony
-- [ ] `skill-smith` scheduled audit runs the scorecard and flags underperformers
+### Phase 4 — Wiring the ledger live ✅
+- [x] `.agents/autonomy.md` gains a **Measure yourself** section — a universal contract
+      (every skill references autonomy.md): record the run, record finding verdicts, record
+      the outcome when known. Framed as honest-reporting's machine-readable twin.
+- [x] Orchestrators wired to append per-stage rows: `new-feature` Step 8, `review-feature`
+      Step 5; scheduled `security-audit` §6 sweep records its run
+- [x] `skill-smith` audit gains a **Performance** dimension: runs the scorecard, flags
+      crying-wolf / escaped-defect / unrecorded skills — makes "improve or retire poor
+      performers" actionable instead of a slogan
+- [x] **Dropped: static `cost`/`confidence` frontmatter.** Honest call — the ledger
+      *measures* real cost (duration) and real confidence (acceptance rate) per run;
+      hand-declared estimates would duplicate that and rot. Measured beats declared. (This
+      also settles the review's Phase-4 "declarative capability graph" note: not worth
+      rebuilding orchestration around; the useful half — metadata feeding the scorecard — is
+      better served by measurement.)
 
 Progress log lives at the bottom of this file as each phase lands.
 
@@ -188,3 +198,19 @@ Progress log lives at the bottom of this file as each phase lands.
   already-rejected findings and re-surface regressions, keyed by a churn-resistant
   signature. Wired into `security-audit` and `review-feature`; `data_stores` CI job guards
   it. This is also the accepted-vs-rejected feed the Phase 1 scorecard needed.
+- 2026-07-19 — **Phase 4 complete. Roadmap done.** The ledger is now live, not just
+  built: `.agents/autonomy.md` makes recording runs/verdicts/outcomes a universal contract;
+  `new-feature`, `review-feature`, and `security-audit` append rows; `skill-smith` reads
+  the scorecard to catch underperformers. Consciously dropped static cost/confidence
+  frontmatter — measured cost/acceptance from the ledger supersedes hand-declared numbers.
+
+## Where this leaves us vs. AER
+
+All three real gaps closed, and the North Star item (learning loop) is enforced in CI. The
+system now **measures itself** (Phase 1), **turns findings into permanent tested rules**
+(Phase 2), **remembers prior findings** (Phase 3), and **acts on the measurements** (Phase
+4). What remains AER-side is the deliberately-declined set: full event-driven-on-every-push
+routing, a call/symbol-graph substrate, and generic model-agnostic workers — trades we made
+on purpose, documented above. On execution, safety, honesty, adversarial review, and now
+self-measurement and compounding learning, this repo is at or past the frontier the AER doc
+describes — with the advantage that ours runs.

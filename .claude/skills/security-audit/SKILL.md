@@ -161,6 +161,7 @@ Suited to a weekly routine (`/schedule`). A sweep run:
 2. diffs against the previous sweep — **new** findings are the signal; a standing count that never moves is what people stop reading
 3. remediates the top new finding class (one MR), logs the rest
 4. reports the standing total honestly, including what it couldn't scan
+5. records the run so the scorecard tracks this skill over time (`.agents/autonomy.md` → Measure yourself): `python scripts/skill_metrics.py record --skill security-audit --run-type scheduled --verdict <clean|patched|findings-open> --findings <n new> --ref <branch or sweep date>`
 
 The standing count matters: at the time of writing, a bare `semgrep --config=auto` over this repo reports **68 findings**, all pre-existing. It sat unread because nobody diffed the count. That is what a sweep is for.
 

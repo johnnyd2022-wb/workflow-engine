@@ -110,3 +110,27 @@ The whole policy rests on reports being true. `clean` means it was checked; `ski
 means say so and why; a failure that was worked around is a failure that gets reported.
 An agent that shades a report to look successful has removed the human's only view into
 an unwatched loop — which is worse than the bug it hid.
+
+## Measure yourself (the evaluation ledger)
+
+A report the human reads once is not the same as a record the *system* can learn from. Two
+append-only ledgers make skills measurable over time; writing to them is part of finishing
+a run, not an optional extra.
+
+- **Record the run.** When an orchestrating or scheduled skill finishes, append one row per
+  skill run to the metrics ledger (`scripts/skill_metrics.py record --skill … --run-type
+  chained|scheduled|interactive --verdict … --findings N --ref <branch/MR> --scope <slug>`).
+  This is what lets the scorecard answer "is this skill worth its tokens" instead of nobody
+  knowing. Schema and examples: `.agents/metrics/README.md`.
+- **Record finding verdicts.** Skills that surface findings (security-audit, review-feature,
+  perf-guardrails) consult the history store before surfacing and record the verdict after
+  (`scripts/finding_history.py`, `.agents/history/README.md`) — so already-rejected findings
+  stay suppressed and regressions surface loudly.
+- **Record the outcome when it's known.** Whoever later sees an MR merged, closed, or a
+  defect escape to prod records it (`skill_metrics.py outcome --ref … --outcome …`). This is
+  usually deferred to a human or a scheduled sweep — the agent that opened the MR is long
+  gone. That's expected; the join is on `ref`, not on being the same run.
+
+These are honest-reporting's machine-readable twin: the same truth, written where the next
+run and the scorecard can use it. Never fabricate a favourable row — a gamed ledger is the
+same lie as a shaded report, and it poisons every future decision about which skills to keep.

@@ -80,6 +80,9 @@ grep -oE '(app|tests|scripts|docs|\.agents|\.claude)/[A-Za-z0-9_./-]+' .claude/s
 # 4. is it in the index, and does anything route to it?
 python3 scripts/skill_graph.py --check          # orphans, unindexed, stale roots
 python3 scripts/skill_graph.py --skill <name>   # who calls it, what it calls
+
+# 5. is it earning its keep? (the evaluation ledger — .agents/metrics/)
+python3 scripts/skill_metrics.py scorecard      # per-skill acceptance, findings/run, escaped, cost
 ```
 
 `skill_graph.py` answers the orphan question deterministically, so don't grep for it by
@@ -104,6 +107,13 @@ Audit checklist per skill:
 - **Overlap** — do two skills claim the same trigger? Name the winner, narrow the loser.
 - **Orphans** — nothing calls it, it calls nothing, and it's not a front door. Propose
   merging or retiring.
+- **Performance** — what does the scorecard say (`skill_metrics.py scorecard`)? A skill
+  with a low acceptance rate is crying wolf; one with escaped defects missed something it
+  owns; one with no rows isn't recording its runs (a wiring gap — fix per
+  `.agents/autonomy.md` → Measure yourself). "Improve or retire the poor performers" is
+  only actionable because this data exists; use it, don't guess. A skill can't be retired
+  on graph-orphan grounds *and* be a heavy scorecard performer — reconcile the two signals
+  before proposing removal.
 
 Findings go to `.agents/reports/skill-smith/<date>.md`:
 
