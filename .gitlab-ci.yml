@@ -99,7 +99,7 @@ semgrep:
   only:
     - merge_requests
     - main
-  allow_failure: true
+  allow_failure: false
 
 semgrep_observability:
   stage: security
