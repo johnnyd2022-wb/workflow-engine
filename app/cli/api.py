@@ -16,6 +16,7 @@ if parent_dir not in sys.path:
 if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
 
+
 def get_ssl_context():
     """Get SSL context paths relative to app directory"""
     app_dir_path = Path(__file__).parent.parent

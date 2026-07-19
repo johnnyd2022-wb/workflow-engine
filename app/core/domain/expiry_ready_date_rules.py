@@ -13,7 +13,7 @@ Single source of truth so both flows stay consistent.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration_to_timedelta
 from app.core.domain.ready_date_rules import (
@@ -30,8 +30,8 @@ def _parse_iso(s: str | None) -> datetime | None:
     try:
         dt = datetime.fromisoformat(s.strip().replace("Z", "+00:00"))
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
     except Exception:
         return None
 

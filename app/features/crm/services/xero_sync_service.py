@@ -1,7 +1,7 @@
 """XeroSyncService — orchestrates contact and invoice sync from Xero."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -314,7 +314,7 @@ class XeroSyncService:
         status = "failed"
         if result.success:
             self.sync_job_repo.mark_completed(job_id, result.contacts_synced, result.invoices_synced)
-            self.tenant_repo.update_last_sync(org_id, datetime.now(timezone.utc))
+            self.tenant_repo.update_last_sync(org_id, datetime.now(UTC))
             status = "completed"
         elif result.partial:
             self.sync_job_repo.mark_partial(
@@ -324,7 +324,7 @@ class XeroSyncService:
                 error_message=f"{len(result.errors)} error(s) during sync",
                 error_details={"errors": result.errors},
             )
-            self.tenant_repo.update_last_sync(org_id, datetime.now(timezone.utc))
+            self.tenant_repo.update_last_sync(org_id, datetime.now(UTC))
             status = "partial"
         else:
             self.sync_job_repo.mark_failed(

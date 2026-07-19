@@ -6,7 +6,7 @@ import gzip
 import json
 import time
 from collections import deque
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 import requests
@@ -152,7 +152,7 @@ class XeroAPIClient:
         kwargs: dict = {"include_archived": True}
         if modified_after:
             if modified_after.tzinfo is None:
-                modified_after = modified_after.replace(tzinfo=timezone.utc)
+                modified_after = modified_after.replace(tzinfo=UTC)
             kwargs["if_modified_since"] = modified_after
 
         while True:
@@ -196,7 +196,7 @@ class XeroAPIClient:
         kwargs: dict = {"statuses": ["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED", "DELETED"]}
         if modified_after:
             if modified_after.tzinfo is None:
-                modified_after = modified_after.replace(tzinfo=timezone.utc)
+                modified_after = modified_after.replace(tzinfo=UTC)
             kwargs["if_modified_since"] = modified_after
 
         while True:
@@ -302,7 +302,7 @@ class XeroAPIClient:
             raise ValueError(f"Xero only renders ACCREC invoices as PDF via API (this invoice type is {live_type}).")
         if live_status and live_status not in {"SUBMITTED", "AUTHORISED", "PAID"}:
             raise ValueError(
-                f"Xero does not render PDF for invoice status {live_status}. " "Use SUBMITTED, AUTHORISED, or PAID."
+                f"Xero does not render PDF for invoice status {live_status}. Use SUBMITTED, AUTHORISED, or PAID."
             )
         access_token, tenant_id = self._oauth_service.get_valid_token(self.org_id)
         headers = {

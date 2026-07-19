@@ -3,7 +3,7 @@
 import hashlib
 import json
 import os
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -309,7 +309,7 @@ def _coerce_step_position(value):
     return pos
 
 
-def _next_step_position(process_id: UUID) -> "Decimal":
+def _next_step_position(process_id: UUID) -> Decimal:
     from decimal import Decimal
 
     max_pos = (
@@ -5549,18 +5549,14 @@ def entity_activity_feed():
 
     if from_date:
         try:
-            from datetime import timezone as _tz
-
-            fd = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=_tz.utc)
+            fd = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=UTC)
             q = q.filter(EntityEvent.created_at >= fd)
         except ValueError:
             pass
 
     if to_date:
         try:
-            from datetime import timezone as _tz
-
-            td = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=_tz.utc)
+            td = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=UTC)
             q = q.filter(EntityEvent.created_at <= td)
         except ValueError:
             pass

@@ -25,7 +25,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 from uuid import UUID
@@ -67,7 +67,7 @@ def _normalize_date(val: Any) -> date | None:
     if hasattr(val, "date") and callable(getattr(val, "date")):
         if getattr(val, "tzinfo", None) is not None:
             try:
-                return val.astimezone(timezone.utc).date()
+                return val.astimezone(UTC).date()
             except (ValueError, TypeError):
                 pass
         return val.date()
@@ -76,7 +76,7 @@ def _normalize_date(val: Any) -> date | None:
             parsed = datetime.fromisoformat(val.replace("Z", "+00:00"))
             if getattr(parsed, "tzinfo", None) is not None:
                 try:
-                    return parsed.astimezone(timezone.utc).date()
+                    return parsed.astimezone(UTC).date()
                 except (ValueError, TypeError):
                     pass
             return parsed.date()
@@ -88,7 +88,7 @@ def _normalize_date(val: Any) -> date | None:
                 if hasattr(parsed, "date"):
                     if getattr(parsed, "tzinfo", None) is not None:
                         try:
-                            return parsed.astimezone(timezone.utc).date()
+                            return parsed.astimezone(UTC).date()
                         except (ValueError, TypeError):
                             pass
                     return parsed.date()

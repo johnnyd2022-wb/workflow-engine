@@ -1,6 +1,6 @@
 """Execution repository with tenancy enforcement"""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session, joinedload
@@ -278,7 +278,7 @@ class ExecutionRepository:
             execution_step.actual_outputs = actual_outputs or []
             execution_step.execution_data = execution_data or {}
             execution_step.completed_at = (
-                completed_at_override if completed_at_override is not None else datetime.now(timezone.utc)
+                completed_at_override if completed_at_override is not None else datetime.now(UTC)
             )
 
             # Advance execution: mark next steps as ready
@@ -435,4 +435,4 @@ class ExecutionRepository:
             all_completed = all(es.status == ExecutionStepStatus.COMPLETED for es in execution_steps)
             if all_completed and execution.status != ExecutionStatus.COMPLETED:
                 execution.status = ExecutionStatus.COMPLETED
-                execution.completed_at = datetime.now(timezone.utc)
+                execution.completed_at = datetime.now(UTC)

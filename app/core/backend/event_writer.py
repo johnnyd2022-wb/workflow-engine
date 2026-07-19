@@ -14,7 +14,7 @@ Key rules:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -136,7 +136,7 @@ class EventWriter:
             causation_id=causation_id,
             correlation_id=correlation_id,
             request_metadata=_request_metadata(),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         self.session.add(event)
         self.session.flush()  # get event.id before upsert
@@ -172,7 +172,7 @@ def _do_upsert(
     session: Session, entity_id: UUID, org_id: UUID, entity_type: str, summary: dict, event: EntityEvent
 ) -> None:
     """Generic upsert into entity_event_summaries."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     session.execute(
         text(
             """

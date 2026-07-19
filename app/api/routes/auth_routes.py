@@ -2,7 +2,7 @@
 
 import io
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pyotp
@@ -290,9 +290,7 @@ def login():
         if user_by_email and not is_password_reset:
             if user_repo.is_account_locked(user_by_email.id):
                 # Calculate remaining lockout time
-                remaining_seconds = int(
-                    (user_by_email.account_locked_until - datetime.now(timezone.utc)).total_seconds()
-                )
+                remaining_seconds = int((user_by_email.account_locked_until - datetime.now(UTC)).total_seconds())
                 remaining_minutes = max(0, remaining_seconds // 60)
 
                 # Log account lockout attempt with IP and User-Agent
@@ -806,7 +804,7 @@ def verify_two_factor():
             if existing_device:
                 # Update existing device - extend expiration and update last used
                 existing_device.expires_at = TrustedDevice.get_expiration_date()
-                existing_device.last_used_at = datetime.now(timezone.utc)
+                existing_device.last_used_at = datetime.now(UTC)
                 # Get the original token (we need to send it in cookie)
                 # Since we store hashed, we need to generate a new token or retrieve from somewhere
                 # For now, generate new token and update hash

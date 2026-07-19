@@ -1,5 +1,6 @@
 """Repository for process step documents (SOP)."""
 
+from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -60,7 +61,7 @@ class ProcessStepDocumentRepository:
         )
 
     def soft_delete(self, doc_id: UUID, org_id: UUID) -> bool:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         updated = (
             self.db.query(ProcessStepDocument)
@@ -68,7 +69,7 @@ class ProcessStepDocumentRepository:
                 ProcessStepDocument.id == doc_id,
                 ProcessStepDocument.org_id == org_id,
             )
-            .update({"deleted_at": datetime.now(timezone.utc)})
+            .update({"deleted_at": datetime.now(UTC)})
         )
         return updated > 0
 

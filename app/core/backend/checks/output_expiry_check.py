@@ -8,7 +8,7 @@ risk signals only (no inventory modification). Findings appear in system banner 
 from __future__ import annotations
 
 import calendar
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -54,20 +54,20 @@ def _normalize_dt(val: Any) -> datetime | None:
         return None
     if isinstance(val, int | float):
         try:
-            return datetime.fromtimestamp(val, tz=timezone.utc)
+            return datetime.fromtimestamp(val, tz=UTC)
         except Exception:
             return None
     if isinstance(val, datetime):
         if val.tzinfo is None:
-            return val.replace(tzinfo=timezone.utc)
-        return val.astimezone(timezone.utc)
+            return val.replace(tzinfo=UTC)
+        return val.astimezone(UTC)
     if isinstance(val, str) and val.strip():
         s = val.strip()
         try:
             dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
+            return dt.astimezone(UTC)
         except Exception:
             return None
     return None
@@ -215,7 +215,7 @@ def run_output_expiry_check(org_id: UUID, session: Session) -> CheckResult:
             # Look up inventory from preloaded map (step_id, normalized_name, trimmed unit)
             items = inventory_map.get((es.id, _normalize(out_name), out_unit.strip()), [])
 
-            now = datetime.now(timezone.utc) - timedelta(hours=CLOCK_SKEW_BUFFER_HOURS)
+            now = datetime.now(UTC) - timedelta(hours=CLOCK_SKEW_BUFFER_HOURS)
 
             for item in items:
                 if item.id in seen_item_ids:
