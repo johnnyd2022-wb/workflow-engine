@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import logging
 import os
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -66,9 +65,10 @@ from app.core.utils.inventory_wastage_quantity import (
 from app.core.utils.log_action import log_action
 from app.core.utils.mock_data import DEMO_USER_EMAIL
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.observability import get_logger
 from app.utils.config_loader import config
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Guardrail: batch size caps row-lock duration under concurrent SELECT ... FOR UPDATE.
 MAX_WASTAGE_BATCH_ENTRIES = 100
@@ -1070,17 +1070,11 @@ def serve_core_js(filename):
         return response
     except FileNotFoundError:
         # Missing static file - log at info level (not error)
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.info(f"Static JS file not found: {filename} from {core_frontend_dir}")
         # Return 404 - do not fall back to Flask's global static handler
         abort(404, "File not found")
     except Exception:
         # Unexpected exception - log at exception level
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception(f"Unexpected error serving static JS file: {filename}")
         abort(500, "Internal server error")
 
@@ -1115,17 +1109,11 @@ def serve_core_css(filename):
         return response
     except FileNotFoundError:
         # Missing static file - log at info level (not error)
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.info(f"Static CSS file not found: {filename} from {core_frontend_dir}")
         # Return 404 - do not fall back to Flask's global static handler
         abort(404, "File not found")
     except Exception:
         # Unexpected exception - log at exception level
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception(f"Unexpected error serving static CSS file: {filename}")
         abort(500, "Internal server error")
 
@@ -1163,14 +1151,10 @@ def serve_core_inventory_static(filename):
             response.headers["Content-Type"] = "text/css; charset=utf-8"
         return response
     except FileNotFoundError:
-        import logging
-
-        logging.getLogger(__name__).info("Inventory static file not found: %s", filename)
+        logger.info("Inventory static file not found: %s", filename)
         abort(404, "File not found")
     except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("Error serving inventory static: %s", filename)
+        logger.exception("Error serving inventory static: %s", filename)
         abort(500, "Internal server error")
 
 
@@ -1206,14 +1190,10 @@ def serve_core_img(filename):
         response.headers["Cache-Control"] = "public, max-age=86400"
         return response
     except FileNotFoundError:
-        import logging
-
-        logging.getLogger(__name__).info("Image static file not found: %s", filename)
+        logger.info("Image static file not found: %s", filename)
         abort(404, "File not found")
     except Exception:
-        import logging
-
-        logging.getLogger(__name__).exception("Error serving image static: %s", filename)
+        logger.exception("Error serving image static: %s", filename)
         abort(500, "Internal server error")
 
 
@@ -1344,9 +1324,6 @@ def create_process():
         return jsonify({"error": str(e)}), 400
     except Exception:
         # Log the full error for debugging but return generic message to client
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception("Error creating process")
         return jsonify({"error": "Failed to create process"}), 500
 
@@ -1403,9 +1380,6 @@ def update_process(process_id: str):
         )
     except Exception:
         # Log the full error for debugging but return generic message to client
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception("Error updating process")
         return jsonify({"error": "Failed to update process"}), 500
 
@@ -1430,9 +1404,6 @@ def delete_process(process_id: str):
         return jsonify({"message": "Process deleted successfully"}), 200
     except Exception:
         # Log the full error for debugging but return generic message to client
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception("Error deleting process")
         return jsonify({"error": "Failed to delete process"}), 500
 
@@ -1690,9 +1661,7 @@ def reorder_steps(process_id: str):
         except Exception:
             db_session.rollback()
         try:
-            from flask import current_app
-
-            current_app.logger.exception("Failed to reorder steps process_id=%s", process_id)
+            logger.exception("Failed to reorder steps process_id=%s", process_id)
         except Exception:
             pass
         return jsonify({"error": "Failed to reorder steps", "details": str(e)}), 500
@@ -1758,9 +1727,6 @@ def create_execution():
         return jsonify({"error": str(e)}), 400
     except Exception:
         # Log the full error for debugging but return generic message to client
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception("Error creating process")
         return jsonify({"error": "Failed to create process"}), 500
 
@@ -2230,9 +2196,6 @@ def complete_step(execution_id: str, execution_step_id: str):
                     inventory_updates.append((inventory_item, new_quantity))
 
                 except Exception as e:
-                    import logging
-
-                    logger = logging.getLogger(__name__)
                     logger.exception(f"Unexpected error consuming inventory {item_id_str}")
                     execution_errors.append(f"Failed to consume inventory {item_id_str}: {str(e)}")
 
@@ -2576,9 +2539,6 @@ def complete_step(execution_id: str, execution_step_id: str):
             # Single commit for all inventory operations
             db_session.commit()
         except Exception as e:
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.exception("Failed to commit inventory operations atomically")
             db_session.rollback()
             return jsonify({"error": "Failed to update inventory", "details": str(e)}), 500
@@ -2612,9 +2572,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                             )
                             break
         except Exception as audit_err:
-            import logging
-
-            logging.getLogger(__name__).warning(
+            logger.warning(
                 "Audit log for custom_output_expiry_used failed: %s",
                 audit_err,
                 exc_info=True,
@@ -2634,9 +2592,6 @@ def complete_step(execution_id: str, execution_step_id: str):
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         # Log the full error for debugging; return message and details for diagnosis
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception("Error completing execution step")
         err_detail = str(e) if e else "Unknown error"
         db_session.rollback()
@@ -2808,9 +2763,6 @@ def list_inventory():
                     # Safety limit to prevent excessive recursion (configurable)
                     max_dag_depth = 50
                     if depth > max_dag_depth:
-                        import logging
-
-                        logger = logging.getLogger(__name__)
                         logger.warning(
                             f"DAG traversal depth limit ({max_dag_depth}) reached for inventory item {inventory_item_id}"
                         )
@@ -2821,9 +2773,6 @@ def list_inventory():
 
                     # Prevent infinite loops (cycle detection)
                     if inventory_item_id in visited_ids:
-                        import logging
-
-                        logger = logging.getLogger(__name__)
                         logger.warning(f"Cycle detected in DAG traversal at inventory item {inventory_item_id}")
                         return []
                     visited_ids.add(inventory_item_id)
@@ -2940,9 +2889,6 @@ def list_inventory():
 
             except Exception:
                 # If lookup fails, just continue without previous steps data
-                import logging
-
-                logger = logging.getLogger(__name__)
                 logger.exception("Error tracing step chain")
                 pass
 
@@ -3532,13 +3478,11 @@ def reset_demo_db_route():
             return jsonify(result), 400
         return jsonify(result), 200
     except Exception as e:
-        import logging
-
         try:
             session.rollback()
         except Exception:
             pass
-        logging.getLogger(__name__).exception("reset_demo_db failed: %s", e)
+        logger.exception("reset_demo_db failed: %s", e)
         return jsonify({"success": False, "message": str(e), "error": "RESET_FAILED"}), 500
 
 
@@ -3730,9 +3674,6 @@ def create_inventory_item():
         return jsonify({"error": str(e)}), 400
     except Exception:
         # Log the full error for debugging but return generic message to client
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception("Error creating process")
         return jsonify({"error": "Failed to create process"}), 500
 
@@ -3847,9 +3788,6 @@ def update_inventory_item(item_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception:
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception("Error updating inventory item")
         return jsonify({"error": "Failed to update inventory item"}), 500
 
@@ -3901,9 +3839,6 @@ def delete_inventory_item(item_id):
 
         return jsonify({"message": "Inventory item deleted successfully"}), 200
     except Exception:
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception("Error deleting inventory item")
         return jsonify({"error": "Failed to delete inventory item"}), 500
 

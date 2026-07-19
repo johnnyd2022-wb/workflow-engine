@@ -7,7 +7,6 @@ Uses InventoryRepository.get_untracked_items so canonical inventory state drives
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 from uuid import UUID
 
@@ -19,8 +18,9 @@ from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.observability import get_logger
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 
 def _normalize(s: str | None) -> str:

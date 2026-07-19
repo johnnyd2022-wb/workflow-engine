@@ -9,7 +9,6 @@ Duration math and units come from app.core.domain.ready_date_rules (single sourc
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -29,8 +28,9 @@ from app.core.domain.ready_date_rules import (
     duration_to_timedelta,
 )
 from app.core.utils.internal_counters import inc_counter
+from app.observability import get_logger
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 CHECK_ID = "output_ready_date"
 RULE_TYPE_READY_DATE = "custom_ready_date"

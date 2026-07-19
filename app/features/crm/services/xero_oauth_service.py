@@ -2,7 +2,6 @@
 
 import base64
 import hashlib
-import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -13,9 +12,10 @@ from sqlalchemy.orm import Session
 from app.features.crm.models.xero_oauth_token import XeroOAuthToken
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
+from app.observability import get_logger
 from app.utils.config_loader import config
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 XERO_TOKEN_URL = "https://identity.xero.com/connect/token"
 XERO_REVOKE_URL = "https://identity.xero.com/connect/revocation"

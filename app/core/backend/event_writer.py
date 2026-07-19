@@ -14,7 +14,6 @@ Key rules:
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -24,11 +23,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.db.models.entity_event import EntityEvent
+from app.observability import get_logger
 
 if TYPE_CHECKING:
     pass
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _QUANTITY_HISTORY_CAP = 50
 

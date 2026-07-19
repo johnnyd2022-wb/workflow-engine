@@ -13,6 +13,9 @@ from app.core.security.auth_service import AuthService
 from app.core.security.permissions import requires_auth, requires_org_scope, requires_role
 from app.core.utils.emit_event import emit_event
 from app.core.utils.log_action import log_action
+from app.observability import get_logger
+
+logger = get_logger(__name__)
 
 org_bp = Blueprint("org", __name__, url_prefix="/org")
 
@@ -212,9 +215,6 @@ def create_user():
     except Exception:
         db.rollback()
         # Log the full error for debugging but return generic message to client
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception("Error creating user")
         return jsonify({"error": "Failed to create user"}), 500
     # Don't close session here - let middleware teardown handle it

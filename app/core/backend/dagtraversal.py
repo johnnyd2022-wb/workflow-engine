@@ -21,7 +21,6 @@ data is still recommended to validate behavior and performance.
 
 from __future__ import annotations
 
-import logging
 import time
 from collections import deque
 from collections.abc import Callable
@@ -38,7 +37,7 @@ from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.process import Process
 from app.core.utils.inventory_quantity import quantity_to_api_str
-from app.observability import traced
+from app.observability import get_logger, traced
 
 try:
     from dateutil import parser as dateutil_parser
@@ -248,7 +247,7 @@ class DAGTracer:
     def __init__(self, org_id: UUID, session: Session):
         self.org_id = org_id
         self.session = session
-        self._log = logging.getLogger(__name__)
+        self._log = get_logger(__name__)
         self._enrichment_cache: dict[UUID, dict[str, Any]] = {}
 
     @traced("dag.traverse", attributes_fn=_traverse_span_attrs)

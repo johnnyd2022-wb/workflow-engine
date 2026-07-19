@@ -8,7 +8,6 @@ or execution flows. All actions are audited in extra_data.reconciliation_history
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -23,8 +22,9 @@ from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.observability import get_logger
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 
 def _normalize_str(s: str | None) -> str:

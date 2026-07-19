@@ -12,13 +12,14 @@ exposes run_check(check_id) and run_all_checks() for APIs and UI.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+
+from app.observability import get_logger
 
 # ---------------------------------------------------------------------------
 # Check result and runner
@@ -56,7 +57,7 @@ class CoreChecksRunner:
     def __init__(self, org_id: UUID, session: Session):
         self.org_id = org_id
         self.session = session
-        self._log = logging.getLogger(__name__)
+        self._log = get_logger(__name__)
         self._checks: dict[str, CheckFn] = {}
         self._register_builtin_checks()
 

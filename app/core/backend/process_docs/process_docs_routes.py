@@ -1,6 +1,5 @@
 """API routes for process step documentation (SOP): upload, inline, list, delete, download."""
 
-import logging
 from io import BytesIO
 from uuid import UUID
 
@@ -23,8 +22,9 @@ from app.core.backend.process_docs.process_docs_validation import (
 from app.core.db.models.user import UserRole
 from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
+from app.observability import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _org_uuid():

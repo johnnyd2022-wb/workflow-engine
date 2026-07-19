@@ -1,6 +1,5 @@
 """API routes for evidence upload and download."""
 
-import logging
 from io import BytesIO
 from uuid import UUID
 
@@ -20,8 +19,9 @@ from app.core.backend.evidence.evidence_validation import (
 )
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
+from app.observability import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def register_routes(bp):

@@ -1,6 +1,5 @@
 """Validation for process doc upload and inline SOP."""
 
-import logging
 import os
 import tempfile
 from pathlib import Path
@@ -11,8 +10,9 @@ from flask import request
 from app.core.backend.process_docs.process_docs_storage import get_temp_dir
 from app.core.db import db_session
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.observability import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Magic bytes for server-side MIME detection
 _MAGIC = {
