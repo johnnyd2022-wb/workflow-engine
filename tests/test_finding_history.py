@@ -99,3 +99,10 @@ def test_check_flags_bad_verdict(store):
     (store / "findings.jsonl").write_text('{"sig": "x", "area": "a", "verdict": "vibes"}\n', encoding="utf-8")
     problems = fh.check()
     assert any("bad verdict" in p for p in problems)
+
+
+def test_date_backfill(store):
+    rec = fh.record(area="app/x", kind="k", evidence="ev", verdict="confirmed", ts=fh._date_to_ts("2026-07-17"))
+    assert rec["ts"].startswith("2026-07-17T00:00:00")
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        fh._date_to_ts("nope")

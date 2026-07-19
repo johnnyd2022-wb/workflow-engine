@@ -86,6 +86,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _date_to_ts(date_str: str | None) -> str | None:
+    """--date YYYY-MM-DD -> ISO ts (midnight UTC), for backfilling a historical verdict
+    with its real date instead of today. None means 'use now'."""
+    if not date_str:
+        return None
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError as e:
+        raise ValueError(f"--date must be YYYY-MM-DD, got {date_str!r}") from e
+    return d.isoformat(timespec="seconds")
+
+
 def normalise_evidence(evidence: str) -> str:
     """Collapse the volatile parts of a finding's evidence so the same bug in the same
     place hashes the same next time, even if line numbers, ids, or literals shifted."""
@@ -227,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--skill", default=None)
     rec.add_argument("--ref", default=None)
     rec.add_argument("--notes", default=None)
+    rec.add_argument("--date", default=None, help="YYYY-MM-DD to backfill a historical verdict (default: now)")
 
     args = ap.parse_args(argv)
 
@@ -269,6 +282,7 @@ def main(argv: list[str] | None = None) -> int:
                 skill=args.skill,
                 ref=args.ref,
                 notes=args.notes,
+                ts=_date_to_ts(args.date),
             )
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)

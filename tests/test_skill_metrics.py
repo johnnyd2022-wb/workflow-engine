@@ -120,3 +120,15 @@ def test_check_flags_bad_enum(ledger):
 def test_empty_ledger_scores_empty(ledger):
     assert _score(skill_metrics) == {}
     assert "empty" in skill_metrics.render_scorecard({})
+
+
+def test_date_backfill_sets_ts():
+    assert skill_metrics._date_to_ts("2026-07-18").startswith("2026-07-18T00:00:00")
+    assert skill_metrics._date_to_ts(None) is None
+
+
+def test_date_backfill_rejects_bad_format():
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="YYYY-MM-DD"):
+        skill_metrics._date_to_ts("18-07-2026")

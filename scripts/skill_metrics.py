@@ -68,6 +68,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _date_to_ts(date_str: str | None) -> str | None:
+    """Turn a --date YYYY-MM-DD into an ISO ts (midnight UTC), for backfilling historical
+    runs honestly instead of stamping them with today. None means 'use now'."""
+    if not date_str:
+        return None
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError as e:
+        raise ValueError(f"--date must be YYYY-MM-DD, got {date_str!r}") from e
+    return d.isoformat(timespec="seconds")
+
+
 def _append(path: Path, record: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
@@ -291,12 +303,14 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--ref", default=None, help="MR ref (!123) or branch — the join key for outcomes")
     rec.add_argument("--duration", type=float, default=None, dest="duration_s")
     rec.add_argument("--notes", default=None)
+    rec.add_argument("--date", default=None, help="YYYY-MM-DD to backfill a historical run (default: now)")
 
     oc = sub.add_parser("outcome", help="attach a resolution to a run/MR")
     oc.add_argument("--ref", required=True, help="the run's ref (MR ref or branch)")
     oc.add_argument("--outcome", required=True, choices=sorted(OUTCOMES))
     oc.add_argument("--skill", default=None)
     oc.add_argument("--notes", default=None)
+    oc.add_argument("--date", default=None, help="YYYY-MM-DD to backfill (default: now)")
 
     sc = sub.add_parser("scorecard", help="per-skill performance summary")
     sc.add_argument("--json", action="store_true")
@@ -324,6 +338,7 @@ def main(argv: list[str] | None = None) -> int:
                 ref=args.ref,
                 duration_s=args.duration_s,
                 notes=args.notes,
+                ts=_date_to_ts(args.date),
             )
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
@@ -333,7 +348,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "outcome":
         try:
-            rec_out = record_outcome(ref=args.ref, outcome=args.outcome, skill=args.skill, notes=args.notes)
+            rec_out = record_outcome(
+                ref=args.ref, outcome=args.outcome, skill=args.skill, notes=args.notes, ts=_date_to_ts(args.date)
+            )
         except ValueError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
