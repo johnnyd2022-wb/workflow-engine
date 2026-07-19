@@ -50,6 +50,20 @@ ruff:
     - main
   allow_failure: false
 
+# Guard the agent-written data stores (AER metrics ledger + findings history). These are
+# append-only JSONL that unattended skills write; a malformed line should fail fast here
+# rather than silently corrupt a scorecard or suppress the wrong finding. Stdlib-only.
+data_stores:
+  stage: test
+  image: python:3.12-bullseye
+  script:
+    - python3 scripts/skill_metrics.py --check
+    - python3 scripts/finding_history.py --check
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
+
 unit_tests:
   stage: test
   image: python:3.12-bullseye

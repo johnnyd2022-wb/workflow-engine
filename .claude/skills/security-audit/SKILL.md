@@ -40,6 +40,25 @@ Triage every finding into exactly one bucket:
 
 Never bulk-dismiss. A lazy triage is worse than no scan because it trains everyone to ignore the tool.
 
+**Consult the history store first (`scripts/finding_history.py`, see `.agents/history/README.md`).** Before spending judgment on a finding, ask whether a prior run already ruled on it:
+
+```bash
+python scripts/finding_history.py decide --area <path/slug> --kind <rule-id-or-class> --evidence '<snippet>'
+```
+
+- `suppress` → a human already called it false-positive/accepted-risk. Keep it out of the report body; log it under a `suppressed (prior verdict):` line so the suppression is auditable, not invisible. Don't burn tokens re-deciding it.
+- `recurring` → this was **fixed and is back**: a regression. Surface it loudly and prioritise it over new findings.
+- `known-confirmed` / `new` → triage normally.
+
+After you rule on a finding, **record the verdict** so the next run compounds — and so the scorecard (`.agents/metrics/`) can see whether this skill's findings land as real or as false positives:
+
+```bash
+python scripts/finding_history.py record --area <path/slug> --kind <class> --evidence '<snippet>' \
+  --verdict confirmed|fixed|false-positive|accepted-risk --skill security-audit --ref <branch/MR> --notes '<why>'
+```
+
+Only a human's call is `false-positive`/`accepted-risk`; you may record `confirmed`/`fixed` yourself.
+
 ## 2. Manual pass (what scanners miss)
 
 Work this checklist against the scoped code. For each item, look at actual code paths, not file names:

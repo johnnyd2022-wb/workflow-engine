@@ -151,11 +151,15 @@ they land on this branch.
 - [x] DB-free unit tests pin the under-match / over-match / parse logic
       (`tests/test_rule_candidates.py`, 6 tests)
 
-### Phase 3 — Historical-findings store (compounding memory)
-- [ ] `.agents/history/` verdict store keyed by file/area + finding signature
-- [ ] `review-feature`/`security-audit` consult it to suppress already-rejected findings
-      and re-surface recurring ones
-- [ ] Store feeds the Phase 1 ledger (accepted vs. rejected over time)
+### Phase 3 — Historical-findings store (compounding memory) ✅
+- [x] `.agents/history/findings.jsonl` verdict store keyed by a stable, tool-agnostic
+      signature (area + kind + normalised evidence — survives line moves & literal churn)
+- [x] `scripts/finding_history.py`: `signature`, `decide`
+      (new/known-confirmed/recurring/suppress), `record`, `--check`; suppression only ever
+      earned by a human verdict; last-verdict-wins
+- [x] `security-audit` triage + `review-feature` Step 4 rewired to consult and record
+- [x] `data_stores` CI job guards the ledgers; feeds the Phase 1 scorecard
+      (accepted-vs-rejected signal); 11 DB-free tests (`tests/test_finding_history.py`)
 
 ### Phase 4 — Declarative capability metadata + wiring
 - [ ] Add `cost`/`confidence` metadata to skill frontmatter (feeds the scorecard)
@@ -179,3 +183,8 @@ Progress log lives at the bottom of this file as each phase lands.
   ones; `security-audit` §3 routes through it; seeded with a real rule
   (`bize-mass-assignment-from-request`). Each validated finding can now become permanent,
   *tested* deterministic capability — the North Star made mechanical.
+- 2026-07-19 — **Phase 3 complete.** Review skills now have memory:
+  `.agents/history/findings.jsonl` + `scripts/finding_history.py` suppress
+  already-rejected findings and re-surface regressions, keyed by a churn-resistant
+  signature. Wired into `security-audit` and `review-feature`; `data_stores` CI job guards
+  it. This is also the accepted-vs-rejected feed the Phase 1 scorecard needed.

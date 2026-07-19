@@ -62,6 +62,8 @@ verdict: clean | patched | findings-open | escalated
 
 Patch priority: security `fix` items first, then broken/missing tests, then observability gaps. After each patch batch, re-run the affected stage plus the unit suite. Same circuit breaker as new-feature: a finding that survives two full patch rounds gets escalated to the user with hypotheses, not a third round.
 
+**Use the history store so the review compounds** (`scripts/finding_history.py`, `.agents/history/README.md`). A repeat audit of the same feature should not re-litigate findings a human already rejected, nor miss a fixed bug that returned. For each finding, `finding_history.py decide` first: `suppress` (log it under a `suppressed (prior verdict):` line, keep it out of the body), `recurring` (a regression — surface loudly, patch first), else triage normally. After ruling, `finding_history.py record` the verdict (`--skill review-feature`, `--ref` the branch) — this is also the accepted-vs-rejected signal the scorecard reads (`.agents/metrics/`).
+
 ## Step 5: Report honestly
 
 Present the table, the before/after (coverage %, findings fixed, tests added, rules added to `.semgrep/`), and what remains open with your recommendation. Set the spec `status: reviewed`. If the review changed code, call the **merge-request** skill to write the MR (from this report and the spec), push, open it, and watch the pipeline — same as new-feature's final step, do not assemble the MR yourself. No direct commits to main.
