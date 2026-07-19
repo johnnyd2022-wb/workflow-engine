@@ -108,17 +108,20 @@ def _chromium_available() -> tuple[bool, str]:
 
 def _e2e_skip_reason() -> str | None:
     """The one place that decides whether E2E can run. None means go."""
-    if os.getenv("ENVIRONMENT", "").lower() == "test":
+    external_url = os.environ.get("E2E_BASE_URL")
+
+    if not external_url and os.getenv("ENVIRONMENT", "").lower() == "test":
         return (
             "ENVIRONMENT=test targets host.docker.internal and hangs from a host shell; "
-            "run E2E with ENVIRONMENT unset so it resolves to local (spec D1)"
+            "run E2E with ENVIRONMENT unset so it resolves to local (spec D1), or set "
+            "E2E_BASE_URL to point at an already-running deployment instead of booting one"
         )
 
     ok, reason = _chromium_available()
     if not ok:
         return reason
 
-    if not (CERT_FILE.exists() and KEY_FILE.exists()):
+    if not external_url and not (CERT_FILE.exists() and KEY_FILE.exists()):
         return f"TLS cert/key missing at {CERT_FILE.parent} — E2E serves the app over HTTPS"
 
     from app.utils.config_loader import config
@@ -166,7 +169,18 @@ def e2e_preconditions() -> None:
 
 @pytest.fixture(scope="session")
 def app_url(e2e_preconditions) -> str:
-    """Boot the real app on an ephemeral port over TLS, once per session."""
+    """Boot the real app on an ephemeral port over TLS, once per session.
+
+    If E2E_BASE_URL is set, point Playwright at that URL instead of booting anything —
+    this is how a CD post-deploy smoke test proves the actually-deployed, registry-pulled
+    container works (see the deploy-runner skill), rather than exercising a fresh
+    in-process app that never touched the built image at all.
+    """
+    external_url = os.environ.get("E2E_BASE_URL")
+    if external_url:
+        yield external_url.rstrip("/")
+        return
+
     from werkzeug.serving import make_server
 
     # The composed app, not app_factory.create_app() — see the module docstring.
