@@ -119,5 +119,51 @@ and **remember prior findings (history store)**. Those three — in that order �
 we get more efficient and effective. The rest of AER is either already ours or a trade we
 made on purpose.
 
-Suggested next move: stand up the `.agents/metrics/` ledger + `skill_scorecard.py` (#1)
+Suggested next move: stand up the `.agents/metrics/` ledger + scorecard (#1)
 first, because it's small and every other improvement becomes measurable once it exists.
+
+## Roadmap checklist — closing the gap to frontier
+
+Ordered so each item is independently shippable and later items build on earlier ones.
+Effort is not the constraint; correctness and compounding leverage are. Check items off as
+they land on this branch.
+
+### Phase 1 — Evaluation layer (measure ourselves) ✅
+- [x] `.agents/metrics/` append-only run ledger (`runs.jsonl` / `outcomes.jsonl`) with a
+      documented schema
+- [x] `scripts/skill_metrics.py`: `record` (append a run), `outcome` (attach MR result),
+      `scorecard` (per-skill acceptance rate, findings volume, escaped defects, cost),
+      `--check` for CI
+- [x] `.agents/metrics/README.md` documenting the schema and how skills append
+- [x] DB-free unit test for the scorecard aggregation (falsifiable) —
+      `tests/test_skill_metrics.py`, 11 tests green
+
+### Phase 2 — Learning loop (finding → permanent deterministic rule)
+- [ ] `scripts/rule_candidates.py`: given a validated finding, emit a semgrep rule stub +
+      a test fixture that the rule must catch
+- [ ] Handoff wired: when a `security-audit`/`perf-guardrails` finding's fix merges,
+      propose the rule candidate through the normal MR gate
+- [ ] Track "rules born from findings" as a first-class metric in the scorecard
+
+### Phase 3 — Historical-findings store (compounding memory)
+- [ ] `.agents/history/` verdict store keyed by file/area + finding signature
+- [ ] `review-feature`/`security-audit` consult it to suppress already-rejected findings
+      and re-surface recurring ones
+- [ ] Store feeds the Phase 1 ledger (accepted vs. rejected over time)
+
+### Phase 4 — Declarative capability metadata + wiring
+- [ ] Add `cost`/`confidence` metadata to skill frontmatter (feeds the scorecard)
+- [ ] Wire the orchestrators + `.agents/autonomy.md` so every skill run appends to the
+      ledger without ceremony
+- [ ] `skill-smith` scheduled audit runs the scorecard and flags underperformers
+
+Progress log lives at the bottom of this file as each phase lands.
+
+## Progress log
+
+- 2026-07-19 — Phase 1 started.
+- 2026-07-19 — **Phase 1 complete.** Evaluation ledger + scorecard shipped
+  (`scripts/skill_metrics.py`, `.agents/metrics/`, `tests/test_skill_metrics.py`). We can
+  now measure per-skill acceptance rate, findings/run, escaped defects, and cost. Next:
+  Phase 4's wiring is what makes skills actually *append* to this — but Phase 2 (learning
+  loop) is the higher-leverage North-Star item, so it goes next.
