@@ -34,18 +34,6 @@ wheels = [
 ]
 
 [[package]]
-name = "authlib"
-version = "1.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/61/ab/7475c1292d0ae22e291d74468693ae29c146185859e3ea4e01a179e9b625/Authlib-1.2.1.tar.gz", hash = "sha256:421f7c6b468d907ca2d9afede256f068f87e34d23dd221c07d13d4c234726afb", size = 140416, upload-time = "2023-06-25T13:03:58.165Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/81/6e/f4522542322c7f53783da5f65464a7dee137c687111624d2ac733e2a1b98/Authlib-1.2.1-py2.py3-none-any.whl", hash = "sha256:c88984ea00149a90e3537c964327da930779afa4564e354edfd98410bea01911", size = 215252, upload-time = "2023-06-25T13:03:55.988Z" },
-]
-
-[[package]]
 name = "bcrypt"
 version = "5.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1914,7 +1902,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
-    { name = "authlib" },
     { name = "bcrypt" },
     { name = "click" },
     { name = "cryptography" },
@@ -1949,7 +1936,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.17.2" },
-    { name = "authlib", specifier = "==1.2.1" },
     { name = "bcrypt", specifier = ">=5.0.0" },
     { name = "click", specifier = "==8.3.3" },
     { name = "cryptography", specifier = ">=48.0.1" },
