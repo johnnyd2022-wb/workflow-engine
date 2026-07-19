@@ -1,12 +1,12 @@
 """Org-level CRM sales traceability configuration."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class SalesTraceabilityConfig(Base):
@@ -24,8 +24,8 @@ class SalesTraceabilityConfig(Base):
     strict_mapping = Column(Boolean, nullable=False, default=True)
     task_done_archive_days = Column(Integer, nullable=False, default=7)
     revenue_baseline_target_mtd = Column(Numeric(12, 2), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
     def __repr__(self) -> str:
         return f"<SalesTraceabilityConfig(org_id={self.org_id}, strategy={self.matching_strategy!r})>"

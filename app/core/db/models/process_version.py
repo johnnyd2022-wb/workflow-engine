@@ -1,13 +1,13 @@
 """ProcessVersion model — immutable snapshot of a process and its steps"""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Column, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import backref, relationship
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class ProcessVersion(Base):
@@ -32,7 +32,7 @@ class ProcessVersion(Base):
     change_summary = Column(String(500), nullable=True)
     created_at = Column(
         __import__("sqlalchemy").TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False,
     )
 

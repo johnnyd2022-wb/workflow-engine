@@ -1,12 +1,12 @@
 """XeroInvoiceLineItem — a single line on a Xero invoice."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Column, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class XeroInvoiceLineItem(Base):
@@ -28,7 +28,7 @@ class XeroInvoiceLineItem(Base):
     tax_amount = Column(Numeric(18, 4), nullable=True)
     discount_rate = Column(Numeric(5, 2), nullable=True)
     tracking = Column(JSONB, nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
 
     def __repr__(self) -> str:
         return f"<XeroInvoiceLineItem(id={self.id}, invoice_id={self.invoice_id}, desc={self.description!r:.40})>"

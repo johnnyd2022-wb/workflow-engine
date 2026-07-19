@@ -9,7 +9,7 @@ Design (no float, single unit path; DB stores NUMERIC(18,4)):
 import csv
 import io
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -309,7 +309,7 @@ def register_routes(bp):
                     "inventory_audit_history": [
                         {
                             "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
-                            "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                             "source_method": "csv_upload",
                             "csv_row_index": r.get("row_index"),
                         }

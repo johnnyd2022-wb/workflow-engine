@@ -4,11 +4,11 @@ Contains cross-cutting concerns like response formatting, validation, and databa
 """
 
 import traceback
-from datetime import datetime
 from functools import wraps
 
 from flask import jsonify, request
 
+from app.core.utils.time import utc_now
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -27,7 +27,13 @@ def api_response(success=True, data=None, message="", status_code=200):
     Returns:
         tuple: (jsonify response, status_code)
     """
-    response = {"success": success, "message": message, "timestamp": datetime.utcnow().isoformat() + "Z"}
+    # utc_now() is aware, so isoformat() already appends a UTC offset ("+00:00") — swap it
+    # for the "Z" suffix this response shape has always used, rather than concatenating one.
+    response = {
+        "success": success,
+        "message": message,
+        "timestamp": utc_now().isoformat().replace("+00:00", "Z"),
+    }
     if data is not None:
         response["data"] = data
     return jsonify(response), status_code

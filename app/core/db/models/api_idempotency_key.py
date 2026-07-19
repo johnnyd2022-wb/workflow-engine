@@ -1,12 +1,12 @@
 """Stores idempotent API responses (e.g. inventory wastage) for safe client retries."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class ApiIdempotencyKey(Base):
@@ -21,4 +21,4 @@ class ApiIdempotencyKey(Base):
     payload_hash = Column(String(64), nullable=False)
     response_json = Column(Text, nullable=False)
     http_status = Column(Integer, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

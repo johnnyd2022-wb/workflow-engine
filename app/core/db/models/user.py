@@ -2,13 +2,13 @@
 
 import enum
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class UserRole(enum.Enum):
@@ -33,7 +33,7 @@ class User(Base):
     last_name = Column(String(255), nullable=True)
     role = Column(Enum(UserRole, name="user_role"), default=UserRole.MEMBER, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     totp_secret = Column(String, nullable=True)
     two_factor_enabled = Column(Boolean, default=False, nullable=False)
     # Conservative default (24h); long sessions only with explicit user choice in settings.

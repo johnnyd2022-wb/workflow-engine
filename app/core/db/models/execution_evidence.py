@@ -1,12 +1,12 @@
 """Execution evidence model for uploaded files (images, PDFs)."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 # Status: PENDING_FILE (record created, file not yet moved), ACTIVE (file finalized), FAILED (finalize failed, cleaned)
 EVIDENCE_STATUS_PENDING = "pending"
@@ -29,6 +29,6 @@ class ExecutionEvidence(Base):
     file_size = Column(Integer, nullable=False)
     checksum_sha256 = Column(String(64), nullable=False)
     uploaded_by = Column(String(512), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     extra_data = Column(JSONB, nullable=True)
     evidence_status = Column(String(32), nullable=False, default=EVIDENCE_STATUS_ACTIVE, index=True)

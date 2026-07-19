@@ -2,13 +2,13 @@
 
 import enum
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class InventoryMovementType(str, enum.Enum):
@@ -43,7 +43,7 @@ class InventoryMovement(Base):
     movement_type = Column("type", String(32), nullable=False, index=True)
     quantity = Column(Numeric(18, 4), nullable=False)
     unit = Column(String(50), nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
     # DB column name "metadata"; avoid Python name `metadata` (conflicts with declarative MetaData).
     movement_metadata = Column("metadata", JSONB, nullable=True)
 

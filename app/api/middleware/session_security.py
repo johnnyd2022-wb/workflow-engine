@@ -12,7 +12,7 @@ Explicit non-goals (intentionally deferred for current product maturity):
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from flask import g, make_response, render_template_string, request, session
@@ -78,7 +78,7 @@ def setup_session_security(app):
         if last_activity_str:
             try:
                 last_activity = datetime.fromisoformat(last_activity_str)
-                time_since_activity = datetime.utcnow() - last_activity
+                time_since_activity = datetime.now(UTC) - last_activity
                 if time_since_activity > timedelta(minutes=timeout_minutes):
                     logger.info("session_expired_due_to_inactivity", user_id=user_id)
                     session.clear()
@@ -110,7 +110,7 @@ def setup_session_security(app):
             except (ValueError, TypeError) as e:
                 logger.warning("invalid_last_activity_at_format", error=str(e))
                 # Reset on invalid format (only write in before_request when correcting bad data)
-                session["last_activity_at"] = datetime.utcnow().isoformat()
+                session["last_activity_at"] = datetime.now(UTC).isoformat()
                 session.modified = True
 
         # No session write here: single authoritative update of last_activity_at is in after_request.
@@ -121,6 +121,6 @@ def setup_session_security(app):
         Ensures 4xx/5xx responses still update inactivity without redundant writes (no duplicate Set-Cookie).
         """
         if session.get("user_id"):
-            session["last_activity_at"] = datetime.utcnow().isoformat()
+            session["last_activity_at"] = datetime.now(UTC).isoformat()
             session.modified = True
         return response

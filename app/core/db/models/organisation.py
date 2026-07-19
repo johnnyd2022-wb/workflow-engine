@@ -2,12 +2,12 @@
 
 import enum
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Enum, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class OrganisationStatus(enum.Enum):
@@ -27,8 +27,8 @@ class Organisation(Base):
     status = Column(
         Enum(OrganisationStatus, name="organisation_status"), default=OrganisationStatus.ACTIVE, nullable=False
     )
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     def __repr__(self):
         return f"<Organisation(id={self.id}, name={self.name}, status={self.status.value})>"

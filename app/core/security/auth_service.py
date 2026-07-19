@@ -2,7 +2,6 @@
 
 import hashlib
 import hmac
-from datetime import datetime
 from uuid import UUID
 
 import bcrypt
@@ -14,6 +13,7 @@ from app.core.db.models.user import User
 from app.core.db.repositories.backup_code_repo import BackupCodeRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
+from app.core.utils.time import utc_now
 
 
 class AuthService:
@@ -137,7 +137,7 @@ class AuthService:
             "org_id": str(org_id),
             "user_email": user_email,  # Store as user_email for consistency
             "org_name": org_name,  # Store org_name for lightweight access
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": utc_now().isoformat(),
         }
         return session_data
 

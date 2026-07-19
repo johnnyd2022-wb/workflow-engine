@@ -1,10 +1,10 @@
 """Repository for CRMNote and CRMTask records."""
 
-from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.utils.time import utc_now
 from app.features.crm.models.crm_note import CRMNote
 from app.features.crm.models.crm_task import CRMTask
 
@@ -36,7 +36,7 @@ class CRMNoteRepository:
 
     def update(self, note: CRMNote, content: str) -> CRMNote:
         note.content = content
-        note.updated_at = datetime.utcnow()
+        note.updated_at = utc_now()
         return note
 
     def delete(self, note: CRMNote) -> None:
@@ -95,8 +95,8 @@ class CRMTaskRepository:
         for k, v in fields.items():
             setattr(task, k, v)
         if fields.get("status") == "completed" and not task.completed_at:
-            task.completed_at = datetime.utcnow()
-        task.updated_at = datetime.utcnow()
+            task.completed_at = utc_now()
+        task.updated_at = utc_now()
         return task
 
     def delete(self, task: CRMTask) -> None:

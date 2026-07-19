@@ -1,12 +1,12 @@
 """ProductMapping — links a Biz-e product name to a Xero invoice line item description pattern."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class ProductMapping(Base):
@@ -26,8 +26,8 @@ class ProductMapping(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     notes = Column(Text, nullable=True)
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
     def __repr__(self) -> str:
         return (

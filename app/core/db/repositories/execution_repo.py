@@ -226,7 +226,7 @@ class ExecutionRepository:
         Enforces step order: all prior steps must be completed before this step can be completed.
         If commit=False, caller is responsible for commit (e.g. atomic reconciliation).
         completed_at_override: optional datetime for tests/fixtures that need a specific completion time
-        (e.g. expired output expiry); when None, uses utcnow().
+        (e.g. expired output expiry); when None, uses now(UTC).
         """
         with start_span(
             "execution.complete_step",

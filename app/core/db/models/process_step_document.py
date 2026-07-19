@@ -1,12 +1,12 @@
 """Process step document (SOP) model: file-based or inline markdown."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class ProcessStepDocument(Base):
@@ -23,7 +23,7 @@ class ProcessStepDocument(Base):
     content_markdown = Column(Text, nullable=True)  # inline SOP
     mime_type = Column(String(128), nullable=True)
     file_size = Column(Integer, nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True)  # soft delete
