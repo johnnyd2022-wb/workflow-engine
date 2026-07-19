@@ -9,7 +9,7 @@ Duration math and units come from app.core.domain.ready_date_rules (single sourc
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -58,20 +58,20 @@ def _normalize_dt(val: Any) -> datetime | None:
         return None
     if isinstance(val, int | float):
         try:
-            return datetime.fromtimestamp(val, tz=timezone.utc)
+            return datetime.fromtimestamp(val, tz=UTC)
         except Exception:
             return None
     if isinstance(val, datetime):
         if val.tzinfo is None:
-            return val.replace(tzinfo=timezone.utc)
-        return val.astimezone(timezone.utc)
+            return val.replace(tzinfo=UTC)
+        return val.astimezone(UTC)
     if isinstance(val, str) and val.strip():
         s = val.strip()
         try:
             dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
+            return dt.astimezone(UTC)
         except Exception:
             return None
     return None
@@ -148,7 +148,7 @@ def is_inventory_item_ready_for_consumption(
     Invariant (locked): now < ready_dt → not ready; now >= ready_dt → ready (inclusive).
     """
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
     extra = (item.extra_data or {}) if isinstance(item.extra_data, dict) else {}
     # Set-at-execution: ready date stored on item (dict with date, or ISO string)
     actual = extra.get("ready_date_actual")
@@ -307,7 +307,7 @@ def run_output_ready_date_check(org_id: UUID, session: Session) -> CheckResult:
     execution_steps and their inventory. Avoids loading all org execution_steps
     and all org inventory when most steps do not use ready date (scales for large orgs).
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     ready_date_items: list[dict[str, Any]] = []
     seen_item_ids: set[UUID] = set()
 

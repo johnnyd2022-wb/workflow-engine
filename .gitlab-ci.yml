@@ -26,7 +26,7 @@ sast:
 
 # Check for dependency updates
 check_dependency_updates:
-  image: python:3.12-bullseye
+  image: python:3.14-bookworm
   script:
     - pip install uv
     - uv lock --check
@@ -39,7 +39,7 @@ check_dependency_updates:
 # Note: This checks only. To auto-fix locally, run: uv run workflow lint --fix
 ruff:
   stage: test
-  image: python:3.12-bullseye
+  image: python:3.14-bookworm
   script:
     - pip install uv
     - uv sync --extra dev
@@ -55,7 +55,7 @@ ruff:
 # rather than silently corrupt a scorecard or suppress the wrong finding. Stdlib-only.
 data_stores:
   stage: test
-  image: python:3.12-bullseye
+  image: python:3.14-bookworm
   script:
     - python3 scripts/skill_metrics.py --check
     - python3 scripts/finding_history.py --check
@@ -66,7 +66,7 @@ data_stores:
 
 unit_tests:
   stage: test
-  image: python:3.12-bullseye
+  image: python:3.14-bookworm
   services:
     - name: postgres:16
       alias: postgres
@@ -175,7 +175,7 @@ gitleaks:
 # dependency-update skill for the remediation flow when a new CVE lands).
 pip_audit:
   stage: security
-  image: python:3.12-bullseye
+  image: python:3.14-bookworm
   script:
     - pip install uv
     - uv sync --extra dev
@@ -191,7 +191,7 @@ pip_audit:
 # down and back up round-trips cleanly.
 migration_reversibility:
   stage: migrations
-  image: python:3.12-bullseye
+  image: python:3.14-bookworm
   services:
     - name: postgres:16
       alias: postgres

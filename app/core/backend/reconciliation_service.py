@@ -8,7 +8,7 @@ or execution flows. All actions are audited in extra_data.reconciliation_history
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -419,7 +419,7 @@ def reconcile_via_addition(
             surplus = added_qty_dec - reconv_in_added_unit
             remaining_untracked_balance = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
 
-            ts = datetime.now(timezone.utc).isoformat()
+            ts = datetime.now(UTC).isoformat()
             history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
             history.append(
                 {
@@ -638,7 +638,7 @@ def reconcile_via_execution(
             commit=False,
         )
 
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
         history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
         history.append(
             {
@@ -759,7 +759,7 @@ def reconcile_output_to_untracked_reduce_only(
     history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
     history.append(
         {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "user_id": user_id,
             "user_email": user_email,
             "method": "map_to_untracked_at_completion",
@@ -776,7 +776,7 @@ def reconcile_output_to_untracked_reduce_only(
     new_extra["remaining_balance_to_reconcile"] = "0" if remaining_to_reconcile <= 0 else str(remaining_to_reconcile)
     new_extra["untracked"] = True
     if remaining_to_reconcile <= 0 or abs(remaining_to_reconcile) < Decimal("0.0001"):
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
         new_extra["resolved"] = True
         new_extra["resolved_at"] = ts
     qty_str = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
@@ -842,7 +842,7 @@ def reconcile_output_to_untracked(
     history = list((untracked.extra_data or {}).get("reconciliation_history") or [])
     history.append(
         {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "user_id": user_id,
             "user_email": user_email,
             "method": "map_to_untracked_at_completion",
@@ -858,7 +858,7 @@ def reconcile_output_to_untracked(
     new_extra["untracked"] = True
     new_extra["remaining_balance_to_reconcile"] = remaining_balance
     if new_untracked_qty <= 0:
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(UTC).isoformat()
         new_extra["resolved"] = True
         new_extra["resolved_at"] = ts
     _assert_reconciliation_invariants(remaining_balance, new_extra)

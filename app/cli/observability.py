@@ -79,7 +79,9 @@ def _stack_environment() -> tuple[dict[str, str], list[str]]:
 def _require_stack_environment() -> dict[str, str]:
     environment, missing = _stack_environment()
     if missing:
-        raise click.ClickException("Missing KeePassXC observability entries:\n" + "\n".join(f"- {item}" for item in missing))
+        raise click.ClickException(
+            "Missing KeePassXC observability entries:\n" + "\n".join(f"- {item}" for item in missing)
+        )
     return environment
 
 
@@ -288,7 +290,9 @@ def validate_config() -> None:
 def reset(volumes: bool, rotate_secrets: bool) -> None:
     """Recreate containers, preserving data by default."""
     if rotate_secrets and not volumes:
-        raise click.UsageError("--rotate-secrets requires --volumes because existing PostHog encrypted data would be unreadable.")
+        raise click.UsageError(
+            "--rotate-secrets requires --volumes because existing PostHog encrypted data would be unreadable."
+        )
     if rotate_secrets:
         _rotate_stack_secrets()
 

@@ -1,5 +1,6 @@
 """User repository with tenancy enforcement"""
 
+from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -221,12 +222,12 @@ class UserRepository:
 
     def lock_account(self, user_id: UUID, lockout_duration_minutes: int = 1) -> User | None:
         """Lock user account for specified duration (default 1 minute)"""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         user = self.get_user_by_id(user_id)
         if not user:
             return None
-        user.account_locked_until = datetime.now(timezone.utc) + timedelta(minutes=lockout_duration_minutes)
+        user.account_locked_until = datetime.now(UTC) + timedelta(minutes=lockout_duration_minutes)
         self.db.commit()
         return user
 
@@ -242,7 +243,7 @@ class UserRepository:
 
     def is_account_locked(self, user_id: UUID) -> bool:
         """Check if account is currently locked"""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         user = self.get_user_by_id(user_id)
         if not user:
@@ -250,7 +251,7 @@ class UserRepository:
         if not user.account_locked_until:
             return False
         # Check if lockout has expired
-        if user.account_locked_until < datetime.now(timezone.utc):
+        if user.account_locked_until < datetime.now(UTC):
             # Auto-unlock expired accounts
             user.account_locked_until = None
             user.failed_login_attempts = 0

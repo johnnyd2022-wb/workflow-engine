@@ -2,7 +2,7 @@
 
 import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import and_
@@ -71,8 +71,8 @@ class TrustedDeviceRepository:
             device_token=device_token,
             device_fingerprint=device_fingerprint,
             expires_at=expires_at,
-            created_at=datetime.now(timezone.utc),
-            last_used_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            last_used_at=datetime.now(UTC),
         )
         self.db.add(trusted_device)
         return trusted_device
@@ -94,7 +94,7 @@ class TrustedDeviceRepository:
                 and_(
                     TrustedDevice.user_id == user_id,
                     TrustedDevice.device_fingerprint == device_fingerprint,
-                    TrustedDevice.expires_at > datetime.now(timezone.utc),  # Only return non-expired devices
+                    TrustedDevice.expires_at > datetime.now(UTC),  # Only return non-expired devices
                 )
             )
             .first()
@@ -102,13 +102,11 @@ class TrustedDeviceRepository:
 
     def update_last_used(self, trusted_device: TrustedDevice) -> None:
         """Update the last_used_at timestamp for a trusted device"""
-        trusted_device.last_used_at = datetime.now(timezone.utc)
+        trusted_device.last_used_at = datetime.now(UTC)
 
     def delete_expired_devices(self) -> int:
         """Delete all expired trusted devices and return count of deleted devices"""
-        deleted_count = (
-            self.db.query(TrustedDevice).filter(TrustedDevice.expires_at < datetime.now(timezone.utc)).delete()
-        )
+        deleted_count = self.db.query(TrustedDevice).filter(TrustedDevice.expires_at < datetime.now(UTC)).delete()
         return deleted_count
 
     def delete_user_devices(self, user_id: UUID) -> int:

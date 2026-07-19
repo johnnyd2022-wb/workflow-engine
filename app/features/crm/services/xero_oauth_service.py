@@ -3,7 +3,7 @@
 import base64
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import requests
@@ -22,7 +22,7 @@ XERO_REVOKE_URL = "https://identity.xero.com/connect/revocation"
 XERO_CONNECTIONS_URL = "https://api.xero.com/connections"
 XERO_AUTH_URL = "https://login.xero.com/identity/connect/authorize"
 XERO_SCOPES = (
-    "openid profile email " "accounting.contacts.read " "accounting.invoices accounting.invoices.read " "offline_access"
+    "openid profile email accounting.contacts.read accounting.invoices accounting.invoices.read offline_access"
 )
 
 
@@ -118,7 +118,7 @@ class XeroOAuthService:
           {"id": str, "tenantId": str, "tenantName": str, "tenantType": str}
         """
         expires_in = token_data.get("expires_in", 1800)
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
 
         self.token_repo.upsert(
             org_id=org_id,
@@ -165,10 +165,10 @@ class XeroOAuthService:
         if not token_record:
             raise XeroTokenExpiredError("No Xero token found — connect Xero first.")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires_at = token_record.expires_at
         if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
+            expires_at = expires_at.replace(tzinfo=UTC)
 
         if now >= expires_at - timedelta(minutes=5):
             token_record = self._refresh_token(org_id, token_record)
@@ -230,7 +230,7 @@ class XeroOAuthService:
             self.db.commit()
             raise
 
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=token_data.get("expires_in", 1800))
+        expires_at = datetime.now(UTC) + timedelta(seconds=token_data.get("expires_in", 1800))
         next_refresh_token = token_data.get("refresh_token") or prior_refresh_token
         updated = self.token_repo.upsert(
             org_id=org_id,
