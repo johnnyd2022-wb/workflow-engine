@@ -19,14 +19,14 @@ dependencies = [
     "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
     "opentelemetry-sdk>=1.27",
     "pandas>=2.0.0",
-    "psycopg2-binary==2.9.7",
+    "psycopg2-binary>=2.9.10",
     "pydantic>=2.5,<3",
     "pyotp>=2.9.0",
     "pytest>=9.0.3",
     "structlog>=24.1",
     "qrcode[pil]>=7.4.2",
     "requests==2.33.0",
-    "sqlalchemy==2.0.19",
+    "sqlalchemy>=2.0.43,<2.1",
     "xero-python==4.0.0",
 ]
 
