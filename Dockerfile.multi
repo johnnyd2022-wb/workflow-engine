@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for test and production
-FROM python:3.12-bullseye as base
+FROM python:3.14-bookworm as base
 
 LABEL maintainer="johnny@whistlebird.co.nz"
 
