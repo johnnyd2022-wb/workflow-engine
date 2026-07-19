@@ -18,6 +18,19 @@ rules:
           - pattern: $SESSION.execute(...)
       - pattern-not: cursor.execute(...)
       - pattern-not: outer_cursor.execute(...)
+      # A query that IS the for-loop's own iterable (`for x in session.query(...).all():`,
+      # or a chained `.join(...).filter(...).all()`) runs once, not per-iteration —
+      # pattern-inside matches the whole for-statement subtree including the header, so
+      # without this exclusion the batch-fetch pattern this rule's own message
+      # recommends gets flagged as the bug it fixes. `.all()` only ever executes once
+      # regardless of chain length, so excluding on the chain's return value (not
+      # re-matching `$SESSION.query`) covers any join/filter/order_by in between.
+      - pattern-not-inside: |
+          for $VAR2 in $EXPR.all():
+              ...
+      - pattern-not-inside: |
+          for $VAR2 in $SESSION.execute(...):
+              ...
 
   - id: repository-get-in-for-loop
     languages: [python]
@@ -51,8 +64,24 @@ rules:
       - pattern: $Q.filter(...).all()
       - pattern-not: $Q.filter(...).limit(...).all()
       - pattern-not: $Q.filter(...).order_by(...).limit(...).all()
-      - pattern-not-inside: |
-          $VAR = $REPO.$METHOD(...)
+      # NOTE: an earlier `pattern-not-inside: $VAR = $REPO.$METHOD(...)` lived here,
+      # meant to exempt repo-layer calls. $REPO/$METHOD are unconstrained metavariables
+      # that bind to ANY preceding expression, so `x = db.query(...).filter(...).all()`
+      # also matched it (REPO = "db.query(...).filter(...)", METHOD = "all") and every
+      # assigned unbounded query was silently excluded — the rule never fired on the
+      # thing it exists to catch. semgrep also rejects constraining a metavariable that
+      # is only ever bound inside a negative (pattern-not-inside) clause, so it can't be
+      # tightened with metavariable-regex either. Removed rather than patched: the
+      # primary pattern already requires a literal `.filter(...).all()` chain, which a
+      # bare `repo.get_thing(...)` call never has (repos here return materialized
+      # results, not chainable Query objects — confirmed no `repo.X(...).filter(...)`
+      # call site exists in the codebase), so the exclusion was dead weight even before
+      # it was found to be wrong.
+      # Bounded batch-by-ID lookup — the N+1 rule above's own recommended fix
+      # ("pre-fetch with .in_() and build a dict"). Bounded by the caller-supplied
+      # id collection, same acceptable shape as a single-entity PK/FK lookup.
+      - pattern-not: $Q.filter($COL.in_(...), ...).all()
+      - pattern-not: $Q.filter($COL.in_(...)).all()
     paths:
       include:
         - "**/backend.py"
@@ -128,12 +157,17 @@ rules:
       call `clearInterval(intervalId)` on cleanup/navigation.
     patterns:
       - pattern: setInterval(...)
-      - pattern-not: $VAR = setInterval(...)
-      - pattern-not: let $VAR = setInterval(...)
-      - pattern-not: const $VAR = setInterval(...)
-      - pattern-not: var $VAR = setInterval(...)
-      - pattern-not: window.$VAR = setInterval(...)
-      - pattern-not: this.$VAR = setInterval(...)
+      # pattern-not (not pattern-not-inside) only excludes a match whose range is IDENTICAL
+      # to the negative pattern's — `setInterval(...)` matches just the call expression,
+      # while `const $VAR = setInterval(...)` matches the whole enclosing declaration, so
+      # those ranges never coincide and pattern-not silently never excluded the assigned
+      # form. pattern-not-inside excludes on containment instead, which is what this needs.
+      - pattern-not-inside: $VAR = setInterval(...)
+      - pattern-not-inside: let $VAR = setInterval(...)
+      - pattern-not-inside: const $VAR = setInterval(...)
+      - pattern-not-inside: var $VAR = setInterval(...)
+      - pattern-not-inside: window.$VAR = setInterval(...)
+      - pattern-not-inside: this.$VAR = setInterval(...)
 
   # ── JAVASCRIPT: SEQUENTIAL INDEPENDENT AWAITS ────────────────────────────────
 
@@ -154,3 +188,10 @@ rules:
       - pattern-not: |
           const $A = await $EXPR1;
           const $B = await $EXPR2($A.$FIELD, ...);
+      # `const data = await response.json()` — $B calls a method ON $A (not passing $A as an
+      # arg), which is exactly as dependent as the two cases above but wasn't covered by
+      # either. This was the fetch()-then-.json()/.text() pattern flagging as "independent"
+      # across every fetch call site in the frontend.
+      - pattern-not: |
+          const $A = await $EXPR1;
+          const $B = await $A.$METHOD(...);

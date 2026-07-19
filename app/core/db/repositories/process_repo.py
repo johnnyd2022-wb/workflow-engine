@@ -381,6 +381,18 @@ class ProcessRepository:
             .first()
         )
 
+    def get_processes_with_steps(self, process_ids: list[UUID], org_id: UUID) -> dict[UUID, Process]:
+        """Batch version of get_process_with_steps — one query for many process IDs, keyed by id."""
+        if not process_ids:
+            return {}
+        processes = (
+            self.db.query(Process)
+            .filter(Process.id.in_(process_ids), Process.org_id == org_id)
+            .options(selectinload(Process.steps))
+            .all()
+        )
+        return {p.id: p for p in processes}
+
     def get_latest_process_version(self, process_id: UUID) -> ProcessVersion | None:
         """Return the latest ProcessVersion for this process (used when creating executions)."""
         return (

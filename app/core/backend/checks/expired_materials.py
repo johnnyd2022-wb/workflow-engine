@@ -28,7 +28,9 @@ def run_expired_materials_check(org_id: UUID, session: Session) -> CheckResult:
     # Impacted items are products produced by executions that consumed expired raw
     # materials while stock was present. This aligns with compliance and recall semantics.
     today = date.today()
-    expired_raw_materials = (
+    # Compliance/recall check — must find ALL expired raw materials in the org, not a page of
+    # them; a LIMIT here would silently under-report a recall-relevant result.
+    expired_raw_materials = (  # nosemgrep: sqlalchemy-all-without-limit
         session.query(InventoryItem)
         .filter(InventoryItem.org_id == org_id)
         .filter(InventoryItem.inventory_type == InventoryType.RAW_MATERIAL.value)

@@ -357,7 +357,11 @@ def reset_demo_db(db: Session) -> dict:
                 inv_id = ai.get("inventory_item_id")
                 if not inv_id:
                     continue
-                inv = inv_repo.get_inventory_item_by_id(UUID(inv_id), org_id)
+                # Dev/demo-only seed script — actual_inputs is a small fixed demo list, not
+                # production request traffic, so batching isn't worth the added complexity here.
+                inv = inv_repo.get_inventory_item_by_id(  # nosemgrep: repository-get-in-for-loop
+                    UUID(inv_id), org_id
+                )
                 if inv and inv.quantity is not None:
                     try:
                         current = parse_stored_quantity_to_decimal(inv.quantity)

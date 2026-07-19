@@ -144,7 +144,9 @@ def _quantity_consumed_from_item_in_execution(
     total = Decimal("0")
     if current_step_actual_inputs:
         total += _quantity_consumed_from_inputs_list(current_step_actual_inputs, inventory_item_id, ref_unit)
-    steps = (
+    # Bounded by execution_id (a single execution's steps, not a table scan) —
+    # same acceptable shape as a single-entity FK lookup.
+    steps = (  # nosemgrep: sqlalchemy-all-without-limit
         session.query(ExecutionStep)
         .filter(ExecutionStep.execution_id == execution_id, ExecutionStep.actual_inputs.isnot(None))
         .all()
@@ -274,13 +276,15 @@ def _enrich_producing_step_name(session: Session, org_id: UUID, matching: list[d
     process_ids = list({m.get("process_id") for m in matching if m.get("process_id")})
     process_repo = ProcessRepository(session)
     processes_by_id: dict[str, Any] = {}
+    process_uuids = []
     for pid in process_ids:
         try:
-            p = process_repo.get_process_with_steps(UUID(pid), org_id)
-            if p:
-                processes_by_id[pid] = p
-        except Exception:
+            process_uuids.append(UUID(pid))
+        except (ValueError, TypeError):
             pass
+    if process_uuids:
+        by_uuid = process_repo.get_processes_with_steps(process_uuids, org_id)
+        processes_by_id = {str(uid): p for uid, p in by_uuid.items()}
     for m in matching:
         pid = m.get("process_id")
         process = processes_by_id.get(pid) if pid else None
@@ -339,9 +343,9 @@ def get_matching_untracked(
             from app.core.db.models.execution import Execution
 
             ex = (
-                session.query(
+                session.query(  # nosemgrep: sqlalchemy-query-in-for-loop — filters by process_id per item, not batchable without restructuring
                     Execution
-                )  # nosemgrep: sqlalchemy-query-in-for-loop — filters by process_id per item, not batchable without restructuring
+                )
                 .filter(
                     Execution.id == item.source_execution_id,
                     Execution.org_id == org_id,

@@ -135,7 +135,9 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
         untracked_orm = [i for i in untracked_orm if _needs_reconciliation(i)]
     except Exception as e:
         _log.warning("get_untracked_items failed, falling back to direct query: %s", e)
-        untracked_orm = (
+        # Correctness fallback for a failed repo call, not a hot path — a LIMIT here would
+        # silently drop items needing reconciliation rather than flag them.
+        untracked_orm = (  # nosemgrep: sqlalchemy-all-without-limit
             session.query(InventoryItem)
             .filter(
                 InventoryItem.org_id == org_id,
@@ -186,13 +188,15 @@ def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
     process_ids = list(process_ids_set)
     process_repo = ProcessRepository(session)
     processes_by_id: dict[str, Any] = {}
+    process_uuids = []
     for pid in process_ids:
         try:
-            p = process_repo.get_process_with_steps(UUID(pid), org_id)
-            if p:
-                processes_by_id[pid] = p
-        except Exception:
+            process_uuids.append(UUID(pid))
+        except (ValueError, TypeError):
             pass
+    if process_uuids:
+        by_uuid = process_repo.get_processes_with_steps(process_uuids, org_id)
+        processes_by_id = {str(uid): p for uid, p in by_uuid.items()}
 
     untracked_items: list[dict[str, Any]] = []
     for item in untracked_orm:
