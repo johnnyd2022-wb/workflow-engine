@@ -1,0 +1,123 @@
+# AER Proposal — Review Against This Repo's Agentic Design
+
+Reviewer: Claude (Opus 4.8) · Date: 2026-07-19 · Branch: `review/aer-architecture`
+
+Honest assessment of the [AER proposal](./aer-architecture-proposal.md) against what
+this repo already runs (`.claude/skills/`, `.agents/`, `scripts/`).
+
+## Headline
+
+The AER document is a **vision whiteboard**; this repo is a **running system** that
+already implements ~70% of AER's principles — and in the areas AER hand-waves (autonomy
+contract, safety, honest reporting, adversarial test grading) our design is materially
+**more mature and more concrete**. AER's genuine value to us is in **three disciplines we
+have only partially**: a measurement/evaluation layer, an automated finding→rule learning
+loop, and a persistent historical-findings/PR-outcome store. Everything else in AER we
+either already have or have deliberately traded away.
+
+## What AER proposes vs. what we already have
+
+| AER concept | Our implementation | Verdict |
+|---|---|---|
+| Deterministic-first | `preflight.py`, `.semgrep/rules/*` (multitenant, perf, observability, js-security), gitleaks, pip-audit, `perf_triage.py` (fuses semgrep + measured runs), `error_scan.py` (dedup registry), `skill_graph.py`, `e2e_coverage.py` | **We have it, genuinely wired** — not just a principle |
+| Specialisation (one skill per discipline) | 38+ skills: security-audit, perf-guardrails, migration-safety, e2e-playwright, observability, test-author, test-evaluator, ci-gate, docs-truth, etc. | **We exceed it** |
+| Adversarial verification / different model families | Verification by subagents that didn't write the code; `test-evaluator` adversarially grades tests; Herdr **Claude-Architect / Codex-Breaker** cross-model round-trip | **We have it, and it's real** — AER's is aspirational |
+| Mapping graph (skills declare edges; reachability) | `skill_graph.py` builds the reference graph, flags **orphans** (nothing routes to them), unindexed, stale roots; `entrypoint` self-syncs the index | **We have the reachability half**; not the declarative cost/confidence half (see gaps) |
+| Self-authoring skills | `skill-smith` scaffolds/audits/registers skills to house standard; `entrypoint` index | **We have it** |
+| Closed-loop engineering (build→test→review→sec→perf→PR→CI→repair→merge) | `new-feature` chain: preflight → spec-first → build → migration-safety → security-audit ‖ e2e → perf-guardrails → observability → test-author → test-evaluator → ci-gate → merge-request (watches pipeline, repairs) | **We have it, sequenced with rationale** |
+| Learning loop (finding → deterministic rule → future detection without LLM) | Ad hoc: security findings become custom semgrep rules; N+1 findings become perf rules; `prod-sentinel` dedups against a known-issues registry | **Partial** — done by hand, not systematised |
+| Repository intelligence layer (shared substrate) | Document-based & per-domain: `conventions.md`, `test-map.md`, `budgets.json`, perf baselines, known-issues registry, quarantine registry | **Partial** — scattered docs, no unified/queryable substrate, no call/symbol graph, no PR-outcome history |
+| Evaluation layer (precision/recall/acceptance/escaped defects/cost) | **None** | **Genuine gap** |
+| Event-driven runtime (repo event auto-routes) | Invocation-driven: human front doors + cron watchers (`prod-sentinel`, `security-audit`, `suite-warden`, `perf-guardrails`, `docs-truth`, `skill-smith`) | **Deliberate difference**, not a gap (see below) |
+| Safety (budgets, rollback, human approval, evidence) | `.agents/autonomy.md`: MR-is-the-gate, never-authorised list, unattended-mode substitutions, circuit breakers (2-round ceiling), per-run work-volume caps, honest-reporting doctrine | **We vastly exceed it** — AER's safety section is one bullet list; ours is an operating contract |
+
+## Where we are clearly *better* than AER
+
+1. **The autonomy contract.** AER says "human approval for high-risk actions." We have a
+   full operating contract (`.agents/autonomy.md`): the MR is the only gate, an explicit
+   never-authorised list (no prod DB, no merge, no deploy, no external comms, no secret
+   exfiltration, **no weakening a gate to get green**), and a rule for unattended runs —
+   replace every blocking question with a *written reviewable assumption*. AER has no
+   equivalent to "would a reviewer reading the MR be able to reject the assumption you
+   made?"
+2. **Honest-reporting doctrine.** The whole loop rests on `clean` meaning checked and
+   `skipped` meaning stated. AER never addresses the single biggest failure mode of an
+   unwatched agent: shading its own report.
+3. **Adversarial *test* grading.** AER's "Test Reviewer" bullet ("detects weak
+   assertions") is exactly what `test-evaluator` does — but ours runs mutation
+   spot-checks, blocks the ship on a `valid` verdict, and never edits code. We built the
+   thing AER only names.
+4. **Concrete circuit breakers & work caps.** 2-round ceiling per finding; one fix MR per
+   `prod-sentinel` run; one MR per finding class in `security-audit`. AER says "execution
+   budgets" abstractly.
+5. **It runs against a real multi-tenant Flask codebase.** AER is a diagram.
+
+## Real gaps / opportunities worth taking
+
+Ranked by ROI. These are the parts of AER genuinely worth stealing.
+
+### 1. Evaluation layer — the biggest real gap (high ROI)
+We cannot currently answer "is `security-audit` finding real bugs or crying wolf?" or
+"which skill's findings get accepted vs. reverted?" AER's metrics list (precision, recall,
+accepted/rejected findings, escaped defects, latency, cost, developer acceptance) is the
+discipline we lack.
+- **Cheap first step:** a `.agents/metrics/` ledger. Each scheduled/chained skill run
+  appends one row: skill, run date, findings opened, MR outcome (merged / closed /
+  amended), escaped-to-prod (cross-ref `prod-sentinel`). No ML — just a CSV/JSONL and a
+  `scripts/skill_scorecard.py` that prints acceptance rate per skill.
+- **Payoff:** turns "retire poor performers" from a slogan into a decision we can make,
+  and tells us which skills earn their token cost.
+
+### 2. Systematise the finding→rule learning loop (high ROI, fits our philosophy)
+We already convert findings into semgrep rules by hand. AER's flagship idea — *every
+validated finding becomes a permanent deterministic check* — deserves a defined pipeline,
+not ad hoc effort.
+- **Step:** when a `security-audit`/`perf-guardrails` finding is confirmed and its fix
+  merges, `skill-smith` (or a new lightweight `rule-smith` handoff) proposes a semgrep
+  rule candidate that would catch the class next time — reviewed via the normal MR gate.
+- **Payoff:** directly serves the North Star (reduce the need for LLM reasoning over
+  time). This is the highest-leverage idea in the whole AER doc and it's aligned with what
+  we already do.
+
+### 3. Historical-findings / previous-PR-outcome store (medium ROI)
+AER lists "historical findings" and "previous PR outcomes" in its intelligence layer; we
+have `error_scan`'s known-issues registry and the test-quarantine registry, but review
+skills start cold on *"what did we already find/reject here."*
+- **Step:** persist review verdicts per file/area under `.agents/history/` so
+  `review-feature`/`security-audit` can suppress already-rejected findings and re-surface
+  recurring ones. This also *feeds gap #1*.
+- **Payoff:** fewer repeat false positives; compounding memory.
+
+### 4. Declarative capability graph — partial, lower ROI
+AER wants each skill to declare triggers/inputs/outputs/cost budget/confidence thresholds,
+with **graph traversal deriving execution order**. Our `skill_graph.py` proves
+reachability but ordering is hardcoded in each orchestrator.
+- **Honest take:** deriving order from a declared graph is elegant but the hardcoded
+  chains in `new-feature`/`review-feature`/`fix-bug` are readable and correct today.
+  Worth adding *cost/confidence metadata* to frontmatter (feeds #1), **not** worth
+  rebuilding orchestration around graph traversal. Deferred-value, not a gap.
+
+## AER ideas we should *not* chase (deliberate trade-offs)
+
+- **Full event-driven runtime** (every push auto-routes to specialists). Expensive and
+  removes the human front door. Our cron-watcher + human-front-door model is a considered
+  cost/safety trade, not an oversight. Keep it; maybe add a single lightweight
+  post-merge trigger for the metrics ledger.
+- **Call graph / symbol graph substrate.** Heavy to build and maintain for one Flask app
+  where `conventions.md` + semgrep + `test-map.md` already cover most of what it would
+  give us. Adopt intelligence *artifacts* selectively (see #3), not a whole graph DB.
+- **"Model-agnostic interchangeable workers"** as a full abstraction. We already get the
+  real benefit via Herdr's Claude/Codex split; a generic worker abstraction is overkill.
+
+## Bottom line
+
+Our design is **ahead of AER on execution, safety, and honesty**, and **level on
+specialisation, adversarial review, and deterministic-first**. AER's contribution is to
+name three disciplines we've under-invested in: **measure ourselves (eval layer)**,
+**convert every validated finding into a permanent deterministic rule (learning loop)**,
+and **remember prior findings (history store)**. Those three — in that order — are where
+we get more efficient and effective. The rest of AER is either already ours or a trade we
+made on purpose.
+
+Suggested next move: stand up the `.agents/metrics/` ledger + `skill_scorecard.py` (#1)
+first, because it's small and every other improvement becomes measurable once it exists.
