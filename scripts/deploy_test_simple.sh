@@ -33,30 +33,34 @@ else
 fi
 
 # Browser telemetry uses the public PostHog project token stored in KeePassXC.
-# Resolve it on the host; the container cannot access the host KeePassXC database.
-# In CD, POSTHOG_PROJECT_API_KEY is instead expected to already be set as a masked
-# GitLab CI/CD variable -- the check below is a no-op in that case since the
-# variable is already non-empty.
-if [ -z "${POSTHOG_PROJECT_API_KEY:-}" ]; then
-    POSTHOG_PROJECT_API_KEY="$(uv run python -c 'from app.utils.config_loader import config; print(config.rum_posthog_api_key)')"
-fi
-if [ -z "$POSTHOG_PROJECT_API_KEY" ]; then
-    echo "❌ PostHog project API key is unavailable. Configure workflow-engine/observability/posthog_project_api_key in KeePassXC (local) or the POSTHOG_PROJECT_API_KEY CI/CD variable (CD)."
-    exit 1
+# Optional, not required: an empty key just means client-side RUM doesn't
+# initialize (config_loader.rum_posthog_api_key falls back to "", app_factory
+# passes it straight into the page template either way) -- no crash, no missing
+# functionality that matters for a deploy. CD does not resolve or require this
+# at all; only try KeePassXC when running locally with no image ref, and only
+# best-effort (never fail the deploy over it).
+POSTHOG_PROJECT_API_KEY="${POSTHOG_PROJECT_API_KEY:-}"
+if [ -z "$POSTHOG_PROJECT_API_KEY" ] && [ -z "$IMAGE_REF" ]; then
+    POSTHOG_PROJECT_API_KEY="$(uv run python -c 'from app.utils.config_loader import config; print(config.rum_posthog_api_key)' 2>/dev/null || true)"
 fi
 
 # Run Docker container
-docker run -d \
-    --name workflow-engine-test \
-    -p 8001:8001 \
-    --network workflow-observability \
-    -e ENVIRONMENT=test \
-    -e POSTHOG_PROJECT_API_KEY="$POSTHOG_PROJECT_API_KEY" \
-    -e XERO_CLIENT_ID_TEST="$XERO_CLIENT_ID_TEST" \
-    -e XERO_CLIENT_SECRET_TEST="$XERO_CLIENT_SECRET_TEST" \
-    -e xero_client_id_test="$xero_client_id_test" \
-    -e xero_client_secret_test="$xero_client_secret_test" \
-    "$RUN_IMAGE"
+DOCKER_RUN_ARGS=(
+    -d
+    --name workflow-engine-test
+    -p 8001:8001
+    --network workflow-observability
+    -e ENVIRONMENT=test
+    -e XERO_CLIENT_ID_TEST="${XERO_CLIENT_ID_TEST:-}"
+    -e XERO_CLIENT_SECRET_TEST="${XERO_CLIENT_SECRET_TEST:-}"
+    -e xero_client_id_test="${xero_client_id_test:-}"
+    -e xero_client_secret_test="${xero_client_secret_test:-}"
+)
+if [ -n "$POSTHOG_PROJECT_API_KEY" ]; then
+    DOCKER_RUN_ARGS+=(-e POSTHOG_PROJECT_API_KEY="$POSTHOG_PROJECT_API_KEY")
+fi
+
+docker run "${DOCKER_RUN_ARGS[@]}" "$RUN_IMAGE"
 
 echo "✅ Test environment started on port 8001"
 echo "View logs with: docker logs -f workflow-engine-test"

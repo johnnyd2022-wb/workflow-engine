@@ -261,17 +261,25 @@ docker_build_publish:
 # that gate fails. See docs/deploy-registry-cd.md for the full flow and the
 # `:test-stable` promotion model.
 #
-# NEEDS HUMAN SETUP before any of these four jobs can actually run:
-#   1. `tags:` below is a placeholder -- point it at whatever tag identifies a
-#      runner with docker access to the box serving test-workflow-engine.whistlebird.co.nz
-#      (this repo's runner appears to be colocated with that box already, based on
-#      the containers visible from a normal dev shell here, but its actual GitLab
-#      tag isn't something this file can discover).
-#   2. POSTHOG_PROJECT_API_KEY as a CI/CD variable (masked) -- local dev resolves
-#      it from KeePassXC; CD can't reach that, so it needs the plain variable
-#      instead (scripts/deploy_test_simple.sh already handles both paths).
-#   3. XERO_CLIENT_ID_TEST / XERO_CLIENT_SECRET_TEST (and lowercase pair) as CI/CD
-#      variables (masked) -- same reasoning.
+# `deploy-target` runner: a second [[runners]] entry on this project's existing
+# self-hosted runner container, executor = "shell" (not docker -- the docker
+# executor spins up a fresh per-job container with no host docker.sock access,
+# which can't cycle the real host containers a tunnel/DNS actually points at;
+# shell executor runs directly in the runner's own environment, which does have
+# it). Also needed inside that runner container: the `docker` CLI (the image
+# ships without one -- installed via apt) and DOCKER_API_VERSION=1.43 set as a
+# runner-level `environment` in config.toml (the apt-installed CLI defaults to a
+# newer API than this host's Docker 24.0.5 daemon supports).
+#
+# PostHog is deliberately NOT wired up here: it's optional (an empty key just
+# disables client-side RUM, no crash -- see scripts/deploy_test_simple.sh) and
+# CD has no local KeePassXC to resolve it from, so it's simply not requested.
+#
+# STILL NEEDS HUMAN SETUP:
+#   XERO_CLIENT_ID_TEST / XERO_CLIENT_SECRET_TEST (and lowercase pair) as masked
+#   CI/CD variables, if the Xero OAuth flow needs to work in the deployed test
+#   container. Optional in the same sense PostHog is -- omitting them just means
+#   Xero connect won't complete, nothing else breaks.
 # ============================================================================
 
 deploy_test:
@@ -287,7 +295,7 @@ deploy_test:
   only:
     - main
   tags:
-    - deploy-target  # TODO(johnny): replace with this runner's real tag
+    - deploy-target  # registered: project runner id 54420399, shell executor, on this project's self-hosted box
 
 # Ground-truth verification of the DEPLOYED container (not a fresh in-process
 # app) -- see tests/e2e/conftest.py's E2E_BASE_URL fixture path and its commit
@@ -304,7 +312,7 @@ cd_e2e:
   only:
     - main
   tags:
-    - deploy-target  # TODO(johnny): must be the SAME runner as deploy_test (hits localhost:8001)
+    - deploy-target  # must be the SAME runner as deploy_test (hits localhost:8001)
 
 # Promotion: only a green cd_e2e moves the `:test-stable` tag forward. Nothing
 # else in this file ever writes that tag -- it is only ever moved here, and only
@@ -322,7 +330,7 @@ promote_test_stable:
   only:
     - main
   tags:
-    - deploy-target  # TODO(johnny): same runner tag as above
+    - deploy-target
 
 # Automatic rollback: fires only when cd_e2e failed (the Playwright gate on the
 # just-deployed candidate), redeploying whatever :test-stable currently points
@@ -340,4 +348,4 @@ rollback_test_on_failure:
   only:
     - main
   tags:
-    - deploy-target  # TODO(johnny): same runner tag as above
+    - deploy-target

@@ -54,24 +54,50 @@ done silently. Until then, "promoted" means: built from the same commit, in the 
 pipeline, moments apart — a large improvement over today's host-side rebuild, but not
 byte-identical to what gets shipped to prod.
 
-## Manual setup required (not done by any commit — these are account/infra actions)
+## Runner setup — done
 
-1. **Runner tag.** Every deploy-stage job below is tagged `deploy-target` as a placeholder.
-   Replace it with whatever tag actually identifies a GitLab Runner with `docker` access to
-   the box serving `test-workflow-engine.whistlebird.co.nz` — this repo's runner (see
-   `gitlab-runner/` at repo root) appears to already be colocated with that box, based on the
-   containers visible from a plain dev shell here, but its real registered tag isn't
-   discoverable from the repo itself.
-2. **`POSTHOG_PROJECT_API_KEY`** as a masked GitLab CI/CD variable. Local dev resolves this
-   from KeePassXC; a CD job can't reach the host's KeePassXC database, so it needs the plain
-   value instead. `scripts/deploy_test_simple.sh` already handles both paths (env var first,
-   KeePassXC fallback for local use).
-3. **`XERO_CLIENT_ID_TEST` / `XERO_CLIENT_SECRET_TEST`** (and the lowercase pair the script
-   also sets) as masked CI/CD variables, same reasoning.
-4. **GitLab Container Registry** must be enabled for the project (Settings → General →
-   Visibility → Container Registry). `CI_REGISTRY`, `CI_REGISTRY_USER`,
-   `CI_REGISTRY_PASSWORD`, and `CI_REGISTRY_IMAGE` are then auto-populated by GitLab for every
-   job — no separate token needed for the registry itself, unlike Renovate/Socket.
+The `deploy-target` tag is a real, registered runner, not a placeholder: a second
+`[[runners]]` entry (project runner id `54420399`) added to this project's existing
+self-hosted `gitlab-runner` container, alongside the original `docker`-executor one
+(`biz-e`, id `53089900`, untouched).
+
+It's a **separate runner definition, not a converted one**, deliberately — the existing
+runner's `docker` executor is what every other job here (`ruff`, `unit_tests`, `semgrep`,
+etc.) relies on for `image:` isolation, and `image:` is silently ignored under `shell`
+executor. Converting the existing runner wholesale would have broken all of those. The
+new one uses `executor = "shell"` instead: the `docker` executor spins up a **fresh
+container per job**, which by this runner's config only mounts `/cache`, not the host's
+`/var/run/docker.sock` — no path to the real containers a tunnel/DNS actually points at.
+`shell` executor runs job scripts directly in the runner's own environment, which has the
+host socket bind-mounted in (`/var/run/docker.sock:/var/run/docker.sock`).
+
+Two things the runner container needed that its base image doesn't ship with, found by
+actually trying to run a job rather than assuming the socket mount was sufficient:
+- **`docker` CLI itself** — `gitlab/gitlab-runner:latest` has the socket but no client
+  binary. Installed via `apt-get install docker.io` inside the running container. This is
+  a live modification to the container's writable layer, not baked into the image — if
+  this container is ever removed and recreated from scratch, this step needs repeating.
+- **`DOCKER_API_VERSION=1.43`** as a runner-level `environment` entry in `config.toml`.
+  The apt-installed CLI (29.1.3) defaults to a newer Docker API than the host daemon
+  (24.0.5, max 1.43) supports, and — unlike this machine's own host-side `docker` CLI,
+  which auto-negotiates down — errors instead of downgrading automatically.
+
+Still open: `XERO_CLIENT_ID_TEST` / `XERO_CLIENT_SECRET_TEST` (and the lowercase pair the
+script also sets) as masked CI/CD variables, if the deployed test container needs a
+working Xero OAuth connection. Optional in the same sense PostHog is below — omit them
+and Xero connect just won't complete; nothing else breaks.
+
+`POSTHOG_PROJECT_API_KEY` is **deliberately not wired up in CD at all** — it's genuinely
+optional (an empty key just means client-side RUM doesn't initialize;
+`config_loader.rum_posthog_api_key` falls back to `""`, no crash) and CD has no KeePassXC
+to resolve it from. `scripts/deploy_test_simple.sh` only attempts KeePassXC resolution
+when run locally with no image ref; CD never requests it and the container just runs
+without that one env var.
+
+**GitLab Container Registry** must be enabled for the project (Settings → General →
+Visibility → Container Registry). `CI_REGISTRY`, `CI_REGISTRY_USER`,
+`CI_REGISTRY_PASSWORD`, and `CI_REGISTRY_IMAGE` are then auto-populated by GitLab for every
+job — no separate token needed for the registry itself, unlike Renovate/Socket.
 
 ## Production deploy is deliberately untouched
 
