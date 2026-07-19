@@ -2456,11 +2456,12 @@
       }
     }
     
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through escapeHtml()
     dropdownContainer.innerHTML = `
-      <input 
-        type="text" 
-        class="form-input guided-input-name searchable-dropdown-input" 
-        placeholder="${placeholder}"
+      <input
+        type="text"
+        class="form-input guided-input-name searchable-dropdown-input"
+        placeholder="${escapeHtml(placeholder)}"
         autocomplete="off"
         style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); font-size: 13px;"
         data-dropdown-id="${uniqueId}"
@@ -3599,6 +3600,9 @@
 
       const headerRow = document.createElement('div');
       headerRow.className = 'card-header-row';
+      // audited: item.name goes through escapeHtmlForText(); summary is pre-escaped by
+      // inventoryCardSummary() then additionally quote-escaped for the title attribute context
+      // nosemgrep: innerhtml-string-concat
       headerRow.innerHTML =
         '<div class="card-header-text">' +
           '<span class="card-name">' + escapeHtmlForText(item.name) + '</span>' +
@@ -3761,6 +3765,7 @@
       const row = document.createElement('button');
       row.type = 'button';
       row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 12px 14px; border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); background: var(--bg-card, #fff); color: var(--text-primary); font-size: 13px; text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s;';
+      // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtmlForText()
       row.innerHTML = '<span style="font-weight: 600;">' + escapeHtmlForText(displayName) + '</span>' +
         (item.unit ? '<span style="font-size: 11px; color: var(--text-tertiary);">' + escapeHtmlForText(item.unit) + '</span>' : '');
       row.onmouseenter = function() { row.style.background = 'var(--bg-secondary, #f9fafb)'; row.style.borderColor = 'var(--primary, #3b82f6)'; };

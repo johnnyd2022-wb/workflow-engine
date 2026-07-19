@@ -200,6 +200,7 @@
           encodeURIComponent(step.id)
         : '#';
 
+    // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml() or encodeURIComponent()
     card.innerHTML =
       '<div class="flows2-step__header">' +
         '<button type="button" class="flows2-step__drag step-drag-handle" draggable="true" title="Drag to reorder" aria-label="Drag to reorder" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();">' +

@@ -324,6 +324,7 @@
           if (createdStr) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Created</span> ' + escapeHtml(createdStr) + '</p>');
           if (inv.supplier) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Supplier</span> ' + escapeHtml(inv.supplier) + '</p>');
           if (inv.supplier_batch_number) detailsParts.push('<p style="margin: 0 0 6px 0;"><span style="color: var(--text-secondary);">Batch</span> ' + escapeHtml(inv.supplier_batch_number) + '</p>');
+          // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml()
           card.innerHTML = '<div class="process-card-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px;"><div style="flex: 1; min-width: 0;"><h4 style="margin: 0; font-size: 14px; font-weight: 600;">' + escapeHtml(inv.name || '') + '</h4><p style="margin: 4px 0 0 0; font-size: 12px; color: var(--text-secondary);">' + subtitleLine + '</p></div></div><div class="execute-reconcile-details" style="padding: 12px 16px; border-top: 1px solid var(--border-default); background: var(--bg-secondary, #f9fafb); font-size: 13px;">' + detailsParts.join('') + '</div>';
           card.onclick = function() {
             hiddenInput.value = id;

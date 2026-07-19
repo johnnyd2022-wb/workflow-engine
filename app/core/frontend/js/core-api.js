@@ -910,6 +910,7 @@ if (typeof window !== 'undefined') {
             (notReadyUsed || []).map(function(u) {
                 return '<li style="margin-bottom: 6px;"><strong>' + escapeHtml(u.inputName) + ':</strong> ' + escapeHtml(u.itemName) + ' &mdash; <span style="color: var(--text-secondary);">' + escapeHtml(u.reason) + '</span></li>';
             }).join('') + '</ul>';
+        // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml()
         bodyEl.innerHTML = summaryHtml + listHtml;
         modal.style.display = 'flex';
         return new Promise(function(resolve) {

@@ -53,7 +53,8 @@
             return '<li style="margin-bottom: 0.25rem;">' + escapedWarning + '</li>';
           }).join('');
           
-          warningsDiv.innerHTML = 
+          // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml()
+          warningsDiv.innerHTML =
             '<div style="margin-bottom: 0.5rem; font-weight: 500; color: inherit;">' + escapeHtml(headerText) + '</div>' +
             '<ul style="margin: 0.5rem 0 0 1.5rem; padding: 0; list-style-type: disc;">' +
             warningsList +

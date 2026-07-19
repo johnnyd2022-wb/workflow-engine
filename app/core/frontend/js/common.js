@@ -1,5 +1,12 @@
 // Flume - Common JavaScript Functions
 
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // Navigation Bar
 function renderNavbar(activePage = '') {
   const navLinks = [
@@ -170,6 +177,7 @@ function openModal(modalId) {
       box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.2);
     `;
     
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through escapeHtml()
     toast.innerHTML = `
       <div style="display: flex; gap: 0.75rem; align-items: start;">
         <div style="
@@ -187,8 +195,8 @@ function openModal(modalId) {
           </svg>
         </div>
         <div style="flex: 1;">
-          <div style="font-weight: 600; margin-bottom: 0.25rem;">${title}</div>
-          <div style="font-size: 0.875rem; color: var(--muted-foreground);">${description}</div>
+          <div style="font-weight: 600; margin-bottom: 0.25rem;">${escapeHtml(title)}</div>
+          <div style="font-size: 0.875rem; color: var(--muted-foreground);">${escapeHtml(description)}</div>
         </div>
         <button onclick="this.parentElement.parentElement.remove()" style="
           background: none;

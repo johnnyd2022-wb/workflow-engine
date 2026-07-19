@@ -32,6 +32,7 @@
     m.id = 'map-to-execution-reconciliation-modal';
     m.className = 'modal-overlay';
     m.style.cssText = 'display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 1001; align-items: center; justify-content: center;';
+    // nosemgrep: innerhtml-string-concat -- audited: static template only, no dynamic interpolation
     m.innerHTML =
       '<div class="card" style="max-width: 500px; width: 90%; padding: 24px;">' +
       '  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">' +

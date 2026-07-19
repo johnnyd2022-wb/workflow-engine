@@ -291,6 +291,7 @@
     var processName = process.name || 'Process';
     var summary = escapeHtml(processName) + ' · ' + escapeHtml(String(steps.length)) + ' steps';
 
+    // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml()
     host.innerHTML =
       '<p class="core2-active-status-note" style="margin-bottom:10px;">' + summary + '</p>' +
       '<div class="core2-step-rail-track" style="--core2-step-count:' + String(steps.length) + '">' + nodes + '</div>';
@@ -548,6 +549,7 @@
       );
     }).join('');
 
+    // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml()
     host.innerHTML = head + rows;
   }
 
