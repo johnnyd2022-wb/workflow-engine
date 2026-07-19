@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":enablePreCommit"],
+  "timezone": "Pacific/Auckland",
+  "schedule": ["after 6am and before 8am every weekday", "every weekend"],
+  "dependencyDashboard": true,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Group non-major bumps together -- one MR to review instead of a dozen, still gated by the full pipeline (uv_audit, ruff, pytest).",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "groupName": "non-major dependencies",
+      "automerge": false
+    },
+    {
+      "description": "Major bumps stay separate and reviewed individually -- these are the ones most likely to carry breaking changes.",
+      "matchUpdateTypes": ["major"],
+      "groupName": null,
+      "automerge": false
+    },
+    {
+      "description": "Docker base image (python:3.14-bookworm in Dockerfile.multi) grouped on its own -- a base image bump is a different risk profile from a Python package bump and shouldn't block on / be blocked by it.",
+      "matchManagers": ["dockerfile"],
+      "groupName": "docker base image"
+    },
+    {
+      "description": "pre-commit hook revs (ruff, gitleaks) grouped separately -- these are local tooling pins, not app dependencies.",
+      "matchManagers": ["pre-commit"],
+      "groupName": "pre-commit hooks"
+    }
+  ]
+}

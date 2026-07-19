@@ -35,6 +35,28 @@ check_dependency_updates:
     - merge_requests
   allow_failure: true
 
+# Renovate: proposes dependency/Docker-base-image/pre-commit-hook version bumps as MRs
+# on a schedule (config: renovate.json). Distinct from check_dependency_updates above,
+# which only checks uv.lock is in sync -- this looks for newer versions to upgrade to.
+# Needs a GitLab pipeline schedule (Settings > CI/CD > Schedules) targeting this job's
+# ref, and a RENOVATE_TOKEN CI/CD variable (masked, protected) holding a project or
+# group access token with `api` scope + Developer/Maintainer role, so Renovate can open
+# MRs. Neither is set up by this file -- both are account-level actions for a human.
+renovate:
+  stage: test
+  image: renovate/renovate:latest
+  variables:
+    RENOVATE_PLATFORM: gitlab
+    RENOVATE_ENDPOINT: "${CI_SERVER_URL}/api/v4"
+    RENOVATE_TOKEN: "${RENOVATE_TOKEN}"
+    RENOVATE_AUTODISCOVER: "false"
+    RENOVATE_REPOSITORIES: "${CI_PROJECT_PATH}"
+  script:
+    - renovate
+  only:
+    - schedules
+  allow_failure: true
+
 # Run ruff linter
 # Note: This checks only. To auto-fix locally, run: uv run workflow lint --fix
 ruff:
