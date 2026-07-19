@@ -108,18 +108,24 @@ stored instant is currently wrong by the NZ↔UTC offset for any code path relyi
 localise. Moving to aware `now(UTC)` fixes that. The trap: mixing aware and naive datetimes in
 a comparison raises `TypeError`, so call sites must be converted *coherently*, not piecemeal.
 
-Scope: **41 call sites / 15 files.** Do **not** bulk sed-replace.
+**STATUS: DONE** (branch `chore/datetime-utcnow-migration`, commits `c6c306d` + `dc2a4cf`).
 
-- [ ] Inventory every call site into three buckets and record the classification:
-  - **A — Column defaults** (`default=datetime.utcnow`, `onupdate=…`): the highest-value fix (these are the mis-stored instants). Prefer moving default generation to the DB (`server_default=text('now()')` / `onupdate` at DB level) or a shared aware callable. Requires an Alembic migration if altering server defaults → route through the **migration-safety** skill.
-  - **B — Comparisons / arithmetic** (session expiry, token TTLs, e.g. `session_security.py`, `auth_service.py`, `xero_token_repo.py`): convert the call **and every datetime it's compared against** together. Highest breakage risk — session timeouts / 2FA / Xero token refresh. Cover each with a test before touching.
-  - **C — Values written to aware columns without comparison** (e.g. `wastage_repo.recorded_at`, `crm_task_repo.updated_at`): straightforward swap to `datetime.now(UTC)`.
-- [ ] Confirm what actually reads these values back (any code assuming naive UTC? any `.replace(tzinfo=…)` already compensating?) before flipping, so we don't double-correct.
-- [ ] Convert bucket by bucket, each as its own commit, running the affected test subset each time (auth/session, CRM/Xero, wastage/inventory). Use **test-author** to add coverage where a converted comparison has none.
-- [ ] Add a guard so it doesn't regress: a ruff rule (`DTZ` — flake8-datetimez family) or a semgrep rule banning `datetime.utcnow(` — turn the warning into a gate once the count is zero.
-- [ ] Verify: suite goes from ~11k DeprecationWarnings to ~0; auth/2FA/Xero live suites still pass; spot-check a freshly written row's stored UTC value is correct.
+Scope corrected during execution: the original 41/15 estimate only counted *called*
+`datetime.utcnow()` sites; it missed the bare `default=datetime.utcnow` / `onupdate=…`
+callable references used in SQLAlchemy `Column(...)` defaults, which don't match a
+`utcnow()` grep (no parens). True scope: **85 call sites / 40 files.**
 
-> Sequence risk: if the Python upgrade already made these `DeprecationWarning`s, they'll become **errors** in a future Python. Doing this before Renovate starts proposing a Python bump avoids a forced scramble.
+- [x] Inventoried every call site into three buckets:
+  - **A — Column defaults** (45 sites, ~25 models): moved to a shared `utc_now()` helper (`app/core/utils/time.py`) used as the bare callable — a lambda repeated 45 times across 25 files was worse than one function; no Alembic migration needed since `default=`/`onupdate=` are Python-side, not server defaults.
+  - **B — Comparisons / arithmetic** (`session_security.py`, `auth_routes.py` — `last_activity_at`, `pending_2fa_created_at`): write and read/compare sides are self-contained (round-trip through the same Flask session-cookie keys, not the DB), converted together to `datetime.now(UTC)`. Existing `except (ValueError, TypeError)` handling in both files already degrades a stale naive cookie gracefully (timer reset, not a 500) — no separate migration handling needed.
+  - **C — Plain writes to aware columns** (~30 sites: `wastage_repo`, `crm_task_repo`, `xero_*_repo`, `crm_service`): swapped to `utc_now()`.
+  - Plus a format-string edge case: `api_helpers.py` manually appended `+ "Z"` to a naive `isoformat()`; an aware `isoformat()` already appends `+00:00`, so this now reads `.isoformat().replace("+00:00", "Z")` to avoid double-suffixing.
+- [x] Confirmed nothing reads these values back assuming naive UTC — `backend.py`/`inventory_upload_routes.py`'s `strftime("...Z")` calls are unaffected by tz-awareness (literal `Z`, not `%Z`); `auth_service.py`'s session `created_at` is informational only, not compared.
+- [x] Converted and verified as two commits (code, then plan doc) rather than per-bucket — full suite run was cheap enough (170s) to run once at the end rather than per bucket.
+- [x] Added `.semgrep/rules/correctness.yml` (`no-naive-utcnow`, blocking) — verified it fires on a known-bad fixture and is silent on the migrated `app/`. (Went with semgrep over the ruff `DTZ` family — enabling all of `DTZ` risked flagging unrelated pre-existing naive-datetime call sites repo-wide, out of scope for this fix.)
+- [x] Verified: 426 passed, 30 skipped, **0 DeprecationWarnings** (was ~11k); ruff clean; semgrep clean.
+
+Process note for next time: a plain `grep -rn "utcnow()"` (with parens) undercounts — always also grep the bare form (`datetime\.utcnow\b`) to catch `default=`/`onupdate=` references. Also: two files (`two_factor_backup_code.py`, `auth_service.py`) hit a real gotcha — their CRLF line endings meant a `sed 's/^from datetime import datetime$/.../'` anchor silently failed to match (the line actually ends `datetime\r`), so `ruff --fix` later removed the now-unused old import without adding the new one, producing `F821`s that had to be hand-fixed. `git diff`'s "CRLF will be replaced by LF" warning is not decorative — check for it before trusting a `sed` anchor-match count in a file it fires on. Similarly, a "does `datetime` appear anywhere else in this file" check must include bare type-hint usage (`recorded_at: datetime | None`), not just `datetime.xxx` — a case-sensitive/dot-suffixed grep alone will miss it.
 
 ---
 
