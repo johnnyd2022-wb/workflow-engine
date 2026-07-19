@@ -1,0 +1,1 @@
+{"area": "app/tls", "kind": "secret-in-history", "notes": "owner accepted, declined rotation; do NOT re-raise unless repo goes public / forked / >1 member, or before cert expiry 2028-01-14", "ref": "security-audit/2026-07-17", "sig": "32cc4eaa0301", "skill": "security-audit", "ts": "2026-07-17T00:00:00+00:00", "verdict": "accepted-risk"}

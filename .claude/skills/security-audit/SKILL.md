@@ -40,6 +40,25 @@ Triage every finding into exactly one bucket:
 
 Never bulk-dismiss. A lazy triage is worse than no scan because it trains everyone to ignore the tool.
 
+**Consult the history store first (`scripts/finding_history.py`, see `.agents/history/README.md`).** Before spending judgment on a finding, ask whether a prior run already ruled on it:
+
+```bash
+python scripts/finding_history.py decide --area <path/slug> --kind <rule-id-or-class> --evidence '<snippet>'
+```
+
+- `suppress` → a human already called it false-positive/accepted-risk. Keep it out of the report body; log it under a `suppressed (prior verdict):` line so the suppression is auditable, not invisible. Don't burn tokens re-deciding it.
+- `recurring` → this was **fixed and is back**: a regression. Surface it loudly and prioritise it over new findings.
+- `known-confirmed` / `new` → triage normally.
+
+After you rule on a finding, **record the verdict** so the next run compounds — and so the scorecard (`.agents/metrics/`) can see whether this skill's findings land as real or as false positives:
+
+```bash
+python scripts/finding_history.py record --area <path/slug> --kind <class> --evidence '<snippet>' \
+  --verdict confirmed|fixed|false-positive|accepted-risk --skill security-audit --ref <branch/MR> --notes '<why>'
+```
+
+Only a human's call is `false-positive`/`accepted-risk`; you may record `confirmed`/`fixed` yourself.
+
 ## 2. Manual pass (what scanners miss)
 
 Work this checklist against the scoped code. For each item, look at actual code paths, not file names:
@@ -52,24 +71,33 @@ Work this checklist against the scoped code. For each item, look at actual code 
 6. **Secrets and config.** No secrets in code or git history (gitleaks covers most); `SECRET_KEY` from env; cookies `Secure`, `HttpOnly`, `SameSite`; debug off outside dev.
 7. **CSRF and CORS.** State-changing routes are CSRF-protected (or the API uses token auth consistently); CORS is not `*` with credentials.
 
-## 3. Write the rules (compounding step)
+## 3. Write the rules (compounding step — now an enforced loop)
 
-For each manual finding whose pattern is mechanically recognizable, add a rule under `.semgrep/`. Example shape for the missing-org-filter class:
+For each manual finding whose pattern is mechanically recognizable, add a rule so the NEXT
+occurrence is caught by machine. Finding-born rules live in **`.semgrep/rules/learned.yml`**
+(not scattered), and each one ships with a **fixture pair** that proves it works — this is
+the AER learning loop, and `scripts/rule_candidates.py` makes "prove it fires on the bug
+and stays silent on the fix" a gate instead of a promise an agent skips at 3am.
 
-```yaml
-rules:
-  - id: bize-query-missing-org-scope
-    languages: [python]
-    severity: ERROR
-    message: Query on tenant-scoped model without org filter. Use scoped helper.
-    patterns:
-      - pattern: $MODEL.query.get($ID)
-      - metavariable-regex:
-          metavariable: $MODEL
-          regex: (Order|Customer|Invoice|WorkOrder)  # keep in sync with scoped models
+Workflow:
+
+```bash
+# 1. scaffold the fixtures + get a rule template
+python scripts/rule_candidates.py scaffold --id bize-<name> --lang python
+
+# 2. fill in .semgrep/fixtures/bize-<name>/vulnerable.py (the real pre-patch shape)
+#    and fixed.py (the patched shape), then paste the rule into .semgrep/rules/learned.yml
+#    with its metadata block (born-from, finding, date, fixture)
+
+# 3. prove it: FIRES on vulnerable, SILENT on fixed — exit 1 if not
+python scripts/rule_candidates.py verify
 ```
 
-Validate with `semgrep --validate --config .semgrep/`, and confirm the rule fires on the pre-patch code and stays silent after the fix. A rule that never fired against the real bug is untested.
+A rule that never fired against the real bug is untested, and an untested rule is a false
+sense of security. The `semgrep_learned_rules` CI job runs `verify` on every MR, so a
+broken or over-matching learned rule blocks the pipeline. The worked seed to copy is
+`bize-mass-assignment-from-request` (rule + fixtures already in the tree). Record the rule
+you added under each finding's `rule_added:` line in the report (§4).
 
 ## 4. Report and patch
 
@@ -133,6 +161,7 @@ Suited to a weekly routine (`/schedule`). A sweep run:
 2. diffs against the previous sweep — **new** findings are the signal; a standing count that never moves is what people stop reading
 3. remediates the top new finding class (one MR), logs the rest
 4. reports the standing total honestly, including what it couldn't scan
+5. records the run so the scorecard tracks this skill over time (`.agents/autonomy.md` → Measure yourself): `python scripts/skill_metrics.py record --skill security-audit --run-type scheduled --verdict <clean|patched|findings-open> --findings <n new> --ref <branch or sweep date>`
 
 The standing count matters: at the time of writing, a bare `semgrep --config=auto` over this repo reports **68 findings**, all pre-existing. It sat unread because nobody diffed the count. That is what a sweep is for.
 

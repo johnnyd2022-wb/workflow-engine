@@ -103,6 +103,15 @@ Read each subagent's report file, not just its verdict line. A `patched` verdict
 
 Confirm true before proceeding: spec approved, unit tests green with AC coverage, migrations up/down/up verified (or none), security verdict clean/patched, E2E green and flake-checked, observability instrumented, test-map reconciled and **test-evaluator verdict `valid`**, all ci gates passing. Set the spec's `status: built`. Then call the **merge-request** skill to write the MR from the spec and stage reports, push, open it, and watch the pipeline — do not assemble the MR description yourself. Present the summary as a short table of stage -> verdict -> report path, then the MR link merge-request returns.
 
+**Record the run** (`.agents/autonomy.md` → Measure yourself). Append one metrics row per verification stage that ran, using its report verdict and finding count, so the scorecard can see this chain's shape:
+
+```bash
+python scripts/skill_metrics.py record --skill <stage> --run-type chained \
+  --scope <slug> --verdict <clean|patched|findings-open> --findings <n> --ref feat/<slug>
+```
+
+Do this for the stages you drove (security-audit, e2e-playwright, perf-guardrails, etc.). The MR's eventual merge/close is recorded later as an `outcome` on the same `--ref feat/<slug>` — not now.
+
 ## Rules
 
 - Never skip a stage silently. Skips are stated with reasons ("no data model changes, migration-safety skipped").
