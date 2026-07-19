@@ -1,12 +1,11 @@
 """CRM page routes — serve HTML SPA pages."""
 
-import logging
-
 from flask import Blueprint, render_template
 
 from app.core.security.permissions import requires_auth
+from app.observability import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 page_bp = Blueprint("crm_pages", __name__, template_folder="../frontend/templates")
 

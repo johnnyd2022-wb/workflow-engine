@@ -4,7 +4,6 @@ import base64
 import binascii
 import gzip
 import json
-import logging
 import time
 from collections import deque
 from datetime import date, datetime, timezone
@@ -14,8 +13,9 @@ import requests
 from sqlalchemy.orm import Session
 
 from app.features.crm.services.xero_oauth_service import XeroOAuthService
+from app.observability import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Xero rate limit: 60 calls per 60-second rolling window
 _RATE_LIMIT_CALLS = 60

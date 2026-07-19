@@ -1,6 +1,5 @@
 """Business logic for evidence upload and retrieval."""
 
-import logging
 import os
 from pathlib import Path
 from uuid import UUID
@@ -17,9 +16,9 @@ from app.core.db import db_session
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, EVIDENCE_STATUS_PENDING
 from app.core.db.repositories.evidence_repo import EvidenceRepository
 from app.core.db.repositories.execution_repo import ExecutionRepository
-from app.observability import start_span
+from app.observability import get_logger, start_span
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def upload_evidence_from_temp(

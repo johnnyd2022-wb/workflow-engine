@@ -1,13 +1,14 @@
 """Filesystem operations for evidence files. Atomic write, UUID filenames."""
 
 import hashlib
-import logging
 import os
 import re
 from pathlib import Path
 from uuid import uuid4
 
-logger = logging.getLogger(__name__)
+from app.observability import get_logger
+
+logger = get_logger(__name__)
 
 # Strict filename: UUID plus extension only (no path traversal, no arbitrary names)
 _SAFE_FILENAME_RE = re.compile(r"^[a-f0-9\-]{36}\.(jpg|jpeg|png|pdf|bin)$", re.IGNORECASE)

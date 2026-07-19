@@ -2,6 +2,13 @@
 // Supply Chain Platform - Main Application JavaScript
 // ============================================================
 
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   initializeSidebar();
   initializeTabs();
@@ -184,6 +191,7 @@ function addNewStep() {
     </div>
   `;
   
+  // nosemgrep: insertadjacenthtml -- audited: stepHtml is a static template, no dynamic interpolation
   stepsContainer.insertAdjacentHTML('beforeend', stepHtml);
   
   // Re-initialize step headers for the new step
@@ -223,6 +231,7 @@ function addInput(button) {
     </div>
   `;
   
+  // nosemgrep: insertadjacenthtml -- audited: inputHtml is a static template, no dynamic interpolation
   ioList.insertAdjacentHTML('beforeend', inputHtml);
 }
 
@@ -252,6 +261,7 @@ function addOutput(button) {
     </div>
   `;
   
+  // nosemgrep: insertadjacenthtml -- audited: outputHtml is a static template, no dynamic interpolation
   ioList.insertAdjacentHTML('beforeend', outputHtml);
 }
 
@@ -278,15 +288,16 @@ function addInventoryItem(form) {
     const itemHtml = `
       <div class="inventory-item">
         <div class="inventory-item-header">
-          <span class="inventory-item-name">${data.name}</span>
-          <span class="badge badge-primary">${data.quantity} ${data.unit}</span>
+          <span class="inventory-item-name">${escapeHtml(data.name)}</span>
+          <span class="badge badge-primary">${escapeHtml(data.quantity)} ${escapeHtml(data.unit)}</span>
         </div>
         <div class="inventory-item-details">
-          <span>Supplier: ${data.supplier}</span>
-          <span>Batch: ${data.batchNumber || 'N/A'}</span>
+          <span>Supplier: ${escapeHtml(data.supplier)}</span>
+          <span>Batch: ${escapeHtml(data.batchNumber) || 'N/A'}</span>
         </div>
       </div>
     `;
+    // nosemgrep: insertadjacenthtml -- audited: all dynamic values here go through escapeHtml()
     inventoryGrid.insertAdjacentHTML('beforeend', itemHtml);
   }
   

@@ -205,7 +205,9 @@ def create_app():
         ]
         return Response(upstream_response.content, status=upstream_response.status_code, headers=response_headers)
 
-    @app.post("/telemetry")
+    # Intentionally public, rate-limited ingest endpoint for browser RUM (Faro); the
+    # browser has no session-authenticated way to call this before/during page load.
+    @app.post("/telemetry")  # nosemgrep: route-missing-requires-auth
     @limiter.limit("120 per minute")
     def ingest_faro_telemetry():
         """Accept Faro's fixed collect endpoint without exposing a general HTTP proxy."""
@@ -226,7 +228,9 @@ def create_app():
             return config.rum_posthog_upstream, normalized
         return None
 
-    @app.route("/telemetry/posthog/<path:endpoint>", methods=["GET", "POST"])
+    # Intentionally public, rate-limited ingest/config endpoint for browser RUM (PostHog
+    # SDK); same reasoning as the Faro telemetry route above.
+    @app.route("/telemetry/posthog/<path:endpoint>", methods=["GET", "POST"])  # nosemgrep: route-missing-requires-auth
     @limiter.limit("120 per minute")
     def ingest_posthog_telemetry(endpoint):
         """Forward only the PostHog SDK endpoints required by the browser bundle."""

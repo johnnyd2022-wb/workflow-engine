@@ -1,12 +1,13 @@
 """Request validation for evidence uploads."""
 
-import logging
 from pathlib import Path
 from uuid import UUID
 
 from flask import request
 
-logger = logging.getLogger(__name__)
+from app.observability import get_logger
+
+logger = get_logger(__name__)
 
 # Magic bytes for server-side MIME detection (first few bytes)
 _MAGIC = {

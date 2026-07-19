@@ -8,7 +8,6 @@ Design (no float, single unit path; DB stores NUMERIC(18,4)):
 
 import csv
 import io
-import logging
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -23,9 +22,9 @@ from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.security.permissions import requires_auth
 from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.core.utils.unit_conversion import CONVERSION_FACTORS, UNIT_DISPLAY_LABELS
-from app.observability import start_span
+from app.observability import get_logger, start_span
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Max CSV file size (2MB)
 CSV_MAX_BYTES = 2 * 1024 * 1024

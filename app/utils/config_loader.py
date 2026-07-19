@@ -1,11 +1,12 @@
 import configparser
-import logging
 import os
 import sys
 from pathlib import Path
 from typing import Any
 
-LOGGER = logging.getLogger(__name__)
+from app.observability import get_logger
+
+LOGGER = get_logger(__name__)
 
 
 class Config:

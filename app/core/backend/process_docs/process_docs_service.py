@@ -1,6 +1,5 @@
 """Business logic for process step documentation (SOP): upload, inline, list, delete, download."""
 
-import logging
 import os
 from pathlib import Path
 from uuid import UUID
@@ -17,9 +16,9 @@ from app.core.backend.process_docs.process_docs_storage import (
 from app.core.db import db_session
 from app.core.db.models.step import Step
 from app.core.db.repositories.process_step_document_repo import ProcessStepDocumentRepository
-from app.observability import start_span
+from app.observability import get_logger, start_span
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _step_name(step_id: UUID) -> str:

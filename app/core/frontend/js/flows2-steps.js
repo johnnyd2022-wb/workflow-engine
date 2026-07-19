@@ -749,6 +749,7 @@
           }
           const spacing = 1000;
           const orders = orderedIds.map((id, idx) => ({ id, position: spacing * (idx + 1) }));
+          // nosemgrep: raw-fetch-post -- X-CSRFToken already attached above (headers)
           const res = await fetch(`/api/core/processes/${encodeURIComponent(processId)}/steps/reorder`, {
             method: 'POST',
             credentials: 'include',

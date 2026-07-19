@@ -1,12 +1,13 @@
 """Filesystem operations for process step documentation. UUID filenames, no reuse of evidence_storage."""
 
-import logging
 import os
 import re
 from pathlib import Path
 from uuid import uuid4
 
-logger = logging.getLogger(__name__)
+from app.observability import get_logger
+
+logger = get_logger(__name__)
 
 # Safe filename: UUID plus extension only
 _SAFE_FILENAME_RE = re.compile(r"^[a-f0-9\-]{36}\.(pdf|doc|docx|md|txt|bin)$", re.IGNORECASE)

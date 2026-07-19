@@ -5,7 +5,6 @@ plus products made with them (via DAG traversal).
 
 from __future__ import annotations
 
-import logging
 from datetime import date
 from typing import Any
 from uuid import UUID
@@ -14,8 +13,9 @@ from sqlalchemy.orm import Session
 
 from app.core.backend.corechecks import CheckResult
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.observability import get_logger
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 
 def run_expired_materials_check(org_id: UUID, session: Session) -> CheckResult:

@@ -141,6 +141,9 @@ function _bindPasswordResetOnce() {
 
     if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Updating...'; }
     try {
+      // /auth/* is CSRF-exempt by design (SameSite=Strict session cookie); see
+      // app_factory.py CSRFProtect setup.
+      // nosemgrep: raw-fetch-post
       const resp = await fetch('/auth/change-password', {
         method: 'POST',
         credentials: 'include',

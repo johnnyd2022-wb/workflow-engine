@@ -1,14 +1,13 @@
 """Authentication routes"""
 
 import io
-import logging
 import os
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 import pyotp
 import qrcode
-from flask import Blueprint, current_app, g, jsonify, make_response, request, session
+from flask import Blueprint, g, jsonify, make_response, request, session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -25,9 +24,9 @@ from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
-from app.observability import start_span, traced
+from app.observability import get_logger, start_span, traced
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -627,7 +626,7 @@ def get_current_user():
 
     # Log user info for debugging (optional: remove or mask IDs in production)
     if g.user_id:
-        current_app.logger.debug(f"/auth/me called by user_id={g.user_id}, org_id={g.org_id}")
+        logger.debug(f"/auth/me called by user_id={g.user_id}, org_id={g.org_id}")
 
     # Logged-out state
     if not g.user_id:

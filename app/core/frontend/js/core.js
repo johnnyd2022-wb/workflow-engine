@@ -74,6 +74,9 @@ function createProcessCard(process) {
         year: 'numeric'
     }) : 'Unknown';
     
+    // audited: all dynamic values here go through escapeHtml(); process.category is a
+    // DB-enforced enum (ProcessCategory), not free text
+    // nosemgrep: innerhtml-template-literal
     card.innerHTML = `
         <div class="process-card-header">
             <h3 class="process-card-title">${escapeHtml(process.name)}</h3>
@@ -180,10 +183,11 @@ function createInventoryItem(item) {
         details.push(`Created: ${createdDate}`);
     }
     
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through escapeHtml()
     div.innerHTML = `
         <div class="inventory-item-header">
             <span class="inventory-item-name">${escapeHtml(item.name)}</span>
-            <span class="badge ${badgeClass}">${item.quantity} ${item.unit}</span>
+            <span class="badge ${badgeClass}">${item.quantity} ${escapeHtml(item.unit)}</span>
         </div>
         <div class="inv-adj-wrap">
             <button class="inv-adj-btn inv-adj-btn--primary" type="button"

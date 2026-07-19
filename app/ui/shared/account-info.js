@@ -89,6 +89,9 @@
    */
   async function handleAccountInfoLogout() {
     try {
+      // /auth/* is CSRF-exempt by design (SameSite=Strict session cookie); see
+      // app_factory.py CSRFProtect setup.
+      // nosemgrep: raw-fetch-post
       const response = await fetch('/auth/logout', {
         method: 'POST',
         headers: {

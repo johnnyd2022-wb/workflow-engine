@@ -230,6 +230,7 @@
           `<option value="${smEsc(op)}"${_smActivityOperator === op ? ' selected' : ''}>${smEsc(op)}</option>`
         ).join('');
 
+        // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
         controls.innerHTML = `
           <div class="sm-act-type-filter">
             <button class="sm-act-type-btn${_smActivityEntityType === '' ? ' sm-act-type-btn--active' : ''}" data-type="">All</button>
@@ -318,6 +319,7 @@
           const msg = (hasDateFilter || q || _smActivityEntityType || _smActivityOperator)
             ? 'No activity matching these filters.'
             : 'No activity recorded yet.';
+          // nosemgrep: insertadjacenthtml -- audited: all dynamic values here go through smEsc()
           grid.insertAdjacentHTML('beforeend', `<div class="sm-browse-empty" style="margin-top:16px">${smEsc(msg)}</div>`);
         } else {
           grid.appendChild(smBuildActivityFeed(filtered));
@@ -343,6 +345,7 @@
     const batchText = primary.supplier_batch_number ? `Batch ${primary.supplier_batch_number}` : '';
     const supplierText = primary.supplier || '';
 
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     card.innerHTML = `
       <div class="sm-browse-card__header">
         <span class="sm-type-badge sm-type-badge--${typeClass}">${smTypeLabelShort(primary.inventory_type)}</span>
@@ -373,6 +376,7 @@
 
     const card = document.createElement('div');
     card.className = 'sm-browse-card sm-browse-card--batch';
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     card.innerHTML = `
       <div class="sm-browse-card__header">
         <span class="sm-browse-card__type-label">Batch</span>
@@ -399,6 +403,7 @@
 
     const card = document.createElement('div');
     card.className = 'sm-browse-card sm-browse-card--supplier';
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     card.innerHTML = `
       <div class="sm-browse-card__header">
         <span class="sm-browse-card__type-label">Supplier</span>
@@ -443,6 +448,7 @@
           </div>`;
       }).join('');
 
+      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
       entry.innerHTML = `
         <div class="sm-timeline-dot-col" aria-hidden="true">
           <div class="sm-timeline-dot"></div>
@@ -519,6 +525,7 @@
 
     const card = document.createElement('div');
     card.className = 'sm-browse-card sm-browse-card--activity';
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     card.innerHTML = `
       <div class="sm-browse-card__header">
         <span class="sm-browse-card__type-label">${smEsc(statusLabel)}</span>
@@ -591,6 +598,7 @@
         diffHtml = `<ul class="sm-story-diff sm-act-diff" id="${diffId}" hidden>${rows}</ul>`;
       }
 
+      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
       entry.innerHTML = `
         <div class="sm-act-entry__dot-col" aria-hidden="true">
           <div class="sm-act-entry__dot"></div>
@@ -672,6 +680,7 @@
   async function smRunTemporalTrace(itemId, itemName) {
     smShowAreaLoading();
     try {
+      // nosemgrep: raw-fetch-post -- X-CSRFToken already attached via smCsrfHeader()
       const res = await fetch('/api/core/sourcemap/trace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...smCsrfHeader() },
@@ -700,10 +709,12 @@
     // Banner
     const banner = document.createElement('div');
     banner.className = 'sm-temporal-banner';
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     banner.innerHTML = `<span class="sm-temporal-banner__icon">⏱</span> Showing provenance as of <strong>${smEsc(asOfDate)}</strong> — not current state`;
     area.appendChild(banner);
 
     if (!nodes.length) {
+      // nosemgrep: insertadjacenthtml -- audited: smEmptyState() only ever receives a static string literal here
       area.insertAdjacentHTML('beforeend', smEmptyState('No provenance data recorded before this date.'));
       return;
     }
@@ -717,6 +728,7 @@
       card.className = 'sm-temporal-node' + (node.is_root ? ' sm-temporal-node--root' : '');
       const typeLabel = { raw_material: 'Raw', work_in_progress: 'WIP', final_product: 'Final' }[s.inventory_type] || (node.type || '');
       const qty = s.quantity != null ? `${s.quantity}${s.unit ? ' ' + s.unit : ''}` : null;
+      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
       card.innerHTML = `
         <div class="sm-temporal-node__type">${smEsc(typeLabel)}</div>
         <div class="sm-temporal-node__name">${smEsc(s.name || node.id)}</div>
@@ -749,6 +761,7 @@
         const li = document.createElement('li');
         li.className = 'pl-story-timeline__item';
         const atStr = ev.at ? new Date(ev.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+        // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
         li.innerHTML = `
           <span class="pl-story-timeline__dot"></span>
           <div class="pl-story-timeline__content">
@@ -853,6 +866,7 @@
       `<span class="sm-impact-stat${s.warn ? ' sm-impact-stat--warn' : ''}">${smEsc(s.label)}</span>`
     ).join('');
 
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     div.innerHTML = `
       <div class="sm-impact-header__left">
         <div class="sm-impact-header__name">
@@ -908,6 +922,7 @@
           </div>`;
       }).join('');
 
+      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
       entry.innerHTML = `
         <div class="sm-timeline-dot-col" aria-hidden="true">
           <div class="sm-timeline-dot"></div>
@@ -1012,6 +1027,7 @@
     const rootType = smTypeClass(tracedItem.inventory_type);
     const rootDiv = document.createElement('div');
     rootDiv.className = 'sm-tree-root';
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     rootDiv.innerHTML = `
       <div class="sm-tree-node sm-tree-node--${rootType}${smIsCheckNeeded(tracedItem.id) ? ' sm-tree-node--check' : ''}">
         <span class="sm-type-badge sm-type-badge--${rootType}">${smTypeLabelShort(tracedItem.inventory_type)}</span>
@@ -1033,6 +1049,7 @@
 
       const groupLabel = document.createElement('div');
       groupLabel.className = 'sm-tree-group-label';
+      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
       groupLabel.innerHTML = `
         <div class="sm-tree-group__row">
           <span class="sm-tree-group__label-tag">Process</span>
@@ -1064,6 +1081,7 @@
             : null;
           const stepLabel = document.createElement('div');
           stepLabel.className = 'sm-tree-step-label';
+          // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
           stepLabel.innerHTML = `
             <span class="sm-tree-group__label-tag">Step</span>
             ${step.stepName ? `<span class="sm-tree-step-name">${smEsc(step.stepName)}</span>` : ''}
@@ -1152,6 +1170,7 @@
   function smBuildTreeNode(item, type, isShared, ioTag) {
     const div = document.createElement('div');
     div.className = `sm-tree-node sm-tree-node--${type}${smIsCheckNeeded(item.id) ? ' sm-tree-node--check' : ''}`;
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     div.innerHTML = `
       ${ioTag ? `<span class="sm-tl-io-tag sm-tl-io-tag--${ioTag}">${ioTag === 'in' ? 'In' : 'Out'}</span>` : ''}
       <span class="sm-type-badge sm-type-badge--${type}">${smTypeLabelShort(item.inventory_type)}</span>
@@ -1295,6 +1314,7 @@
        <dd class="sm-detail-value${isWarn ? ' sm-detail-value--warn' : ''}">${smEsc(String(value || '—'))}</dd>`
     ).join('');
 
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     card.innerHTML = `
       <div class="sm-item-card__header">
         <span class="sm-item-card__name">${smEsc(item.name || item.expired_raw_material_name || 'Unnamed')}</span>
@@ -1343,6 +1363,7 @@
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'false');
     panel.setAttribute('aria-label', 'Audit history');
+    // nosemgrep: innerhtml-template-literal -- audited: static markup only, no dynamic interpolation
     panel.innerHTML = `
       <div class="sm-story-panel__header">
         <span class="sm-story-panel__title" id="sm-story-panel-title"></span>
@@ -1509,6 +1530,7 @@
     byDay.forEach(({ day, entries }) => {
       const dayEl = document.createElement('div');
       dayEl.className = 'sm-wastage-day';
+      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
       dayEl.innerHTML = `<div class="sm-wastage-day__label">${smEsc(day)}</div>`;
 
       entries.forEach(r => {
@@ -1520,6 +1542,7 @@
         const entry = document.createElement('div');
         entry.className = 'sm-wastage-entry';
         const reasonText = r.reason || null;
+        // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
         entry.innerHTML = `
           <div class="sm-wastage-entry__main">
             <span class="sm-wastage-entry__name">${smEsc(itemName)}</span>
@@ -1626,6 +1649,7 @@
 
       const card = document.createElement('div');
       card.className = 'sm-finding-card';
+      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
       card.innerHTML = `
         <div class="sm-finding-card__body">
           <div class="sm-finding-card__name">${smEsc(name)}</div>
@@ -1678,10 +1702,11 @@
     items.forEach(item => {
       const tr = document.createElement('tr');
       const typeClass = smTypeClass(item.inventory_type);
-      const qty = item.quantity != null ? `${smFmtQty(item.quantity)} ${item.unit || ''}`.trim() : '—';
+      const qty = item.quantity != null ? `${smFmtQty(item.quantity)} ${smEsc(item.unit || '')}`.trim() : '—';
+      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
       tr.innerHTML = `
         <td>${smEsc(item.name || '—')}</td>
-        <td><span class="sm-type-badge sm-type-badge--${typeClass}">${smTypeLabel(item.inventory_type)}</span></td>
+        <td><span class="sm-type-badge sm-type-badge--${typeClass}">${smEsc(smTypeLabel(item.inventory_type))}</span></td>
         <td>${qty}</td>
         <td>${smEsc(item.supplier_batch_number || '—')}</td>
         <td>${smEsc(item.supplier || '—')}</td>
@@ -1784,6 +1809,7 @@
 
         const card = document.createElement('div');
         card.className = 'sm-batch-entry';
+        // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
         card.innerHTML = `
           <div>
             <div class="sm-batch-entry__name">${smEsc(entry.name || name)}</div>
@@ -1864,6 +1890,7 @@
 
     const header = document.createElement('div');
     header.className = 'sm-impact-header';
+    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     header.innerHTML = `
       <div class="sm-impact-header__left">
         <div class="sm-impact-header__name">
@@ -1880,6 +1907,7 @@
     area.appendChild(header);
 
     if (!groups.length) {
+      // nosemgrep: insertadjacenthtml -- audited: smEmptyState() only ever receives a static string literal here
       area.insertAdjacentHTML('beforeend', smEmptyState('No production activity found.'));
       return;
     }

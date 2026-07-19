@@ -196,6 +196,7 @@
             return '<circle cx="' + pt.x.toFixed(2) + '" cy="' + pt.y.toFixed(2) + '" r="1.9"></circle>';
         }).join('');
 
+        // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml() or are numeric
         host.innerHTML =
             '<svg class="dash-kpi-trend-svg" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">' +
             '<path class="dash-kpi-trend-line" d="' + built.path + '"></path>' +

@@ -344,6 +344,7 @@
     if (!modal || !bodyEl) return;
     var stepDisplay = stepName ? escapeHtml(stepName) : 'the step that produced this output';
     var processDisplay = processName ? escapeHtml(processName) : 'the process';
+    // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml()
     bodyEl.innerHTML = 'This untracked item was produced as an output. To reconcile it, go to the process <strong>' + processDisplay + '</strong> and execute the step <strong>' + stepDisplay + '</strong>. You can then link the output to existing inventory or record it there.';
     modal.setAttribute('data-reconcile-process-id', processId || '');
     modal.style.display = 'flex';

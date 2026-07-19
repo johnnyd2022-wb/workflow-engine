@@ -284,6 +284,7 @@
           }
         }
         var expiryReadyValidationErrorHtml = (expiryInputHtml && readyDateHtml) ? ('<div class="execute-output-expiry-ready-validation-error" data-output-id="' + escapeHtml(outputId) + '" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert" aria-live="polite"></div>') : '';
+        // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through escapeHtml()
         outputSection.innerHTML = `
           ${customExpiryHtml}
           ${readyDateHtml}
@@ -292,9 +293,9 @@
           <div style="margin-bottom: 12px;">
             <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
               ${escapeHtml(output.name)}
-              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${output.quantity || '0'} ${output.unit || ''})</span>
+              <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${escapeHtml(output.quantity || '0')} ${escapeHtml(output.unit || '')})</span>
             </label>
-            <input type="number" class="spa-inp execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${output.quantity || '0'}" value="${output.quantity || ''}" step="0.01" min="0">
+            <input type="number" class="spa-inp execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${escapeHtml(output.quantity || '0')}" value="${escapeHtml(output.quantity || '')}" step="0.01" min="0">
             <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
             <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">
           </div>
@@ -307,6 +308,7 @@
           recon.className = 'execute-reconcile-untracked-wrapper';
           recon.setAttribute('data-output-id', String(outputId));
           recon.style.cssText = 'margin-top: 12px; padding: 14px 16px; background: hsl(42, 93%, 96%); border: 1px solid var(--warning, #f59e0b); border-radius: var(--radius-md); font-size: 13px;';
+          // nosemgrep: innerhtml-string-concat -- audited: static markup only, no dynamic interpolation
           recon.innerHTML =
             '<label style="display:block; font-weight: 700; color: #92400e; margin-bottom: 6px;">Reconciliation</label>' +
             '<p style="margin: 0 0 12px 0; color: #92400e; font-size: 12px; line-height: 1.45;">This step produces an output that is currently untracked in your inventory. Choose an item to reconcile when you record this step.</p>' +
@@ -432,6 +434,7 @@
           var noneCard = document.createElement('div');
           noneCard.className = 'execute-reconcile-untracked-card' + (defaultIdNorm ? '' : ' execute-reconcile-card-selected');
           noneCard.dataset.untrackedId = '';
+          // nosemgrep: innerhtml-string-concat -- audited: static markup only, no dynamic interpolation
           noneCard.innerHTML =
             '<div style="padding: 12px 16px;">' +
               '<div style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">— None —</div>' +
@@ -466,6 +469,7 @@
             if (u.source_step_completed_by) subtitleParts.push('Completed by: ' + escapeHtml(u.source_step_completed_by));
             var subtitleLine = subtitleParts.join(' · ');
             var expandInner = buildUntrackedReconcileExpandHtml(u, escapeHtml, prettyLabel, orgUsersMap);
+            // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml()
             card.innerHTML =
               '<div style="padding: 12px 16px;">' +
                 '<div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 10px;">' +

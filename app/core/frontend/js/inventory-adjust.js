@@ -28,6 +28,7 @@
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-labelledby', 'inv-edit-title');
+    // nosemgrep: innerhtml-string-concat -- audited: static template only, no dynamic interpolation
     panel.innerHTML =
       '<div class="inv-edit-handle" aria-hidden="true"></div>' +
       '<div class="inv-edit-header">' +
@@ -166,6 +167,7 @@
     };
 
     var savedId = activeItemId;
+    // nosemgrep: raw-fetch-post -- X-CSRFToken already attached below via getCsrf()
     fetch('/api/core/inventory/' + encodeURIComponent(savedId), {
       method: 'PUT',
       credentials: 'same-origin',

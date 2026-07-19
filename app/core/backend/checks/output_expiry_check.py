@@ -8,7 +8,6 @@ risk signals only (no inventory modification). Findings appear in system banner 
 from __future__ import annotations
 
 import calendar
-import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -19,8 +18,9 @@ from app.core.backend.corechecks import CheckResult
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
+from app.observability import get_logger
 
-_log = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 # Severity when past expiry
 SEVERITY_EXPIRED = "red"

@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
 from app.core.security.backup_code_encryption import BackupCodeEncryption
+from app.observability import get_logger
+
+logger = get_logger(__name__)
 
 
 class BackupCodeRepository:
@@ -124,9 +127,6 @@ class BackupCodeRepository:
             except Exception as e:
                 # Decryption failed or code doesn't match - continue to next
                 # Log the exception for debugging (but don't expose sensitive info)
-                import logging
-
-                logger = logging.getLogger(__name__)
                 logger.debug(f"Backup code verification failed: {type(e).__name__}")
                 continue
 

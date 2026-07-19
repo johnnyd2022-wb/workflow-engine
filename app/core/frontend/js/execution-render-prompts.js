@@ -104,6 +104,7 @@
           inputHtml = `<select class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''}><option value="">Select...</option></select>`;
         }
 
+        // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through escapeHtml()
         promptSection.innerHTML = `
           <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
             ${escapeHtml(prompt.label)}${prompt.required !== false ? ' <span style="color: var(--error);">*</span>' : ''}${prompt.unit ? ` (${escapeHtml(prompt.unit)})` : ''}
@@ -152,6 +153,7 @@
                 '</div>'
               );
             }).join('');
+            // nosemgrep: insertadjacenthtml -- audited: all dynamic values here go through escapeHtml()
             listEl.insertAdjacentHTML('beforeend', html);
           }
           listEl.addEventListener('click', async function(ev) {

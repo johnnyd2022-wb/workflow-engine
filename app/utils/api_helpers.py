@@ -3,14 +3,15 @@ Shared API helper utilities for backend modules.
 Contains cross-cutting concerns like response formatting, validation, and database operations.
 """
 
-import logging
 import traceback
 from datetime import datetime
 from functools import wraps
 
 from flask import jsonify, request
 
-logger = logging.getLogger(__name__)
+from app.observability import get_logger
+
+logger = get_logger(__name__)
 
 
 def api_response(success=True, data=None, message="", status_code=200):

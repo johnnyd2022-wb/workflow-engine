@@ -878,6 +878,7 @@
           }
           var reason = getExpiredReason(inv.id);
           var titlePrefix = reason ? '⚠ ' + escapeHtml(reason) + ': ' : '';
+          // nosemgrep: innerhtml-string-concat -- audited: all dynamic values here go through escapeHtml()
           card.innerHTML =
             '<div class="process-card-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; word-wrap: break-word; overflow-wrap: break-word;">' +
               '<div style="flex: 1; min-width: 0; cursor: pointer;" data-expand-trigger="1">' +
