@@ -1,6 +1,6 @@
 ---
 name: ci-gate
-description: "Build and verify the deterministic GitLab CI pipeline that stops unverified code reaching main: jobs for ruff, pytest, semgrep, gitleaks, pip-audit, Alembic migration reversibility, and Playwright E2E, plus pre-commit hooks and protected-branch merge checks. Use this skill when setting up or modifying CI, when new-feature or review-feature calls it as the final gate, when a new test suite must become a blocking job, or whenever the user mentions CI, .gitlab-ci.yml, pipelines, pre-commit, protected branches, or 'make sure this can't ship broken'."
+description: "Build and verify the deterministic GitLab CI pipeline that stops unverified code reaching main: jobs for ruff, pytest, semgrep, gitleaks, uv audit, Alembic migration reversibility, and Playwright E2E, plus pre-commit hooks and protected-branch merge checks. Use this skill when setting up or modifying CI, when new-feature or review-feature calls it as the final gate, when a new test suite must become a blocking job, or whenever the user mentions CI, .gitlab-ci.yml, pipelines, pre-commit, protected branches, or 'make sure this can't ship broken'."
 ---
 
 # CI Gate (GitLab)
@@ -86,11 +86,13 @@ gitleaks:
   script:
     - gitleaks detect --source . --no-banner
 
-pip_audit:
+uv_audit:
   stage: security
   script:
-    - pip install pip-audit
-    - pip-audit -r requirements.txt
+    - pip install "uv==${UV_VERSION}"  # UV_VERSION pinned in top-level `variables:` -- uv audit is preview-stage
+    - uv sync --extra dev
+    - uv audit --frozen --output-format json --preview-features audit-command,json-output
+      > .agents/reports/security/uv-audit.json || (cat .agents/reports/security/uv-audit.json; exit 1)
 
 migrations:
   stage: migrations

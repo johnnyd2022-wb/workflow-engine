@@ -94,7 +94,7 @@ test-fixtures
 | "Build/add a new feature, endpoint, page, capability" | `new-feature` |
 | "Review/audit/harden an existing feature", "is X solid", "check X before launch" | `review-feature` |
 | "This is broken", a bug report, stack trace, request_id, regression | `fix-bug` |
-| A CVE/pip-audit finding, "bump this dependency" | `dependency-update` |
+| A CVE/uv-audit finding, "bump this dependency" | `dependency-update` |
 | "Deploy this", "ship to prod/test", "roll this back" | `deploy-runner` (technical) → hands off to `release-manager` |
 | Already built + verified, needs the MR opened/pushed/watched | `merge-request` (front doors call this themselves) |
 
@@ -108,7 +108,7 @@ test-fixtures
 | "Write tests for X", "update the tests after this change", "is <flow> covered" | `test-author` |
 | "Are these tests real", "did the test actually test anything", "check these tests aren't gamed" | `test-evaluator` |
 | Set up/modify CI, `.gitlab-ci.yml`, pre-commit, protected branches | `ci-gate` |
-| Security review, semgrep/gitleaks/pip-audit, tenant isolation, scheduled security sweep | `security-audit` |
+| Security review, semgrep/gitleaks/uv-audit, tenant isolation, scheduled security sweep | `security-audit` |
 | Browser/E2E tests, Playwright, "does the app actually work" | `e2e-playwright` |
 | "The app is slow", "this page is slow", LCP, load times, perf budgets, N+1 triage | `perf-guardrails` |
 | Migration reversibility, schema change safety | `migration-safety` |

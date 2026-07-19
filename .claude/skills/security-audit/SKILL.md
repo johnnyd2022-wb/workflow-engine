@@ -1,11 +1,11 @@
 ---
 name: security-audit
-description: "Audit the Flask codebase (or one feature blueprint) for security vulnerabilities: run semgrep with Flask/OWASP plus custom repo rules, gitleaks, pip-audit, then hunt the class scanners miss, especially tenant isolation and missing auth. Findings don't stop at a report — this skill drives remediation to an MR (itself when scoped, via fix-bug/dependency-update when wider), through the normal adversarial verification. Use this skill whenever the user mentions security, vulnerabilities, semgrep, secrets, dependency CVEs, auth review, or tenant isolation, whenever new-feature or review-feature calls it after a build, or on a scheduled security sweep. Autonomous: opens at most one MR per finding class; the MR is the human gate."
+description: "Audit the Flask codebase (or one feature blueprint) for security vulnerabilities: run semgrep with Flask/OWASP plus custom repo rules, gitleaks, uv audit, then hunt the class scanners miss, especially tenant isolation and missing auth. Findings don't stop at a report — this skill drives remediation to an MR (itself when scoped, via fix-bug/dependency-update when wider), through the normal adversarial verification. Use this skill whenever the user mentions security, vulnerabilities, semgrep, secrets, dependency CVEs, auth review, or tenant isolation, whenever new-feature or review-feature calls it after a build, or on a scheduled security sweep. Autonomous: opens at most one MR per finding class; the MR is the human gate."
 ---
 
 # Security Audit
 
-Two layers, and the order matters. Scanners (semgrep, gitleaks, pip-audit) catch known patterns deterministically; run them first and fix what they find. Then do the agent work scanners cannot: logic flaws, missing authorization, and tenant isolation, which in a multi-tenant B2B SaaS is the scariest bug class because a valid-looking query that forgets the org filter leaks customer data with zero scanner signal.
+Two layers, and the order matters. Scanners (semgrep, gitleaks, uv audit) catch known patterns deterministically; run them first and fix what they find. Then do the agent work scanners cannot: logic flaws, missing authorization, and tenant isolation, which in a multi-tenant B2B SaaS is the scariest bug class because a valid-looking query that forgets the org filter leaks customer data with zero scanner signal.
 
 Every audit ends with a rule: when you find a vulnerability class by reading code, write a custom semgrep rule for it so the NEXT occurrence is caught by machine, not by hoping an agent reads carefully. That is how this skill compounds.
 
@@ -30,7 +30,8 @@ mkdir -p .agents/reports/<slug>
 semgrep --config p/python --config p/flask --config p/owasp-top-ten --config .semgrep/ \
   --json --output .agents/reports/<slug>/semgrep.json app/
 gitleaks detect --no-banner --report-path .agents/reports/<slug>/gitleaks.json || true
-uv pip install pip-audit && uv run pip-audit -f json -o .agents/reports/<slug>/pip-audit.json || true
+uv audit --frozen --output-format json --preview-features audit-command,json-output \
+  > .agents/reports/<slug>/uv-audit.json || true
 ```
 
 Triage every finding into exactly one bucket:
@@ -107,7 +108,7 @@ Write `.agents/reports/<slug>/security.md`:
 # SECURITY: <slug>
 date: <date>
 verdict: clean | patched | findings-open
-scanned: semgrep(<n> findings), gitleaks(<n>), pip-audit(<n>)
+scanned: semgrep(<n> findings), gitleaks(<n>), uv-audit(<n>)
 manual_checklist: 7/7 completed
 
 ## Findings

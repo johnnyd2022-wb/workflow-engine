@@ -4,6 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+Requires **uv >= 0.11.29** (matches `UV_VERSION` in `.gitlab-ci.yml`) — `uv audit`
+(the CI security gate, see `uv_audit` job) doesn't exist before that version. Check
+with `uv --version`; upgrade via however you installed it (`pip install --upgrade uv`,
+`brew upgrade uv`, or `uv self update` for a standalone-installer uv).
+
 ```bash
 # Install dependencies
 uv sync --extra dev
