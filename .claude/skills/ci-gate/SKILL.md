@@ -37,7 +37,7 @@ Cross-check three places that must agree: `app/config/`, `alembic.ini`/`migratio
 stages: [lint, test, security, migrations, e2e]
 
 default:
-  image: python:3.12-slim
+  image: python:3.14-slim
   cache:
     key:
       files: [requirements.txt, requirements-dev.txt]
