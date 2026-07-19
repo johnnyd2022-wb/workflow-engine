@@ -186,6 +186,49 @@ pip_audit:
     - main
   allow_failure: false
 
+# Supply-chain BEHAVIOUR analysis (Socket) -- the proactive layer pip_audit/uv_audit
+# can't provide. Those scan for already-published CVEs (reactive, days-to-weeks lag from
+# disclosure to database entry); Socket inspects what a package's installed code actually
+# *does* (network calls, install scripts, obfuscation, telemetry) and flags red flags
+# before any CVE exists for them -- see docs/supply-chain-security.md for the full
+# division of labour. Diff-based: only alerts on NEW issues introduced versus the
+# repository's existing head scan, so it doesn't re-litigate a pre-existing dependency
+# tree on every MR.
+#
+# NEEDS HUMAN SETUP before this job can run (not done by this commit):
+#   1. Create a socket.dev account/org (Free tier covers full behavioural scanning --
+#      see docs/supply-chain-security.md for the tier breakdown and upgrade triggers).
+#   2. Add SOCKET_SECURITY_API_TOKEN as a masked, protected GitLab CI/CD variable.
+# Until then this job will fail on missing auth -- allow_failure below covers that too,
+# not just the soak period.
+socket_security:
+  stage: security
+  image: python:3.14-bookworm
+  script:
+    - pip install socketsecurity
+    - mkdir -p .agents/reports/security
+    - >
+      socketcli
+      --integration gitlab
+      --repo "${CI_PROJECT_PATH}"
+      --branch "${CI_COMMIT_REF_NAME}"
+      --commit-sha "${CI_COMMIT_SHA}"
+      ${CI_MERGE_REQUEST_IID:+--pr-number "${CI_MERGE_REQUEST_IID}"}
+      --enable-json --json-file .agents/reports/security/socket.json
+  artifacts:
+    paths:
+      - .agents/reports/security/socket.json
+    when: always
+    expire_in: 30 days
+  only:
+    - merge_requests
+    - main
+  # Soak first: behavioural heuristics can flag a legitimate package (a false positive
+  # is a judgement call, not a wrong-vs-right CVE match), same reasoning pip_audit
+  # started with. Flip to allow_failure: false once a soak period shows the signal is
+  # clean, per .agents/plans/repo-modernisation-plan.md §2.
+  allow_failure: true
+
 # Proves migrations are reversible, not just applicable — added by ci-gate.
 # ci/setup_database.sh already brings the schema to head; this then proves one step
 # down and back up round-trips cleanly.
