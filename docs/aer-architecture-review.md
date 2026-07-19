@@ -138,12 +138,18 @@ they land on this branch.
 - [x] DB-free unit test for the scorecard aggregation (falsifiable) —
       `tests/test_skill_metrics.py`, 11 tests green
 
-### Phase 2 — Learning loop (finding → permanent deterministic rule)
-- [ ] `scripts/rule_candidates.py`: given a validated finding, emit a semgrep rule stub +
-      a test fixture that the rule must catch
-- [ ] Handoff wired: when a `security-audit`/`perf-guardrails` finding's fix merges,
-      propose the rule candidate through the normal MR gate
-- [ ] Track "rules born from findings" as a first-class metric in the scorecard
+### Phase 2 — Learning loop (finding → permanent deterministic rule) ✅
+- [x] `scripts/rule_candidates.py`: `scaffold` (fixture skeleton + rule template),
+      `verify` (proves each learned rule fires on vulnerable.* and stays silent on
+      fixed.*), `list` (provenance)
+- [x] Finding-born rules live in `.semgrep/rules/learned.yml` with provenance metadata;
+      fixtures under `.semgrep/fixtures/<id>/`; seeded with a real one
+      (`bize-mass-assignment-from-request` — a checklist item that had no scanner rule)
+- [x] `security-audit` §3 rewritten to route through the enforced tool + fixture
+      convention (was prose-only, easily skipped)
+- [x] `semgrep_learned_rules` CI job makes it a blocking gate on every MR
+- [x] DB-free unit tests pin the under-match / over-match / parse logic
+      (`tests/test_rule_candidates.py`, 6 tests)
 
 ### Phase 3 — Historical-findings store (compounding memory)
 - [ ] `.agents/history/` verdict store keyed by file/area + finding signature
@@ -167,3 +173,9 @@ Progress log lives at the bottom of this file as each phase lands.
   now measure per-skill acceptance rate, findings/run, escaped defects, and cost. Next:
   Phase 4's wiring is what makes skills actually *append* to this — but Phase 2 (learning
   loop) is the higher-leverage North-Star item, so it goes next.
+- 2026-07-19 — **Phase 2 complete.** Learning loop is now enforced, not aspirational:
+  `.semgrep/rules/learned.yml` + `scripts/rule_candidates.py` prove every finding-born rule
+  fires on its bug and is silent on the fix; `semgrep_learned_rules` CI job blocks broken
+  ones; `security-audit` §3 routes through it; seeded with a real rule
+  (`bize-mass-assignment-from-request`). Each validated finding can now become permanent,
+  *tested* deterministic capability — the North Star made mechanical.

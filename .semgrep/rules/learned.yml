@@ -1,0 +1,41 @@
+# Rules born from findings — the learning loop's output.
+#
+# Every rule here started life as a vulnerability or defect an agent (or human) found by
+# reading code. Once validated, it became a deterministic check so the NEXT occurrence is
+# caught by machine, not by hoping someone reads carefully. This is the AER North Star made
+# concrete: each validated insight becomes permanent engineering capability, and the need
+# for LLM reasoning over that class drops to zero.
+#
+# Contract for every rule in this file (enforced by scripts/rule_candidates.py):
+#   1. carry a `metadata:` block with `born-from`, `finding`, `date`, and `fixture`
+#   2. have a paired fixture under .semgrep/fixtures/<fixture>/ with vulnerable.* + fixed.*
+#   3. FIRE on vulnerable.* and stay SILENT on fixed.* — a rule that never fired on the
+#      real bug is untested, and an untested rule is a false sense of security
+#
+# Add rules here via `python scripts/rule_candidates.py scaffold --id <rule-id>`, then
+# prove them with `python scripts/rule_candidates.py verify`.
+
+rules:
+  - id: bize-mass-assignment-from-request
+    languages: [python]
+    severity: ERROR
+    message: >
+      Mass assignment: a model is constructed by splatting the request body
+      (Model(**request.json)). A client can then set any column, including ones it should
+      never control (org_id, is_admin, id). Bind an explicit allowlist of fields instead:
+      User(email=data["email"], name=data["name"]).
+    metadata:
+      born-from: security-audit
+      finding: "security-audit checklist item 3 (mass assignment) had no scanner rule — a reader had to catch it every time"
+      date: "2026-07-19"
+      fixture: bize-mass-assignment-from-request
+      references:
+        - https://owasp.org/www-community/attacks/Mass_Assignment
+    patterns:
+      - pattern-either:
+          - pattern: $MODEL(**request.json)
+          - pattern: $MODEL(**request.get_json(...))
+      # the callable is a model class, not an arbitrary helper: CapWord name
+      - metavariable-regex:
+          metavariable: $MODEL
+          regex: "^[A-Z][A-Za-z0-9]+$"

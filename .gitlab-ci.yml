@@ -111,6 +111,20 @@ semgrep_observability:
     - main
   allow_failure: false
 
+# Learning loop (AER Phase 2): every finding-born rule in .semgrep/rules/learned.yml must
+# prove it fires on its vulnerable fixture and stays silent on the fixed one. An untested
+# learned rule is decorative — green in the config while catching nothing. This gate makes
+# "write the rule, prove it catches the bug" (security-audit §3) mechanical, not a promise.
+semgrep_learned_rules:
+  stage: security
+  image: semgrep/semgrep:latest
+  script:
+    - python3 scripts/rule_candidates.py verify
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
+
 # Secret scanning — added by ci-gate. First run scanning full history found 32
 # pre-existing findings that predate this job (git history was never scanned before).
 # Rather than weaken the gate, this job is scoped to only the commits actually being

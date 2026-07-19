@@ -52,24 +52,33 @@ Work this checklist against the scoped code. For each item, look at actual code 
 6. **Secrets and config.** No secrets in code or git history (gitleaks covers most); `SECRET_KEY` from env; cookies `Secure`, `HttpOnly`, `SameSite`; debug off outside dev.
 7. **CSRF and CORS.** State-changing routes are CSRF-protected (or the API uses token auth consistently); CORS is not `*` with credentials.
 
-## 3. Write the rules (compounding step)
+## 3. Write the rules (compounding step — now an enforced loop)
 
-For each manual finding whose pattern is mechanically recognizable, add a rule under `.semgrep/`. Example shape for the missing-org-filter class:
+For each manual finding whose pattern is mechanically recognizable, add a rule so the NEXT
+occurrence is caught by machine. Finding-born rules live in **`.semgrep/rules/learned.yml`**
+(not scattered), and each one ships with a **fixture pair** that proves it works — this is
+the AER learning loop, and `scripts/rule_candidates.py` makes "prove it fires on the bug
+and stays silent on the fix" a gate instead of a promise an agent skips at 3am.
 
-```yaml
-rules:
-  - id: bize-query-missing-org-scope
-    languages: [python]
-    severity: ERROR
-    message: Query on tenant-scoped model without org filter. Use scoped helper.
-    patterns:
-      - pattern: $MODEL.query.get($ID)
-      - metavariable-regex:
-          metavariable: $MODEL
-          regex: (Order|Customer|Invoice|WorkOrder)  # keep in sync with scoped models
+Workflow:
+
+```bash
+# 1. scaffold the fixtures + get a rule template
+python scripts/rule_candidates.py scaffold --id bize-<name> --lang python
+
+# 2. fill in .semgrep/fixtures/bize-<name>/vulnerable.py (the real pre-patch shape)
+#    and fixed.py (the patched shape), then paste the rule into .semgrep/rules/learned.yml
+#    with its metadata block (born-from, finding, date, fixture)
+
+# 3. prove it: FIRES on vulnerable, SILENT on fixed — exit 1 if not
+python scripts/rule_candidates.py verify
 ```
 
-Validate with `semgrep --validate --config .semgrep/`, and confirm the rule fires on the pre-patch code and stays silent after the fix. A rule that never fired against the real bug is untested.
+A rule that never fired against the real bug is untested, and an untested rule is a false
+sense of security. The `semgrep_learned_rules` CI job runs `verify` on every MR, so a
+broken or over-matching learned rule blocks the pipeline. The worked seed to copy is
+`bize-mass-assignment-from-request` (rule + fixtures already in the tree). Record the rule
+you added under each finding's `rule_added:` line in the report (§4).
 
 ## 4. Report and patch
 
