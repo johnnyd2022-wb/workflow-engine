@@ -171,8 +171,8 @@ gitleaks:
 
 # Known-vulnerability scanning of resolved dependencies — added by ci-gate. Distinct
 # from check_dependency_updates above, which only checks the lockfile is up to date.
-# allow_failure: true until the first run's findings are triaged (see dependency-update
-# skill); flip to false once the backlog is clear.
+# Blocking: the initial findings backlog has been triaged and cleared (see the
+# dependency-update skill for the remediation flow when a new CVE lands).
 pip_audit:
   stage: security
   image: python:3.12-bullseye
@@ -184,7 +184,7 @@ pip_audit:
   only:
     - merge_requests
     - main
-  allow_failure: true
+  allow_failure: false
 
 # Proves migrations are reversible, not just applicable — added by ci-gate.
 # ci/setup_database.sh already brings the schema to head; this then proves one step
