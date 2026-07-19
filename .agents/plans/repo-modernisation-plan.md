@@ -6,6 +6,15 @@ Five workstreams. Each is independently shippable as its own MR — do them in t
 recommended order (§6) so the dependency-scanning churn settles before we bolt on
 Renovate and CD. Checkboxes are the working list.
 
+**Overall status (2026-07-19): all five branches built and committed, locally verified
+where verification didn't require credentials or a real pipeline run.** §4, §1, §3, §5
+are code-complete. §2 (Socket) is prepped but genuinely blocked on you creating a
+socket.dev account/token. None of the five branches have been pushed or opened as MRs
+yet — that's the next step, and needs your go-ahead since pushing/opening MRs is
+visible outside this session. See each section for what got found and fixed along the
+way (the datetime scope was 2x the original estimate; two doc/reality gaps got fixed
+as prerequisites — Renovate's pre-commit manager and the E2E suite's `E2E_BASE_URL`).
+
 ---
 
 ## Review — what's actually here today
@@ -34,20 +43,18 @@ Renovate and CD. Checkboxes are the working list.
 
 **Goal:** single uv-native CVE/malware gate; drop the pip-audit install and the stale requirements.txt path.
 
-- [ ] Pin the uv version CI installs (e.g. `pip install "uv==<X>"` or the astral install script pinned) so `uv audit` is guaranteed present and reproducible — do **not** leave it on floating `pip install uv` given the command is preview-stage.
-- [ ] Bump local `uv` (currently 0.9.13, lacks the subcommand) to the same pinned version; note it in CLAUDE.md's command list.
-- [ ] Rewrite the `.gitlab-ci.yml` `pip_audit` job → `uv_audit`:
-  - `uv sync --extra dev` then `uv audit` (against the lockfile). Confirm the exact flag set (`--strict` equivalent, JSON output) against `uv audit --help` on the pinned version.
-  - **DECIDED: block immediately** (`allow_failure: false`). A CVE fails the pipeline; `/git-commit-chain` sees the red job and routes remediation. The real protection against the preview command misbehaving is the **pinned uv version** above — not `allow_failure` — so pinning is non-negotiable here.
-- [ ] Keep a machine-readable report artifact (`uv audit --format json > .agents/reports/…`) so the `dependency-update` skill still has a findings file to consume.
-- [ ] Remove pip-audit everywhere it's now dead:
-  - [ ] `.gitlab-ci.yml` — the `uv pip install pip-audit` line.
-  - [ ] `requirements.txt` — **delete it (decided).** Grep confirmed nothing reads it except the `ci-gate` skill doc's old `pip-audit -r requirements.txt` line (rewritten below). Dockerfile uses `uv sync --frozen`; no deploy path touches it; it's stale (`Flask==2.3.3` vs real `3.1.3`) and misleading.
-  - [ ] Update skills that call pip-audit: `security-audit/SKILL.md`, `dependency-update/SKILL.md`, `ci-gate/SKILL.md` (+ `.claude/takeaway/` mirrors), and `.agents/ci-gate-setup.md` / `.agents/autonomy.md` → point at `uv audit` and the new job name.
-- [ ] Update the memory note about the blocking `pip_audit` job to name the new `uv_audit` job.
-- [ ] Verify: run the pipeline on a branch; confirm `uv_audit` runs, reports, and (once flipped) blocks on a seeded vulnerable pin.
+**STATUS: DONE** (branch `chore/uv-audit-migration`, commit `3e9f5e1`).
 
-> Note: pip-audit uses the PyPA Advisory DB (+OSV); `uv audit` is OSV-only today. Coverage is *close* but not identical — the one-pipeline `allow_failure` soak is partly to confirm we're not losing signal.
+- [x] Pinned uv at **0.11.29** (confirmed via an isolated pip install this is the version where `uv audit` exists — local system uv was 0.9.13 and lacks it) as a top-level `UV_VERSION` CI variable, referenced by every `pip install "uv==${UV_VERSION}"` line in `.gitlab-ci.yml`, not just the audit job — one source of truth for the whole pipeline's uv version, not just the job that strictly needed it.
+- [ ] Bump **local** `uv` to 0.11.29+ — this is Johnny's own machine, not something a commit can do; CLAUDE.md now documents the requirement and how to check/upgrade.
+- [x] `pip_audit` job → `uv_audit`: `uv audit --frozen --output-format json --preview-features audit-command,json-output`, JSON artifact at `.agents/reports/security/uv-audit.json`. Two undocumented preview-flag warnings on stderr required `--preview-features audit-command,json-output` (comma-separated, both needed) to suppress — found by running it, not by assuming the `--help` text was complete.
+  - **Blocking from day one** (`allow_failure: false`), per the decision above.
+- [x] Report artifact wired as a GitLab CI `artifacts:` entry (`when: always`), so `dependency-update` has a findings file to consume — same role `.agents/reports/*/pip-audit.json` used to serve.
+- [x] pip-audit removed everywhere: the `.gitlab-ci.yml` job rewritten (not just the `uv pip install pip-audit` line); `requirements.txt` deleted (grep-confirmed nothing else read it); `security-audit/SKILL.md`, `dependency-update/SKILL.md`, `ci-gate/SKILL.md`, `entrypoint/skill-index.md`, `.agents/autonomy.md` updated to name `uv audit`/`uv_audit`. **`.agents/ci-gate-setup.md` deliberately left alone** — it's a dated (2026-07-12) historical record of that setup pass; rewriting "pip_audit was added" after the fact would misrepresent what actually happened. `.claude/takeaway/` mirrors also left alone (skill-smith-owned export snapshots, not hand-maintained sources).
+- [x] Memory note update: flagged for a follow-up outside this session (memory lives across conversations, not in this repo's diff) — the note should now say `uv_audit`, not `pip_audit`.
+- [x] Verified: `uv audit --frozen` against the real `uv.lock` (82 packages, 0 vulnerabilities, exit 0) using the pinned 0.11.29; separately confirmed exit 1 + correct JSON shape against a deliberately vulnerable throwaway project (`requests==2.6.0`, 10 known CVEs) before trusting the job design.
+
+> Note: pip-audit uses the PyPA Advisory DB (+OSV); `uv audit` is OSV-only today. Coverage is *close* but not identical — worth re-checking once `uv audit` leaves preview.
 
 ---
 
@@ -62,14 +69,14 @@ adds reachability analysis + Slack. **Business ($50/seat/mo, ~$40 annual) adds S
 will eventually force. Plan: ship on Free now; upgrade to Business only when a customer/compliance
 requirement demands SBOM or SSO. No blocker to starting.
 
-- [ ] Create socket.dev org (Free tier) + API token; add `SOCKET_SECURITY_API_KEY` as a **masked, protected** GitLab CI/CD variable (never in the repo).
-- [ ] Add a `socket` job to the `security` stage:
-  - Image with the `socketsecurity` CLI (pip `socketsecurity`), or the official container.
-  - Runs on `merge_requests` (diff-scoped: the CLI auto-detects changed manifests from the commit). Uses the built-in `CI_JOB_TOKEN`/`GITLAB_TOKEN` for MR comment posting.
-  - Start `allow_failure: true` — behavioural scoring produces judgement-call alerts (a legitimate package can trip a heuristic); soak before it blocks merges, then decide per-alert-tier whether to gate.
-- [ ] Decide the block policy: hard-fail only on high-severity behavioural flags (malware, install scripts, telemetry), warn on the rest. Document it next to the job.
-- [ ] Add a short `docs/supply-chain-security.md`: what uv audit covers (known CVEs, reactive) vs what Socket covers (behaviour, proactive), so the two jobs' roles are unambiguous.
-- [ ] Verify against a known-bad fixture (Socket publishes test packages) that the job flags it.
+**STATUS: prepped as far as possible without credentials** (branch `chore/socket-supply-chain-scanning`, commit `30f2787`). **Blocked on you** for the two items only a human/account-owner can do (see below) — everything else is done.
+
+- [ ] Create socket.dev org (Free tier) + API token; add `SOCKET_SECURITY_API_KEY` as a **masked, protected** GitLab CI/CD variable (never in the repo). **← your action, not automatable.**
+- [x] Added `socket_security` job to the `security` stage. Real CLI entrypoint confirmed to be `socketcli` (not the `socketsecurity` package name itself — checked via an isolated install rather than assumed). Diff-based scan using GitLab's own predefined variables (`CI_PROJECT_PATH`, `CI_COMMIT_REF_NAME`, `CI_COMMIT_SHA`, `CI_MERGE_REQUEST_IID` guarded with `${VAR:+...}` since it's unset outside MR pipelines), JSON report as a build artifact.
+  - `allow_failure: true` for the soak period, as decided.
+- [x] Block policy documented in the job comment: soak first, decide per-alert-tier once real findings exist — can't meaningfully pre-decide severity tiers without having seen this repo's actual alert mix yet.
+- [x] `docs/supply-chain-security.md` written: uv_audit (reactive, CVE database) vs Socket (proactive, behaviour) division of labour, plus the pricing tier breakdown.
+- [ ] Verify against a known-bad fixture — **cannot do without the API token**; this is the one verification step genuinely blocked on your sign-off, not something more digging would unblock.
 
 ---
 
@@ -83,19 +90,17 @@ GitLab-native answer, natively understands **uv** (updates both `pyproject.toml`
 have. Run it as a **CI job on a schedule** (not the Mend hosted app) to keep everything
 inside your own runner and secrets — no third-party app with repo write access.
 
-- [ ] Add `renovate.json` (or `.gitlab/renovate.json5`) at repo root:
-  - `extends: ["config:recommended"]`.
-  - Enable the uv manager; confirm it picks up `pyproject.toml` + `uv.lock`.
-  - **Grouping/scheduling to avoid PR spam:** group patch/minor; separate majors; limit concurrent PRs; weekend/off-hours schedule.
-  - `dependencyDashboard: true` (single issue tracking everything pending).
-  - Also let Renovate manage the **Docker base image** (`python:3.14-bookworm`) and **pre-commit hook revs** (ruff, gitleaks pins are currently hand-maintained and stale — e.g. `ruff-pre-commit v0.1.15`).
-- [ ] Add a `renovate` scheduled pipeline job:
-  - Runs `renovate/renovate` image, `only: schedules`.
-  - Needs a `RENOVATE_TOKEN` (project/group access token with `api` + write) as a masked CI variable.
-  - Create a GitLab pipeline **schedule** (e.g. daily 6am NZT) targeting it.
-- [ ] **Keep `check_dependency_updates` — Renovate does NOT replace it (decided).** `uv lock --check` is a *lockfile-consistency* guard ("does `uv.lock` still match `pyproject.toml`?", catches an edited-pyproject-without-relock), run per-MR including on Renovate's own PRs. Renovate *proposes upgrades* on a schedule — different job, different stage, complementary. The only fix: the name lies. **Rename the job `lockfile_consistency`** so it describes what it does; update the `.gitlab-ci.yml` comment accordingly.
-- [ ] Ensure Renovate PRs run the **full pipeline** (they will, as MRs) so `uv_audit` + tests gate every bump — this is the safety net that lets you auto-merge low-risk updates later.
-- [ ] Verify: dry-run (`LOG_LEVEL=debug renovate --dry-run`) against the repo; confirm it detects uv + docker + pre-commit and proposes sane PRs.
+**STATUS: DONE** (branch `chore/renovate-setup`, commit `7c3519d`).
+
+- [x] Added `renovate.json` at repo root (`extends: ["config:recommended", ":enablePreCommit"]`). The `:enablePreCommit` addition wasn't in the original plan — Renovate's pre-commit manager turns out to be **opt-in, disabled by default even under `config:recommended`** (the maintainers disabled it indefinitely over a design disagreement with the pre-commit project). Found this by dry-running and seeing 0 pre-commit deps detected despite a working `.pre-commit-config.yaml`, not by reading docs first.
+  - Grouping done: non-major bumps grouped together (still gated by the full pipeline); majors stay separate; Docker base image and pre-commit hooks get their own groups.
+  - `dependencyDashboard: true` set.
+- [x] Added a `renovate` scheduled job (`only: schedules`, `allow_failure: true` since it never gates an MR). **Needs `RENOVATE_TOKEN` (masked CI variable) and a GitLab pipeline schedule targeting this job — both account-level, called out explicitly in the job's comment rather than silently assumed done.**
+- [x] `check_dependency_updates` kept, not renamed in this branch (the `lockfile_consistency` rename lives on the `chore/uv-audit-migration` branch/commit `3e9f5e1`, since it's really part of the uv_audit workstream's cleanup — the two branches will need reconciling at merge time, noted below).
+- [x] Renovate's own MRs will run the full pipeline automatically (no special config needed — GitLab treats them as ordinary MRs).
+- [x] Verified via `renovate-config-validator` (config validates cleanly) **and** a local dry-run (`--platform=local --dry-run=extract`, with `RENOVATE_CONFIG_FILE` pointed explicitly at `renovate.json` since `--platform=local` doesn't auto-discover repo config — a real gotcha that produced a false "it just works with defaults" result on the first attempt): confirmed `pep621` manager picks up `pyproject.toml`/`uv.lock` (27 deps), `dockerfile` manager picks up `Dockerfile.multi`, and `pre-commit` manager picks up `.pre-commit-config.yaml` (2 pinned hooks) once `:enablePreCommit` was added.
+
+**Merge-order note:** this branch and `chore/uv-audit-migration` both touch `.gitlab-ci.yml`'s `check_dependency_updates`/`lockfile_consistency` job — expect a small conflict there when both land; resolve by taking the rename plus this branch's `renovate` job addition.
 
 ---
 
@@ -135,33 +140,33 @@ Process note for next time: a plain `grep -rn "utcnow()"` (with parens) undercou
 works in a real browser (Playwright) against the deployed env, and can **roll back to the last
 known-good image** — never deploying a failing artifact.
 
+**STATUS: DONE** (branch `chore/registry-cd-pipeline`, commits `c4b9958` + `74856d4`). Full design writeup lives in `docs/deploy-registry-cd.md` — this section records what changed and what got found along the way.
+
 ### 5a. Build & publish (end of CI)
-- [ ] Add a `build` stage after `migrations`. Job builds `Dockerfile.multi` and pushes to the **GitLab Container Registry**, one image repository per logical image (Docker convention — a repo per image, tags for versions):
-  - Path: `$CI_REGISTRY_IMAGE/app` (room for `$CI_REGISTRY_IMAGE/<other-image>` later — do **not** dump multiple images as tags of one repo).
-  - Tag **immutably** by commit: `:$CI_COMMIT_SHORT_SHA`, plus a moving `:latest` / `:main` pointer for humans. The SHA tag is what CD deploys — that's what makes "don't deploy failing artifacts" enforceable.
-  - Build the `production` target (and/or `test` target) via `--target`.
-  - `docker login` with the built-in `$CI_REGISTRY_USER` / `$CI_JOB_TOKEN`.
-  - `only: main` (and tags) — don't push registry images for every MR branch.
-- [ ] Confirm the project's Container Registry is enabled and the runner can reach it.
+- [x] Added a `build` stage after `migrations`. `docker_build_publish` job pushes to **one repository** `$CI_REGISTRY_IMAGE/app`, environment-prefixed immutable tags (`test-<sha>`, `prod-<sha>`) rather than a bare `:$SHA` — needed since the Dockerfile has two meaningfully different targets (see the scope-limit note below), not one.
+  - `docker login` via `$CI_REGISTRY_USER`/`$CI_REGISTRY_PASSWORD` — both auto-populated by GitLab once the Container Registry is enabled, no manual token needed for this part (unlike Renovate/Socket).
+  - `only: main` — no registry pushes from MR branches.
+  - Used `docker:27` + `docker:27-dind` service rather than assuming host docker-socket access, since this file can't know the runner's actual privileges — flagged as possibly-unnecessary overhead if the runner turns out to already have host socket access.
+- [ ] Confirming the project's Container Registry is actually enabled and the runner can reach it needs a real pipeline run — **can't verify from here.**
 
 ### 5b. Decouple CI from CD
-- [ ] New `deploy` stage, **auto on every green `main`** (decided — no manual button; a merge to main that passes CI deploys to test), gated on the build job's artifact (the SHA-tagged image). CD does **not** rebuild — it pulls `$CI_REGISTRY_IMAGE/app:$CI_COMMIT_SHORT_SHA`. This is the CI/CD decoupling: the thing that ships is exactly the thing that was tested, addressed by digest/SHA. (Because it's fully automatic, the Playwright gate + rollback in 5c is what keeps a bad merge from sitting live — that safety net is load-bearing here, not optional.)
-- [ ] Rewrite the test-deploy path to **pull, not build**:
-  - Update `scripts/deploy_test_simple.sh` (and the `git_workflow.sh` `deploy_test` path) to `docker login` + `docker pull …/app:<sha|latest>` + `docker run`, replacing the local `docker build --target test`.
-  - Keep the healthcheck wait.
-- [ ] Use a GitLab **environment** (`environment: name: test, url: https://test-workflow-engine.whistlebird.co.nz`) so deploys are tracked and rollback has a UI.
+- [x] New `deploy` stage, auto on every green `main`, as decided. `deploy_test` pulls `$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA` — never rebuilds.
+- [x] `scripts/deploy_test_simple.sh` rewritten to accept an image ref as `$1` and pull it when given one; called with **no arguments** (existing local-dev usage), it still builds locally exactly as before — local dev workflow is unaffected.
+- [x] `environment: {name: test, url: https://test-workflow-engine.whistlebird.co.nz}` added for GitLab environment tracking.
 
 ### 5c. Playwright on CD (the real-browser gate)
-- [ ] Add a `cd_e2e` job **after** the test deploy, in the CD flow:
-  - Installs chromium (`uv run playwright install chromium`) and runs `tests/e2e/` against the **deployed test URL** (the suite already parametrises `base_url`).
-  - This is ground-truth verification of the *deployed artifact*, not the source — which is why it belongs on CD, not CI.
-- [ ] **Rollback rule — don't leave a failing artifact live:** if `cd_e2e` (or the post-deploy healthcheck) fails, CD re-deploys the previous known-good SHA tag. Record the last-good SHA (GitLab environment history already tracks the last successful deploy; the deploy script can also stash the previously-running image tag before swapping). Implement rollback as: pull previous-good SHA → run → healthcheck → confirm.
-- [ ] Promotion: only a green `cd_e2e` + healthcheck marks the SHA as "known good" (e.g. move the `:test-stable` tag). Prod deploy later consumes only `:test-stable`.
-- [ ] Verify: push to main → image published → auto-deploy to test → Playwright runs against the live test env → deliberately break a page and confirm CD refuses/rolls back.
+- [x] **Found and fixed a real gap first:** the plan assumed "the suite already parametrises `base_url`" — it didn't. `tests/e2e/conftest.py`'s `app_url` fixture unconditionally booted its own in-process Flask app via werkzeug; `deploy-runner/SKILL.md` already referenced an `E2E_BASE_URL` env var in its documented smoke-test command, but that env var didn't exist anywhere in the actual fixture code. The documented step had never worked. Fixed `app_url` to short-circuit to `E2E_BASE_URL` when set, and adjusted `_e2e_skip_reason`'s `ENVIRONMENT=test`/TLS-cert checks to not apply in that mode.
+- [x] `cd_e2e` job: installs chromium, runs `tests/e2e/test_smoke.py` with `E2E_BASE_URL=https://localhost:8001` against the just-deployed container.
+- [x] **Verified end-to-end, not just by reading the diff:** built the `test` target locally, ran it standalone on an isolated port, confirmed real TLS-served pages, then ran an actual Playwright test against it via `E2E_BASE_URL` — passed. (Hit an unrelated local DB-auth quirk against the container from inside Docker Desktop/WSL2 networking during this exercise; didn't chase it since it's orthogonal to what needed proving and unlikely to reproduce on the actual Linux CI runner.)
+- [x] Rollback: `rollback_test_on_failure` (`when: on_failure`, needs `cd_e2e`) redeploys whatever `:test-stable` currently points at.
+- [x] Promotion: `promote_test_stable` moves the `:test-stable` tag **only** after `cd_e2e` passes — nothing else in the pipeline ever writes that tag, which is what makes rollback trustworthy (a broken candidate was simply never promoted, so "roll back" is just "redeploy the tag that didn't move").
+- [ ] The actual "push to main → watch it deploy → break something → watch it roll back" live-fire verification needs a real pipeline run against real infrastructure — **can't do from here**, same reason as 5a.
 
 ### 5d. Reconcile the deploy docs/skills
-- [ ] `DEPLOYMENT.md` is stale (bashrc-era, wrong ports 5000/5001/5401 vs real 8000/8001/8401). Update it for the registry/CD flow — route through **docs-truth** so every documented command is verified.
-- [ ] `deploy-runner` skill owns "cut tag, deploy, smoke test, rollback" — align its steps with the new registry+rollback mechanics so the skill and the pipeline agree.
+- [x] `DEPLOYMENT.md`: didn't attempt the full rewrite (that's genuinely a `docs-truth` job — verifying every documented command against reality is a different kind of pass than this workstream). Added a prominent stale-content warning at the top pointing to `docs/deploy-registry-cd.md` instead of leaving it silently wrong.
+- [x] `deploy-runner/SKILL.md` updated: its smoke-test section now notes that `E2E_BASE_URL` actually works now, and that `cd_e2e` automates exactly that pattern for test — the skill's manual command stays correct guidance for prod (still not automated, deliberately) and ad-hoc checks.
+- [x] **Scope boundary, not an oversight:** `docker_build_publish` also builds and pushes `:prod-<sha>` every merge, but nothing auto-deploys it — production still goes through the existing `scripts/git_workflow.sh prod` (manual, tag-based). Auto-deploying test was an explicit decision; auto-deploying *production* the same way is a materially bigger call that needs its own sign-off, not a side effect of this change.
+- [ ] **Known scope limit, flagged not fixed:** true single-artifact promotion (the *same* image moving from test to prod, not a parallel build) would need unifying `Dockerfile.multi`'s `test`/`production` targets into one image driven entirely by `-e ENVIRONMENT=...` at `docker run` time, including a dynamic `HEALTHCHECK`. Real, behavior-affecting Dockerfile change — deliberately not done as a side effect here. Full reasoning in `docs/deploy-registry-cd.md`.
 
 ---
 
