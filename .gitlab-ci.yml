@@ -18,17 +18,27 @@ stages:
 - security
 - migrations
 
+variables:
+  # Pinned (not floating `pip install uv`) so every job resolves the lockfile the same
+  # way and `uv audit` (preview-stage as of this pin) is guaranteed present. Bump
+  # deliberately, not via drift — see the uv-audit-migration workstream in
+  # .agents/plans/repo-modernisation-plan.md.
+  UV_VERSION: "0.11.29"
+
 include:
 - template: Security/SAST.gitlab-ci.yml
 
 sast:
   stage: test
 
-# Check for dependency updates
-check_dependency_updates:
+# Guards that uv.lock still matches pyproject.toml -- catches an edited pyproject that
+# never got re-locked. This is a consistency check, not an upgrade check: it does NOT
+# look for newer versions (that's Renovate's job, see .agents/plans/repo-modernisation-plan.md
+# §3) and Renovate does not replace it -- Renovate's own MRs still need to pass this.
+lockfile_consistency:
   image: python:3.14-bookworm
   script:
-    - pip install uv
+    - pip install "uv==${UV_VERSION}"
     - uv lock --check
   only:
     - schedules
@@ -41,7 +51,7 @@ ruff:
   stage: test
   image: python:3.14-bookworm
   script:
-    - pip install uv
+    - pip install "uv==${UV_VERSION}"
     - uv sync --extra dev
     - uv run ruff check app/ --fix
     - uv run ruff format app/
@@ -82,7 +92,7 @@ unit_tests:
     POSTGRES_HOST_AUTH_METHOD: trust
   before_script:
     # Install dependencies
-    - pip install uv
+    - pip install "uv==${UV_VERSION}"
     - uv sync --extra dev
     # Install PostgreSQL client and curl for health checks
     - apt-get update -o Acquire::AllowInsecureRepositories=true -qq && apt-get install -y -qq postgresql-client curl openssl ca-certificates
@@ -169,18 +179,30 @@ gitleaks:
     - main
   allow_failure: false
 
-# Known-vulnerability scanning of resolved dependencies — added by ci-gate. Distinct
-# from check_dependency_updates above, which only checks the lockfile is up to date.
-# Blocking: the initial findings backlog has been triaged and cleared (see the
-# dependency-update skill for the remediation flow when a new CVE lands).
-pip_audit:
+# Known-vulnerability scanning of resolved dependencies via uv's native OSV-backed
+# scanner (replaces pip-audit — same OSV data source, ~4-10x faster, no extra install).
+# Distinct from lockfile_consistency above, which only checks the lockfile is in sync.
+# Blocking: `uv audit` is preview-stage in the pinned uv version (UV_VERSION above) —
+# the protection against that instability is the version pin, not allow_failure, per
+# the explicit decision in .agents/plans/repo-modernisation-plan.md §1. A finding here
+# routes to the dependency-update skill, same as the old pip_audit job did.
+uv_audit:
   stage: security
   image: python:3.14-bookworm
   script:
-    - pip install uv
+    - pip install "uv==${UV_VERSION}"
     - uv sync --extra dev
-    - uv pip install pip-audit
-    - uv run pip-audit --strict
+    - mkdir -p .agents/reports/security
+    - >
+      uv audit --frozen --output-format json
+      --preview-features audit-command,json-output
+      > .agents/reports/security/uv-audit.json
+      || (cat .agents/reports/security/uv-audit.json; exit 1)
+  artifacts:
+    paths:
+      - .agents/reports/security/uv-audit.json
+    when: always
+    expire_in: 30 days
   only:
     - merge_requests
     - main
@@ -203,7 +225,7 @@ migration_reversibility:
     POSTGRES_PASSWORD: secret
     POSTGRES_HOST_AUTH_METHOD: trust
   before_script:
-    - pip install uv
+    - pip install "uv==${UV_VERSION}"
     - uv sync --extra dev
     - apt-get update -o Acquire::AllowInsecureRepositories=true -qq && apt-get install -y -qq postgresql-client
     - chmod +x ci/*.sh

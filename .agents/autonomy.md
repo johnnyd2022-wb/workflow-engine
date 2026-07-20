@@ -15,7 +15,7 @@ mode.
 Run these without asking, in any skill, including on a schedule with nobody watching:
 
 - Create branches, commit, push, open MRs, and push follow-up commits to your own MR.
-- Run the full local verification chain: pytest, ruff, semgrep, gitleaks, pip-audit,
+- Run the full local verification chain: pytest, ruff, semgrep, gitleaks, uv audit,
   alembic up/down/up against the **local/test** database, Playwright, ci-gate.
 - Read production **observability** signals — logs, traces, metrics, error aggregates.
   These are read-only telemetry, not the database.

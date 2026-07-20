@@ -1,21 +1,23 @@
 ---
 name: dependency-update
-description: "Consumes pip-audit CVE findings and routine version bumps: upgrades the dependency, reads its changelog for breaking changes, runs the affected chain subset, and hands off to merge-request. Use this skill when the CI pip_audit job reports a finding, when check_dependency_updates flags a stale lockfile, when the user asks to upgrade/bump a package, or on a routine dependency review."
+description: "Consumes uv audit CVE findings and routine version bumps: upgrades the dependency, reads its changelog for breaking changes, runs the affected chain subset, and hands off to merge-request. Use this skill when the CI uv_audit job reports a finding, when lockfile_consistency flags a stale lockfile, when the user asks to upgrade/bump a package, or on a routine dependency review."
 ---
 
 # Dependency Update
 
-Two triggers, same flow: a **CVE** (from the `pip_audit` CI job / `.agents/reports/*/pip-audit.json`,
-see `ci-gate`'s setup notes at `.agents/ci-gate-setup.md`) or a **routine bump** (from
-`check_dependency_updates`, the existing `uv lock --check` job, or a manual ask). Either
+Two triggers, same flow: a **CVE** (from the `uv_audit` CI job / `.agents/reports/security/uv-audit.json`,
+see `ci-gate`'s setup notes at `.agents/ci-gate-setup.md` — the job was `pip_audit` when
+originally set up, migrated to `uv_audit` since) or a **routine bump** (from
+`lockfile_consistency`, the existing `uv lock --check` job, or a manual ask). Either
 way: upgrade, read what changed, verify, hand off. Never bump blind.
 
 ## 1. Identify the target and why
 
-- CVE-driven: read the finding (`pip-audit`'s JSON has the package, installed version,
-  fix version, advisory ID). Priority is severity, not alphabetical — a critical CVE in
-  an internet-facing dependency (`flask`, `authlib`, `xero-python`, anything touching
-  the OAuth/auth path) jumps the queue over a dev-only tool.
+- CVE-driven: read the finding (`uv audit`'s JSON has the package, installed version,
+  fix version under `vulnerabilities[].dependency`/`vulnerabilities[].id`, advisory ID).
+  Priority is severity, not alphabetical — a critical CVE in an internet-facing
+  dependency (`flask`, `authlib`, `xero-python`, anything touching the OAuth/auth path)
+  jumps the queue over a dev-only tool.
 - Routine: `uv lock --check` failing, or a package the user names.
 
 ## 2. Upgrade
@@ -100,7 +102,7 @@ is visible in the git history, not just the changelog).
   none of them are individually risky (patch-version, no changelog concerns).
 - A CVE finding that can't be fixed by upgrading (no fix released yet, or the fix breaks
   something this app depends on) is `accepted-risk` territory — report it, don't silently
-  leave `pip_audit` red or add a blanket suppression. Flag to the user for sign-off,
+  leave `uv_audit` red or add a blanket suppression. Flag to the user for sign-off,
   same rule `security-audit` follows for its own findings.
 - Never skip reading the changelog because "it's just a patch version" — patch versions
   have shipped security-relevant default changes before; the read is cheap, the miss
@@ -108,8 +110,8 @@ is visible in the git history, not just the changelog).
 
 ## Handoffs
 
-- ← CI `pip_audit` job / `.agents/reports/*/pip-audit.json`: CVE findings to triage.
-- ← `check_dependency_updates` (existing lockfile-freshness job): routine staleness.
+- ← CI `uv_audit` job / `.agents/reports/security/uv-audit.json`: CVE findings to triage.
+- ← `lockfile_consistency` (existing lockfile-freshness job): routine staleness.
 - → **security-audit**: bare run for security-relevant package bumps.
 - → **migration-safety**: if the bump touches SQLAlchemy/Alembic behavior.
 - → **merge-request**: always the final step.
