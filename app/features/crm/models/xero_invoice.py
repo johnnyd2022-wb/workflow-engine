@@ -1,12 +1,12 @@
 """XeroInvoice — a Xero invoice synced into the CRM."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Column, Date, ForeignKey, Index, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class XeroInvoice(Base):
@@ -40,8 +40,8 @@ class XeroInvoice(Base):
     fully_paid_on_date = Column(Date, nullable=True)
     xero_updated_at = Column(TIMESTAMP(timezone=True), nullable=True)
     last_synced_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
     def __repr__(self) -> str:
         return f"<XeroInvoice(id={self.id}, number={self.invoice_number!r}, status={self.status!r})>"

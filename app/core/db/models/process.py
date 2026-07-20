@@ -2,13 +2,13 @@
 
 import enum
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class ProcessCategory(enum.Enum):
@@ -32,8 +32,8 @@ class Process(Base):
     description = Column(String(1000), nullable=True)
     category = Column(Enum(ProcessCategory, name="process_category"), nullable=True)
     is_draft = Column(Boolean, nullable=False, default=False, index=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     organisation = relationship("Organisation", backref="processes")

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
 from app.core.db.models.inventory_wastage import InventoryWastage
+from app.core.utils.time import utc_now
 from app.observability import start_span
 
 
@@ -45,7 +46,7 @@ class WastageRepository:
                 unit=unit,
                 reason=reason,
                 recorded_by=recorded_by,
-                recorded_at=recorded_at or datetime.utcnow(),
+                recorded_at=recorded_at or utc_now(),
             )
             self.db.add(record)
             self.db.flush()

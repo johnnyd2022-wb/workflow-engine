@@ -1,12 +1,12 @@
 """XeroSyncJob — tracks a single sync run (contacts, invoices, or full)."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class XeroSyncJob(Base):
@@ -25,8 +25,8 @@ class XeroSyncJob(Base):
     error_message = Column(Text, nullable=True)
     error_details = Column(JSONB, nullable=True)
     triggered_by = Column(String(50), nullable=True)  # manual | oauth_connect | scheduled
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
     def __repr__(self) -> str:
         return f"<XeroSyncJob(id={self.id}, type={self.sync_type!r}, status={self.status!r})>"

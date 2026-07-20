@@ -1,12 +1,13 @@
 """Repository for XeroInvoice and XeroInvoiceLineItem records."""
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.core.utils.time import utc_now
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
 
@@ -37,8 +38,8 @@ class XeroInvoiceRepository:
             inv.contact_id = contact_id
             for k, v in fields.items():
                 setattr(inv, k, v)
-            inv.last_synced_at = datetime.utcnow()
-            inv.updated_at = datetime.utcnow()
+            inv.last_synced_at = utc_now()
+            inv.updated_at = utc_now()
         else:
             inv = XeroInvoice(
                 id=uuid.uuid4(),  # generate now so inv.id is available before flush
@@ -46,7 +47,7 @@ class XeroInvoiceRepository:
                 xero_invoice_id=xero_invoice_id,
                 xero_tenant_id=xero_tenant_id,
                 contact_id=contact_id,
-                last_synced_at=datetime.utcnow(),
+                last_synced_at=utc_now(),
                 **fields,
             )
             self.db.add(inv)
@@ -77,7 +78,7 @@ class XeroInvoiceRepository:
         if seen_xero_invoice_ids:
             q = q.filter(~XeroInvoice.xero_invoice_id.in_(list(seen_xero_invoice_ids)))
 
-        now = datetime.utcnow()
+        now = utc_now()
         updated = q.update(
             {
                 XeroInvoice.status: "DELETED",

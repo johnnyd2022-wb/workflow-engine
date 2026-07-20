@@ -1,11 +1,10 @@
 """EntityEventSummary model — pre-computed per-entity read model for list views"""
 
-from datetime import datetime
-
 from sqlalchemy import Column, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class EntityEventSummary(Base):
@@ -33,7 +32,7 @@ class EntityEventSummary(Base):
     last_actor = Column(String(255), nullable=True)
     updated_at = Column(
         __import__("sqlalchemy").TIMESTAMP(timezone=True),
-        default=datetime.utcnow,
+        default=utc_now,
         nullable=False,
     )
 

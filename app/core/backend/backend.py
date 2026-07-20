@@ -3538,7 +3538,7 @@ def create_inventory_item():
                     "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
                     "operator_email": operator_email,
                     "operator_name": operator_name,
-                    "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "source_method": source_method,
                     "quantity_added": str(quantity),
                     "supplier": supplier,
@@ -3611,7 +3611,7 @@ def create_inventory_item():
             "user_id": str(g.user_id) if getattr(g, "user_id", None) else None,
             "operator_email": operator_email,
             "operator_name": operator_name,
-            "timestamp_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "source_method": source_method,
         }
         history = list(extra_data.get("inventory_audit_history") or [])

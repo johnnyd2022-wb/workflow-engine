@@ -1,12 +1,12 @@
 """CRMTask — an actionable task optionally linked to a CRM contact."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Column, Date, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class CRMTask(Base):
@@ -29,8 +29,8 @@ class CRMTask(Base):
     assigned_to_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     completed_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
     def __repr__(self) -> str:
         return f"<CRMTask(id={self.id}, title={self.title!r}, status={self.status!r})>"

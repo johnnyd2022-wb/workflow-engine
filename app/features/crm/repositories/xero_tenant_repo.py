@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.utils.time import utc_now
 from app.features.crm.models.xero_tenant import XeroTenant
 
 
@@ -34,9 +35,9 @@ class XeroTenantRepository:
             tenant.xero_tenant_type = xero_tenant_type
             tenant.xero_connection_id = xero_connection_id
             tenant.is_connected = True
-            tenant.connected_at = datetime.utcnow()
+            tenant.connected_at = utc_now()
             tenant.disconnected_at = None
-            tenant.updated_at = datetime.utcnow()
+            tenant.updated_at = utc_now()
         else:
             tenant = XeroTenant(
                 org_id=org_id,
@@ -45,7 +46,7 @@ class XeroTenantRepository:
                 xero_tenant_name=xero_tenant_name,
                 xero_tenant_type=xero_tenant_type,
                 is_connected=True,
-                connected_at=datetime.utcnow(),
+                connected_at=utc_now(),
             )
             self.db.add(tenant)
 
@@ -63,11 +64,11 @@ class XeroTenantRepository:
 
     def mark_disconnected(self, org_id: UUID) -> None:
         self.db.query(XeroTenant).filter(XeroTenant.org_id == org_id).update(
-            {"is_connected": False, "disconnected_at": datetime.utcnow(), "updated_at": datetime.utcnow()}
+            {"is_connected": False, "disconnected_at": utc_now(), "updated_at": utc_now()}
         )
 
     def update_last_sync(self, org_id: UUID, synced_at: datetime) -> None:
         self.db.query(XeroTenant).filter(
             XeroTenant.org_id == org_id,
             XeroTenant.is_connected == True,  # noqa: E712
-        ).update({"last_successful_sync_at": synced_at, "updated_at": datetime.utcnow()})
+        ).update({"last_successful_sync_at": synced_at, "updated_at": utc_now()})

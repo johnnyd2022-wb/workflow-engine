@@ -1,12 +1,12 @@
 """Audit log model for tracking actions"""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class AuditLog(Base):
@@ -21,7 +21,7 @@ class AuditLog(Base):
     entity = Column(String(100), nullable=False)
     entity_id = Column(UUID(as_uuid=True), nullable=True)
     meta_data = Column(JSON, nullable=True)  # Renamed from 'metadata' to avoid SQLAlchemy reserved name
-    timestamp = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False, index=True)
+    timestamp = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
 
     def __repr__(self):
         return (

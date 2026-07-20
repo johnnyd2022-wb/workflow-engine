@@ -2,13 +2,13 @@
 
 import enum
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Column, Date, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class InventoryType(enum.Enum):
@@ -57,8 +57,8 @@ class InventoryItem(Base):
     # an item and reading item.display_label raised AttributeError and 500'd quantity
     # adjust and any other path that snapshots an item. Declared here to match the DB.
     display_label = Column(String(255), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     organisation = relationship("Organisation", backref="inventory_items")

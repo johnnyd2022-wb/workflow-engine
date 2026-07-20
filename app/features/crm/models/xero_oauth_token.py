@@ -1,12 +1,12 @@
 """XeroOAuthToken — encrypted OAuth2 token set per Biz-e org (one active set)."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class XeroOAuthToken(Base):
@@ -24,8 +24,8 @@ class XeroOAuthToken(Base):
     scopes = Column(Text, nullable=True)
     is_valid = Column(Boolean, nullable=False, default=True)
     last_refreshed_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
     def __repr__(self) -> str:
         return f"<XeroOAuthToken(id={self.id}, org_id={self.org_id}, valid={self.is_valid})>"

@@ -1,10 +1,10 @@
 """Repository for XeroSyncJob records."""
 
-from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.utils.time import utc_now
 from app.features.crm.models.xero_sync_job import XeroSyncJob
 
 
@@ -19,7 +19,7 @@ class XeroSyncJobRepository:
             sync_type=sync_type,
             status="running",
             triggered_by=triggered_by,
-            started_at=datetime.utcnow(),
+            started_at=utc_now(),
         )
         self.db.add(job)
         self.db.flush()
@@ -34,10 +34,10 @@ class XeroSyncJobRepository:
         self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id).update(
             {
                 "status": "completed",
-                "completed_at": datetime.utcnow(),
+                "completed_at": utc_now(),
                 "contacts_synced": contacts_synced,
                 "invoices_synced": invoices_synced,
-                "updated_at": datetime.utcnow(),
+                "updated_at": utc_now(),
             }
         )
 
@@ -45,10 +45,10 @@ class XeroSyncJobRepository:
         self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id).update(
             {
                 "status": "failed",
-                "completed_at": datetime.utcnow(),
+                "completed_at": utc_now(),
                 "error_message": error_message,
                 "error_details": error_details,
-                "updated_at": datetime.utcnow(),
+                "updated_at": utc_now(),
             }
         )
 
@@ -63,12 +63,12 @@ class XeroSyncJobRepository:
         self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id).update(
             {
                 "status": "partial",
-                "completed_at": datetime.utcnow(),
+                "completed_at": utc_now(),
                 "contacts_synced": contacts_synced,
                 "invoices_synced": invoices_synced,
                 "error_message": error_message,
                 "error_details": error_details,
-                "updated_at": datetime.utcnow(),
+                "updated_at": utc_now(),
             }
         )
 

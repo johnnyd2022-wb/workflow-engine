@@ -1,13 +1,13 @@
 """InventoryWastage model for recording disposed/wasted inventory"""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class InventoryWastage(Base):
@@ -24,13 +24,13 @@ class InventoryWastage(Base):
     inventory_item_id = Column(UUID(as_uuid=True), ForeignKey("inventory_items.id"), nullable=False, index=True)
     quantity_wasted = Column(String(50), nullable=False)  # Same precision as inventory quantity
     unit = Column(String(50), nullable=False)  # Denormalized from item at time of record
-    recorded_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    recorded_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     recorded_by = Column(String(255), nullable=True)  # User identifier for audit
     # nullable=True intentionally: records pre-dating this field have no reason and we cannot invent one.
     # New records are required to supply reason at the API layer. Do not add NOT NULL without a migration
     # that preserves audit fidelity for historical rows (e.g. a sentinel value is not acceptable here).
     reason = Column(String(500), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     organisation = relationship("Organisation", backref="inventory_wastage_records")
     inventory_item = relationship("InventoryItem", backref="wastage_records")

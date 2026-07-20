@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.utils.time import utc_now
 from app.features.crm.models.xero_oauth_token import XeroOAuthToken
 
 
@@ -30,8 +31,8 @@ class XeroTokenRepository:
             token.expires_at = expires_at
             token.scopes = scopes
             token.is_valid = True
-            token.last_refreshed_at = datetime.utcnow()
-            token.updated_at = datetime.utcnow()
+            token.last_refreshed_at = utc_now()
+            token.updated_at = utc_now()
         else:
             token = XeroOAuthToken(
                 org_id=org_id,
@@ -41,7 +42,7 @@ class XeroTokenRepository:
                 expires_at=expires_at,
                 scopes=scopes,
                 is_valid=True,
-                last_refreshed_at=datetime.utcnow(),
+                last_refreshed_at=utc_now(),
             )
             self.db.add(token)
 
@@ -59,10 +60,10 @@ class XeroTokenRepository:
 
     def update_xero_tenant_id(self, org_id: UUID, xero_tenant_id: str) -> None:
         self.db.query(XeroOAuthToken).filter(XeroOAuthToken.org_id == org_id).update(
-            {"xero_tenant_id": xero_tenant_id, "updated_at": datetime.utcnow()}
+            {"xero_tenant_id": xero_tenant_id, "updated_at": utc_now()}
         )
 
     def invalidate(self, org_id: UUID) -> None:
         self.db.query(XeroOAuthToken).filter(XeroOAuthToken.org_id == org_id).update(
-            {"is_valid": False, "updated_at": datetime.utcnow()}
+            {"is_valid": False, "updated_at": utc_now()}
         )

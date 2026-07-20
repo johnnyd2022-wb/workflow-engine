@@ -1,0 +1,17 @@
+rules:
+
+  # ── TIME ─────────────────────────────────────────────────────────────────────
+
+  - id: no-naive-utcnow
+    languages: [python]
+    severity: ERROR
+    message: >
+      datetime.utcnow() returns a naive datetime. Every timestamp column in this
+      repo is TIMESTAMPTZ, and psycopg2 writes a naive value using the session's
+      local timezone (not UTC), silently storing the wrong instant. Use
+      `datetime.now(UTC)` or the shared `utc_now()` helper
+      (app/core/utils/time.py) instead.
+    pattern: datetime.utcnow(...)
+    paths:
+      exclude:
+        - "**/app/core/utils/time.py"

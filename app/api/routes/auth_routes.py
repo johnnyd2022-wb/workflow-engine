@@ -526,7 +526,7 @@ def login():
             session.pop("_user_cache", None)
             # Set pending 2FA session with timestamp
             session["pending_2fa_user_id"] = str(user.id)
-            session["pending_2fa_created_at"] = datetime.utcnow().isoformat()
+            session["pending_2fa_created_at"] = datetime.now(UTC).isoformat()
             return jsonify({"requires_2fa": True}), 200
 
         # Rotate session ID on successful login (session fixation protection)
@@ -701,7 +701,7 @@ def verify_two_factor():
     if pending_created_at_str:
         try:
             pending_created_at = datetime.fromisoformat(pending_created_at_str)
-            time_since_creation = datetime.utcnow() - pending_created_at
+            time_since_creation = datetime.now(UTC) - pending_created_at
 
             if time_since_creation > timedelta(minutes=PENDING_2FA_EXPIRY_MINUTES):
                 # Session expired - clear all auth-related session state
@@ -1355,7 +1355,7 @@ def change_password():
         session.clear()
         for key, value in new_session_data.items():
             session[key] = value
-        session["last_activity_at"] = datetime.utcnow().isoformat()
+        session["last_activity_at"] = datetime.now(UTC).isoformat()
         session["session_timeout_minutes"] = (
             getattr(updated_user, "session_timeout_minutes", None) or DEFAULT_SESSION_TIMEOUT_MINUTES
         )

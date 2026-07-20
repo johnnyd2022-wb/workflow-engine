@@ -1,12 +1,12 @@
 """XeroContact — a Xero Contact synced into the CRM."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class XeroContact(Base):
@@ -35,8 +35,8 @@ class XeroContact(Base):
     is_supplier = Column(Boolean, nullable=False, default=False)
     xero_updated_at = Column(TIMESTAMP(timezone=True), nullable=True)
     last_synced_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
     def __repr__(self) -> str:
         return f"<XeroContact(id={self.id}, name={self.name!r}, org_id={self.org_id})>"

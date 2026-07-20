@@ -1,13 +1,13 @@
 """Step (Sub-process) model for process steps"""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class Step(Base):
@@ -30,8 +30,8 @@ class Step(Base):
     # Execution prompts stored as JSONB array
     # Format: [{"label": "Botanical batch number", "type": "text", "unit": null, "required": true}, ...]
     execution_prompts = Column(JSONB, nullable=False, default=list)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
     process = relationship("Process", back_populates="steps")

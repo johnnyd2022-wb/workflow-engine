@@ -1,11 +1,11 @@
 """Repository for XeroContact records."""
 
-from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.core.utils.time import utc_now
 from app.features.crm.models.xero_contact import XeroContact
 
 
@@ -35,15 +35,15 @@ class XeroContactRepository:
             contact.name = name
             for k, v in fields.items():
                 setattr(contact, k, v)
-            contact.last_synced_at = datetime.utcnow()
-            contact.updated_at = datetime.utcnow()
+            contact.last_synced_at = utc_now()
+            contact.updated_at = utc_now()
         else:
             contact = XeroContact(
                 org_id=org_id,
                 xero_contact_id=xero_contact_id,
                 xero_tenant_id=xero_tenant_id,
                 name=name,
-                last_synced_at=datetime.utcnow(),
+                last_synced_at=utc_now(),
                 **fields,
             )
             self.db.add(contact)

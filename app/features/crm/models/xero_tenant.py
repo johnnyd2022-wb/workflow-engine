@@ -1,12 +1,12 @@
 """XeroTenant — tracks a connected Xero organisation per Biz-e org."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.utils.time import utc_now
 
 
 class XeroTenant(Base):
@@ -23,8 +23,8 @@ class XeroTenant(Base):
     connected_at = Column(TIMESTAMP(timezone=True), nullable=True)
     disconnected_at = Column(TIMESTAMP(timezone=True), nullable=True)
     last_successful_sync_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
-    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
     def __repr__(self) -> str:
         return f"<XeroTenant(id={self.id}, org_id={self.org_id}, name={self.xero_tenant_name!r})>"

@@ -1,6 +1,6 @@
 """CRMService — high-level CRM queries, notes, tasks, and product mapping."""
 
-from datetime import date, datetime
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.utils.time import utc_now
 from app.features.crm.repositories.crm_task_repo import CRMNoteRepository, CRMTaskRepository
 from app.features.crm.repositories.product_mapping_repo import ProductMappingRepository
 from app.features.crm.repositories.sales_traceability_repo import SalesTraceabilityConfigRepository
@@ -493,7 +494,7 @@ class CRMService:
             if updated_status:
                 status_before = current
                 inv.status = str(updated_status)
-                inv.updated_at = datetime.utcnow()
+                inv.updated_at = utc_now()
                 self._emit_event(
                     org_id=org_id,
                     event_type="crm_invoice.authorised",
