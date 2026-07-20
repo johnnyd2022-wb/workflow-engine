@@ -56,6 +56,14 @@ mode for a specific feature slug.
    `main` bypassing CI. I did not attempt this via `glab api`; it's a shared-repo
    permissions change and should be a deliberate action, not a side effect of a skill
    install.
+
+   **RESOLVED (2026-07-20), partially, on Johnny's explicit go-ahead:** `main` is now a
+   protected branch (`push: no one`, `merge: Maintainers`, via `glab api
+   projects/:id/protected_branches`) — done specifically because the Socket supply-chain
+   job needs a protected CI/CD variable, which GitLab only exposes on protected branches
+   (see `chore/socket-supply-chain-scanning`'s `.gitlab-ci.yml` comment). The other half
+   of this item — Settings → Merge requests → Merge checks → "Pipelines must succeed" —
+   is **still not done**; ask before assuming it's covered.
 4. **Full git-history gitleaks findings — still pending triage, not touched.** 20 findings
    (full-history scan, redacted values, 2026-07-12); 3 allowlisted in `.gitleaksignore`
    per Johnny's call the same day (`tls/wb_cert.key`, `config/local.ini`,
