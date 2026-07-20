@@ -1,5 +1,11 @@
 # Workflow Engine Deployment Guide
 
+> **This document is stale** (bashrc-era ports/paths — e.g. `5401`/`5005` below don't
+> match the real `8401`/`8001`/`8000` in use today) and hasn't been verified command-by-
+> command. For the current, registry-backed test deploy and CD pipeline, see
+> `docs/deploy-registry-cd.md` and the `deploy-runner` skill instead. A full pass to bring
+> this file back in line with reality is flagged as a `docs-truth` job, not done here.
+
 This document describes the new Git-based deployment workflow for Workflow Engine, replacing the previous bashrc-based approach.
 
 ## Overview

@@ -17,6 +17,8 @@ stages:
 - test
 - security
 - migrations
+- build
+- deploy
 
 variables:
   # Pinned (not floating `pip install uv`) so every job resolves the lockfile the same
@@ -259,3 +261,135 @@ migration_reversibility:
     - merge_requests
     - main
   allow_failure: false
+
+# ============================================================================
+# CD: build stage (main only -- registry pushes for merged code, never MR branches)
+# ============================================================================
+#
+# One image REPOSITORY per app ($CI_REGISTRY_IMAGE/app), environment-prefixed
+# IMMUTABLE tags (test-<sha>, prod-<sha>) -- not a shared registry of unrelated
+# images, and not a single floating `:latest` a deploy blindly trusts. The SHA tag
+# is what every deploy job below actually pulls, which is what makes "never deploy
+# a failing artifact" enforceable: the thing that gets tested is addressed by the
+# exact same identifier the thing that gets deployed pulls.
+#
+# docker:dind is the portable choice here since this file doesn't know this
+# runner's exact privileges -- if the runner already has host docker socket access
+# (plausible for a runner colocated with the deploy target), dind is unnecessary
+# overhead and can be dropped in favour of a shell-executor job. Flagged, not
+# assumed either way.
+#
+# CI_REGISTRY_USER / CI_REGISTRY_PASSWORD / CI_REGISTRY are auto-populated by
+# GitLab for every job once the project's Container Registry is enabled -- no
+# manual token needed for this part, unlike Renovate/Socket below.
+docker_build_publish:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build --target test -f Dockerfile.multi -t "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
+    - docker build --target production -f Dockerfile.multi -t "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA"
+  only:
+    - main
+
+# ============================================================================
+# CD: deploy stage -- decoupled from CI (pulls the built artifact, never rebuilds),
+# auto-deploys to test on every green main merge, gates promotion on a real
+# Playwright run against the deployed container, and rolls back automatically if
+# that gate fails. See docs/deploy-registry-cd.md for the full flow and the
+# `:test-stable` promotion model.
+#
+# `deploy-target` runner: a second [[runners]] entry on this project's existing
+# self-hosted runner container, executor = "shell" (not docker -- the docker
+# executor spins up a fresh per-job container with no host docker.sock access,
+# which can't cycle the real host containers a tunnel/DNS actually points at;
+# shell executor runs directly in the runner's own environment, which does have
+# it). Also needed inside that runner container: the `docker` CLI (the image
+# ships without one -- installed via apt) and DOCKER_API_VERSION=1.43 set as a
+# runner-level `environment` in config.toml (the apt-installed CLI defaults to a
+# newer API than this host's Docker 24.0.5 daemon supports).
+#
+# PostHog is deliberately NOT wired up here: it's optional (an empty key just
+# disables client-side RUM, no crash -- see scripts/deploy_test_simple.sh) and
+# CD has no local KeePassXC to resolve it from, so it's simply not requested.
+#
+# STILL NEEDS HUMAN SETUP:
+#   XERO_CLIENT_ID_TEST / XERO_CLIENT_SECRET_TEST (and lowercase pair) as masked
+#   CI/CD variables, if the Xero OAuth flow needs to work in the deployed test
+#   container. Optional in the same sense PostHog is -- omitting them just means
+#   Xero connect won't complete, nothing else breaks.
+# ============================================================================
+
+deploy_test:
+  stage: deploy
+  image: docker:27
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
+  environment:
+    name: test
+    url: https://test-workflow-engine.whistlebird.co.nz
+  needs: ["docker_build_publish"]
+  only:
+    - main
+  tags:
+    - deploy-target  # registered: project runner id 54420399, shell executor, on this project's self-hosted box
+
+# Ground-truth verification of the DEPLOYED container (not a fresh in-process
+# app) -- see tests/e2e/conftest.py's E2E_BASE_URL fixture path and its commit
+# message for why that distinction needed a real code fix first.
+cd_e2e:
+  stage: deploy
+  image: python:3.14-bookworm
+  script:
+    - pip install "uv==${UV_VERSION}"
+    - uv sync --extra dev
+    - uv run playwright install --with-deps chromium
+    - E2E_BASE_URL=https://localhost:8001 uv run pytest tests/e2e/test_smoke.py -v
+  needs: ["deploy_test"]
+  only:
+    - main
+  tags:
+    - deploy-target  # must be the SAME runner as deploy_test (hits localhost:8001)
+
+# Promotion: only a green cd_e2e moves the `:test-stable` tag forward. Nothing
+# else in this file ever writes that tag -- it is only ever moved here, and only
+# on success, which is what makes it trustworthy as "the last deploy that passed
+# Playwright against the real container."
+promote_test_stable:
+  stage: deploy
+  image: docker:27
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker pull "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
+    - docker tag "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" "$CI_REGISTRY_IMAGE/app:test-stable"
+    - docker push "$CI_REGISTRY_IMAGE/app:test-stable"
+  needs: ["cd_e2e"]
+  only:
+    - main
+  tags:
+    - deploy-target
+
+# Automatic rollback: fires only when cd_e2e failed (the Playwright gate on the
+# just-deployed candidate), redeploying whatever :test-stable currently points
+# at -- which promote_test_stable above never advanced to the broken candidate,
+# since it never ran. The broken artifact does not stay live.
+rollback_test_on_failure:
+  stage: deploy
+  image: docker:27
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - echo "cd_e2e failed -- rolling back to last known-good :test-stable"
+    - ./scripts/deploy_test_simple.sh "$CI_REGISTRY_IMAGE/app:test-stable"
+  needs: ["cd_e2e"]
+  when: on_failure
+  only:
+    - main
+  tags:
+    - deploy-target

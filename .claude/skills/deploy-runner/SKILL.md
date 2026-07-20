@@ -71,6 +71,15 @@ cross-tenant probe and any test that creates rows stays test-environment-only. I
 release has no E2E coverage yet for what changed, that's a gap to report, not a reason
 to skip smoke testing what does exist.
 
+**Test environment now does this step automatically.** `E2E_BASE_URL` above used to be
+aspirational -- `tests/e2e/conftest.py` had no such env var and always booted its own
+in-process app regardless, so this command never actually smoke-tested a real deployment.
+That's fixed (`app_url` now honours `E2E_BASE_URL` for real), and the CD pipeline's
+`cd_e2e` job runs exactly this pattern against the just-deployed test container on every
+main merge, gating a `:test-stable` promotion — see `docs/deploy-registry-cd.md`. This
+section's manual command is still the right move for prod (not automated, per that doc)
+and for any ad-hoc smoke check you want to run by hand.
+
 ## 3. Rollback — rehearsed, not just documented
 
 Because `git_workflow.sh` has no rollback command, this is the procedure until one gets
