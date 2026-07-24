@@ -14,6 +14,7 @@ Read `.agents/autonomy.md` before starting. In an unattended run the MR is the g
 ```
 0. preflight           (script, ~3s)             -> capabilities + decisions
 1. spec-first          (inline, interactive)     -> .agents/specs/<slug>.md [approved]
+1b. spec-critic        (subagent, adversarial)   -> sound | gaps-found (before any code)
 2. scaffold + build    (this agent / Architect)  -> blueprint + unit tests passing
 3. migration-safety    (subagent, only if spec says data model changes)
 4. security-audit      (subagent)  \  parallel after build is green
@@ -38,6 +39,15 @@ Repair blockers per the **preflight** skill's table, then read `decisions`: `ver
 ## Step 1: Spec (inline, never delegated)
 
 Run the **spec-first** skill yourself; it interviews the user, and subagents cannot talk to the user. Do not proceed past this step until the spec file exists with `status: approved` — or, in an unattended run, `status: approved-unattended` with its assumptions listed (see spec-first §3; those assumptions must lead the MR description). The slug from the spec drives everything downstream.
+
+## Step 1b: Spec critique (before a line of code)
+
+Spawn **spec-critic** as a subagent on the freshly written spec — the one gate that checks the *spec* against reality instead of the code against the spec. This is the cheapest possible place to catch ambiguity: a vague AC fixed here is a one-line edit; the same ambiguity found after build is a wrong MR you come back to. Fresh eyes matter, so this is a subagent (spec-first authored the spec; spec-critic must not be the same author), using the Steps 3-6 prompt template but pointed at the spec, not the branch.
+
+- `VERDICT: sound` → proceed to build.
+- `VERDICT: gaps-found` → **interactive**: take its gap list back to the user via spec-first, edit the spec, re-run. **Unattended**: spec-first converts each gap into an explicit `ASSUMPTION:` line (default chosen + rejected), re-runs spec-critic once, and those assumptions lead the MR description. Do not start building on a `gaps-found` spec — that is the walk-away-and-come-back-to-garbage failure this step exists to prevent.
+
+Two rounds on the same unresolved gap trips the circuit breaker (Step 7): escalate, don't invent the missing requirement.
 
 ## Step 2: Scaffold and build
 
