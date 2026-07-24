@@ -70,11 +70,32 @@ python scripts/skill_metrics.py record --skill security-audit --run-type chained
 python scripts/skill_metrics.py outcome --ref '!123' --outcome merged
 ```
 
+## Closing the loop automatically (`sweep`)
+
+`outcome` above assumes a human remembers to record the MR's fate — and mostly nobody does,
+which is why `outcomes.jsonl` used to sit near-empty while `runs.jsonl` grew. `sweep` closes
+that gap: it asks **glab** what became of every ref that has a run but no outcome, and writes
+`merged`/`closed` for the ones glab can prove.
+
+```bash
+python scripts/skill_metrics.py sweep             # write outcomes for resolved refs
+python scripts/skill_metrics.py sweep --dry-run   # show what it would write, write nothing
+```
+
+It only writes what glab can prove (merged/closed). `amended` (a human reworked the diff)
+and `escaped` (a prod defect blamed on a skill after the fact) are human judgments — the
+sweep never manufactures them. A ref that was never an MR (a scheduled scope like
+`security-audit/2026-07-17`) stays open, correctly: there is no MR for glab to judge.
+Runs unattended-safe — no glab, or an unauthed/rate-limited one, means "resolve nothing",
+never a crash. Best run on a schedule (see `.agents/autonomy.md` → Measure yourself).
+
 ## Reading it
 
 ```bash
-python scripts/skill_metrics.py scorecard          # human table
+python scripts/skill_metrics.py scorecard          # full human table
 python scripts/skill_metrics.py scorecard --json    # machine-readable
+python scripts/skill_metrics.py digest             # the few learnings worth reading each session
+python scripts/skill_metrics.py digest --json       # machine-readable
 python scripts/skill_metrics.py --check             # CI: exit 1 if malformed
 ```
 
@@ -82,3 +103,8 @@ python scripts/skill_metrics.py --check             # CI: exit 1 if malformed
 superseded never enter the denominator. A skill with a low acceptance rate is crying wolf;
 a skill with escaped defects missed something it owns. Both are signals for `skill-smith`
 to improve or retire it.
+
+The **digest** is the scorecard boiled down to only what a session should change behaviour
+over — crying-wolf skills, escaped defects, and refs still awaiting an outcome. It is cheap
+(reads the two JSONL files, no glab) and `preflight` surfaces it at the top of every code
+workflow, so each session opens already knowing what the last ones learned.

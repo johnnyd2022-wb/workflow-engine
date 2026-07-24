@@ -25,9 +25,17 @@ Usage:
     # later, whoever observes the MR's fate records the outcome
     python scripts/skill_metrics.py outcome --ref '!123' --outcome merged
 
+    # or let the loop close itself: ask glab what became of every unresolved ref
+    python scripts/skill_metrics.py sweep               # write merged/closed outcomes
+    python scripts/skill_metrics.py sweep --dry-run     # show what it would write
+
     # the scorecard: per-skill acceptance, findings volume, escaped defects, cost
     python scripts/skill_metrics.py scorecard          # human table
     python scripts/skill_metrics.py scorecard --json    # machine-readable
+
+    # the session digest: the few learnings worth acting on, small enough to read every run
+    python scripts/skill_metrics.py digest             # crying-wolf / escaped / awaiting
+    python scripts/skill_metrics.py digest --json       # machine-readable
     python scripts/skill_metrics.py --check             # exit 1 if the ledger is malformed
 
 Exit codes: 0 = ok, 1 = malformed ledger (--check) or bad input, 2 = usage error.
@@ -38,9 +46,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +76,7 @@ def metrics_dir() -> Path:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _date_to_ts(date_str: str | None) -> str | None:
@@ -74,7 +85,7 @@ def _date_to_ts(date_str: str | None) -> str | None:
     if not date_str:
         return None
     try:
-        d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
     except ValueError as e:
         raise ValueError(f"--date must be YYYY-MM-DD, got {date_str!r}") from e
     return d.isoformat(timespec="seconds")
@@ -261,6 +272,155 @@ def render_scorecard(card: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
+def unresolved_refs(runs: list[dict[str, Any]], outcomes: list[dict[str, Any]]) -> list[str]:
+    """Refs that have a run but no recorded outcome yet — the sweep's candidates and the
+    'awaiting' count in the digest. First-seen order, deduped. Any ref that already carries
+    an outcome (terminal by construction — every OUTCOMES value is a resolution) is skipped.
+    """
+    resolved = {rec["ref"] for rec in outcomes if rec.get("ref")}
+    seen: list[str] = []
+    for run in runs:
+        ref = run.get("ref")
+        if ref and ref not in resolved and ref not in seen:
+            seen.append(ref)
+    return seen
+
+
+# glab's MR state -> our outcome vocabulary. "opened" maps to nothing on purpose: an open
+# MR is not yet resolved, so the sweep leaves it for a later run rather than guessing.
+_GLAB_STATE_TO_OUTCOME = {"merged": "merged", "closed": "closed", "locked": "closed"}
+
+
+def glab_available() -> bool:
+    return shutil.which("glab") is not None
+
+
+def _run_glab(args: list[str]) -> Any:
+    """Run a glab subcommand and parse its JSON, or None on any failure. The sweep must
+    never crash a scheduled run because glab is missing, unauthed, or rate-limited — a
+    failed probe just means 'don't resolve this ref now', not 'abort'."""
+    try:
+        proc = subprocess.run(["glab", *args], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def _mr_state_to_outcome(state: str | None) -> str | None:
+    return _GLAB_STATE_TO_OUTCOME.get((state or "").lower())
+
+
+def glab_resolve_ref(ref: str) -> str | None:
+    """Ask glab what became of a ref: 'merged'/'closed' if terminal, else None (still open,
+    no MR found, or glab unavailable). Never fabricates — None means 'leave it unresolved'.
+
+    A ref is either an MR ref (`!123` / `123`) or a source branch name (`feat/x`). Scope-style
+    refs that were never an MR (e.g. a scheduled `security-audit/2026-07-17`) resolve to no MR
+    and stay unresolved, which is correct: there is nothing for glab to have an opinion about.
+    """
+    ref = ref.strip()
+    num = ref[1:] if ref.startswith("!") else ref
+    if num.isdigit():
+        data = _run_glab(["mr", "view", num, "--output", "json"])
+        return _mr_state_to_outcome(data.get("state")) if isinstance(data, dict) else None
+    data = _run_glab(["mr", "list", "--source-branch", ref, "--state", "all", "--output", "json"])
+    if isinstance(data, list) and data:
+        return _mr_state_to_outcome(data[0].get("state"))
+    return None
+
+
+def sweep(
+    runs: list[dict[str, Any]],
+    outcomes: list[dict[str, Any]],
+    resolver: Callable[[str], str | None],
+    *,
+    dry_run: bool = False,
+) -> list[dict[str, Any]]:
+    """Close the loop: for each unresolved ref, ask the resolver what became of it and
+    append a terminal outcome. Pure over `resolver` so tests inject a fake and the real
+    glab is never shelled out to under test. Returns the actions taken (or, under dry_run,
+    the actions that would be taken). Refs the resolver can't resolve are left untouched.
+
+    Deliberately records only merged/closed — the two states glab can prove. 'amended'
+    (a human reworked the diff) and 'escaped' (a prod defect attributed after the fact) are
+    human judgments the sweep has no way to detect and must not manufacture.
+    """
+    skill_by_ref: dict[str, Any] = {}
+    for run in runs:
+        ref = run.get("ref")
+        if ref and ref not in skill_by_ref:
+            skill_by_ref[ref] = run.get("skill")
+
+    actions: list[dict[str, Any]] = []
+    for ref in unresolved_refs(runs, outcomes):
+        outcome = resolver(ref)
+        if outcome is None:
+            continue
+        action = {"ref": ref, "outcome": outcome, "skill": skill_by_ref.get(ref)}
+        if not dry_run:
+            record_outcome(ref=ref, outcome=outcome, skill=action["skill"], notes="auto-swept from glab")
+        actions.append(action)
+    return actions
+
+
+def digest(
+    runs: list[dict[str, Any]],
+    outcomes: list[dict[str, Any]],
+    *,
+    crying_wolf_max_acceptance: float = 0.5,
+    min_resolved: int = 2,
+) -> dict[str, Any]:
+    """The few learnings worth acting on, small enough to read at the top of every session.
+
+    Not the whole scorecard — only what a session should *change its behaviour* over:
+    a skill that keeps crying wolf (findings that get rejected), a skill that let a defect
+    escape to prod, and how many refs are still waiting on their fate. min_resolved guards
+    against branding a skill a wolf-crier off one rejected MR.
+    """
+    card = scorecard(runs, outcomes)
+    crying_wolf = [
+        {"skill": s, "acceptance_rate": m["acceptance_rate"], "resolved": m["resolved"]}
+        for s, m in card.items()
+        if m["acceptance_rate"] is not None
+        and m["resolved"] >= min_resolved
+        and m["acceptance_rate"] <= crying_wolf_max_acceptance
+    ]
+    escaped = [{"skill": s, "escaped": m["escaped"]} for s, m in card.items() if m["escaped"]]
+    awaiting = unresolved_refs(runs, outcomes)
+    return {
+        "total_runs": len(runs),
+        "resolved": sum(m["resolved"] for m in card.values()),
+        "crying_wolf": crying_wolf,
+        "escaped": escaped,
+        "awaiting_outcome": awaiting,
+        "actionable": bool(crying_wolf or escaped),
+    }
+
+
+def render_digest(d: dict[str, Any]) -> str:
+    if d["total_runs"] == 0:
+        return "skill learnings: ledger empty — nothing to learn from yet"
+    lines = [f"skill learnings: {d['total_runs']} runs, {d['resolved']} resolved"]
+    for c in d["crying_wolf"]:
+        pct = c["acceptance_rate"] * 100
+        lines.append(
+            f"  ⚠ crying wolf: {c['skill']} accepted {pct:.0f}% of {c['resolved']} resolved "
+            f"— skill-smith should tighten or retire it"
+        )
+    for e in d["escaped"]:
+        lines.append(f"  ⚠ escaped: {e['skill']} missed {e['escaped']} prod defect(s) it owns")
+    if n := len(d["awaiting_outcome"]):
+        lines.append(f"  · {n} ref(s) awaiting outcome — run: skill_metrics.py sweep")
+    if not d["actionable"]:
+        lines.append("  ✓ no skill crying wolf, no escaped defects")
+    return "\n".join(lines)
+
+
 def check(runs_p: Path, outcomes_p: Path) -> list[str]:
     """Validate both ledgers parse and every record carries its required fields and a
     known enum value. Returns a list of problems (empty == clean)."""
@@ -315,6 +475,12 @@ def main(argv: list[str] | None = None) -> int:
     sc = sub.add_parser("scorecard", help="per-skill performance summary")
     sc.add_argument("--json", action="store_true")
 
+    sw = sub.add_parser("sweep", help="resolve unresolved refs against glab, close the loop")
+    sw.add_argument("--dry-run", action="store_true", help="show what would be written, write nothing")
+
+    dg = sub.add_parser("digest", help="the few learnings worth reading every session")
+    dg.add_argument("--json", action="store_true")
+
     args = ap.parse_args(argv)
 
     if args.check:
@@ -364,6 +530,38 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {e}", file=sys.stderr)
             return 1
         print(json.dumps(card, indent=2) if args.json else render_scorecard(card))
+        return 0
+
+    if args.cmd == "sweep":
+        if not glab_available():
+            print("glab not on PATH — nothing swept (an open loop, not an error)", file=sys.stderr)
+            return 0
+        try:
+            runs = _read(runs_path())
+            outcomes = _read(outcomes_path())
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        actions = sweep(runs, outcomes, glab_resolve_ref, dry_run=args.dry_run)
+        resolved_refs = {a["ref"] for a in actions}
+        still_open = [r for r in unresolved_refs(runs, outcomes) if r not in resolved_refs]
+        verb = "would write" if args.dry_run else "wrote"
+        if actions:
+            for a in actions:
+                print(f"  {verb}: {a['ref']} -> {a['outcome']} ({a['skill']})")
+        else:
+            print("  nothing to resolve — every ref glab knows about is already recorded")
+        if still_open:
+            print(f"  left open ({len(still_open)}, no terminal MR yet or not an MR): {', '.join(still_open)}")
+        return 0
+
+    if args.cmd == "digest":
+        try:
+            d = digest(_read(runs_path()), _read(outcomes_path()))
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        print(json.dumps(d, indent=2) if args.json else render_digest(d))
         return 0
 
     ap.print_help()

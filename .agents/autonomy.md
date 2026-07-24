@@ -128,8 +128,18 @@ a run, not an optional extra.
   stay suppressed and regressions surface loudly.
 - **Record the outcome when it's known.** Whoever later sees an MR merged, closed, or a
   defect escape to prod records it (`skill_metrics.py outcome --ref … --outcome …`). This is
-  usually deferred to a human or a scheduled sweep — the agent that opened the MR is long
-  gone. That's expected; the join is on `ref`, not on being the same run.
+  usually deferred — the agent that opened the MR is long gone. That's expected; the join is
+  on `ref`, not on being the same run. **You do not have to remember:** `skill_metrics.py
+  sweep` asks glab what became of every unresolved ref and writes `merged`/`closed` itself, so
+  the loop closes without a human. Run it on a schedule (a cheap daily `/schedule`), and the
+  ledger stays current on its own. `sweep` only writes what glab can prove; `amended` and
+  `escaped` remain human judgments it never manufactures.
+- **Learn from it every session.** `skill_metrics.py digest` is the scorecard reduced to what
+  a run should act on — crying-wolf skills, escaped defects, refs awaiting an outcome — and
+  `preflight` prints it at the top of every code workflow. Read that block before you start:
+  a stage flagged crying-wolf is one to weigh sceptically or hand to skill-smith, not to trust
+  by default. This is the self-improving half of the loop — measurement is pointless if the
+  next run doesn't see it.
 
 These are honest-reporting's machine-readable twin: the same truth, written where the next
 run and the scorecard can use it. Never fabricate a favourable row — a gamed ledger is the
