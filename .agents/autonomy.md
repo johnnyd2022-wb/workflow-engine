@@ -104,6 +104,21 @@ Scheduled skills additionally cap **work volume** per run: `prod-sentinel` opens
 one fix MR per run; `security-audit` remediation opens at most one MR per finding class.
 An agent that can open unbounded MRs on a cron will eventually open a hundred bad ones.
 
+## Token discipline
+
+Tokens are the budget the whole autonomous loop runs on; wasting them is the difference
+between a run that finishes and one that dies mid-chain. Two rules for orchestrating skills:
+
+- **Match the model to the work.** The strongest model earns its cost on spec authoring,
+  building, and adversarial reasoning (security-audit, spec-critic, test-evaluator). Spawn
+  the mechanical stages — ci-gate verdict parsing, preflight consumption, straight
+  report-collection — on a cheaper model. A subagent that only reads a report and emits
+  `GATE x: pass` does not need the flagship. This is orchestrator judgment, not a hard gate.
+- **Read files, not transcripts.** The chain already keeps each verification stage in its own
+  context and returns a one-line verdict plus a report *file*; the orchestrator reads the file
+  only when a verdict is non-clean. Don't re-summarise a clean stage's full output back into
+  the main thread — the verdict line is the summary. This is why the chain is file-backed.
+
 ## Honest reporting
 
 The whole policy rests on reports being true. `clean` means it was checked; `skipped`
