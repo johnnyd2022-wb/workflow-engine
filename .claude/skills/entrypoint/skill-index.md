@@ -5,8 +5,8 @@ Cached, categorized roster of every registered skill in `.claude/skills/`. This 
 directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be preserved
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
-last_synced: 2026-07-18
-skill_count: 47
+last_synced: 2026-07-24
+skill_count: 48
 
 ## Wiring
 
@@ -78,6 +78,7 @@ sales-manager
 sales-watches
 security-audit
 skill-smith
+spec-critic
 spec-first
 suite-warden
 test-author
@@ -114,6 +115,7 @@ test-fixtures
 | Migration reversibility, schema change safety | `migration-safety` |
 | Logging, monitoring, "why did this fail in prod" | `observability` |
 | Turn a feature request into a written spec | `spec-first` |
+| Grade a spec for ambiguity before build, "poke holes in this spec", "is this spec ready" | `spec-critic` |
 | "Are these failures real", flaky test, a test needing a live server, suite health | `suite-warden` |
 
 ### 2b. Code — autonomous watchers (built for `/schedule`; run unattended, MR is the gate)

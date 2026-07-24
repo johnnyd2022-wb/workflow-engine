@@ -104,6 +104,21 @@ Scheduled skills additionally cap **work volume** per run: `prod-sentinel` opens
 one fix MR per run; `security-audit` remediation opens at most one MR per finding class.
 An agent that can open unbounded MRs on a cron will eventually open a hundred bad ones.
 
+## Token discipline
+
+Tokens are the budget the whole autonomous loop runs on; wasting them is the difference
+between a run that finishes and one that dies mid-chain. Two rules for orchestrating skills:
+
+- **Match the model to the work.** The strongest model earns its cost on spec authoring,
+  building, and adversarial reasoning (security-audit, spec-critic, test-evaluator). Spawn
+  the mechanical stages — ci-gate verdict parsing, preflight consumption, straight
+  report-collection — on a cheaper model. A subagent that only reads a report and emits
+  `GATE x: pass` does not need the flagship. This is orchestrator judgment, not a hard gate.
+- **Read files, not transcripts.** The chain already keeps each verification stage in its own
+  context and returns a one-line verdict plus a report *file*; the orchestrator reads the file
+  only when a verdict is non-clean. Don't re-summarise a clean stage's full output back into
+  the main thread — the verdict line is the summary. This is why the chain is file-backed.
+
 ## Honest reporting
 
 The whole policy rests on reports being true. `clean` means it was checked; `skipped`
@@ -128,8 +143,18 @@ a run, not an optional extra.
   stay suppressed and regressions surface loudly.
 - **Record the outcome when it's known.** Whoever later sees an MR merged, closed, or a
   defect escape to prod records it (`skill_metrics.py outcome --ref … --outcome …`). This is
-  usually deferred to a human or a scheduled sweep — the agent that opened the MR is long
-  gone. That's expected; the join is on `ref`, not on being the same run.
+  usually deferred — the agent that opened the MR is long gone. That's expected; the join is
+  on `ref`, not on being the same run. **You do not have to remember:** `skill_metrics.py
+  sweep` asks glab what became of every unresolved ref and writes `merged`/`closed` itself, so
+  the loop closes without a human. Run it on a schedule (a cheap daily `/schedule`), and the
+  ledger stays current on its own. `sweep` only writes what glab can prove; `amended` and
+  `escaped` remain human judgments it never manufactures.
+- **Learn from it every session.** `skill_metrics.py digest` is the scorecard reduced to what
+  a run should act on — crying-wolf skills, escaped defects, refs awaiting an outcome — and
+  `preflight` prints it at the top of every code workflow. Read that block before you start:
+  a stage flagged crying-wolf is one to weigh sceptically or hand to skill-smith, not to trust
+  by default. This is the self-improving half of the loop — measurement is pointless if the
+  next run doesn't see it.
 
 These are honest-reporting's machine-readable twin: the same truth, written where the next
 run and the scorecard can use it. Never fabricate a favourable row — a gamed ledger is the

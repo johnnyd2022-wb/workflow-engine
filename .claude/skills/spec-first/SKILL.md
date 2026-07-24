@@ -71,6 +71,16 @@ This trades "approve a spec you can't see the consequences of" for "review a wor
 
 Never use `approved-unattended` to dodge an interview the user is available for — a live user is always better evidence than your best guess.
 
+## 4. Hand off to the critic
+
+A spec you wrote is a spec you can't see the holes in — the same reason test-author doesn't
+grade its own tests. Before build, the written spec goes to **spec-critic**, the independent
+grader that hunts untestable ACs, undecided tenant scoping, and unstated destructive changes.
+When it returns `gaps-found`, you own the fix: interactively, take its gap list to the user
+and edit the spec; unattended, turn each gap into an `ASSUMPTION:` line (per §3) so the gap
+becomes a reviewable decision in the MR rather than a silent one. new-feature drives this at
+its Step 1b; if you're invoked standalone, run spec-critic yourself before declaring done.
+
 ## Rules
 
 - Never write code in this skill. Spec only.

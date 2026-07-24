@@ -132,3 +132,112 @@ def test_date_backfill_rejects_bad_format():
 
     with _pytest.raises(ValueError, match="YYYY-MM-DD"):
         skill_metrics._date_to_ts("18-07-2026")
+
+
+# --- sweep: closing the loop against glab ------------------------------------------------
+#
+# The sweep is pure over an injected resolver, so these never shell out to a real glab —
+# they pin the loop-closing logic (what gets a candidate, what gets written, what is left
+# untouched) without a network or a git host.
+
+
+def _runs_outcomes(mod):
+    return mod._read(mod.runs_path()), mod._read(mod.outcomes_path())
+
+
+def test_unresolved_refs_are_runs_without_an_outcome(ledger):
+    skill_metrics.record_run(skill="fix-bug", run_type="chained", verdict="patched", ref="feat/a")
+    skill_metrics.record_run(skill="fix-bug", run_type="chained", verdict="patched", ref="feat/b")
+    skill_metrics.record_outcome(ref="feat/a", outcome="merged")
+    runs, outcomes = _runs_outcomes(skill_metrics)
+    assert skill_metrics.unresolved_refs(runs, outcomes) == ["feat/b"]
+
+
+def test_sweep_writes_outcome_the_resolver_proves(ledger):
+    skill_metrics.record_run(skill="new-feature", run_type="chained", verdict="clean", ref="feat/x")
+    runs, outcomes = _runs_outcomes(skill_metrics)
+    actions = skill_metrics.sweep(runs, outcomes, lambda ref: "merged")
+    assert actions == [{"ref": "feat/x", "outcome": "merged", "skill": "new-feature"}]
+    # the outcome was actually appended and now scores as accepted
+    card = _score(skill_metrics)["new-feature"]
+    assert card["merged"] == 1 and card["acceptance_rate"] == 1.0
+
+
+def test_sweep_leaves_unresolvable_refs_untouched(ledger):
+    # a resolver that can't prove anything (open MR, or a scope ref that was never an MR)
+    # must not fabricate an outcome
+    skill_metrics.record_run(skill="security-audit", run_type="scheduled", verdict="findings-open", ref="scope/2026")
+    runs, outcomes = _runs_outcomes(skill_metrics)
+    actions = skill_metrics.sweep(runs, outcomes, lambda ref: None)
+    assert actions == []
+    assert skill_metrics._read(skill_metrics.outcomes_path()) == []
+
+
+def test_sweep_dry_run_writes_nothing(ledger):
+    skill_metrics.record_run(skill="new-feature", run_type="chained", verdict="clean", ref="feat/y")
+    runs, outcomes = _runs_outcomes(skill_metrics)
+    actions = skill_metrics.sweep(runs, outcomes, lambda ref: "closed", dry_run=True)
+    assert actions == [{"ref": "feat/y", "outcome": "closed", "skill": "new-feature"}]
+    assert skill_metrics._read(skill_metrics.outcomes_path()) == []  # nothing persisted
+
+
+def test_sweep_skips_already_resolved(ledger):
+    skill_metrics.record_run(skill="fix-bug", run_type="chained", verdict="patched", ref="feat/done")
+    skill_metrics.record_outcome(ref="feat/done", outcome="merged")
+    runs, outcomes = _runs_outcomes(skill_metrics)
+    # resolver would say closed, but the ref is already resolved so it's never consulted
+    called = []
+    skill_metrics.sweep(runs, outcomes, lambda ref: called.append(ref) or "closed")
+    assert called == []
+
+
+def test_glab_state_maps_to_outcome():
+    assert skill_metrics._mr_state_to_outcome("merged") == "merged"
+    assert skill_metrics._mr_state_to_outcome("closed") == "closed"
+    assert skill_metrics._mr_state_to_outcome("locked") == "closed"
+    assert skill_metrics._mr_state_to_outcome("opened") is None  # still in flight
+    assert skill_metrics._mr_state_to_outcome(None) is None
+
+
+# --- digest: the few learnings worth reading every session -------------------------------
+
+
+def test_digest_flags_crying_wolf(ledger):
+    # 3 rejected of 4 resolved -> 25% acceptance, over the min_resolved floor -> flagged
+    for i, oc in enumerate(["merged", "closed", "closed", "closed"]):
+        ref = f"r{i}"
+        skill_metrics.record_run(skill="review-feature", run_type="chained", verdict="findings-open", ref=ref)
+        skill_metrics.record_outcome(ref=ref, outcome=oc)
+    d = skill_metrics.digest(*_runs_outcomes(skill_metrics))
+    assert d["actionable"] is True
+    assert d["crying_wolf"][0]["skill"] == "review-feature"
+    assert d["crying_wolf"][0]["acceptance_rate"] == 0.25
+
+
+def test_digest_min_resolved_guards_against_one_rejection(ledger):
+    # a single closed MR is 0% acceptance but must NOT brand the skill a wolf-crier
+    skill_metrics.record_run(skill="security-audit", run_type="chained", verdict="findings-open", ref="one")
+    skill_metrics.record_outcome(ref="one", outcome="closed")
+    d = skill_metrics.digest(*_runs_outcomes(skill_metrics))
+    assert d["crying_wolf"] == []
+
+
+def test_digest_flags_escaped_defect(ledger):
+    skill_metrics.record_run(skill="security-audit", run_type="scheduled", verdict="clean", ref="e")
+    skill_metrics.record_outcome(ref="e", outcome="escaped")
+    d = skill_metrics.digest(*_runs_outcomes(skill_metrics))
+    assert d["escaped"] == [{"skill": "security-audit", "escaped": 1}]
+    assert d["actionable"] is True
+
+
+def test_digest_counts_refs_awaiting_outcome(ledger):
+    skill_metrics.record_run(skill="new-feature", run_type="chained", verdict="clean", ref="waiting")
+    d = skill_metrics.digest(*_runs_outcomes(skill_metrics))
+    assert d["awaiting_outcome"] == ["waiting"]
+    assert d["actionable"] is False  # awaiting is a nudge, not a behaviour-changing learning
+
+
+def test_digest_empty_ledger_says_nothing_to_learn():
+    d = skill_metrics.digest([], [])
+    assert d["total_runs"] == 0
+    assert "nothing to learn" in skill_metrics.render_digest(d)
