@@ -577,8 +577,31 @@ def run_all(skip_slow: bool = False) -> dict[str, Any]:
         "decisions": decisions,
         "blockers": blockers,
         "advice": advice,
+        "learnings": _metrics_digest(),
         "checks": {name: asdict(c) for name, c in sorted(results.items())},
     }
+
+
+def _metrics_digest() -> dict[str, Any] | None:
+    """The skill-metrics learnings digest (crying-wolf skills, escaped defects, refs
+    awaiting an outcome), loaded defensively so every code workflow opens already knowing
+    what prior runs learned. A missing or malformed ledger must never block preflight, so
+    any failure yields None and the section is simply absent.
+
+    Loaded via importlib, not a package import: scripts/ is not an importable package, and
+    the broad except is deliberate — preflight robustness outranks surfacing the digest.
+    """
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("skill_metrics", REPO_ROOT / "scripts" / "skill_metrics.py")
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.digest(mod._read(mod.runs_path()), mod._read(mod.outcomes_path()))
+    except Exception:
+        return None
 
 
 ICONS = {OK: "✓", DOWN: "✗", MISSING: "✗", UNKNOWN: "?"}
@@ -600,6 +623,22 @@ def render(report: dict[str, Any]) -> str:
     lines.append(f"  verification mode : {dec['verification_mode']}")
     lines.append(f"  otel exporter     : {'active' if dec['otel_exporter_active'] else 'inactive (nothing exported)'}")
     lines.append("")
+
+    learnings = report.get("learnings")
+    if learnings and learnings.get("total_runs"):
+        lines.append(f"  skill learnings   : {learnings['total_runs']} runs, {learnings['resolved']} resolved")
+        for c in learnings["crying_wolf"]:
+            lines.append(
+                f"    ⚠ crying wolf: {c['skill']} {c['acceptance_rate'] * 100:.0f}% accepted of {c['resolved']}"
+            )
+        for e in learnings["escaped"]:
+            lines.append(f"    ⚠ escaped: {e['skill']} missed {e['escaped']} prod defect(s) it owns")
+        if n := len(learnings["awaiting_outcome"]):
+            lines.append(f"    · {n} ref(s) awaiting outcome (run: skill_metrics.py sweep)")
+        if not learnings["actionable"]:
+            lines.append("    ✓ no skill crying wolf, no escaped defects")
+        lines.append("")
+
     lines.append("  BLOCKED: " + ", ".join(report["blockers"]) if report["blockers"] else "  ready")
     return "\n".join(lines)
 
