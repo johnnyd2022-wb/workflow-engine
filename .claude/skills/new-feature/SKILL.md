@@ -36,6 +36,8 @@ python3 scripts/preflight.py --json
 
 Repair blockers per the **preflight** skill's table, then read `decisions`: `verification_mode` (`herdr-adversarial` | `subagents`) settles how steps 3-6 run, and `live_server_tests` tells you whether the live suites will run or skip. Pass the report to subagents in their prompt instead of having each re-probe — one environment, one opinion about it.
 
+**Make E2E ground truth, not a skip.** If the spec touches a page or an API route and `live_server_tests` is `skip` (no dev server listening), start the dev server yourself before Step 4 — `uv run workflow start`, backgrounded — so `e2e-playwright` runs against a real server instead of auto-skipping. `.agents/autonomy.md` authorises starting local infra without asking. This matters most in an unattended run: an E2E stage that silently skipped reports green while never having driven the app, which is the opposite of what "just works when I come back" needs. Note in the run report whether you started the server or it was already up. Read the `learnings` block preflight now prints — it carries what prior runs learned (crying-wolf stages, escaped defects) so you don't repeat them.
+
 ## Step 1: Spec (inline, never delegated)
 
 Run the **spec-first** skill yourself; it interviews the user, and subagents cannot talk to the user. Do not proceed past this step until the spec file exists with `status: approved` — or, in an unattended run, `status: approved-unattended` with its assumptions listed (see spec-first §3; those assumptions must lead the MR description). The slug from the spec drives everything downstream.
@@ -108,6 +110,8 @@ Read each subagent's report file, not just its verdict line. A `patched` verdict
 ## Step 7: Patch loop and circuit breaker
 
 `findings-open` from any stage comes back to you: fix (that is builder work), then re-run only the failed stage plus ci-gate. Track rounds in `.agents/reports/<slug>/rounds.md`. If the same finding survives **two full rounds**, stop, write up what was tried and your best hypotheses, and escalate to the user. Grinding a third round on the same wall burns tokens and usually means the spec or the design is wrong, which is a human decision.
+
+**Escalation must reach the human, not wait silently.** "Escalate to the user" fails the walk-away case if there is no user in the room. When the breaker trips (or any impasse per `.agents/autonomy.md`), do both: (1) push what you have as a **`Draft:` MR** via merge-request with the impasse, the two-or-three hypotheses, and the failing stage's report linked in the description — a reviewable artifact beats a lost session; (2) fire a **`PushNotification`** summarising the block and the MR link, so the founder finds it at their leisure instead of discovering a stalled run. A notification the human reads later is not a blocking question — it's the autonomy policy's escalation channel (`.agents/autonomy.md` → Escalation, point 5).
 
 ## Step 8: Done means demonstrated
 
