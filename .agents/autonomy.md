@@ -41,9 +41,17 @@ convenient it would be:
 - **Push to `main`,** or force-push any branch a human might be working on. Force-push at
   all requires explicit approval (see git-commit-chain).
 - **Deploy to production.** `deploy-runner` is human-triggered; nothing here calls it.
-- **Send external communications.** No email, no Slack, no posting, no webhooks to third
-  parties. Founder-ops skills that draft comms draft only — that rule is theirs and
+- **Send external communications.** No email, no posting to anywhere a third party reads,
+  no webhooks. Founder-ops skills that draft comms draft only — that rule is theirs and
   unchanged by this policy.
+  **One carve-out, added deliberately:** posting a completion notice to the founder's own
+  internal Slack workspace, to the two channels named in `.agents/notifications.json` and
+  no others. The test for whether a post is authorised is *who reads it* — an internal
+  channel only the founder and staff see is a notification surface, the same category as
+  `PushNotification`. A customer, prospect, supplier, or anyone outside the workspace is
+  an external communication and stays prohibited. Announcing that a deliverable is ready
+  is authorised; posting the deliverable's contents when it names a customer, carries
+  pricing, or was drafted *for* an external recipient is not.
 - **Rotate, exfiltrate, or print secrets.** If a secret is found committed, report the
   path and say which credential needs rotating; never paste the value into a report, log,
   MR description, or commit message.

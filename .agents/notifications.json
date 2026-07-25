@@ -1,0 +1,30 @@
+{
+  "_comment": "Where completed work gets announced. Read by merge-request (code) and the founder-ops skills. Add a channel HERE, never inline a raw channel ID in a SKILL.md.",
+  "version": 1,
+  "updated": "2026-07-25",
+  "transport": {
+    "kind": "slack-connector",
+    "note": "Posts go through the Slack connector's own tool, as the founder's own user. There is no bot token and no webhook in this repo — do not add one. Resolve the actual tool name at runtime rather than trusting a name written here; connector tool names change and a stale name fails silently at 3am.",
+    "if_unavailable": "Skip the post, say so in the run report, and fall back to PushNotification. A missing connector is never a reason to fail a chain that otherwise passed."
+  },
+  "channels": {
+    "code-changes": {
+      "id": "C0BKP7YSQ4W",
+      "name": "#code-changes",
+      "url": "https://whistlebird.slack.com/archives/C0BKP7YSQ4W",
+      "used_by": "merge-request",
+      "when": "An MR is open AND its head pipeline has passed — i.e. a reviewable artifact exists and the human is the only thing left.",
+      "never": "Do not post on a failed or still-running pipeline, on a Draft MR, or on an escalation. Those are PushNotification's job. This channel means 'ready to review'; if it also carries 'something broke', it stops meaning anything.",
+      "why": "The founder walks away mid-chain. This is the ping that says the walk-away worked, so an unattended run ends in a place they actually look rather than a terminal nobody reopens."
+    },
+    "general": {
+      "id": "C04R93YLPMH",
+      "name": "#general",
+      "url": "https://whistlebird.slack.com/archives/C04R93YLPMH",
+      "used_by": "founder-ops",
+      "when": "A founder-ops skill finishes a deliverable — a plan, a content pack, a pipeline review, a weekly command centre.",
+      "never": "Never post the deliverable's contents if it contains customer names, pricing, or anything drafted for an external recipient. Announce that it is ready and where it is; the founder opens it.",
+      "why": "FYI only. Drafts stay drafts — this announces that something is ready to look at, it does not send anything to a customer or prospect."
+    }
+  }
+}

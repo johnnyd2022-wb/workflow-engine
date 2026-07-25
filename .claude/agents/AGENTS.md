@@ -58,6 +58,14 @@ output without rework.
   never send**. The founder reviews and sends from Gmail. Calibrate tone from our sent
   mail (`in:sent`) before drafting; no AI voice (no em-dashes, no "I hope this finds you
   well", no corporate filler).
+- Slack: connected as the founder. When a skill finishes a deliverable — a plan, a content
+  pack, a pipeline review, a weekly command centre — post a short FYI to the `general`
+  channel in `.agents/notifications.json`: what was produced, where it lives, and the one
+  thing worth deciding. Announce it, don't paste it. **Never post the contents when they
+  name a customer, carry pricing, or were drafted for an external recipient** — those stay
+  in the file for the founder to open. Drafts-only is unchanged: this announces that a
+  draft exists, it never sends one. Resolve the connector's tool name at runtime, and if
+  Slack is unavailable just say so in the report rather than failing the run.
 - Dates: NZ context; today's date is provided by the session. Convert relative dates
   ("next Tuesday") to absolute dates in artifacts.
 - Default to markdown. Don't reach for heavier systems unless complexity demands it.
