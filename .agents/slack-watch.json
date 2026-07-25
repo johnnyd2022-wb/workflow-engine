@@ -1,0 +1,32 @@
+{
+  "_comment": "Config for scripts/slack_watch.py. Holds NO credentials — the bot token comes from SLACK_BOT_TOKEN or the KeePassXC entry named below, per the same rule as .agents/notifications.json.",
+  "version": 1,
+  "updated": "2026-07-25",
+
+  "channels": ["C04R93YLPMH"],
+  "_channels_note": "Channel IDs the watcher polls for top-level @claude mentions. Start with ONE. #general is C04R93YLPMH; #code-changes (C0BKP7YSQ4W) is a notification surface and should not be a request intake — keep it out of this list.",
+
+  "claude_app_user_id": ["U0BGZ4YKJF3", "U0BKALN1A4F"],
+  "_claude_app_user_id_note": "Every Claude identity in the workspace, so a rendered <@Uxxxx> mention is detected and not just the literal text '@claude'. U0BGZ4YKJF3 is the official Claude app; U0BKALN1A4F is claude2, the bot this watcher authenticates as. BOTH are needed: typing '@claude' autocompletes to whichever Slack ranks first, and the rendered text is an opaque ID — matching only one silently drops half the mentions. Accepts a string or a list; falls back to literal text matching when null.",
+
+  "keepass_entry": "workflow-engine/slack_bot_token",
+  "_keepass_entry_note": "KeePassXC entry whose Password field is the xoxb- token. This token is READ-ONLY (channels:history, no chat:write) — the script never posts. Replies are sent by the agent through the Slack MCP connector so they appear as the founder. Env var SLACK_BOT_TOKEN overrides this when set.",
+
+  "sensitive_data_channels": [],
+  "_sensitive_data_channels_note": "Channels cleared for detailed financial and customer data (figures, customer names, invoice detail). Anywhere NOT listed gets shape-level answers only — 'revenue up on last month, want the breakdown?'. This enforces the same line .agents/notifications.json already draws: customer names and pricing do not go into a channel staff can scroll back through. Empty means every channel is treated as uncleared, which is the safe default.",
+
+  "triage_allowed_tools": null,
+  "_triage_allowed_tools_note": "Overrides the allow-list passed to the triage agent. null uses the built-in default in scripts/slack_watch.py: Slack send/read, Xero reads, Gmail reads, Drive reads. Deliberately excludes Bash, Edit/Write, and every send-email tool. Enumerate tool names exactly — wildcards are not verified to match MCP names, and a pattern that silently fails denies the tool with no useful error.",
+
+  "triage_model": "claude-haiku-4-5-20251001",
+  "_triage_model_note": "Triage is short conversational turns — cheap model on purpose. The expensive chain model is a separate setting below.",
+
+  "chain_model": null,
+  "_chain_model_note": "Model for the handed-off new-feature/fix-bug run. null = whatever the CLI defaults to, which is what an interactive run would use.",
+
+  "chain_permission_mode": "acceptEdits",
+  "_chain_permission_mode_note": "The handed-off chain edits files on a feature branch and opens an MR. It never merges — that boundary is enforced by .agents/autonomy.md, not by this setting.",
+
+  "agent_timeout": 420,
+  "_agent_timeout_note": "Seconds. Higher than a pure triage turn would need because an 'answer' may query Xero or Gmail before replying."
+}
