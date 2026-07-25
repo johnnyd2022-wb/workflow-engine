@@ -78,6 +78,7 @@ sales-manager
 sales-watches
 security-audit
 skill-smith
+slack-watcher
 spec-critic
 spec-first
 suite-warden
@@ -123,6 +124,7 @@ test-fixtures
 | Ask sounds like | Skill |
 |---|---|
 | "Anything broken in prod", scheduled error sweep, post-deploy watch | `prod-sentinel` |
+| A request arriving as a top-level `@claude` mention in Slack, triaged to `fix-bug`/`new-feature` | `slack-watcher` (driven by `scripts/slack_watch.py`, not invoked by hand) |
 | Weekly security sweep that remediates, not just reports | `security-audit` (§6) |
 | Scheduled suite-health check | `suite-warden` |
 | Scheduled core-flow coverage sweep, filling test gaps | `test-author` |
