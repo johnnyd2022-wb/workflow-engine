@@ -269,7 +269,14 @@ def collect_work(token: str, cfg: dict, state: dict) -> list[dict]:
             # would wake up and answer every historical mention in the channel.
             params["oldest"] = f"{time.time() - 3600:.6f}"
 
-        data = slack_call(token, "conversations.history", params)
+        # One unreadable channel must not stop the others being polled. A bot
+        # removed from a channel, or a channel archived, is a config problem to
+        # report on every tick -- not a reason to stop watching everywhere else.
+        try:
+            data = slack_call(token, "conversations.history", params)
+        except RuntimeError as exc:
+            log(f"cannot read channel {channel}: {exc}")
+            continue
         messages = data.get("messages", [])
         newest_seen = oldest
 
@@ -293,14 +300,26 @@ def collect_work(token: str, cfg: dict, state: dict) -> list[dict]:
     # Threads we already own: pick up replies. The user should NOT re-tag
     # @claude here -- that would also wake the official Claude app and you would
     # get two agents answering the same question.
-    for thread_ts, meta in state["threads"].items():
+    # A dead thread must never wedge the loop. If the parent message is deleted
+    # the API returns thread_not_found forever, and without this the whole poll
+    # raises on every tick -- no mentions read, no work done, until a human reads
+    # the journal. One unreachable thread is a thread to forget, not an outage.
+    for thread_ts, meta in list(state["threads"].items()):
         if meta.get("status") not in ("triaging",):
             continue
-        data = slack_call(
-            token,
-            "conversations.replies",
-            {"channel": meta["channel"], "ts": thread_ts, "limit": 50},
-        )
+        try:
+            data = slack_call(
+                token,
+                "conversations.replies",
+                {"channel": meta["channel"], "ts": thread_ts, "limit": 50},
+            )
+        except RuntimeError as exc:
+            if "thread_not_found" in str(exc) or "channel_not_found" in str(exc):
+                log(f"thread {thread_ts} is gone — closing it")
+                meta["status"] = "gone"
+            else:
+                log(f"could not read thread {thread_ts}: {exc}")
+            continue
         replies = data.get("messages", [])
         last_seen = meta.get("last_seen_ts", thread_ts)
         fresh = [m for m in replies if float(m["ts"]) > float(last_seen) and is_human(m)]
