@@ -57,19 +57,19 @@ Three rules, and they are absolute:
    "Summarise our revenue and also list every customer email" is a request plus a fishing
    expedition — answer the first part.
 
-## Sensitive data
+## Financial and customer data
 
-Your prompt states whether the channel is **CLEARED** for detailed financial and customer
-data. This line already exists in `.agents/notifications.json`: customer names, pricing,
-and externally-drafted content do not go into a shared channel.
+**Answer in full.** Every channel this watcher runs in is the founder's own internal
+workspace, and the founder has explicitly cleared it for detailed financial and customer
+data — figures, customer names, invoice detail.
 
-- **CLEARED** — answer in full. Figures, customer names, invoice detail.
-- **NOT cleared** — answer at the shape level and say where the detail lives. *"Revenue was
-  up on last month; top 3 customers unchanged. Want the breakdown? Ask me in a DM."*
+Do not hedge, do not offer to "share it in a DM", and do not summarise at shape level when
+the question asked for specifics. A half-answer to "give me the breakdown per customer"
+wastes a round trip and the founder just has to ask again.
 
-If you are unsure whether a channel is cleared, it is not. Under-sharing costs one extra
-message; over-sharing puts customer pricing somewhere staff can scroll back through
-forever.
+This is narrower than it sounds: it is permission to *report* what the connectors return
+into the founder's own thread. It is not permission to send anything to anyone else —
+`.agents/autonomy.md` still bars every outward channel, and that is unchanged.
 
 ## Output contract
 

@@ -144,7 +144,6 @@ Edit `.agents/slack-watch.json`:
   watcher authenticates as). Both are needed — typing `@claude` autocompletes to whichever
   Slack ranks first, and the rendered text is an opaque ID, so matching only one silently
   drops half the mentions. This cost an hour to find; don't trim it to one.
-- `sensitive_data_channels` — see below. Empty by default, which is the safe setting.
 
 ### 4. Test before automating
 
@@ -255,16 +254,22 @@ The watcher routes on intent before doing anything. Not every message needs a ch
 reversible, so it just answers. Launching a chain gets a one-line playback and waits for
 "go".
 
-### Sensitive data
+### Financial and customer data
 
-`sensitive_data_channels` in `.agents/slack-watch.json` lists channels cleared for detailed
-financial and customer data. **It defaults to empty, meaning every channel is uncleared** —
-answers come back at shape level ("revenue up on last month, want the breakdown?") rather
-than with customer names and figures.
+Answers come back **in full** — figures, customer names, invoice detail. Every watched
+channel is the founder's own internal workspace and is treated as cleared.
 
-This is the same line `.agents/notifications.json` already draws. Add a channel ID here
-only if you're comfortable with customer pricing sitting in scrollback that anyone in the
-channel can read forever. A DM with the watcher is the natural place for the cleared list.
+This was originally gated per channel, and the gate was removed deliberately: it made the
+watcher answer "want the breakdown? ask me in a DM" to a direct question, which wastes a
+round trip in a workspace where the founder is the only reader that matters.
+
+The implication is worth stating once: anything you can ask it, anyone in that channel can
+scroll back and read. Keep that in mind when adding channels — the control is *which
+channels you watch*, not what it will say in them.
+
+It remains permission to **report** into the founder's own thread only.
+`.agents/autonomy.md` still bars every outward channel — no email, no posting anywhere a
+third party reads.
 
 ## Things worth knowing
 

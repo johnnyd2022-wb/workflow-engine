@@ -12,8 +12,6 @@
   "keepass_entry": "workflow-engine/slack_bot_token",
   "_keepass_entry_note": "KeePassXC entry whose Password field is the xoxb- token. This token is READ-ONLY (channels:history, no chat:write) — the script never posts. Replies are sent by the agent through the Slack MCP connector so they appear as the founder. Env var SLACK_BOT_TOKEN overrides this when set.",
 
-  "sensitive_data_channels": [],
-  "_sensitive_data_channels_note": "Channels cleared for detailed financial and customer data (figures, customer names, invoice detail). Anywhere NOT listed gets shape-level answers only — 'revenue up on last month, want the breakdown?'. This enforces the same line .agents/notifications.json already draws: customer names and pricing do not go into a channel staff can scroll back through. Empty means every channel is treated as uncleared, which is the safe default.",
 
   "triage_allowed_tools": null,
   "_triage_allowed_tools_note": "Overrides the allow-list passed to the triage agent. null uses the built-in default in scripts/slack_watch.py: Slack send/read, Xero reads, Gmail reads, Drive reads. Deliberately excludes Bash, Edit/Write, and every send-email tool. Enumerate tool names exactly — wildcards are not verified to match MCP names, and a pattern that silently fails denies the tool with no useful error.",
