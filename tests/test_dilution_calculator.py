@@ -138,6 +138,35 @@ class TestDilutionServiceValidation:
         with pytest.raises(DilutionValidationError, match="solve_for"):
             solve_dilution({"starting_abv": 40, "starting_volume_ml": 1000, "final_abv": 20})
 
+    def test_ac4_rejects_non_string_solve_for(self):
+        """build-review finding: a list/dict solve_for must not crash on the frozenset
+        membership test — it must be rejected as a normal 400-worthy validation error.
+        """
+        with pytest.raises(DilutionValidationError, match="solve_for"):
+            solve_dilution(
+                {
+                    "solve_for": ["final_volume_ml"],
+                    "starting_abv": 40,
+                    "starting_volume_ml": 1000,
+                    "final_abv": 20,
+                }
+            )
+
+    def test_ac4_rejects_overflow_to_infinite_solved_value(self):
+        """build-review finding: an extreme-but-finite input that overflows the division
+        to inf must be rejected, not silently pass the `> 0` volume check (inf > 0 is
+        True in Python).
+        """
+        with pytest.raises(DilutionValidationError, match="non-finite"):
+            solve_dilution(
+                {
+                    "solve_for": "final_volume_ml",
+                    "starting_abv": 100,
+                    "starting_volume_ml": 1.5e308,
+                    "final_abv": 1e-300,
+                }
+            )
+
     def test_ac4_rejects_invalid_solve_for_value(self):
         with pytest.raises(DilutionValidationError, match="solve_for"):
             solve_dilution(

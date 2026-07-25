@@ -77,7 +77,7 @@ def _validate_and_extract(payload: dict) -> tuple[str, dict[str, float]]:
         raise DilutionValidationError("Request body must be a JSON object")
 
     solve_for = payload.get("solve_for")
-    if solve_for not in FIELD_NAMES:
+    if not isinstance(solve_for, str) or solve_for not in FIELD_NAMES:
         raise DilutionValidationError(f"solve_for must be one of: {', '.join(sorted(FIELD_NAMES))}")
 
     if payload.get(solve_for) is not None:
@@ -135,6 +135,8 @@ def solve_dilution(payload: dict) -> dict:
 
     solved_value = _solve_value(solve_for, given)
 
+    if not math.isfinite(solved_value):
+        raise DilutionValidationError(f"solving for '{solve_for}' produced a non-finite value — check inputs")
     if solve_for in ABV_FIELDS and not (0.0 <= solved_value <= 100.0):
         raise DilutionValidationError(f"solving for '{solve_for}' produced a value outside 0-100 — check inputs")
     if solve_for in VOLUME_FIELDS and not (solved_value > 0.0):
