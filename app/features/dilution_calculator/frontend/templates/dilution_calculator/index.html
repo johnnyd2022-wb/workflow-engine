@@ -79,9 +79,15 @@
       </template>
     </div>
 
-    <div x-show="error" x-cloak class="dilcalc-error" x-text="error"></div>
+    <div x-show="error" x-cloak class="dilcalc-error" role="alert" data-testid="dilcalc-error" x-text="error"></div>
 
-    <form @submit.prevent="submit()">
+    {# hx-boost="false": base_spa.html boosts every descendant form by default
+       (hx-boost="true" on <body>); without opting out here, htmx intercepts this
+       submit alongside Alpine's own handler and fires its own boosted GET back to
+       this page, swapping #page-content and wiping the Alpine result/error state
+       right as the real POST resolves. Same opt-out pattern already used for the
+       notifications link in base_spa.html. #}
+    <form @submit.prevent="submit()" hx-boost="false">
       <div class="dilcalc-field-grid">
         <template x-for="opt in fieldOptions" :key="opt.key">
           <div class="dilcalc-field">
@@ -101,19 +107,19 @@
     </form>
   </div>
 
-  <div class="dilcalc-card" x-show="result" x-cloak>
+  <div class="dilcalc-card" x-show="result" x-cloak data-testid="dilcalc-result">
     <h2 class="dilcalc-title" style="font-size:1.1rem;">Result</h2>
     <div class="dilcalc-result-row dilcalc-highlight">
       <span class="dilcalc-result-label" x-text="result ? fieldLabel(result.solved_field) : ''"></span>
-      <span class="dilcalc-result-value" x-text="result ? formatNumber(result.solved_value) : ''"></span>
+      <span class="dilcalc-result-value" data-testid="dilcalc-solved-value" x-text="result ? formatNumber(result.solved_value) : ''"></span>
     </div>
     <div class="dilcalc-result-row">
       <span class="dilcalc-result-label">Water to add (contraction-aware)</span>
-      <span class="dilcalc-result-value" x-text="result ? formatNumber(result.water_to_add_ml) + ' mL' : ''"></span>
+      <span class="dilcalc-result-value" data-testid="dilcalc-water-to-add" x-text="result ? formatNumber(result.water_to_add_ml) + ' mL' : ''"></span>
     </div>
     <div class="dilcalc-result-row">
       <span class="dilcalc-result-label">Water to add (naive, additive)</span>
-      <span class="dilcalc-result-value" x-text="result ? formatNumber(result.water_to_add_naive_ml) + ' mL' : ''"></span>
+      <span class="dilcalc-result-value" data-testid="dilcalc-water-to-add-naive" x-text="result ? formatNumber(result.water_to_add_naive_ml) + ' mL' : ''"></span>
     </div>
     <p class="dilcalc-disclaimer" x-text="result ? result.disclaimer : ''"></p>
   </div>
