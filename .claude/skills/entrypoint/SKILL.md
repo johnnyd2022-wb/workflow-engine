@@ -181,15 +181,18 @@ Two things in the report change how you route:
   head`) *before* invoking the front door, rather than handing it a broken environment
   and letting it fail three steps in. If a documented command is what's broken, that's
   **docs-truth**, not a repair.
-- **`decisions.verification_mode`** → `herdr-adversarial` when a Codex partner pane
-  exists, else `subagents`. When it's `herdr-adversarial`, append to the handoff:
+- **`decisions.verification_mode`** → `herdr-tabs` when the herdr CLI is available,
+  `herdr-adversarial` when only a Codex partner pane exists, else `subagents`. Pass it
+  through with `decisions.grader_engine`; the front doors read both and drive stages per
+  `.agents/verification-chain.md`. Don't probe `HERDR_ENV` yourself; preflight already did.
 
-  > Running inside Herdr with a Codex partner pane — route verification through
-  > herdr-multi-agent-collab (Architect/Breaker, Workflow A/B, two-round circuit breaker).
-
-  The front doors each carry their own "If running inside Herdr" clause, so this line is
-  a confirmation, not an instruction. Outside Herdr, say nothing — they default to
-  subagents. Don't probe `HERDR_ENV` yourself; preflight already did.
+**Every code change goes through the chain — there is no "small change" lane.** Whichever
+code front door you route to, it runs the same verification chain on the same routing table
+(`.agents/verification-chain.md`, `.agents/model-routing.json`): graders read-only on Codex,
+build and verify on Sonnet 5, Opus 5 only for spec work. A one-line fix and a new blueprint
+get the same tenant-isolation audit, because the one-line fix is where a missing `org_id`
+filter is *more* likely, not less. If a request tempts you to route it somewhere lighter to
+save a few minutes, that is the request most worth sending through the full chain.
 
 Also hand down `decisions.live_server_tests` — a front door that knows the live suites
 will skip won't misread `30 skipped` as a problem.
