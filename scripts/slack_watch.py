@@ -401,8 +401,17 @@ def rate_limit_note() -> str:
 # --------------------------------------------------------------------------
 
 
-def session_id_for(channel: str, thread_ts: str) -> str:
-    return str(uuid.uuid5(SESSION_NS, f"{channel}:{thread_ts}"))
+def session_id_for(channel: str, thread_ts: str, attempt: int = 0) -> str:
+    """Stable per-thread session id, salted by attempt.
+
+    Resuming is what makes follow-up turns cheap, but a session that has failed
+    repeatedly is usually failing *because* of what it accumulated -- a thread
+    that looped grew to 222k cache-read tokens and then blew the turn budget on
+    every resume. Salting after a failure abandons the poisoned session and
+    starts clean rather than resuming into the same wall.
+    """
+    key = f"{channel}:{thread_ts}" if attempt == 0 else f"{channel}:{thread_ts}#{attempt}"
+    return str(uuid.uuid5(SESSION_NS, key))
 
 
 def extract_json(text: str) -> dict | None:
@@ -421,14 +430,14 @@ def extract_json(text: str) -> dict | None:
     return None
 
 
-def run_agent(cfg: dict, channel: str, thread_ts: str, transcript: str, first: bool) -> dict:
+def run_agent(cfg: dict, channel: str, thread_ts: str, transcript: str, first: bool, attempt: int = 0) -> dict:
     """Invoke the triage skill headlessly and parse its decision.
 
     The agent posts its own reply through the Slack MCP connector, so replies
     appear as the founder rather than a bot. That is why this script's token
     only needs read scope -- it never writes to Slack at all.
     """
-    sid = session_id_for(channel, thread_ts)
+    sid = session_id_for(channel, thread_ts, attempt)
 
     # The transcript is untrusted input. Anyone who can post in this channel can
     # put text in here, and this runs on a machine with real credentials -- so it
@@ -513,7 +522,7 @@ def run_agent(cfg: dict, channel: str, thread_ts: str, transcript: str, first: b
         "--output-format",
         "json",
         "--max-turns",
-        "6",
+        str(cfg.get("max_turns", 12)),
     ]
     if cfg.get("triage_model"):
         cmd += ["--model", cfg["triage_model"]]
@@ -529,13 +538,16 @@ def run_agent(cfg: dict, channel: str, thread_ts: str, transcript: str, first: b
     # file. Deleting state (a normal recovery step) would otherwise make every
     # known thread look "new" and collide with its own existing session. Treat
     # the collision as proof the session exists and resume it instead.
-    proc = invoke(["--session-id", sid] if first else ["--resume", sid])
+    proc = invoke(["--session-id", sid] if (first or attempt) else ["--resume", sid])
     if proc.returncode != 0 and "already in use" in (proc.stderr or ""):
         log(f"session {sid[:8]} exists — resuming instead of creating")
         proc = invoke(["--resume", sid])
 
     if proc.returncode != 0:
-        raise RuntimeError(f"claude exited {proc.returncode}: {proc.stderr[:400]}")
+        # stderr is sometimes empty on a failed run; including stdout makes the
+        # difference between a diagnosable failure and "claude exited 1:".
+        detail = (proc.stderr or "").strip() or (proc.stdout or "").strip() or "no output"
+        raise RuntimeError(f"claude exited {proc.returncode}: {detail[:400]}")
 
     envelope = json.loads(proc.stdout)
     result_text = envelope.get("result", "")
@@ -609,21 +621,37 @@ def handle(cfg: dict, state: dict, token: str, item: dict, dry_run: bool) -> Non
     meta = state["threads"].setdefault(
         thread_ts, {"channel": channel, "status": "triaging", "session_id": session_id_for(channel, thread_ts)}
     )
+    # A retry drops the thread entry, so the attempt count has to live outside it.
+    attempts = (state.get("attempt_counts") or {}).get(thread_ts, 0)
+    cap = cfg.get("max_attempts", 3)
 
-    try:
-        decision = run_agent(cfg, channel, thread_ts, transcript, first)
-    except Exception as exc:  # noqa: BLE001 - one bad thread must not kill the run
-        # Do NOT advance last_seen_ts, and drop the thread entry entirely, so the
-        # next tick retries from scratch. Recording progress here would consume
-        # the request on a transient failure (claude not on PATH, a network blip)
-        # and the human would never learn their message was dropped.
-        log(f"agent failed on {thread_ts}: {exc} — will retry next tick")
+    def retry_or_stall(reason: str) -> None:
+        """Rewind so the next tick re-discovers this message, up to a cap.
+
+        Not advancing is the right call on failure -- nothing reached the human,
+        so nothing was accomplished. But retrying forever at ~$0.04 a turn is its
+        own failure, so give up loudly once the cap is hit.
+        """
+        n = attempts + 1
+        state.setdefault("attempt_counts", {})[thread_ts] = n
+        if n >= cap:
+            log(f"ERROR {thread_ts}: giving up after {n} attempts ({reason}) — marking stalled")
+            meta["status"] = "stalled"
+            meta["last_error"] = reason[:300]
+            meta["last_seen_ts"] = newest_ts
+            return
+        log(f"{thread_ts}: {reason} (attempt {n}/{cap}) — retrying next tick")
         state["threads"].pop(thread_ts, None)
         chan = state["channels"].get(channel)
         if chan and float(chan.get("last_ts", 0)) >= float(thread_ts):
-            # Rewind the channel watermark just behind this message so
-            # collect_work() rediscovers it rather than scanning past it.
             chan["last_ts"] = f"{float(thread_ts) - 0.000001:.6f}"
+
+    try:
+        # Pass the attempt count so a repeatedly-failing thread abandons its
+        # accumulated session instead of resuming into the same wall.
+        decision = run_agent(cfg, channel, thread_ts, transcript, first, attempt=attempts)
+    except Exception as exc:  # noqa: BLE001 - one bad thread must not kill the run
+        retry_or_stall(f"agent failed: {exc}")
         return
 
     # Verify the agent actually posted, rather than trusting that it did.
@@ -636,14 +664,32 @@ def handle(cfg: dict, state: dict, token: str, item: dict, dry_run: bool) -> Non
         check = slack_call(
             token, "conversations.replies", {"channel": channel, "ts": thread_ts, "limit": 20}
         )
-        posted = any(float(m["ts"]) > float(newest_ts) for m in check.get("messages", []))
+        seen = [float(m["ts"]) for m in check.get("messages", [])]
+        posted = any(t > float(newest_ts) for t in seen)
+        # CRITICAL: advance the watermark past the agent's OWN reply.
+        #
+        # The agent posts through the MCP connector as the founder, so its replies
+        # carry a real user id and is_human() cannot tell them apart from a human's.
+        # newest_ts was captured before the agent ran, so leaving it there means the
+        # agent's own message looks like fresh input on the next tick -- and the
+        # watcher answers itself, once a minute, paying for every turn. Observed in
+        # production within minutes of enabling the timer.
+        if seen:
+            newest_ts = f"{max(seen):.6f}"
     except Exception as exc:  # noqa: BLE001 - verification must never fail the run
         log(f"could not verify post on {thread_ts}: {exc}")
         posted = None  # unknown, not proven absent
+        # Unknown means we cannot prove where the conversation got to. Advancing
+        # blind would drop a real reply; not advancing risks one repeat. Prefer the
+        # repeat -- it is visible and cheap, where a dropped request is neither.
 
     if posted is False:
-        log(f"WARNING {thread_ts}: agent returned action={decision.get('action')} but NOTHING was posted")
-        meta["last_error"] = "agent returned a decision without posting to Slack"
+        # Nothing reached Slack, so the human has not been served -- treat this
+        # exactly like a crash rather than recording progress. Previously the run
+        # advanced the watermark anyway, which left the thread inert: discovered,
+        # consumed, never retried, and the request silently dropped.
+        retry_or_stall(f"action={decision.get('action')} but NOTHING was posted")
+        return
 
     action = decision.get("action", "ask")
     usage = decision.get("_usage", {})
@@ -677,6 +723,9 @@ def handle(cfg: dict, state: dict, token: str, item: dict, dry_run: bool) -> Non
         meta["status"] = "triaging"
         meta["last_answer_at"] = datetime.now(UTC).isoformat(timespec="seconds")
 
+    # A turn that reached Slack clears the retry budget for this thread.
+    (state.get("attempt_counts") or {}).pop(thread_ts, None)
+    meta.pop("post_failures", None)
     meta["last_seen_ts"] = newest_ts
     meta["updated"] = datetime.now(UTC).isoformat(timespec="seconds")
 
