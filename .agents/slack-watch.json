@@ -24,8 +24,11 @@
   "chain_model": null,
   "_chain_model_note": "Model for the handed-off new-feature/fix-bug run. null = whatever the CLI defaults to, which is what an interactive run would use.",
 
-  "chain_permission_mode": "acceptEdits",
-  "_chain_permission_mode_note": "The handed-off chain edits files on a feature branch and opens an MR. It never merges — that boundary is enforced by .agents/autonomy.md, not by this setting.",
+  "chain_permission_mode": "auto",
+  "_chain_permission_mode_note": "The handed-off chain needs Bash (pytest, alembic, git, glab), but its brief comes from chat text anyone in the channel can write — so 'auto' (classifier-gated) rather than 'acceptEdits' (unrestricted shell). It never merges; that boundary is .agents/autonomy.md, not this setting. Valid: acceptEdits, auto, bypassPermissions, manual, dontAsk, plan.",
+
+  "triage_denied_tools": null,
+  "_triage_denied_tools_note": "Overrides the deny-list for the triage agent. null uses the built-in default: Bash, Write, Edit, NotebookEdit, Read, Glob, Grep, Task, Agent, WebFetch, WebSearch. This matters because --allowedTools GRANTS rather than restricts — verified: with only the Slack tool allow-listed, Bash still ran. Triage needs no local tools at all, so denying them closes the read-a-secret-then-post-it path.",
 
   "agent_timeout": 420,
   "_agent_timeout_note": "Seconds. Higher than a pure triage turn would need because an 'answer' may query Xero or Gmail before replying."

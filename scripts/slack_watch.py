@@ -461,12 +461,36 @@ def run_agent(cfg: dict, channel: str, thread_ts: str, transcript: str, first: b
         "mcp__claude_ai_Google_Drive__list_recent_files",
     ]
 
+    # --allowedTools GRANTS; it does not restrict to the list. Verified: with only
+    # the Slack tool allow-listed, Bash still executed. For an agent whose entire
+    # input is untrusted chat text, running on a machine with KeePassXC, glab, and
+    # prod telemetry in reach, the deny list is the control that actually holds.
+    #
+    # Triage needs no local tools whatsoever: it reads a thread, optionally queries
+    # a connector, and posts. The skill already forbids repo investigation, so
+    # denying these costs nothing and closes the read-a-secret-then-post-it path.
+    denied = cfg.get("triage_denied_tools") or [
+        "Bash",
+        "Write",
+        "Edit",
+        "NotebookEdit",
+        "Read",
+        "Glob",
+        "Grep",
+        "Task",
+        "Agent",
+        "WebFetch",
+        "WebSearch",
+    ]
+
     cmd = [
         "claude",
         "-p",
         prompt,
         "--allowedTools",
         ",".join(allowed),
+        "--disallowedTools",
+        ",".join(denied),
         "--output-format",
         "json",
         "--max-turns",
@@ -530,7 +554,16 @@ def launch_chain(cfg: dict, kind: str, spec_text: str, channel: str, thread_ts: 
         f"<brief>\n{spec_text}\n</brief>"
     )
 
-    cmd = ["claude", "-p", prompt, "--permission-mode", cfg.get("chain_permission_mode", "acceptEdits")]
+    # `auto` rather than `acceptEdits`, deliberately. The chain genuinely needs
+    # Bash (pytest, alembic, git, glab), but its brief is derived from chat text
+    # anyone in the channel can write -- so unrestricted shell is the wrong
+    # default here even though the chain itself is trusted code. auto's classifier
+    # allows ordinary development work and hard-denies the destructive tail.
+    #
+    # The tradeoff is real: a classifier block mid-chain stalls an unattended run.
+    # That failure is visible (logged, no MR appears) rather than catastrophic,
+    # which is the right way round for work that starts in a Slack message.
+    cmd = ["claude", "-p", prompt, "--permission-mode", cfg.get("chain_permission_mode", "auto")]
     if cfg.get("chain_model"):
         cmd += ["--model", cfg["chain_model"]]
 
