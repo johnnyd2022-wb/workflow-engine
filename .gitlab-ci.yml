@@ -93,6 +93,9 @@ data_stores:
   script:
     - python3 scripts/skill_metrics.py --check
     - python3 scripts/finding_history.py --check
+    # Routing decides which engine spends which quota, and enforces that graders stay
+    # read-only. A table pointing at a deleted skill fails here, not mid-run at 3am.
+    - python3 scripts/agent_launch.py --check
   only:
     - merge_requests
     - main
