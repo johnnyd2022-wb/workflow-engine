@@ -36,6 +36,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.e2e.conftest import csrf_headers
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUDGETS_FILE = REPO_ROOT / ".agents" / "perf" / "budgets.json"
 REPORT_FILE = REPO_ROOT / ".agents" / "reports" / "perf" / "last-run.json"
@@ -65,6 +67,33 @@ def _limits(route: str, kind: str, metric: str) -> dict:
     merged = dict(BUDGETS["defaults"][kind].get(metric, {}))
     merged.update(BUDGETS.get("overrides", {}).get(route, {}).get(metric, {}))
     return merged
+
+
+def _api_entries() -> list[dict]:
+    """Normalize measure.api into {route, method, body}.
+
+    Most API routes are read-only and measured with a bare GET — the common case stays a
+    plain route string. A route that only accepts a body (a POST-only solve/compute
+    endpoint, for instance) can't be measured meaningfully with a bodyless GET, so it uses
+    the object form {"route", "method", "body"} instead; `body` is sent as the JSON
+    payload, the same shape a real caller would send.
+    """
+    entries = []
+    for item in BUDGETS["measure"]["api"]:
+        if isinstance(item, str):
+            entries.append({"route": item, "method": "GET", "body": None})
+        else:
+            entries.append(
+                {
+                    "route": item["route"],
+                    "method": item.get("method", "GET").upper(),
+                    "body": item.get("body"),
+                }
+            )
+    return entries
+
+
+API_ENTRIES = _api_entries()
 
 
 # --------------------------------------------------------------------------------------
@@ -184,18 +213,23 @@ def _evaluate(route: str, kind: str, metrics: dict) -> None:
 # --------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("route", BUDGETS["measure"]["api"])
-def test_api_perf_budget(perf_instrumentation, logged_in_page, route):
+@pytest.mark.parametrize("entry", API_ENTRIES, ids=lambda e: e["route"])
+def test_api_perf_budget(perf_instrumentation, logged_in_page, entry):
     page = logged_in_page
-    start = REGISTRY.count("GET", route)
+    route, method, body = entry["route"], entry["method"], entry["body"]
+    headers = csrf_headers(page) if method != "GET" else None
+    start = REGISTRY.count(method, route)
     for _ in range(WARMUP + API_SAMPLES):
-        resp = page.request.get(route)
+        if method == "GET":
+            resp = page.request.get(route)
+        else:
+            resp = page.request.fetch(route, method=method, headers=headers, data=body)
         if resp.status >= 400:
             pytest.skip(
                 f"{route} returned {resp.status} — not measurable as the logged-in user; "
                 "route correctness belongs to the main E2E suite, not the perf tier"
             )
-    samples = REGISTRY.since("GET", route, start)[WARMUP:]
+    samples = REGISTRY.since(method, route, start)[WARMUP:]
     assert samples, f"no server-side samples recorded for {route} — instrumentation is broken"
     _evaluate(
         route,
