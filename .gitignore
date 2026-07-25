@@ -64,3 +64,8 @@ build/
 dist/
 *.egg-info/
 *.egg
+
+# Slack watcher runtime state (thread IDs, session mapping) — machine-local, not shared
+.agents/slack-watch-state.json
+.agents/slack-watch-state.corrupt
+.agents/reports/slack-watch/
