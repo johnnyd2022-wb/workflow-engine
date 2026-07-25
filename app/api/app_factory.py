@@ -98,6 +98,13 @@ def create_app():
 
     app.register_blueprint(core_bp)
 
+    # Register dilution calculator blueprint (always on — no data model, no rollout risk)
+    from app.features.dilution_calculator.dilution_calculator_bp import (
+        create_dilution_calculator_blueprint,
+    )
+
+    app.register_blueprint(create_dilution_calculator_blueprint())
+
     # Register CRM blueprint (feature-flagged)
     if config.crm_enabled:
         from app.features.crm.crm_bp import create_crm_blueprint
