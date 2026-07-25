@@ -25,11 +25,26 @@ every reply is posted by the agent through your Slack MCP connector — so repli
 you rather than as a bot.
 
 The trade-off, stated plainly: the agent now holds live Xero, Gmail, and Drive connections
-while reading text anyone in the channel can write. Three things hold that line — the
-destination channel and thread are pinned in the prompt *outside* the untrusted fence, the
-allow-list excludes Bash, file writes, and every send-email tool, and
-`.agents/autonomy.md` still bars external comms, merges, deploys, and production database
-access regardless of what a thread says.
+while reading text anyone in the channel can write. Three things hold that line:
+
+1. The destination channel and thread are pinned in the prompt *outside* the untrusted
+   fence, so nothing in the thread can redirect a reply.
+2. Bash, file writes, `Read`/`Grep`/`Glob`, subagents, and web access are **denied** with
+   `--disallowedTools`. This is the control that matters, and it is not the same as
+   leaving them off the allow-list: **`--allowedTools` grants permissions, it does not
+   restrict the session to what it lists.** Verified — with only the Slack tool
+   allow-listed, Bash still executed. Triage needs no local tools at all, so denying them
+   costs nothing and closes the read-a-secret-then-post-it path.
+3. `.agents/autonomy.md` still bars external comms, merges, deploys, and production
+   database access regardless of what a thread says.
+
+The handed-off chain runs under `--permission-mode auto` rather than `acceptEdits`. It
+genuinely needs Bash, but its brief derives from chat text, so the classifier gates the
+destructive tail. A block mid-chain stalls an unattended run — visible and recoverable,
+which is the right way round here.
+
+Tested against a hostile transcript attempting both shell execution and a redirect to
+another channel: declined, nothing ran, nothing moved.
 
 ## Token cost
 
