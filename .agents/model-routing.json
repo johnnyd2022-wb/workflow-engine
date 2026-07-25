@@ -1,0 +1,143 @@
+{
+  "_comment": "Single source of truth for which engine runs which chain stage. Owned by scripts/agent_launch.py; read by the front-door skills. Change routing HERE, never inline in a SKILL.md.",
+  "version": 1,
+  "updated": "2026-07-25",
+  "engines": {
+    "claude": {
+      "bin": "claude",
+      "models": {
+        "opus": "opus",
+        "sonnet": "sonnet",
+        "haiku": "haiku"
+      }
+    },
+    "codex": {
+      "bin": "codex",
+      "models": {
+        "sol": "gpt-5.6-sol"
+      }
+    }
+  },
+  "defaults": {
+    "timeout_ms": 1800000,
+    "tab_label_prefix": ""
+  },
+  "stages": {
+    "spec-first": {
+      "engine": "claude",
+      "model": "opus",
+      "effort": "high",
+      "access": "write",
+      "blocking": true,
+      "why": "Spec errors are the most expensive failure in the chain: a wrong spec produces a wrong MR that passed every gate."
+    },
+    "spec-critic": {
+      "engine": "codex",
+      "model": "sol",
+      "effort": "high",
+      "codex_mode": "exec",
+      "access": "read",
+      "blocking": true,
+      "why": "Independent grader on a separate quota pool. Never the author of the spec it grades."
+    },
+    "build": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "xhigh",
+      "access": "write",
+      "blocking": true,
+      "why": "Sonnet 5 is near-Opus on coding/agentic work; xhigh keeps reasoning depth where the code is written."
+    },
+    "build-review": {
+      "engine": "codex",
+      "model": "sol",
+      "effort": "medium",
+      "codex_mode": "review",
+      "access": "read",
+      "blocking": false,
+      "why": "Breaker role. Advisory so a Codex quota exhaustion cannot stall an unattended chain."
+    },
+    "migration-safety": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "xhigh",
+      "access": "read",
+      "blocking": true,
+      "why": "Rule-shaped work, but guards the only irreversible mistake in the system. Effort stays high even though the model steps down."
+    },
+    "security-audit": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "high",
+      "access": "read",
+      "blocking": true,
+      "why": "semgrep/gitleaks/uv audit do the detection; the agent orchestrates and triages."
+    },
+    "security-tenant-audit": {
+      "engine": "codex",
+      "model": "sol",
+      "effort": "high",
+      "codex_mode": "exec",
+      "access": "read",
+      "blocking": true,
+      "why": "The one genuinely open-ended reasoning task in the chain: org_id leakage the scanners cannot pattern-match."
+    },
+    "e2e-playwright": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "high",
+      "access": "write",
+      "blocking": true,
+      "why": "Authors browser tests mapped to ACs, so it needs write access."
+    },
+    "perf-guardrails": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "high",
+      "access": "write",
+      "blocking": true,
+      "why": "Budgets in budgets.json do the measuring; perf_triage.py fuses the findings."
+    },
+    "observability": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "high",
+      "access": "write",
+      "blocking": true,
+      "why": "Instruments the blueprint; writes code."
+    },
+    "test-author": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "high",
+      "access": "write",
+      "blocking": true,
+      "why": "Writes tests and refreshes the test map."
+    },
+    "test-evaluator": {
+      "engine": "codex",
+      "model": "sol",
+      "effort": "high",
+      "codex_mode": "review",
+      "access": "read",
+      "blocking": true,
+      "why": "Never grade your own tests. Separate quota pool, and read-only so it cannot 'fix' a test into passing."
+    },
+    "ci-gate": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "medium",
+      "access": "read",
+      "blocking": true,
+      "why": "Reads pass/fail from a deterministic pipeline."
+    },
+    "merge-request": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "medium",
+      "access": "write",
+      "blocking": true,
+      "why": "Synthesis from spec and stage reports that already exist on disk."
+    }
+  }
+}

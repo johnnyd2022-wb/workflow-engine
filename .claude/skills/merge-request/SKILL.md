@@ -90,6 +90,34 @@ Do not report the MR as done while the pipeline is still running. If a job fails
 4. Never re-run a failed job hoping it passes without understanding why, except for a
    named-flaky job already tracked as such.
 
+### 3.1 Announce it when — and only when — it is genuinely ready
+
+Once the MR is open **and its head pipeline has passed**, post to the `code-changes`
+channel in `.agents/notifications.json` via the Slack connector. This is the step that
+makes walking away work: an unattended chain otherwise ends in a terminal nobody reopens.
+
+Post exactly one message, carrying the MR title and link, the branch, the stage → verdict
+table, and one line on what a reviewer should look at first.
+
+The discipline that keeps the channel worth reading:
+
+- **Only on green.** Never post a failed or still-running pipeline, a `Draft:` MR, or a
+  tripped circuit breaker. Those go to `PushNotification`, which is for "come look now".
+  This channel means "ready to review" — the moment it also means "something broke", it
+  stops meaning anything and gets muted.
+- **One message per MR, not per push.** A follow-up commit that re-greens the pipeline is
+  not a new announcement; reply in the existing thread if anything at all.
+- **Resolve the connector's tool at runtime** rather than trusting a name written here.
+  Connector tool names change, and a stale one fails silently — which is the worst
+  outcome, because the chain reports success while the human is never told.
+- **A missing connector is not a failure.** If Slack is unavailable, skip the post, say so
+  plainly in the run report, and fall back to `PushNotification`. Never fail a chain that
+  otherwise passed because a notification could not be delivered.
+
+Authorised by `.agents/autonomy.md` → the internal-Slack carve-out, which is scoped to the
+channels in `notifications.json` and to announcing *that* work is ready — never to sending
+anything a customer or prospect reads.
+
 ## 4. Rebase conflicts
 
 If `main` has moved and the MR shows conflicts:

@@ -412,14 +412,22 @@ def check_glab() -> Check:
 
 
 def check_herdr() -> Check:
-    """Herdr presence decides whether verification runs adversarially (Codex-as-Breaker)
-    or through subagents. Both are valid; the skills just need to know which.
+    """Herdr presence decides how verification runs: one tab per stage with per-stage
+    model routing (`herdr-tabs`), a single Codex partner pane (`herdr-adversarial`),
+    or in-process subagents. All three are valid; the skills just need to know which.
     """
     in_herdr = os.getenv("HERDR_ENV") == "1"
     if not in_herdr:
-        return Check("herdr", OK, "not in Herdr — subagent verification", data={"in_herdr": False, "partner": None})
+        return Check(
+            "herdr",
+            OK,
+            "not in Herdr — subagent verification",
+            data={"in_herdr": False, "partner": None, "cli": False, "codex": False},
+        )
     pane = os.getenv("HERDR_PANE_ID", "?")
     workspace = os.getenv("HERDR_WORKSPACE_ID", "")
+    has_cli = bool(shutil.which("herdr"))
+    has_codex = bool(shutil.which("codex"))
     partner = None
     if shutil.which("herdr") and workspace:
         code, out, _ = run_cmd(["herdr", "pane", "list", "--workspace", workspace], timeout=10)
@@ -435,8 +443,16 @@ def check_herdr() -> Check:
             except (json.JSONDecodeError, AttributeError):
                 partner = None
     detail = f"pane {pane}"
-    detail += f", partner {partner['agent']} ({partner['status']})" if partner else ", no partner pane detected"
-    return Check("herdr", OK, detail, data={"in_herdr": True, "pane_id": pane, "partner": partner})
+    detail += ", tabs mode available" if has_cli else ", herdr CLI missing — cannot open stage tabs"
+    if not has_codex:
+        detail += ", codex missing — grader stages fall back to claude"
+    detail += f", partner {partner['agent']} ({partner['status']})" if partner else ""
+    return Check(
+        "herdr",
+        OK,
+        detail,
+        data={"in_herdr": True, "pane_id": pane, "partner": partner, "cli": has_cli, "codex": has_codex},
+    )
 
 
 def check_tools() -> Check:
@@ -548,6 +564,8 @@ def run_all(skip_slow: bool = False) -> dict[str, Any]:
         "glab": results["glab"].ok,
         "in_herdr": bool(results["herdr"].data.get("in_herdr")),
         "herdr_partner": bool(results["herdr"].data.get("partner")),
+        "herdr_cli": bool(results["herdr"].data.get("cli")),
+        "codex": bool(results["herdr"].data.get("codex")),
         "deps": results["deps"].ok,
     }
 
@@ -559,9 +577,16 @@ def run_all(skip_slow: bool = False) -> dict[str, Any]:
             if capabilities["app_server"]
             else "no app server listening; suites driving it would fail on connection, not assertions"
         ),
+        # Prefer tabs: it is the only mode that can route each stage to its own engine
+        # and model, which is what keeps a chain affordable on a $20 plan.
         "verification_mode": (
-            "herdr-adversarial" if capabilities["in_herdr"] and capabilities["herdr_partner"] else "subagents"
+            "herdr-tabs"
+            if capabilities["in_herdr"] and capabilities["herdr_cli"]
+            else "herdr-adversarial"
+            if capabilities["in_herdr"] and capabilities["herdr_partner"]
+            else "subagents"
         ),
+        "grader_engine": "codex" if capabilities["codex"] else "claude",
         "otel_exporter_active": bool(results["otel_collector"].data.get("exporter_active")),
         "can_open_mr": capabilities["glab"],
         "db_writes_allowed": env_name != "production",
@@ -620,7 +645,7 @@ def render(report: dict[str, Any]) -> str:
     lines.append("")
     dec = report["decisions"]
     lines.append(f"  live-server tests : {dec['live_server_tests']} ({dec['live_server_reason']})")
-    lines.append(f"  verification mode : {dec['verification_mode']}")
+    lines.append(f"  verification mode : {dec['verification_mode']} (graders on {dec['grader_engine']})")
     lines.append(f"  otel exporter     : {'active' if dec['otel_exporter_active'] else 'inactive (nothing exported)'}")
     lines.append("")
 

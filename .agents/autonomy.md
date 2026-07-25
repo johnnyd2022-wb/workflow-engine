@@ -41,9 +41,17 @@ convenient it would be:
 - **Push to `main`,** or force-push any branch a human might be working on. Force-push at
   all requires explicit approval (see git-commit-chain).
 - **Deploy to production.** `deploy-runner` is human-triggered; nothing here calls it.
-- **Send external communications.** No email, no Slack, no posting, no webhooks to third
-  parties. Founder-ops skills that draft comms draft only — that rule is theirs and
+- **Send external communications.** No email, no posting to anywhere a third party reads,
+  no webhooks. Founder-ops skills that draft comms draft only — that rule is theirs and
   unchanged by this policy.
+  **One carve-out, added deliberately:** posting a completion notice to the founder's own
+  internal Slack workspace, to the two channels named in `.agents/notifications.json` and
+  no others. The test for whether a post is authorised is *who reads it* — an internal
+  channel only the founder and staff see is a notification surface, the same category as
+  `PushNotification`. A customer, prospect, supplier, or anyone outside the workspace is
+  an external communication and stays prohibited. Announcing that a deliverable is ready
+  is authorised; posting the deliverable's contents when it names a customer, carries
+  pricing, or was drafted *for* an external recipient is not.
 - **Rotate, exfiltrate, or print secrets.** If a secret is found committed, report the
   path and say which credential needs rotating; never paste the value into a report, log,
   MR description, or commit message.
@@ -109,11 +117,20 @@ An agent that can open unbounded MRs on a cron will eventually open a hundred ba
 Tokens are the budget the whole autonomous loop runs on; wasting them is the difference
 between a run that finishes and one that dies mid-chain. Two rules for orchestrating skills:
 
-- **Match the model to the work.** The strongest model earns its cost on spec authoring,
-  building, and adversarial reasoning (security-audit, spec-critic, test-evaluator). Spawn
-  the mechanical stages — ci-gate verdict parsing, preflight consumption, straight
-  report-collection — on a cheaper model. A subagent that only reads a report and emits
-  `GATE x: pass` does not need the flagship. This is orchestrator judgment, not a hard gate.
+- **Match the model to the work — and don't decide it by feel.** `.agents/model-routing.json`
+  is the single source of truth for which engine, model, and reasoning effort each stage
+  gets; `scripts/agent_launch.py` turns it into flags so a skill cannot drift from it. The
+  shape: Opus for spec authoring (an error there is the most expensive to find late),
+  Sonnet for the build and every tool-driven verify stage, Codex for every grader. Change
+  routing in that file, never inline in a SKILL.md.
+- **Quota is the constraint, not cost.** Stage agents draw on the same subscription as the
+  orchestrator, so parallelism buys no capacity — it burns the window faster. Run the chain
+  serially except the one pair it declares independent (`security-audit ∥ e2e-playwright`).
+  Routing graders to Codex is the exception that genuinely helps: a separate pool.
+- **Effort is the second dial.** Stepping a stage from `xhigh` to `medium` is often a bigger
+  saving than changing its model, and costs less capability on rubric-following work. The
+  routing table carries an explicit effort per stage; `gpt-5.6-sol` in particular defaults
+  to `low`, so an unset effort ships a shallow review that still looks like a review.
 - **Read files, not transcripts.** The chain already keeps each verification stage in its own
   context and returns a one-line verdict plus a report *file*; the orchestrator reads the file
   only when a verdict is non-clean. Don't re-summarise a clean stage's full output back into
