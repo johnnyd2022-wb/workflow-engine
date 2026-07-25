@@ -24,17 +24,16 @@ The chain needs acceptance criteria to audit against.
 
 Baseline before touching anything: `git status` clean, `uv run pytest tests/test_<slug>.py -v` (see `.agents/conventions.md` §6 — flat `tests/test_<slug>.py`, no `tests/unit`/`tests/integration` split in this repo) result recorded in `.agents/reports/<slug>/baseline.md`. If tests are already red, that is finding number one and gets fixed before the audit stages run, or the stage reports drown in pre-existing noise — **unless the failures never reached an assertion** (connection errors, missing service), which is **suite-warden**'s problem, not this feature's. Don't open an audit by blaming a feature for an absent app server.
 
-## Step 3: Run the chain via subagents
+## Step 3: Run the chain
 
-Same subagent prompt template as new-feature (skill path, slug, spec, report path, `VERDICT:` line). Spawn in this order:
+Same stage prompt template as new-feature (skill path, slug, spec, report path, `VERDICT:` line). Run in this order:
 
-**If running inside Herdr with a Codex pane** (`HERDR_ENV=1` and a partner exists): route
-stages 1-5 below through the herdr-multi-agent-collab protocol instead of spawning
-subagents — same division of labor as new-feature. Claude stays Architect (patches what
-gets found); Codex-as-Breaker runs the migration audit, security-audit, e2e-playwright,
-unit coverage check, and observability pass in its own pane per its Workflow A, and
-reports findings back via the handoff file. Otherwise use subagents as described; the
-chain and verdicts are identical either way.
+**`.agents/verification-chain.md` is the contract** — execution mode, model routing,
+read-only graders, blocking rules, and the stage prompt template live there, shared with
+`new-feature` and `fix-bug`. Read `verification_mode` and `grader_engine` from preflight and
+drive stages accordingly. Claude stays Architect and patches what gets found; the graders
+(`security-tenant-audit`, `test-evaluator`) run read-only on Codex and hand findings back
+rather than fixing them. The chain and verdicts are identical in every mode.
 
 1. **migration audit** (migration-safety skill, only if the feature has models/migrations): verify every revision touching its tables has a real downgrade and survives up/down/up; flag any historical destructive change with no permit file.
 2. **security-audit** and **e2e-playwright** in the same turn, parallel:

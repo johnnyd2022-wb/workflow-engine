@@ -174,7 +174,74 @@ Use when a test fails, a build breaks, or an adversarial case lands.
 
 **Disagree out loud.** If you think your partner's finding or fix is wrong, say so in the handoff file with reasoning and evidence. Do not silently re-do each other's work; dueling edits to the same files is how repos get corrupted.
 
-## 7. Quick reference
+## 7. Tabs mode: one tab per stage, one engine per stage
+
+Sections 1-6 describe **two** agents in side-by-side panes. Tabs mode is the same protocol
+scaled out: each verification stage gets its own labelled Herdr tab running the engine
+`.agents/model-routing.json` assigns it. preflight reports `verification_mode: herdr-tabs`
+when this is available (inside Herdr, with the `herdr` CLI on PATH).
+
+Why it exists: a stage launched as a separate process can be given **its own model,
+reasoning effort, and filesystem permissions**. In-process subagents all inherit the
+orchestrator's model, so a mechanical stage costs the same as a hard one. Tabs are also
+watchable — the founder can scroll back through what each stage actually did instead of
+seeing only a verdict line.
+
+### 7.1 Never hand-build the command
+
+`scripts/agent_launch.py` owns the flag construction. Routing changes in the JSON, not here:
+
+```bash
+python scripts/agent_launch.py plan                    # what runs where, and on whose quota
+python scripts/agent_launch.py --check                 # routing is coherent (CI runs this)
+
+# write the stage prompt to a file, then launch it into its own tab
+python scripts/agent_launch.py launch security-audit \
+    --scope inventory --prompt-file .agents/reports/inventory/security-audit.prompt.md
+# -> {"pane_id": "w1:pK", "tab_id": "w1:tK", "engine": "claude", "model": "sonnet", ...}
+
+python scripts/agent_launch.py wait w1:pK --timeout 900000
+```
+
+Read the **report file** the stage wrote, not the pane. Pane text scrolls, wraps, and
+truncates; §3.2's rule applies unchanged.
+
+### 7.2 The two gotchas that will cost you a run
+
+**`herdr wait output --match` matches the echoed command line itself.** The command you
+typed is the first thing in the pane, so a match on any word in it returns instantly and
+you conclude the stage finished before it started. Gate on `agent-status`, which is what
+`agent_launch.py wait` does.
+
+**`herdr agent start` without `--tab` splits into the current tab.** It does not open a new
+one. `agent_launch.py` always `tab create`s first and passes the returned ID — never guess
+a tab or pane ID from sidebar order, per §0.
+
+### 7.3 Permissions encode the fresh-eyes principle
+
+A grader that can edit the code it grades is not an independent grader. The routing table
+gives every grader `access: read`, which becomes `--permission-mode auto` (Claude) or
+`--sandbox read-only` (Codex), and `agent_launch.py --check` **fails** if a grader is ever
+given write access. The principle is enforced by the launcher, not by the grader's goodwill.
+
+### 7.4 Blocking vs advisory
+
+`blocking: true` stages hold the chain: their verdict must be green before the next stage.
+`blocking: false` stages log findings and let the chain continue, surfacing what they found
+in the MR description. `build-review` is advisory on purpose — a Codex quota exhaustion
+should not strand an unattended overnight run, and its findings still reach the human at
+the MR gate.
+
+### 7.5 Quota, not cost, is the constraint
+
+Tab agents draw on the same subscription as the session that spawned them. Eight tabs in
+parallel do not buy capacity; they burn the window eight times faster. Keep the chain
+**serial**, parallelising only the pair the chain already declares independent
+(`security-audit ∥ e2e-playwright`). Codex stages are the exception worth leaning on:
+they spend a *different* pool, so routing graders there genuinely relieves pressure rather
+than moving it.
+
+## 8. Quick reference
 
 ```bash
 # who am I

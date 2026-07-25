@@ -11,22 +11,29 @@ Read `.agents/autonomy.md` before starting. In an unattended run the MR is the g
 
 ## The chain
 
+Engines below are what `.agents/model-routing.json` assigns; `agent_launch.py plan` prints the live table.
+
 ```
-0. preflight           (script, ~3s)             -> capabilities + decisions
-1. spec-first          (inline, interactive)     -> .agents/specs/<slug>.md [approved]
-1b. spec-critic        (subagent, adversarial)   -> sound | gaps-found (before any code)
-2. scaffold + build    (this agent / Architect)  -> blueprint + unit tests passing
-3. migration-safety    (subagent, only if spec says data model changes)
-4. security-audit      (subagent)  \  parallel after build is green
-   e2e-playwright      (subagent)  /
-4b. perf-guardrails    (subagent, only if the spec touches a page/API route: measure
-                        budgets on the touched routes after e2e passes)
-5. observability       (subagent)
-6. ci-gate verify      (subagent, always last)
-7. patch loop          (back to 2 with findings; max 2 rounds, then escalate)
+0. preflight              (script, ~3s)          -> capabilities + decisions
+1. spec-first             (inline, OPUS 5)       -> .agents/specs/<slug>.md [approved]
+1b. spec-critic           (CODEX sol, blocking)  -> sound | gaps-found (before any code)
+2. scaffold + build       (SONNET 5, xhigh)      -> blueprint + unit tests passing
+2b. build-review          (CODEX sol, advisory)  -> Breaker on the diff
+3. migration-safety       (SONNET 5, xhigh)      -> only if spec says data model changes
+4. security-audit         (SONNET 5)  \  parallel after build is green
+   e2e-playwright         (SONNET 5)  /
+4b. security-tenant-audit (CODEX sol)            -> the classes scanners miss
+4c. perf-guardrails       (SONNET 5)             -> only if the spec touches a page/API
+                                                    route; measure after e2e passes
+5. observability          (SONNET 5)
+6. test-author            (SONNET 5)
+6b. test-evaluator        (CODEX sol, blocking)  -> valid | weakened | gamed
+6c. ci-gate verify        (SONNET 5, always last)
+7. patch loop             (back to 2 with findings; max 2 rounds, then escalate)
+8. merge-request          (SONNET 5)             -> the human gate
 ```
 
-Skill locations: resolve each skill's SKILL.md from the installed skills directories before spawning; pass the absolute path to the subagent.
+Skill locations: resolve each skill's SKILL.md from the installed skills directories before launching; pass the absolute path in the stage prompt.
 
 ## Step 0: Preflight (once, then pass it down)
 
@@ -34,7 +41,7 @@ Skill locations: resolve each skill's SKILL.md from the installed skills directo
 python3 scripts/preflight.py --json
 ```
 
-Repair blockers per the **preflight** skill's table, then read `decisions`: `verification_mode` (`herdr-adversarial` | `subagents`) settles how steps 3-6 run, and `live_server_tests` tells you whether the live suites will run or skip. Pass the report to subagents in their prompt instead of having each re-probe — one environment, one opinion about it.
+Repair blockers per the **preflight** skill's table, then read `decisions`: `verification_mode` (`herdr-tabs` | `herdr-adversarial` | `subagents`) settles how steps 3-6 run, `grader_engine` says whether the graders get an independent engine or fall back to Claude, and `live_server_tests` tells you whether the live suites will run or skip. Pass the report to each stage in its prompt instead of having every stage re-probe — one environment, one opinion about it.
 
 **Make E2E ground truth, not a skip.** If the spec touches a page or an API route and `live_server_tests` is `skip` (no dev server listening), start the dev server yourself before Step 4 — `uv run workflow start`, backgrounded — so `e2e-playwright` runs against a real server instead of auto-skipping. `.agents/autonomy.md` authorises starting local infra without asking. This matters most in an unattended run: an E2E stage that silently skipped reports green while never having driven the app, which is the opposite of what "just works when I come back" needs. Note in the run report whether you started the server or it was already up. Read the `learnings` block preflight now prints — it carries what prior runs learned (crying-wolf stages, escaped defects) so you don't repeat them.
 
@@ -81,11 +88,21 @@ Register the blueprint in the app factory. Then build to the spec:
 - Log state changes per the observability event convention (`<slug>.<verb_past>`); it is cheaper to emit them now than to retrofit in step 5.
 - Commit on a feature branch `feat/<slug>`. Verification agents audit the tree, not your intentions.
 
-**If running inside Herdr with a Codex pane** (`HERDR_ENV=1` and a partner exists): route the verification stages below through the herdr-multi-agent-collab protocol instead of spawning subagents. Claude stays Architect (builds, patches findings); Codex-as-Breaker runs the verification stages in its own pane per its Workflow A, reporting findings back via the handoff file, with the protocol's two-round circuit breaker in place of step 7's. Otherwise use subagents as described; the chain is identical either way.
+**After the build is green, hand the diff to the Breaker.** Per `.agents/model-routing.json`, `build-review` runs on Codex (`gpt-5.6-sol`) — fresh eyes on a separate quota pool. It is **advisory**: log its findings into the round file and carry on, surfacing them in the MR description. A Codex quota exhaustion must not strand an unattended run. In tabs mode this is one command (`agent_launch.py launch build-review --base main`); in adversarial mode it is the herdr-multi-agent-collab Workflow A handoff.
 
-## Steps 3-6: Verification by subagents
+## Steps 3-6: Verification
 
-Spawn each verification stage as a subagent whose prompt follows this template. Fresh eyes are the point: the subagent gets the spec and the skill, not your reasoning or excuses.
+**`.agents/verification-chain.md` is the contract** — execution mode, model routing, read-only graders, blocking rules, concurrency, and the stage prompt template all live there, shared with `fix-bug` and `review-feature`. Read it; don't restate it. In short: read `verification_mode` and `grader_engine` from preflight, then drive stages via `scripts/agent_launch.py` (tabs), the herdr-multi-agent-collab handoff (adversarial), or subagents. The chain and its verdicts are identical in all three.
+
+Two routing points specific to this chain:
+
+`security-audit` **splits deliberately**. The scanner pass is Sonnet; the "hunt what scanners miss — tenant isolation, missing auth" half is `security-tenant-audit` on Codex. Reasoning about `org_id` leakage across a multi-tenant schema is the one genuinely open-ended task here; everything else is rubric-following, which is why Sonnet carries the rest.
+
+`spec-first` is **the only Opus 5 stage in the system**. That is where the money goes because a vague acceptance criterion is the one error every downstream gate can pass while the result is still wrong.
+
+### Stage prompts
+
+Each stage gets the template from the shared contract and nothing else. Fresh eyes are the point: the stage gets the spec and the skill, not your reasoning or excuses.
 
 ```
 Read and follow the skill at: <absolute path to SKILL.md>
@@ -99,13 +116,16 @@ exactly one line: VERDICT: clean | patched | findings-open
 
 Sequencing rules:
 - **migration-safety** runs before security/e2e whenever the spec's data model section says changes (both need a migratable schema to test against). Skip it, and say you skipped it, when the spec says `changes: none`.
-- **security-audit** and **e2e-playwright** are independent; spawn them in the same turn so they run in parallel.
+- **security-audit** and **e2e-playwright** are independent; spawn them in the same turn so they run in parallel. This is the *only* pair to parallelise: stage agents draw on the same subscription quota as you, so extra concurrency buys no capacity and burns the window faster. Keep the rest serial.
+- **security-tenant-audit** follows the security-audit scanner pass, on Codex. Treat its findings exactly like security-audit's — they merge into one security verdict for step 8.
 - **observability** runs after those pass, instrumenting anything the build missed.
 - **test-author** runs after observability: it reconciles the *rest* of the suite against this feature's diff (tests in other areas the change rippled into) and refreshes `.agents/test-map.md` — the build wrote this feature's own tests; this stage catches what those tests didn't know they touched.
 - **test-evaluator** grades every new or changed test in the diff (this feature's inline AC tests plus anything test-author added) for validity — falsifiability, no silently-widened assertions, no tautologies. Its verdict must be `valid` before ci-gate; treat `weakened`/`gamed`/`inconclusive` as a `findings-open` returned to you.
 - **ci-gate** in verify mode is always last, because it checks that everything the other stages produced (tests, rules, migrations) is actually collected and enforced. Parse its `GATE <name>: pass|fail` lines.
 
-Read each subagent's report file, not just its verdict line. A `patched` verdict means code changed: re-run the unit suite before moving on, since one stage's patch can break another's assumptions.
+Read each stage's report file, not just its verdict line — and never the pane transcript, which scrolls and truncates. A `patched` verdict means code changed: re-run the unit suite before moving on, since one stage's patch can break another's assumptions.
+
+Note which stages *can* return `patched` at all: the routing table gives graders `access: read`, so `spec-critic`, `test-evaluator`, `build-review`, `security-audit` and `security-tenant-audit` cannot edit the code they judge. Their findings come back to you to fix in step 7. That is the fresh-eyes principle enforced at the permission layer rather than trusted to the grader.
 
 ## Step 7: Patch loop and circuit breaker
 
