@@ -1,12 +1,12 @@
 {
-  "generated": "2026-07-25T12:55:22+00:00",
+  "generated": "2026-07-26T03:57:20+00:00",
   "budgets_file": ".agents/perf/budgets.json",
   "results": [
     {
       "route": "/api/core/dashboard/summary",
       "kind": "api",
       "metrics": {
-        "backend_ms": 31.3,
+        "backend_ms": 31.9,
         "queries": 38
       },
       "over_budget": [],
@@ -16,8 +16,8 @@
       "route": "/api/core/executions",
       "kind": "api",
       "metrics": {
-        "backend_ms": 3.9,
-        "queries": 3
+        "backend_ms": 6.5,
+        "queries": 5
       },
       "over_budget": [],
       "over_ceiling": []
@@ -26,8 +26,8 @@
       "route": "/api/core/inventory",
       "kind": "api",
       "metrics": {
-        "backend_ms": 7.7,
-        "queries": 8
+        "backend_ms": 10.8,
+        "queries": 9
       },
       "over_budget": [],
       "over_ceiling": []
@@ -36,8 +36,8 @@
       "route": "/api/core/inventory/wastage",
       "kind": "api",
       "metrics": {
-        "backend_ms": 3.8,
-        "queries": 3
+        "backend_ms": 4.6,
+        "queries": 4
       },
       "over_budget": [],
       "over_ceiling": []
@@ -46,8 +46,8 @@
       "route": "/api/core/processes",
       "kind": "api",
       "metrics": {
-        "backend_ms": 4.8,
-        "queries": 4
+        "backend_ms": 7.1,
+        "queries": 6
       },
       "over_budget": [],
       "over_ceiling": []
@@ -56,7 +56,7 @@
       "route": "/api/crm/overview",
       "kind": "api",
       "metrics": {
-        "backend_ms": 10.4,
+        "backend_ms": 10.8,
         "queries": 11
       },
       "over_budget": [],
@@ -66,7 +66,7 @@
       "route": "/api/dilution-calculator/solve",
       "kind": "api",
       "metrics": {
-        "backend_ms": 3.1,
+        "backend_ms": 3.6,
         "queries": 2
       },
       "over_budget": [],
@@ -76,7 +76,7 @@
       "route": "/auth/me",
       "kind": "api",
       "metrics": {
-        "backend_ms": 2.9,
+        "backend_ms": 3.3,
         "queries": 2
       },
       "over_budget": [],
@@ -86,9 +86,9 @@
       "route": "/core/dashboard",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.6,
+        "backend_ms": 3.8,
         "queries": 2,
-        "lcp_ms": 88
+        "lcp_ms": 96
       },
       "over_budget": [],
       "over_ceiling": []
@@ -97,9 +97,9 @@
       "route": "/core/executions/live",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.8,
+        "backend_ms": 4.0,
         "queries": 2,
-        "lcp_ms": 64
+        "lcp_ms": 68
       },
       "over_budget": [],
       "over_ceiling": []
@@ -110,7 +110,7 @@
       "metrics": {
         "backend_ms": 3.8,
         "queries": 2,
-        "lcp_ms": 64
+        "lcp_ms": 72
       },
       "over_budget": [],
       "over_ceiling": []
@@ -119,7 +119,7 @@
       "route": "/core/inventory/view",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.6,
+        "backend_ms": 3.9,
         "queries": 2,
         "lcp_ms": 60
       },
@@ -130,9 +130,9 @@
       "route": "/core/processes",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.7,
+        "backend_ms": 3.9,
         "queries": 2,
-        "lcp_ms": 68
+        "lcp_ms": 60
       },
       "over_budget": [],
       "over_ceiling": []
@@ -141,7 +141,7 @@
       "route": "/core/settings",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.5,
+        "backend_ms": 3.6,
         "queries": 2,
         "lcp_ms": 60
       },
@@ -152,9 +152,9 @@
       "route": "/crm",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.0,
+        "backend_ms": 3.6,
         "queries": 2,
-        "lcp_ms": 56
+        "lcp_ms": 60
       },
       "over_budget": [],
       "over_ceiling": []
@@ -163,9 +163,9 @@
       "route": "/dilution-calculator",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.5,
+        "backend_ms": 3.8,
         "queries": 2,
-        "lcp_ms": 52
+        "lcp_ms": 56
       },
       "over_budget": [],
       "over_ceiling": []

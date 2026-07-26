@@ -24,7 +24,8 @@ def solve():
     try:
         result = solve_dilution(payload)
     except DilutionValidationError as exc:
+        logger.warning("dilution_calculator_rejected", reason=str(exc))
         return jsonify({"error": str(exc)}), 400
 
-    logger.info("dilution_calculator.solved", solve_for=result["solved_field"])
+    logger.info("dilution_calculator_solved", solve_for=result["solved_field"])
     return jsonify(result), 200

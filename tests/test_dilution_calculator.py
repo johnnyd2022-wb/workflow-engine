@@ -12,6 +12,7 @@ against.
 
 from __future__ import annotations
 
+import logging
 import math
 from uuid import uuid4
 
@@ -26,6 +27,23 @@ from app.features.dilution_calculator.services.dilution_service import (
     DilutionValidationError,
     solve_dilution,
 )
+
+
+class _LogRecordCollector(logging.Handler):
+    """Collects raw LogRecords for direct inspection of the structlog event dict
+    (`record.msg`), bypassing stdout/renderer capture entirely — see
+    test_ac4_endpoint_logs_rejection_event_on_validation_failure for why: the app
+    factory's own logging setup (root handlers bound during app_client fixture setup)
+    doesn't interact reliably with pytest's capsys/capfd fd-swap timing.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
 
 # ─────────────────────────────────────────────
 # Service-level tests (pure computation, no Flask/DB)
@@ -401,6 +419,40 @@ class TestDilutionCalculatorAPI:
         assert body["solved_field"] == "final_volume_ml"
         assert body["solved_value"] == pytest.approx(2000.0, abs=1e-6)
 
+    def test_ac1_endpoint_logs_solved_event_on_success(self, app_client):
+        """A successful solve must leave a structured log line behind — this is the
+        `<slug>_<verb_past_tense>` counterpart to the rejection event below, using the
+        same renderer-independent root-logger-handler technique. Event name is
+        underscore-separated (`dilution_calculator_solved`), matching this repo's
+        stable-event-name convention (e.g. `xero_contacts_sync_started`), not dotted.
+        """
+        collector = _LogRecordCollector()
+        root_logger = logging.getLogger()
+        root_logger.addHandler(collector)
+        try:
+            resp = app_client.post(
+                "/api/dilution-calculator/solve",
+                json={
+                    "solve_for": "final_volume_ml",
+                    "starting_abv": 40,
+                    "starting_volume_ml": 1000,
+                    "final_abv": 20,
+                },
+            )
+        finally:
+            root_logger.removeHandler(collector)
+
+        assert resp.status_code == 200
+
+        solved = [
+            r.msg
+            for r in collector.records
+            if isinstance(r.msg, dict) and r.msg.get("event") == "dilution_calculator_solved"
+        ]
+        assert solved, f"Expected a dilution_calculator_solved log record, got: {collector.records}"
+        assert solved[0]["level"] == "info"
+        assert solved[0]["solve_for"] == "final_volume_ml"
+
     def test_ac4_endpoint_returns_400_with_error_message(self, app_client):
         resp = app_client.post(
             "/api/dilution-calculator/solve",
@@ -408,6 +460,43 @@ class TestDilutionCalculatorAPI:
         )
         assert resp.status_code == 400
         assert "error" in resp.get_json()
+
+    def test_ac4_endpoint_logs_rejection_event_on_validation_failure(self, app_client):
+        """A validation 400 must leave a structured log line behind — otherwise a spike
+        of rejected requests (e.g. a broken frontend build) would be invisible in the
+        logs. Attaches a plain logging.Handler to the root logger for the duration of
+        the request and inspects the raw structlog event dict off `record.msg` — this
+        is renderer-independent (works whether local.ini's console renderer or
+        prod/test.ini's JSON renderer is active) and immune to stdout/fd capture-fixture
+        ordering issues against the app factory's own logging setup. Checks the
+        event/level/field shape fires; doesn't assert on message wording.
+        """
+        collector = _LogRecordCollector()
+        root_logger = logging.getLogger()
+        root_logger.addHandler(collector)
+        try:
+            resp = app_client.post(
+                "/api/dilution-calculator/solve",
+                json={
+                    "solve_for": "final_volume_ml",
+                    "starting_abv": 40,
+                    "starting_volume_ml": 1000,
+                    "final_abv": 900,
+                },
+            )
+        finally:
+            root_logger.removeHandler(collector)
+
+        assert resp.status_code == 400
+
+        rejected = [
+            r.msg
+            for r in collector.records
+            if isinstance(r.msg, dict) and r.msg.get("event") == "dilution_calculator_rejected"
+        ]
+        assert rejected, f"Expected a dilution_calculator_rejected log record, got: {collector.records}"
+        assert rejected[0]["level"] == "warning"
+        assert "reason" in rejected[0]
 
     def test_ac4_endpoint_rejects_non_object_body(self, app_client):
         resp = app_client.post("/api/dilution-calculator/solve", json=[1, 2, 3])
