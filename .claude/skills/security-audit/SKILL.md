@@ -19,7 +19,7 @@ Read `.agents/autonomy.md`: this skill runs unattended, ships via MR, and never 
 python3 scripts/preflight.py --json    # tools.absent tells you which scanners exist
 ```
 
-If `semgrep` or `gitleaks` is absent, **say which layer didn't run** rather than reporting a clean scan. (`gitleaks` is not currently installed here — an audit that skips it has not checked for secrets, and must say so.) Pass `decisions.verification_mode` down to whatever you hand remediation to.
+If `semgrep` or `gitleaks` is absent, **say which layer didn't run** rather than reporting a clean scan — an audit that skips a scanner has not checked for what that scanner catches, and must say so. (`gitleaks` was missing on this host as of 2026-07-25; installed 2026-07-26 by extracting the binary directly from the CI job's own `zricethezav/gitleaks:latest` Docker image, guaranteeing version parity with what CI actually runs rather than risking drift from an independently-downloaded release. If it's absent again, that install method is the fastest path back: `docker create --name x zricethezav/gitleaks:latest && docker cp x:/usr/bin/gitleaks ~/.local/bin/ && docker rm x`.) Pass `decisions.verification_mode` down to whatever you hand remediation to.
 
 Called with a feature slug: audit `app/features/<slug>/` plus anything it imports or migrates. Called bare: audit the whole app. Read `.agents/specs/<slug>.md` if it exists; `External surfaces` and `tenant_scoped` tell you where to concentrate.
 

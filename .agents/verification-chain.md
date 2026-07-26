@@ -88,6 +88,18 @@ exactly one line: VERDICT: clean | patched | findings-open
 
 Read the **report file**, not the pane transcript — pane text scrolls, wraps, and truncates.
 
+**A `--sandbox read-only` / `access: "read"` grader cannot write that file itself** — verified
+live: Codex's read-only sandbox rejects the write with `patch rejected: writing is blocked
+by read-only sandbox`, and a correctly-behaving grader will recognize this and decline to
+route around it (creating one via some other writable channel would be the same integrity
+breach as giving it write access directly). This is not a bug to fix by loosening the
+sandbox — graders are read-only *by construction* (§3) precisely so they cannot edit what
+they grade, and a report file is not exempt from that boundary. The orchestrator — which
+does have write access — is responsible for capturing the grader's verbatim final message
+and writing the report file on its behalf. This is the same "read the report file, not the
+transcript" rule from the other direction: for a read-only stage, the orchestrator's
+transcript-to-file transcription *is* how the file comes to exist at all.
+
 ## 6. Concurrency
 
 Stage agents draw on the **same subscription quota** as the orchestrator, so parallelism
