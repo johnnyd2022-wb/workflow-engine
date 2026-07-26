@@ -11,3 +11,15 @@
 {"duration_s": null, "findings": 0, "notes": null, "ref": "feat/dilution_calculator", "run_type": "chained", "scope": "dilution_calculator", "skill": "test-author", "ts": "2026-07-26T04:27:08+00:00", "verdict": "clean"}
 {"duration_s": null, "findings": 0, "notes": null, "ref": "feat/dilution_calculator", "run_type": "chained", "scope": "dilution_calculator", "skill": "test-evaluator", "ts": "2026-07-26T04:27:08+00:00", "verdict": "clean"}
 {"duration_s": null, "findings": 0, "notes": null, "ref": "feat/dilution_calculator", "run_type": "chained", "scope": "dilution_calculator", "skill": "ci-gate", "ts": "2026-07-26T04:27:08+00:00", "verdict": "clean"}
+{"duration_s": null, "findings": 3, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "org", "skill": "security-audit", "ts": "2026-07-26T09:25:29+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 5, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "org", "skill": "e2e-playwright", "ts": "2026-07-26T09:25:29+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 1, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "org", "skill": "test-evaluator", "ts": "2026-07-26T09:25:29+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 0, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "org", "skill": "perf-guardrails", "ts": "2026-07-26T09:25:29+00:00", "verdict": "clean"}
+{"duration_s": null, "findings": 1, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "org", "skill": "observability", "ts": "2026-07-26T09:25:29+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 0, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "org", "skill": "ci-gate", "ts": "2026-07-26T09:25:29+00:00", "verdict": "clean"}
+{"duration_s": null, "findings": 3, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "auth", "skill": "security-audit", "ts": "2026-07-26T09:46:32+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 7, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "auth", "skill": "e2e-playwright", "ts": "2026-07-26T09:46:32+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 2, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "auth", "skill": "test-evaluator", "ts": "2026-07-26T09:46:32+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 0, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "auth", "skill": "perf-guardrails", "ts": "2026-07-26T09:46:32+00:00", "verdict": "clean"}
+{"duration_s": null, "findings": 0, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "auth", "skill": "observability", "ts": "2026-07-26T09:46:32+00:00", "verdict": "clean"}
+{"duration_s": null, "findings": 0, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "auth", "skill": "ci-gate", "ts": "2026-07-26T09:46:32+00:00", "verdict": "clean"}
