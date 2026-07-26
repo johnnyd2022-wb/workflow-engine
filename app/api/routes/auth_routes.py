@@ -97,7 +97,11 @@ def get_rate_limit_key():
         if data:
             email = (data.get("email") or "").lower().strip()
             if email:
-                return f"{ip}:{email}"
+                # False positive (see nosemgrep below): this is a rate-limiter *key*
+                # (Flask-Limiter's key_func), never sent to the client as a response body,
+                # so there is no XSS/injection surface here — unlike an f-string returned
+                # directly from a Flask view.
+                return f"{ip}:{email}"  # nosemgrep: directly-returned-format-string
     except Exception:
         pass
     # Fallback to IP-only if email not available
@@ -285,6 +289,18 @@ def login():
         user_repo = UserRepository(db)
         user_by_email = user_repo.get_user_by_email(email, org_id=org_uuid)
 
+        # CRITICAL: Timing side-channel fix — always run the password check FIRST, before
+        # branching on lockout state, so the lockout early-return doesn't skip bcrypt.
+        # Without this, a locked account would respond near-instantly (no bcrypt call)
+        # while an unlocked account with a wrong password pays bcrypt's cost, letting an
+        # attacker distinguish "this account is locked" from "wrong password" purely by
+        # response latency even though the returned message/status are identical.
+        # AuthService.authenticate() itself pays the same bcrypt cost for a nonexistent
+        # user / wrong org_id (see its `_DUMMY_PASSWORD_HASH` comparison), so this single
+        # call also equalizes timing across all four cases: no such user, wrong org_id,
+        # wrong password, and locked account.
+        user = auth_service.authenticate(email, password, org_id=org_uuid)
+
         # CRITICAL: Account Lockout Logic
         # If account is locked and this is NOT a password reset, block login
         if user_by_email and not is_password_reset:
@@ -316,7 +332,7 @@ def login():
 
         # Normalize authentication to prevent user enumeration
         # Always perform the same operations regardless of whether user exists
-        user = auth_service.authenticate(email, password, org_id=org_uuid)
+        # (authenticate() was already called above, before the lockout check, for timing parity)
 
         # CRITICAL: Account Lockout - Handle failed login attempts
         # If authentication failed and user exists, increment failed attempts
@@ -570,7 +586,10 @@ def login():
         ), 200
 
     except ValueError as e:
-        logger.warning(f"Invalid org_id in login: {e}")
+        # False positive (bize-verbose-error-to-client): {e} is only interpolated into the
+        # server-side log line below; the client-facing jsonify() response two lines down
+        # is a fixed generic string and never includes `e`.
+        logger.warning(f"Invalid org_id in login: {e}")  # nosemgrep: bize-verbose-error-to-client
         return jsonify({"error": "Invalid request"}), 400
     except Exception:
         logger.exception("Login failed")
@@ -604,7 +623,10 @@ def logout():
             pass  # Don't fail logout if logging fails
 
     # CRITICAL: Clear ALL session data on logout to prevent session fixation
-    session.clear()
+    # False positive (bize-session-clear-without-rotate): logout intentionally ends the
+    # session with nothing re-established afterward (AC9) — there's no "session.permanent"
+    # to preserve because no new authenticated session data is written back.
+    session.clear()  # nosemgrep: bize-session-clear-without-rotate
     session.modified = True  # Explicitly mark session as modified to ensure cookie is cleared
 
     # Do NOT clear trusted device cookie - it should persist across logout/login
@@ -715,7 +737,9 @@ def verify_two_factor():
                 logger.info(f"Pending 2FA session expired for user {pending}")
                 return jsonify({"error": "2FA session expired. Please log in again."}), 401
         except (ValueError, TypeError) as e:
-            logger.warning(f"Invalid pending_2fa_created_at format: {e}")
+            # False positive (bize-verbose-error-to-client): {e} only reaches the
+            # server-side log line; the jsonify() response below is a fixed generic string.
+            logger.warning(f"Invalid pending_2fa_created_at format: {e}")  # nosemgrep: bize-verbose-error-to-client
             # If timestamp is invalid, treat as expired
             session.pop("pending_2fa_user_id", None)
             session.pop("pending_2fa_created_at", None)
@@ -872,7 +896,9 @@ def verify_two_factor():
         return response
 
     except ValueError as e:
-        logger.warning(f"Invalid user_id in 2FA verification: {e}")
+        # False positive (bize-verbose-error-to-client): {e} only reaches the server-side
+        # log line; the jsonify() response below is a fixed generic string.
+        logger.warning(f"Invalid user_id in 2FA verification: {e}")  # nosemgrep: bize-verbose-error-to-client
         return jsonify({"error": "Invalid request"}), 400
     except Exception:
         logger.exception("2FA verification failed")
@@ -1102,6 +1128,16 @@ def disable_2fa():
             # Delete all backup codes for this user (no commit - transaction controlled by caller)
             deleted_count = auth_service.backup_code_repo.delete_all_codes_for_user(user.id, commit=False)
 
+            # SECURITY: Also invalidate all trusted-device ("remember this device") tokens.
+            # Those tokens exist to skip 2FA, tied to the 2FA enrollment that created them.
+            # If they survive a disable, a later re-enroll (new TOTP secret, new backup
+            # codes) can still be bypassed by an old device_token+fingerprint pair minted
+            # under the *previous* enrollment — silently defeating the point of
+            # re-enrolling. Mirrors change_password(), which invalidates trusted devices
+            # for the same reason.
+            trusted_device_repo = TrustedDeviceRepository(db)
+            trusted_devices_deleted = trusted_device_repo.delete_user_devices(user.id)
+
             # Disable 2FA
             user_repo.disable_two_factor(user.id)
 
@@ -1117,7 +1153,12 @@ def disable_2fa():
                 "2fa_disabled",
                 "user",
                 user.id,
-                {"ip_address": ip_address, "user_agent": user_agent, "backup_codes_deleted": deleted_count},
+                {
+                    "ip_address": ip_address,
+                    "user_agent": user_agent,
+                    "backup_codes_deleted": deleted_count,
+                    "trusted_devices_deleted": trusted_devices_deleted,
+                },
                 user.org_id,
                 user.id,
             )
@@ -1162,8 +1203,10 @@ def cancel_2fa():
     """
     # CRITICAL: Clear ALL authentication-related session data
     # Use session.clear() instead of individual pops for complete cleanup
+    # False positive (bize-session-clear-without-rotate): cancel_2fa intentionally ends the
+    # session with nothing re-established afterward (AC17) — same reasoning as logout().
     had_pending = "pending_2fa_user_id" in session
-    session.clear()
+    session.clear()  # nosemgrep: bize-session-clear-without-rotate
     session.modified = True  # Explicitly mark session as modified to ensure cookie is cleared
 
     return jsonify({"cancelled": True, "had_pending": had_pending}), 200
@@ -1351,10 +1394,14 @@ def change_password():
         # were already invalidated via trusted_device cleanup above. Intentional UX + security
         # balance; matches industry best practice. Session regeneration does not bypass 2FA
         # (2FA is enforced at login only; this session carries no "skip 2FA" state).
+        # CRITICAL: Use the shared rotate_session() helper (same as login/signup/verify-2fa)
+        # rather than a hand-rolled session.clear(), so `session.permanent` (itself stored
+        # as a session key) is reliably re-set to True. A bare session.clear() + manual
+        # key-by-key restore silently drops it, downgrading the post-password-change cookie
+        # from a persistent session back to a browser-session-only cookie.
         new_session_data = auth_service.generate_session(updated_user)
-        session.clear()
-        for key, value in new_session_data.items():
-            session[key] = value
+        rotate_session()
+        session.update(new_session_data)
         session["last_activity_at"] = datetime.now(UTC).isoformat()
         session["session_timeout_minutes"] = (
             getattr(updated_user, "session_timeout_minutes", None) or DEFAULT_SESSION_TIMEOUT_MINUTES
