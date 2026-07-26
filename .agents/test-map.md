@@ -10,7 +10,7 @@ longer exists and `tests/test_*.py` files that appear in no row. It cannot judge
 row's **status** is truthful; that is test-author's job to keep current as it writes, and
 test-evaluator's to catch when a test claims more than it proves.
 
-last_synced: 2026-07-18
+last_synced: 2026-07-26
 status legend: `covered` (happy + unhappy + isolation where scoped) · `partial` (happy
 path only, or missing the hostile-org / unhappy cases) · `none` (no automated pytest
 coverage) · `live` (covered only by `live_server`-marked suites that need the dev app
@@ -52,6 +52,12 @@ server up)
 | 15 | Inventory read / add / out-of-stock | core_bp `/api/core/inventory*` | test_corechecks.py | partial | reads covered; write reasons per row 14 |
 | 16 | Wastage entry + batch-hash idempotency | core_bp `/api/core/inventory/wastage` | test_wastage.py | covered | Batch 3: records+deducts, idempotent replay does not double-deduct, key reuse with a different payload → 409, wastage rows org-scoped. Idempotency driven through an authenticated Flask test client; org-scoping via `WastageFactory` |
 | 17 | Unit conversion | `app/core/utils/unit_conversion.py` | test_unit_conversion.py, tests/js/ | covered | Batch 6: server-side compatibility rules + float/decimal conversion + storage-aligned quantization + refusals; JS side already covered |
+
+## Dilution calculator
+
+| # | Flow | App area | Test file(s) | Status | Notes |
+|---|---|---|---|---|---|
+| 24 | Solve dilution (a,b,c,d identity + water-to-add) — happy path, validation, determinism | `app/features/dilution_calculator/services/dilution_service.py`, `routes/api_routes.py`, `routes/page_routes.py` | test_dilution_calculator.py | covered | 34 tests: service-level happy path + validation (AC1-5,7-9) + determinism, API endpoint auth guard/happy path/400s/no-DB-writes (AC7), page route auth (AC6). Stateless — no `org_id` scoping to test (no tenant data read or written); blueprint always registered (no feature flag). Nested-blueprint feature-tag mapping regression covered separately in test_observability_context.py (row 23) |
 
 ## CRM & Xero (feature flag `crm_enabled`)
 
