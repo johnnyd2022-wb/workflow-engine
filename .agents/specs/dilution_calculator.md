@@ -1,5 +1,5 @@
 # SPEC: dilution_calculator
-status: approved-unattended
+status: built
 name: Dilution Calculator
 slug: dilution_calculator
 blueprint: app/features/dilution_calculator/
