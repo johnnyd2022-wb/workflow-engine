@@ -777,16 +777,22 @@ def _spawn_supervised_chain(
     # anyone in the channel can write -- so unrestricted shell is the wrong
     # default here even though the chain itself is trusted code. auto's classifier
     # allows ordinary development work and hard-denies the destructive tail.
-    claude_cmd = [
-        "claude",
-        "-p",
-        "$CHAIN_PROMPT",
-        "--permission-mode",
-        cfg.get("chain_permission_mode", "auto"),
-        *session_flag,
-    ]
+    # $CHAIN_PROMPT must NOT go through shlex.join with the rest of this list.
+    # shlex.quote wraps a bare "$CHAIN_PROMPT" token in single quotes (it isn't
+    # in shlex's safe-character set), and single quotes suppress ALL expansion
+    # in bash -- so bash would pass claude the literal six characters
+    # "$CHAIN_PROMPT" instead of the env var's value. Verified live: the first
+    # real resume attempt under this code received exactly that literal string
+    # as its entire prompt and did nothing. Every other token here is safe to
+    # quote normally (they're code-controlled, not chat-derived); only the
+    # prompt reference itself needs to stay outside quoting so bash expands it.
+    claude_cmd_before = [shlex.quote(x) for x in ("claude", "-p")]
+    claude_cmd_after = ["--permission-mode", cfg.get("chain_permission_mode", "auto"), *session_flag]
     if cfg.get("chain_model"):
-        claude_cmd += ["--model", cfg["chain_model"]]
+        claude_cmd_after += ["--model", cfg["chain_model"]]
+    claude_cmd_str = (
+        " ".join(claude_cmd_before) + ' "$CHAIN_PROMPT" ' + " ".join(shlex.quote(x) for x in claude_cmd_after)
+    )
 
     watchdog_cmd = [
         sys.executable,
@@ -825,7 +831,7 @@ def _spawn_supervised_chain(
         "--",
         "bash",
         "-c",
-        shlex.join(claude_cmd),
+        claude_cmd_str,
     ]
     subprocess.run(systemd_cmd, cwd=str(REPO), check=True, capture_output=True, text=True, timeout=30)
     return logfile
