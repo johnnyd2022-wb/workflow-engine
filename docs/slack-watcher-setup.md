@@ -271,6 +271,65 @@ It remains permission to **report** into the founder's own thread only.
 `.agents/autonomy.md` still bars every outward channel — no email, no posting anywhere a
 third party reads.
 
+## Quota handling
+
+A handed-off chain can outlive the founder's 5h usage window. Built after exactly that
+happened: a chain launched at 102% used, kept running, and burned real budget for ten
+minutes before giving up with nothing to show for it.
+
+**The constraint that shapes all of this:** there is no live quota signal during an
+unattended run. Verified — `claude -p --output-format json` carries no `rate_limits` field
+at all, only per-call token usage. The percentage this doc quotes elsewhere only exists
+because the interactive statusline hook renders it after a real turn; nothing refreshes
+that number while a headless chain is running unattended. So this can't be a live watcher —
+it's built from the two signals that actually do exist.
+
+**Before launching** (`quota_ok_to_launch` in `scripts/slack_watch.py`): checks the
+statusline cache. If the reading is fresh (younger than `quota_cache_max_age_sec`, default
+30 min) and at or above `quota_preflight_ceiling_pct` (default 90%), the chain doesn't
+start — the thread is marked `held_for_capacity`, a resume is scheduled, and a notice goes
+out via `post_via_mcp`. A stale or absent reading always means "proceed" — trusting old data
+to block would silently freeze every request the moment the founder's terminal has been
+idle long enough for the cache to go cold.
+
+**While running:** the chain launches under a transient `systemd-run --user` unit with
+`KillMode=process` (survives its own launcher exiting — the exact bug that killed the first
+real handoff attempt) and an `ExecStopPost=` watchdog (`scripts/chain_watchdog.py`).
+Verified live: `ExecStopPost` fires exactly once regardless of outcome and exposes
+`$EXIT_STATUS`/`$SERVICE_RESULT`.
+
+**On failure**, the watchdog reads the log tail for a quota signature (`QUOTA_SIGNATURES` in
+`chain_watchdog.py`) and branches:
+- **Matches** → held for capacity, resume scheduled, Slack notified with an ETA.
+- **No match** → reported as an unclear failure, no auto-resume. A real bug must never get
+  silently retried under the "quota" label — that would look like progress while being none.
+
+> **The one thing this hasn't been tested against: a real hard rate-limit stop.** The
+> signature list is a best guess. There has been no genuine occurrence in this repo's
+> history to confirm the actual wording against. If a resume never fires when it should,
+> or fires when it shouldn't, this list is the first place to look.
+
+**Resuming** happens two ways, deliberately redundant:
+1. **Fast path** — a `systemd-run --on-active` one-shot timer, scheduled for the estimated
+   reset. Independent of any process staying alive (verified: fires correctly even after
+   the scheduling process exits).
+2. **Durable fallback** — the existing per-minute poller checks every tick for any
+   `held_for_capacity` thread whose time has passed (`reconcile_held_threads`), regardless of
+   fresh Slack activity. This is what survives the fast-path timer being lost — e.g. a
+   reboot wipes transient systemd units, but the state file this reads from is a real file.
+
+A held thread resumes via `--resume <chain_session_id>` if a chain had already started, or a
+fresh launch from the persisted spec if the hold happened pre-flight (nothing to resume in
+that case). Retries are capped at `quota_max_resume_attempts` (default 3) — an estimate that
+keeps being wrong is a signal to tell a human, not to retry forever at real cost.
+
+**Why not just poll the quota with an interactive session?** Considered and rejected. The
+percentage only updates as a side effect of a real turn, and Anthropic's prompt cache has
+roughly a 5-minute TTL — so anything polling less often than that misses the cache every
+time and pays the ~72k-token cold-start cost measured earlier in this doc, on every check.
+At a 10-minute interval that's on the order of 10M tokens/day: spending the exact resource
+being conserved, in order to measure how much is left.
+
 ## Things worth knowing
 
 **Don't re-tag `@claude` inside a thread the watcher owns.** That wakes the official Claude
