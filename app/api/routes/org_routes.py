@@ -112,9 +112,10 @@ def update_org():
             }
         ), 200
 
-    except Exception as e:
+    except Exception:
         db.rollback()
-        return jsonify({"error": f"Failed to update organisation: {str(e)}"}), 500
+        logger.exception("Error updating organisation")
+        return jsonify({"error": "Failed to update organisation"}), 500
     # Don't close session here - let middleware teardown handle it
 
 
@@ -152,8 +153,9 @@ def list_users():
 
         return jsonify({"users": users_data}), 200
 
-    except Exception as e:
-        return jsonify({"error": f"Failed to list users: {str(e)}"}), 500
+    except Exception:
+        logger.exception("Error listing users")
+        return jsonify({"error": "Failed to list users"}), 500
     # Don't close session here - let middleware teardown handle it
 
 
@@ -259,7 +261,8 @@ def delete_user(user_id: str):
 
         return jsonify({"message": "User deleted successfully"}), 200
 
-    except Exception as e:
+    except Exception:
         db.rollback()
-        return jsonify({"error": f"Failed to delete user: {str(e)}"}), 500
+        logger.exception("Error deleting user")
+        return jsonify({"error": "Failed to delete user"}), 500
     # Don't close session here - let middleware teardown handle it
