@@ -452,15 +452,27 @@ def chain_session_id_for(channel: str, thread_ts: str, attempt: int) -> str:
     return str(uuid.uuid5(SESSION_NS, f"chain:{channel}:{thread_ts}#{attempt}"))
 
 
-def post_via_mcp(cfg: dict, channel: str, thread_ts: str, text: str) -> None:
-    """Post a fixed, already-written system notice into a thread, as the
-    founder, via the Slack MCP connector. For "say exactly this" notices
-    (quota holds, stalls) that don't need a full triage/routing turn -- kept
+def post_via_mcp(cfg: dict, channel: str, thread_ts: str | None, text: str) -> None:
+    """Post a fixed, already-written system notice, as the founder, via the
+    Slack MCP connector. For "say exactly this" notices (quota holds, stalls,
+    ready-to-review pings) that don't need a full triage/routing turn -- kept
     separate from run_agent so a notification can never be re-routed by
-    whatever untrusted text happens to be sitting in the thread it's posted to.
+    whatever untrusted text happens to be sitting in a thread it's posted to.
+
+    thread_ts=None posts a top-level message (e.g. the #code-changes
+    ready-to-review ping, which is never a reply). This is deliberately an
+    explicit branch, not an f-string with thread_ts possibly interpolating the
+    literal word "None" into the instruction -- that exact mistake shipped
+    once already and was only caught because the destination channel happened
+    to be unreadable with the watcher's own read-only token, not because it
+    was verified working.
     """
+    if thread_ts is None:
+        destination = f"as a new top-level message in channel `{channel}` (not a reply)"
+    else:
+        destination = f"to channel `{channel}`, thread_ts `{thread_ts}`"
     prompt = (
-        f"Post exactly the following message to channel `{channel}`, thread_ts `{thread_ts}`, "
+        f"Post exactly the following message {destination}, "
         "using the Slack connector. Do not alter the wording and do not add commentary, "
         "then stop.\n\n"
         f"<message>\n{text}\n</message>"
