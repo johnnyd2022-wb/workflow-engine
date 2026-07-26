@@ -44,9 +44,9 @@ rules:
     languages: [python]
     severity: ERROR
     message: >
-      An exception's str() is being interpolated into a JSON error response sent to the
-      client. This can leak internal detail — raw DB driver messages, file paths, SQL
-      fragments — through an API error body. Log the exception server-side only
+      An exception's str() is being interpolated directly into a jsonify() response body.
+      This can leak internal detail — raw DB driver messages, file paths, SQL fragments —
+      through an API error sent to the client. Log the exception server-side only
       (logger.exception("...")) and return a fixed, generic error message to the client.
     metadata:
       born-from: security-audit
@@ -55,12 +55,18 @@ rules:
         straight to the API client instead of being logged server-side only"
       date: "2026-07-26"
       fixture: bize-verbose-error-to-client
+      note: >
+        Narrowed 2026-07-26 to require the interpolation inside a jsonify(...) call —
+        the original pattern (any f-string with {e}/{str(e)} inside an except block)
+        false-positived on logger.error(f"...{e}...") and print(f"...{e}...") calls
+        elsewhere in the app that never reach a client response at all.
     patterns:
       - pattern-inside: |
           try:
               ...
           except $EXC as $E:
               ...
+      - pattern-inside: jsonify(...)
       - pattern-either:
           - pattern: f"...{$E}..."
           - pattern: f"...{str($E)}..."
