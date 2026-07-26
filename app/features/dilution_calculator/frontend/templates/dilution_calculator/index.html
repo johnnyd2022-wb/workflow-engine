@@ -1,0 +1,209 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Dilution Calculator{% endblock %}
+{% block body_class %}dilcalc-page{% endblock %}
+
+{% block head_extras %}
+<style>
+  .dilcalc-root { max-width: 640px; margin: 0 auto; padding: 24px 0 48px; }
+  .dilcalc-card {
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .dilcalc-title { font-size: 1.4rem; font-weight: 700; margin: 0 0 4px; }
+  .dilcalc-subtitle { color: var(--text-secondary, #6b7280); font-size: .9rem; margin: 0 0 20px; }
+  .dilcalc-solve-for { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .dilcalc-solve-for button {
+    flex: 1 1 140px;
+    padding: 10px 8px;
+    border: 1px solid var(--border, #d1d5db);
+    border-radius: 8px;
+    background: var(--surface, #fff);
+    cursor: pointer;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text-secondary, #374151);
+  }
+  .dilcalc-solve-for button.active {
+    border-color: #2DD4BF;
+    background: rgba(45, 212, 191, 0.12);
+    color: #0f766e;
+  }
+  .dilcalc-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .dilcalc-field label { display: block; font-size: .78rem; font-weight: 600; color: var(--text-secondary, #6b7280); text-transform: uppercase; margin-bottom: 6px; }
+  .dilcalc-field input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border, #d1d5db);
+    border-radius: 8px;
+    font-size: 1rem;
+    box-sizing: border-box;
+  }
+  .dilcalc-field input:disabled { background: var(--surface-muted, #f3f4f6); color: var(--text-secondary, #9ca3af); }
+  .dilcalc-submit {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: #0f766e;
+    color: #fff;
+    font-weight: 700;
+    font-size: .95rem;
+    cursor: pointer;
+  }
+  .dilcalc-submit:disabled { opacity: .6; cursor: not-allowed; }
+  .dilcalc-error {
+    background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+    padding: 12px 14px; border-radius: 8px; margin-bottom: 20px; font-size: .88rem;
+  }
+  .dilcalc-result-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border, #f0f0f0); }
+  .dilcalc-result-row:last-child { border-bottom: none; }
+  .dilcalc-result-label { color: var(--text-secondary, #6b7280); font-size: .85rem; }
+  .dilcalc-result-value { font-weight: 700; font-size: .95rem; }
+  .dilcalc-highlight .dilcalc-result-value { color: #0f766e; }
+  .dilcalc-disclaimer { font-size: .78rem; color: var(--text-secondary, #9ca3af); margin-top: 16px; line-height: 1.4; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-content dilcalc-root" x-data="dilutionCalculator()">
+  <div class="dilcalc-card">
+    <h1 class="dilcalc-title">Dilution Calculator</h1>
+    <p class="dilcalc-subtitle">Solve for any one of starting ABV, starting volume, final ABV, or final volume — and see how much water to actually add.</p>
+
+    <div class="dilcalc-solve-for">
+      <template x-for="opt in fieldOptions" :key="opt.key">
+        <button type="button" :class="{active: solveFor === opt.key}" @click="setSolveFor(opt.key)" x-text="opt.label"></button>
+      </template>
+    </div>
+
+    <div x-show="error" x-cloak class="dilcalc-error" role="alert" data-testid="dilcalc-error" x-text="error"></div>
+
+    {# hx-boost="false": base_spa.html boosts every descendant form by default
+       (hx-boost="true" on <body>); without opting out here, htmx intercepts this
+       submit alongside Alpine's own handler and fires its own boosted GET back to
+       this page, swapping #page-content and wiping the Alpine result/error state
+       right as the real POST resolves. Same opt-out pattern already used for the
+       notifications link in base_spa.html. #}
+    <form @submit.prevent="submit()" hx-boost="false">
+      <div class="dilcalc-field-grid">
+        <template x-for="opt in fieldOptions" :key="opt.key">
+          <div class="dilcalc-field">
+            <label :for="'dilcalc-' + opt.key" x-text="opt.label"></label>
+            <input
+              :id="'dilcalc-' + opt.key"
+              type="number"
+              step="any"
+              :placeholder="solveFor === opt.key ? 'solving for this' : opt.placeholder"
+              :disabled="solveFor === opt.key"
+              x-model="fields[opt.key]">
+          </div>
+        </template>
+      </div>
+
+      <button type="submit" class="dilcalc-submit" :disabled="loading" x-text="loading ? 'Calculating…' : 'Calculate'"></button>
+    </form>
+  </div>
+
+  <div class="dilcalc-card" x-show="result" x-cloak data-testid="dilcalc-result">
+    <h2 class="dilcalc-title" style="font-size:1.1rem;">Result</h2>
+    <div class="dilcalc-result-row dilcalc-highlight">
+      <span class="dilcalc-result-label" x-text="result ? fieldLabel(result.solved_field) : ''"></span>
+      <span class="dilcalc-result-value" data-testid="dilcalc-solved-value" x-text="result ? formatNumber(result.solved_value) : ''"></span>
+    </div>
+    <div class="dilcalc-result-row">
+      <span class="dilcalc-result-label">Water to add (contraction-aware)</span>
+      <span class="dilcalc-result-value" data-testid="dilcalc-water-to-add" x-text="result ? formatNumber(result.water_to_add_ml) + ' mL' : ''"></span>
+    </div>
+    <div class="dilcalc-result-row">
+      <span class="dilcalc-result-label">Water to add (naive, additive)</span>
+      <span class="dilcalc-result-value" data-testid="dilcalc-water-to-add-naive" x-text="result ? formatNumber(result.water_to_add_naive_ml) + ' mL' : ''"></span>
+    </div>
+    <p class="dilcalc-disclaimer" x-text="result ? result.disclaimer : ''"></p>
+  </div>
+</div>
+
+<script>
+  function dilutionCalculator() {
+    return {
+      fieldOptions: [
+        { key: 'starting_abv', label: 'Starting ABV (%)', placeholder: 'e.g. 40' },
+        { key: 'starting_volume_ml', label: 'Starting volume (mL)', placeholder: 'e.g. 1000' },
+        { key: 'final_abv', label: 'Final ABV (%)', placeholder: 'e.g. 20' },
+        { key: 'final_volume_ml', label: 'Final volume (mL)', placeholder: 'e.g. 2000' },
+      ],
+      solveFor: 'final_volume_ml',
+      fields: { starting_abv: '', starting_volume_ml: '', final_abv: '', final_volume_ml: '' },
+      loading: false,
+      error: null,
+      result: null,
+
+      fieldLabel(key) {
+        const opt = this.fieldOptions.find(o => o.key === key);
+        return opt ? opt.label : key;
+      },
+
+      setSolveFor(key) {
+        this.solveFor = key;
+        this.fields[key] = '';
+        this.result = null;
+        this.error = null;
+      },
+
+      formatNumber(n) {
+        return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      },
+
+      csrfToken() {
+        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      },
+
+      async submit() {
+        this.error = null;
+        this.result = null;
+
+        const payload = { solve_for: this.solveFor };
+        for (const opt of this.fieldOptions) {
+          if (opt.key === this.solveFor) continue;
+          const raw = this.fields[opt.key];
+          if (raw === '' || raw === null || raw === undefined) {
+            this.error = `${opt.label} is required`;
+            return;
+          }
+          const num = Number(raw);
+          if (!Number.isFinite(num)) {
+            this.error = `${opt.label} must be a number`;
+            return;
+          }
+          payload[opt.key] = num;
+        }
+
+        this.loading = true;
+        try {
+          const res = await fetch('/api/dilution-calculator/solve', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': this.csrfToken(),
+            },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            this.error = data.error || 'Calculation failed';
+            return;
+          }
+          this.result = data;
+        } catch (e) {
+          this.error = 'Network error — please try again';
+        } finally {
+          this.loading = false;
+        }
+      },
+    };
+  }
+</script>
+{% endblock %}

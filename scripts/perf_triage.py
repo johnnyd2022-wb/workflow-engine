@@ -153,7 +153,12 @@ def build_triage() -> dict:
     last_run = load_json(LAST_RUN_FILE)
     routes = route_surface()
 
-    measured = set(budgets.get("measure", {}).get("pages", [])) | set(budgets.get("measure", {}).get("api", []))
+    # measure.api entries are normally a bare route string (GET); a route that needs a
+    # request body to be measured meaningfully uses the object form {route, method, body}
+    # instead (see budgets.json's _doc and test_perf_budgets.py._api_entries) — pull the
+    # route string out of either shape.
+    api_routes = {item if isinstance(item, str) else item["route"] for item in budgets.get("measure", {}).get("api", [])}
+    measured = set(budgets.get("measure", {}).get("pages", [])) | api_routes
 
     area_score: dict[str, int] = {}
     area_files: dict[str, dict[str, int]] = {}

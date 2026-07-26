@@ -17,7 +17,12 @@
     "roughly 4x the worst observed value; ceilings where only a real regression lands.",
     "The /api/core/dashboard/summary override RATCHETS its known 38-query debt: any new",
     "query trips the advisory, and the number must only ever go down. Recalibrate with the",
-    "procedure in the SKILL.md rather than hand-tuning numbers to make a red run green."
+    "procedure in the SKILL.md rather than hand-tuning numbers to make a red run green.",
+    "measure.api entries are normally a bare route string (GET, no body). A route that",
+    "requires a request body to be measured meaningfully (e.g. a POST-only solve/compute",
+    "endpoint) uses the object form {route, method, body} instead — test_perf_budgets.py",
+    "sends `body` as the JSON payload with CSRF headers attached, same as any other",
+    "mutating core-API call in the E2E suite."
   ],
   "defaults": {
     "page": {
@@ -38,7 +43,8 @@
       "/core/inventory/view",
       "/core/executions/live",
       "/core/settings",
-      "/crm"
+      "/crm",
+      "/dilution-calculator"
     ],
     "api": [
       "/api/core/dashboard/summary",
@@ -47,7 +53,17 @@
       "/api/core/inventory",
       "/api/core/inventory/wastage",
       "/api/crm/overview",
-      "/auth/me"
+      "/auth/me",
+      {
+        "route": "/api/dilution-calculator/solve",
+        "method": "POST",
+        "body": {
+          "solve_for": "final_volume_ml",
+          "starting_abv": 40,
+          "starting_volume_ml": 1000,
+          "final_abv": 20
+        }
+      }
     ]
   },
   "overrides": {
