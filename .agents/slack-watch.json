@@ -29,5 +29,17 @@
   "_triage_denied_tools_note": "Overrides the deny-list for the triage agent. null uses the built-in default: Bash, Write, Edit, NotebookEdit, Read, Glob, Grep, Task, Agent, WebFetch, WebSearch. This matters because --allowedTools GRANTS rather than restricts — verified: with only the Slack tool allow-listed, Bash still ran. Triage needs no local tools at all, so denying them closes the read-a-secret-then-post-it path.",
 
   "agent_timeout": 420,
-  "_agent_timeout_note": "Seconds. Higher than a pure triage turn would need because an 'answer' may query Xero or Gmail before replying."
+  "_agent_timeout_note": "Seconds. Higher than a pure triage turn would need because an 'answer' may query Xero or Gmail before replying.",
+
+  "quota_preflight_ceiling_pct": 90,
+  "_quota_preflight_ceiling_pct_note": "Don't launch a chain if the cached 5h reading is already at/above this. This is the ONLY quota check that can ever block a launch — headless runs have no live percentage to watch (verified: claude -p --output-format json carries no rate_limits field), so everything else is reactive, not preventive.",
+
+  "quota_cache_max_age_sec": 1800,
+  "_quota_cache_max_age_sec_note": "A cached reading older than this is treated as absent, never as a reason to hold. The cache only refreshes on an interactive render, so a stale reading proves nothing about the CURRENT window — trusting it to block would silently freeze every request once the founder's terminal has been idle this long.",
+
+  "quota_fallback_window_sec": 18000,
+  "_quota_fallback_window_sec_note": "5 hours. Used to estimate a reset time when there is no fresh cached reading to go on — e.g. a mid-run quota failure detected by chain_watchdog.py with no recent interactive render to confirm against. A wrong estimate just means one wasted resume attempt (quota_ok_to_launch re-checks before actually relaunching), not a stuck thread.",
+
+  "quota_max_resume_attempts": 3,
+  "_quota_max_resume_attempts_note": "Caps both flavours of auto-resume (pre-flight hold and mid-run watchdog detection) so a wrong reset estimate can't retry forever at real cost. Exceeding this posts to Slack and marks the thread 'stalled' for a human to re-drive by hand."
 }
