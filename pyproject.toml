@@ -35,6 +35,10 @@ dev = [
     "ruff>=0.1.0",
     "factory-boy>=3.3.0",
     "pytest-playwright>=0.8.0",
+    # Coverage measurement. The review-feature/new-feature skills' unit-coverage stage
+    # runs `pytest --cov=<module> --cov-report=term-missing`; without this that stage
+    # errors with "unrecognized arguments" and coverage has to be eyeballed instead.
+    "pytest-cov>=5.0.0",
 ]
 
 # System Dependencies (not managed by uv):
@@ -81,6 +85,11 @@ exclude = [
     "dist",
     "migrations",
     "node_modules",
+    # Semgrep rule fixtures are minimal illustrative snippets, not runnable code: each
+    # pair is the smallest thing that makes a rule fire (vulnerable.py) and stop firing
+    # (fixed.py), so they reference undefined helpers on purpose. Linting them produces
+    # only F821 noise that can never be legitimately fixed without defeating the fixture.
+    ".semgrep/fixtures",
 ]
 
 [tool.ruff.lint]

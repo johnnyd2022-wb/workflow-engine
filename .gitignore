@@ -73,3 +73,8 @@ dist/
 # gitleaks JSON reports embed the matched secret string for every finding, so a
 # committed report re-publishes every secret it found. Keep scanner output local.
 .agents/reports/**/gitleaks.json
+
+# Coverage data (pytest-cov)
+.coverage
+coverage.xml
+htmlcov/
