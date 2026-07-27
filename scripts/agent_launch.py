@@ -39,6 +39,13 @@ SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 # routing table must resolve to a real SKILL.md, or --check fails.
 VIRTUAL_STAGES = {"build", "build-review", "security-tenant-audit"}
 
+# The edit tools withheld from a Claude-engine `access: read` stage. Bash is deliberately
+# NOT withheld — graders need it to run semgrep, pytest and git — so this is a guardrail,
+# not a sandbox: a stage that shells out can still write. Only Codex's `--sandbox
+# read-only` closes that hole. The structural guarantee is one writer per worktree
+# (see PARALLEL group validation below), not this list.
+READ_ONLY_DENIED_TOOLS = ("Edit", "Write", "NotebookEdit")
+
 
 class RoutingError(RuntimeError):
     """Raised when the routing table cannot answer the question asked of it."""
@@ -97,6 +104,12 @@ def build_command(cfg: dict[str, Any], *, prompt_file: str, base: str | None = N
             "--permission-mode",
             "acceptEdits" if cfg["access"] == "write" else "auto",
         ]
+        if cfg["access"] == "read":
+            # `--permission-mode auto` is not read-only — it auto-approves. Without this,
+            # a Claude "read" stage can edit the code it grades, which is how two stages
+            # in one worktree end up writing overlapping fixes to the same file. Codex
+            # gets a real syscall sandbox below; this is the nearest Claude equivalent.
+            parts += ["--disallowed-tools", *READ_ONLY_DENIED_TOOLS]
         return f"cat {quoted_prompt} | " + " ".join(shlex.quote(p) for p in parts)
 
     if engine == "codex":
@@ -236,6 +249,14 @@ def render_plan(routing: dict[str, Any]) -> str:
         lines.append(
             f"{name:<23} {cfg['engine']:<7} {cfg['_model_id']:<16} {cfg['effort']:<7} {cfg['access']:<7} {gate}"
         )
+
+    groups = routing.get("concurrency", {}).get("parallel_groups", [])
+    lines.append("")
+    lines.append("concurrency: everything is serial except these groups (max one writer each)")
+    for group in groups:
+        lines.append("  " + " ∥ ".join(group))
+    if not groups:
+        lines.append("  (none — fully serial)")
     return "\n".join(lines)
 
 
@@ -264,6 +285,38 @@ def check(routing: dict[str, Any], skills_dir: Path = SKILLS_DIR) -> list[str]:
             problems.append(f"{name}: grader stages must be read-only (fresh-eyes principle)")
         if name not in VIRTUAL_STAGES and not (skills_dir / name / "SKILL.md").exists():
             problems.append(f"{name}: no skill at {skills_dir / name / 'SKILL.md'}")
+
+    problems.extend(_check_parallel_groups(routing))
+    return problems
+
+
+def _check_parallel_groups(routing: dict[str, Any]) -> list[str]:
+    """Validate the declared parallel groups.
+
+    Every stage in the chain shares ONE worktree. Two write-access stages running in the
+    same turn edit the same tree with no coordination, and the failure is silent: both
+    agents "succeed", and whichever wrote last wins. Declaring concurrency as data lets
+    that be a CI failure instead of a corrupted run.
+    """
+    problems: list[str] = []
+    stages = routing.get("stages", {})
+    groups = routing.get("concurrency", {}).get("parallel_groups", [])
+
+    for group in groups:
+        label = " ∥ ".join(group)
+        unknown = [s for s in group if s not in stages]
+        if unknown:
+            problems.append(f"parallel group [{label}]: unknown stage(s) {', '.join(unknown)}")
+            continue
+        if len(set(group)) != len(group):
+            problems.append(f"parallel group [{label}]: a stage cannot run in parallel with itself")
+            continue
+        writers = [s for s in group if stages[s].get("access") == "write"]
+        if len(writers) > 1:
+            problems.append(
+                f"parallel group [{label}]: {len(writers)} write-access stages "
+                f"({', '.join(writers)}) — one shared worktree allows at most one writer"
+            )
     return problems
 
 

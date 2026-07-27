@@ -164,6 +164,8 @@ Use when a test fails, a build breaks, or an adversarial case lands.
 
 **File ownership.** One writer per file at a time. `files_touched` in the current handoff is the lock list: the agent named in `to:` owns those files until it hands back; the other agent must not edit them, including via `sed`, formatters, or "quick fixes". If you genuinely need a locked file, message the owner and wait for an explicit release.
 
+This is the pane-level form of a rule that governs every execution mode: **one writer per worktree** (`.agents/verification-chain.md` §6). Panes, tabs, and in-process subagents all share one checkout, and none of them can see another's uncommitted edits. Two writers converging on the same file fail *silently* — both report success and the last write wins. When you have no handoff file to act as the lock list (chain stages don't), the substitute is the one in that section: never run two write-access stages at once.
+
 **Git is the transport for code.** Share code through the working tree and commits, never by pasting code into the partner's pane. Pane messages carry pointers and short status, nothing else.
 
 **Focus discipline.** Always use `--no-focus` on splits and never move the user's focus. Use `--current` or an explicit pane ID for every pane command; omitting the target can hit whatever pane the human has focused.
@@ -236,8 +238,10 @@ the MR gate.
 
 Tab agents draw on the same subscription as the session that spawned them. Eight tabs in
 parallel do not buy capacity; they burn the window eight times faster. Keep the chain
-**serial**, parallelising only the pair the chain already declares independent
-(`security-audit ∥ e2e-playwright`). Codex stages are the exception worth leaning on:
+**serial**, parallelising only the groups declared in `.agents/model-routing.json` →
+`concurrency.parallel_groups` (today: `security-audit ∥ e2e-playwright`) — quota is only
+half the reason, the other half being that tabs share one worktree and may not contain two
+writers (`.agents/verification-chain.md` §6). Codex stages are the exception worth leaning on:
 they spend a *different* pool, so routing graders there genuinely relieves pressure rather
 than moving it.
 

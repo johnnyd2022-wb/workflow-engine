@@ -22,6 +22,15 @@
     "timeout_ms": 1800000,
     "tab_label_prefix": ""
   },
+  "concurrency": {
+    "_comment": "The ONLY stage groups allowed to run in the same turn; every other stage is serial. A group may hold at most one write-access stage, because all stages share one worktree and two writers produce overlapping edits to the same files. agent_launch.py --check enforces that, so adding a second writer here fails CI instead of corrupting a run. See .agents/verification-chain.md section 6.",
+    "parallel_groups": [
+      [
+        "security-audit",
+        "e2e-playwright"
+      ]
+    ]
+  },
   "stages": {
     "spec-first": {
       "engine": "claude",

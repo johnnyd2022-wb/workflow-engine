@@ -36,8 +36,8 @@ drive stages accordingly. Claude stays Architect and patches what gets found; th
 rather than fixing them. The chain and verdicts are identical in every mode.
 
 1. **migration audit** (migration-safety skill, only if the feature has models/migrations): verify every revision touching its tables has a real downgrade and survives up/down/up; flag any historical destructive change with no permit file.
-2. **security-audit** and **e2e-playwright** in the same turn, parallel:
-   - security-audit scoped to the slug; on existing code expect findings, that is the point.
+2. **security-audit** and **e2e-playwright** in the same turn, parallel — the only declared pair (`.agents/model-routing.json` → `concurrency.parallel_groups`), safe because security-audit is read-only and e2e-playwright is the single writer. Two writing stages never share a turn; they share a worktree (`.agents/verification-chain.md` §6).
+   - security-audit scoped to the slug; on existing code expect findings, that is the point. It reports them — **this review patches them**, in Step 4.
    - e2e-playwright in gap-fill mode: run whatever exists under `tests/e2e/<slug>`, then write tests for every AC with no coverage, including the mandatory cross-tenant probe and unhappy paths.
 3. **unit coverage check**: `pytest --cov=app/features/<slug> --cov-report=term-missing` to find uncovered branches; hand the gaps to **test-author** to write the missing tests against the flows in `.agents/test-map.md` (it also updates the map's status rows for this feature) rather than hand-rolling them here. Every uncovered branch in routes/service is a gap.
 4. **test-evaluator**: grades the tests test-author added (and any this review changed) — an audit that closes a coverage gap with a test that asserts nothing has hardened nothing. Verdict must be `valid`.

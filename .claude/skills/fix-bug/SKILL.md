@@ -42,8 +42,9 @@ place spec-critic sits.
 3. fix                    (SONNET 5, xhigh)            -> minimal patch, repro goes green
 3b. build-review          (CODEX sol, advisory)        -> Breaker on the diff
 4. migration-safety       (SONNET 5, xhigh)            -> only if the fix touches schema
-5. security-audit         (SONNET 5)  \  parallel
-   e2e-playwright         (SONNET 5)  /
+5. security-audit         (SONNET 5, read)  \  parallel — the only declared pair,
+   e2e-playwright         (SONNET 5, write) /  and safe only because it is read ∥ write
+                                              (one shared worktree: never two writers)
 5b. security-tenant-audit (CODEX sol)                  -> the classes scanners miss
 5c. perf-guardrails       (SONNET 5)                   -> only if a page/API route changed
 6. observability          (SONNET 5)                   -> can the next occurrence be
