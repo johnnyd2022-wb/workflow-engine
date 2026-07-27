@@ -9,9 +9,9 @@
 #   1. An allowlist entry needs a reason, a date, and evidence it is historic (the commit
 #      that deleted it). "It was noisy" is not a reason.
 #   2. Allowlisting is NOT rotation. A credential that was ever real stays compromised
-#      once committed — deletion does not unpublish it. Anything listed under
-#      "Historic, pre-existing" below still needs its rotation status confirmed by a
-#      human; see the open question in .agents/reports/auth/review.md.
+#      once committed — deletion does not unpublish it. Every entry under "Historic,
+#      pre-existing" below has had its rotation confirmed (see that section); a NEW
+#      entry must not be added until the same is true of it.
 #   3. Never allowlist a path that is still live in the tree.
 
 title = "workflow-engine gitleaks config"
@@ -31,9 +31,11 @@ paths = [
   #   config/prod.ini                              added 2025-09-24, deleted 2025-11-29 (79a0897)
   #   app.py / app.py.bak / app.diff / app.py.xero_*  legacy root app, deleted 2025-09-24 (713e7d2)
   #
-  # ROTATION STATUS: UNCONFIRMED. These matched GitLab PAT, generic-api-key, and an
-  # `sk-live-` shaped value. If any were real production credentials they must be
-  # rotated — allowlisting only silences the scanner, it does not revoke a token.
+  # ROTATION STATUS: REVOKED — confirmed by the repo owner 2026-07-27.
+  # These matched GitLab PAT, generic-api-key, and an `sk-live-` shaped value. All are
+  # revoked, so the committed copies are inert and this allowlist silences a scanner
+  # finding rather than hiding a live credential. Do not re-escalate these signatures.
+  # Revisit only if one of these paths returns to the tree with a NEW value.
   '''^ci/scripts/(production|test)/.*_container\.sh$''',
   '''^config/prod\.ini$''',
   '''^app\.py(\.bak|\.diff|\.xero_.*)?$''',

@@ -84,12 +84,17 @@ instruction to fix all findings:
   was called) — considered and deliberately rejected: asserting the `Set-Cookie` header is
   the correct level; mocking the helper would be an implementation-detail test that breaks
   on refactor while proving less.
-- **Rotation status of the historic committed credentials is UNCONFIRMED** — see
-  `.gitleaks.toml`. Allowlisting silenced the scanner; it did not revoke anything. Needs a
-  human to confirm whether the GitLab PATs and `sk-live-` value in the pre-2026 deleted
-  files were ever real, and rotate if so.
 - The cross-agent worktree-collision risk (two subagents editing one shared worktree
   converged on overlapping edits) — still worth a `skill-smith` pass.
+
+## Closed by owner
+
+- **Historic committed credentials — REVOKED** (confirmed 2026-07-27). The GitLab PATs,
+  generic-api-keys, and `sk-live-` value found in the pre-2026 deleted files are all
+  revoked, so the committed copies are inert. Recorded in `.gitleaks.toml` and in the
+  finding-history store (`committed-credentials-historic`, verdict `fixed`) so a future
+  `security-audit` sweep does not re-escalate a signature the owner has already resolved.
+  Revisit only if one of those paths returns to the tree carrying a new value.
 
 ## Recommendation
 Merge. No open findings block; the two escalated items are product/ops decisions, not
