@@ -81,7 +81,11 @@ def setup_session_security(app):
                 time_since_activity = datetime.now(UTC) - last_activity
                 if time_since_activity > timedelta(minutes=timeout_minutes):
                     logger.info("session_expired_due_to_inactivity", user_id=user_id)
-                    session.clear()
+                    # False positive (bize-session-clear-without-rotate): this is an
+                    # inactivity-timeout invalidation, not a login/rotation — the session
+                    # ends here (401/redirect below) with nothing re-established
+                    # afterward, so there's no session.permanent to preserve.
+                    session.clear()  # nosemgrep: bize-session-clear-without-rotate
                     session.modified = True
 
                     # Check if this is an HTML page request (not an API call)

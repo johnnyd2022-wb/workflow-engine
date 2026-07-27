@@ -17,6 +17,9 @@ from app.core.backend.reconciliation_service import (
 )
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
+from app.observability import get_logger
+
+logger = get_logger(__name__)
 
 
 def register_routes(bp):
@@ -138,8 +141,9 @@ def register_routes(bp):
             untracked_item_id = UUID(untracked_item_id_str)
             process_id = UUID(process_id_str)
             step_id = UUID(step_id_str)
-        except ValueError as e:
-            return jsonify({"error": f"Invalid UUID: {e}"}), 400
+        except ValueError:
+            logger.warning("reconcile_via_execution invalid uuid in request")
+            return jsonify({"error": "Invalid untracked_item_id, process_id, or step_id"}), 400
 
         session = db_session()
         try:

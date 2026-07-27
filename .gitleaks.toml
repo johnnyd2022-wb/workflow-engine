@@ -1,0 +1,58 @@
+# gitleaks configuration
+#
+# The `gitleaks` CI job (.gitlab-ci.yml) is blocking and scans the commit range of each
+# MR. This file exists to keep that gate meaningful: it allowlists a bounded, documented
+# set of HISTORIC findings so the gate fails on new secrets only, instead of failing on
+# every MR because of files deleted a year ago.
+#
+# Rules for editing this file:
+#   1. An allowlist entry needs a reason, a date, and evidence it is historic (the commit
+#      that deleted it). "It was noisy" is not a reason.
+#   2. Allowlisting is NOT rotation. A credential that was ever real stays compromised
+#      once committed — deletion does not unpublish it. Every entry under "Historic,
+#      pre-existing" below has had its rotation confirmed (see that section); a NEW
+#      entry must not be added until the same is true of it.
+#   3. Never allowlist a path that is still live in the tree.
+
+title = "workflow-engine gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Historic deleted files, and scanner output artifacts that quote them"
+
+paths = [
+  # --- Historic, pre-existing (all deleted; none present on main or in the tree) ------
+  #
+  # Deployment/config files from the pre-2026 layout that carried inline credentials.
+  # Verified 2026-07-27: none of these paths exist in the working tree or on main.
+  #   ci/scripts/{production,test}/*_container.sh  added 2025-09-24, deleted 2025-11-24 (e170449)
+  #   config/prod.ini                              added 2025-09-24, deleted 2025-11-29 (79a0897)
+  #   app.py / app.py.bak / app.diff / app.py.xero_*  legacy root app, deleted 2025-09-24 (713e7d2)
+  #
+  # ROTATION STATUS: REVOKED — confirmed by the repo owner 2026-07-27.
+  # These matched GitLab PAT, generic-api-key, and an `sk-live-` shaped value. All are
+  # revoked, so the committed copies are inert and this allowlist silences a scanner
+  # finding rather than hiding a live credential. Do not re-escalate these signatures.
+  # Revisit only if one of these paths returns to the tree with a NEW value.
+  '''^ci/scripts/(production|test)/.*_container\.sh$''',
+  '''^config/prod\.ini$''',
+  '''^app\.py(\.bak|\.diff|\.xero_.*)?$''',
+  '''^app\.diff$''',
+
+  # --- Scanner output artifacts -------------------------------------------------------
+  #
+  # gitleaks' own JSON report embeds the matched secret string for each finding, so
+  # committing a report re-publishes every secret it found. The security-audit skill
+  # wrote these during a review and they were committed by mistake (removed in e22cea1,
+  # and .gitignore'd so it cannot recur). This entry stops the two commits that
+  # introduced them from failing every future MR that includes them in its range.
+  '''^\.agents/reports/.*/gitleaks\.json$''',
+
+  # Prompt/skill docs that carry deliberately fake example keys ("sk-live-abc123") as
+  # illustrations of what NOT to write. Not credentials.
+  '''^\.agents/skills/python\.md$''',
+  '''^\.claude/skills/python-review/SKILL\.md$''',
+  '''^\.cursor/rules/python-review\.mdc$''',
+]

@@ -1,7 +1,5 @@
 """Organisation management service"""
 
-from uuid import UUID
-
 from sqlalchemy.orm import Session
 
 from app.core.db.models.organisation import Organisation, OrganisationStatus
@@ -54,12 +52,3 @@ class OrgManager:
             raise ValueError(f"User with email '{admin_email}' already exists")
 
         return org, admin_user
-
-    def switch_org(self, user_id: UUID, new_org_id: UUID) -> bool:
-        """Switch user's organisation (if user belongs to that org)"""
-        user = self.user_repo.get_user_by_id(user_id, org_id=new_org_id)
-        if not user:
-            return False
-
-        # Update session would be handled by the middleware/route
-        return True

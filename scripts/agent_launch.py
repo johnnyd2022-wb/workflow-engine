@@ -140,18 +140,34 @@ def _run(argv: list[str], timeout: int = 30) -> tuple[int, str, str]:
         return 1, "", str(exc)
 
 
-def _herdr_json(argv: list[str], timeout: int = 30) -> dict[str, Any]:
+def _herdr_json(argv: list[str], timeout: int = 30, *, allow_empty: bool = False) -> dict[str, Any]:
     """Call herdr and parse its JSON envelope. Herdr IDs are opaque — always read them
-    from the response, never guess them from sidebar order."""
+    from the response, never guess them from sidebar order.
+
+    Not every herdr subcommand answers with an envelope. `pane run` in particular is
+    fire-and-forget: it dispatches the command to the pane and exits 0 with an empty
+    stdout (verified against herdr 0.7.3). Demanding JSON from it made every
+    `agent_launch.py launch` die with "herdr returned non-JSON:" *after* the tab had
+    already been created — so the whole herdr-tabs execution mode was unusable and every
+    caller silently fell back to subagents. Pass `allow_empty=True` for those commands;
+    exit status stays the real success signal.
+    """
     if not shutil.which("herdr"):
         raise RoutingError("herdr CLI not found on PATH")
     code, out, err = _run(argv, timeout=timeout)
     if code != 0:
-        raise RoutingError(f"herdr {' '.join(argv[1:3])} failed: {err or out}")
+        raise RoutingError(f"herdr {' '.join(argv[1:3])} failed (exit {code}): {err or out}")
+
+    out = out.strip()
+    if not out:
+        if allow_empty:
+            return {}
+        raise RoutingError(f"herdr {' '.join(argv[1:3])} returned no output (exit {code}); expected a JSON envelope")
+
     try:
         payload = json.loads(out)
     except json.JSONDecodeError as exc:
-        raise RoutingError(f"herdr returned non-JSON: {out[:200]}") from exc
+        raise RoutingError(f"herdr {' '.join(argv[1:3])} returned non-JSON: {out[:200]}") from exc
     if "error" in payload:
         raise RoutingError(f"herdr error: {payload['error']}")
     return payload.get("result", payload)
@@ -181,7 +197,8 @@ def launch(
     pane_id = tab["root_pane"]["pane_id"]
 
     command = build_command(cfg, prompt_file=prompt_file, base=base)
-    _herdr_json(["herdr", "pane", "run", pane_id, command])
+    # `pane run` is fire-and-forget and prints nothing on success — see _herdr_json.
+    _herdr_json(["herdr", "pane", "run", pane_id, command], allow_empty=True)
 
     return {
         "stage": stage,

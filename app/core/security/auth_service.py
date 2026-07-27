@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import secrets
 from uuid import UUID
 
 import bcrypt
@@ -14,6 +15,19 @@ from app.core.db.repositories.backup_code_repo import BackupCodeRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.utils.time import utc_now
+
+# CRITICAL: Timing-parity dummy hash for `authenticate()`.
+#
+# Computed once at import time (bcrypt cost 12, same as a real password hash) so that a
+# login attempt against a nonexistent email, an inactive account, or a mismatched org_id
+# costs roughly the same wall-clock time as a login attempt against a real account with a
+# wrong password. Without this, `bcrypt.checkpw` is only ever invoked on the "user exists"
+# path, and its ~100ms+ cost vs. a sub-millisecond early return is a measurable timing
+# side-channel an attacker can use to enumerate valid emails (and, when org_id is
+# supplied, which org an email belongs to) even though the response body/status code are
+# identical. The value itself is never checked against anything; only its bcrypt cost is
+# used, so the specific plaintext doesn't matter.
+_DUMMY_PASSWORD_HASH = bcrypt.hashpw(secrets.token_bytes(32), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
 class AuthService:
@@ -85,12 +99,18 @@ class AuthService:
 
         CRITICAL: Automatically rehashes old SHA-256 passwords to bcrypt on successful login
         This ensures all passwords are eventually migrated to secure bcrypt hashing
+
+        SECURITY: Always performs a bcrypt comparison, even when the account doesn't exist,
+        is inactive, or doesn't belong to the supplied org_id. This closes a timing
+        side-channel: without it, a nonexistent email (or a real email paired with the
+        wrong org_id) would return near-instantly while a real account with a wrong
+        password pays bcrypt's cost, letting an attacker enumerate valid emails/org
+        membership by measuring response latency alone. See `_DUMMY_PASSWORD_HASH` above.
         """
         user = self.user_repo.get_user_by_email(email, org_id=org_id)
-        if not user:
-            return None
-
-        if not user.is_active:
+        if not user or not user.is_active:
+            # Burn a comparable amount of time to the real-password-check path below.
+            self.verify_password(password, _DUMMY_PASSWORD_HASH)
             return None
 
         if not self.verify_password(password, user.password_hash):

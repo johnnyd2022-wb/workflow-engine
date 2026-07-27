@@ -39,3 +39,67 @@ rules:
       - metavariable-regex:
           metavariable: $MODEL
           regex: "^[A-Z][A-Za-z0-9]+$"
+
+  - id: bize-verbose-error-to-client
+    languages: [python]
+    severity: ERROR
+    message: >
+      An exception's str() is being interpolated directly into a jsonify() response body.
+      This can leak internal detail — raw DB driver messages, file paths, SQL fragments —
+      through an API error sent to the client. Log the exception server-side only
+      (logger.exception("...")) and return a fixed, generic error message to the client.
+    metadata:
+      born-from: security-audit
+      finding: "org_routes.py's update_org/list_users/delete_user exception handlers
+        returned jsonify({'error': f'...: {str(e)}'}) — verbose internal error text sent
+        straight to the API client instead of being logged server-side only"
+      date: "2026-07-26"
+      fixture: bize-verbose-error-to-client
+      note: >
+        Narrowed 2026-07-26 to require the interpolation inside a jsonify(...) call —
+        the original pattern (any f-string with {e}/{str(e)} inside an except block)
+        false-positived on logger.error(f"...{e}...") and print(f"...{e}...") calls
+        elsewhere in the app that never reach a client response at all.
+    patterns:
+      - pattern-inside: |
+          try:
+              ...
+          except $EXC as $E:
+              ...
+      - pattern-inside: jsonify(...)
+      - pattern-either:
+          - pattern: f"...{$E}..."
+          - pattern: f"...{str($E)}..."
+          - pattern: '"...".format($E)'
+          - pattern: '"..." + str($E)'
+
+  - id: bize-session-clear-without-rotate
+    languages: [python]
+    severity: WARNING
+    message: >
+      session.clear() here is not immediately followed by session.permanent = True, and
+      isn't inside the shared rotate_session() helper. session.clear() wipes every
+      session key — including the internal `_permanent` key that backs
+      session.permanent — so a hand-rolled clear() + manual key restore silently
+      downgrades a persistent (long-lived) session cookie to a browser-session-only one.
+      Call the shared rotate_session() helper (which clears AND re-sets
+      session.permanent = True) instead of session.clear() directly when rotating an
+      authenticated session (login, 2FA verify, password change, etc).
+    metadata:
+      born-from: security-audit
+      finding: "auth security audit F2: app/api/routes/auth_routes.py's change_password()
+        rotated the session with a bare session.clear() + manual per-key restore instead
+        of the shared rotate_session() helper used by login/signup/verify-2fa, dropping
+        session.permanent (stored as the `_permanent` session key) and silently
+        downgrading the post-password-change cookie from persistent to
+        browser-session-only."
+      date: "2026-07-26"
+      fixture: bize-session-clear-without-rotate
+    patterns:
+      - pattern: session.clear()
+      - pattern-not-inside: |
+          session.clear()
+          session.permanent = ...
+      - pattern-not-inside: |
+          def rotate_session(...):
+              ...

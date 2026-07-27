@@ -54,6 +54,8 @@
       "/api/core/inventory/wastage",
       "/api/crm/overview",
       "/auth/me",
+      "/org",
+      "/org/users",
       {
         "route": "/api/dilution-calculator/solve",
         "method": "POST",
