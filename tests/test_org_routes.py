@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.db.models.audit_log import AuditLog
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import User, UserRole
@@ -307,6 +308,35 @@ def test_patch_org_emits_diff_scoped_audit_event(org_world, db):
     # Only the field that actually changed (name) appears in the diff — status was
     # untouched by this request and must not show up as a spurious change.
     assert "status" not in event.diff
+
+
+def test_patch_org_writes_an_audit_log_row(org_world, db):
+    """AC2, second mechanism: PATCH /org calls log_action as well as emit_event.
+
+    These are two independent trails -- emit_event feeds the entity-event stream, while
+    log_action writes the audit_logs table -- and the event assertion above passes even if
+    log_action is deleted. Closes test-evaluator gap G2
+    (.agents/reports/org/test-evaluator.md), which flagged exactly that blind spot.
+    """
+    resp = org_world["admin_client"].patch("/org", json={"name": "Audit Logged Org"})
+    assert resp.status_code == 200, resp.data
+
+    row = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.org_id == org_world["org_id"],
+            AuditLog.action == "update",
+            AuditLog.entity == "organisation",
+        )
+        .order_by(AuditLog.timestamp.desc())
+        .first()
+    )
+    assert row is not None, "expected an audit_logs row for the org update"
+    assert row.entity_id == org_world["org_id"]
+    assert row.meta_data["name"] == "Audit Logged Org"
+    # The acting user is recorded, not just the org -- an audit row that can't answer
+    # "who did this" is not an audit row.
+    assert row.user_id is not None
 
 
 # --- AC5: invalid role is rejected, and the stored password is hashed -------------------
