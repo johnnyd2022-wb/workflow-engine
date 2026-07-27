@@ -267,3 +267,50 @@ def test_routing_json_is_documented():
 def test_routing_file_round_trips_as_json():
     raw = (REPO_ROOT / ".agents" / "model-routing.json").read_text(encoding="utf-8")
     assert json.loads(raw)["version"] == 1
+
+
+# --- herdr envelope handling ------------------------------------------------------------
+#
+# Regression cover for a bug that made the entire `herdr-tabs` execution mode unusable:
+# `_herdr_json` demanded a JSON envelope from every herdr call, but `herdr pane run` is
+# fire-and-forget and exits 0 with empty stdout (herdr 0.7.3). So `launch` created the tab,
+# then blew up on the very next call with "herdr returned non-JSON:" — and every skill that
+# calls `agent_launch.py launch` silently fell back to subagents instead of running stages
+# in their own labelled tabs, on their own engines.
+
+
+def _fake_run(monkeypatch, *, code=0, out="", err=""):
+    monkeypatch.setattr(agent_launch.shutil, "which", lambda _: "/usr/bin/herdr")
+    monkeypatch.setattr(agent_launch, "_run", lambda argv, timeout=30: (code, out, err))
+
+
+def test_empty_output_is_accepted_when_allowed(monkeypatch):
+    """`herdr pane run` succeeds silently — that must not be an error."""
+    _fake_run(monkeypatch, code=0, out="")
+    assert agent_launch._herdr_json(["herdr", "pane", "run", "w1:p1", "cmd"], allow_empty=True) == {}
+
+
+def test_empty_output_is_still_an_error_when_an_envelope_is_expected(monkeypatch):
+    """Commands we read IDs out of must not silently yield an empty dict — that would
+    turn a missing pane_id into a KeyError far from the cause."""
+    _fake_run(monkeypatch, code=0, out="")
+    with pytest.raises(agent_launch.RoutingError, match="returned no output"):
+        agent_launch._herdr_json(["herdr", "tab", "create", "--label", "x"])
+
+
+def test_nonzero_exit_reports_the_code(monkeypatch):
+    _fake_run(monkeypatch, code=2, err="boom")
+    with pytest.raises(agent_launch.RoutingError, match=r"exit 2"):
+        agent_launch._herdr_json(["herdr", "pane", "run", "w1:p1", "cmd"], allow_empty=True)
+
+
+def test_allow_empty_does_not_swallow_a_real_error_envelope(monkeypatch):
+    """allow_empty relaxes *emptiness*, never error reporting."""
+    _fake_run(monkeypatch, code=0, out=json.dumps({"error": "no such pane"}))
+    with pytest.raises(agent_launch.RoutingError, match="no such pane"):
+        agent_launch._herdr_json(["herdr", "pane", "run", "w9:p9", "cmd"], allow_empty=True)
+
+
+def test_result_is_unwrapped_from_the_envelope(monkeypatch):
+    _fake_run(monkeypatch, code=0, out=json.dumps({"id": "cli:tab:create", "result": {"tab": {"tab_id": "w1:t1"}}}))
+    assert agent_launch._herdr_json(["herdr", "tab", "create"])["tab"]["tab_id"] == "w1:t1"
