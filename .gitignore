@@ -69,3 +69,7 @@ dist/
 .agents/slack-watch-state.json
 .agents/slack-watch-state.corrupt
 .agents/reports/slack-watch/
+
+# gitleaks JSON reports embed the matched secret string for every finding, so a
+# committed report re-publishes every secret it found. Keep scanner output local.
+.agents/reports/**/gitleaks.json
