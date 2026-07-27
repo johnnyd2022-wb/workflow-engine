@@ -62,14 +62,34 @@ across the repo... actually the bulk is org+auth's own files; ran repo-wide spec
 to catch any blast-radius regression from the two shared-file changes, `permissions.py`
 and `auth_service.py`/`session_security.py`. None found.)
 
+## Escalations — now resolved (2026-07-27)
+
+Both items originally left open for human judgment were resolved on the owner's
+instruction to fix all findings:
+
+- **`org_id` login parameter — REMOVED** (`6de6865`). Confirmed no caller: the login form
+  posts `email`/`password`/`device_fingerprint` only, and nothing in `app/` or the
+  frontend sends it. Since `User.email` is `unique=True` globally, the parameter could
+  never select a different account — only act as an org-membership oracle. The two tests
+  that encoded the old contract were replaced with tests asserting the field is now inert.
+- **`USE_RELAXED_AUTH_RATE_LIMITS` — now fails closed** (`6de6865`). Gated on an
+  allowlist (`ENVIRONMENT in {local, test}`) instead of ambient CI markers, so production,
+  unset, misspelled, and unknown environments all keep the strict 5/min limit no matter
+  what `CI`/`GITLAB_CI` say. Verified the old logic returned `True` for
+  `ENVIRONMENT=production, CI=true` and the new one returns `False`, so
+  `tests/test_auth_rate_limit_gating.py` is a real regression guard.
+
 ## Still open
-- `org_id` as a login parameter (see escalation above) — feature-owner decision.
-- `USE_RELAXED_AUTH_RATE_LIMITS` deployment-config risk (see escalation above) — worth a
-  CI/deploy-config check (candidate for **docs-truth** or **ci-gate**, not this review).
-- G3 from test-evaluator (F2 test tests observable outcome, not implementation) —
-  considered and accepted, not a gap.
-- The herdr-tabs tooling break and the cross-agent worktree-collision risk (both noted
-  in the org review) apply here too — recommend routing to `skill-smith` separately.
+- G3 from test-evaluator (F2 test asserts observable outcome, not that `rotate_session()`
+  was called) — considered and deliberately rejected: asserting the `Set-Cookie` header is
+  the correct level; mocking the helper would be an implementation-detail test that breaks
+  on refactor while proving less.
+- **Rotation status of the historic committed credentials is UNCONFIRMED** — see
+  `.gitleaks.toml`. Allowlisting silenced the scanner; it did not revoke anything. Needs a
+  human to confirm whether the GitLab PATs and `sk-live-` value in the pre-2026 deleted
+  files were ever real, and rotate if so.
+- The cross-agent worktree-collision risk (two subagents editing one shared worktree
+  converged on overlapping edits) — still worth a `skill-smith` pass.
 
 ## Recommendation
 Merge. No open findings block; the two escalated items are product/ops decisions, not

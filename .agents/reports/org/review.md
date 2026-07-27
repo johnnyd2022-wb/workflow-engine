@@ -8,14 +8,18 @@ reconstructed at `.agents/specs/org.md` (8 ACs, status: reconstructed).
 
 ## Execution note
 `verification_mode` from preflight was `herdr-tabs`, but `scripts/agent_launch.py`'s
-herdr integration is broken against the installed herdr CLI (0.7.3) — `herdr pane run`
-returns no output where the script expects a JSON envelope, so no stage could launch as
-a labelled tab. Fell back to in-process subagents (Claude, general-purpose) for the two
-Claude-engine stages, and invoked `codex exec --sandbox read-only` directly for the
-Codex-graded stage, bypassing the broken herdr wrapper while keeping the grader
-read-only and on a separate engine as the contract requires. Flagged separately —
-not an org/auth finding, a tooling regression affecting every skill that calls
-`agent_launch.py launch`.
+herdr integration was broken against the installed herdr CLI (0.7.3) — `herdr pane run`
+returns no output where the script expected a JSON envelope, so no stage could launch as
+a labelled tab.
+
+This run therefore fell back to in-process subagents (Claude, general-purpose) for the
+two Claude-engine stages, and invoked `codex exec --sandbox read-only` directly for the
+Codex-graded stage — bypassing the broken herdr wrapper while keeping the grader
+read-only and on a separate engine, as the contract requires.
+
+The launcher itself was **fixed in `d2389eb`** and verified end-to-end afterwards, so
+subsequent runs get real tabs. It was a tooling regression affecting every skill that
+calls `agent_launch.py launch`, not an org/auth finding.
 
 Both `security-audit` and `e2e-playwright` ran as background subagents in the same
 shared worktree and independently converged on overlapping fixes (see below) — a
@@ -50,14 +54,26 @@ patches itself.
   candidate follow-up for **dependency-update**, not done here (out of scope for a
   behavior review).
 
+## Findings — now resolved (2026-07-27)
+
+Resolved on the owner's instruction to fix all findings:
+
+- **`OrgManager.switch_org` — REMOVED** (`b16c05f`). Zero callers anywhere in `app/`,
+  `tests/`, or the frontend. Not merely unused but actively misleading: despite the name
+  it switched nothing, returning a bool with a comment deferring the real work elsewhere,
+  so a future caller would reasonably assume it changed the active org.
+- **G2 — CLOSED** (`b16c05f`). `test_patch_org_writes_an_audit_log_row` now asserts the
+  `audit_logs` row (action/entity/entity_id) and that the acting user is recorded. The
+  route writes two independent trails and only `emit_event` was covered, so deleting the
+  `log_action` call previously left the suite green.
+- **Coverage now measured, not estimated** (`pytest-cov` added). `org_routes.py` **92%**,
+  `permissions.py` **94%**, `org_manager.py` 70%. Replaces this report's earlier
+  "assessed by manual read-through" caveat.
+
 ## Still open
-- `OrgManager.switch_org` — confirmed dead code (unreachable from any route). Flagged,
-  not removed: deleting code is a design call for the feature owner, not an audit's
-  job to make unilaterally.
-- G2 from test-evaluator (minor): the audit-event test for `PATCH /org` doesn't also
-  assert the parallel `log_action` call fired. Logged, not blocking.
-- The herdr-tabs tooling break and the concurrent-subagent-dedup risk (both above) —
-  recommend routing to `skill-smith` separately; out of scope for this feature review.
+- The cross-agent worktree-collision risk (two subagents in one shared worktree
+  independently converging on overlapping edits) — recommend a `skill-smith` pass.
+  The herdr-tabs break noted above is **fixed** (`d2389eb`).
 
 ## Recommendation
 Merge. No open findings block. Spec status set to `reviewed`.
