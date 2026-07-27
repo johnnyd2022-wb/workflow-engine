@@ -68,11 +68,30 @@ def validate_email(email: str) -> tuple[bool, str | None]:
 # ENVIRONMENT=test (integration tests start Flask with ENVIRONMENT=test; CI vars may not
 # always be visible to the server subprocess). Without this, signup/login fall back to
 # 5/minute keyed by IP when email is not parsed — the full pytest suite exceeds that.
-USE_RELAXED_AUTH_RATE_LIMITS = (
-    os.getenv("CI", "").lower() == "true"
-    or os.getenv("GITLAB_CI", "").lower() == "true"
-    or os.getenv("ENVIRONMENT", "").lower() == "test"
+#
+# SECURITY: this is gated on an ALLOWLIST of environments, not a denylist of production.
+# The CI/GITLAB_CI variables are ambient and attacker-irrelevant but operator-fallible —
+# anything from a build container that also serves traffic to a stray `export CI=true` in
+# a deploy script would, under a plain `if CI: relax`, silently raise the login limit to
+# 1000/minute and disable brute-force protection with no error and no log line. Requiring
+# ENVIRONMENT to be explicitly one of the non-production environments makes the dangerous
+# case fail closed: an unset, misspelled, or unexpected ENVIRONMENT keeps the strict
+# limits, and no combination of CI variables can relax them in production.
+_RELAXABLE_ENVIRONMENTS = frozenset({"local", "test"})
+_ENVIRONMENT = os.getenv("ENVIRONMENT", "local").strip().lower()
+
+USE_RELAXED_AUTH_RATE_LIMITS = _ENVIRONMENT in _RELAXABLE_ENVIRONMENTS and (
+    os.getenv("CI", "").lower() == "true" or os.getenv("GITLAB_CI", "").lower() == "true" or _ENVIRONMENT == "test"
 )
+
+if USE_RELAXED_AUTH_RATE_LIMITS:
+    # Loud on purpose: if this ever appears in a production log, the gate above was
+    # misconfigured and auth brute-force protection is effectively off.
+    logger.warning(
+        "auth_rate_limits_relaxed",
+        environment=_ENVIRONMENT,
+        reason="non-production environment with CI/test markers set",
+    )
 
 
 # CRITICAL: Custom rate limiting key function that combines IP + email/account
@@ -251,7 +270,16 @@ def login():
 
     email = data.get("email")
     password = data.get("password")
-    org_id = data.get("org_id")  # Optional: allow specifying org_id
+
+    # SECURITY: `org_id` is deliberately NOT read from the request body. `users.email` is
+    # globally unique (User.email is unique=True, not unique-per-org), so an org_id could
+    # only ever narrow the lookup to the same user or to nothing — it can never select a
+    # different account. Its only real effect was as an oracle: pairing a known email with
+    # a guessed org_id let an attacker probe org membership. Timing parity now hides that
+    # (see AuthService.authenticate), but the parameter itself had no legitimate caller —
+    # the login form sends email/password/device_fingerprint only — so it is gone rather
+    # than merely mitigated. Internal callers that genuinely need a scoped lookup still
+    # have `get_user_by_email(email, org_id=...)`.
 
     if not email or not password:
         return jsonify({"error": "email and password are required"}), 400
@@ -281,13 +309,12 @@ def login():
         is_password_reset = data.get("password_reset", False)
 
         auth_service = AuthService(db)
-        org_uuid = UUID(org_id) if org_id else None
 
         # Try to get user by email first to check lockout status
         # This is done before authentication to check lockout status
         # Email is already normalized above
         user_repo = UserRepository(db)
-        user_by_email = user_repo.get_user_by_email(email, org_id=org_uuid)
+        user_by_email = user_repo.get_user_by_email(email)
 
         # CRITICAL: Timing side-channel fix — always run the password check FIRST, before
         # branching on lockout state, so the lockout early-return doesn't skip bcrypt.
@@ -296,10 +323,10 @@ def login():
         # attacker distinguish "this account is locked" from "wrong password" purely by
         # response latency even though the returned message/status are identical.
         # AuthService.authenticate() itself pays the same bcrypt cost for a nonexistent
-        # user / wrong org_id (see its `_DUMMY_PASSWORD_HASH` comparison), so this single
-        # call also equalizes timing across all four cases: no such user, wrong org_id,
+        # or inactive user (see its `_DUMMY_PASSWORD_HASH` comparison), so this single
+        # call also equalizes timing across all cases: no such user, inactive user,
         # wrong password, and locked account.
-        user = auth_service.authenticate(email, password, org_id=org_uuid)
+        user = auth_service.authenticate(email, password)
 
         # CRITICAL: Account Lockout Logic
         # If account is locked and this is NOT a password reset, block login
@@ -585,11 +612,11 @@ def login():
             }
         ), 200
 
-    except ValueError as e:
-        # False positive (bize-verbose-error-to-client): {e} is only interpolated into the
-        # server-side log line below; the client-facing jsonify() response two lines down
-        # is a fixed generic string and never includes `e`.
-        logger.warning(f"Invalid org_id in login: {e}")  # nosemgrep: bize-verbose-error-to-client
+    except ValueError:
+        # Kept as a guard even though the client-supplied org_id that used to be parsed
+        # here (UUID(org_id)) is gone: a ValueError from anything else in this handler
+        # should still be a 400 with a fixed message, not an unhandled 500.
+        logger.warning("login_value_error")
         return jsonify({"error": "Invalid request"}), 400
     except Exception:
         logger.exception("Login failed")

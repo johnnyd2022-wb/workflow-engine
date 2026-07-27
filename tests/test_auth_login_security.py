@@ -178,28 +178,40 @@ def test_login_nonexistent_and_wrong_password_return_identical_response(account)
     assert nonexistent.get_json()["error"] == wrong_password.get_json()["error"] == GENERIC_LOGIN_ERROR
 
 
-def test_login_wrong_org_id_returns_identical_response_to_wrong_password(account):
-    """A real email with a guessed-wrong org_id must look identical to a wrong password —
-    it must not reveal "this email doesn't belong to that org" via a different message.
+def test_login_ignores_client_supplied_org_id(account):
+    """`org_id` in the login body must be ignored outright, not honoured.
+
+    It used to scope the user lookup, which made it an org-membership oracle: pair a known
+    email with a guessed org_id and the response told you whether that pairing was real.
+    Because `users.email` is globally unique, the parameter could never select a different
+    account anyway, so it was removed rather than merely timing-equalised.
+
+    The proof that it is *ignored* (not just uniformly rejected) is that a deliberately
+    bogus org_id alongside valid credentials still logs in. If the parameter were still
+    being applied as a filter, this would 401.
     """
-    client = account["make_client"]()
-    wrong_org = client.post(
+    resp = account["make_client"]().post(
         "/auth/login",
         json={"email": account["email"], "password": PASSWORD, "org_id": str(uuid4())},
     )
-    wrong_password = account["make_client"]().post(
-        "/auth/login", json={"email": account["email"], "password": "definitely-wrong"}
-    )
-    assert wrong_org.status_code == wrong_password.status_code == 401
-    assert wrong_org.get_json()["error"] == wrong_password.get_json()["error"] == GENERIC_LOGIN_ERROR
+    assert resp.status_code == 200, resp.data
 
-
-def test_login_correct_org_id_still_succeeds(account):
-    """Sanity check: supplying the correct org_id still logs in normally."""
-    client = account["make_client"]()
-    resp = client.post(
+    # And a real org_id is equally inert — same outcome, so the field carries no signal
+    # either way and cannot be used to probe membership.
+    same = account["make_client"]().post(
         "/auth/login",
         json={"email": account["email"], "password": PASSWORD, "org_id": str(account["org_id"])},
+    )
+    assert same.status_code == 200, same.data
+
+
+def test_login_malformed_org_id_is_not_a_500(account):
+    """A non-UUID org_id used to reach UUID(org_id) and raise. Now that the field is
+    ignored, garbage in it must be inert — not a 400, and certainly not an unhandled 500.
+    """
+    resp = account["make_client"]().post(
+        "/auth/login",
+        json={"email": account["email"], "password": PASSWORD, "org_id": "not-a-uuid-at-all"},
     )
     assert resp.status_code == 200, resp.data
 
