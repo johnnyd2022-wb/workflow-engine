@@ -1,18 +1,19 @@
 # Feature Index
 
 **What this is:** the cached map of what this app does and where each capability lives, so a
-session can scope work to one slice instead of treating `core` as a single 5784-line feature.
+session can scope work to one slice instead of treating `core` as a single 5763-line feature.
 Read the slice you're touching plus its `depended on by` line before you start.
 
-14 slices + platform. Two of them — **crm** and **dilution-calculator** — already have the
-target directory layout; the other twelve are still inside `core_bp`.
+14 slices + platform. Three — **crm**, **dilution-calculator** and **demo-data** — have the
+target directory layout under `app/features/`; the other eleven are still inside `core_bp`.
 
-**This describes the code as it is today, not the target.** The physical carve
-(`.agents/plans/feature-slicing-plan.md`) has not started. Line ranges into
-`app/core/backend/backend.py` are therefore load-bearing and will drift — treat a miss as a
-signal to re-locate and update this file, not as licence to guess.
+**This describes the code as it is today, not the target.** The carve
+(`.agents/plans/feature-slicing-plan.md`) is in progress: Phase 1 has moved demo-data.
+Line ranges into `app/core/backend/backend.py` are load-bearing and shift every time a slice
+leaves that file — treat a miss as a signal to re-locate and update this file, not as licence
+to guess.
 
-Last verified: 2026-07-27 against `origin/main` @ `f4495aa`.
+Last verified: 2026-07-28, `backend.py` @ 5763 lines (demo-data carved out).
 
 ## Two axes
 
@@ -104,9 +105,9 @@ how they get carved.
               /api/core/processes/<id>/steps [POST], /steps/<sid> [PUT DELETE]
               /api/core/processes/<id>/steps/reorder [POST]
               /api/core/process-docs/* (config, upload, inline, <step_id>, download, DELETE)
-    backend:  app/core/backend/backend.py:1200-1693 (processes+steps API)
-              app/core/backend/backend.py:854-1021 (wizard pages)
-              app/core/backend/backend.py:138-423 (flow-wizard session state + guards)
+    backend:  app/core/backend/backend.py:1201-1694 (processes+steps API)
+              app/core/backend/backend.py:855-1022 (wizard pages)
+              app/core/backend/backend.py:139-424 (flow-wizard session state + guards)
               app/core/backend/process_docs/ (routes 221, service 343, validation 180, storage 125)
     models:   Process, ProcessVersion, Step, ProcessStepDocument
     repos:    process_repo, process_step_document_repo
@@ -120,9 +121,9 @@ how they get carved.
     depends on:      platform, inventory (steps reference item types)
     depended on by:  execution, traceability, dashboard
 
-    - The wizard keeps state in the Flask session (_flow_state_* helpers, backend.py:332-423)
+    - The wizard keeps state in the Flask session (_flow_state_* helpers, backend.py:333-424)
       with a step-order guard. Wizard changes must keep _maybe_enforce_flow_wizard_step honest.
-    - _safe_flow_return_to (backend.py:144) is an open-redirect guard whose ALLOWED_PREFIX
+    - _safe_flow_return_to (backend.py:145) is an open-redirect guard whose ALLOWED_PREFIX
       must stay in sync with batch-start-scripts.html. It has its own test file.
     - flows2-*.js straddles this slice and execution — the least clean boundary in the app.
 
@@ -139,8 +140,8 @@ how they get carved.
               /api/core/executions/<id>/steps/<sid>/complete [POST]
               /api/core/execution-metadata
               /api/core/evidence/* (config, upload, <id>/download, list, DELETE)
-    backend:  app/core/backend/backend.py:1694-2600 (executions API; complete_step is 1985-2600)
-              app/core/backend/backend.py:4037-4120 (execution metadata)
+    backend:  app/core/backend/backend.py:1695-2601 (executions API; complete_step is 1985-2600)
+              app/core/backend/backend.py:4016-4099 (execution metadata)
               app/core/backend/dagtraversal.py (850)
               app/core/backend/complete_step_payload.py (95)
               app/core/backend/evidence/ (routes 180, service 332, validation 174, storage 145)
@@ -160,8 +161,8 @@ how they get carved.
       inventory, produces outputs, writes movements, emits events and enforces idempotency
       in one transaction. Read all of it before changing any of it.
     - Incoming execution_data is stripped of audit/trace keys (_strip_incoming_execution_trace_keys,
-      backend.py:471) then re-derived from the session. Any other persistence path must do
-      the same — the contract is documented at backend.py:553.
+      backend.py:472) then re-derived from the session. Any other persistence path must do
+      the same — the contract is documented at backend.py:554.
     - workflow_execution_lineage records parent/child execution relationships.
 
 ## inventory
@@ -176,8 +177,8 @@ how they get carved.
               /api/core/inventory/out-of-stock
               /api/core/inventory/{barcode/<code>,csv-validate,csv-commit,decode-barcode}
               /api/core/config/units
-    backend:  app/core/backend/backend.py:2601-3012 (list/read), :3489-3845 (CRUD+adjust)
-              app/core/backend/backend.py:3405-3465 (out-of-stock)
+    backend:  app/core/backend/backend.py:2602-3013 (list/read), :3468-3824 (CRUD+adjust)
+              app/core/backend/backend.py:3406-3467 (out-of-stock)
               app/core/backend/inventory_upload_routes.py (396)
               app/core/utils/{unit_conversion,inventory_quantity}.py
               app/core/domain/inventory_quantity_guard.py (169)
@@ -204,7 +205,7 @@ how they get carved.
 
     routes:   /core/inventory/dispose, /core/inventory/dispose/confirm
               /api/core/inventory/wastage [GET POST]
-    backend:  app/core/backend/backend.py:2997-3012 (advisory lock), :3013-3405 (record+list)
+    backend:  app/core/backend/backend.py:2998-3013 (advisory lock), :3014-3406 (record+list)
               app/core/utils/inventory_wastage_quantity.py (89)
     models:   InventoryWastage
     repos:    wastage_repo
@@ -215,7 +216,7 @@ how they get carved.
     depended on by:  compliance-checks, dashboard
 
     - Idempotency is a Postgres advisory lock keyed on batch hash
-      (_pg_advisory_lock_wastage_idempotency, backend.py:2997) — not the ApiIdempotencyKey
+      (_pg_advisory_lock_wastage_idempotency, backend.py:2998) — not the ApiIdempotencyKey
       table the rest of the app uses. Two different mechanisms; don't assume one.
     - Separate table and separate compliance meaning from an inventory adjustment. Writing
       stock off is not the same event as correcting a count.
@@ -286,8 +287,8 @@ how they get carved.
               /api/core/inventory/trace/<raw_material_id> [GET]        (forward)
               /api/core/inventory/trace-backward/<item_id> [GET]
               /api/core/sourcemap/objects [GET], /api/core/sourcemap/trace [POST]
-    backend:  app/core/backend/backend.py:3846-4036 (trace fwd/back)
-              app/core/backend/backend.py:5579-5784 (sourcemap)
+    backend:  app/core/backend/backend.py:3825-4015 (trace fwd/back)
+              app/core/backend/backend.py:5558-5763 (sourcemap)
               app/core/backend/temporal_dag_tracer.py (179)
     frontend: frontend/sourcemap/sourcemap.html, js/sourcemap.js (2128), css/sourcemap.css
     tests:    GAP — no test touches sourcemap at all
@@ -310,7 +311,7 @@ how they get carved.
     routes:   /api/core/entities/<type>/<id>/story [GET]
               /api/core/entities/<type>/<id>/summary [GET]
               /api/core/entities/activity [GET]
-    backend:  app/core/backend/backend.py:4858-5578 (event→human diff rendering, 721 lines)
+    backend:  app/core/backend/backend.py:4837-5557 (event→human diff rendering, 721 lines)
               app/core/backend/event_writer.py (458) — WRITER, belongs to platform
               app/core/utils/{emit_event,log_action}.py
     models:   EntityEvent, EntityEventSummary, AuditLog
@@ -322,7 +323,7 @@ how they get carved.
 
     - Split of responsibility: EventWriter is platform (every slice emits events); reading
       the stream back as human-readable history is this slice. Writer down, reader up.
-    - _merge_inventory_legacy_audit (backend.py:5361) blends pre-event-sourcing AuditLog
+    - _merge_inventory_legacy_audit (backend.py:5327) blends pre-event-sourcing AuditLog
       rows into the modern EntityEvent stream. There are two historical formats in play.
     - ~450 of the 721 lines are diff humanisation (_smart_list_diff_rows, _human_summary,
       _fmt_field_value). Presentation logic in the API layer — a candidate for a service.
@@ -334,8 +335,8 @@ how they get carved.
     flag:         none
 
     routes:   /core/dashboard, /api/core/dashboard/summary [GET], /api/core/metrics [GET]
-    backend:  app/core/backend/backend.py:4121-4801 (summary, action board, weekly series)
-              app/core/backend/backend.py:4802-4857 (metrics)
+    backend:  app/core/backend/backend.py:4100-4780 (summary, action board, weekly series)
+              app/core/backend/backend.py:4781-4836 (metrics)
     frontend: frontend/dashboard/dashboard.html, js/dashboard.js,
               js/core-active-batches-graph.js (813), css/dashboard_spa.css
     tests:    test_dashboard_summary
@@ -345,8 +346,8 @@ how they get carved.
 
     - COMPOSITION SLICE: it aggregates six others. The rule that makes the taxonomy hold is
       that it consumes their services, never queries their tables directly. Today it does
-      query directly — _dashboard_event_counts_by_day (:4396) hits EntityEvent and
-      _dashboard_execution_counts_by_day (:4416) hits Execution, both bypassing the repos.
+      query directly — _dashboard_event_counts_by_day (:4375) hits EntityEvent and
+      _dashboard_execution_counts_by_day (:4395) hits Execution, both bypassing the repos.
       That's the debt this slice exists to name.
     - Reads config.crm_enabled at :4666 — the only feature-flag branch inside core.
 
@@ -416,8 +417,8 @@ how they get carved.
               /core/static/{js,css,img,inventory}/<filename>  (4 serving routes)
               /ui/shared/<filename>  (app_factory.py:115 — .js/.css only, auth by allowlist)
               landing, session-expired
-    backend:  app/core/backend/backend.py:604-630 (hub/settings/integrations pages)
-              app/core/backend/backend.py:1043-1199 (static serving)
+    backend:  app/core/backend/backend.py:605-631 (hub/settings/integrations pages)
+              app/core/backend/backend.py:1044-1200 (static serving)
               app/api/app_factory.py
     frontend: app/ui/templates/{landing,session_expired,biz-e-diagram-landing}.html
               app/ui/templates/shared/sidebar-v2.html   <-- THE LIVE SIDEBAR
@@ -443,21 +444,36 @@ how they get carved.
 
     subscription: n/a (dev only)
     layer:        non-product
-    flag:         none — SHOULD HAVE ONE
+    flag:         none — but the route self-gates on config.environment
 
     routes:   /api/core/reset-demo-db [POST]
-    backend:  app/core/backend/backend.py:3466-3488
-              app/core/utils/mock_data.py (681), app/core/utils/resetdb.py (378)
-    frontend: js/mockData.js (563)
-    tests:    (exercised indirectly by fixtures)
+    backend:  app/features/demo_data/           <-- CARVED (Phase 1, first slice out)
+                routes/api_routes.py (register_routes seam, mounted on core_bp)
+                services/resetdb.py (378)
+    frontend: none
+    tests:    exercised as fixture infrastructure by test_corechecks,
+              test_executions, test_dag_traversal (they import reset_demo_db,
+              clear_demo_db, DEMO_USER_EMAIL from services/resetdb.py)
 
     depends on:      platform, inventory, process-design, execution
-    depended on by:  (leaf)
+    depended on by:  the three test files above — resetdb is NOT dev-only, it is
+                     load-bearing test infrastructure
 
-    - This route wipes and reseeds a database. It is gated by @requires_auth and a
-      show_reset_db template flag, but by no environment or feature flag. Isolating it so
-      production can hard-disable it is the main reason this is its own slice.
+    - This route wipes and reseeds a database. It self-gates on
+      config.environment in ("test", "local") and is behind @requires_auth, but has
+      no feature flag. Isolating it so production can hard-disable it is the main
+      reason this is its own slice.
+    - DEMO_USER_EMAIL now has one definition (services/resetdb.py). It was previously
+      duplicated in mock_data.py; backend.py imported the mock_data copy while the
+      tests imported the resetdb copy.
+    - Removed as proven-dead during the carve: app/core/utils/mock_data.py (681 lines,
+      of which only the duplicate constant was referenced) and
+      app/core/frontend/js/mockData.js (563 lines, referenced by no template or script).
     - Distinct from tests/factories.py — that's the test-fixtures skill's territory.
+    - The seeding tests are NOT isolated from each other: a failed run leaves demo rows
+      behind and the next run hits unique-constraint violations on re-seed. If you see
+      UniqueViolation on uq_inventory_items_org_name_batch or StaleDataError on
+      execution_steps, the DB is dirty — that is not your change.
 
 ---
 
