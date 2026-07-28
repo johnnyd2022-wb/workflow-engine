@@ -14,7 +14,7 @@ import pytest
 from app.core.backend.dagtraversal import DAGTracer, validate_item_uuid
 from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
-from app.core.utils.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
+from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
 from tests.dag_traversal_helpers import (
     QueryCounter,
     assert_traversal_invariants,
