@@ -125,8 +125,12 @@ between a run that finishes and one that dies mid-chain. Two rules for orchestra
   routing in that file, never inline in a SKILL.md.
 - **Quota is the constraint, not cost.** Stage agents draw on the same subscription as the
   orchestrator, so parallelism buys no capacity — it burns the window faster. Run the chain
-  serially except the one pair it declares independent (`security-audit ∥ e2e-playwright`).
-  Routing graders to Codex is the exception that genuinely helps: a separate pool.
+  serially except the groups declared in `.agents/model-routing.json`
+  (`security-audit ∥ e2e-playwright`). Routing graders to Codex is the exception that
+  genuinely helps: a separate pool. Quota is only the cheap reason to stay serial; the
+  binding one is **one writer per worktree** (`.agents/verification-chain.md` §6) — two
+  writing agents in one checkout collide silently, and no amount of spare quota makes that
+  safe.
 - **Effort is the second dial.** Stepping a stage from `xhigh` to `medium` is often a bigger
   saving than changing its model, and costs less capability on rubric-following work. The
   routing table carries an explicit effort per stage; `gpt-5.6-sol` in particular defaults

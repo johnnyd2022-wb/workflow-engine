@@ -50,16 +50,29 @@ The shape, and why:
   model, at less capability cost on rubric-following work. `gpt-5.6-sol` defaults to `low`,
   so an unset effort ships a shallow review that still looks like a review.
 
-## 3. Graders are read-only, by construction
+## 3. Graders are read-only
 
-Every grader carries `access: read`, which becomes `--permission-mode auto` (Claude) or
-`--sandbox read-only` (Codex). `agent_launch.py --check` **fails** if a grader is ever given
-write access, and CI runs that check.
+Every grader carries `access: read`. `agent_launch.py --check` **fails** if a grader is ever
+given write access, and CI runs that check.
 
-This is the fresh-eyes principle enforced at the permission layer instead of trusted to the
-grader's restraint: a grader physically cannot edit the code or tests it judges. Findings
-come back to the orchestrator to fix. A grader that could "just fix it" is how a weakened
-test gets written by the agent that was supposed to catch weakened tests.
+This is the fresh-eyes principle: a grader must not edit the code or tests it judges.
+Findings come back to the orchestrator to fix. A grader that could "just fix it" is how a
+weakened test gets written by the agent that was supposed to catch weakened tests.
+
+**How strongly that is enforced depends on the mode — know which one you are in:**
+
+| Mode | What stops a grader writing |
+|---|---|
+| `herdr-tabs`, Codex stage | `--sandbox read-only`. A real syscall sandbox; the write fails |
+| `herdr-tabs`, Claude stage | `--permission-mode auto` **plus** `--disallowed-tools Edit Write NotebookEdit`. `auto` alone auto-*approves* — it is not read-only. The denylist withholds the edit tools, but graders keep Bash (they run semgrep, pytest, git), so a stage that shells out can still write |
+| `herdr-adversarial` | Nothing mechanical. The Breaker pane is a plain interactive `codex`, launched without a sandbox flag |
+| `subagents` | Nothing mechanical. In-process subagents inherit the orchestrator's permissions — `access` is not consulted at all on this path |
+
+So `access: read` is a hard boundary only for Codex tabs. Everywhere else it is a rule the
+stage is *told*, which means **the orchestrator carries the guarantee, not the launcher**:
+put the read-only line from §5 in every `access: read` stage prompt, and never spawn a
+grader alongside a writer (§6). Do not let "graders are read-only by construction" become a
+reason to skip that — outside Codex tabs, construction is not doing the work.
 
 ## 4. Blocking vs advisory
 
@@ -86,6 +99,24 @@ Write your report to .agents/reports/<slug>/<stage>.md and end your reply with
 exactly one line: VERDICT: clean | patched | findings-open
 ```
 
+**Append this to every `access: read` stage's prompt** — it is the only thing enforcing the
+boundary outside Codex tabs (§3), and it costs one line:
+
+```
+You are read-only for this stage. Do not edit, create, or delete any file under app/,
+tests/, or scripts/ — not with an edit tool, not via a shell command, not a "quick fix"
+on the way past. Report findings with file:line and hand them back; the orchestrator
+patches. Your report file is the one thing you write.
+```
+
+**And this to every stage that runs in a declared parallel group (§6):**
+
+```
+Another stage is running against this same worktree right now. Confine your writes to
+the files this task names. Do not reformat, tidy, or opportunistically fix anything
+outside them, and do not run a formatter or codemod across the tree.
+```
+
 Read the **report file**, not the pane transcript — pane text scrolls, wraps, and truncates.
 
 **A `--sandbox read-only` / `access: "read"` grader cannot write that file itself** — verified
@@ -100,12 +131,41 @@ and writing the report file on its behalf. This is the same "read the report fil
 transcript" rule from the other direction: for a read-only stage, the orchestrator's
 transcript-to-file transcription *is* how the file comes to exist at all.
 
-## 6. Concurrency
+## 6. Concurrency: one writer per worktree
 
-Stage agents draw on the **same subscription quota** as the orchestrator, so parallelism
-buys no capacity — it burns the window faster. Run serially except the one pair the chain
-declares independent (`security-audit ∥ e2e-playwright`). Codex stages are the exception
+Two independent reasons to keep the chain serial. The first is a budget; the second is a
+correctness rule that does not bend.
+
+**Quota.** Stage agents draw on the **same subscription quota** as the orchestrator, so
+parallelism buys no capacity — it burns the window faster. Codex stages are the exception
 worth leaning on: they spend a different pool.
+
+**One writer per worktree.** Every stage — tab, pane, or in-process subagent — operates on
+**the same checkout**. Two `access: write` stages in the same turn edit the same files with
+no lock, no coordination, and no way to see each other. The failure is silent: both stages
+report success, whichever wrote last wins, and if they happened to fix the same thing you
+get duplicated or half-overwritten edits that still pass tests. *This has already happened
+once* — two subagents converged on overlapping fixes to the same files. It was harmless only
+by luck.
+
+So:
+
+- **The allowed parallel groups are declared as data**, in `.agents/model-routing.json` →
+  `concurrency.parallel_groups`, and `agent_launch.py --check` fails CI if any group holds
+  more than one write-access stage. Today that is exactly one group:
+  `security-audit ∥ e2e-playwright` — safe because security-audit is `access: read`.
+- **Never parallelise a pair the table does not declare**, and never widen a group by
+  reasoning about it in prose. Change the JSON, let the checker rule on it.
+- **A read stage beside a write stage is fine.** A read stage beside another read stage is
+  fine. Two writers never are — not even "on different files", because neither agent can
+  prove that in advance and both are free to widen their own blast radius mid-run.
+- **`patched` after parallel stages means re-baseline.** When a group finishes, `git status`
+  before the next stage: a stage that patched changed the tree the next stage assumes.
+
+For the cross-pane case the same rule is stated as file ownership in
+`herdr-multi-agent-collab` §6 — `files_touched` is the lock list, one writer at a time.
+That skill governs two *human-visible panes*; this section governs the chain's stages, in
+every mode. They are the same rule about the same worktree.
 
 ## 7. Circuit breaker
 

@@ -116,7 +116,7 @@ exactly one line: VERDICT: clean | patched | findings-open
 
 Sequencing rules:
 - **migration-safety** runs before security/e2e whenever the spec's data model section says changes (both need a migratable schema to test against). Skip it, and say you skipped it, when the spec says `changes: none`.
-- **security-audit** and **e2e-playwright** are independent; spawn them in the same turn so they run in parallel. This is the *only* pair to parallelise: stage agents draw on the same subscription quota as you, so extra concurrency buys no capacity and burns the window faster. Keep the rest serial.
+- **security-audit** and **e2e-playwright** are independent; spawn them in the same turn so they run in parallel. This is the *only* pair to parallelise, and the allowed groups are declared in `.agents/model-routing.json` → `concurrency.parallel_groups`, not decided here. Two reasons, both in `.agents/verification-chain.md` §6: extra concurrency buys no capacity (same quota) and, more importantly, **every stage shares one worktree** — this pair is safe only because security-audit is `access: read`. Never spawn two writing stages in the same turn. Keep the rest serial.
 - **security-tenant-audit** follows the security-audit scanner pass, on Codex. Treat its findings exactly like security-audit's — they merge into one security verdict for step 8.
 - **observability** runs after those pass, instrumenting anything the build missed.
 - **test-author** runs after observability: it reconciles the *rest* of the suite against this feature's diff (tests in other areas the change rippled into) and refreshes `.agents/test-map.md` — the build wrote this feature's own tests; this stage catches what those tests didn't know they touched.

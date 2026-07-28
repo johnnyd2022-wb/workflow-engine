@@ -111,6 +111,22 @@ def test_read_access_maps_to_auto(routing):
     assert "acceptEdits" not in cmd
 
 
+def test_read_access_withholds_the_edit_tools(routing):
+    """`--permission-mode auto` auto-approves; it is not read-only. Without the tool
+    denylist a Claude 'read' stage can edit the code it grades — which is how two
+    stages sharing one worktree wrote overlapping fixes to the same files."""
+    cfg = agent_launch.resolve_stage(routing, "security-audit")
+    cmd = agent_launch.build_command(cfg, prompt_file="/tmp/p.md")
+    assert "--disallowed-tools Edit Write NotebookEdit" in cmd
+
+
+def test_write_access_keeps_the_edit_tools(routing):
+    """The denylist must not leak onto stages whose whole job is writing code."""
+    cfg = agent_launch.resolve_stage(routing, "build")
+    cmd = agent_launch.build_command(cfg, prompt_file="/tmp/p.md")
+    assert "--disallowed-tools" not in cmd
+
+
 def test_claude_command_pipes_prompt_and_sets_model_and_effort(routing):
     cfg = agent_launch.resolve_stage(routing, "build")
     cmd = agent_launch.build_command(cfg, prompt_file="/tmp/p.md")
@@ -197,6 +213,58 @@ def test_virtual_stages_need_no_skill_file(routing, tmp_path):
 def test_shipped_routing_table_is_valid():
     """The table this repo actually ships must pass its own checker."""
     assert agent_launch.check(agent_launch.load_routing()) == []
+
+
+# --- concurrency: one writer per worktree ----------------------------------
+
+
+def test_check_rejects_two_writers_in_one_parallel_group(routing):
+    """The collision this guard exists for: every stage shares one worktree, so two
+    write-access stages in the same turn edit the same files with no coordination —
+    and both report success, because neither can see the other."""
+    routing["stages"]["e2e-playwright"] = {
+        "engine": "claude",
+        "model": "sonnet",
+        "effort": "high",
+        "access": "write",
+        "blocking": True,
+    }
+    routing["concurrency"] = {"parallel_groups": [["build", "e2e-playwright"]]}
+    problems = agent_launch._check_parallel_groups(routing)
+    assert len(problems) == 1
+    assert "at most one writer" in problems[0]
+
+
+def test_check_allows_a_reader_beside_a_writer(routing):
+    """read ∥ write is the shape the chain actually declares, and it is safe."""
+    routing["concurrency"] = {"parallel_groups": [["security-audit", "build"]]}
+    assert agent_launch._check_parallel_groups(routing) == []
+
+
+def test_check_flags_an_unknown_stage_in_a_parallel_group(routing):
+    routing["concurrency"] = {"parallel_groups": [["build", "ghost"]]}
+    assert "unknown stage(s) ghost" in agent_launch._check_parallel_groups(routing)[0]
+
+
+def test_check_flags_a_stage_parallel_with_itself(routing):
+    routing["concurrency"] = {"parallel_groups": [["build", "build"]]}
+    assert "parallel with itself" in agent_launch._check_parallel_groups(routing)[0]
+
+
+def test_a_table_declaring_no_concurrency_is_valid(routing):
+    """Fully serial is always safe; absence of the block must not be an error."""
+    assert agent_launch._check_parallel_groups(routing) == []
+
+
+def test_shipped_table_declares_at_most_one_writer_per_group():
+    """Guards the real table, not a fixture: if someone parallelises two writing
+    stages, CI fails here before a run corrupts a worktree."""
+    routing = agent_launch.load_routing()
+    groups = routing["concurrency"]["parallel_groups"]
+    assert groups, "the chain declares one parallel pair; an empty list means it was lost"
+    for group in groups:
+        writers = [s for s in group if routing["stages"][s]["access"] == "write"]
+        assert len(writers) <= 1, f"{group} has multiple writers: {writers}"
 
 
 def test_shipped_table_puts_opus_only_where_it_earns_it():

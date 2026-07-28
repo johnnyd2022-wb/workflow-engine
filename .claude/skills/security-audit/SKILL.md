@@ -1,6 +1,6 @@
 ---
 name: security-audit
-description: "Audit the Flask codebase (or one feature blueprint) for security vulnerabilities: run semgrep with Flask/OWASP plus custom repo rules, gitleaks, uv audit, then hunt the class scanners miss, especially tenant isolation and missing auth. Findings don't stop at a report — this skill drives remediation to an MR (itself when scoped, via fix-bug/dependency-update when wider), through the normal adversarial verification. Use this skill whenever the user mentions security, vulnerabilities, semgrep, secrets, dependency CVEs, auth review, or tenant isolation, whenever new-feature or review-feature calls it after a build, or on a scheduled security sweep. Autonomous: opens at most one MR per finding class; the MR is the human gate."
+description: "Audit the Flask codebase (or one feature blueprint) for security vulnerabilities: run semgrep with Flask/OWASP plus custom repo rules, gitleaks, uv audit, then hunt the class scanners miss, especially tenant isolation and missing auth. Findings don't stop at a report — invoked as a front door (user ask or scheduled sweep) this skill drives remediation to an MR (itself when scoped, via fix-bug/dependency-update when wider), through the normal adversarial verification; invoked as a chain stage it is a read-only grader that reports findings and lets the caller patch. Use this skill whenever the user mentions security, vulnerabilities, semgrep, secrets, dependency CVEs, auth review, or tenant isolation, whenever new-feature or review-feature calls it after a build, or on a scheduled security sweep. Autonomous: opens at most one MR per finding class; the MR is the human gate."
 ---
 
 # Security Audit
@@ -9,7 +9,7 @@ Two layers, and the order matters. Scanners (semgrep, gitleaks, uv audit) catch 
 
 Every audit ends with a rule: when you find a vulnerability class by reading code, write a custom semgrep rule for it so the NEXT occurrence is caught by machine, not by hoping an agent reads carefully. That is how this skill compounds.
 
-And every audit ends with **remediation, not a report**. A findings list nobody actions is a record of known-unfixed vulnerabilities — arguably worse than not looking, because it converts ignorance into documented negligence. Section 5 is not optional.
+And every audit ends with **remediation, not a report**. A findings list nobody actions is a record of known-unfixed vulnerabilities — arguably worse than not looking, because it converts ignorance into documented negligence. Section 5 is not optional — though *who* does the remediating depends on whether you were invoked as a front door or as a read-only chain stage, which is the first thing section 5 settles.
 
 Read `.agents/autonomy.md`: this skill runs unattended, ships via MR, and never merges.
 
@@ -124,6 +124,23 @@ manual_checklist: 7/7 completed
 Patch `fix` items yourself when scoped to the audited feature; for architectural findings that ripple wider, route them per section 5 rather than refactoring half the app inside an audit.
 
 ## 5. Remediate to an MR (the step that makes this real)
+
+**First, know which of the two ways you were invoked — they have different write rights:**
+
+| Invoked as | You are | What you do with `fix` findings |
+|---|---|---|
+| **A front door** — user asked for an audit, or a scheduled sweep. Nothing else is running. | The orchestrator | This whole section. Route, fix, open the MR. |
+| **A chain stage** — `new-feature`, `fix-bug`, or `review-feature` spawned you (`access: read`, often running in parallel with `e2e-playwright`) | A read-only grader | **Report, do not patch.** Write findings with `file:line`, evidence and severity to your report file, end with `VERDICT: findings-open`, and hand back. The caller patches — that is its Step 4/7. |
+
+This is not a softening of "remediation, not a report". The remediation still happens; the
+caller does it, having read your report, and the finding is closed before that chain ships.
+What the distinction prevents is two agents writing to one worktree at the same time: as a
+chain stage you may be running beside `e2e-playwright`, which is writing test files, and
+neither of you can see the other's edits (`.agents/verification-chain.md` §6). Patching from
+here produces overlapping, silently-conflicting fixes — it has already happened once.
+
+If you are unsure which you are: a stage prompt names a report path and demands a `VERDICT:`
+line. That is a chain stage. Report and hand back.
 
 Every `fix`-bucket finding gets routed. Which route depends on the finding, not on convenience:
 

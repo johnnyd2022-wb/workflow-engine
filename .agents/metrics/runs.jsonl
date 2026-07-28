@@ -23,3 +23,4 @@
 {"duration_s": null, "findings": 0, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "auth", "skill": "perf-guardrails", "ts": "2026-07-26T09:46:32+00:00", "verdict": "clean"}
 {"duration_s": null, "findings": 0, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "auth", "skill": "observability", "ts": "2026-07-26T09:46:32+00:00", "verdict": "clean"}
 {"duration_s": null, "findings": 0, "notes": null, "ref": "review-feature", "run_type": "chained", "scope": "auth", "skill": "ci-gate", "ts": "2026-07-26T09:46:32+00:00", "verdict": "clean"}
+{"duration_s": null, "findings": 3, "notes": null, "ref": "fix/multi-agent-write-collisions", "run_type": "interactive", "scope": "multi-agent-write-collisions", "skill": "skill-smith", "ts": "2026-07-27T09:27:41+00:00", "verdict": "patched"}
