@@ -150,6 +150,313 @@ def test_wastage_key_reuse_with_different_payload_is_rejected(db, app_client, or
     assert _quantity_of(item.id) == Decimal("7")  # only the first disposal applied
 
 
+def test_wastage_batch_failure_rolls_back_item_wastage_and_movement_together(db, app_client, org, monkeypatch):
+    """AC14: inventory_items.quantity, inventory_wastage, and inventory_movements are one
+    ledger invariant committed in a single transaction — only the success path was tested
+    before this. Force a failure partway through a two-entry batch, after the first entry's
+    quantity mutation and wastage row are already flushed (but not committed), and prove the
+    whole batch rolls back together: a partial commit here is silent stock and audit
+    corruption. Mutation this catches: removing the shared `db_session.commit()` /
+    `except Exception: db_session.rollback()` wrapper (or committing per-entry instead of
+    once for the batch) would leave the first entry's deduction and wastage row persisted
+    even though the batch as a whole failed.
+    """
+    item_a = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    item_b = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    import app.core.backend.backend as backend_module
+
+    original_assert = backend_module.assert_movement_unit_matches_item_canonical
+    calls = {"n": 0}
+
+    def flaky_assert(movement_unit, inventory_item_unit):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise ValueError("simulated failure staged between the two ledger writes")
+        return original_assert(movement_unit, inventory_item_unit)
+
+    monkeypatch.setattr(backend_module, "assert_movement_unit_matches_item_canonical", flaky_assert)
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={
+            "entries": [
+                {"inventory_item_id": str(item_a.id), "quantity_wasted": "3", "reason": "spillage"},
+                {"inventory_item_id": str(item_b.id), "quantity_wasted": "4", "reason": "spillage"},
+            ]
+        },
+    )
+
+    assert resp.status_code == 500, resp.data
+    assert calls["n"] == 2, "the simulated failure must fire on the second entry, after the first was staged"
+    db.expire_all()
+    assert _quantity_of(item_a.id) == Decimal("10"), "the first entry's deduction must roll back with the batch"
+    assert _quantity_of(item_b.id) == Decimal("10")
+    assert (
+        db.query(InventoryWastage)
+        .filter(InventoryWastage.inventory_item_id.in_([item_a.id, item_b.id]))
+        .count()
+        == 0
+    ), "no wastage row may survive a rolled-back batch, including the entry staged before the failure"
+    assert (
+        db.query(InventoryMovement)
+        .filter(InventoryMovement.inventory_item_id.in_([item_a.id, item_b.id]))
+        .count()
+        == 0
+    ), "no ledger movement row may survive a rolled-back batch"
+
+
+def test_wastage_converts_compatible_non_canonical_unit_and_records_metadata(db, app_client, org):
+    """AC16: wasting in a unit compatible with (but different from) the item's canonical
+    unit must deduct the CONVERTED amount, write the ledger row in the item's canonical
+    unit, and record both units in movement_metadata for audit/replay."""
+    item = InventoryItemFactory(org_id=org.id, quantity="1", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={
+            "entries": [
+                {
+                    "inventory_item_id": str(item.id),
+                    "quantity_wasted": "500",
+                    "quantity_unit": "g",
+                    "reason": "spillage",
+                }
+            ]
+        },
+    )
+
+    assert resp.status_code == 201, resp.data
+    db.expire_all()
+    # 500 g converts to 0.5 kg — the deduction must be the converted amount, not raw "500".
+    assert _quantity_of(item.id) == Decimal("0.5000")
+
+    record = db.query(InventoryWastage).filter(InventoryWastage.inventory_item_id == item.id).one()
+    assert record.unit == "kg", "the wastage record must be stored in the item's canonical unit"
+    assert Decimal(record.quantity_wasted) == Decimal("0.5000")
+
+    movement = db.query(InventoryMovement).filter(InventoryMovement.inventory_item_id == item.id).one()
+    assert movement.unit == "kg"
+    assert movement.quantity == Decimal("-0.5000")
+    assert movement.movement_metadata["converted_from_unit"] == "g"
+    assert movement.movement_metadata["canonical_unit"] == "kg"
+
+
+def test_wastage_rejects_incompatible_unit_with_400(db, app_client, org):
+    """AC16: a quantity_unit that cannot be converted to the item's unit (different unit
+    category, e.g. volume against a mass-tracked item) must be refused, not silently
+    treated as the item's own unit."""
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={
+            "entries": [
+                {
+                    "inventory_item_id": str(item.id),
+                    "quantity_wasted": "1",
+                    "quantity_unit": "L",
+                    "reason": "spillage",
+                }
+            ]
+        },
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("10"), "a rejected incompatible unit must not deduct anything"
+
+
+def test_wastage_rejects_idempotency_key_over_128_chars(db, app_client, org):
+    """AC17: an idempotency_key that isn't a non-empty string <=128 chars is a 400, not a
+    silently-truncated or silently-ignored key."""
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={
+            "entries": [{"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": "spillage"}],
+            "idempotency_key": "x" * 129,
+        },
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "IDEMPOTENCY_KEY_INVALID"
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("10")
+
+
+def test_wastage_rejects_empty_idempotency_key(db, app_client, org):
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={
+            "entries": [{"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": "spillage"}],
+            "idempotency_key": "   ",
+        },
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "IDEMPOTENCY_KEY_INVALID"
+
+
+def test_wastage_rejects_non_string_idempotency_key(db, app_client, org):
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={
+            "entries": [{"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": "spillage"}],
+            "idempotency_key": 12345,
+        },
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "IDEMPOTENCY_KEY_INVALID"
+
+
+def test_wastage_batch_rejects_more_than_max_entries(db, app_client, org):
+    """AC13: a batch larger than MAX_WASTAGE_BATCH_ENTRIES is rejected outright."""
+    from app.core.backend.backend import MAX_WASTAGE_BATCH_ENTRIES
+
+    item = InventoryItemFactory(org_id=org.id, quantity="1000", unit="kg")
+    db.commit()
+
+    entries = [
+        {"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": f"r{i}"}
+        for i in range(MAX_WASTAGE_BATCH_ENTRIES + 1)
+    ]
+    resp = app_client.post("/api/core/inventory/wastage", json={"entries": entries})
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "BATCH_TOO_LARGE"
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("1000"), "an oversized batch must write nothing"
+
+
+def test_wastage_rejects_duplicate_item_id_within_batch(db, app_client, org):
+    """AC12: the same inventory_item_id appearing twice in one batch is a validation error,
+    not two independent deductions."""
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={
+            "entries": [
+                {"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": "spillage"},
+                {"inventory_item_id": str(item.id), "quantity_wasted": "2", "reason": "spillage"},
+            ]
+        },
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("10")
+
+
+def test_wastage_rejects_non_object_entry(db, app_client, org):
+    """AC12: an entry that isn't a JSON object (e.g. a bare string) is a validation error,
+    not a crash trying to call .get() on it."""
+    resp = app_client.post("/api/core/inventory/wastage", json={"entries": ["not-an-object"]})
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    assert any("must be an object" in e for e in resp.get_json()["errors"])
+
+
+def test_wastage_rejects_missing_item_id(db, app_client, org):
+    """AC12: a missing inventory_item_id is a validation error."""
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={"entries": [{"quantity_wasted": "1", "reason": "spillage"}]},
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    assert any("inventory_item_id required" in e for e in resp.get_json()["errors"])
+
+
+def test_wastage_rejects_invalid_item_id(db, app_client, org):
+    """AC12: an inventory_item_id that isn't a valid UUID is a validation error, not a
+    500 from a bare UUID(...) parse failure."""
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={"entries": [{"inventory_item_id": "not-a-uuid", "quantity_wasted": "1", "reason": "spillage"}]},
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    assert any("invalid inventory_item_id" in e.lower() for e in resp.get_json()["errors"])
+
+
+def test_wastage_rejects_missing_reason(db, app_client, org):
+    """AC12: a missing reason is a validation error — wastage without a stated cause must
+    not be recordable."""
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={"entries": [{"inventory_item_id": str(item.id), "quantity_wasted": "1"}]},
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    assert any("reason is required" in e for e in resp.get_json()["errors"])
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("10")
+
+
+def test_wastage_rejects_reason_over_500_chars(db, app_client, org):
+    """AC12: a reason longer than 500 characters is a validation error, not silently
+    truncated on write."""
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={
+            "entries": [
+                {"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": "x" * 501}
+            ]
+        },
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    assert any("500 characters or fewer" in e for e in resp.get_json()["errors"])
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("10")
+
+
+def test_wastage_rejects_wasting_more_than_on_hand(db, app_client, org):
+    """AC15: wasting more than is on hand is a 400 naming the on-hand quantity, not a
+    negative on-hand balance."""
+    item = InventoryItemFactory(org_id=org.id, quantity="5", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={"entries": [{"inventory_item_id": str(item.id), "quantity_wasted": "6", "reason": "spillage"}]},
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    assert "5" in resp.get_json()["errors"][0]
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("5")
+
+
 def test_wastage_records_are_org_scoped(db, two_org_two_user):
     org_a = two_org_two_user["org_a"]
     org_b = two_org_two_user["org_b"]
@@ -170,3 +477,42 @@ def test_wastage_records_are_org_scoped(db, two_org_two_user):
             db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
             db.query(InventoryItem).filter(InventoryItem.org_id == org_id).delete(synchronize_session=False)
         db.commit()
+
+
+@pytest.mark.parametrize(
+    ("quantity_wasted", "why"),
+    [
+        ("0", "zero"),
+        ("-3", "negative"),
+        ("nan", "not a number"),
+        ("Infinity", "non-finite"),
+        ("1e19", "over MAX_WASTAGE_MAGNITUDE"),
+        ("not-a-number", "unparseable"),
+    ],
+)
+def test_wastage_route_rejects_bad_quantity_without_writing(db, app_client, org, quantity_wasted, why):
+    """AC12 at the ROUTE, not just the helper.
+
+    `parse_wastage_quantity` is unit-tested for each of these, but helper coverage does not
+    prove the route turns the helper's error into 400 + VALIDATION_FAILED with no writes —
+    deleting the route's `qty_err` branch leaves every helper test green (test-evaluator
+    round 3). This asserts the status, the error code, the untouched quantity, and that
+    neither ledger table gained a row.
+    """
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={"entries": [{"inventory_item_id": str(item.id), "quantity_wasted": quantity_wasted, "reason": why}]},
+    )
+
+    assert resp.status_code == 400, f"{why!r} should be rejected: {resp.data}"
+    body = resp.get_json()
+    assert body["success"] is False
+    assert body["error_code"] == "VALIDATION_FAILED", body
+    assert body["wastage_records"] == []
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("10"), f"{why!r} deducted despite being rejected"
+    assert db.query(InventoryWastage).filter(InventoryWastage.inventory_item_id == item.id).count() == 0
+    assert db.query(InventoryMovement).filter(InventoryMovement.inventory_item_id == item.id).count() == 0

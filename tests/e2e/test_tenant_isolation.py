@@ -38,8 +38,15 @@ def two_tenants(browser, app_url, fresh_user):
         context.close()
 
 
-def _create_inventory_item(page, name: str, barcode: str | None = None) -> str:
-    payload = {"name": name, "quantity": 5, "unit": "kg", "inventory_type": "RAW_MATERIAL"}
+def _create_inventory_item(
+    page, name: str, barcode: str | None = None, quantity_override: int | None = None, inventory_type: str = "raw_material"
+) -> str:
+    payload = {
+        "name": name,
+        "quantity": quantity_override if quantity_override is not None else 5,
+        "unit": "kg",
+        "inventory_type": inventory_type,
+    }
     if barcode:
         payload["barcode"] = barcode
     response = page.request.post("/api/core/inventory", headers=csrf_headers(page), data=payload)
@@ -120,3 +127,175 @@ def test_org_b_dashboard_summary_excludes_org_a_data(two_tenants):
     response = two_tenants["b"].request.get("/api/core/dashboard/summary")
     assert response.status == 200, f"summary failed for org B: {response.status}"
     assert marker not in response.text(), "org A's data leaked into org B's dashboard summary"
+
+
+def test_org_b_cannot_adjust_org_a_inventory_item(two_tenants):
+    """AC33/AC5: adjust is a guarded quantity write — cross-org must be 404, not a leak."""
+    item_id = _create_inventory_item(two_tenants["a"], f"Secret Botanicals {uuid.uuid4().hex[:6]}")
+
+    page_b = two_tenants["b"]
+    response = page_b.request.post(
+        f"/api/core/inventory/{item_id}/adjust",
+        headers=csrf_headers(page_b),
+        data={"new_quantity": 999},
+    )
+    assert response.status == 404, f"expected 404 not-found, got {response.status}: {response.text()}"
+
+    # A 404 alone would also be returned by a route that rejected the response but had
+    # already written. Read the owner's own quantity back and pin it exactly.
+    page_a = two_tenants["a"]
+    owner_view = page_a.request.get("/api/core/inventory")
+    assert owner_view.status == 200, owner_view.status
+    owned = next(i for i in owner_view.json()["inventory_items"] if i["id"] == item_id)
+    assert owned["quantity"] == "5", f"org A's quantity changed despite the rejected adjust: {owned}"
+
+
+def test_org_b_cannot_waste_org_a_inventory_item(two_tenants):
+    """AC33/AC15: wastage on an id outside the caller's org is indistinguishable from a
+    nonexistent id — never a distinguishable 403, and never a deduction."""
+    item_id = _create_inventory_item(two_tenants["a"], f"Secret Botanicals {uuid.uuid4().hex[:6]}")
+
+    page_b = two_tenants["b"]
+    response = page_b.request.post(
+        "/api/core/inventory/wastage",
+        headers=csrf_headers(page_b),
+        data={
+            "entries": [{"inventory_item_id": item_id, "quantity_wasted": 1, "reason": "attempted cross-org waste"}],
+            "idempotency_key": uuid.uuid4().hex,
+        },
+    )
+    assert response.status == 400, f"expected 400, got {response.status}: {response.text()}"
+    body = response.json()
+    assert body["success"] is False
+    assert any("not found or access denied" in e for e in body["errors"]), body["errors"]
+
+    # Wasteability alone does not prove the item was untouched — an item silently reduced
+    # from 5 to 4 is still wasteable. Pin the exact quantity BEFORE the owner writes.
+    page_a = two_tenants["a"]
+    owner_view = page_a.request.get("/api/core/inventory")
+    assert owner_view.status == 200, owner_view.status
+    owned = next(i for i in owner_view.json()["inventory_items"] if i["id"] == item_id)
+    assert owned["quantity"] == "5", f"org A's quantity changed despite the rejected wastage: {owned}"
+
+    owner_waste = page_a.request.post(
+        "/api/core/inventory/wastage",
+        headers=csrf_headers(page_a),
+        data={
+            "entries": [{"inventory_item_id": item_id, "quantity_wasted": 1, "reason": "owner waste after probe"}],
+            "idempotency_key": uuid.uuid4().hex,
+        },
+    )
+    assert owner_waste.status == 201, "owner could not waste its own item after org B's rejected attempt"
+
+
+def test_org_b_wastage_list_excludes_org_a_records(two_tenants):
+    """AC19/AC33: listing wastage never surfaces another org's records or item names."""
+    marker = f"Isolation Wastage {uuid.uuid4().hex[:8]}"
+    item_id = _create_inventory_item(two_tenants["a"], marker, quantity_override=5)
+    page_a = two_tenants["a"]
+    waste = page_a.request.post(
+        "/api/core/inventory/wastage",
+        headers=csrf_headers(page_a),
+        data={
+            "entries": [{"inventory_item_id": item_id, "quantity_wasted": 1, "reason": "org A wastage"}],
+            "idempotency_key": uuid.uuid4().hex,
+        },
+    )
+    assert waste.status == 201, f"setup wastage failed: {waste.status} {waste.text()}"
+    record_id = waste.json()["wastage_records"][0]["id"]
+
+    response = two_tenants["b"].request.get("/api/core/inventory/wastage")
+    assert response.status == 200, f"list failed for org B: {response.status}"
+    # Item-name absence alone is too weak: item-name hydration is separately org-scoped, so
+    # a repository that lost its own org filter would leak the record while still rendering
+    # item_name "Unknown" — and a marker-only assertion would pass. Assert on the record's
+    # own fields, which no other layer sanitises. (test-evaluator's finding.)
+    leaked = [r for r in response.json()["wastage_records"] if r["id"] == record_id]
+    assert not leaked, f"org A's wastage record leaked into org B's wastage list: {leaked}"
+    assert item_id not in response.text(), "org A's inventory item id leaked via the wastage list"
+    assert "org A wastage" not in response.text(), "org A's wastage reason leaked into org B's list"
+    assert marker not in response.text(), "org A's item name leaked into org B's wastage list"
+
+
+def test_org_b_out_of_stock_excludes_org_a_items(two_tenants):
+    """AC8/AC33: out-of-stock recall tracing must never cross tenants."""
+    marker = f"Isolation OutOfStock {uuid.uuid4().hex[:8]}"
+    # inventory_type must be the exact lowercase enum value — out-of-stock filters on it
+    # exactly, unlike list_inventory's other filters (see test_inventory_flow.py).
+    item_id = _create_inventory_item(two_tenants["a"], marker, quantity_override=3, inventory_type="raw_material")
+    page_a = two_tenants["a"]
+    zero_out = page_a.request.post(
+        f"/api/core/inventory/{item_id}/adjust",
+        headers=csrf_headers(page_a),
+        data={"new_quantity": 0},
+    )
+    assert zero_out.status == 200, f"setup adjust failed: {zero_out.status} {zero_out.text()}"
+
+    response = two_tenants["b"].request.get("/api/core/inventory/out-of-stock")
+    assert response.status == 200, f"out-of-stock failed for org B: {response.status}"
+    assert marker not in response.text(), "org A's zeroed item leaked into org B's out-of-stock listing"
+
+
+def _create_untracked_item(page, name: str) -> str:
+    resp = page.request.post(
+        "/api/core/inventory",
+        headers=csrf_headers(page),
+        data={
+            "name": name,
+            "quantity": 8,
+            "unit": "kg",
+            "inventory_type": "raw_material",
+            "untracked": True,
+            "notes": "cross-tenant reconciliation probe",
+        },
+    )
+    assert resp.status == 201, f"untracked setup failed: {resp.status} {resp.text()}"
+    return resp.json()["id"]
+
+
+def test_org_b_matching_untracked_excludes_org_a_items(two_tenants):
+    """AC29/AC33: reconciliation's untracked-item search is org-scoped."""
+    marker = f"Isolation Untracked {uuid.uuid4().hex[:8]}"
+    _create_untracked_item(two_tenants["a"], marker)
+
+    response = two_tenants["b"].request.get(f"/api/core/inventory/reconcile/matching-untracked?name={marker}&unit=kg")
+    assert response.status == 200, f"matching-untracked failed for org B: {response.status}"
+    assert response.json()["matching_untracked"] == [], "org A's untracked item leaked into org B's search"
+
+
+def test_org_b_cannot_reconcile_via_addition_onto_org_a_untracked_item(two_tenants):
+    """AC30/AC33: mapping onto another org's untracked_item_id must fail as not-found, and
+    must not mutate org A's item."""
+    marker = f"Isolation Reconcile {uuid.uuid4().hex[:8]}"
+    untracked_id = _create_untracked_item(two_tenants["a"], marker)
+
+    page_b = two_tenants["b"]
+    response = page_b.request.post(
+        "/api/core/inventory/reconcile/via-addition",
+        headers=csrf_headers(page_b),
+        data={"name": marker, "quantity": 5, "unit": "kg", "untracked_item_id": untracked_id},
+    )
+    assert response.status == 400, f"expected 400, got {response.status}: {response.text()}"
+    assert "not found" in response.json()["error"].lower()
+
+    # Org A's untracked balance must be untouched. Mere membership in the matching list is
+    # too weak — an item partially reduced from 8 to 3 still matches. Pin the balance.
+    page_a = two_tenants["a"]
+    still_matches = page_a.request.get(f"/api/core/inventory/reconcile/matching-untracked?name={marker}&unit=kg")
+    matches = still_matches.json()["matching_untracked"]
+    mine = next((m for m in matches if m["id"] == untracked_id), None)
+    assert mine is not None, "org A's untracked item disappeared after org B's rejected attempt"
+    assert str(mine["quantity"]) == "8", f"org A's untracked balance changed: {mine}"
+    # remaining_balance_to_reconcile is the field the reconcile flow actually decrements —
+    # quantity alone can hold steady while the reconcile ledger moves underneath it.
+    owner_list = page_a.request.get("/api/core/inventory")
+    assert owner_list.status == 200, owner_list.status
+    owner_item = next(i for i in owner_list.json()["inventory_items"] if i["id"] == untracked_id)
+    assert str(owner_item["extra_data"].get("remaining_balance_to_reconcile")) == "8.0", (
+        f"org A's reconcile balance moved despite the rejected attempt: {owner_item['extra_data']}"
+    )
+
+    # And org B must not have quietly received an item of its own out of the rejected call.
+    b_items = page_b.request.get("/api/core/inventory")
+    assert b_items.status == 200, b_items.status
+    assert marker not in b_items.text(), "org B received an item from its own rejected reconcile"
