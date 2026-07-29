@@ -8,6 +8,8 @@ Owned by the test-fixtures skill. Add a factory here, not a one-off in a test fi
 moment a second test needs the same kind of row.
 """
 
+import uuid
+
 import bcrypt
 import factory
 
@@ -36,7 +38,11 @@ class OrganisationFactory(factory.Factory):
     class Meta:
         model = Organisation
 
-    name = factory.Sequence(lambda n: f"Test Org {n}")
+    # UUID-suffixed, not a bare per-process sequence: `n` restarts at 0 every test-process
+    # run while rows persist in the shared test DB, so a run whose teardown fails poisons
+    # the next run's org at that same number — a name collision presenting as an unrelated
+    # failure wherever the colliding number lands next.
+    name = factory.Sequence(lambda n: f"Test Org {n}-{uuid.uuid4().hex[:8]}")
 
     @classmethod
     def _create(cls, model_class, name, **kwargs):
