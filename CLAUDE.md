@@ -42,7 +42,7 @@ Run pytest from the host with **`ENVIRONMENT` unset**. It resolves to `local`
 `ENVIRONMENT=test` from a host shell **hangs**: `test.ini` targets
 `host.docker.internal`, which only resolves for the test app running inside Docker.
 
-Expect `252 passed, 30 skipped` with no dev server running. The 30 skips are the
+Expect `730 passed, 30 skipped` with no dev server running. The 30 skips are the
 live-server 2FA suites (`pytest.mark.live_server`), which auto-skip with a reason unless
 `uv run workflow start` is up — start it and they run. See the **suite-warden** skill.
 
