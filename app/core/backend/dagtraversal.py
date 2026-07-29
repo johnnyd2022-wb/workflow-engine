@@ -632,12 +632,36 @@ class DAGTracer:
             return []
         step_ids = {i.source_execution_step_id for i in items if i.source_execution_step_id}
         exec_ids = {i.source_execution_id for i in items if i.source_execution_id}
-        steps = self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids)).all() if step_ids else []
+        # Every lookup here is org-scoped, even though the items were already fetched under
+        # an org filter. The item's provenance FKs point at global tables, so a row carrying
+        # a foreign execution reference — whether planted before the write-side check in
+        # InventoryRepository._assert_source_refs_belong_to_org existed, or by any future
+        # path that forgets it — would otherwise pull that org's execution_data (prompts),
+        # actual_inputs/outputs and process name into this tenant's response. Matches the
+        # scoping already used at :314-319 and in backend._hydrate_step_data.
+        steps = (
+            self.session.query(ExecutionStep)
+            .join(Execution, ExecutionStep.execution_id == Execution.id)
+            .filter(ExecutionStep.id.in_(step_ids), Execution.org_id == self.org_id)
+            .all()
+            if step_ids
+            else []
+        )
         steps_by_id = {s.id: s for s in steps}
-        executions = self.session.query(Execution).filter(Execution.id.in_(exec_ids)).all() if exec_ids else []
+        executions = (
+            self.session.query(Execution)
+            .filter(Execution.id.in_(exec_ids), Execution.org_id == self.org_id)
+            .all()
+            if exec_ids
+            else []
+        )
         exec_by_id = {e.id: e for e in executions}
         process_ids = {e.process_id for e in executions if e.process_id}
-        processes = self.session.query(Process).filter(Process.id.in_(process_ids)).all() if process_ids else []
+        processes = (
+            self.session.query(Process).filter(Process.id.in_(process_ids), Process.org_id == self.org_id).all()
+            if process_ids
+            else []
+        )
         process_by_id = {p.id: p for p in processes}
 
         result = []
