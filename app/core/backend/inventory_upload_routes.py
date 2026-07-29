@@ -166,7 +166,12 @@ def register_routes(bp):
             attributes={"org_id": str(UUID(g.org_id)), "max_rows": CSV_MAX_ROWS},
         ):
             file = request.files.get("file")
-            raw = request.get_data(as_text=True) if not file else None
+            # Read the raw body as BYTES, not text. `get_data(as_text=True)` decodes with
+            # errors="replace", so invalid UTF-8 arrived as U+FFFD instead of being
+            # rejected — the multipart branch below returns 400 for exactly that input.
+            # On a traceability product, silently mangling an item name is worse than
+            # refusing the upload.
+            raw = request.get_data() if not file else None
             if file:
                 content = file.read()
                 if len(content) > CSV_MAX_BYTES:
@@ -176,7 +181,16 @@ def register_routes(bp):
                 except UnicodeDecodeError:
                     return jsonify({"error": "File must be UTF-8 encoded."}), 400
             elif raw is not None:
-                text = raw
+                # The raw-body branch used to inherit only Flask's global MAX_CONTENT_LENGTH,
+                # which is sized for evidence uploads (~10MB) — five times this endpoint's own
+                # documented 2MB limit, and a number that moves whenever evidence config does.
+                # Enforce the CSV limit here so both branches honour the same contract.
+                if len(raw) > CSV_MAX_BYTES:
+                    return jsonify({"error": "File too large. Maximum size is 2MB."}), 400
+                try:
+                    text = raw.decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    return jsonify({"error": "File must be UTF-8 encoded."}), 400
             else:
                 return jsonify({"error": "Provide 'file' (multipart) or request body as CSV text."}), 400
 
