@@ -29,7 +29,7 @@ from app.core.domain.ready_date_rules import (
     assert_warning_within_ready_period,
     duration_to_timedelta,
 )
-from app.core.utils.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
+from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
 
 
 @pytest.fixture

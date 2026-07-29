@@ -63,8 +63,9 @@ from app.core.utils.inventory_wastage_quantity import (
     wastage_entries_payload_hash,
 )
 from app.core.utils.log_action import log_action
-from app.core.utils.mock_data import DEMO_USER_EMAIL
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.features.demo_data.routes import api_routes as demo_data_routes
+from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL
 from app.observability import get_logger
 from app.utils.config_loader import config
 
@@ -3461,29 +3462,7 @@ reconciliation_routes.register_routes(core_bp)
 inventory_upload_routes.register_routes(core_bp)
 evidence_routes.register_routes(core_bp)
 process_docs_routes.register_routes(core_bp)
-
-
-@core_bp.route("/api/core/reset-demo-db", methods=["POST"])
-@requires_auth
-def reset_demo_db_route():
-    """Reset and populate DB with demo data for demo@whistlebird.co.nz. Only available in test or local environment."""
-    if config.environment not in ("test", "local"):
-        return jsonify({"error": "Reset demo DB is only available in test or local environment", "success": False}), 403
-    from app.core.utils.resetdb import reset_demo_db
-
-    session = db_session()
-    try:
-        result = reset_demo_db(session)
-        if not result.get("success"):
-            return jsonify(result), 400
-        return jsonify(result), 200
-    except Exception as e:
-        try:
-            session.rollback()
-        except Exception:
-            pass
-        logger.exception("reset_demo_db failed: %s", e)
-        return jsonify({"success": False, "message": str(e), "error": "RESET_FAILED"}), 500
+demo_data_routes.register_routes(core_bp)
 
 
 @core_bp.route("/api/core/inventory", methods=["POST"])

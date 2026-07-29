@@ -21,7 +21,7 @@ from app.core.db.models.step import Step
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.process_repo import ProcessRepository
-from app.core.utils.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
+from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
 
 
 @pytest.fixture
