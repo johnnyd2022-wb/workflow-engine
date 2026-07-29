@@ -5,7 +5,7 @@ Scope: expired_materials.py, corechecks.py, output_expiry_check.py, and API resp
 Do NOT modify DAG traversal (dagtraversal.py). Tests validate behavior, not implementation details.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -170,7 +170,7 @@ def _make_output_expiry_fixture(db, org_id, mode="set_at_execution", completed_a
     expiry_past_days: for datetime mode, expiry_at is this many days in the past (so item is expired).
     Returns (process, step, execution, execution_step, inventory_item) for cleanup and assertions.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     process_repo = ProcessRepository(db)
     exec_repo = ExecutionRepository(db)
     inv_repo = InventoryRepository(db)
@@ -358,7 +358,7 @@ class TestOutputExpiryCheck:
             assert "expiry_at" in item
             # completed_at was 10 days ago, duration 5 days -> expiry 5 days ago (expired)
             expiry_dt = datetime.fromisoformat(item["expiry_at"].replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             assert (now - expiry_dt).days >= 4  # at least ~5 days in the past
         finally:
             _cleanup_output_expiry_fixture(db, org_id, process, execution, inv_item)
@@ -390,7 +390,7 @@ class TestOutputExpiryCheck:
         process_repo = ProcessRepository(db)
         exec_repo = ExecutionRepository(db)
         inv_repo = InventoryRepository(db)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         completed_at_override = now - timedelta(days=10)
         step_output = {
             "name": "Invalid Unit Output",
@@ -544,7 +544,7 @@ def _make_output_ready_date_fixture(db, org_id, ready_date_days_ahead=7, use_fix
     so with completed_at 1 day ago, ready is 6 days in the future.
     Returns (process, step, execution, execution_step, inventory_item).
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     process_repo = ProcessRepository(db)
     exec_repo = ExecutionRepository(db)
     inv_repo = InventoryRepository(db)
@@ -643,7 +643,7 @@ def _make_output_ready_date_fixture(db, org_id, ready_date_days_ahead=7, use_fix
 
 def _make_output_ready_date_set_at_execution_fixture(db, org_id, ready_date_days_ahead=7):
     """Fixture with mode set_at_execution; ready_date_actual on inventory item."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     process_repo = ProcessRepository(db)
     exec_repo = ExecutionRepository(db)
     inv_repo = InventoryRepository(db)

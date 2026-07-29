@@ -7,7 +7,7 @@ Scope: ExecutionRepository, execution/execution_step models, and the API contrac
 """
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -863,7 +863,7 @@ class TestCompletedAtTimestamp:
         repo = ExecutionRepository(db)
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
@@ -876,13 +876,13 @@ class TestCompletedAtTimestamp:
             actual_inputs=[{"name": "Out1", "quantity": 8, "unit": "kg"}],
             actual_outputs=[{"name": "Final", "quantity": 7, "unit": "kg"}],
         )
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
         loaded = repo.get_execution_by_id(execution.id, org_id)
         assert loaded.completed_at is not None
         assert isinstance(loaded.completed_at, datetime)
         # completed_at may be timezone-naive UTC; compare in UTC
         completed_utc = (
-            loaded.completed_at if loaded.completed_at.tzinfo else loaded.completed_at.replace(tzinfo=timezone.utc)
+            loaded.completed_at if loaded.completed_at.tzinfo else loaded.completed_at.replace(tzinfo=UTC)
         )
         assert (
             before <= completed_utc <= after + timedelta(seconds=5)
