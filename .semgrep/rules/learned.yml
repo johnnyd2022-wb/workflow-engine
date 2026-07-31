@@ -103,3 +103,60 @@ rules:
       - pattern-not-inside: |
           def rotate_session(...):
               ...
+
+  - id: bize-decimal-compare-without-finite-guard
+    languages: [python]
+    severity: WARNING
+    message: >
+      This Decimal is ordering-compared (< > <= >=) without a preceding is_finite()
+      guard. Decimal("NaN") < 0 raises decimal.InvalidOperation, which is NOT a subclass
+      of ValueError — so a route whose only handler is `except ValueError` lets it escape
+      as an unlogged, non-JSON 500 instead of the 400 a bad client value deserves. Check
+      `not value.is_finite()` BEFORE any ordering comparison (is_finite() is False for
+      both NaN and Infinity), or funnel the value through
+      app/core/utils/inventory_quantity.coerce_stored_quantity, which already does.
+    metadata:
+      born-from: security-audit
+      finding: "inventory security audit F2: adjust_inventory_item_quantity validated with
+        float(), and float('nan') <= 0 is False, so 'nan' passed the route gate. The
+        repository then evaluated Decimal('NaN') < 0, raising InvalidOperation past the
+        route's ValueError-only handler — a 500 with no structured log line. F3 was the
+        same root cause one layer down: Decimal('1e400').quantize() raising outside
+        coerce_stored_quantity's try."
+      date: "2026-07-28"
+      fixture: bize-decimal-compare-without-finite-guard
+    patterns:
+      - pattern-either:
+          - pattern: $D < $N
+          - pattern: $D > $N
+          - pattern: $D <= $N
+          - pattern: $D >= $N
+      - pattern-inside: |
+          $D = Decimal(...)
+          ...
+      - pattern-not-inside: |
+          ...
+          if <... $D.is_finite() ...>:
+              ...
+      - pattern-not-inside: |
+          if <... not $D.is_finite() ...>:
+              ...
+      # Handling the raise is the other legitimate way to write this, so a comparison
+      # sitting inside ANY try/except is out of scope for this rule. That keeps it aimed
+      # at the shape both real findings actually had — an inline parse compared with no
+      # exception handling at all — instead of guessing which handlers are broad enough.
+      - pattern-not-inside: |
+          try:
+              ...
+          except $EXC:
+              ...
+      - pattern-not-inside: |
+          try:
+              ...
+          except $EXC as $E:
+              ...
+      - pattern-not-inside: |
+          try:
+              ...
+          except (...):
+              ...

@@ -13,16 +13,17 @@ def coerce_stored_quantity(value: object) -> Decimal:
     """Parse API/user input into a Decimal quantized for NUMERIC(18,4)."""
     if value is None:
         return Decimal("0")
-    if isinstance(value, Decimal):
-        d = value
-    else:
-        try:
-            d = Decimal(str(value).strip())
-        except (InvalidOperation, ValueError, TypeError) as e:
-            raise ValueError(f"Invalid quantity: {value!r}") from e
-    if not d.is_finite():
-        raise ValueError("Quantity must be finite")
-    return d.quantize(STORAGE_QUANTIZE_EXP, rounding=ROUND_HALF_UP)
+    try:
+        d = value if isinstance(value, Decimal) else Decimal(str(value).strip())
+        if not d.is_finite():
+            raise ValueError("Quantity must be finite")
+        # quantize() is inside the try on purpose: a finite but huge value ("1e400") parses
+        # cleanly and then raises InvalidOperation here, because rendering it to 4dp needs
+        # more significant digits than the default Decimal context allows. Left outside, that
+        # surfaces as a generic 500 instead of the 400 a bad client value deserves.
+        return d.quantize(STORAGE_QUANTIZE_EXP, rounding=ROUND_HALF_UP)
+    except (InvalidOperation, TypeError) as e:
+        raise ValueError(f"Invalid quantity: {value!r}") from e
 
 
 def quantity_to_api_str(value: object | None) -> str:

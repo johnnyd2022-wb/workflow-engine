@@ -74,6 +74,9 @@ logger = get_logger(__name__)
 # Guardrail: batch size caps row-lock duration under concurrent SELECT ... FOR UPDATE.
 MAX_WASTAGE_BATCH_ENTRIES = 100
 
+# inventory_items.inventory_type is an unconstrained String(50); this is the only gate.
+_VALID_INVENTORY_TYPES = frozenset(t.value for t in InventoryType)
+
 # GET /api/core/inventory: bound nested display-only lists (aligned with flows2.html caps; not persisted).
 LIST_INVENTORY_MAX_PREVIOUS_STEPS = 80
 LIST_INVENTORY_MAX_AUDIT_HISTORY = 120
@@ -711,7 +714,10 @@ def inventory_dispose_confirm():
                 s = format(quantity_wasted_dec, "f")
                 if "." in s:
                     s = s.rstrip("0").rstrip(".")
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, InvalidOperation):
+        # InvalidOperation matters here: `?quantity_wasted=nan` parses to Decimal("NaN"),
+        # and the `<= 0` above then raises InvalidOperation — which is NOT a ValueError,
+        # so without this the dispose-confirm page 500s on a malformed query string.
         error = "Invalid quantity."
 
     if not inventory_item_id:
@@ -2677,7 +2683,14 @@ def list_inventory():
     item_ids_all = [item.id for item in items]
     event_summary_by_id: dict = {}
     if item_ids_all:
-        ees_rows = db_session.query(EntityEventSummary).filter(EntityEventSummary.entity_id.in_(item_ids_all)).all()
+        # entity_id is this table's PK and the ids came from an org-scoped query, so the
+        # org filter is redundant today — kept because every other tenant table in this
+        # file is scoped explicitly, and the redundancy is what survives the next refactor.
+        ees_rows = (
+            db_session.query(EntityEventSummary)
+            .filter(EntityEventSummary.entity_id.in_(item_ids_all), EntityEventSummary.org_id == org_id)
+            .all()
+        )
         event_summary_by_id = {str(r.entity_id): r.summary for r in ees_rows}
 
     result = []
@@ -3476,6 +3489,14 @@ def create_inventory_item():
     quantity = data.get("quantity")
     unit = (data.get("unit") or "").strip() or None
     inventory_type = data.get("inventory_type", InventoryType.RAW_MATERIAL.value)
+
+    # inventory_type is a plain String(50) with no DB constraint, and several views match
+    # it exactly (`/out-of-stock`, `?type=`). An off-enum value therefore does not error —
+    # the item just silently stops appearing in the recall-tracing view. Validate here.
+    if inventory_type not in _VALID_INVENTORY_TYPES:
+        return jsonify(
+            {"error": f"inventory_type must be one of: {', '.join(sorted(_VALID_INVENTORY_TYPES))}"}
+        ), 400
     barcode = (data.get("barcode") or "").strip() or None
 
     if quantity is None or (isinstance(quantity, str) and not quantity.strip()):

@@ -60,10 +60,22 @@ _EXECUTION_PROMPTS_INTERNAL = {
 
 
 def _parse_quantity(value: Any) -> Decimal | None:
+    """Parse to a FINITE Decimal, or None.
+
+    Non-finite must be rejected here, at the single choke point, rather than by each
+    caller: `Decimal("nan")` parses fine, and every downstream `qty >= 0` /
+    `qty <= balance` comparison then raises `decimal.InvalidOperation` — which is not a
+    ValueError, so it escapes the callers' handlers as a 500 rather than the 400 a bad
+    client value deserves. Returning None keeps the existing "unparseable" contract, which
+    every caller already handles. (Same defect class as inventory security-audit F2/F3;
+    found here by the `bize-decimal-compare-without-finite-guard` learned semgrep rule
+    written from those findings.)
+    """
     try:
-        return Decimal(str(value))
+        d = Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError):
         return None
+    return d if d.is_finite() else None
 
 
 def _assert_reconciliation_invariants(

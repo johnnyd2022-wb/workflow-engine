@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
@@ -14,7 +14,9 @@ from app.core.domain.inventory_quantity_guard import (
     allow_inventory_quantity_write,
 )
 from app.core.utils.inventory_quantity import coerce_stored_quantity, parse_stored_quantity_to_decimal
-from app.observability import start_span
+from app.observability import get_logger, start_span
+
+logger = get_logger(__name__)
 
 _UNTRACKED_EXTRA_FILTER = {"untracked": True}
 
@@ -90,6 +92,83 @@ class InventoryRepository:
             .first()
         )
 
+    def _assert_source_refs_belong_to_org(
+        self,
+        org_id: UUID,
+        source_execution_id: UUID | None,
+        source_execution_step_id: UUID | None,
+        source_output_id: UUID | None = None,
+    ) -> None:
+        """Reject provenance references that point outside `org_id`.
+
+        All three are accepted from client JSON by `POST /api/core/inventory`, and
+        `executions` / `execution_steps` are global tables — nothing in the schema stops a
+        row in org A from referencing org B's execution. That reference is then followed by
+        lineage enrichment, so an unvalidated reference is a cross-tenant read primitive,
+        not just a cosmetic data-integrity problem.
+
+        `source_output_id` is the odd one out: it is `steps.outputs[].id` inside a JSONB
+        array with no foreign key at all, so there is nothing to join against. It is only
+        meaningful relative to a step, and validating it therefore means requiring the step
+        it belongs to and checking membership in that step's declared outputs. An output id
+        with no step is unverifiable by construction, so it is refused rather than trusted.
+
+        Same shape as `ExecutionRepository.create_execution`, which already refuses to build
+        an execution against a process outside the org.
+        """
+        from app.core.db.models.execution import Execution
+        from app.core.db.models.execution_step import ExecutionStep
+        from app.core.db.models.step import Step
+
+        def _deny(reason: str, ref_kind: str, ref_id: object) -> None:
+            """Log the refusal before raising.
+
+            A rejected cross-tenant reference is a tenant-boundary probe, and the route
+            turns it into an ordinary 400 — so without this it leaves no trace at all and
+            prod-sentinel has nothing to find. Same `access_denied` event name the auth
+            decorators use (app/core/security/permissions.py), so one query covers both.
+            """
+            logger.warning(
+                "access_denied",
+                reason=reason,
+                feature="inventory",
+                org_id=str(org_id),
+                ref_kind=ref_kind,
+                ref_id=str(ref_id),
+            )
+
+        if source_execution_id is not None:
+            owned = (
+                self.db.query(Execution.id)
+                .filter(Execution.id == source_execution_id, Execution.org_id == org_id)
+                .first()
+            )
+            if not owned:
+                _deny("cross_org_source_execution", "source_execution_id", source_execution_id)
+                raise ValueError("source_execution_id not found in this organisation")
+
+        owned_step_row = None
+        if source_execution_step_id is not None:
+            owned_step_row = (
+                self.db.query(ExecutionStep)
+                .join(Execution, ExecutionStep.execution_id == Execution.id)
+                .filter(ExecutionStep.id == source_execution_step_id, Execution.org_id == org_id)
+                .first()
+            )
+            if not owned_step_row:
+                _deny("cross_org_source_execution_step", "source_execution_step_id", source_execution_step_id)
+                raise ValueError("source_execution_step_id not found in this organisation")
+
+        if source_output_id is not None:
+            if owned_step_row is None:
+                _deny("source_output_without_step", "source_output_id", source_output_id)
+                raise ValueError("source_output_id requires a source_execution_step_id in this organisation")
+            step_def = self.db.query(Step).filter(Step.id == owned_step_row.step_id).first()
+            declared = (step_def.outputs if step_def else None) or []
+            if not any(str(o.get("id")) == str(source_output_id) for o in declared if isinstance(o, dict)):
+                _deny("source_output_not_declared_by_step", "source_output_id", source_output_id)
+                raise ValueError("source_output_id is not an output of that execution step")
+
     def create_inventory_item(
         self,
         org_id: UUID,
@@ -118,6 +197,9 @@ class InventoryRepository:
                 "has_source_execution": source_execution_id is not None,
             },
         ):
+            self._assert_source_refs_belong_to_org(
+                org_id, source_execution_id, source_execution_step_id, source_output_id
+            )
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_CREATE):
                 item = InventoryItem(
                     org_id=org_id,
@@ -240,8 +322,11 @@ class InventoryRepository:
                 return None
             current = parse_stored_quantity_to_decimal(item.quantity)
             target = _parse_quantity(new_quantity)
-            if target is None or target < 0:
-                raise ValueError("new_quantity must be a non-negative number")
+            # is_finite() must be checked BEFORE any ordering comparison: Decimal("NaN") < 0
+            # raises InvalidOperation, which is not a ValueError, so it escapes the route's
+            # handler as an unlogged non-JSON 500 instead of a 400.
+            if target is None or not target.is_finite() or target < 0:
+                raise ValueError("new_quantity must be a non-negative finite number")
             quantity_before = str(current)
             if current == target:
                 if commit:
@@ -331,8 +416,12 @@ class InventoryRepository:
             from app.core.db.models.execution import Execution
 
             tagged_pid = InventoryItem.extra_data["producing_process_id"].astext == str(process_id)
+            # `Execution.org_id == org_id` belongs inside the join predicate, not beside it:
+            # without it the WHERE clause can match on another tenant's execution even though
+            # the SELECT stays org-scoped. `get_untracked_items` above already scopes its
+            # equivalent join; this one had drifted.
             query = query.outerjoin(Execution, InventoryItem.source_execution_id == Execution.id).filter(
-                or_(Execution.process_id == process_id, tagged_pid)
+                or_(and_(Execution.org_id == org_id, Execution.process_id == process_id), tagged_pid)
             )
         return query.order_by(InventoryItem.created_at.desc()).all()
 
