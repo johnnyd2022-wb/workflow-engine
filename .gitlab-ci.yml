@@ -287,7 +287,11 @@ socket_security:
 
 # Proves migrations are reversible, not just applicable — added by ci-gate.
 # ci/setup_database.sh already brings the schema to head; this then proves one step
-# down and back up round-trips cleanly.
+# down and back up round-trips cleanly, AND that the full chain survives a
+# base -> head -> base -> head cycle. The full-cycle leg exists because the -1 check
+# alone never provisions from empty, so it structurally cannot catch a migration whose
+# downgrade leaves behind state (e.g. an un-dropped enum type) that only collides on a
+# second upgrade from scratch — see .agents/reports/inventory/review.md follow-up #1.
 migration_reversibility:
   stage: migrations
   image: python:3.14-bookworm
@@ -309,6 +313,8 @@ migration_reversibility:
     - ./ci/setup_database.sh
   script:
     - ENVIRONMENT=test uv run alembic downgrade -1
+    - ENVIRONMENT=test uv run alembic upgrade head
+    - ENVIRONMENT=test uv run alembic downgrade base
     - ENVIRONMENT=test uv run alembic upgrade head
   only:
     - merge_requests

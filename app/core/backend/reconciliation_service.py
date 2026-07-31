@@ -573,7 +573,14 @@ def reconcile_via_execution(
     remaining_untracked_balance = str(new_untracked_qty) if new_untracked_qty > 0 else "0"
 
     try:
-        execution = exec_repo.create_execution(org_id=org_id, process_id=process_id, commit=False)
+        try:
+            execution = exec_repo.create_execution(org_id=org_id, process_id=process_id, commit=False)
+        except ValueError:
+            # create_execution raises ValueError (not ValueError subclass) only when the
+            # process doesn't exist or belongs to another org — same "not found or access
+            # denied" shape as the untracked-item lookup above, not a 500 (AC32/AC33).
+            session.rollback()
+            return {"error": "Process not found or access denied"}
         session.flush()
 
         from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus

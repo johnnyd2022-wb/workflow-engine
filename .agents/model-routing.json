@@ -61,10 +61,10 @@
       "engine": "codex",
       "model": "sol",
       "effort": "medium",
-      "codex_mode": "review",
+      "codex_mode": "exec",
       "access": "read",
       "blocking": false,
-      "why": "Breaker role. Advisory so a Codex quota exhaustion cannot stall an unattended chain."
+      "why": "Breaker role. Advisory so a Codex quota exhaustion cannot stall an unattended chain. codex_mode is exec, not review: `codex review --base <ref>` piped a prompt on stdin at the same time, and codex rejects that combination — see .agents/reports/inventory/review.md follow-up #2."
     },
     "migration-safety": {
       "engine": "claude",
@@ -127,10 +127,10 @@
       "engine": "codex",
       "model": "sol",
       "effort": "high",
-      "codex_mode": "review",
+      "codex_mode": "exec",
       "access": "read",
       "blocking": true,
-      "why": "Never grade your own tests. Separate quota pool, and read-only so it cannot 'fix' a test into passing."
+      "why": "Never grade your own tests. Separate quota pool, and read-only so it cannot 'fix' a test into passing. codex_mode is exec, not review: `codex review --base <ref>` piped a prompt on stdin at the same time, and codex rejects that combination — see .agents/reports/inventory/review.md follow-up #2."
     },
     "ci-gate": {
       "engine": "claude",

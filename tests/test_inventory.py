@@ -78,13 +78,14 @@ def _purge_org(db, org_id):
     behind, and the NEXT run then dies in fixture *setup* on the unique org-name
     constraint, which reads as an unrelated failure and hides whatever the real one was.
     """
+    from app.core.db.models.entity_event_summary import EntityEventSummary
     from app.core.db.models.execution import Execution
     from app.core.db.models.process import Process
     from app.core.db.models.process_version import ProcessVersion
     from app.core.db.models.step import Step
 
     try:
-        for model in (InventoryMovement, InventoryWastage, ApiIdempotencyKey, InventoryItem):
+        for model in (InventoryMovement, InventoryWastage, ApiIdempotencyKey, EntityEventSummary, InventoryItem):
             db.query(model).filter(model.org_id == org_id).delete(synchronize_session=False)
         exec_ids = [e.id for e in db.query(Execution).filter(Execution.org_id == org_id).all()]
         if exec_ids:
@@ -693,3 +694,193 @@ def test_csv_commit_records_acting_user_in_audit_history(db, app_client, org, us
     assert before <= stamped <= datetime.now(UTC) + timedelta(seconds=1), (
         f"AC25 timestamp {entry['timestamp_utc']!r} is outside the request window"
     )
+
+
+# --------------------------------------------------------------------------------------
+# AC31/AC32 — reconcile via-execution (Path B): success path and cross-org isolation.
+# `tests/test_reconciliation_routes.py` covers Path B's six 400 request-validation paths
+# but never a success, and never a cross-org id — disclosed gaps in
+# .agents/reports/inventory/review.md ("AC31/AC32 — reconcile via-execution (Path B),
+# declared out of scope by the router[-focused test batch]").
+# --------------------------------------------------------------------------------------
+
+
+def _process_with_one_step(db, org_id, name_prefix="Recon"):
+    """A real Process + Step, org-scoped — the minimum Path B needs to complete a step."""
+    from app.core.db.models.step import Step
+
+    process = ProcessFactory(org_id=org_id, name=f"{name_prefix} Process {uuid4()}")
+    db.commit()
+    step = Step(
+        process_id=process.id,
+        step_number=1,
+        # chk_steps_position_grid requires position > 0 AND MOD(position, 1000) = 0.
+        position=1000,
+        name=f"{name_prefix} Step",
+        inputs=[],
+        outputs=[],
+        execution_prompts=[],
+    )
+    db.add(step)
+    db.commit()
+    return process, step
+
+
+def test_reconcile_via_execution_creates_execution_and_reduces_untracked_balance(db, app_client, org):
+    """AC31: Path B requires untracked_item_id, process_id, step_id, output name, quantity
+    and unit, and on success maps the untracked item onto a newly created execution output.
+    Nothing anywhere in the suite exercises this success path — only its 400s."""
+    process, step = _process_with_one_step(db, org.id)
+    untracked = InventoryItemFactory(
+        org_id=org.id, name="Untracked Widget", quantity="5", unit="kg", extra_data={"untracked": True}
+    )
+    db.commit()
+    # Capture plain values: the request's teardown detaches these ORM objects (same trap
+    # documented on the `org` fixture above), so touching .id on them afterwards raises
+    # DetachedInstanceError rather than reading a stale value.
+    untracked_id, process_id, step_id = untracked.id, process.id, step.id
+
+    resp = app_client.post(
+        "/api/core/inventory/reconcile/via-execution",
+        json={
+            "untracked_item_id": str(untracked_id),
+            "process_id": str(process_id),
+            "step_id": str(step_id),
+            "output_name": "Reconciled Output",
+            "output_quantity": 5,
+            "output_unit": "kg",
+        },
+    )
+
+    assert resp.status_code == 201, resp.data
+    body = resp.get_json()
+    assert body["inventory_created"] is True
+    assert Decimal(body["reconciled_amount"]) == Decimal("5")
+    assert Decimal(body["remaining_untracked_balance"]) == Decimal("0")
+
+    refreshed_untracked = db.query(InventoryItem).filter(InventoryItem.id == untracked_id).one()
+    assert refreshed_untracked.quantity == Decimal("0")
+    created = (
+        db.query(InventoryItem).filter(InventoryItem.org_id == org.id, InventoryItem.name == "Reconciled Output").one()
+    )
+    assert created.quantity == Decimal("5")
+    assert str(created.source_execution_id) == body["execution_id"]
+
+
+def test_reconcile_via_execution_rejects_untracked_item_id_from_another_org(db, app_client, org, other_org):
+    """AC32: an untracked_item_id belonging to another org must not resolve — no execution
+    or inventory row created against the caller's org from a neighbour's id."""
+    process, step = _process_with_one_step(db, org.id)
+    foreign_untracked = InventoryItemFactory(
+        org_id=other_org.id, name="Neighbour Untracked", quantity="5", unit="kg", extra_data={"untracked": True}
+    )
+    db.commit()
+    foreign_untracked_id, process_id, step_id = foreign_untracked.id, process.id, step.id
+
+    resp = app_client.post(
+        "/api/core/inventory/reconcile/via-execution",
+        json={
+            "untracked_item_id": str(foreign_untracked_id),
+            "process_id": str(process_id),
+            "step_id": str(step_id),
+            "output_name": "Should Not Exist",
+            "output_quantity": 5,
+            "output_unit": "kg",
+        },
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error"] == "Untracked item not found"
+    refreshed_foreign = db.query(InventoryItem).filter(InventoryItem.id == foreign_untracked_id).one()
+    assert refreshed_foreign.quantity == Decimal("5"), "neighbour's item must be untouched"
+    from app.core.db.models.execution import Execution
+
+    assert db.query(Execution).filter(Execution.process_id == process_id).count() == 0, (
+        "a rejected reconciliation must not create an execution"
+    )
+
+
+def test_reconcile_via_execution_rejects_process_id_from_another_org(db, app_client, org, other_org):
+    """AC32/AC33: a process_id belonging to another org must not resolve — never a 500
+    that leaks a stack trace, never an execution created against the wrong tenant's
+    process graph.
+
+    [REGRESSION] `create_execution` raises a bare `ValueError` for a cross-org
+    process_id, and `reconcile_via_execution` re-raised it uncaught — an unhandled
+    exception through the route, not the 400 every other id-ownership check on this
+    surface returns. Fixed by catching that ValueError in reconciliation_service.py and
+    returning the same "not found or access denied" shape as the untracked-item check
+    right above it.
+    """
+    foreign_process, foreign_step = _process_with_one_step(db, other_org.id, name_prefix="Neighbour")
+    untracked = InventoryItemFactory(
+        org_id=org.id, name="Untracked Widget", quantity="5", unit="kg", extra_data={"untracked": True}
+    )
+    db.commit()
+    untracked_id, foreign_process_id, foreign_step_id = untracked.id, foreign_process.id, foreign_step.id
+
+    resp = app_client.post(
+        "/api/core/inventory/reconcile/via-execution",
+        json={
+            "untracked_item_id": str(untracked_id),
+            "process_id": str(foreign_process_id),
+            "step_id": str(foreign_step_id),
+            "output_name": "Should Not Exist",
+            "output_quantity": 5,
+            "output_unit": "kg",
+        },
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error"] == "Process not found or access denied"
+    body_text = resp.get_data(as_text=True)
+    assert "Traceback" not in body_text
+    refreshed_untracked = db.query(InventoryItem).filter(InventoryItem.id == untracked_id).one()
+    assert refreshed_untracked.quantity == Decimal("5"), "no partial reconciliation on a rejected process"
+    from app.core.db.models.execution import Execution
+
+    assert db.query(Execution).filter(Execution.process_id == foreign_process_id).count() == 0
+
+
+# --------------------------------------------------------------------------------------
+# EntityEventSummary.org_id — disclosed as a gap in .agents/reports/inventory/review.md:
+# "defense-in-depth only; security-audit established the pre-fix query was not
+# exploitable" (entity_id is entity_event_summaries' primary key, so the org_id filter
+# on the list_inventory_items enrichment query at backend.py:2691 is redundant given the
+# item ids it filters on are already org-scoped — but the enrichment path itself, the
+# `event_summary` field on GET /api/core/inventory, had zero test coverage before this).
+# --------------------------------------------------------------------------------------
+
+
+def test_list_inventory_enriches_items_with_their_own_org_event_summary(db, app_client, org, other_org):
+    """GET /api/core/inventory attaches event_summary (from entity_event_summaries, kept
+    current by EventWriter on every inventory_item event) to each item in the response,
+    and only ever the caller's own org's summaries — never a neighbour's, even though the
+    enrichment query joins by entity_id across the whole table."""
+    item = InventoryItemFactory(org_id=org.id, name="Summarized Item", quantity="5", unit="kg")
+    neighbour_item = InventoryItemFactory(org_id=other_org.id, name="Neighbour Item", quantity="5", unit="kg")
+    db.commit()
+    item_id, neighbour_item_id = item.id, neighbour_item.id
+
+    from app.core.db.models.entity_event_summary import EntityEventSummary
+
+    own_summary = db.query(EntityEventSummary).filter(EntityEventSummary.entity_id == item_id).one()
+    assert own_summary.org_id == org.id, "creating an item must upsert its own org-scoped summary row"
+    neighbour_summary = db.query(EntityEventSummary).filter(EntityEventSummary.entity_id == neighbour_item_id).one()
+    assert neighbour_summary.org_id == other_org.id
+
+    resp = app_client.post(
+        f"/api/core/inventory/{item_id}/adjust",
+        json={"new_quantity": "8"},
+    )
+    assert resp.status_code == 200, resp.data
+
+    resp = app_client.get("/api/core/inventory")
+    assert resp.status_code == 200, resp.data
+    by_id = {row["id"]: row for row in resp.get_json()["inventory_items"]}
+    assert str(item_id) in by_id, "the caller's own item must be in its own org's list"
+    assert by_id[str(item_id)]["event_summary"] is not None, (
+        "the enrichment query must attach the item's own event summary"
+    )
+    neighbour_ids = {row["id"] for row in resp.get_json()["inventory_items"]}
+    assert str(neighbour_item_id) not in neighbour_ids, "another org's item must never appear in this org's list"

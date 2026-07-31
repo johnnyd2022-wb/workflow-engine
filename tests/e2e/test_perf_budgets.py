@@ -31,7 +31,7 @@ import statistics
 import threading
 import time
 import warnings
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -167,7 +167,7 @@ def perf_instrumentation(app_url):
             REPORT_FILE.write_text(
                 json.dumps(
                     {
-                        "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        "generated": datetime.now(UTC).isoformat(timespec="seconds"),
                         "budgets_file": str(BUDGETS_FILE.relative_to(REPO_ROOT)),
                         "results": sorted(RESULTS, key=lambda r: r["route"]),
                     },

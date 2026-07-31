@@ -12,6 +12,8 @@ repository property, tested directly — this also completes the wastage isolati
 from Batch 2.
 """
 
+import threading
+import time
 from decimal import Decimal
 from uuid import uuid4
 
@@ -120,6 +122,111 @@ def test_wastage_idempotent_replay_does_not_double_deduct(db, app_client, org):
     assert second.get_json().get("idempotent_replay") is True
     db.expire_all()
     assert _quantity_of(item.id) == Decimal("7")  # deducted once, not twice
+    assert db.query(InventoryWastage).filter(InventoryWastage.inventory_item_id == item.id).count() == 1
+
+
+def test_wastage_advisory_lock_serializes_concurrent_duplicate_submissions(db, org, user, monkeypatch):
+    """AC18: concurrent duplicate submissions of the same org+key are serialized by the
+    transaction-scoped `pg_advisory_xact_lock` in `_pg_advisory_lock_wastage_idempotency`,
+    not just raced against the unique (org_id, key) constraint after the fact.
+
+    `test_wastage_idempotent_replay_does_not_double_deduct` above proves the serial
+    replay case, but a serial test can never exercise the lock itself: the second
+    request only starts once the first has already returned. Two real threads with a
+    `threading.Barrier` starting them at the same instant is not enough either — a
+    fast local Postgres round-trip means the first request can validate, deduct, and
+    commit before the second one even reaches the lock call, so the two never actually
+    contend (verified: that version of this test kept passing with the lock call
+    deleted entirely).
+
+    So this version forces the contention deterministically instead of hoping for it:
+    it wraps `_pg_advisory_lock_wastage_idempotency` to have the *first* caller to reach
+    it call through to the real `pg_advisory_xact_lock` (still a genuine Postgres call,
+    still genuinely holding the lock) and then sleep half a second before returning —
+    holding the transaction, and therefore the lock, open. That gives the second caller
+    a real window to issue its own `pg_advisory_xact_lock` and genuinely block on it
+    inside Postgres. The serialization proven here is still Postgres's, not the test's;
+    the wrapper only guarantees the two calls actually overlap.
+    """
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    key = f"key-{uuid4()}"
+    payload = {
+        "entries": [{"inventory_item_id": str(item.id), "quantity_wasted": "3", "reason": "spillage"}],
+        "idempotency_key": key,
+    }
+
+    import app.core.backend.backend as backend_module
+
+    original_lock = backend_module._pg_advisory_lock_wastage_idempotency
+    order_lock = threading.Lock()
+    call_count = {"n": 0}
+
+    def delayed_lock(session, org_id_arg, idem_key_arg):
+        original_lock(session, org_id_arg, idem_key_arg)  # the real pg_advisory_xact_lock call
+        with order_lock:
+            call_count["n"] += 1
+            is_first = call_count["n"] == 1
+        if is_first:
+            time.sleep(0.5)
+
+    monkeypatch.setattr(backend_module, "_pg_advisory_lock_wastage_idempotency", delayed_lock)
+
+    from app.api.app_factory import create_app
+
+    def _logged_in_client():
+        flask_app = create_app()
+        flask_app.config["TESTING"] = True
+        flask_app.config["WTF_CSRF_ENABLED"] = False
+        client = flask_app.test_client()
+        client.environ_base["wsgi.url_scheme"] = "https"
+        client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+        with flask_app.app_context():
+            resp = client.post(
+                "/auth/login",
+                json={"email": user.email, "password": "TestPass123!"},
+                content_type="application/json",
+            )
+            assert resp.status_code in (200, 201), f"Login failed: {resp.data}"
+        return client
+
+    # Two independent clients (own cookie jar, own connection) so the only thing shared
+    # between the threads is the database — the thing the advisory lock actually guards.
+    client_a = _logged_in_client()
+    client_b = _logged_in_client()
+
+    barrier = threading.Barrier(2)
+    results: list[tuple[int, dict] | None] = [None, None]
+    errors: list[BaseException] = []
+
+    def _fire(idx, client):
+        try:
+            barrier.wait(timeout=10)
+            resp = client.post("/api/core/inventory/wastage", json=payload)
+            results[idx] = (resp.status_code, resp.get_json())
+        except BaseException as exc:  # noqa: BLE001 - surfaced via the errors list below
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=_fire, args=(0, client_a)),
+        threading.Thread(target=_fire, args=(1, client_b)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert not errors, errors
+    assert all(r is not None for r in results), f"a thread did not complete in time: {results}"
+    assert call_count["n"] == 2, "both requests must reach the lock for this test to prove anything"
+
+    assert [r[0] for r in results] == [201, 201], results
+    replay_flags = sorted(bool(r[1].get("idempotent_replay")) for r in results)
+    # Exactly one request actually disposed; the loser of the lock race replayed the
+    # stored response instead of disposing a second time.
+    assert replay_flags == [False, True], results
+
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("7"), "advisory lock failed to prevent a double deduction"
     assert db.query(InventoryWastage).filter(InventoryWastage.inventory_item_id == item.id).count() == 1
 
 

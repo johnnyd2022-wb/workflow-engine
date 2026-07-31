@@ -12,7 +12,9 @@ The guard is registered globally on the Session class at import of app.core.db, 
 active for every session the test suite uses.
 """
 
+from datetime import UTC, datetime
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 
@@ -83,6 +85,46 @@ def test_nested_allow_block_is_rejected():
         with allow_inventory_quantity_write(InventoryQuantityWriteReason.MANUAL_API_UPDATE):
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.MANUAL_API_UPDATE):
                 pass
+
+
+def test_raw_sql_insert_outside_guard_is_rejected_by_postgres_trigger(db, org):
+    """AC11: the DB trigger holds even when SQLAlchemy's own event pipeline never runs.
+
+    Every test above proves the Python-side halves of the guard (before_flush,
+    the repository paths). None of them prove the PostgreSQL trigger itself — the
+    layer that is the only thing standing between a raw INSERT/UPDATE (a bulk-load
+    script, a `psql` session, a driver that doesn't fire SQLAlchemy events) and an
+    untracked quantity change. `engine.raw_connection()` returns the underlying DBAPI
+    connection with no `before_execute` listener attached, so a statement run through
+    its cursor genuinely bypasses the ORM and the engine-level GUC sync alike — only
+    the trigger's own `current_setting('app.inventory_qty_guard')` default of '0' is
+    left standing between this INSERT and the table.
+    """
+    engine = db.get_bind()
+    if getattr(engine.dialect, "name", None) != "postgresql":
+        pytest.skip("the quantity guard trigger is PostgreSQL-only")
+
+    item_id = uuid4()
+    now = datetime.now(UTC)
+    raw_conn = engine.raw_connection()
+    try:
+        cur = raw_conn.cursor()
+        with pytest.raises(Exception) as excinfo:
+            cur.execute(
+                """
+                INSERT INTO inventory_items
+                    (id, org_id, name, quantity, unit, inventory_type, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (str(item_id), str(org.id), "Bypass Attempt", "5", "kg", "raw_material", now, now),
+            )
+        assert "quantity INSERT blocked" in str(excinfo.value)
+    finally:
+        raw_conn.rollback()
+        raw_conn.close()
+
+    # The rejected statement never reached the table.
+    assert db.get(InventoryItem, item_id) is None
 
 
 def test_guard_rearms_after_an_allowed_block(db, org):
