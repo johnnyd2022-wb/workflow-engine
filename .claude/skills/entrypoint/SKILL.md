@@ -1,6 +1,6 @@
 ---
 name: entrypoint
-description: "Top-level router across every registered skill in this repo — both the biz-e code suite (new-feature, review-feature, fix-bug, and their specialists) and the founder-ops pack (business-operator and its specialists). Self-updating on two axes: syncs a cached category index (skill-index.md) against the live .claude/skills/ roster, AND checks the wiring graph (scripts/skill_graph.py) so a skill nothing routes to gets caught instead of silently never firing. Also runs preflight once and hands its report to the front door, and — for code front doors — dispatches each into its own fresh worktree and herdr workspace cut from origin/main, so parallel code tasks don't collide. Use this when the user doesn't know which skill to reach for: 'which skill should I use', 'help', 'where do I start', 'I want to build/fix/ship X' with no named skill, or any request that could plausibly map to more than one skill. Not for requests that already clearly name their skill (e.g. 'run sales-manager') — invoke that skill directly instead."
+description: "Top-level router across every registered skill in this repo — both the biz-e code suite (new-feature, review-feature, fix-bug, and their specialists) and the founder-ops pack (business-operator and its specialists). Self-updating on two axes: syncs a cached category index (skill-index.md) against the live .claude/skills/ roster, AND checks the wiring graph (scripts/skill_graph.py) so a skill nothing routes to gets caught instead of silently never firing. Also runs preflight once and hands its report to the front door, and — for code front doors — cuts each its own fresh worktree off origin/main, then either launches it live in a herdr workspace or hands it to the claude-nightwatch FIFO queue to run later, so parallel or staggered code tasks don't collide. Use this when the user doesn't know which skill to reach for: 'which skill should I use', 'help', 'where do I start', 'I want to build/fix/ship X' with no named skill, or any request that could plausibly map to more than one skill. Not for requests that already clearly name their skill (e.g. 'run sales-manager') — invoke that skill directly instead."
 ---
 
 # Entrypoint
@@ -275,7 +275,9 @@ Put `$WORKTREES_DIR` next to wherever `herdr worktree create` puts its own workt
 Then skip straight to 4.4 — do not launch anything, and do not touch a herdr pane, in
 this turn.
 
-**Run now** — one command does all of it:
+**Run now** — continued in 4.3.
+
+### 4.3 Run now — launch it live
 
 `herdr worktree create` builds the branch, the checkout, and a new workspace/tab/pane bound
 to it, in a single call (verified live: it returns `workspace.workspace_id`,
@@ -313,10 +315,54 @@ Report the workspace id, branch, and worktree path to the user in one line, then
 immediately, which repeats 4.1-4.2 with a new slug, a new branch, and a new workspace,
 running alongside the first rather than queuing behind it.
 
-### 4.3 No Herdr available
+### 4.4 Add to queue — hand off to claude-nightwatch
 
-No CLI, or not `HERDR_ENV=1`: there's no herdr space to put it in, but the fresh-worktree
-guarantee doesn't have to depend on Herdr. Use the Agent tool's own isolation instead:
+The worktree from 4.2 already exists; nothing runs in this turn. Build the exact same
+"live" invocation the pane would have received in 4.3, but as **plain prose, not a
+`/skill-name` slash command** — the queued launch is `claude -p "<prompt>"`, a one-shot
+non-interactive call, and slash commands are a REPL feature that a `-p` invocation cannot
+be relied on to resolve. Spell the skill out by path instead, the same convention
+`agent_launch.py` and `claude_nightwatch.py`'s own docstring already use for headless
+invocations:
+
+```
+Read and follow the skill at: .claude/skills/<front-door>/SKILL.md
+Scope / ask: <the ask + Step 1 handoff context>
+You are already on branch <prefix>/<slug> in an isolated worktree at <worktree.path>, cut
+fresh from origin/main — do not create another branch and do not touch any other checkout.
+Run your own preflight first; this worktree has no venv yet, so expect a deps blocker and
+repair it per the preflight table before doing anything else.
+```
+
+Queue it with `agent_queue.py` (file-locked FIFO store, lives outside this repo at
+`~/.claude/tools/`):
+
+```bash
+python3 ~/.claude/tools/agent_queue.py add --cwd "<worktree.path>" --label "<slug>" "<prompt above>"
+```
+
+`claude-nightwatch` (systemd user service, already `enabled`+`active`, `Restart=always` —
+survives reboots and crashes) polls every ~2 minutes, and the moment quota and its
+concurrency cap allow, launches `claude -p "<prompt>" --permission-mode bypassPermissions`
+headless in `<worktree.path>` and logs to `~/.claude/tools/runs/`. That prompt is the same
+full front-door invocation 4.3 would have sent live, so the queued run drives the front
+door's entire chain — spec/build/verify/merge-request, Breaker rounds and all — with
+nothing shortened; "queued" only changes *when* it starts, not what runs. Queue order is
+plain insertion order (FIFO): several asks queued in the order you want them run will
+launch in that order, one at a time per nightwatch's concurrency cap, without you needing
+to sequence them by hand.
+
+Report to the user in one line: the slug, the worktree path, and that it's queued behind
+`N` other pending item(s) (`python3 ~/.claude/tools/agent_queue.py list` shows the current
+order) — then return, same as 4.3. To pull something back out before it launches:
+`python3 ~/.claude/tools/agent_queue.py rm <id>`.
+
+### 4.5 No Herdr available (Run now only)
+
+No CLI, or not `HERDR_ENV=1`: there's no herdr space to launch a live pane in. This only
+affects "Run now" — "Add to queue" (4.4) never needed a pane and is unaffected. For "Run
+now" without Herdr, the fresh-worktree guarantee doesn't have to depend on Herdr either;
+use the Agent tool's own isolation instead:
 
 ```
 Agent({
@@ -331,7 +377,7 @@ Leave it in the background (the tool's default) so this turn isn't blocked eithe
 plainly in your reply that isolation here is filesystem-only — there's no pane to watch,
 just a worktree path the tool result will report.
 
-### 4.4 Conflicts are a later problem, cleanup is a later step
+### 4.6 Conflicts are a later problem, cleanup is a later step
 
 Don't reconcile two isolated worktrees against each other here — that freedom from
 reconciling immediately is the entire reason this exists. If two tasks touched the same
@@ -339,11 +385,16 @@ file, `merge-request` surfaces that as a rebase conflict when it opens the MR, a
 is cheap at that point because only one of the two branches needs to move. Two different
 real asks colliding later is not a problem to prevent at dispatch time; the same slug asked
 twice, on the other hand, is worth a one-line flag before you cut a second worktree for it.
+The same applies to a slug already sitting in the queue (4.4) — check `agent_queue.py list`
+before adding a duplicate.
 
-Once a branch is merged (or abandoned), the worktree should go — `herdr worktree list
---json` enumerates what's still open, and `herdr worktree remove --workspace <id>` clears
-one. Entrypoint doesn't chase this proactively (it dispatches and moves on), but surface it
-when the user asks "what's still running" or "clean up my worktrees".
+Once a branch is merged (or abandoned), the worktree should go. For a "Run now" worktree,
+`herdr worktree list --json` enumerates what's still open and `herdr worktree remove
+--workspace <id>` clears one. For a queued (4.4) worktree, there is no workspace to remove
+— plain `git worktree remove <path>` after the queue item has launched or been pulled
+(`agent_queue.py rm <id>`) is enough. Entrypoint doesn't chase either proactively (it
+dispatches and moves on), but surface it when the user asks "what's still running", "what's
+still queued", or "clean up my worktrees".
 
 ## Step 5: Route the meta-skills when the ask is really about the tooling
 
@@ -385,8 +436,12 @@ guess — check `decisions.live_server_tests` and `blockers` first.
   entrypoint chooses the front door, it doesn't re-implement what happens after.
 - Doesn't invent a skill that doesn't exist. If the ask has no home, say that.
 - Builds exactly one piece of Herdr topology itself — the per-code-task worktree +
-  workspace dispatch in Step 4 — because the user asked for that specific structure.
-  Everything else about panes is still `herdr-multi-agent-collab`'s: the handoff-file
-  protocol, Architect/Breaker rounds, and tabs-mode stage routing all happen *inside* the
-  dispatched workspace, once the front door is running there. Entrypoint hands off and
-  does not drive them.
+  workspace dispatch in Step 4's "Run now" path — because the user asked for that specific
+  structure. Everything else about panes is still `herdr-multi-agent-collab`'s: the
+  handoff-file protocol, Architect/Breaker rounds, and tabs-mode stage routing all happen
+  *inside* the dispatched workspace, once the front door is running there. Entrypoint hands
+  off and does not drive them.
+- Doesn't own the queue's launch policy. Step 4's "Add to queue" path only ever appends to
+  `agent_queue.py`'s FIFO store and cuts the worktree it points at — deciding *when* a
+  queued item actually launches (quota, concurrency, backoff) belongs entirely to
+  `claude_nightwatch.py`, which entrypoint does not invoke, configure, or wait on.
