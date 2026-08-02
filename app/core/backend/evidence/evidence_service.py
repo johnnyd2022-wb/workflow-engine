@@ -57,6 +57,29 @@ def upload_evidence_from_temp(
                 span.set_attribute("result", "not_found")
             return None, "Execution not found or access denied", 404
 
+        # step_id is a FK to the global steps table with no org scoping of its own
+        # (ExecutionEvidence.step_id); validate it belongs to this org-scoped execution's
+        # process before persisting it, matching the pattern InventoryRepository's
+        # _assert_source_refs_belong_to_org applies to inventory provenance FKs.
+        if step_id is not None:
+            valid_step_ids = {es.step_id for es in execution.execution_steps if es.step_id}
+            if step_id not in valid_step_ids:
+                # Same access_denied event name as permissions.py / inventory_repo.py: a
+                # step_id outside this execution's own process is exactly the kind of
+                # cross-tenant FK probe _assert_source_refs_belong_to_org exists to catch
+                # for inventory provenance references, so it gets the same trace.
+                logger.warning(
+                    "access_denied",
+                    reason="step_id_not_in_execution_process",
+                    feature="execution",
+                    org_id=str(org_id),
+                    execution_id=str(execution_id),
+                    step_id=str(step_id),
+                )
+                if span is not None:
+                    span.set_attribute("result", "invalid_step_id")
+                return None, "step_id does not belong to this execution", 400
+
         try:
             checksum = compute_checksum(temp_path)
         except Exception as e:

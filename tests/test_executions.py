@@ -1500,3 +1500,167 @@ class TestRegressionSafeguards:
         step2 = next(es for es in full.execution_steps if es.step_number == 2)
         assert step1.actual_inputs[0].get("inventory_item_id") == inv_id
         assert step2.actual_inputs[0].get("inventory_item_id") == inv_id
+
+    def test_execution_warnings_persist_to_db_not_just_response(self, db, synthetic_org_and_process_clean):
+        """execution_warnings must survive to a fresh read, not just the HTTP response.
+
+        Regression for a bug where the route mutated execution_step.execution_data
+        (a plain JSONB column, not MutableDict-wrapped) in place *after* an earlier
+        db_session.flush() had already cleared its dirty state. SQLAlchemy never saw
+        the in-place mutation, so the warning was returned to the caller but silently
+        dropped from the persisted row — invisible to any later read (traceability,
+        compliance-checks, dashboard) of the same execution_step.
+        """
+        import json
+
+        from flask import Flask, g
+
+        from app.core.backend.backend import complete_step, core_bp
+        from app.core.db.repositories.user_repo import UserRepository
+        from app.core.security.auth_service import AuthService
+
+        org_id = synthetic_org_and_process_clean["org_id"]
+        process_id = synthetic_org_and_process_clean["process_id"]
+        user_repo = UserRepository(db)
+        user = user_repo.create_user(
+            org_id=org_id,
+            email=f"warnings-regression-{uuid4()}@example.com",
+            password_hash=AuthService.hash_password("Demo123!"),
+        )
+
+        repo = ExecutionRepository(db)
+        execution = repo.create_execution(org_id=org_id, process_id=process_id)
+        steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
+        step_id = steps[0].id
+        db.commit()
+
+        payload = {
+            "actual_inputs": [],
+            # Zero quantity -> non-blocking "Skipping output ..." warning (not an error).
+            "actual_outputs": [{"name": "Out1", "quantity": 0, "unit": "kg"}],
+            "execution_data": {},
+        }
+        app = Flask(__name__)
+        app.secret_key = "test-secret"
+        app.register_blueprint(core_bp)
+        with app.app_context():
+            with app.test_request_context(
+                f"/api/core/executions/{execution.id}/steps/{step_id}/complete",
+                method="POST",
+                data=json.dumps(payload),
+                content_type="application/json",
+            ):
+                g.org_id = str(org_id)
+                g.current_user = user
+                g.user_id = str(user.id)
+                g.user_email = user.email
+                response, status_code = complete_step(str(execution.id), str(step_id))
+
+        assert status_code == 200
+        body = response.get_json()
+        assert body.get("execution_warnings"), f"expected a warning in the response, got {body}"
+
+        # Force a real read from Postgres instead of the identity map's in-memory object.
+        db.expire_all()
+        reloaded = repo.get_execution_with_steps(execution.id, org_id)
+        step = next(es for es in reloaded.execution_steps if es.id == step_id)
+        assert step.execution_data.get("execution_warnings") == body["execution_warnings"], (
+            "execution_warnings from the response were not persisted to execution_data"
+        )
+
+
+@pytest.fixture
+def flask_app():
+    """A real app instance, built during fixture setup (not inside a test body).
+
+    create_app() -> configure_logging() unconditionally replaces the root logger's
+    handler list (app/observability/logging_config.py), which silently discards
+    pytest's caplog handler if it's called *during* a test body (after caplog's own
+    per-test handler has already been attached). Building the app here, as a fixture,
+    means create_app() runs during pytest's setup phase — before caplog's handler
+    attachment — so caplog keeps working for any test that requests both.
+    """
+    from app.api.app_factory import create_app
+
+    app = create_app()
+    app.config["TESTING"] = True
+    app.config["WTF_CSRF_ENABLED"] = False
+    return app
+
+
+class TestFlowProcessAccessObservability:
+    """[REGRESSION] A rejected cross-tenant /core/flows* access must be observable.
+
+    _assert_flow_process_access turns the refusal into an ordinary 404 (no ID
+    enumeration), so without an explicit log line a tenant-boundary probe against a
+    process/execution page leaves no trace. Same access_denied event name the auth
+    decorators and inventory_repo.py's provenance-FK guard emit, per the observability
+    skill's rule for every rejected cross-tenant attempt.
+    """
+
+    @staticmethod
+    def _client_logged_in_as(flask_app, db, org_id, email, password="TestPass123!"):
+        from app.core.db.repositories.user_repo import UserRepository
+        from app.core.security.auth_service import AuthService
+
+        UserRepository(db).create_user(org_id=org_id, email=email, password_hash=AuthService.hash_password(password))
+        db.commit()
+
+        client = flask_app.test_client()
+        client.environ_base["wsgi.url_scheme"] = "https"
+        client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+        with flask_app.app_context():
+            resp = client.post(
+                "/auth/login", json={"email": email, "password": password}, content_type="application/json"
+            )
+            assert resp.status_code in (200, 201), f"Login failed: {resp.data}"
+        return client
+
+    def test_cross_org_process_id_emits_access_denied(self, db, flask_app, caplog):
+        import logging
+
+        org_repo = OrganisationRepository(db)
+        process_repo = ProcessRepository(db)
+        owner_org = org_repo.create_org(f"Flow Access Owner Org {uuid4()}")
+        prober_org = org_repo.create_org(f"Flow Access Prober Org {uuid4()}")
+        process = process_repo.create_process(
+            org_id=owner_org.id, name="Owner's Process", description="", is_draft=False
+        )
+        db.commit()
+
+        client = self._client_logged_in_as(flask_app, db, prober_org.id, f"prober-{uuid4()}@example.com")
+        with caplog.at_level(logging.WARNING):
+            resp = client.get(f"/core/flows?id={process.id}")
+        assert resp.status_code == 404
+
+        denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+        assert denials, f"cross-org process access was not logged: {[r.getMessage() for r in caplog.records]}"
+        logged = denials[0].getMessage()
+        assert "process_not_found_or_cross_org" in logged, logged
+
+        db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
+        db.query(Organisation).filter(Organisation.id.in_([owner_org.id, prober_org.id])).delete(
+            synchronize_session=False
+        )
+        db.commit()
+
+    def test_own_org_process_id_does_not_log_access_denied(self, db, flask_app, caplog):
+        import logging
+
+        org_repo = OrganisationRepository(db)
+        process_repo = ProcessRepository(db)
+        org = org_repo.create_org(f"Flow Access Legit Org {uuid4()}")
+        process = process_repo.create_process(org_id=org.id, name="My Process", description="", is_draft=False)
+        db.commit()
+
+        client = self._client_logged_in_as(flask_app, db, org.id, f"legit-{uuid4()}@example.com")
+        with caplog.at_level(logging.WARNING):
+            resp = client.get(f"/core/flows?id={process.id}")
+        assert resp.status_code == 200, resp.data
+
+        denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+        assert denials == [], f"legitimate same-org access must not log access_denied: {denials}"
+
+        db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()

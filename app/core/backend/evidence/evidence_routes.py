@@ -73,11 +73,12 @@ def register_routes(bp):
                     pass
             return jsonify({"error": "Invalid execution_id or step_id"}), 400
 
-        user_email = (
-            getattr(g, "user_email", None) or getattr(g, "user", {}).get("email") if hasattr(g, "user") else None
-        )
-        if isinstance(user_email, dict):
-            user_email = user_email.get("email")
+        # NOTE: `getattr(g, "user_email", None) or X if Y else Z` parses as
+        # `(getattr(...) or X) if Y else Z` (the ternary binds looser than `or`), so a
+        # prior "or fall back to g.user" clause here silently discarded a real
+        # g.user_email whenever g.user was unset — which is always, since only
+        # g.user_email/g.user_id/g.current_user are ever set (app/api/middleware/tenant_context.py).
+        user_email = getattr(g, "user_email", None)
         uploaded_by = str(user_email) if user_email else None
 
         result, err_msg, status = upload_evidence_from_temp(
