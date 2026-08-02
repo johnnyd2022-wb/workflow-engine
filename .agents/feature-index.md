@@ -7,6 +7,15 @@ Read the slice you're touching plus its `depended on by` line before you start.
 14 slices + platform. Three — **crm**, **dilution-calculator** and **demo-data** — have the
 target directory layout under `app/features/`; the other eleven are still inside `core_bp`.
 
+Each slice block carries a `reviewed:` line, one of three states: a **date** (last
+`review-feature` audit, linking to the `.agents/reports/<slug>/review.md` that proves it),
+**`in progress (review/<slug> @ <worktree path>, started <date>)`** (a review is running
+right now in its own worktree and hasn't produced `review.md` yet), or **`never`**. This is
+what `entrypoint` and `review-feature` sort their picklist by (never-reviewed and
+longest-stale first, most-recently-reviewed at the bottom, in-progress ones excluded
+entirely — offering one back would start a second review colliding with the first). Don't
+hand-edit this field: `scripts/feature_index_sweep.py` derives and writes it every run.
+
 **This describes the code as it is today, not the target.** The carve
 (`.agents/plans/feature-slicing-plan.md`) is in progress: Phase 1 has moved demo-data.
 Line ranges into `app/core/backend/backend.py` are load-bearing and shift every time a slice
@@ -67,6 +76,7 @@ how they get carved.
     subscription: core (foundational — never gated)
     layer:        platform
     flag:         none
+    reviewed:     2026-07-26 (as auth + org, pre-identity-slice — see .agents/reports/{auth,org}/review.md)
 
     routes:   /auth/* (login, logout, signup, 2FA setup/verify, backup codes, password)
               /org/*  (org management, members)
@@ -99,6 +109,7 @@ how they get carved.
     subscription: core
     layer:        domain
     flag:         none
+    reviewed:     in progress (review/process-design @ /home/johnny/.herdr/worktrees/workflow-engine/review-process-design, started 2026-08-02)
 
     routes:   /core/processes, /core/flows/create/* (8 wizard pages)
               /api/core/processes [GET POST], /api/core/processes/<id> [GET PUT DELETE]
@@ -132,6 +143,7 @@ how they get carved.
     subscription: core
     layer:        domain
     flag:         none
+    reviewed:     in progress (review/execution @ /home/johnny/.herdr/worktrees/workflow-engine/review-execution, started 2026-08-02)
 
     routes:   /core/flows, /core/flows/executions/step, /core/flows/batches/start
               /core/executions/live
@@ -170,6 +182,7 @@ how they get carved.
     subscription: core
     layer:        domain
     flag:         none
+    reviewed:     2026-07-29 (MR !133 open, not yet merged — see .agents/reports/inventory/review.md)
 
     routes:   /core/inventory/{add,add/manual,add/csv,add/barcode,view,live}
               /api/core/inventory [GET POST], /api/core/inventory/<id> [PUT DELETE]
@@ -202,6 +215,7 @@ how they get carved.
     subscription: core
     layer:        derived
     flag:         none (candidate for one)
+    reviewed:     never
 
     routes:   /core/inventory/dispose, /core/inventory/dispose/confirm
               /api/core/inventory/wastage [GET POST]
@@ -226,6 +240,7 @@ how they get carved.
     subscription: core
     layer:        derived
     flag:         none
+    reviewed:     never
 
     routes:   /api/core/inventory/reconcile/matching-untracked [GET]
               /api/core/inventory/reconcile/via-addition [POST]
@@ -248,6 +263,7 @@ how they get carved.
     subscription: core today — and the plug-in point for the unbuilt COMPLIANT tier
     layer:        derived
     flag:         none
+    reviewed:     in progress (review/compliance-checks @ /home/johnny/.herdr/worktrees/workflow-engine/review-compliance-checks, started 2026-08-02)
 
     routes:   /core/notifications
               /api/core/system-findings
@@ -282,6 +298,7 @@ how they get carved.
     subscription: core
     layer:        derived
     flag:         none (workflow_engine_enabled is NOT this — it's a dead legacy flag)
+    reviewed:     never
 
     routes:   /core/sourcemap
               /api/core/inventory/trace/<raw_material_id> [GET]        (forward)
@@ -307,6 +324,7 @@ how they get carved.
     subscription: core
     layer:        derived
     flag:         none
+    reviewed:     never
 
     routes:   /api/core/entities/<type>/<id>/story [GET]
               /api/core/entities/<type>/<id>/summary [GET]
@@ -333,6 +351,7 @@ how they get carved.
     subscription: core
     layer:        derived (composition)
     flag:         none
+    reviewed:     never
 
     routes:   /core/dashboard, /api/core/dashboard/summary [GET], /api/core/metrics [GET]
     backend:  app/core/backend/backend.py:4100-4780 (summary, action board, weekly series)
@@ -357,6 +376,7 @@ how they get carved.
     layer:        integration
     flag:         crm_enabled — a feature toggle, not a tier gate. The only flag that
                   actually gates a blueprint (app_factory.py:112). True in local.ini.
+    reviewed:     never
 
     routes:   /crm/* — pages, api, oauth. Parent blueprint composes crm_api/crm_pages/crm_oauth.
     backend:  app/features/crm/{routes,services,repositories,models,frontend}/
@@ -379,6 +399,7 @@ how they get carved.
     subscription: core
     layer:        domain (stateless — no models, no repos, no tenant data)
     flag:         none — registered unconditionally (app_factory.py:106)
+    reviewed:     never
 
     routes:   /dilution-calculator [GET]                    (page)
               /api/dilution-calculator/solve [POST]         (stateless solve)
@@ -412,6 +433,7 @@ how they get carved.
     subscription: n/a
     layer:        shell
     flag:         none
+    reviewed:     never
 
     routes:   /core (hub), /core/dashboard chrome, /core/settings, /core/integrations
               /core/static/{js,css,img,inventory}/<filename>  (4 serving routes)
@@ -445,6 +467,7 @@ how they get carved.
     subscription: n/a (dev only)
     layer:        non-product
     flag:         none — but the route self-gates on config.environment
+    reviewed:     never
 
     routes:   /api/core/reset-demo-db [POST]
     backend:  app/features/demo_data/           <-- CARVED (Phase 1, first slice out)
@@ -533,4 +556,11 @@ Recorded here because the index is where you'd look before scoping work:
 - `backend.py` line ranges drift with every edit to that file. If a range doesn't match what
   you find, re-locate it and fix the entry.
 - Re-verify wholesale after each phase of the slicing plan.
-- Staleness automation is open item 1 in the plan (§6) — not built yet.
+- Staleness automation for `routes:`/`backend:` line ranges is open item 1 in the plan
+  (§6) — not built yet. That's a different problem from the one below: this one is about
+  the index describing code accurately, not about whether a slice has been reviewed.
+- The `reviewed:` field's staleness *is* handled: `scripts/feature_index_sweep.py` reconciles
+  it against `.agents/reports/<slug>/review.md` (a completed review) and live `review/<slug>`
+  worktrees (one in flight) every time `review-feature` or `entrypoint` runs, and writes the
+  line itself — never hand-edit `reviewed:`. See the field's own description above for the
+  three states it can hold.

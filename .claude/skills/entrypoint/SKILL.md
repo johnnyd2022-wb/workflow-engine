@@ -138,10 +138,52 @@ Map whatever comes back onto the index:
 **Then collect the handoff context.** Before invoking, ask (as selections/short
 questions, not an essay prompt) for whatever the target skill's first step would
 otherwise have to re-ask: for `new-feature` a one-line feature statement; for `fix-bug`
-the symptom, where it was seen, and any request_id/trace; for `review-feature` which
-blueprint/area; for business skills the business (Whistlebird or Biz-E) and the concrete
-artifact wanted. One round of questions, not an interrogation — the skill runs its own
-interview for the details it owns (e.g. spec-first).
+the symptom, where it was seen, and any request_id/trace; for `review-feature` **the
+slice**, offered as an `AskUserQuestion` picklist built from `.agents/feature-index.md`'s
+14 named slices (+ platform) rather than a free-text "which blueprint/area" prompt — the
+index already exists precisely so nobody has to type or re-derive the map by hand.
+
+**Before building that picklist (scoped or unscoped), run the sweep:**
+`python3 scripts/feature_index_sweep.py --json`. It reconciles the index against ground
+truth — a `.agents/reports/<slug>/review.md` proves a slice was actually reviewed even if
+the line was never hand-updated; a live `review/<slug>` worktree proves one is already
+running — and self-updates the file. Use its `picklist_order` (already sorted
+never-reviewed-first/oldest-audits-next, most-recently-reviewed last) and
+`excluded_in_review` directly rather than re-deriving the sort from the raw file. This
+matters here specifically because entrypoint is the thing cutting a fresh worktree per
+dispatch (Step 4) — without the sweep, two calls to entrypoint in a row would happily
+offer the same never-reviewed slice twice and dispatch two reviews at each other.
+
+If the user's ask already names an area, use the index's "Quick routing table" to pre-match
+it to a slug and confirm rather than asking from scratch — but check that slug against
+`excluded_in_review` first. If it's already in flight, say so (branch, worktree path) and
+ask whether they want to check on that run instead of starting a duplicate, rather than
+silently dispatching a second one. If the index is missing or looks stale in a way the
+sweep can't explain (routes/backend lines wrong, not just a stale `reviewed:` line), say so
+and fall back to an open question.
+
+For an unscoped review ask ("do a review", "what should I audit next"), the picklist
+options are `picklist_order` taken in order — that ordering already sweeps every slice
+once before repeating any, and already excludes anything mid-review. Show each option's
+status in its description: the date for a reviewed slice, `never` for an untouched one, or
+`partial — started, N stalled artifacts, no review.md` (`computed_status: partial`) for one
+worth resuming rather than restarting fresh — put `partial` candidates first regardless of
+where the plain sort would place them, since finishing existing work beats starting new
+work. Since `AskUserQuestion` caps at 4 options, this is a paged pick, not a one-shot list:
+
+1. Take the next 3 (or 4, if this is the last batch — no need to reserve a slot when
+   nothing remains to page to) off `picklist_order` starting from offset 0.
+2. If more than 3 remain after this batch, the 4th option is **"Show more slices"** —
+   not a real candidate, a pager control.
+3. If the user picks a real slice, done — confirm and move on. If they pick "Show more",
+   repeat from step 1 at the next offset (+3). Keep paging until either a real pick lands
+   or the list is exhausted (last batch shown with no pager slot, so every slice is
+   reachable by paging, not just the first 4) — free-text "Other" remains available at
+   every step for a slug named directly.
+
+For business skills the business (Whistlebird or Biz-E) and the concrete artifact wanted.
+One round of questions, not an interrogation — the skill runs its own interview for the
+details it owns (e.g. spec-first).
 
 ## Step 2: Route from the index
 
