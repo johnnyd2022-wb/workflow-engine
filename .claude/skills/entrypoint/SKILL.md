@@ -343,14 +343,38 @@ Claude Code into it, wait for it to boot, then hand it the actual task — the s
 pane, just aimed at a fresh workspace instead of a split:
 
 ```bash
-herdr pane run <root_pane.pane_id> "claude"
+herdr pane run <root_pane.pane_id> "claude --permission-mode auto"
 herdr wait agent-status <root_pane.pane_id> --status idle --timeout 30000
 herdr pane run <root_pane.pane_id> "/<front-door-skill> <the ask + Step 1 handoff context>. \
 You are already on branch <prefix>/<slug> in an isolated worktree at <worktree.path>, cut \
 fresh from origin/main — do not create another branch and do not touch any other checkout. \
 Run your own preflight first; this worktree has no venv yet, so expect a deps blocker and \
 repair it per the preflight table before doing anything else."
+herdr pane send-keys <root_pane.pane_id> enter
 ```
+
+**Always pass `--permission-mode auto` on this launch, don't rely on it inheriting a
+default.** A bare `claude` may happen to start in whatever permission mode the invoking
+user's own settings default to, which is not a property this skill controls or should
+depend on — an unattended dispatched pane needs a deterministic mode, not a borrowed one.
+`auto` (not `acceptEdits`) is the deliberate choice here: this is a live, unattended pane
+nobody is watching to clear a permission prompt, so it needs the classifier-driven mode
+that keeps going through routine tool calls instead of stalling on one — the same mode
+this router's own session runs under (see "Auto Mode Active"). This is a different call
+from `scripts/agent_launch.py`'s chain stages (`.agents/verification-chain.md` §3), which
+give write stages the narrower `acceptEdits` specifically *because* a supervising session
+is there to review each stage's output between steps — there is no such supervision here
+between dispatch and completion notification, so the pane cannot afford to block on a
+prompt no one will answer.
+
+**Always send the trailing `enter` after the front-door prompt, on its own `pane
+send-keys` call, don't assume `pane run` submits it.** The prompt is long — it is the ask
+plus the full Step 1 handoff context — and a long string lands in the input box as a
+collapsed "[Pasted text]" block rather than being submitted, the same way a human pasting
+a large block would need to press Enter separately to send it. Skipping this step leaves
+the pane sitting idle indefinitely with the task never actually dispatched, which reads as
+success (the command returns cleanly) right up until someone checks the pane and finds it
+never started.
 
 Report the workspace id, branch, and worktree path to the user in one line, then return —
 **do not wait on it.** That is the point: a second ask can invoke `entrypoint` again
