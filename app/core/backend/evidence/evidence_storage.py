@@ -1,8 +1,10 @@
 """Filesystem operations for evidence files. Atomic write, UUID filenames."""
 
+import errno
 import hashlib
 import os
 import re
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -88,7 +90,7 @@ def prepare_final_path(org_id: str, execution_id: str, content_type: str) -> tup
 
 def finalize_from_temp(temp_path: Path, org_id: str, execution_id: str, filename: str) -> Path:
     """
-    Atomically move temp file to final location under storage root.
+    Move temp file to final location under storage root.
     Call only after DB commit. Returns the final Path. Raises if filename is not safe or move fails.
     """
     if not is_safe_filename(filename):
@@ -100,7 +102,22 @@ def finalize_from_temp(temp_path: Path, org_id: str, execution_id: str, filename
     temp_path = Path(temp_path)
     if not temp_path.is_file():
         raise FileNotFoundError(f"Temp file missing: {temp_path}")
-    os.replace(temp_path, full_path)
+    try:
+        # Fast path: atomic same-filesystem rename (temp dir and storage root are the
+        # same device in most local/dev setups).
+        os.replace(temp_path, full_path)
+    except OSError as e:
+        if e.errno != errno.EXDEV:
+            raise
+        # tempfile.mkstemp() uses the OS default temp dir, which is on a different
+        # filesystem than the storage root in some deployments (observed in GitLab CI:
+        # /tmp is a separate mount from the /builds checkout) -- os.replace() cannot
+        # rename across devices. Fall back to copy-then-delete, which works across
+        # filesystems; not atomic, but this path only runs after the DB record is
+        # already committed PENDING, and every caller already tolerates a partial
+        # state here by deleting the record on any finalize failure.
+        shutil.copy2(temp_path, full_path)
+        os.unlink(temp_path)
     logger.info("Evidence finalize_from_temp: %s -> %s", temp_path, full_path)
     return full_path
 

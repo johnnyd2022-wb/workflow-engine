@@ -676,6 +676,48 @@ class TestEvidenceStorageHelpers:
         assert final_path.exists()
         assert final_path.read_bytes() == _PNG_BYTES
 
+    def test_finalize_from_temp_falls_back_to_copy_across_devices(self, tmp_path, monkeypatch):
+        """[REGRESSION] os.replace() cannot rename across filesystems (EXDEV) — observed
+        for real in GitLab CI, where /tmp (tempfile.mkstemp()'s default) and the checkout
+        under /builds are separate mounts, so every evidence upload 500'd there. Simulate
+        the same OSError locally (can't rely on the dev sandbox having separate devices to
+        provoke it naturally) and assert the copy-then-delete fallback still finalizes
+        correctly."""
+        import errno
+
+        import app.core.backend.evidence.evidence_storage as storage
+
+        monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
+        temp = tmp_path / "temp_src.bin"
+        temp.write_bytes(_PNG_BYTES)
+        filename = f"{uuid4()}.png"
+
+        def _cross_device_replace(src, dst):
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+        monkeypatch.setattr(storage.os, "replace", _cross_device_replace)
+        final_path = storage.finalize_from_temp(temp, "org1", "exec1", filename)
+
+        assert not temp.exists(), "temp file must be removed after the copy fallback"
+        assert final_path.exists()
+        assert final_path.read_bytes() == _PNG_BYTES
+
+    def test_finalize_from_temp_reraises_non_exdev_os_errors(self, tmp_path, monkeypatch):
+        """Only EXDEV should trigger the copy fallback -- any other OSError (permissions,
+        disk full) must still propagate, not be silently swallowed by the fallback path."""
+        import app.core.backend.evidence.evidence_storage as storage
+
+        monkeypatch.setattr(storage, "get_storage_root", lambda: tmp_path)
+        temp = tmp_path / "temp_src.bin"
+        temp.write_bytes(_PNG_BYTES)
+
+        def _permission_denied(src, dst):
+            raise PermissionError("simulated permission error")
+
+        monkeypatch.setattr(storage.os, "replace", _permission_denied)
+        with pytest.raises(PermissionError):
+            storage.finalize_from_temp(temp, "org1", "exec1", f"{uuid4()}.png")
+
     def test_read_file_path_rejects_traversal_outside_storage_root(self, tmp_path, monkeypatch):
         """org_id/execution_id are UUID strings in production, but the path-join itself
         offers no protection — the root-containment check (`relative_to`) is what actually
