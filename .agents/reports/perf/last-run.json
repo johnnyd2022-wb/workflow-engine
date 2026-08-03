@@ -1,12 +1,12 @@
 {
-  "generated": "2026-08-01T08:46:06+00:00",
+  "generated": "2026-08-03T07:52:40+00:00",
   "budgets_file": ".agents/perf/budgets.json",
   "results": [
     {
       "route": "/api/core/dashboard/summary",
       "kind": "api",
       "metrics": {
-        "backend_ms": 34.2,
+        "backend_ms": 35.2,
         "queries": 38
       },
       "over_budget": [],
@@ -16,7 +16,7 @@
       "route": "/api/core/executions",
       "kind": "api",
       "metrics": {
-        "backend_ms": 6.7,
+        "backend_ms": 6.4,
         "queries": 5
       },
       "over_budget": [],
@@ -26,7 +26,7 @@
       "route": "/api/core/inventory",
       "kind": "api",
       "metrics": {
-        "backend_ms": 14.8,
+        "backend_ms": 16.5,
         "queries": 13
       },
       "over_budget": [],
@@ -36,7 +36,7 @@
       "route": "/api/core/inventory/wastage",
       "kind": "api",
       "metrics": {
-        "backend_ms": 5.1,
+        "backend_ms": 5.2,
         "queries": 4
       },
       "over_budget": [],
@@ -46,7 +46,7 @@
       "route": "/api/core/processes",
       "kind": "api",
       "metrics": {
-        "backend_ms": 7.1,
+        "backend_ms": 9.5,
         "queries": 6
       },
       "over_budget": [],
@@ -56,7 +56,7 @@
       "route": "/api/crm/overview",
       "kind": "api",
       "metrics": {
-        "backend_ms": 11.7,
+        "backend_ms": 11.5,
         "queries": 11
       },
       "over_budget": [],
@@ -66,7 +66,7 @@
       "route": "/api/dilution-calculator/solve",
       "kind": "api",
       "metrics": {
-        "backend_ms": 3.6,
+        "backend_ms": 3.5,
         "queries": 2
       },
       "over_budget": [],
@@ -76,7 +76,7 @@
       "route": "/auth/me",
       "kind": "api",
       "metrics": {
-        "backend_ms": 3.5,
+        "backend_ms": 3.0,
         "queries": 2
       },
       "over_budget": [],
@@ -86,9 +86,9 @@
       "route": "/core/dashboard",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.7,
+        "backend_ms": 4.5,
         "queries": 2,
-        "lcp_ms": 96
+        "lcp_ms": 104
       },
       "over_budget": [],
       "over_ceiling": []
@@ -97,9 +97,9 @@
       "route": "/core/executions/live",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.8,
+        "backend_ms": 4.2,
         "queries": 2,
-        "lcp_ms": 76
+        "lcp_ms": 68
       },
       "over_budget": [],
       "over_ceiling": []
@@ -108,9 +108,9 @@
       "route": "/core/flows",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.8,
+        "backend_ms": 4.3,
         "queries": 2,
-        "lcp_ms": 56
+        "lcp_ms": 60
       },
       "over_budget": [],
       "over_ceiling": []
@@ -121,7 +121,7 @@
       "metrics": {
         "backend_ms": 3.6,
         "queries": 2,
-        "lcp_ms": 64
+        "lcp_ms": 56
       },
       "over_budget": [],
       "over_ceiling": []
@@ -130,9 +130,9 @@
       "route": "/core/processes",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.6,
+        "backend_ms": 3.8,
         "queries": 2,
-        "lcp_ms": 52
+        "lcp_ms": 56
       },
       "over_budget": [],
       "over_ceiling": []
@@ -141,9 +141,9 @@
       "route": "/core/settings",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.7,
+        "backend_ms": 3.8,
         "queries": 2,
-        "lcp_ms": 76
+        "lcp_ms": 72
       },
       "over_budget": [],
       "over_ceiling": []
@@ -152,9 +152,9 @@
       "route": "/crm",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.5,
+        "backend_ms": 4.3,
         "queries": 2,
-        "lcp_ms": 64
+        "lcp_ms": 60
       },
       "over_budget": [],
       "over_ceiling": []
@@ -163,9 +163,9 @@
       "route": "/dilution-calculator",
       "kind": "page",
       "metrics": {
-        "backend_ms": 3.7,
+        "backend_ms": 3.6,
         "queries": 2,
-        "lcp_ms": 56
+        "lcp_ms": 60
       },
       "over_budget": [],
       "over_ceiling": []
@@ -174,7 +174,7 @@
       "route": "/org",
       "kind": "api",
       "metrics": {
-        "backend_ms": 3.3,
+        "backend_ms": 3.1,
         "queries": 2
       },
       "over_budget": [],
@@ -184,7 +184,7 @@
       "route": "/org/users",
       "kind": "api",
       "metrics": {
-        "backend_ms": 3.7,
+        "backend_ms": 3.9,
         "queries": 3
       },
       "over_budget": [],
