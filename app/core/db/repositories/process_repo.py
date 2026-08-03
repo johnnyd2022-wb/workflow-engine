@@ -1,5 +1,6 @@
 """Process repository with tenancy enforcement"""
 
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func
@@ -371,6 +372,73 @@ class ProcessRepository:
             )
             self.db.commit()
             return True
+
+    def reorder_steps(
+        self,
+        process_id: UUID,
+        org_id: UUID,
+        updates: list[tuple[UUID, Decimal]],
+    ) -> str | None:
+        """Batch-update step positions atomically, with the same ProcessVersion/event
+        audit trail every other step mutation gets. Caller holds the transaction
+        (typically `with sess.begin():` on a dedicated session) — this does not commit.
+
+        Validates every step_id belongs to the process *before* applying any position
+        update, so a validation failure can never leave a partial reorder applied
+        (the previous inline implementation validated-and-applied in the same loop,
+        which meant a mid-loop 404 still committed whatever positions had already
+        been written on that same connection, since a `return` from inside a
+        `with sess.begin():` block exits normally and commits rather than rolling back).
+
+        Returns None on success, or one of 'process_not_found' | 'no_steps' |
+        'step_not_found' identifying which validation failed — the route maps that to
+        the matching HTTP status/message.
+        """
+        with start_span(
+            "process.step_reorder",
+            attributes={"org_id": str(org_id), "process_id": str(process_id)},
+        ):
+            process = self.get_process_by_id(process_id, org_id)
+            if not process:
+                return "process_not_found"
+
+            # Lock all steps for this process to prevent concurrent reorder collisions.
+            locked = self.db.query(Step.id).filter(Step.process_id == process_id).with_for_update().all()
+            locked_ids = {sid for (sid,) in locked}
+            if not locked_ids:
+                return "no_steps"
+
+            for step_uuid, _position in updates:
+                if step_uuid not in locked_ids:
+                    return "step_not_found"
+
+            for step_uuid, position in updates:
+                updated = (
+                    self.db.query(Step)  # nosemgrep: sqlalchemy-query-in-for-loop — each step gets a distinct position
+                    .filter(Step.id == step_uuid, Step.process_id == process_id)
+                    .update({"position": position})
+                )
+                # Already validated + row-locked above, so this is unreachable outside a
+                # concurrent delete racing past the lock — kept as a defensive guard.
+                if updated != 1:
+                    return "step_not_found"
+
+            all_steps = _current_steps(self.db, process_id)
+            pv = _insert_process_version(self.db, org_id, process, all_steps, change_summary="Reordered steps")
+
+            ew = EventWriter(self.db, org_id)
+            ew.emit(
+                event_type="process.steps_reordered",
+                entity_type="process",
+                entity_id=process.id,
+                payload={
+                    "step": {"count": len(all_steps)},
+                    "process_version_id": str(pv.id),
+                    "version_number": pv.version_number,
+                    "change_summary": "Reordered steps",
+                },
+            )
+            return None
 
     def get_process_with_steps(self, process_id: UUID, org_id: UUID) -> Process | None:
         """Get process with all its steps loaded in a single query."""

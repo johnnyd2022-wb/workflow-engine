@@ -46,9 +46,14 @@ def create_app():
     # Flask will also search blueprint template folders automatically
     app = Flask(__name__, template_folder=ui_templates_dir)
 
-    # Enforce max request body for uploads (evidence max size) to avoid memory spikes under load
-    if hasattr(config, "evidence_max_file_size_mb"):
-        app.config["MAX_CONTENT_LENGTH"] = config.evidence_max_file_size_mb * 1024 * 1024
+    # Enforce max request body for uploads, to avoid memory spikes under load. Must be the
+    # LARGEST of every feature's own upload cap (evidence, process-docs, ...) — a smaller
+    # global value here silently truncates a larger per-feature limit before that feature's
+    # own size check ever runs, turning its configured/advertised max into dead config.
+    upload_limit_mb_attrs = ("evidence_max_file_size_mb", "process_docs_max_file_size_mb")
+    upload_limits_mb = [getattr(config, attr) for attr in upload_limit_mb_attrs if hasattr(config, attr)]
+    if upload_limits_mb:
+        app.config["MAX_CONTENT_LENGTH"] = max(upload_limits_mb) * 1024 * 1024
 
     # Set secret key for sessions (should be in config in production)
     app.secret_key = config.get("app", "secret_key", fallback="dev-secret-key-change-in-production")
