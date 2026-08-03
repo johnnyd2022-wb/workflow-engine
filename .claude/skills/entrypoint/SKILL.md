@@ -138,10 +138,52 @@ Map whatever comes back onto the index:
 **Then collect the handoff context.** Before invoking, ask (as selections/short
 questions, not an essay prompt) for whatever the target skill's first step would
 otherwise have to re-ask: for `new-feature` a one-line feature statement; for `fix-bug`
-the symptom, where it was seen, and any request_id/trace; for `review-feature` which
-blueprint/area; for business skills the business (Whistlebird or Biz-E) and the concrete
-artifact wanted. One round of questions, not an interrogation — the skill runs its own
-interview for the details it owns (e.g. spec-first).
+the symptom, where it was seen, and any request_id/trace; for `review-feature` **the
+slice**, offered as an `AskUserQuestion` picklist built from `.agents/feature-index.md`'s
+14 named slices (+ platform) rather than a free-text "which blueprint/area" prompt — the
+index already exists precisely so nobody has to type or re-derive the map by hand.
+
+**Before building that picklist (scoped or unscoped), run the sweep:**
+`python3 scripts/feature_index_sweep.py --json`. It reconciles the index against ground
+truth — a `.agents/reports/<slug>/review.md` proves a slice was actually reviewed even if
+the line was never hand-updated; a live `review/<slug>` worktree proves one is already
+running — and self-updates the file. Use its `picklist_order` (already sorted
+never-reviewed-first/oldest-audits-next, most-recently-reviewed last) and
+`excluded_in_review` directly rather than re-deriving the sort from the raw file. This
+matters here specifically because entrypoint is the thing cutting a fresh worktree per
+dispatch (Step 4) — without the sweep, two calls to entrypoint in a row would happily
+offer the same never-reviewed slice twice and dispatch two reviews at each other.
+
+If the user's ask already names an area, use the index's "Quick routing table" to pre-match
+it to a slug and confirm rather than asking from scratch — but check that slug against
+`excluded_in_review` first. If it's already in flight, say so (branch, worktree path) and
+ask whether they want to check on that run instead of starting a duplicate, rather than
+silently dispatching a second one. If the index is missing or looks stale in a way the
+sweep can't explain (routes/backend lines wrong, not just a stale `reviewed:` line), say so
+and fall back to an open question.
+
+For an unscoped review ask ("do a review", "what should I audit next"), the picklist
+options are `picklist_order` taken in order — that ordering already sweeps every slice
+once before repeating any, and already excludes anything mid-review. Show each option's
+status in its description: the date for a reviewed slice, `never` for an untouched one, or
+`partial — started, N stalled artifacts, no review.md` (`computed_status: partial`) for one
+worth resuming rather than restarting fresh — put `partial` candidates first regardless of
+where the plain sort would place them, since finishing existing work beats starting new
+work. Since `AskUserQuestion` caps at 4 options, this is a paged pick, not a one-shot list:
+
+1. Take the next 3 (or 4, if this is the last batch — no need to reserve a slot when
+   nothing remains to page to) off `picklist_order` starting from offset 0.
+2. If more than 3 remain after this batch, the 4th option is **"Show more slices"** —
+   not a real candidate, a pager control.
+3. If the user picks a real slice, done — confirm and move on. If they pick "Show more",
+   repeat from step 1 at the next offset (+3). Keep paging until either a real pick lands
+   or the list is exhausted (last batch shown with no pager slot, so every slice is
+   reachable by paging, not just the first 4) — free-text "Other" remains available at
+   every step for a slug named directly.
+
+For business skills the business (Whistlebird or Biz-E) and the concrete artifact wanted.
+One round of questions, not an interrogation — the skill runs its own interview for the
+details it owns (e.g. spec-first).
 
 ## Step 2: Route from the index
 
@@ -301,14 +343,38 @@ Claude Code into it, wait for it to boot, then hand it the actual task — the s
 pane, just aimed at a fresh workspace instead of a split:
 
 ```bash
-herdr pane run <root_pane.pane_id> "claude"
+herdr pane run <root_pane.pane_id> "claude --permission-mode auto"
 herdr wait agent-status <root_pane.pane_id> --status idle --timeout 30000
 herdr pane run <root_pane.pane_id> "/<front-door-skill> <the ask + Step 1 handoff context>. \
 You are already on branch <prefix>/<slug> in an isolated worktree at <worktree.path>, cut \
 fresh from origin/main — do not create another branch and do not touch any other checkout. \
 Run your own preflight first; this worktree has no venv yet, so expect a deps blocker and \
 repair it per the preflight table before doing anything else."
+herdr pane send-keys <root_pane.pane_id> enter
 ```
+
+**Always pass `--permission-mode auto` on this launch, don't rely on it inheriting a
+default.** A bare `claude` may happen to start in whatever permission mode the invoking
+user's own settings default to, which is not a property this skill controls or should
+depend on — an unattended dispatched pane needs a deterministic mode, not a borrowed one.
+`auto` (not `acceptEdits`) is the deliberate choice here: this is a live, unattended pane
+nobody is watching to clear a permission prompt, so it needs the classifier-driven mode
+that keeps going through routine tool calls instead of stalling on one — the same mode
+this router's own session runs under (see "Auto Mode Active"). This is a different call
+from `scripts/agent_launch.py`'s chain stages (`.agents/verification-chain.md` §3), which
+give write stages the narrower `acceptEdits` specifically *because* a supervising session
+is there to review each stage's output between steps — there is no such supervision here
+between dispatch and completion notification, so the pane cannot afford to block on a
+prompt no one will answer.
+
+**Always send the trailing `enter` after the front-door prompt, on its own `pane
+send-keys` call, don't assume `pane run` submits it.** The prompt is long — it is the ask
+plus the full Step 1 handoff context — and a long string lands in the input box as a
+collapsed "[Pasted text]" block rather than being submitted, the same way a human pasting
+a large block would need to press Enter separately to send it. Skipping this step leaves
+the pane sitting idle indefinitely with the task never actually dispatched, which reads as
+success (the command returns cleanly) right up until someone checks the pane and finds it
+never started.
 
 Report the workspace id, branch, and worktree path to the user in one line, then return —
 **do not wait on it.** That is the point: a second ask can invoke `entrypoint` again
