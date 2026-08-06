@@ -565,3 +565,175 @@ class TestEnrichmentResilience:
         )
         assert_traversal_invariants(result)
         assert len(result.nodes) == 3
+
+
+class TestAddStepOrderConnectionsTenantIsolation:
+    """add_step_order_connections must scope its ExecutionStep lookup to self.org_id.
+
+    Regression: the lookup queried ExecutionStep by id alone, with no join back to
+    Execution.org_id — unlike every other step/item lookup in this file (see the
+    comment on _enrich_items_bulk). An inventory item whose source_execution_step_id
+    is corrupted or forged to point at another org's step must not have that foreign
+    step's step_number/actual_inputs used to link it into this org's visualization edges.
+    """
+
+    def test_step_from_another_org_is_not_used_to_build_a_connection(self, db):
+        from app.core.db.models.execution_step import ExecutionStep
+        from app.core.db.models.organisation import Organisation
+        from app.core.db.repositories.organisation_repo import OrganisationRepository
+
+        org_repo = OrganisationRepository(db)
+        org_a = org_repo.create_org(f"Tenant Isolation Org A {uuid4()}")
+        org_b = org_repo.create_org(f"Tenant Isolation Org B {uuid4()}")
+        try:
+            data_a = build_linear_dag(db, org_a.id)
+            data_b = build_linear_dag(db, org_b.id)
+            steps_a = (
+                db.query(ExecutionStep)
+                .filter(ExecutionStep.execution_id == data_a["execution_id"])
+                .order_by(ExecutionStep.step_number)
+                .all()
+            )
+            steps_b = (
+                db.query(ExecutionStep)
+                .filter(ExecutionStep.execution_id == data_b["execution_id"])
+                .order_by(ExecutionStep.step_number)
+                .all()
+            )
+
+            # item_w1_confused impersonates org A's real w1 item, but its
+            # source_execution_step_id has been corrupted to point at org B's step 1
+            # (R1->W1, actual_inputs referencing org B's own r1 — never org A's w1).
+            item_w1_confused = {
+                "id": str(data_a["w1_id"]),
+                "inventory_type": "work_in_progress",
+                "source_execution_id": "shared-key",
+                "source_execution_step_id": str(steps_b[0].id),
+            }
+            # item_f1_real is org A's genuine f1 item/step: step 2 legitimately
+            # consumes org A's w1 (data_a["w1_id"]) to produce f1.
+            item_f1_real = {
+                "id": str(data_a["f1_id"]),
+                "inventory_type": "final_product",
+                "source_execution_id": "shared-key",
+                "source_execution_step_id": str(steps_a[1].id),
+            }
+
+            tracer = DAGTracer(org_id=org_a.id, session=db)
+            connections: list[dict[str, str]] = []
+            tracer.add_step_order_connections([item_w1_confused, item_f1_real], connections)
+
+            assert connections == [], (
+                "org B's step must not be resolved for an org-A-scoped tracer; a "
+                f"connection was still built using it: {connections}"
+            )
+        finally:
+            clear_org_synthetic_data(db, org_a.id)
+            clear_org_synthetic_data(db, org_b.id)
+            db.query(Organisation).filter(Organisation.id.in_([org_a.id, org_b.id])).delete(
+                synchronize_session=False
+            )
+            db.commit()
+
+
+class TestFindImpactedByExpiredRaw:
+    """find_impacted_by_expired_raw had zero test coverage before this review.
+
+    A security-audit pass on this branch flagged its ExecutionStep lookup
+    (`self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids_orm))`)
+    as missing the `Execution.org_id` join every sibling lookup in this file has — the
+    same bug class as TestAddStepOrderConnectionsTenantIsolation above. The join was
+    added to match (see dagtraversal.py, `find_impacted_by_expired_raw`).
+
+    Unlike that sibling case, this one is *not* independently reachable as a live
+    cross-tenant read: `step_ids_orm` is built only from `trace_items`, which come
+    from `self.traverse()`'s own forward edge-following — and every edge in that
+    traversal is discovered via `produced_items`, which itself filters
+    `InventoryItem.source_execution_step_id` down to *this org's own* ExecutionStep
+    ids before an item is ever added to the graph. An item with a foreign
+    source_execution_step_id therefore never becomes a `trace_item` in the first
+    place, regardless of this lookup's own scoping — confirmed empirically: a
+    corrupted-FK item planted directly at the ORM layer (bypassing
+    InventoryRepository._assert_source_refs_belong_to_org, the write-time guard) was
+    never discovered by find_impacted_by_expired_raw at all, on both the pre-fix and
+    post-fix code. So the join is applied here as defense-in-depth / consistency with
+    the pattern this file otherwise enforces everywhere, not as a fix for a
+    demonstrated hole — and a test asserting "the corrupted item doesn't leak" would
+    pass regardless of the fix, which is worse than no test (it can't fail). What
+    *can* regress is ordinary, single-tenant correctness, so that's what this covers.
+    """
+
+    def test_item_produced_after_raw_material_expiry_is_flagged(self, db):
+        from datetime import UTC, datetime, timedelta
+
+        from app.core.db.models.execution_step import ExecutionStep
+        from app.core.db.models.inventory_item import InventoryItem
+        from app.core.db.models.organisation import Organisation
+        from app.core.db.repositories.organisation_repo import OrganisationRepository
+
+        org_repo = OrganisationRepository(db)
+        org = org_repo.create_org(f"Expired Raw Org {uuid4()}")
+        try:
+            data = build_linear_dag(db, org.id)
+            steps = (
+                db.query(ExecutionStep)
+                .filter(ExecutionStep.execution_id == data["execution_id"])
+                .order_by(ExecutionStep.step_number)
+                .all()
+            )
+            # w1 (steps[0]'s output) is genuinely produced from r1 after r1's expiry.
+            steps[0].completed_at = datetime.now(UTC)
+            db.commit()
+
+            raw_material = db.query(InventoryItem).filter(InventoryItem.id == data["r1_id"]).one()
+            raw_material.expiry_date = (datetime.now(UTC) - timedelta(days=1)).date()
+            db.commit()
+
+            tracer = DAGTracer(org_id=org.id, session=db)
+            result = tracer.find_impacted_by_expired_raw(raw_material)
+
+            impacted_ids = {i["id"] for i in result["impacted_items"]}
+            assert str(data["w1_id"]) in impacted_ids, result
+            impacted_w1 = next(i for i in result["impacted_items"] if i["id"] == str(data["w1_id"]))
+            assert impacted_w1["made_after_raw_expired"] is True
+            assert impacted_w1["expired_raw_material_id"] == str(raw_material.id)
+        finally:
+            clear_org_synthetic_data(db, org.id)
+            db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+            db.commit()
+
+    def test_item_produced_before_raw_material_expiry_is_not_flagged(self, db):
+        from datetime import UTC, datetime, timedelta
+
+        from app.core.db.models.execution_step import ExecutionStep
+        from app.core.db.models.inventory_item import InventoryItem
+        from app.core.db.models.organisation import Organisation
+        from app.core.db.repositories.organisation_repo import OrganisationRepository
+
+        org_repo = OrganisationRepository(db)
+        org = org_repo.create_org(f"Expired Raw Compliant Org {uuid4()}")
+        try:
+            data = build_linear_dag(db, org.id)
+            steps = (
+                db.query(ExecutionStep)
+                .filter(ExecutionStep.execution_id == data["execution_id"])
+                .order_by(ExecutionStep.step_number)
+                .all()
+            )
+            # w1 produced well before r1's (later) expiry: compliant, must not be flagged.
+            steps[0].completed_at = datetime.now(UTC) - timedelta(days=10)
+            db.commit()
+
+            raw_material = db.query(InventoryItem).filter(InventoryItem.id == data["r1_id"]).one()
+            raw_material.expiry_date = (datetime.now(UTC) - timedelta(days=1)).date()
+            db.commit()
+
+            tracer = DAGTracer(org_id=org.id, session=db)
+            result = tracer.find_impacted_by_expired_raw(raw_material)
+
+            impacted_ids = {i["id"] for i in result["impacted_items"]}
+            assert str(data["w1_id"]) not in impacted_ids, result
+        finally:
+            clear_org_synthetic_data(db, org.id)
+            db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+            db.commit()

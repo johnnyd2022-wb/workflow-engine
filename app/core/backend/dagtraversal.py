@@ -574,8 +574,16 @@ class DAGTracer:
                     step_ids_orm.add(UUID(str(sid)))
                 except (ValueError, TypeError):
                     pass
+        # org-scoped for the same reason as _enrich_items_bulk / add_step_order_connections
+        # above: step_ids_orm comes from source_execution_step_id on already-org-scoped
+        # InventoryItem rows, but that FK is not itself org-checked at read time.
         steps = (
-            self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids_orm)).all() if step_ids_orm else []
+            self.session.query(ExecutionStep)
+            .join(Execution, ExecutionStep.execution_id == Execution.id)
+            .filter(ExecutionStep.id.in_(step_ids_orm), Execution.org_id == self.org_id)
+            .all()
+            if step_ids_orm
+            else []
         )
         step_by_id = {str(s.id): s for s in steps}
 
@@ -744,7 +752,17 @@ class DAGTracer:
                     step_ids.add(UUID(sid))
                 except (ValueError, TypeError):
                     pass
-        steps = self.session.query(ExecutionStep).filter(ExecutionStep.id.in_(step_ids)).all() if step_ids else []
+        # org-scoped for the same reason as _enrich_items_bulk above: a source_execution_step_id
+        # that (through a bug elsewhere) points outside this org must not pull that org's
+        # step_number/actual_inputs into this tenant's visualization edges.
+        steps = (
+            self.session.query(ExecutionStep)
+            .join(Execution, ExecutionStep.execution_id == Execution.id)
+            .filter(ExecutionStep.id.in_(step_ids), Execution.org_id == self.org_id)
+            .all()
+            if step_ids
+            else []
+        )
         step_by_id = {str(s.id): s for s in steps}
 
         for eid, exec_items in by_exec.items():

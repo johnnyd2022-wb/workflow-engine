@@ -2500,10 +2500,15 @@ def complete_step(execution_id: str, execution_step_id: str):
             return jsonify({"error": "Execution failed", "details": execution_errors}), 400
 
         # FAILURE HANDLING: Persist warnings to execution_data for audit trail
+        # Reassign (not in-place mutate) the JSONB dict: execution_data was already
+        # flushed once above (db_session.flush()), so an in-place key add on the same
+        # dict object is invisible to SQLAlchemy's dirty tracking (JSONB is not
+        # MutableDict-wrapped) and would be silently dropped by the commit below.
         if execution_warnings:
-            if not execution_step.execution_data:
-                execution_step.execution_data = {}
-            execution_step.execution_data["execution_warnings"] = execution_warnings
+            execution_step.execution_data = {
+                **(execution_step.execution_data or {}),
+                "execution_warnings": execution_warnings,
+            }
 
         # TRANSACTION INTEGRITY: Commit all inventory operations atomically
         # This ensures inventory consumption and output creation are atomic per execution step

@@ -89,3 +89,6 @@ dist/
 .coverage
 coverage.xml
 htmlcov/
+
+# Runtime evidence file storage (org_id/execution_id dirs written by uploads, incl. tests)
+app/core/evidence_storage/
