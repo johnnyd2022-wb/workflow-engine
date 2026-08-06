@@ -61,6 +61,11 @@ ROOTS = {
     # invoked by scripts/slack_watch.py, not by another skill — its inbound edge is a
     # systemd timer, which the graph cannot see
     "slack-watcher",
+    # invoked by scripts/session_sweep_watch.py, same reasoning — a weekly systemd timer
+    # hands it an ISO week. It is also the one skill that deliberately has no inbound
+    # skill edge by design: it reviews the whole roster, so anything routing *to* it
+    # would be a skill asking to be graded by its own caller.
+    "session-sweep",
     # user- or schedule-invoked test coverage authoring (test-evaluator is NOT a root:
     # it only ever runs when a caller hands it a batch, so its reachability is proven by
     # inbound edges, not by declaration)
