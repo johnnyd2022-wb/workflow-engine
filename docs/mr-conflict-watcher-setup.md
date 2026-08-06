@@ -206,6 +206,20 @@ semantic conflict then gets classified mechanical. Diffing the two sides git alr
 knows about sidesteps the ambiguity entirely: there's no marker syntax to parse, only
 line lists to compare, and no string can impersonate a diff opcode.
 
+**A semantic escalation can carry an ordering hint, but the hint never resolves anything.**
+Some escalations aren't a real disagreement — they're a branch being stale relative to
+`main` because a sibling MR already advanced the same skill-managed file (another
+`review-feature` run's `reviewed:` entry, for instance). `scripts/mr_conflict_watch.py
+siblings --mr-iid N --files a,b,c` answers a narrower, cheaper question than "do these
+MRs actually conflict with each other": which other currently open, currently conflicted
+MRs touch at least one of the same files, via GitLab's own diff API (`glab api
+projects/:id/merge_requests/<iid>/diffs`, no clone or fetch needed), sorted by which was
+opened first. That's a file-overlap signal, not proof of a real relationship between the
+two MRs — which is exactly why it only ever adds a paragraph to the escalation note
+(SKILL.md Step 5b), never a resolution decision. Auto-rebasing once a named sibling
+merges would be new resolution logic, and would need the same explicit-allow-list rigor
+as the mechanical classifier, not an extension riding in on an informational check.
+
 ## One-time setup
 
 ### 1. `glab` auth

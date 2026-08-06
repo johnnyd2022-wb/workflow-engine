@@ -203,6 +203,100 @@ def test_eligible_subset_filters_draft_and_labels(cfg):
     assert [m["iid"] for m in out] == [3]
 
 
+# --- mr_touched_files / find_conflicting_siblings (ordering-hint advisory) --------
+
+
+def test_mr_touched_files_collects_old_and_new_paths(monkeypatch):
+    def fake_glab(args, timeout=30):
+        assert args == ["api", "projects/:id/merge_requests/99/diffs", "--output", "json"]
+        return [
+            {"old_path": "a.md", "new_path": "a.md"},
+            {"old_path": "old_name.py", "new_path": "new_name.py"},
+        ]
+
+    monkeypatch.setattr(mcw, "_glab_json", fake_glab)
+    assert mcw.mr_touched_files(99) == ["a.md", "new_name.py", "old_name.py"]
+
+
+def test_mr_touched_files_returns_none_on_failure(monkeypatch):
+    monkeypatch.setattr(mcw, "_glab_json", lambda args, timeout=30: None)
+    assert mcw.mr_touched_files(99) is None
+
+
+def test_find_conflicting_siblings_matches_on_file_overlap(cfg, monkeypatch):
+    monkeypatch.setattr(
+        mcw,
+        "discover_conflicted_mrs",
+        lambda cfg: [
+            _mr(1),
+            _mr(2, created_at="2026-08-01T00:00:00Z"),
+            _mr(3, created_at="2026-08-02T00:00:00Z"),
+        ],
+    )
+
+    def fake_touched(iid):
+        return {2: ["a.md", "b.md"], 3: ["c.md"]}[iid]
+
+    monkeypatch.setattr(mcw, "mr_touched_files", fake_touched)
+
+    siblings = mcw.find_conflicting_siblings(cfg, 1, [".agents/feature-index.md", "a.md"])
+
+    assert [s["iid"] for s in siblings] == [2]
+    assert siblings[0]["shared_files"] == ["a.md"]
+
+
+def test_find_conflicting_siblings_excludes_self(cfg, monkeypatch):
+    monkeypatch.setattr(mcw, "discover_conflicted_mrs", lambda cfg: [_mr(1)])
+    monkeypatch.setattr(mcw, "mr_touched_files", lambda iid: ["a.md"])
+    assert mcw.find_conflicting_siblings(cfg, 1, ["a.md"]) == []
+
+
+def test_find_conflicting_siblings_ignores_a_sibling_lookup_failure(cfg, monkeypatch):
+    """A sibling whose diff can't be fetched is skipped, not treated as a match or a
+    reason to fail the whole advisory lookup -- this is a best-effort hint, never a gate."""
+    monkeypatch.setattr(mcw, "discover_conflicted_mrs", lambda cfg: [_mr(1), _mr(2)])
+    monkeypatch.setattr(mcw, "mr_touched_files", lambda iid: None)
+    assert mcw.find_conflicting_siblings(cfg, 1, ["a.md"]) == []
+
+
+def test_find_conflicting_siblings_sorted_by_created_at_ascending(cfg, monkeypatch):
+    monkeypatch.setattr(
+        mcw,
+        "discover_conflicted_mrs",
+        lambda cfg: [
+            _mr(1),
+            _mr(2, created_at="2026-08-05T00:00:00Z"),
+            _mr(3, created_at="2026-08-01T00:00:00Z"),
+        ],
+    )
+    monkeypatch.setattr(mcw, "mr_touched_files", lambda iid: ["a.md"])
+
+    siblings = mcw.find_conflicting_siblings(cfg, 1, ["a.md"])
+
+    assert [s["iid"] for s in siblings] == [3, 2]  # earlier-opened MR first
+
+
+def test_find_conflicting_siblings_returns_empty_when_discovery_fails(cfg, monkeypatch):
+    monkeypatch.setattr(mcw, "discover_conflicted_mrs", lambda cfg: None)
+    assert mcw.find_conflicting_siblings(cfg, 1, ["a.md"]) == []
+
+
+def test_siblings_cli_prints_json(cfg, monkeypatch, capsys):
+    monkeypatch.setattr(mcw, "load_config", lambda: cfg)
+    monkeypatch.setattr(
+        mcw,
+        "find_conflicting_siblings",
+        lambda cfg, mr_iid, files: [{"iid": mr_iid, "files": files}],
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["mr_conflict_watch.py", "siblings", "--mr-iid", "1", "--files", "a.md, b.md"],
+    )
+    assert mcw.main() == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out == [{"iid": 1, "files": ["a.md", "b.md"]}]
+
+
 # --- eligible_work ------------------------------------------------------------
 
 

@@ -271,6 +271,66 @@ def list_conflicted_mrs(cfg: dict) -> list[dict]:
     return eligible_subset(cfg, raw)
 
 
+def mr_touched_files(mr_iid: int) -> list[str] | None:
+    """Every path MR `mr_iid`'s diff touches, straight from GitLab's own diff API — no
+    clone, no fetch, no worktree needed. `None` on any failure, never guessed (an empty
+    list is a legitimate answer for an MR with no file changes; `None` means "couldn't
+    ask GitLab", a different thing).
+    """
+    data = _glab_json(["api", f"projects/:id/merge_requests/{mr_iid}/diffs", "--output", "json"])
+    if not isinstance(data, list):
+        return None
+    paths: set[str] = set()
+    for change in data:
+        if not isinstance(change, dict):
+            continue
+        for key in ("old_path", "new_path"):
+            path = change.get(key)
+            if path:
+                paths.add(path)
+    return sorted(paths)
+
+
+def find_conflicting_siblings(cfg: dict, mr_iid: int, blocker_files: list[str]) -> list[dict]:
+    """Other currently open+conflicted MRs that also touch at least one of
+    `blocker_files` -- an advisory ordering hint for mr-conflict-resolver's escalation
+    note (SKILL.md Step 5b), nothing more. This is a FILE-OVERLAP signal, not proof of
+    an actual content conflict between the siblings: two MRs touching the same file can
+    easily not conflict on the same lines. That's exactly why it only ever feeds an
+    informational comment -- never a resolution decision. Cross-MR auto-resolution (does
+    sibling X's already-being-open explain and safely fix this exact conflict) is a
+    materially bigger claim than "these two touch the same file," and isn't made here.
+
+    Ordered by `created_at` ascending -- the MR open longest is the reasonable default
+    for "probably intended to land first," a starting point for a human to confirm or
+    override, not a scheduling decision this function makes on its own.
+    """
+    raw = discover_conflicted_mrs(cfg)
+    if raw is None:
+        return []
+    blocker_set = set(blocker_files)
+    siblings = []
+    for other in raw:
+        if other["iid"] == mr_iid:
+            continue
+        touched = mr_touched_files(other["iid"])
+        if touched is None:
+            continue
+        overlap = blocker_set.intersection(touched)
+        if not overlap:
+            continue
+        siblings.append(
+            {
+                "iid": other["iid"],
+                "source_branch": other.get("source_branch"),
+                "created_at": other.get("created_at"),
+                "shared_files": sorted(overlap),
+            }
+        )
+    siblings.sort(key=lambda s: s.get("created_at") or "")
+    return siblings
+
+
 # --------------------------------------------------------------------------
 # work discovery
 # --------------------------------------------------------------------------
@@ -914,10 +974,20 @@ def main() -> int:
     rec.add_argument("--status", required=True, choices=["resolved", "needs_human", "stalled"])
     rec.add_argument("--blocker", default=None, help="required in spirit for needs_human/stalled")
 
+    sib = sub.add_parser("siblings", help="find other open+conflicted MRs sharing a blocker file (called by the skill)")
+    sib.add_argument("--mr-iid", required=True, type=int)
+    sib.add_argument("--files", required=True, help="comma-separated blocker file paths")
+
     args = ap.parse_args()
 
     if args.cmd == "record":
         record_outcome(args.mr_iid, args.lease_id, args.status, args.blocker)
+        return 0
+
+    if args.cmd == "siblings":
+        cfg = load_config()
+        files = [f.strip() for f in args.files.split(",") if f.strip()]
+        print(json.dumps(find_conflicting_siblings(cfg, args.mr_iid, files)))
         return 0
 
     cfg = load_config()

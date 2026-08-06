@@ -280,12 +280,37 @@ fi
 table, not bare names, and an exact-line grep against it will not match. JSON is the only
 reliable check here.)
 
+**Before writing the note, check for an ordering hint.** Some escalations aren't a real
+content disagreement at all -- they're this branch being stale relative to `main` because
+a sibling MR already advanced the same skill-managed file (a `review-feature` run's
+`reviewed:` entry, a shared checklist, that kind of thing). This check surfaces that
+possibility; it never resolves anything itself:
+
+```bash
+python3 scripts/mr_conflict_watch.py siblings --mr-iid "$MR_IID" --files "<comma-separated blocker file paths>"
+```
+
+This is advisory only: it reports other currently open, currently conflicted MRs that
+touch at least one of the same files, sorted by which was opened first -- a file-overlap
+signal, not proof those MRs actually conflict with each other on the same lines. If it
+returns any entries, add an "Ordering" section to the note (below) naming the earliest one
+and suggesting: "if `!<iid>` is meant to land first, wait for it to merge, then `git fetch
+origin main && git rebase origin/main && git push --force-with-lease` on this branch --
+this conflict may resolve on its own once the shared file has converged." If it returns
+empty, say nothing about ordering -- don't manufacture a queue that isn't there.
+
 ```bash
 glab mr note "$MR_IID" -m "$(cat <<'EOF'
 Automated conflict resolution (mr-conflict-resolver) could not resolve this safely.
 
 Blocker: <exact file(s)/hunk(s), and why they're a judgment call -- e.g. "app/core/backend/
 inventory.py: both branches changed the wastage-quantity validation differently">
+
+Ordering: <omit this whole section if the siblings check above returned nothing. Otherwise:
+"This file is also touched by !<iid> (opened <date>), still open and conflicted. If !<iid>
+is meant to land first, wait for it to merge, then `git fetch origin main && git rebase
+origin/main && git push --force-with-lease` on this branch -- this conflict may resolve on
+its own once the shared file has converged.">
 
 The merge attempt was aborted in full (git merge --abort), including anything mechanical
 that would otherwise have resolved automatically (nothing partial is left on this branch
@@ -351,6 +376,13 @@ verdict: resolved | needs_human | stalled
 - **Never force-push.** If a plain push is rejected, refetch and remerge; if that fails
   twice, escalate. Force-pushing another run's branch with nobody watching is not a call
   this skill gets to make.
+- **The siblings check (Step 5b) is a comment, never a decision.** It names other open
+  MRs that touch the same blocker file and suggests an order -- it does not tell you
+  which one is "right," does not change what gets escalated, and never triggers a rebase
+  or a retry on its own. If a future version of this skill ever wants to *act* on an
+  ordering hint (auto-rebase once a sibling merges, say), that is new resolution logic
+  and needs the same explicit-allow-list discipline as Step 2's table, not an extension
+  bolted onto an informational check.
 - **GitLab's own conflict status is the finish line, not local git exiting 0.** Recheck
   after every push before calling anything resolved.
 - **Never hand-edit the watch state file.** Always go through
