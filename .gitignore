@@ -3,6 +3,9 @@ config/local.ini
 config/test.ini
 config/prod.ini
 
+# Herdr Architect/Breaker pane collaboration scratch (handoff.md, log.md) — session-local
+.herdr-collab/
+
 # Python
 __pycache__/
 *.py[cod]
