@@ -12,7 +12,13 @@ import pytest
 from app.core.backend.checks.expired_materials import run_expired_materials_check
 from app.core.backend.checks.output_expiry_check import run_output_expiry_check
 from app.core.backend.checks.output_ready_date_check import run_output_ready_date_check
-from app.core.backend.corechecks import CoreChecksRunner
+from app.core.backend.checks.untracked_items import run_untracked_items_check
+from app.core.backend.corechecks import CheckResult, CoreChecksRunner, get_system_findings_by_item
+from app.core.backend.system_status import (
+    build_system_status_payload,
+    compute_onboarding_complete,
+    derive_health_state,
+)
 from app.core.db import db_session
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
@@ -24,12 +30,17 @@ from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.core.domain.expiry_ready_date_rules import (
+    assert_expiry_after_ready_dates,
+    assert_expiry_after_ready_duration,
+)
 from app.core.domain.ready_date_rules import (
     VALID_READY_DATE_UNITS,
     assert_warning_within_ready_period,
     duration_to_timedelta,
 )
 from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
+from tests.factories import InventoryItemFactory
 
 
 @pytest.fixture
@@ -840,3 +851,183 @@ class TestOutputReadyDateCheck:
             assert TEST_READY_DATE_OUTPUT_NAME in (found[0].get("message") or "")
         finally:
             _cleanup_output_ready_date_fixture(db, org_id, process, execution, inv_item)
+
+
+# ---------------------------------------------------------------------------
+# Tenant isolation — the check registry is the plug-in point for the unbuilt
+# COMPLIANT tier (see .agents/feature-index.md), so a cross-org leak here would
+# leak compliance-relevant findings across tenants. Uses the shared two-org
+# world (tests/conftest.py) rather than the per-test create/cleanup pattern
+# used above.
+# ---------------------------------------------------------------------------
+
+
+class TestComplianceChecksTenantIsolation:
+    @pytest.fixture
+    def untracked_pair(self, db, two_org_two_user):
+        """One untracked item in each org. Cleaned up before two_org_two_user's own
+        teardown deletes the orgs, or the org DELETE fails on the FK to inventory_items."""
+        org_a = two_org_two_user["org_a"]
+        org_b = two_org_two_user["org_b"]
+        item_a = InventoryItemFactory(org_id=org_a.id, extra_data={"untracked": True})
+        item_b = InventoryItemFactory(org_id=org_b.id, extra_data={"untracked": True})
+        db.commit()
+        try:
+            yield {"org_a": org_a, "org_b": org_b, "item_a": item_a, "item_b": item_b}
+        finally:
+            db.query(InventoryItem).filter(InventoryItem.id.in_([item_a.id, item_b.id])).delete(
+                synchronize_session=False
+            )
+            db.commit()
+
+    def test_expired_materials_check_excludes_other_org(self, db, two_org_two_user):
+        org_a = two_org_two_user["org_a"]
+        org_b = two_org_two_user["org_b"]
+        today = date.today()
+        expiry_past = today - timedelta(days=7)
+        item_a = InventoryItemFactory(
+            org_id=org_a.id,
+            inventory_type=InventoryType.RAW_MATERIAL.value,
+            expiry_date=expiry_past,
+        )
+        item_b = InventoryItemFactory(
+            org_id=org_b.id,
+            inventory_type=InventoryType.RAW_MATERIAL.value,
+            expiry_date=expiry_past,
+        )
+        db.commit()
+        try:
+            result_a = run_expired_materials_check(org_a.id, db)
+            ids_a = {e["id"] for e in (result_a.data.get("expired_raw_materials") or [])}
+            assert str(item_a.id) in ids_a
+            assert str(item_b.id) not in ids_a
+        finally:
+            db.query(InventoryItem).filter(InventoryItem.id.in_([item_a.id, item_b.id])).delete(
+                synchronize_session=False
+            )
+            db.commit()
+
+    def test_untracked_items_check_excludes_other_org(self, db, untracked_pair):
+        result_a = run_untracked_items_check(untracked_pair["org_a"].id, db)
+        ids_a = {i["id"] for i in (result_a.data.get("untracked_items") or [])}
+        assert str(untracked_pair["item_a"].id) in ids_a
+        assert str(untracked_pair["item_b"].id) not in ids_a
+
+    def test_get_system_findings_by_item_excludes_other_org(self, db, untracked_pair):
+        """get_system_findings_by_item decorates the /api/core/inventory list response —
+        a leak here would attach another org's compliance reasons to this org's rows."""
+        findings_a = get_system_findings_by_item(untracked_pair["org_a"].id, db)
+        assert str(untracked_pair["item_a"].id) in findings_a
+        assert str(untracked_pair["item_b"].id) not in findings_a
+
+    def test_runner_run_all_checks_excludes_other_org(self, db, untracked_pair):
+        """CoreChecksRunner is the registry the unbuilt COMPLIANT tier plugs checks into
+        (corechecks.py:64) — every check run through it must stay org-scoped."""
+        runner = CoreChecksRunner(org_id=untracked_pair["org_a"].id, session=db)
+        results = runner.run_all_checks()
+        untracked_result = next(r for r in results if r.check_id == "untracked_items")
+        ids = {i["id"] for i in (untracked_result.data.get("untracked_items") or [])}
+        assert str(untracked_pair["item_a"].id) in ids
+        assert str(untracked_pair["item_b"].id) not in ids
+
+
+# ---------------------------------------------------------------------------
+# system_status.py had zero test coverage before this review despite driving
+# the dashboard's compliance summary and the notifications page health state
+# (feature-index.md: "changing signal shape breaks the dashboard's summary").
+# ---------------------------------------------------------------------------
+
+
+class TestSystemStatus:
+    def test_compute_onboarding_complete_all_missing(self, db):
+        from app.core.db.repositories.organisation_repo import OrganisationRepository
+
+        org = OrganisationRepository(db).create_org("Onboarding Incomplete Org")
+        try:
+            result = compute_onboarding_complete(org.id, db)
+            assert result["complete"] is False
+            assert result["completion"] == 0
+            assert all(not step["complete"] for step in result["steps"])
+        finally:
+            db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+            db.commit()
+
+    def test_compute_onboarding_complete_true_with_demo_data(self, db, demo_data):
+        org_id = demo_data["org_id"]
+        result = compute_onboarding_complete(org_id, db)
+        assert result["complete"] is True
+        assert result["completion"] == 100
+        assert all(step["complete"] for step in result["steps"])
+
+    def test_derive_health_state_healthy_when_no_issues(self):
+        assert derive_health_state([]) == "healthy"
+        assert derive_health_state([{"has_issue": False, "in_active_use": False}]) == "healthy"
+
+    def test_derive_health_state_degraded_when_issue_not_in_active_use(self):
+        signals = [{"has_issue": True, "in_active_use": False}]
+        assert derive_health_state(signals) == "degraded"
+
+    def test_derive_health_state_critical_when_issue_in_active_use(self):
+        signals = [{"has_issue": True, "in_active_use": True}]
+        assert derive_health_state(signals) == "critical"
+
+    def test_build_system_status_payload_activation_mode_when_onboarding_incomplete(self, db):
+        from app.core.db.repositories.organisation_repo import OrganisationRepository
+
+        org = OrganisationRepository(db).create_org("Onboarding Payload Org")
+        try:
+            payload = build_system_status_payload(org.id, db, [])
+            assert payload["mode"] == "activation"
+            assert payload["completion"] == 0
+        finally:
+            db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+            db.commit()
+
+    def test_build_system_status_payload_health_mode_reflects_untracked_signal(self, db, demo_data):
+        org_id = demo_data["org_id"]
+        result = CheckResult(
+            check_id="untracked_items",
+            flagged=True,
+            message="1 untracked item(s) — reconciliation required.",
+            data={"untracked_items": [{"quantity": "5"}]},
+        )
+        payload = build_system_status_payload(org_id, db, [result])
+        assert payload["mode"] == "health"
+        assert payload["state"] in ("degraded", "critical")
+        signal_types = {s["type"] for s in payload["signals"]}
+        assert "UNTRACKED_ITEMS" in signal_types
+
+
+# ---------------------------------------------------------------------------
+# expiry_ready_date_rules.py had zero test coverage before this review despite
+# being the documented single source of truth for the ready-date/expiry
+# ordering invariant used by step-modal and execution-modal validation.
+# ---------------------------------------------------------------------------
+
+
+class TestExpiryReadyDateInvariant:
+    def test_assert_expiry_after_ready_duration_valid_when_ready_before_expiry(self):
+        errors = assert_expiry_after_ready_duration(
+            "Output", ready_value=1, ready_unit="days", expiry_value=2, expiry_unit="days"
+        )
+        assert errors == []
+
+    def test_assert_expiry_after_ready_duration_invalid_when_ready_exceeds_expiry(self):
+        errors = assert_expiry_after_ready_duration(
+            "Output", ready_value=5, ready_unit="days", expiry_value=1, expiry_unit="days"
+        )
+        assert len(errors) == 1
+        assert "Output" in errors[0]
+
+    def test_assert_expiry_after_ready_dates_valid_when_ready_before_expiry(self):
+        errors = assert_expiry_after_ready_dates("Output", "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z")
+        assert errors == []
+
+    def test_assert_expiry_after_ready_dates_invalid_when_ready_after_expiry(self):
+        errors = assert_expiry_after_ready_dates("Output", "2026-01-05T00:00:00Z", "2026-01-01T00:00:00Z")
+        assert len(errors) == 1
+        assert "Output" in errors[0]
+
+    def test_assert_expiry_after_ready_dates_missing_values_returns_no_error(self):
+        assert assert_expiry_after_ready_dates("Output", None, None) == []
+        assert assert_expiry_after_ready_dates("Output", "2026-01-01T00:00:00Z", None) == []

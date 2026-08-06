@@ -263,7 +263,7 @@ how they get carved.
     subscription: core today — and the plug-in point for the unbuilt COMPLIANT tier
     layer:        derived
     flag:         none
-    reviewed:     in progress (review/compliance-checks @ /home/johnny/.herdr/worktrees/workflow-engine/review-compliance-checks, started 2026-08-02)
+    reviewed:     2026-08-02 (review-feature; see .agents/reports/compliance-checks/review.md)
 
     routes:   /core/notifications
               /api/core/system-findings
