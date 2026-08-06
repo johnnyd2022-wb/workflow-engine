@@ -1,0 +1,40 @@
+{
+  "_comment": "Config for scripts/session_sweep_watch.py. No credentials here -- codex and glab each hold their own auth, same as every other skill that shells out to them.",
+  "_routing_note": "Engine/model/effort live HERE rather than in .agents/model-routing.json, following the same split .agents/mr-conflict-watch.json uses for resolver_model: model-routing.json is owned by scripts/agent_launch.py and describes the verification CHAIN's stages, which this pipeline is not one of. A watcher-driven skill carries its own routing in its own watcher config, so agent_launch.py --check never has to validate a stage it does not launch.",
+  "version": 1,
+  "updated": "2026-08-06",
+
+  "window_days": 7,
+  "_window_days_note": "How far back the digest reads. Matches the weekly cadence: a 7-day window on a weekly timer sees every session exactly once, so a finding is neither missed nor counted twice.",
+
+  "min_signals_to_launch": 1,
+  "_min_signals_to_launch_note": "Below this many actionable signals in the digest, the week records 'no-findings' and NO model runs at all. The digest is free; the model is not. A quiet week costing zero tokens is the single biggest saving in this pipeline, and it is the common case once the obvious rot is fixed.",
+
+  "author_engine": "codex",
+  "author_model": "gpt-5.6-sol",
+  "author_effort": "high",
+  "_author_note": "Codex draws on a separate quota pool from the Claude subscription every other skill in this repo spends, so the expensive half of this sweep costs nothing the interactive sessions were going to use. high effort is explicit and load-bearing: gpt-5.6-sol defaults to LOW, and an unset effort ships a shallow review that still looks like a review (.agents/autonomy.md, Token discipline).",
+
+  "reviewer_engine": "claude",
+  "reviewer_model": "opus",
+  "reviewer_effort": "high",
+  "_reviewer_note": "Opus reviews the author's findings INDEX, not the transcripts and not the whole diff -- see the skill's Phase B. Opus is the right model for a judgment call about whether a proposed instruction change is actually an improvement; it is the wrong model to spend re-deriving what the digest already computed deterministically.",
+
+  "agent_timeout_sec": 3600,
+  "_agent_timeout_note": "60 minutes. The author phase reads a digest, spot-checks evidence, edits several SKILL.md files, runs skill_graph --check and the test suite, and opens an MR. Longer than the conflict resolver's 30min because it writes more and verifies more.",
+
+  "crash_grace_sec": 120,
+  "_crash_grace_note": "Added to agent_timeout_sec before a 'handed_off' week is treated as a dead run and retried. Covers the gap between the process finishing and the watchdog updating state.",
+
+  "max_attempts": 2,
+  "_max_attempts_note": "Per week, per phase. Lower than the conflict resolver's 3: this is an advisory improvement sweep, not a blocked MR. A week that fails twice is better skipped than retried into the ground -- next week's window overlaps it anyway.",
+
+  "quota_preflight_ceiling_pct": 90,
+  "_quota_preflight_ceiling_pct_note": "Gates the REVIEWER phase only (it spends the Claude subscription). The author phase is Codex and is deliberately not gated on this reading, which says nothing about Codex's pool. Shared implementation: scripts/slack_watch.py's quota_ok_to_launch.",
+
+  "quota_cache_max_age_sec": 1800,
+  "quota_fallback_window_sec": 18000,
+
+  "worktrees_dir": ".claude/worktrees",
+  "_worktrees_dir_note": "The watcher creates the worktree itself, before spawning, and passes it as codex's --cd. That makes the sandbox's writable root the worktree, so an author run physically cannot write into main or into another skill's checkout -- a structural guarantee, not an instruction the model is asked to follow."
+}
