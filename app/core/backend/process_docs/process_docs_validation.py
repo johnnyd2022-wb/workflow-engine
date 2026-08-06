@@ -73,9 +73,24 @@ def validate_process_and_step(org_id: UUID, process_id: UUID, step_id: UUID) -> 
     repo = ProcessRepository(db_session)
     process = repo.get_process_with_steps(process_id, org_id)
     if not process:
+        logger.warning(
+            "access_denied",
+            reason="process_not_found_or_cross_org",
+            feature="process-design",
+            org_id=str(org_id),
+            process_id=str(process_id),
+        )
         return False, "Process not found or access denied"
     step_ids = [s.id for s in (process.steps or []) if s.id]
     if step_id not in step_ids:
+        logger.warning(
+            "access_denied",
+            reason="step_not_in_process",
+            feature="process-design",
+            org_id=str(org_id),
+            process_id=str(process_id),
+            step_id=str(step_id),
+        )
         return False, "Step not found or does not belong to process"
     return True, ""
 
