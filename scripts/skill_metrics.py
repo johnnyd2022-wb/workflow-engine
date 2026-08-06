@@ -328,7 +328,11 @@ def glab_resolve_ref(ref: str) -> str | None:
     if num.isdigit():
         data = _run_glab(["mr", "view", num, "--output", "json"])
         return _mr_state_to_outcome(data.get("state")) if isinstance(data, dict) else None
-    data = _run_glab(["mr", "list", "--source-branch", ref, "--state", "all", "--output", "json"])
+    # NOT --state all: glab (verified against 1.111.0) has no --state flag at all and
+    # errors on one ("Unknown flag: --state"), which _run_glab swallows into a silent
+    # None -- this branch-name path has never actually resolved anything. --all is the
+    # real flag for including closed/merged MRs alongside open ones.
+    data = _run_glab(["mr", "list", "--source-branch", ref, "--all", "--output", "json"])
     if isinstance(data, list) and data:
         return _mr_state_to_outcome(data[0].get("state"))
     return None
