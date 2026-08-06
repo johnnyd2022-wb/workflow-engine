@@ -61,6 +61,9 @@ ROOTS = {
     # invoked by scripts/slack_watch.py, not by another skill — its inbound edge is a
     # systemd timer, which the graph cannot see
     "slack-watcher",
+    # invoked by scripts/mr_conflict_watch.py, same reasoning — its inbound edge is a
+    # systemd timer polling `glab mr list`, which the graph cannot see
+    "mr-conflict-resolver",
     # user- or schedule-invoked test coverage authoring (test-evaluator is NOT a root:
     # it only ever runs when a caller hands it a batch, so its reachability is proven by
     # inbound edges, not by declaration)

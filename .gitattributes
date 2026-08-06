@@ -1,2 +1,9 @@
 * text=auto eol=lf
 *.py text eol=lf
+
+# Append-only ledgers: every conflict here is two branches adding different rows, never
+# a real disagreement. `merge=union` keeps every added line from both sides and lets git
+# resolve these during a plain merge -- mr-conflict-resolver should never see one of these
+# still marked conflicted (see .claude/skills/mr-conflict-resolver/SKILL.md Step 2).
+.agents/metrics/*.jsonl merge=union
+.agents/history/*.jsonl merge=union
