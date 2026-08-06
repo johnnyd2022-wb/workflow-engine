@@ -28,6 +28,8 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +47,7 @@ VIRTUAL_STAGES = {"build", "build-review", "security-tenant-audit"}
 # read-only` closes that hole. The structural guarantee is one writer per worktree
 # (see PARALLEL group validation below), not this list.
 READ_ONLY_DENIED_TOOLS = ("Edit", "Write", "NotebookEdit")
+MISSION_REPORT_ENV = "MISSION_CONTROL_REPORT"
 
 
 class RoutingError(RuntimeError):
@@ -153,6 +156,61 @@ def _run(argv: list[str], timeout: int = 30) -> tuple[int, str, str]:
         return 1, "", str(exc)
 
 
+def _report_mission_start(
+    *,
+    stage: str,
+    scope: str,
+    pane_id: str,
+    tab_id: str,
+    workdir: str,
+    cfg: dict[str, Any],
+) -> str | None:
+    """Best-effort shadow telemetry. It is opt-in and cannot affect launch.
+
+    Mission Control is deliberately an observer during its proving period. A missing
+    binary, malformed response, timeout, or write failure therefore returns ``None``;
+    the stage has already launched and its execution semantics remain unchanged.
+    """
+    if os.getenv(MISSION_REPORT_ENV) != "1" or not shutil.which("mission-control"):
+        return None
+    run_id = f"chain-{uuid.uuid4().hex[:12]}"
+    argv = [
+        "mission-control",
+        "report",
+        "start",
+        "--run-id",
+        run_id,
+        "--pane-id",
+        pane_id,
+        "--tab-id",
+        tab_id,
+        "--worktree",
+        workdir,
+        "--agent",
+        cfg["engine"],
+        "--model",
+        cfg["_model_id"],
+        "--skill",
+        stage,
+        "--stage",
+        stage,
+        "--scope",
+        scope,
+        "--goal",
+        f"Run {stage} for {scope or 'current scope'}",
+        "--done-when",
+        "The stage report exists and its explicit verdict has been recorded",
+    ]
+    code, out, _ = _run(argv, timeout=2)
+    if code != 0:
+        return None
+    try:
+        value = json.loads(out)
+    except json.JSONDecodeError:
+        return None
+    return str(value.get("run_id")) if value.get("run_id") else None
+
+
 def _herdr_json(argv: list[str], timeout: int = 30, *, allow_empty: bool = False) -> dict[str, Any]:
     """Call herdr and parse its JSON envelope. Herdr IDs are opaque — always read them
     from the response, never guess them from sidebar order.
@@ -213,6 +271,15 @@ def launch(
     # `pane run` is fire-and-forget and prints nothing on success — see _herdr_json.
     _herdr_json(["herdr", "pane", "run", pane_id, command], allow_empty=True)
 
+    mission_run_id = _report_mission_start(
+        stage=stage,
+        scope=scope,
+        pane_id=pane_id,
+        tab_id=tab_id,
+        workdir=workdir,
+        cfg=cfg,
+    )
+
     return {
         "stage": stage,
         "scope": scope,
@@ -225,18 +292,53 @@ def launch(
         "pane_id": pane_id,
         "label": label,
         "command": command,
+        "mission_run_id": mission_run_id,
     }
 
 
-def wait_for(pane_id: str, timeout_ms: int = 1800000) -> dict[str, Any]:
-    """Block until the pane's agent goes idle.
+def wait_for(
+    pane_id: str,
+    timeout_ms: int = 1800000,
+    *,
+    poll_interval: float = 0.5,
+    startup_grace: float = 30.0,
+) -> dict[str, Any]:
+    """Wait for a stage without mistaking an exited agent for success.
 
-    Gate on agent status, never on `herdr wait output --match`: that matches the
-    echoed command line itself and returns instantly.
+    Non-interactive Claude/Codex processes return the pane to its shell, which Herdr
+    reports as ``unknown``. Waiting only for ``idle`` can therefore hang for the full
+    timeout after quota failures or ordinary process exit. Poll the semantic state so
+    blocked and exited stages return an explicit failure. ``unknown`` before an agent
+    first appears gets a startup grace period; after a recognized state it means the
+    agent left the pane and cannot prove successful completion.
     """
-    argv = ["herdr", "wait", "agent-status", pane_id, "--status", "idle", "--timeout", str(timeout_ms)]
-    code, out, err = _run(argv, timeout=(timeout_ms // 1000) + 30)
-    return {"pane_id": pane_id, "ok": code == 0, "detail": (out or err)[:400]}
+    started = time.monotonic()
+    deadline = started + timeout_ms / 1000
+    seen_agent = False
+    last_status = "unknown"
+    while time.monotonic() < deadline:
+        try:
+            result = _herdr_json(["herdr", "pane", "get", pane_id], timeout=5)
+        except RoutingError as exc:
+            return {"pane_id": pane_id, "ok": False, "status": "unknown", "detail": str(exc)[:400]}
+        pane = result.get("pane", result)
+        status = str(pane.get("agent_status") or "unknown") if isinstance(pane, dict) else "unknown"
+        last_status = status
+        if status in {"working", "blocked", "idle", "done"}:
+            seen_agent = True
+        if status in {"idle", "done"}:
+            return {"pane_id": pane_id, "ok": True, "status": status, "detail": f"agent settled: {status}"}
+        if status == "blocked":
+            return {"pane_id": pane_id, "ok": False, "status": status, "detail": "agent needs input"}
+        if status == "unknown" and (seen_agent or time.monotonic() - started >= startup_grace):
+            return {
+                "pane_id": pane_id,
+                "ok": False,
+                "status": status,
+                "detail": "agent exited or was never detected; inspect its report/transcript",
+            }
+        time.sleep(max(0.01, poll_interval))
+    return {"pane_id": pane_id, "ok": False, "status": last_status, "detail": "timed out waiting for agent"}
 
 
 def render_plan(routing: dict[str, Any]) -> str:
@@ -333,6 +435,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--scope", default="", help="feature slug, used in the tab label")
         p.add_argument("--prompt-file", required=True, help="file holding the stage prompt")
         p.add_argument("--base", default=None, help="base branch for codex review stages")
+        p.add_argument("--cwd", default=None, help="working directory for the Herdr tab (launch only)")
 
     w = sub.add_parser("wait", help="block until a pane's agent is idle")
     w.add_argument("pane_id")
@@ -356,7 +459,7 @@ def main(argv: list[str] | None = None) -> int:
             print(build_command(cfg, prompt_file=args.prompt_file, base=args.base))
             return 0
         if args.cmd == "launch":
-            print(json.dumps(launch(args.stage, scope=args.scope, prompt_file=args.prompt_file, base=args.base)))
+            print(json.dumps(launch(args.stage, scope=args.scope, prompt_file=args.prompt_file, base=args.base, cwd=args.cwd)))
             return 0
         if args.cmd == "wait":
             result = wait_for(args.pane_id, args.timeout)
