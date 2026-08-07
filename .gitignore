@@ -103,6 +103,21 @@ dist/
 .agents/worktree-sweep-state.lock
 .agents/reports/worktree-sweep/
 
+# Findings index: generated state, not source. `findings_index.py sweep` rebuilds both
+# from the tree and GitLab on every run, and it runs daily — committing them would put a
+# churning, whole-file-rewritten artifact in the path of every parallel MR, which is
+# exactly the conflict class mr-conflict-resolver already has to special-case for
+# .agents/feature-index.md. The CONFIG (.agents/findings-index-config.json) is tracked;
+# the state and the rendered worklist are not.
+#
+# NOTE: distinct from session-sweep's own findings-index.json above, which lives under
+# .agents/reports/session-sweep/<week>/ and IS tracked. Same filename, different artifact:
+# that one is a curated weekly review, this one is a daily-regenerated debt index.
+.agents/findings-index.json
+.agents/findings-index.json.tmp
+.agents/findings-index.md
+.agents/reports/findings-sweep/
+
 # Coverage data (pytest-cov)
 .coverage
 coverage.xml

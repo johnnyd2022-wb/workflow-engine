@@ -1,0 +1,31 @@
+{
+  "_comment": "Config for scripts/findings_index.py and the findings-sweep skill. Holds NO credentials. The budget ladder is the founder's 'two a day, more when we can afford it' rule expressed as data, so tuning it never means editing code.",
+  "version": 1,
+  "updated": "2026-08-06",
+
+  "merged_lookback_days": 2,
+  "_merged_lookback_days_note": "How far back to read merged MRs for `Findings-Index:` closure trailers. Deliberately wider than the daily cadence: a timer that misses a day (laptop asleep, WSL restarted) would otherwise never see the MRs that merged while it was down, and those items would sit 'mr-open' forever.",
+
+  "budget_ladder": [
+    { "max_five_hour_pct": 35, "max_seven_day_pct": 45, "items": 4 },
+    { "max_five_hour_pct": 55, "max_seven_day_pct": 65, "items": 3 },
+    { "max_five_hour_pct": 75, "max_seven_day_pct": 80, "items": 2 },
+    { "max_five_hour_pct": 88, "max_seven_day_pct": 92, "items": 1 }
+  ],
+  "_budget_ladder_note": "First rung BOTH windows fit under wins. The 7-day column is not decoration: a Pro plan can sit comfortably under the 5h ceiling every single day and still exhaust the week by Thursday, and only the weekly number sees that coming. Rung 3 (2 items) is the founder's stated baseline — the rungs above and below it are the 'pick up more / back off' behaviour.",
+
+  "budget_when_unknown": 2,
+  "_budget_when_unknown_note": "Used when the statusline quota cache is missing or stale. Falls back to the stated baseline rather than standing down, because 'no reading' is the NORMAL state on an unattended box — the cache only refreshes when an interactive session renders, so treating absence as a stop signal would mean the timer never does anything.",
+
+  "budget_ceiling_pct": 88,
+  "_budget_ceiling_pct_note": "At or above this on EITHER window the run stands down entirely (0 items) rather than starting work it cannot finish. A half-fixed finding with no MR is worse than an untouched one: the index says in-progress, the tree says nothing happened.",
+
+  "quota_cache_max_age_sec": 86400,
+  "_quota_cache_max_age_sec_note": "Much wider than slack_watch.py's 30 minutes, on purpose. There, a stale reading BLOCKS a request and a wrong call strands it. Here it only SIZES a batch, so a day-old reading is still better evidence than none — the worst case is taking two items instead of three.",
+
+  "max_items_hard_cap": 4,
+  "_max_items_hard_cap_note": "Ceiling on the ladder regardless of how quiet quota looks. An unattended skill that can open unbounded MRs on a timer will eventually open a pile of bad ones — same reasoning as prod-sentinel's one-MR-per-run rule, one rung looser because these items are pre-triaged.",
+
+  "max_attempts_before_escalation": 3,
+  "_max_attempts_before_escalation_note": "After this many failed runs at the same item, stop retrying it and say so in the run report. Something an agent has failed three times needs a human to look, not a fourth identical attempt at real cost."
+}
