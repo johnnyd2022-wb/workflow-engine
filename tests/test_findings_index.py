@@ -634,6 +634,87 @@ def test_item_with_no_recorded_verdict_is_not_suppressed(history_store):
     assert fi.suppressed_ids([item]) == {}
 
 
+# --- the timer entrypoint's spend gates ------------------------------------------------
+#
+# These matter for cost, not correctness: the whole design is that the free sweep runs
+# daily and the expensive model only starts when there is both budget and work. A
+# regression here would not break anything visibly -- it would just quietly start
+# spending quota on days it should have stood down.
+
+_RUN_SPEC = importlib.util.spec_from_file_location(
+    "findings_sweep_run", Path(__file__).resolve().parents[1] / "scripts" / "findings_sweep_run.py"
+)
+fsr = importlib.util.module_from_spec(_RUN_SPEC)
+sys.modules[_RUN_SPEC.name] = fsr
+_RUN_SPEC.loader.exec_module(fsr)
+
+
+@pytest.fixture
+def runner(monkeypatch, tmp_path):
+    """Stub the index calls and record whether a worktree/agent was ever started."""
+    launched: list[str] = []
+    monkeypatch.setattr(fsr, "LOG_PATH", tmp_path / "run-log.jsonl")
+    monkeypatch.setattr(fsr, "cut_worktree", lambda slug: launched.append(f"worktree:{slug}") or (tmp_path, "b"))
+    monkeypatch.setattr(fsr, "cleanup", lambda path, branch: None)
+    monkeypatch.setattr(fsr.shutil, "which", lambda name: "/usr/bin/claude")
+    monkeypatch.setattr(fsr, "run", lambda *a, **k: launched.append("agent") or (0, "", ""))
+    return launched
+
+
+def _index_stub(monkeypatch, *, budget_items, open_items):
+    def fake(args):
+        if args[0] == "sweep":
+            return {
+                "total": 10, "open": open_items, "stats": {},
+                "budget": {"items": budget_items, "why": "test"},
+            }
+        return {"items": [{"id": "abc12345", "priority": "P0"}] * open_items}
+    monkeypatch.setattr(fsr, "index_json", fake)
+
+
+def test_zero_budget_spends_nothing(runner, monkeypatch):
+    """A stood-down run must not cut a worktree or start an agent."""
+    _index_stub(monkeypatch, budget_items=0, open_items=5)
+    assert fsr.main([]) == 0
+    assert runner == []
+
+
+def test_empty_index_spends_nothing_even_with_budget(runner, monkeypatch):
+    """Budget available but nothing outstanding — launching a model to discover that is
+    exactly the waste this script exists to avoid."""
+    _index_stub(monkeypatch, budget_items=4, open_items=0)
+    assert fsr.main([]) == 0
+    assert runner == []
+
+
+def test_budget_and_work_launches_the_agent(runner, monkeypatch):
+    _index_stub(monkeypatch, budget_items=2, open_items=2)
+    assert fsr.main([]) == 0
+    assert any(x.startswith("worktree:") for x in runner)
+    assert "agent" in runner
+
+
+def test_dry_run_decides_but_never_launches(runner, monkeypatch):
+    _index_stub(monkeypatch, budget_items=4, open_items=4)
+    assert fsr.main(["--dry-run"]) == 0
+    assert runner == []
+
+
+def test_force_overrides_a_zero_budget(runner, monkeypatch):
+    """Manual escape hatch — a human at the keyboard can overrule the ladder."""
+    _index_stub(monkeypatch, budget_items=0, open_items=3)
+    assert fsr.main(["--force"]) == 0
+    assert "agent" in runner
+
+
+def test_failed_sweep_does_not_launch(runner, monkeypatch):
+    """If the index could not be refreshed, the worklist is untrustworthy — working from
+    a stale index means re-fixing shipped work."""
+    monkeypatch.setattr(fsr, "index_json", lambda args: None)
+    assert fsr.main([]) == 1
+    assert runner == []
+
+
 def test_mr_trailer_parses_multiple_ids():
     ids = fi.TRAILER_RE.search("body text\nFindings-Index: a1b2c3d4, 09d144c1\nmore text")
     assert ids is not None
