@@ -454,13 +454,18 @@ twice, on the other hand, is worth a one-line flag before you cut a second workt
 The same applies to a slug already sitting in the queue (4.4) — check `agent_queue.py list`
 before adding a duplicate.
 
-Once a branch is merged (or abandoned), the worktree should go. For a "Run now" worktree,
-`herdr worktree list --json` enumerates what's still open and `herdr worktree remove
---workspace <id>` clears one. For a queued (4.4) worktree, there is no workspace to remove
-— plain `git worktree remove <path>` after the queue item has launched or been pulled
-(`agent_queue.py rm <id>`) is enough. Entrypoint doesn't chase either proactively (it
-dispatches and moves on), but surface it when the user asks "what's still running", "what's
-still queued", or "clean up my worktrees".
+Once a branch is merged (or abandoned), the worktree should go — that's `worktree-sweep`'s
+job, not a thing to walk by hand here. It classifies every worktree (herdr-launched, queued
+via 4.2, or plain `git worktree add`) against glab's MR state, branch ancestry into
+`origin/main`, and working-tree cleanliness, and only ever proposes removing the ones that
+are genuinely safe — a worktree with uncommitted changes never qualifies, merged or not. A
+daily unattended timer (`scripts/worktree_sweep_watch.py`) notifies when new candidates
+appear but never deletes anything itself; deletion always waits for a human turn inside the
+skill. Entrypoint doesn't chase cleanup proactively (it dispatches and moves on), but route
+"clean up my worktrees" or "what worktrees can I remove" to `worktree-sweep` rather than
+walking `herdr worktree list` / `git worktree remove` by hand. "What's still running" or
+"what's still queued" are a different, non-destructive query — `herdr worktree list --json`
+and `agent_queue.py list` respectively, same as before.
 
 ## Step 5: Route the meta-skills when the ask is really about the tooling
 
@@ -474,6 +479,7 @@ ones that otherwise get papered over with a wrong-but-plausible front door:
 | "Create a skill for X"; a SKILL.md's instructions look stale; Step 0 found a stray SKILL.md | `skill-smith` |
 | "Anything broken in prod"; a scheduled error sweep | `prod-sentinel` |
 | "Is my environment set up"; unexplained connection errors | `preflight` |
+| Merged-MR worktrees piling up; "clean up my worktrees"; "what worktrees can I remove" | `worktree-sweep` |
 
 The failure mode this table prevents: routing "the tests are failing" to `fix-bug`, which
 then hunts for a bug in code that is fine, because the real answer was "no app server is
