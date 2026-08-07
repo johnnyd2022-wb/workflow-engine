@@ -147,6 +147,23 @@
       "access": "write",
       "blocking": true,
       "why": "Synthesis from spec and stage reports that already exist on disk."
+    },
+    "findings-sweep": {
+      "engine": "claude",
+      "model": "sonnet",
+      "effort": "xhigh",
+      "access": "write",
+      "blocking": true,
+      "why": "Unattended daily worker that reads .agents/findings-index.md and fixes the top items. Same routing as `build` because it is the same kind of work — writing code against an existing, already-triaged brief. Effort stays xhigh: it runs with nobody watching, and its characteristic failure (closing a finding without really fixing it) is one only careful reasoning catches."
+    },
+    "findings-review": {
+      "engine": "codex",
+      "model": "sol",
+      "effort": "high",
+      "codex_mode": "exec",
+      "access": "read",
+      "blocking": false,
+      "why": "Independent grader for findings-sweep's diffs, on a separate quota pool so a Claude exhaustion cannot also take out the review. Read-only: a grader that can edit the fix it grades is not a grader. Advisory rather than blocking, matching build-review — a Codex quota failure must not stall an unattended timer run. codex_mode is exec, not review, for the same reason the other Codex stages use it: `codex review --base <ref>` rejects a piped prompt (see .agents/reports/inventory/review.md follow-up #2)."
     }
   }
 }
