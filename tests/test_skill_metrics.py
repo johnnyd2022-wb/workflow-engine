@@ -199,6 +199,28 @@ def test_glab_state_maps_to_outcome():
     assert skill_metrics._mr_state_to_outcome(None) is None
 
 
+def test_glab_resolve_ref_branch_lookup_uses_a_real_flag(monkeypatch):
+    """Regression: this used to pass `--state all`, which glab 1.112 rejects outright
+    (`Unknown flag: --state`) -- _run_glab swallowed the non-zero exit and returned None,
+    so every branch silently resolved to "still open" and `sweep` never closed a loop.
+    Pin the actual argv so a future glab-flag typo fails a test instead of failing silently."""
+    captured = {}
+
+    class FakeProc:
+        returncode = 0
+        stdout = "[]"
+
+    def fake_run(args, **kwargs):
+        captured["args"] = args
+        return FakeProc()
+
+    monkeypatch.setattr(skill_metrics.subprocess, "run", fake_run)
+    skill_metrics.glab_resolve_ref("feat/example")
+    assert captured["args"][:3] == ["glab", "mr", "list"]
+    assert "--state" not in captured["args"]
+    assert "--all" in captured["args"]
+
+
 # --- digest: the few learnings worth reading every session -------------------------------
 
 
