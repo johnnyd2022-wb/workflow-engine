@@ -6,7 +6,7 @@ directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be p
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
 last_synced: 2026-08-07
-skill_count: 51
+skill_count: 52
 
 ## Wiring
 
@@ -87,6 +87,7 @@ suite-warden
 test-author
 test-evaluator
 test-fixtures
+worktree-sweep
 ```
 
 ## Categories
@@ -120,6 +121,7 @@ test-fixtures
 | Turn a feature request into a written spec | `spec-first` |
 | Grade a spec for ambiguity before build, "poke holes in this spec", "is this spec ready" | `spec-critic` |
 | "Are these failures real", flaky test, a test needing a live server, suite health | `suite-warden` |
+| Merged-MR worktrees piling up, "clean up my worktrees", "what worktrees can I remove" | `worktree-sweep` |
 
 ### 2b. Code — autonomous watchers (built for `/schedule`; run unattended, MR is the gate)
 
@@ -135,6 +137,7 @@ test-fixtures
 | Docs/commands drifted from reality, "the docs say X but Y happens" | `docs-truth` |
 | Skill rot audit, "create a skill for X" | `skill-smith` |
 | "Sweep my sessions", "what are we wasting tokens on", "make the skills better from what actually happened" | `session-sweep` (driven by `scripts/session_sweep_watch.py`, weekly) |
+| Daily unattended worktree-cleanup detection (notifies only, never deletes) | `worktree-sweep` (driven by `scripts/worktree_sweep_watch.py`, daily) |
 
 ### 3. Code — ad hoc file review (single-file lint pass, outside any chain)
 

@@ -98,6 +98,11 @@ dist/
 .agents/reports/session-sweep/**/digest.md
 .agents/reports/session-sweep/*.log
 
+# Worktree sweep runtime state and report — machine-local, regenerated on every run.
+.agents/worktree-sweep-state.json
+.agents/worktree-sweep-state.lock
+.agents/reports/worktree-sweep/
+
 # Coverage data (pytest-cov)
 .coverage
 coverage.xml
