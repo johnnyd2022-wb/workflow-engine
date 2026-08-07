@@ -6,7 +6,7 @@ directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be p
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
 last_synced: 2026-08-07
-skill_count: 52
+skill_count: 53
 
 ## Wiring
 
@@ -55,6 +55,7 @@ docs-truth
 e2e-playwright
 entrypoint
 finance-advisor
+findings-sweep
 fix-bug
 herdr-multi-agent-collab
 html-review
@@ -130,6 +131,7 @@ worktree-sweep
 | "Anything broken in prod", scheduled error sweep, post-deploy watch | `prod-sentinel` |
 | A request arriving as a top-level `@claude` mention in Slack, triaged to `fix-bug`/`new-feature` | `slack-watcher` (driven by `scripts/slack_watch.py`, not invoked by hand) |
 | An open MR GitLab reports as conflicted; "resolve the conflicts on MR !N" | `mr-conflict-resolver` (driven by `scripts/mr_conflict_watch.py`, not invoked by hand) |
+| "Work the findings index", "what debt do we owe", scheduled sweep of documented follow-ups/known bugs | `findings-sweep` (driven by `scripts/findings_sweep_run.py` on a daily timer) |
 | Weekly security sweep that remediates, not just reports | `security-audit` (§6) |
 | Scheduled suite-health check | `suite-warden` |
 | Scheduled core-flow coverage sweep, filling test gaps | `test-author` |

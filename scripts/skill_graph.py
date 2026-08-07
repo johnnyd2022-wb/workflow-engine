@@ -69,6 +69,9 @@ ROOTS = {
     # skill edge by design: it reviews the whole roster, so anything routing *to* it
     # would be a skill asking to be graded by its own caller.
     "session-sweep",
+    # same shape: scripts/findings_sweep_run.py launches it from findings-sweep.timer,
+    # so its only inbound edge is a timer the graph cannot see
+    "findings-sweep",
     # user- or schedule-invoked test coverage authoring (test-evaluator is NOT a root:
     # it only ever runs when a caller hands it a batch, so its reachability is proven by
     # inbound edges, not by declaration)
