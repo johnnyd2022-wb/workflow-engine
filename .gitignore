@@ -87,7 +87,21 @@ dist/
 # committed report re-publishes every secret it found. Keep scanner output local.
 .agents/reports/**/gitleaks.json
 
+# Session sweep runtime state and raw digests — machine-local, not shared.
+# The digest is derived from local session transcripts: redaction is best-effort, not a
+# proof, so the raw digest stays out of git. findings-index.json is deliberately NOT
+# ignored — it is the curated, reviewed artifact the MR is built on and the thing next
+# week's sweep reads instead of re-deriving this week's reasoning.
+.agents/session-sweep-state.json
+.agents/session-sweep-state.lock
+.agents/reports/session-sweep/**/digest.json
+.agents/reports/session-sweep/**/digest.md
+.agents/reports/session-sweep/*.log
+
 # Coverage data (pytest-cov)
 .coverage
 coverage.xml
 htmlcov/
+
+# Runtime evidence file storage (org_id/execution_id dirs written by uploads, incl. tests)
+app/core/evidence_storage/

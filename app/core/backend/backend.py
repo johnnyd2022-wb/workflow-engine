@@ -38,6 +38,7 @@ from app.core.db.models.inventory_movement import InventoryMovement, InventoryMo
 from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.process import ProcessCategory
 from app.core.db.models.step import Step
+from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
@@ -49,7 +50,7 @@ from app.core.domain.inventory_quantity_guard import (
     InventoryQuantityWriteReason,
     allow_inventory_quantity_write,
 )
-from app.core.security.permissions import requires_auth
+from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.internal_counters import get_counter_snapshot, inc_counter
 from app.core.utils.inventory_quantity import (
     assert_movement_unit_matches_item_canonical,
@@ -241,6 +242,21 @@ def _flow_process_id_from_request() -> UUID | None:
         abort(400)
 
 
+def _log_process_access_denied(org_id: UUID, process_id: UUID) -> None:
+    """A rejected org-scoped process lookup is a tenant-boundary probe (or a stale link);
+    the route turns it into a generic 404, so without this it leaves no trace at all.
+    Same `access_denied` event name as permissions.py/inventory_repo.py so one query covers all three.
+    """
+    logger.warning(
+        "access_denied",
+        reason="process_not_found_or_cross_org",
+        feature="process-design",
+        org_id=str(org_id),
+        process_id=str(process_id),
+        path=request.path,
+    )
+
+
 def _assert_flow_process_access(process_id: UUID) -> None:
     """
     Object-level authorization for flow pages.
@@ -253,6 +269,7 @@ def _assert_flow_process_access(process_id: UUID) -> None:
     repo = ProcessRepository(db_session)
     proc = repo.get_process_by_id(process_id, org_id=org_id)
     if not proc:
+        _log_process_access_denied(org_id, process_id)
         abort(404)
 
 
@@ -265,31 +282,28 @@ def _get_process_or_404(process_id: UUID):
     repo = ProcessRepository(db_session)
     proc = repo.get_process_by_id(process_id, org_id=org_id)
     if not proc:
+        _log_process_access_denied(org_id, process_id)
         abort(404)
     return proc
 
 
-def _assert_valid_step_write(process_id: UUID, requested_step_number: int | None, step_id: UUID | None = None) -> None:
+def _is_valid_step_position(pos) -> bool:
+    """Pure grid-validity check, shared by `_coerce_step_position` (which aborts) and
+    `reorder_steps` (which needs a plain bool since it can't call `abort()` from inside
+    a `with sess.begin():` block without triggering a partial commit — see reorder_steps).
     """
-    Enforce basic flow integrity at the mutation boundary.
-    This is not a security boundary (tenancy is handled by org-scoped process lookup),
-    but it prevents inconsistent state caused by skipping ahead or colliding step numbers.
-    """
-    if requested_step_number is None:
-        return
-    if not isinstance(requested_step_number, int) or requested_step_number < 1:
-        abort(400)
+    from decimal import Decimal
 
-    # Ensure process exists in current org (prevents IDOR & guarantees scope).
-    _ = _get_process_or_404(process_id)
-
-    q = db_session.query(Step).filter(Step.process_id == process_id)
-    if step_id is not None:
-        q = q.filter(Step.id != step_id)
-
-    [n for (n,) in q.with_entities(Step.step_number).all() if isinstance(n, int)]
-    # Option B: step_number is not canonical ordering. No uniqueness enforcement here.
-    return None
+    # Defensive bounds: reject NaN/Inf and negative/zero positions.
+    if not pos.is_finite() or pos <= 0:
+        return False
+    # Guard against pathological magnitudes (prevents log spam / abuse).
+    if pos.copy_abs() > Decimal("1e30"):
+        return False
+    # Hard invariant: always store positions on the 1000-grid.
+    if (pos % Decimal("1000")) != 0:
+        return False
+    return True
 
 
 def _coerce_step_position(value):
@@ -301,14 +315,7 @@ def _coerce_step_position(value):
         pos = Decimal(str(value))
     except Exception:
         abort(400)
-    # Defensive bounds: reject NaN/Inf and negative/zero positions.
-    if not pos.is_finite() or pos <= 0:
-        abort(400)
-    # Guard against pathological magnitudes (prevents log spam / abuse).
-    if pos.copy_abs() > Decimal("1e30"):
-        abort(400)
-    # Hard invariant: always store positions on the 1000-grid.
-    if (pos % Decimal("1000")) != 0:
+    if not _is_valid_step_position(pos):
         abort(400)
     return pos
 
@@ -1393,8 +1400,16 @@ def update_process(process_id: str):
 
 @core_bp.route("/api/core/processes/<process_id>", methods=["DELETE"])
 @requires_auth
+@requires_role(UserRole.ADMIN)
 def delete_process(process_id: str):
-    """Delete a process"""
+    """Delete a process.
+
+    ADMIN-gated: cascades to delete every step and the entire ProcessVersion history
+    for this process (DB ON DELETE CASCADE), a strictly more destructive blast radius
+    than the single-file DELETE /api/core/process-docs/<doc_id>, which was already
+    ADMIN-gated — this closes that asymmetry (security-audit F3, review-feature
+    process-design audit, 2026-08-02).
+    """
     org_id = UUID(g.org_id)
     try:
         process_uuid = UUID(process_id)
@@ -1612,66 +1627,63 @@ def reorder_steps(process_id: str):
 
     from decimal import Decimal
 
+    if not isinstance(orders, list) or not orders:
+        return jsonify({"error": "orders is required"}), 400
+
+    updates: list[tuple[UUID, Decimal]] = []
+    for row in orders:
+        if not isinstance(row, dict):
+            return jsonify({"error": "Invalid orders payload"}), 400
+        sid = row.get("id") or row.get("step_id")
+        pos = row.get("position")
+        if not sid or pos is None:
+            return jsonify({"error": "Each order must include id and position"}), 400
+        try:
+            step_uuid = UUID(str(sid))
+            position = Decimal(str(pos))
+        except Exception:
+            return jsonify({"error": "Invalid id or position"}), 400
+        if not _is_valid_step_position(position):
+            return jsonify({"error": f"Invalid position: must be a positive, finite multiple of 1000 (got {pos!r})"}), 400
+        updates.append((step_uuid, position))
+
+    # Use an isolated session for this write endpoint.
+    # The app's before_request tenant middleware uses the scoped_session for reads and can leave
+    # an open transaction on it; using a fresh SessionLocal avoids nested-transaction surprises
+    # and ensures the commit persists.
+    sess = SessionLocal()
     try:
-        if not isinstance(orders, list) or not orders:
-            return jsonify({"error": "orders is required"}), 400
-
-        updates: list[tuple[UUID, Decimal]] = []
-        for row in orders:
-            if not isinstance(row, dict):
-                return jsonify({"error": "Invalid orders payload"}), 400
-            sid = row.get("id") or row.get("step_id")
-            pos = row.get("position")
-            if not sid or pos is None:
-                return jsonify({"error": "Each order must include id and position"}), 400
-            try:
-                step_uuid = UUID(str(sid))
-                position = Decimal(str(pos))
-            except Exception:
-                return jsonify({"error": "Invalid id or position"}), 400
-            updates.append((step_uuid, position))
-
-        # Use an isolated session for this write endpoint.
-        # The app's before_request tenant middleware uses the scoped_session for reads and can leave
-        # an open transaction on it; using a fresh SessionLocal avoids nested-transaction surprises
-        # and ensures the commit persists.
-        sess = SessionLocal()
         with sess.begin():
-            # Ensure process belongs to org (IDOR guard).
             repo = ProcessRepository(sess)
-            if not repo.get_process_by_id(process_uuid, org_id=org_id):
-                return jsonify({"error": "Process not found"}), 404
+            error_code = repo.reorder_steps(process_uuid, org_id, updates)
 
-            # Lock all steps for this process to prevent concurrent reorder collisions.
-            locked = sess.query(Step.id).filter(Step.process_id == process_uuid).with_for_update().all()
-            locked_ids = {sid for (sid,) in locked}
-            if not locked_ids:
-                return jsonify({"error": "No steps to reorder"}), 400
+        if error_code == "process_not_found":
+            _log_process_access_denied(org_id, process_uuid)
+            return jsonify({"error": "Process not found"}), 404
+        if error_code == "no_steps":
+            return jsonify({"error": "No steps to reorder"}), 400
+        if error_code == "step_not_found":
+            logger.warning(
+                "access_denied",
+                reason="step_not_in_process",
+                feature="process-design",
+                org_id=str(org_id),
+                process_id=str(process_uuid),
+                step_ids=[str(u) for u, _ in updates],
+                path=request.path,
+            )
+            return jsonify({"error": "Step not found"}), 404
 
-            for step_uuid, position in updates:
-                if step_uuid not in locked_ids:
-                    return jsonify({"error": "Step not found"}), 404
-                updated = (
-                    sess.query(Step)  # nosemgrep: sqlalchemy-query-in-for-loop — each step gets a distinct position
-                    .filter(Step.id == step_uuid, Step.process_id == process_uuid)
-                    .update({"position": position})
-                )
-                if updated != 1:
-                    return jsonify({"error": "Step not found"}), 404
-
-        sess.close()
         return jsonify({"message": "Reordered"}), 200
     except Exception as e:
         try:
-            sess.rollback()  # type: ignore[name-defined]
-            sess.close()  # type: ignore[name-defined]
+            sess.rollback()
         except Exception:
             db_session.rollback()
-        try:
-            logger.exception("Failed to reorder steps process_id=%s", process_id)
-        except Exception:
-            pass
+        logger.exception("Failed to reorder steps process_id=%s", process_id)
         return jsonify({"error": "Failed to reorder steps", "details": str(e)}), 500
+    finally:
+        sess.close()
 
 
 @core_bp.route("/api/core/processes/<process_id>/steps/<step_id>", methods=["DELETE"])
@@ -2488,10 +2500,15 @@ def complete_step(execution_id: str, execution_step_id: str):
             return jsonify({"error": "Execution failed", "details": execution_errors}), 400
 
         # FAILURE HANDLING: Persist warnings to execution_data for audit trail
+        # Reassign (not in-place mutate) the JSONB dict: execution_data was already
+        # flushed once above (db_session.flush()), so an in-place key add on the same
+        # dict object is invisible to SQLAlchemy's dirty tracking (JSONB is not
+        # MutableDict-wrapped) and would be silently dropped by the commit below.
         if execution_warnings:
-            if not execution_step.execution_data:
-                execution_step.execution_data = {}
-            execution_step.execution_data["execution_warnings"] = execution_warnings
+            execution_step.execution_data = {
+                **(execution_step.execution_data or {}),
+                "execution_warnings": execution_warnings,
+            }
 
         # TRANSACTION INTEGRITY: Commit all inventory operations atomically
         # This ensures inventory consumption and output creation are atomic per execution step

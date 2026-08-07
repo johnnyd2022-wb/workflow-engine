@@ -27,8 +27,20 @@
 (function() {
   'use strict';
   // Safety: this file is used in multiple shells; ensure notifications never crash execution.
-  // Prefer the app's global showNotification (from core.js) when available.
-  if (typeof window.showNotification !== 'function') {
+  // Prefer the app's global showNotification (from base_spa.html) when available.
+  //
+  // The real showNotification is defined by an inline <script> near the bottom of
+  // base_spa.html's <body>, *after* {% block content %} — which is where this file gets
+  // loaded on pages like batch-start.html that include the execution modal stack in their
+  // content block. Installing the fallback here immediately (at parse time) would win that
+  // race and permanently shadow the real, DOM-updating implementation with this console-only
+  // one, even on pages that do have the real one coming later in the same document — which is
+  // exactly what happened on /core/flows/batches/start (operators saw no visible toast on
+  // step completion success/failure, only a browser-console line). Defer the fallback install
+  // to DOMContentLoaded so the real implementation — an inline script, so it always runs
+  // during initial parse, before DOMContentLoaded fires — gets first claim on the global.
+  function installFallbackNotificationIfNeeded() {
+    if (typeof window.showNotification === 'function') return;
     window.showNotification = function(type, title, message) {
       try {
         var t = (title || '').toString();
@@ -41,6 +53,11 @@
         }
       } catch (e) {}
     };
+  }
+  if (document.readyState !== 'loading') {
+    installFallbackNotificationIfNeeded();
+  } else {
+    document.addEventListener('DOMContentLoaded', installFallbackNotificationIfNeeded);
   }
 
   // Safety: execution submit uses getCurrentUser() for audit fields.

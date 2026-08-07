@@ -10,7 +10,7 @@ longer exists and `tests/test_*.py` files that appear in no row. It cannot judge
 row's **status** is truthful; that is test-author's job to keep current as it writes, and
 test-evaluator's to catch when a test claims more than it proves.
 
-last_synced: 2026-07-26
+last_synced: 2026-08-02
 status legend: `covered` (happy + unhappy + isolation where scoped) · `partial` (happy
 path only, or missing the hostile-org / unhappy cases) · `none` (no automated pytest
 coverage) · `live` (covered only by `live_server`-marked suites that need the dev app
@@ -38,11 +38,17 @@ server up)
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 9 | Process CRUD + steps (add/reorder/delete) | core_bp `/api/core/processes*` | test_executions.py, test_corechecks.py, test_multi_tenant_isolation.py | covered | CRUD in test_executions/corechecks; org-isolation of get/list/delete added in Batch 2 |
+| 9 | Process CRUD + steps (add/reorder/delete) | core_bp `/api/core/processes*` | test_executions.py, test_corechecks.py, test_multi_tenant_isolation.py, test_process_design.py, tests/e2e/test_process_steps_flow.py | covered | CRUD in test_executions/corechecks; org-isolation of get/list/delete added in Batch 2. review/process-design audit (this batch): test_process_design.py fills the fast-unit-test validation/error-branch gap create_process/update_process/delete_process/get_process/add_step/update_step/delete_step/reorder_steps had zero unit coverage of (400/404/409 branches, no-op-update-writes-no-version, IntegrityError→409, reorder payload validation) plus `_next_step_position` and `process_docs_validation.py`'s MIME-detection/step-ownership branches; e2e suite (test_process_steps_flow.py) already covers the reorder endpoint end-to-end including its two documented gaps (missing audit trail, off-grid-position 500 not 400) |
 | 10 | DAG traversal | `app/core/backend/dagtraversal.py` | test_dag_traversal.py | covered | 29 tests, cycles + ordering |
 | 11 | Execution lifecycle (create → complete step) | core_bp `/api/core/executions*` | test_executions.py, test_complete_step_payload.py | covered | Batch 4 re-assessment: create-materialises-steps, in-order advancement, full completion, out-of-order rejected, double-completion rejected, step-failure does not advance, wrong-org → None — all in test_executions.py (45 tests) |
 | 12 | ~~Idempotency (`ApiIdempotencyKey`) on executions~~ | n/a | test_wastage.py (the real user) | covered | **Gap-analysis correction (Batch 4):** there is no execution idempotency-key mechanism — `ApiIdempotencyKey` is used only by the wastage route (row 16, covered in Batch 3). create_execution has no dedup; execution replay-safety is the `complete_step` state guard in row 11. No new test owed |
 | 13 | Execution lineage (parent→child) | `workflow_execution_lineage`, reconciliation_service | test_dag_traversal.py (helpers) | partial | traversal helpers touch it; lineage-record assertions absent |
+
+## Evidence
+
+| # | Flow | App area | Test file(s) | Status | Notes |
+|---|---|---|---|---|---|
+| 27 | Evidence upload/list/download/delete/config | `app/core/backend/evidence/*` | test_evidence.py | covered | **test-author (review-execution, 2026-08-02):** `none → covered`. Route coverage raised from a single uploaded_by regression test to the full surface: config, list (happy/empty/missing-param/invalid-format/org-scoped), download (happy/404-nonexistent/404-cross-org), delete (happy incl. file removal/idempotent-on-missing/cross-org), and upload's unhappy paths (oversized, empty, disallowed MIME via magic-byte sniffing including the "sniffing overrides a lying client Content-Type" property, missing file, invalid execution_id/step_id format, execution not found) plus the three post-commit failure/orphan-cleanup branches in `upload_evidence_from_temp` (checksum-verify failure, `finalize_from_temp` failure, `update_status`-to-ACTIVE failure — each via monkeypatch, each asserted to leave no DB row and no file on disk). Added pure unit tests for `evidence_storage.py` (`is_safe_filename`, `extension_from_mime`, checksum roundtrip, `finalize_from_temp`, path-traversal containment in `read_file_path`, `delete_file` idempotency) and `evidence_validation.py` (`detect_mime_from_path`, `validate_upload_request`) needing no DB. **Finding surfaced, not fixed here (test-only stage):** AC17 states DELETE should 404 for evidence outside the caller's org, but `delete_evidence`'s not-found and cross-org cases share the same idempotent-200 code path (no org-specific branch) — tested and documented as the code's actual behavior in `TestEvidenceDelete::test_delete_cross_org_does_not_remove_the_record`; the record's survival (not the status code) is what's asserted. Route-level org_id-missing/malformed defensive branches (`evidence_routes.py`, reachable only if `g.org_id` were absent post-auth) remain unexercised — low-value, same shape across all four routes. |
 
 ## Inventory
 

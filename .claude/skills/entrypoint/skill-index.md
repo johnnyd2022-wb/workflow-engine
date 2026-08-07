@@ -5,8 +5,8 @@ Cached, categorized roster of every registered skill in `.claude/skills/`. This 
 directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be preserved
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
-last_synced: 2026-08-03
-skill_count: 49
+last_synced: 2026-08-07
+skill_count: 51
 
 ## Wiring
 
@@ -78,6 +78,7 @@ review-feature
 sales-manager
 sales-watches
 security-audit
+session-sweep
 skill-smith
 slack-watcher
 spec-critic
@@ -133,6 +134,7 @@ test-fixtures
 | Scheduled perf sweep: measure budgets, triage, remediate top item | `perf-guardrails` |
 | Docs/commands drifted from reality, "the docs say X but Y happens" | `docs-truth` |
 | Skill rot audit, "create a skill for X" | `skill-smith` |
+| "Sweep my sessions", "what are we wasting tokens on", "make the skills better from what actually happened" | `session-sweep` (driven by `scripts/session_sweep_watch.py`, weekly) |
 
 ### 3. Code — ad hoc file review (single-file lint pass, outside any chain)
 

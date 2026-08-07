@@ -126,6 +126,12 @@ unit_tests:
     # Node.js for tests/js/*.test.js (node --test); see tests/test_execution_shared_utils_js.py
     - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     - apt-get install -y -qq nodejs
+    # Chromium for tests/e2e/*.py (Playwright). Without this, tests/e2e/conftest.py's own
+    # chromium-availability probe skips every Playwright test rather than failing (an
+    # absent dependency is a skip, never a failure) -- so silently omitting this line
+    # would not turn the pipeline red, it would just make every e2e test in this job a
+    # no-op forever. Same command already used by the cd_e2e job below.
+    - uv run playwright install --with-deps chromium
     # Make CI scripts executable
     - chmod +x ci/*.sh
     # Setup database (wait for postgres, update config, run migrations)

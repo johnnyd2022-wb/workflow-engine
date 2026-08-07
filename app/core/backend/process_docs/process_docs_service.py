@@ -320,6 +320,13 @@ def get_file_for_download(doc_id: UUID, org_id: UUID) -> tuple[bytes | None, str
     repo = ProcessStepDocumentRepository(db_session)
     doc = repo.get_by_id(doc_id, org_id)
     if not doc:
+        logger.warning(
+            "access_denied",
+            reason="doc_not_found_or_cross_org",
+            feature="process-design",
+            org_id=str(org_id),
+            doc_id=str(doc_id),
+        )
         return None, None, None, "Document not found or access denied"
     if not doc.storage_path:
         return None, None, None, "Document is inline; no file to download"

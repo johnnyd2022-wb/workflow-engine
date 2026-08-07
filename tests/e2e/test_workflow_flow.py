@@ -17,7 +17,7 @@ import uuid
 import pytest
 from playwright.sync_api import Page
 
-from tests.e2e.conftest import assert_clean_page, csrf_headers
+from tests.e2e.conftest import assert_clean_page, csrf_headers, login_through_ui
 
 pytestmark = pytest.mark.e2e
 
@@ -84,8 +84,25 @@ def test_add_steps_to_process(logged_in_page: Page):
     assert "Step 1" in detail.text() and "Step 2" in detail.text(), "steps not persisted"
 
 
-def test_delete_process_removes_it(logged_in_page: Page):
-    page = logged_in_page
+@pytest.fixture()
+def admin_page(browser, app_url, fresh_user):
+    from app.core.db.models.user import UserRole
+
+    admin = fresh_user(role=UserRole.ADMIN)
+    context = browser.new_context(base_url=app_url, ignore_https_errors=True)
+    page = context.new_page()
+    login_through_ui(page, admin["email"], admin["password"])
+    yield page
+    context.close()
+
+
+def test_delete_process_removes_it(admin_page: Page):
+    """DELETE /api/core/processes/<id> is ADMIN-gated (review/process-design, 2026-08-03:
+    it cascades to every step + the entire ProcessVersion history, a strictly more
+    destructive blast radius than the single-file process-docs delete, which was
+    already ADMIN-gated) — see admin_page fixture, mirrored from
+    tests/e2e/test_process_docs_flow.py's own admin_page for its AC19 delete tests."""
+    page = admin_page
     name = f"E2E Delete {uuid.uuid4().hex[:8]}"
     pid = _create_process(page, name)
 
@@ -94,6 +111,19 @@ def test_delete_process_removes_it(logged_in_page: Page):
 
     listing = page.request.get("/api/core/processes")
     assert name not in listing.text(), "deleted process still listed"
+
+
+def test_delete_process_rejected_for_non_admin_member(logged_in_page: Page):
+    """A MEMBER (the default e2e_user role) cannot delete a process."""
+    page = logged_in_page
+    name = f"E2E Delete Forbidden {uuid.uuid4().hex[:8]}"
+    pid = _create_process(page, name)
+
+    resp = page.request.delete(f"/api/core/processes/{pid}", headers=csrf_headers(page))
+    assert resp.status == 403, f"expected 403 for non-admin delete, got {resp.status}: {resp.text()}"
+
+    listing = page.request.get("/api/core/processes")
+    assert name in listing.text(), "process should not have been deleted by a non-admin"
 
 
 def test_run_execution_and_complete_a_step(logged_in_page: Page):
