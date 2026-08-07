@@ -5,8 +5,8 @@ Cached, categorized roster of every registered skill in `.claude/skills/`. This 
 directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be preserved
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
-last_synced: 2026-08-06
-skill_count: 49
+last_synced: 2026-08-07
+skill_count: 51
 
 ## Wiring
 
@@ -63,6 +63,7 @@ licence-study-coach
 marketing-director
 merge-request
 migration-safety
+mr-conflict-resolver
 new-feature
 observability
 outbound-sales
@@ -126,6 +127,7 @@ test-fixtures
 |---|---|
 | "Anything broken in prod", scheduled error sweep, post-deploy watch | `prod-sentinel` |
 | A request arriving as a top-level `@claude` mention in Slack, triaged to `fix-bug`/`new-feature` | `slack-watcher` (driven by `scripts/slack_watch.py`, not invoked by hand) |
+| An open MR GitLab reports as conflicted; "resolve the conflicts on MR !N" | `mr-conflict-resolver` (driven by `scripts/mr_conflict_watch.py`, not invoked by hand) |
 | Weekly security sweep that remediates, not just reports | `security-audit` (§6) |
 | Scheduled suite-health check | `suite-warden` |
 | Scheduled core-flow coverage sweep, filling test gaps | `test-author` |

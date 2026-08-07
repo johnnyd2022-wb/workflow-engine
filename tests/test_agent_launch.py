@@ -165,6 +165,90 @@ def test_prompt_file_paths_are_shell_quoted(routing):
     assert "'/tmp/a b.md'" in cmd
 
 
+def test_mission_reporting_is_disabled_by_default(routing, monkeypatch):
+    monkeypatch.delenv(agent_launch.MISSION_REPORT_ENV, raising=False)
+    monkeypatch.setattr(agent_launch.shutil, "which", lambda name: "/bin/true")
+    called = []
+    monkeypatch.setattr(agent_launch, "_run", lambda argv, timeout=30: called.append(argv) or (0, "{}", ""))
+    cfg = agent_launch.resolve_stage(routing, "build")
+    assert agent_launch._report_mission_start(
+        stage="build", scope="auth", pane_id="w1:p2", tab_id="w1:t1", workdir="/tmp/wt", cfg=cfg
+    ) is None
+    assert called == []
+
+
+def test_mission_reporting_failure_never_raises(routing, monkeypatch):
+    monkeypatch.setenv(agent_launch.MISSION_REPORT_ENV, "1")
+    monkeypatch.setattr(agent_launch.shutil, "which", lambda name: "/bin/mission-control")
+    monkeypatch.setattr(agent_launch, "_run", lambda argv, timeout=30: (1, "", "state unavailable"))
+    cfg = agent_launch.resolve_stage(routing, "build")
+    assert agent_launch._report_mission_start(
+        stage="build", scope="auth", pane_id="w1:p2", tab_id="w1:t1", workdir="/tmp/wt", cfg=cfg
+    ) is None
+
+
+def test_mission_reporting_returns_run_id_when_enabled(routing, monkeypatch):
+    monkeypatch.setenv(agent_launch.MISSION_REPORT_ENV, "1")
+    monkeypatch.setattr(agent_launch.shutil, "which", lambda name: "/bin/mission-control")
+    monkeypatch.setattr(agent_launch.uuid, "uuid4", lambda: type("U", (), {"hex": "abc123def456789"})())
+    seen = []
+
+    def fake_run(argv, timeout=30):
+        seen.append((argv, timeout))
+        return 0, '{"run_id":"chain-abc123def456"}', ""
+
+    monkeypatch.setattr(agent_launch, "_run", fake_run)
+    cfg = agent_launch.resolve_stage(routing, "build")
+    result = agent_launch._report_mission_start(
+        stage="build", scope="auth", pane_id="w1:p2", tab_id="w1:t1", workdir="/tmp/wt", cfg=cfg
+    )
+    assert result == "chain-abc123def456"
+    assert seen[0][1] == 2
+    assert "--pane-id" in seen[0][0]
+
+
+def test_launch_cli_accepts_an_explicit_working_directory(monkeypatch, capsys):
+    seen = {}
+
+    def fake_launch(stage, **kwargs):
+        seen.update(stage=stage, **kwargs)
+        return {"pane_id": "w1:p2"}
+
+    monkeypatch.setattr(agent_launch, "load_routing", lambda: {})
+    monkeypatch.setattr(agent_launch, "launch", fake_launch)
+    assert agent_launch.main(
+        ["launch", "build", "--scope", "auth", "--prompt-file", "/tmp/p.md", "--cwd", "/tmp/worktree"]
+    ) == 0
+    assert seen["cwd"] == "/tmp/worktree"
+    assert json.loads(capsys.readouterr().out)["pane_id"] == "w1:p2"
+
+
+def test_wait_returns_success_for_done_agent(monkeypatch):
+    monkeypatch.setattr(agent_launch, "_herdr_json", lambda argv, timeout=5: {"pane": {"agent_status": "done"}})
+    result = agent_launch.wait_for("w1:p2", timeout_ms=100, poll_interval=0.01, startup_grace=0)
+    assert result["ok"] is True
+    assert result["status"] == "done"
+
+
+def test_wait_returns_failure_for_blocked_agent(monkeypatch):
+    monkeypatch.setattr(agent_launch, "_herdr_json", lambda argv, timeout=5: {"pane": {"agent_status": "blocked"}})
+    result = agent_launch.wait_for("w1:p2", timeout_ms=100, poll_interval=0.01, startup_grace=0)
+    assert result["ok"] is False
+    assert result["status"] == "blocked"
+
+
+def test_wait_does_not_hang_when_noninteractive_agent_exits(monkeypatch):
+    states = iter(["working", "unknown"])
+    monkeypatch.setattr(
+        agent_launch, "_herdr_json", lambda argv, timeout=5: {"pane": {"agent_status": next(states)}}
+    )
+    monkeypatch.setattr(agent_launch.time, "sleep", lambda seconds: None)
+    result = agent_launch.wait_for("w1:p2", timeout_ms=1000, poll_interval=0.01)
+    assert result["ok"] is False
+    assert result["status"] == "unknown"
+    assert "exited" in result["detail"]
+
+
 # --- table validation ------------------------------------------------------
 
 

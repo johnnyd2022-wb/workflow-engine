@@ -1,0 +1,35 @@
+{
+  "_comment": "Config for scripts/mr_conflict_watch.py. No credentials here -- glab holds its own GitLab auth (glab auth login), same as every other skill that shells out to it.",
+  "version": 1,
+  "updated": "2026-08-03",
+
+  "skip_draft_mrs": true,
+  "_skip_draft_mrs_note": "Draft MRs are usually mid-build in another chain's worktree -- resolving conflicts on a moving target wastes a run. Re-evaluated every poll tick, so it picks up automatically once marked ready.",
+
+  "skip_labels": ["needs-human", "wip"],
+  "_skip_labels_note": "MRs carrying any of these labels are left alone entirely, regardless of conflict state. 'needs-human' is applied BY the resolver skill itself on escalation -- a human removes it (after resolving or accepting the conflict by hand) to make the MR eligible again. 'wip' is a manual founder marker for 'don't touch this one'.",
+
+  "resolver_model": "claude-sonnet-5",
+  "_resolver_model_note": "Conflict assessment plus real git/test work -- Sonnet, same tier as the build stage in .agents/model-routing.json. Not Haiku: this skill edits code when a conflict is genuinely semantic, which triage-only skills (slack-watcher) never do.",
+
+  "resolver_permission_mode": "auto",
+  "_resolver_permission_mode_note": "The resolver needs real Bash (git, pytest, ruff, glab) and Edit, but every MR it acts on originated from an unattended run -- so 'auto' (classifier-gated) rather than 'acceptEdits' (unrestricted), matching slack_watch.py's chain_permission_mode. It never merges or force-pushes; those stay barred regardless of this setting.",
+
+  "agent_timeout_sec": 1800,
+  "_agent_timeout_note": "30 minutes. Covers worktree setup, a merge, a scoped test/lint pass, and a push -- generous because a real semantic conflict may need re-reading both sides' intent before touching anything.",
+
+  "crash_grace_sec": 120,
+  "_crash_grace_note": "Added to agent_timeout_sec before a 'handed_off' MR is treated as a dead run and retried. Covers the gap between the process actually finishing and the watchdog updating state.",
+
+  "max_attempts": 3,
+  "_max_attempts_note": "Per MR, per head sha. A conflict that can't be resolved in 3 attempts on the same commit is not going to resolve on a 4th -- mark stalled and let a human look, same reasoning as slack_watch's per-thread retry cap. A new push resets the counter (new sha, new question).",
+
+  "quota_preflight_ceiling_pct": 90,
+  "_quota_preflight_ceiling_pct_note": "Shared with slack_watch.py's quota gate (scripts/mr_conflict_watch.py imports it directly) -- don't launch a resolver run if the cached 5h reading is already at/above this.",
+
+  "quota_cache_max_age_sec": 1800,
+  "_quota_cache_max_age_sec_note": "A cached reading older than this is treated as absent, never as a reason to hold -- same reasoning as slack-watch.json.",
+
+  "quota_fallback_window_sec": 18000,
+  "_quota_fallback_window_sec_note": "5 hours. Estimate used when there is no fresh cached reading -- e.g. the watchdog detecting a mid-run quota failure with no recent interactive render to confirm against."
+}

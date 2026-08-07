@@ -3,6 +3,9 @@ config/local.ini
 config/test.ini
 config/prod.ini
 
+# Herdr Architect/Breaker pane collaboration scratch (handoff.md, log.md) — session-local
+.herdr-collab/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -69,6 +72,16 @@ dist/
 .agents/slack-watch-state.json
 .agents/slack-watch-state.corrupt
 .agents/reports/slack-watch/
+
+# MR conflict watcher runtime state (per-MR attempt/status tracking) — machine-local
+.agents/mr-conflict-watch-state.json
+.agents/mr-conflict-watch-state.corrupt
+.agents/mr-conflict-watch-state.lock
+.agents/reports/mr-conflict-watch/
+
+# Disposable per-task worktrees (entrypoint, mr-conflict-resolver, ...) — was previously
+# only excluded locally via .git/info/exclude; committed here so it holds for every clone
+.claude/worktrees/
 
 # gitleaks JSON reports embed the matched secret string for every finding, so a
 # committed report re-publishes every secret it found. Keep scanner output local.

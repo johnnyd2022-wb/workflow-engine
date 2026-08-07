@@ -50,7 +50,10 @@ Template:
 | ci-gate | GATE lint: pass, GATE unit: pass, ... | |
 
 ## Out of scope
-<from spec, if any>
+<from spec, if any — also fold in any deprioritized findings from a capped
+`herdr-multi-agent-collab` review: if `.herdr-collab/log.md` has a "session capped at 3
+rounds" entry for this work, its unresolved-findings list belongs here, ranked by
+severity, not silently dropped>
 
 ## Waived stages
 <state any the user explicitly waived, per new-feature's rules — never silent>

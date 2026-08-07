@@ -61,6 +61,9 @@ ROOTS = {
     # invoked by scripts/slack_watch.py, not by another skill — its inbound edge is a
     # systemd timer, which the graph cannot see
     "slack-watcher",
+    # invoked by scripts/mr_conflict_watch.py, same reasoning — its inbound edge is a
+    # systemd timer polling `glab mr list`, which the graph cannot see
+    "mr-conflict-resolver",
     # invoked by scripts/session_sweep_watch.py, same reasoning — a weekly systemd timer
     # hands it an ISO week. It is also the one skill that deliberately has no inbound
     # skill edge by design: it reviews the whole roster, so anything routing *to* it
