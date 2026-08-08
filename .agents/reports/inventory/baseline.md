@@ -64,7 +64,9 @@ falsify them rather than inherit them as assumptions.
   `source_output_id` straight from the request body and writes them to FK columns with
   no org-ownership check. `inventory_items.source_execution_id` FKs to `executions.id`
   globally (inventory_item.py:48-49) — nothing constrains the referenced row to the
-  caller's org. Contradicts AC33.
+  caller's org. Contradicts AC33. Already fixed by commit 7650042: `inventory_repo.py`'s
+  `_assert_source_refs_belong_to_org()` now rejects these refs; regression tests in
+  `tests/test_inventory.py` (verified 2026-08-08 by findings-sweep).
 - **B — `nan` reaches the DB layer as a 500.** `adjust_inventory_item_quantity`
   (backend.py:3807-3810) validates with `float(...)`, and `float("nan") <= 0` is False,
   so `"nan"` passes. `set_inventory_item_quantity` then evaluates `target < 0` on
@@ -73,7 +75,10 @@ falsify them rather than inherit them as assumptions.
 - **C — missing org filter on a join.** `list_inventory_items` (inventory_repo.py:334)
   outer-joins `Execution` with no `Execution.org_id == org_id` predicate, unlike
   `get_untracked_items` (inventory_repo.py:314-317) which has it. Defense-in-depth gap
-  that Finding A makes reachable.
+  that Finding A makes reachable. Already fixed: the join predicate now scopes
+  `Execution.org_id == org_id`, covered by
+  `tests/test_inventory.py::test_list_inventory_by_process_id_does_not_match_another_orgs_execution`
+  (verified 2026-08-08 by findings-sweep).
 - **D — wrong entity in error path.** `create_inventory_item` logs
   `"Error creating process"` and returns `"Failed to create process"` (backend.py:3677-3678).
   Cosmetic, but it misdirects triage from the observability stack.

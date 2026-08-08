@@ -59,6 +59,11 @@ manual_checklist: 7/7 completed
   for "return inside `with sess.begin():` before the matching `.close()`" once
   fix-bug's patch shape is known, so the next occurrence of this pattern elsewhere in
   the app is caught by machine.
+  patch: both parts fixed — backend.py's `reorder_steps` now wraps the whole body in
+  try/except/finally with `sess.close()` in `finally`; process_repo.py's `reorder_steps`
+  now calls `_insert_process_version()` and `EventWriter.emit('process.steps_reordered')`.
+  Regression test: `tests/test_process_design.py::test_ac9_reorder_writes_process_version_and_emits_event`
+  (verified 2026-08-08 by findings-sweep).
 
 - F3 [accepted-risk candidate, escalate] backend.py:1394 `DELETE /api/core/processes/<id>`
   has only `@requires_auth`, no `@requires_role(ADMIN)` — yet it is strictly more

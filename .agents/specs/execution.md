@@ -191,7 +191,10 @@ record commits (no orphan files, two-phase: PENDING → ACTIVE).
 - No test file existed for `app/core/backend/evidence/*` before this review; this audit
   added one targeted regression test, not full route coverage (upload validation edge
   cases, download, delete, config are still unexercised — hand-off candidate for
-  **test-author**).
+  **test-author**). Already fixed: `tests/test_evidence.py` now carries full route
+  coverage (`TestEvidenceConfig`, `TestEvidenceDownload`, `TestEvidenceDelete`,
+  `TestEvidenceUploadValidation`, `TestEvidenceUploadFailureCleanup`), verified 2026-08-08
+  by findings-sweep.
 - `create_execution`'s exception handling has a dead second `except ValueError` clause
   (backend.py, `create_execution`) — the first `except ValueError` catches everything
   before it, so the intended 400 branch for a malformed `process_id`-shaped-but-invalid

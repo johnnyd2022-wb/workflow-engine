@@ -24,7 +24,9 @@ gaps-found (patched in this pass)
   `authenticate()` call back below the lockout branch) and confirmed the new test fails
   (`0 == 1`) against the reverted code, then confirmed the file was correctly restored
   and the full auth suite (33 passed / 30 skipped) plus the whole repo suite
-  (506 passed / 30 skipped) are green against the actual patched code.
+  (506 passed / 30 skipped) are green against the actual patched code. Already fixed and
+  re-confirmed present at `tests/test_auth_login_security.py:142` (re-verified 2026-08-08
+  by findings-sweep).
 - G3 (noted, not patched): the grader felt `test_change_password_keeps_session_permanent`
   (F2) "proves the outcome rather than that `rotate_session()` was specifically called."
   Judgment call: asserting the observable `Set-Cookie: ...Expires=...` header is the

@@ -167,7 +167,9 @@ ship-blocking severity:
   `inventory_items` without the GUC is rejected by PostgreSQL, and with it set, succeeds.
 - **AC31/AC32** — reconcile via-execution (Path B), declared out of scope by the router.
 - **`EntityEventSummary.org_id`** — defense-in-depth only; security-audit established the
-  pre-fix query was not exploitable.
+  pre-fix query was not exploitable. Already fixed:
+  `tests/test_inventory.py::test_list_inventory_enriches_items_with_their_own_org_event_summary`
+  now covers it (verified 2026-08-08 by findings-sweep).
 
 ## Note on the grading rounds
 

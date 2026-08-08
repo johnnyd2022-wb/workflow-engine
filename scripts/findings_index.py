@@ -159,6 +159,20 @@ RESOLVED_MARKERS = re.compile(
     re.I,
 )
 
+# A heading whose own title says its subsection is already resolved -- "Known Issues
+# Fixed (this review)", "### Closed this review", "### Noted, not a gap". These are
+# frequently *nested inside* a still-open ancestor section ("## Known gaps" -> "### Closed
+# this review"), and `level <= section[0]` never closes a deeper heading against a
+# shallower one, so without this check every bullet under an already-resolved subsection
+# inherits the ancestor's open kind forever. Checked before FINDING_HEADINGS opens a
+# section, so "Known Issues Fixed" does not get read as an open "known-issue" section.
+CLOSED_HEADING_RE = re.compile(
+    r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot a gap\b|\balready (?:done|fixed|handled)\b", re.I
+)
+# Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
+# not trip CLOSED_HEADING_RE; those headings are explicitly saying the opposite.
+NEGATED_CLOSURE_RE = re.compile(r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved)\b", re.I)
+
 # A file path, optionally with a line or line-range, as this repo writes them in prose:
 # `backend.py:2679`, `app/utils/config_loader.py:153-155`, `inventory_quantity_guard.py:57-70`.
 CODE_REF_RE = re.compile(
@@ -182,9 +196,18 @@ HANDOFF_RE = re.compile(r"(?:(?:→|->)|\broute:)\s*\*\*(?P<skill>[a-z][\w -]*)\
 # ---------------------------------------------------------------------------
 
 # A report header field: `verdict: clean | patched | findings-open`. `clean` and
-# `patched` mean the report closed its own findings, so nothing in it is owed.
-VERDICT_RE = re.compile(r"^\s*(?:##\s*)?verdict:\s*(?P<verdict>[a-z-]+)", re.I | re.M)
-VERDICT_CLOSED = {"clean", "patched", "no-findings", "pass", "valid", "sound"}
+# `patched` mean the report closed its own findings, so nothing in it is owed. `\**`
+# skips markdown emphasis around the word (`verdict: **patched**`) -- several reports in
+# this repo bold the verdict, and without this the word never reaches `[a-z-]+`, so the
+# whole report (already-closed findings included) gets rescanned as open forever.
+VERDICT_RE = re.compile(r"^\s*(?:##\s*)?verdict:\s*\**(?P<verdict>[a-z-]+)", re.I | re.M)
+# `within-budget` is perf-guardrails' own spelling of "closed, nothing owed" (its reports
+# restate it as a plain `patched` in the trailing footer -- see the comment above `verdict`
+# in `parse_doc`, which explains why the header word, not the footer's, is authoritative).
+# `accepted-risk` at the file level is a human verdict already written into the report
+# itself (`.agents/autonomy.md` requires a human, not this script, to grant it) -- trusting
+# it here is reading that signature, not writing a new suppression.
+VERDICT_CLOSED = {"clean", "patched", "no-findings", "pass", "valid", "sound", "within-budget", "accepted-risk"}
 
 # The per-finding disposition this repo tags: `F1 [fix]`, `F2 [false-positive]`,
 # `F3 [accepted-risk]`. Only `fix` is owed. The other two are recorded human judgements
@@ -541,11 +564,14 @@ def parse_doc(path: Path) -> list[Item]:
         heading = HEADING_RE.match(line)
         if heading:
             level, title = len(heading.group(1)), heading.group(2)
-            kind = next((k for pattern, k in FINDING_HEADINGS if pattern.search(title)), None)
+            declares_closed = CLOSED_HEADING_RE.search(title) and not NEGATED_CLOSURE_RE.search(title)
+            kind = (
+                None if declares_closed else next((k for pattern, k in FINDING_HEADINGS if pattern.search(title)), None)
+            )
             if kind:
                 section = (level, kind)
-            elif section and level <= section[0]:
-                section = None  # a sibling/parent heading closes the section
+            elif declares_closed or (section and level <= section[0]):
+                section = None  # this heading, or a sibling/parent one, closes the section
             i += 1
             continue
 
@@ -751,10 +777,13 @@ def _parse_mr_description(desc: str, pseudo_path: str) -> list[Item]:
         heading = HEADING_RE.match(line)
         if heading:
             level, title = len(heading.group(1)), heading.group(2)
-            kind = next((k for pattern, k in FINDING_HEADINGS if pattern.search(title)), None)
+            declares_closed = CLOSED_HEADING_RE.search(title) and not NEGATED_CLOSURE_RE.search(title)
+            kind = (
+                None if declares_closed else next((k for pattern, k in FINDING_HEADINGS if pattern.search(title)), None)
+            )
             if kind:
                 section = (level, kind)
-            elif section and level <= section[0]:
+            elif declares_closed or (section and level <= section[0]):
                 section = None
             continue
 
