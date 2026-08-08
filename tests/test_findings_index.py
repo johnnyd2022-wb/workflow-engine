@@ -694,6 +694,31 @@ def test_budget_and_work_launches_the_agent(runner, monkeypatch):
     assert "agent" in runner
 
 
+def test_agent_launches_with_auto_permission_mode(monkeypatch, tmp_path):
+    """`acceptEdits` only auto-approves file Edit/Write tools, not Bash -- git commit/push
+    and `glab mr create` would still hit an interactive approval wall a headless `-p`
+    session can never clear. This happened for real on 2026-08-08: a run finished all its
+    analysis, staged the intended diff, and then sat blocked at `git commit` for 40
+    minutes with no MR. Every other autonomous launcher here (mr_conflict_watch.py,
+    worktree_sweep_watch.py) uses `auto`; this pins findings_sweep_run.py to the same
+    choice so the regression can't silently come back."""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(fsr, "LOG_PATH", tmp_path / "run-log.jsonl")
+    monkeypatch.setattr(fsr, "cut_worktree", lambda slug: (tmp_path, "b"))
+    monkeypatch.setattr(fsr, "cleanup", lambda path, branch: None)
+    monkeypatch.setattr(fsr.shutil, "which", lambda name: "/usr/bin/claude")
+    monkeypatch.setattr(fsr, "run", lambda cmd, **k: calls.append(cmd) or (0, "", ""))
+    _index_stub(monkeypatch, budget_items=1, open_items=1)
+
+    assert fsr.main([]) == 0
+    assert calls, "agent was never launched"
+    cmd = calls[0]
+    assert "--permission-mode" in cmd
+    mode = cmd[cmd.index("--permission-mode") + 1]
+    assert mode == "auto", f"acceptEdits cannot run Bash (git commit/push, glab) -- got {mode!r}"
+    assert mode != "acceptEdits"
+
+
 def test_dry_run_decides_but_never_launches(runner, monkeypatch):
     _index_stub(monkeypatch, budget_items=4, open_items=4)
     assert fsr.main(["--dry-run"]) == 0

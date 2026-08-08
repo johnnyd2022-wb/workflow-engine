@@ -220,8 +220,12 @@ def main(argv: list[str] | None = None) -> int:
             "xhigh",
             # The brief comes from this repo's own committed reports, not from untrusted
             # chat input, and the skill needs git/pytest/glab to reach an MR at all.
+            # `acceptEdits` only auto-approves file Edit/Write tools, not Bash -- git
+            # commit/push and `glab mr create` would still hit an interactive approval
+            # wall a headless `-p` session can never clear. `auto`, like every other
+            # autonomous launcher here (mr_conflict_watch.py, worktree_sweep_watch.py).
             "--permission-mode",
-            "acceptEdits",
+            "auto",
         ],
         timeout=AGENT_TIMEOUT_SEC,
         cwd=path,
