@@ -53,8 +53,12 @@ def store(tmp_path, monkeypatch):
 
 def make_item(**kw):
     defaults = dict(
-        id="", title="t", detail="d", kind="finding",
-        source_path="a/b.md", source_line=1,
+        id="",
+        title="t",
+        detail="d",
+        kind="finding",
+        source_path="a/b.md",
+        source_line=1,
     )
     defaults.update(kw)
     if not defaults["id"]:
@@ -104,22 +108,85 @@ def test_id_changes_when_the_claim_changes():
 
 def test_report_with_clean_verdict_contributes_nothing(tmp_path, monkeypatch):
     """A report that closed itself owes no work, however many bullets it lists."""
-    path = write_doc(tmp_path, monkeypatch, "reports/x.md", """# SECURITY: x
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# SECURITY: x
 verdict: clean
 
 ## Findings
 - F1 [fix] app/a.py:1 a real sounding finding about tenant isolation and org_id
-""")
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_bolded_verdict_is_still_recognised(tmp_path, monkeypatch):
+    """Several reports write `verdict: **patched**` -- the emphasis markers must not
+    stop `patched` from reaching the word class and closing the report."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# SECURITY: x
+verdict: **patched**
+
+## Findings
+- F1 [fix] app/a.py:1 a real sounding finding about tenant isolation and org_id
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_within_budget_verdict_is_treated_as_closed(tmp_path, monkeypatch):
+    """perf-guardrails reports spell a clean pass `within-budget`, not `clean`/`patched` --
+    its own trailing footer restates it as `patched`, confirming it means the same thing."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# perf-guardrails: x
+Verdict: **within-budget**
+
+### A gap that was actually closed in this same pass
+- added a new measure entry and fixed the triage script to match
+
+VERDICT: patched
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_file_level_accepted_risk_verdict_is_treated_as_closed(tmp_path, monkeypatch):
+    """A human already signed off accepted-risk in the report's own header -- that is a
+    human verdict already on record, not a suppression this script is minting itself."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# SECURITY: x
+verdict: **accepted-risk** — signed off by the repo owner, 2026-07-17
+
+## Findings
+- a real sounding finding about tenant isolation that the owner has already accepted
+""",
+    )
     assert fi.parse_doc(path) == []
 
 
 def test_report_with_findings_open_verdict_contributes(tmp_path, monkeypatch):
-    path = write_doc(tmp_path, monkeypatch, "reports/x.md", """# SECURITY: x
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# SECURITY: x
 verdict: findings-open
 
 ## Findings
 - F1 [fix] app/a.py:1 cross-org process_id returns a 500 instead of a clean 400
-""")
+""",
+    )
     items = fi.parse_doc(path)
     assert len(items) == 1
     assert items[0].priority == "P0"
@@ -127,34 +194,48 @@ verdict: findings-open
 
 def test_trailing_verdict_does_not_reopen_a_clean_report(tmp_path, monkeypatch):
     """Reports restate the verdict in a footer; the header is authoritative."""
-    path = write_doc(tmp_path, monkeypatch, "reports/x.md", """# SECURITY: x
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# SECURITY: x
 verdict: clean
 
 ## Findings
 - F1 [fix] app/a.py:1 something about org_id scoping that sounds actionable
 
 VERDICT: findings-open
-""")
+""",
+    )
     assert fi.parse_doc(path) == []
 
 
 def test_false_positive_and_accepted_risk_are_not_re_raised(tmp_path, monkeypatch):
     """Re-surfacing a finding a human already rejected is the exact failure mode
     finding_history.py was built to stop. The disposition tag must be honoured here too."""
-    path = write_doc(tmp_path, monkeypatch, "reports/x.md", """# SECURITY: x
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# SECURITY: x
 verdict: findings-open
 
 ## Findings
 - F1 [false-positive] app/a.py:1 constant query with no user input, not injection
 - F2 [accepted-risk] app/b.py:2 org_id filter omitted deliberately on a PK lookup
 - F3 [fix] app/c.py:3 cross-org leak in the summary endpoint
-""")
+""",
+    )
     items = fi.parse_doc(path)
     assert [i.detail[:2] for i in items] == ["F3"]
 
 
 def test_already_patched_finding_is_not_re_indexed(tmp_path, monkeypatch):
-    path = write_doc(tmp_path, monkeypatch, "reports/x.md", """# SECURITY: x
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# SECURITY: x
 verdict: findings-open
 
 ## Findings
@@ -162,7 +243,8 @@ verdict: findings-open
   patch: 4f2a1b9 added the org_id filter and a regression test
 - F2 [fix] app/b.py:2 second missing org_id scope on another lookup
   patch: not applied
-""")
+""",
+    )
     items = fi.parse_doc(path)
     assert [i.detail[:2] for i in items] == ["F2"]
 
@@ -170,20 +252,30 @@ verdict: findings-open
 def test_format_template_placeholders_are_rejected(tmp_path, monkeypatch):
     """`- F1 [fix|false-positive|accepted-risk] <file:line> <description>` is a spec of
     what a finding looks like, not a finding. These dominated the first real P0 list."""
-    path = write_doc(tmp_path, monkeypatch, "skills/s.md", """## Findings
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "skills/s.md",
+        """## Findings
 - F1 [fix|false-positive|accepted-risk] <file:line> <one-line description>
 - F2 [fix] app/real.py:10 an actual cross-org leak in the export path
-""")
+""",
+    )
     items = fi.parse_doc(path)
     assert [i.detail[:2] for i in items] == ["F2"]
 
 
 def test_ticked_checkbox_and_resolved_prose_are_skipped(tmp_path, monkeypatch):
-    path = write_doc(tmp_path, monkeypatch, "reports/x.md", """## Follow-ups
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Follow-ups
 - [x] this one is done and should not be indexed at all
 - [ ] this one is still open and needs the org_id scope added
 - ✅ resolved in !120, the migration guard now covers this case
-""")
+""",
+    )
     items = fi.parse_doc(path)
     assert len(items) == 1
     assert "still open" in items[0].detail
@@ -192,37 +284,108 @@ def test_ticked_checkbox_and_resolved_prose_are_skipped(tmp_path, monkeypatch):
 def test_bullets_outside_a_findings_heading_are_ignored(tmp_path, monkeypatch):
     """Heading scoping is what keeps the index signal-dense; policy prose that merely
     says 'follow-up' must contribute nothing."""
-    path = write_doc(tmp_path, monkeypatch, "reports/x.md", """## Summary
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Summary
 - we ran the audit and everything looked broadly reasonable to us
 
 ## Follow-ups
 - add the missing org_id filter to the summary lookup for defense in depth
-""")
+""",
+    )
     items = fi.parse_doc(path)
     assert len(items) == 1
     assert "org_id filter" in items[0].detail
 
 
 def test_sibling_heading_closes_a_findings_section(tmp_path, monkeypatch):
-    path = write_doc(tmp_path, monkeypatch, "reports/x.md", """## Findings
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Findings
 - the reconciliation path leaks a 500 on cross-org process ids
 
 ## Attempted but clean
 - probed the wastage idempotency path and found nothing wrong there
-""")
+""",
+    )
     items = fi.parse_doc(path)
     assert len(items) == 1
     assert "reconciliation" in items[0].detail
 
 
+def test_heading_that_declares_itself_fixed_does_not_open_a_section(tmp_path, monkeypatch):
+    """`## Known Issues Fixed (this review)` matches the 'known issues' pattern, but the
+    heading itself says these are already fixed -- it must not be read as an open
+    'known-issue' section."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Known Issues Fixed (this review)
+- Cross-tenant step lookup in `DAGTracer.add_step_order_connections` queried by ID alone
+  with no join back to `Execution.org_id`. Fixed to match the file's documented pattern.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_nested_closed_subheading_closes_a_still_open_ancestor_section(tmp_path, monkeypatch):
+    """A deeper subheading ("### Closed this review") never satisfies `level <=
+    section[0]` against its shallower ancestor ("## Known gaps"), so without an explicit
+    check every bullet under it inherited the ancestor's open kind forever. A later
+    sibling *heading* that actually names a still-open kind ("## Still outstanding")
+    must keep working normally."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Known gaps
+
+### Closed this review
+- the org_id filter was missing on the join and has now been added, see the regression test
+
+## Still outstanding
+- the export endpoint has no rate limit and could be abused for a denial of service
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "rate limit" in items[0].detail
+
+
+def test_negated_closure_phrasing_does_not_falsely_close_a_section(tmp_path, monkeypatch):
+    """'not closed' / 'not fixed' must not trip the closed-heading check -- these headings
+    are explicitly saying the work is still owed."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Known coverage gaps (not closed this pass, documented honestly)
+- the summary endpoint still leaks another org's execution ids through the join
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "leaks another org's execution ids" in items[0].detail
+
+
 def test_multi_line_bullet_is_gathered_whole(tmp_path, monkeypatch):
     """Findings here wrap across several lines; truncating at the newline loses the part
     that names the file, which is the half the skill needs to act."""
-    path = write_doc(tmp_path, monkeypatch, "reports/x.md", """## Findings
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Findings
 - **Cross-org process_id produces a 500.** The service calls create_execution
   inside a try block, and the repository raises a bare ValueError at
   `app/core/db/repositories/execution_repo.py:76` which nothing converts.
-""")
+""",
+    )
     items = fi.parse_doc(path)
     assert len(items) == 1
     assert "app/core/db/repositories/execution_repo.py:76" in items[0].code_refs
@@ -264,7 +427,9 @@ def test_body_signal_cannot_claim_the_top_two_tiers():
 def test_security_audit_source_path_raises_priority():
     """A finding written by the security audit is a security finding even if its prose
     never says so."""
-    tier, impact = fi.classify_priority("the regex misses schema-qualified identifiers", ".agents/reports/x/security-audit.md")
+    tier, impact = fi.classify_priority(
+        "the regex misses schema-qualified identifiers", ".agents/reports/x/security-audit.md"
+    )
     assert (tier, impact) == ("P0", "security")
 
 
@@ -301,7 +466,9 @@ def test_budget_ladder_steps_down_as_the_five_hour_window_fills(monkeypatch, tmp
     monkeypatch.setattr(fi, "CONFIG_PATH", tmp_path / "c.json")
     seen = []
     for pct in (10.0, 45.0, 65.0, 80.0):
-        monkeypatch.setattr(fi, "read_quota", lambda cfg, p=pct: {"five_hour_pct": p, "seven_day_pct": 10.0, "age_sec": 5})
+        monkeypatch.setattr(
+            fi, "read_quota", lambda cfg, p=pct: {"five_hour_pct": p, "seven_day_pct": 10.0, "age_sec": 5}
+        )
         seen.append(fi.compute_budget()["items"])
     assert seen == sorted(seen, reverse=True), f"budget must not grow as quota fills: {seen}"
     assert seen[0] > seen[-1]
@@ -548,16 +715,26 @@ def test_closed_items_never_appear_on_the_worklist(store, monkeypatch):
 
 
 def test_check_rejects_an_unknown_status(store):
-    fi.save_store({"version": fi.SCHEMA_VERSION, "items": {
-        "abc": {"id": "abc", "status": "banana", "source": {}},
-    }})
+    fi.save_store(
+        {
+            "version": fi.SCHEMA_VERSION,
+            "items": {
+                "abc": {"id": "abc", "status": "banana", "source": {}},
+            },
+        }
+    )
     assert fi.cmd_check() == 1
 
 
 def test_check_rejects_an_id_mismatch(store):
-    fi.save_store({"version": fi.SCHEMA_VERSION, "items": {
-        "abc": {"id": "def", "status": "outstanding", "source": {}},
-    }})
+    fi.save_store(
+        {
+            "version": fi.SCHEMA_VERSION,
+            "items": {
+                "abc": {"id": "def", "status": "outstanding", "source": {}},
+            },
+        }
+    )
     assert fi.cmd_check() == 1
 
 
@@ -595,11 +772,24 @@ def _record_verdict(verdict: str, area: str, kind: str, evidence: str) -> int:
 
     return subprocess.run(
         [
-            sys.executable, str(fi.FINDING_HISTORY), "record",
-            "--area", area, "--kind", kind, "--evidence", evidence,
-            "--verdict", verdict, "--skill", "test",
+            sys.executable,
+            str(fi.FINDING_HISTORY),
+            "record",
+            "--area",
+            area,
+            "--kind",
+            kind,
+            "--evidence",
+            evidence,
+            "--verdict",
+            verdict,
+            "--skill",
+            "test",
         ],
-        capture_output=True, text=True, cwd=fi.REPO_ROOT, check=False,
+        capture_output=True,
+        text=True,
+        cwd=fi.REPO_ROOT,
+        check=False,
     ).returncode
 
 
@@ -665,10 +855,13 @@ def _index_stub(monkeypatch, *, budget_items, open_items):
     def fake(args):
         if args[0] == "sweep":
             return {
-                "total": 10, "open": open_items, "stats": {},
+                "total": 10,
+                "open": open_items,
+                "stats": {},
                 "budget": {"items": budget_items, "why": "test"},
             }
         return {"items": [{"id": "abc12345", "priority": "P0"}] * open_items}
+
     monkeypatch.setattr(fsr, "index_json", fake)
 
 
