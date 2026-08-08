@@ -257,6 +257,24 @@ def _log_process_access_denied(org_id: UUID, process_id: UUID) -> None:
     )
 
 
+def _log_trace_access_denied(org_id: UUID, item_id: UUID) -> None:
+    """Same rationale as _log_process_access_denied, for the traceability slice's own
+    item lookups (trace_raw_material, trace_inventory_backward, sourcemap_trace's
+    current-state branch) -- a rejected lookup here is a tenant-boundary probe just as
+    much as a stale/mistyped id, and the route can't distinguish the two in its response
+    (AC2/AC6: cross-org existence must not be distinguishable from non-existence), so the
+    log doesn't try to either.
+    """
+    logger.warning(
+        "access_denied",
+        reason="inventory_item_not_found_or_cross_org",
+        feature="traceability",
+        org_id=str(org_id),
+        item_id=str(item_id),
+        path=request.path,
+    )
+
+
 def _assert_flow_process_access(process_id: UUID) -> None:
     """
     Object-level authorization for flow pages.
@@ -3882,6 +3900,7 @@ def trace_raw_material(raw_material_id: str):
         .first()
     )
     if not raw_material:
+        _log_trace_access_denied(org_id, raw_material_uuid)
         return jsonify({"error": "Raw material not found"}), 404
 
     result = trace_forward(
@@ -3970,6 +3989,7 @@ def trace_inventory_backward(inventory_item_id: str):
         db_session.query(InventoryItem).filter(InventoryItem.id == item_uuid, InventoryItem.org_id == org_id).first()
     )
     if not traced_item:
+        _log_trace_access_denied(org_id, item_uuid)
         return jsonify({"error": "Inventory item not found"}), 404
 
     result = trace_backward(
@@ -5603,8 +5623,11 @@ def sourcemap_objects():
     org_id = UUID(g.org_id)
     db = db_session()
 
-    page = max(1, int(request.args.get("page", 1)))
-    limit = min(int(request.args.get("limit", 50)), 200)
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        limit = min(int(request.args.get("limit", 50)), 200)
+    except (TypeError, ValueError):
+        return jsonify({"error": "page and limit must be integers"}), 400
     offset = (page - 1) * limit
     q = request.args.get("q", "").strip()
     entity_type_filter = request.args.get("type", "").strip()
@@ -5701,7 +5724,10 @@ def sourcemap_trace():
     root_type = data.get("root_type", "inventory_item")
     root_id_str = data.get("root_id")
     as_of_str = data.get("as_of")
-    depth = min(int(data.get("depth", 5)), 10)
+    try:
+        depth = min(int(data.get("depth", 5)), 10)
+    except (TypeError, ValueError):
+        return jsonify({"error": "depth must be an integer"}), 400
 
     if not root_id_str:
         return jsonify({"error": "root_id is required"}), 400
@@ -5732,7 +5758,7 @@ def sourcemap_trace():
         timeline_ids = [item.get("event_id") for item in result["timeline"] if item.get("event_id")]
         events_by_id: dict = {}
         if timeline_ids:
-            ev_rows = db.query(_EE_Trace).filter(_EE_Trace.id.in_(timeline_ids)).all()
+            ev_rows = db.query(_EE_Trace).filter(_EE_Trace.id.in_(timeline_ids), _EE_Trace.org_id == org_id).all()
             events_by_id = {str(ev.id): ev for ev in ev_rows}
         story = [
             {
@@ -5765,23 +5791,25 @@ def sourcemap_trace():
 
     item = db.query(InventoryItem).filter(InventoryItem.id == root_id, InventoryItem.org_id == org_id).first()
     if not item:
+        _log_trace_access_denied(org_id, root_id)
         return jsonify({"error": "Item not found"}), 404
 
     try:
-        from app.features.workflow_engine.dagtraversal import trace_backward, trace_forward
+        from app.core.backend.dagtraversal import trace_backward, trace_forward
 
-        result_fwd = trace_forward(str(root_id), db, org_id=str(org_id))
-        result_bwd = trace_backward(str(root_id), db, org_id=str(org_id))
+        result_fwd = trace_forward(org_id, db, root_id, include_quantity_filter=False, root_item_id=root_id)
+        result_bwd = trace_backward(org_id, db, root_id, include_quantity_filter=False, traced_item_id=root_id)
 
-        all_nodes = {n["id"]: n for n in (result_fwd.nodes + result_bwd.nodes)}
-        all_edges = list({(e["from_id"], e["to_id"]): e for e in (result_fwd.edges + result_bwd.edges)}.values())
+        all_nodes = {n["id"]: n for n in (result_fwd["items"] + result_bwd["items"])}
+        all_edges = {(e["from_id"], e["to_id"]): e for e in (result_fwd["connections"] + result_bwd["connections"])}
 
         return jsonify(
             {
                 "root": {"id": str(root_id), "type": "inventory_item", "label": item.display_label or item.name},
                 "nodes": list(all_nodes.values()),
                 "edges": [
-                    {"from": e["from_id"], "to": e["to_id"], "execution_id": e.get("execution_id")} for e in all_edges
+                    {"from": e["from_id"], "to": e["to_id"], "execution_id": e.get("execution_id")}
+                    for e in all_edges.values()
                 ],
                 "as_of": None,
                 "is_current": True,

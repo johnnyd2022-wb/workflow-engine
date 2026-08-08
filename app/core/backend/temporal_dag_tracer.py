@@ -125,6 +125,7 @@ class TemporalDAGTracer:
             self.db.query(EntityEvent)
             .filter(
                 EntityEvent.entity_id == entity_id,
+                EntityEvent.org_id == self.org_id,
                 EntityEvent.created_at <= self.as_of,
             )
             .order_by(EntityEvent.created_at.desc())

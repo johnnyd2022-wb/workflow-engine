@@ -109,7 +109,7 @@ how they get carved.
     subscription: core
     layer:        domain
     flag:         none
-    reviewed:     in progress (review/process-design @ /home/johnny/.herdr/worktrees/workflow-engine/review-process-design, started 2026-08-02)
+    reviewed:     2026-08-03 (see .agents/reports/process-design/review.md)
 
     routes:   /core/processes, /core/flows/create/* (8 wizard pages)
               /api/core/processes [GET POST], /api/core/processes/<id> [GET PUT DELETE]
@@ -299,7 +299,7 @@ how they get carved.
     subscription: core
     layer:        derived
     flag:         none (workflow_engine_enabled is NOT this — it's a dead legacy flag)
-    reviewed:     never
+    reviewed:     2026-08-09 (see .agents/reports/traceability/review.md)
 
     routes:   /core/sourcemap
               /api/core/inventory/trace/<raw_material_id> [GET]        (forward)

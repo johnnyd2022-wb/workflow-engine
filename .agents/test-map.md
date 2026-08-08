@@ -10,7 +10,7 @@ longer exists and `tests/test_*.py` files that appear in no row. It cannot judge
 row's **status** is truthful; that is test-author's job to keep current as it writes, and
 test-evaluator's to catch when a test claims more than it proves.
 
-last_synced: 2026-08-02
+last_synced: 2026-08-09
 status legend: `covered` (happy + unhappy + isolation where scoped) · `partial` (happy
 path only, or missing the hostile-org / unhappy cases) · `none` (no automated pytest
 coverage) · `live` (covered only by `live_server`-marked suites that need the dev app
@@ -43,6 +43,7 @@ server up)
 | 11 | Execution lifecycle (create → complete step) | core_bp `/api/core/executions*` | test_executions.py, test_complete_step_payload.py | covered | Batch 4 re-assessment: create-materialises-steps, in-order advancement, full completion, out-of-order rejected, double-completion rejected, step-failure does not advance, wrong-org → None — all in test_executions.py (45 tests) |
 | 12 | ~~Idempotency (`ApiIdempotencyKey`) on executions~~ | n/a | test_wastage.py (the real user) | covered | **Gap-analysis correction (Batch 4):** there is no execution idempotency-key mechanism — `ApiIdempotencyKey` is used only by the wastage route (row 16, covered in Batch 3). create_execution has no dedup; execution replay-safety is the `complete_step` state guard in row 11. No new test owed |
 | 13 | Execution lineage (parent→child) | `workflow_execution_lineage`, reconciliation_service | test_dag_traversal.py (helpers) | partial | traversal helpers touch it; lineage-record assertions absent |
+| 28 | Traceability / sourcemap (forward/backward trace, on-demand current+temporal trace, sourcemap objects index) | `app/core/backend/backend.py` (`trace_raw_material`, `trace_inventory_backward`, `sourcemap_objects`, `sourcemap_trace`), `app/core/backend/temporal_dag_tracer.py`, `app/core/frontend/sourcemap/*` | test_traceability.py, tests/e2e/traceability/ | covered | **review-feature (2026-08-09):** `none → covered` — this slice had zero test references anywhere before this review (`.agents/reports/traceability/baseline.md`). security-audit found and this review fixed 4 findings: F1 a cross-tenant entity-state leak (`TemporalDAGTracer._snapshot_at` had no `org_id` filter — another org's item state was readable via `POST /api/core/sourcemap/trace`'s temporal branch given that org's item UUID), F2 `sourcemap_trace`'s current-state (no `as_of`) branch imported a module that doesn't exist anywhere in the repo and always 500'd (dead, unreachable from the frontend today), F3/F4 unhandled `int()` parsing on `page`/`limit`/`depth` (500 instead of 400). test_traceability.py: F1-F4 regressions plus direct `TemporalDAGTracer` unit coverage (0%→94% on temporal_dag_tracer.py — BFS edge-building, as_of cutoff, cross-org edge exclusion, timeline ordering) and `/api/core/sourcemap/objects` org-scoping (AC18). tests/e2e/traceability/ (19 tests): page load, forward/backward trace rendering (incl. AC7's traced-item-includes-itself), view-switch/wastage-toggle no-refetch, the mandatory cross-tenant probe for all three trace routes (AC2/AC6/AC9 — AC9 is F1's regression, a real two-org browser session), and unhappy paths (non-UUID→400, nonexistent-UUID→404, empty search, no-history item). |
 
 ## Evidence
 
