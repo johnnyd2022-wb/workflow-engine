@@ -132,7 +132,9 @@ round 2):
 ## Remaining lower-severity gaps (explicitly deprioritized by the task; not closed)
 
 - `EntityEventSummary.org_id` defense-in-depth filter has no regression test (test-evaluator
-  noted this is low risk: the pre-fix query was not exploitable).
+  noted this is low risk: the pre-fix query was not exploitable). Already fixed:
+  `tests/test_inventory.py::test_list_inventory_enriches_items_with_their_own_org_event_summary`
+  now covers it (verified 2026-08-08 by findings-sweep).
 
 ## suite_result
 
