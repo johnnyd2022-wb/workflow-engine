@@ -58,6 +58,7 @@
       "/org",
       "/org/users",
       "/api/core/sourcemap/objects",
+      "/api/core/entities/activity",
       {
         "route": "/api/dilution-calculator/solve",
         "method": "POST",

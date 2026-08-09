@@ -4898,6 +4898,26 @@ def _parse_entity_type(entity_type: str) -> str | None:
     return entity_type if entity_type in valid else None
 
 
+def _log_activity_access_denied(org_id: UUID, entity_type: str, entity_id: UUID) -> None:
+    """Same rationale as _log_process_access_denied/_log_trace_access_denied: a story or
+    summary lookup that resolves to nothing for the caller's org is a tenant-boundary probe
+    just as much as a stale/mistyped id, and the route returns the same empty 200 either
+    way (AC3/AC10: cross-org existence must not be distinguishable from non-existence), so
+    the log doesn't try to distinguish them either. Added as defense-in-depth telemetry
+    after F1 (security-audit.md) -- entity_summary_detail's missing org_id filter -- so a
+    future probe against this class of gap leaves a trace even if the filter regresses.
+    """
+    logger.warning(
+        "access_denied",
+        reason="entity_not_found_or_cross_org",
+        feature="activity-log",
+        org_id=str(org_id),
+        entity_type=entity_type,
+        entity_id=str(entity_id),
+        path=request.path,
+    )
+
+
 def _event_to_dict(ev) -> dict:
     return {
         "id": str(ev.id),
@@ -5362,8 +5382,11 @@ def entity_story(entity_type: str, entity_id: str):
         return jsonify({"error": "Invalid entity_id"}), 400
 
     org_id = UUID(g.org_id)
-    limit = min(int(request.args.get("limit", 200)), 500)
-    offset = int(request.args.get("offset", 0))
+    try:
+        limit = min(int(request.args.get("limit", 200)), 500)
+        offset = int(request.args.get("offset", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "limit and offset must be integers"}), 400
 
     db = db_session()
     events = (
@@ -5383,6 +5406,9 @@ def entity_story(entity_type: str, entity_id: str):
 
     if etype == "inventory_item":
         event_dicts = _merge_inventory_legacy_audit(db, eid, org_id, event_dicts, events)
+
+    if total == 0 and not event_dicts:
+        _log_activity_access_denied(org_id, etype, eid)
 
     return jsonify(
         {
@@ -5535,7 +5561,11 @@ def entity_summary_detail(entity_type: str, entity_id: str):
     db = db_session()
 
     # Pull pre-computed summary
-    summary_row = db.query(EntityEventSummary).filter(EntityEventSummary.entity_id == eid).first()
+    summary_row = (
+        db.query(EntityEventSummary)
+        .filter(EntityEventSummary.entity_id == eid, EntityEventSummary.org_id == org_id)
+        .first()
+    )
     summary = summary_row.summary if summary_row else {}
 
     # Pull most recent 10 events for "recent_events" display
@@ -5546,6 +5576,9 @@ def entity_summary_detail(entity_type: str, entity_id: str):
         .limit(10)
         .all()
     )
+
+    if summary_row is None and not recent:
+        _log_activity_access_denied(org_id, etype, eid)
 
     return jsonify(
         {
@@ -5570,8 +5603,11 @@ def entity_activity_feed():
     from app.core.db.models.entity_event import EntityEvent
 
     org_id = UUID(g.org_id)
-    limit = min(int(request.args.get("limit", 150)), 500)
-    offset = int(request.args.get("offset", 0))
+    try:
+        limit = min(int(request.args.get("limit", 150)), 500)
+        offset = int(request.args.get("offset", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "limit and offset must be integers"}), 400
     from_date = request.args.get("from_date", "")
     to_date = request.args.get("to_date", "")
     entity_types_param = request.args.get("entity_types", "")

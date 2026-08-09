@@ -160,3 +160,28 @@ rules:
               ...
           except (...):
               ...
+
+  - id: bize-entity-event-summary-missing-org-filter
+    languages: [python]
+    severity: ERROR
+    message: >
+      EntityEventSummary is looked up by entity_id alone (its primary key), with no
+      org_id filter. entity_id is globally unique across every tenant, so any caller who
+      can supply an arbitrary entity_id -- most commonly straight from a URL path
+      parameter -- reads another org's pre-computed summary. Depending on entity_type
+      that summary can carry another org's user email/role/login stats, org name/status,
+      or inventory quantity/supplier data. Filter on both EntityEventSummary.entity_id
+      and EntityEventSummary.org_id together, the way the sibling EntityEvent query in
+      the same handler already does.
+    metadata:
+      born-from: review-feature (activity-log)
+      finding: "backend.py:5538 entity_summary_detail queried EntityEventSummary by
+        entity_id only, leaking cross-tenant user/org/inventory summaries via
+        GET /api/core/entities/<type>/<id>/summary -- see
+        .agents/reports/activity-log/security-audit.md F1"
+      date: "2026-08-09"
+      fixture: bize-entity-event-summary-missing-org-filter
+    patterns:
+      - pattern: $Q.query(EntityEventSummary).filter(EntityEventSummary.entity_id == $EID).$METHOD(...)
+      - pattern-not: $Q.query(EntityEventSummary).filter(EntityEventSummary.entity_id == $EID, EntityEventSummary.org_id == $ORG).$METHOD(...)
+      - pattern-not: $Q.query(EntityEventSummary).filter(EntityEventSummary.org_id == $ORG, EntityEventSummary.entity_id == $EID).$METHOD(...)

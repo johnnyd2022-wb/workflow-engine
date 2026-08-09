@@ -241,7 +241,7 @@ how they get carved.
     subscription: core
     layer:        derived
     flag:         none
-    reviewed:     never
+    reviewed:     in progress (review/reconciliation @ /home/johnny/.herdr/worktrees/workflow-engine/review-reconciliation, started 2026-08-09)
 
     routes:   /api/core/inventory/reconcile/matching-untracked [GET]
               /api/core/inventory/reconcile/via-addition [POST]
@@ -325,7 +325,7 @@ how they get carved.
     subscription: core
     layer:        derived
     flag:         none
-    reviewed:     never
+    reviewed:     2026-08-09 (see .agents/reports/activity-log/review.md)
 
     routes:   /api/core/entities/<type>/<id>/story [GET]
               /api/core/entities/<type>/<id>/summary [GET]
