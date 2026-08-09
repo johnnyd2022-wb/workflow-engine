@@ -44,7 +44,8 @@
       "/core/executions/live",
       "/core/settings",
       "/crm",
-      "/dilution-calculator"
+      "/dilution-calculator",
+      "/core/sourcemap"
     ],
     "api": [
       "/api/core/dashboard/summary",
@@ -56,6 +57,7 @@
       "/auth/me",
       "/org",
       "/org/users",
+      "/api/core/sourcemap/objects",
       {
         "route": "/api/dilution-calculator/solve",
         "method": "POST",
