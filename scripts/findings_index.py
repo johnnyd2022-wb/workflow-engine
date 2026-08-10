@@ -166,8 +166,18 @@ RESOLVED_MARKERS = re.compile(
 # shallower one, so without this check every bullet under an already-resolved subsection
 # inherits the ancestor's open kind forever. Checked before FINDING_HEADINGS opens a
 # section, so "Known Issues Fixed" does not get read as an open "known-issue" section.
+#
+# Also covers this repo's "checked, nothing here" convention -- "## Not findings
+# (checked, no issue)", "## Other checks performed (no issues found)", "### CSP note
+# (not a finding -- ...)". `\bfindings?\b` alone would open these as a `finding` section
+# (that's the whole reason FINDING_HEADINGS matches the word), so a heading that pairs
+# "not"/"no" directly against "finding(s)" or "issue(s)" must close instead. Word order
+# matters: "Findings not actioned" puts "not" *after* "Findings" and must stay open --
+# see NEGATED_CLOSURE_RE and the contrast test in test_findings_index.py.
 CLOSED_HEADING_RE = re.compile(
-    r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot a gap\b|\balready (?:done|fixed|handled)\b", re.I
+    r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot a gap\b|\balready (?:done|fixed|handled)\b"
+    r"|\b(?:not|no)\s+(?:a\s+|an\s+)?findings?\b|\bno issues?\b",
+    re.I,
 )
 # Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
 # not trip CLOSED_HEADING_RE; those headings are explicitly saying the opposite.
@@ -1027,10 +1037,27 @@ def save_store(store: dict[str, Any]) -> None:
     tmp.replace(INDEX_JSON)  # atomic: a killed timer must not leave a half-written index
 
 
-def _note(record: dict[str, Any], status: str, why: str) -> None:
+def _note(record: dict[str, Any], status: str, why: str, *, explicit: bool = False) -> None:
+    """Update a record's status.
+
+    `explicit=True` marks a closure a human or skill run asserted on purpose via `record`
+    (findings-sweep's Step 1: "verify against current code, mark gone" for a report whose
+    prose describes an already-fixed issue). That verification has nothing to do with
+    whether the report's *text* still exists -- it almost always does, since these are
+    historical audit reports nobody edits after the fact. Without this flag, the very
+    next sweep re-finds that same unchanged text, sees a `gone`/`done` status, and calls
+    it "regressed" -- silently discarding the verification and re-queuing already-fixed
+    work forever. `closed_explicitly` tells the sweep's regression check (below) that
+    continued presence of the text is not new information here, unlike the disappear-
+    then-reappear case the regression check exists to catch.
+    """
     record["status"] = status
     record["status_reason"] = why
     record.setdefault("history", []).append({"at": utc_now(), "status": status, "why": why})
+    if explicit and status in ("gone", "done"):
+        record["closed_explicitly"] = True
+    else:
+        record.pop("closed_explicitly", None)
 
 
 # ---------------------------------------------------------------------------
@@ -1110,7 +1137,7 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         if item.owner_skill:
             record["owner_skill"] = item.owner_skill
 
-        if record.get("status") in ("done", "gone"):
+        if record.get("status") in ("done", "gone") and not record.get("closed_explicitly"):
             _note(record, "outstanding", "regressed — text reappeared after being closed")
             record["regressed"] = True
             stats["reopened"] += 1
@@ -1319,7 +1346,7 @@ def cmd_record(args: argparse.Namespace) -> int:
         record["attempts"] = record.get("attempts", 0) + 1
     if args.mr:
         record["mr"] = args.mr
-    _note(record, args.status, args.why or f"set by {args.by or 'findings_index.py record'}")
+    _note(record, args.status, args.why or f"set by {args.by or 'findings_index.py record'}", explicit=True)
     save_store(store)
     render_markdown(store, compute_budget())
     print(f"{args.id} → {args.status}")
