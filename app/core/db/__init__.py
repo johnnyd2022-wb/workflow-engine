@@ -5,6 +5,8 @@ from urllib.parse import quote_plus
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 
+from app.core.db.tenant_filter import register_tenant_filter
+from app.core.db.tenant_flush_guard import register_tenant_flush_guard
 from app.core.domain.inventory_quantity_guard import register_inventory_quantity_guard
 from app.utils.config_loader import config
 
@@ -43,6 +45,8 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=
 db_session = scoped_session(SessionLocal)
 
 register_inventory_quantity_guard(engine)
+register_tenant_filter()
+register_tenant_flush_guard()
 
 
 def get_db():
