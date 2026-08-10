@@ -373,6 +373,50 @@ def test_negated_closure_phrasing_does_not_falsely_close_a_section(tmp_path, mon
     assert "leaks another org's execution ids" in items[0].detail
 
 
+def test_not_findings_heading_does_not_open_a_section(tmp_path, monkeypatch):
+    """'## Not findings (checked, no issue)' contains the word "findings", which alone
+    would open a `finding` section -- but the heading's own title says the opposite: this
+    is a real convention this repo's reports use (migration-safety.md, security-audit.md,
+    perf-guardrails.md, e2e-playwright.md all write '(not a finding)' / '(no issues
+    found)' / '(not findings...)' variants) to record a checked-and-clean result inline.
+    Sweeping those bullets in as open findings is exactly the noise the actionability
+    gates exist to keep out."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Not findings (checked, no issue)
+- Multiple heads: none (`alembic heads` -> single head).
+- The pg_guard trigger-function revisions correctly restore the prior body on downgrade.
+
+## Other checks performed (no issues found)
+- AC5 boundary correctly always rejected by the existing check -- no gap.
+
+### CSP note (not a finding -- existing app-wide posture)
+Inline script matches the app-wide CSP convention already in place.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_findings_not_actioned_heading_still_opens_a_section(tmp_path, monkeypatch):
+    """Contrast case for the fix above: '## Findings not actioned (chain stage,
+    read-only)' puts 'not' *after* 'Findings', reporting real findings a read-only stage
+    declined to patch -- not a declaration that nothing was found. These must stay open
+    so the next stage picks them up."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Findings not actioned (this run patches nothing -- chain stage, read-only)
+- F1: the export endpoint has no rate limit and could be abused for a denial of service
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "rate limit" in items[0].detail
+
+
 def test_multi_line_bullet_is_gathered_whole(tmp_path, monkeypatch):
     """Findings here wrap across several lines; truncating at the newline loses the part
     that names the file, which is the half the skill needs to act."""
@@ -592,6 +636,37 @@ def test_reappearing_item_is_reopened_and_flagged_regressed(store, monkeypatch):
     assert record["status"] == "outstanding"
     assert record["regressed"] is True
     assert result["stats"]["reopened"] == 1
+
+
+def test_explicit_gone_verdict_survives_a_sweep_that_still_finds_the_text(store, monkeypatch):
+    """findings-sweep's Step 1 verifies a stale finding against current code and records
+    `gone` while the report prose describing it is still sitting there unedited -- these
+    are historical audit reports, not TODOs someone deletes when the fix ships. Without
+    `closed_explicitly`, the very next sweep would re-find that same unchanged text, see
+    a `gone` status, and reopen it as "regressed" -- discarding the verification and
+    silently re-queuing already-fixed work every single day, forever. `_note(...,
+    explicit=True)` is exactly what `cmd_record` (the CLI path `findings_index.py record`
+    takes) calls; this pins that record()->sweep() round trip, not just `_note` alone."""
+    item = make_item(detail="a finding whose report prose nobody will ever edit")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+
+    store_data = fi.load_store()
+    fi._note(
+        store_data["items"][item.id],
+        "gone",
+        "verified against current code: already fixed elsewhere",
+        explicit=True,
+    )
+    fi.save_store(store_data)
+
+    # The source text never moved -- the report was never edited -- so the tree scan
+    # finds the exact same item again on the next sweep.
+    result = fi.sweep()
+    record = result["store"]["items"][item.id]
+    assert record["status"] == "gone"
+    assert not record.get("regressed")
+    assert result["stats"]["reopened"] == 0
 
 
 def test_human_suppression_overrides_an_open_item(store, monkeypatch):
