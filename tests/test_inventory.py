@@ -37,6 +37,7 @@ from app.core.db.models.inventory_movement import InventoryMovement
 from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.organisation import Organisation
 from app.core.security.auth_service import AuthService
+from app.core.security.tenant_scope import unscoped
 from tests.factories import (
     ExecutionFactory,
     InventoryItemFactory,
@@ -185,6 +186,7 @@ def _foreign_execution_step(db, other_org, name_prefix="Neighbour Secret"):
     # has no steps to reference and the test would silently assert nothing.
     db.add(
         Step(
+            org_id=other_org.id,
             process_id=process.id,
             step_number=1,
             # chk_steps_position_grid requires position > 0 AND MOD(position, 1000) = 0 —
@@ -712,6 +714,7 @@ def _process_with_one_step(db, org_id, name_prefix="Recon"):
     process = ProcessFactory(org_id=org_id, name=f"{name_prefix} Process {uuid4()}")
     db.commit()
     step = Step(
+        org_id=org_id,
         process_id=process.id,
         step_number=1,
         # chk_steps_position_grid requires position > 0 AND MOD(position, 1000) = 0.
@@ -791,7 +794,11 @@ def test_reconcile_via_execution_rejects_untracked_item_id_from_another_org(db, 
 
     assert resp.status_code == 400, resp.data
     assert resp.get_json()["error"] == "Untracked item not found"
-    refreshed_foreign = db.query(InventoryItem).filter(InventoryItem.id == foreign_untracked_id).one()
+    # Verifying a NEIGHBOUR org's row deliberately reads across the tenant line -- the global
+    # filter would otherwise scope this query to whatever org app_client's login left active
+    # (see tenant_scope.py), hiding the very row this assertion needs to see.
+    with unscoped():
+        refreshed_foreign = db.query(InventoryItem).filter(InventoryItem.id == foreign_untracked_id).one()
     assert refreshed_foreign.quantity == Decimal("5"), "neighbour's item must be untouched"
     from app.core.db.models.execution import Execution
 
