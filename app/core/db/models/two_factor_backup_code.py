@@ -6,11 +6,16 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class TwoFactorBackupCode(Base):
-    """Model for storing encrypted 2FA backup codes"""
+class TwoFactorBackupCode(TenantScoped, Base):
+    """Model for storing encrypted 2FA backup codes.
+
+    org_id is denormalized here (backfilled from user.org_id by migration
+    tenant_org_id_backfill_001) -- see Step's docstring / tenant_org_id_add_001 for why.
+    """
 
     __tablename__ = "two_factor_backup_codes"
 

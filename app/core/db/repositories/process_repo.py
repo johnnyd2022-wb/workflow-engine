@@ -231,6 +231,7 @@ class ProcessRepository:
                 return None
 
             step = Step(
+                org_id=org_id,
                 process_id=process_id,
                 step_number=step_number,
                 position=position,

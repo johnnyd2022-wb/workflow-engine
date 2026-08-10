@@ -99,6 +99,7 @@ class ExecutionRepository:
                 for i, step in enumerate(steps, start=1):
                     is_terminal = i == terminal_index if terminal_index else False
                     exec_step = ExecutionStep(
+                        org_id=org_id,
                         execution_id=execution.id,
                         step_id=step.id,
                         # Snapshot an execution-local ordering index so later step reorders

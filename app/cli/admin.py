@@ -13,6 +13,7 @@ from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
 from app.core.security.backup_code_encryption import BackupCodeEncryption
 from app.core.security.org_manager import OrgManager
+from app.core.security.tenant_scope import unscoped
 
 
 @click.command()
@@ -23,8 +24,12 @@ def create_org(name, email, password):
     """Create a new organisation with an admin user"""
     db = db_session()
     try:
-        org_manager = OrgManager(db)
-        org, user = org_manager.create_org_with_admin_user(name, email, password)
+        # Creating a brand-new org's first admin user: there is no ambient tenant context to
+        # check against (this call establishes the tenant), and this CLI never runs inside a
+        # Flask request context. Explicit, not just fail-open silence.
+        with unscoped():
+            org_manager = OrgManager(db)
+            org, user = org_manager.create_org_with_admin_user(name, email, password)
 
         click.echo(f"✅ Created organisation: {org.name} (ID: {org.id})")
         click.echo(f"✅ Created admin user: {user.email} (ID: {user.id})")
@@ -52,21 +57,24 @@ def create_user(org_id, email, password, role):
 
     db = db_session()
     try:
-        user_repo = UserRepository(db)
-        auth_service = AuthService(db)
+        # Admin command targets an arbitrary org via --org-id, not the caller's own tenant --
+        # there is no ambient tenant context here to check against anyway (no Flask request).
+        with unscoped():
+            user_repo = UserRepository(db)
+            auth_service = AuthService(db)
 
-        # Check if user already exists
-        existing_user = user_repo.get_user_by_email(email)
-        if existing_user:
-            click.echo(f"❌ User with email '{email}' already exists", err=True)
-            return
+            # Check if user already exists
+            existing_user = user_repo.get_user_by_email(email)
+            if existing_user:
+                click.echo(f"❌ User with email '{email}' already exists", err=True)
+                return
 
-        # Create user
-        password_hash = auth_service.hash_password(password)
-        user_role = UserRole.ADMIN if role == "admin" else UserRole.MEMBER
-        user = user_repo.create_user(
-            org_id=org_uuid, email=email, password_hash=password_hash, role=user_role, is_active=True
-        )
+            # Create user
+            password_hash = auth_service.hash_password(password)
+            user_role = UserRole.ADMIN if role == "admin" else UserRole.MEMBER
+            user = user_repo.create_user(
+                org_id=org_uuid, email=email, password_hash=password_hash, role=user_role, is_active=True
+            )
 
         click.echo(f"✅ Created user: {user.email} (ID: {user.id}, Role: {user.role.value})")
     except Exception as e:
@@ -82,13 +90,16 @@ def list_orgs(status):
     """List all organisations"""
     db = db_session()
     try:
-        org_repo = OrganisationRepository(db)
+        # Lists across every org by design -- explicit for consistency with the other admin
+        # commands, though Organisation itself carries no org_id to filter on.
+        with unscoped():
+            org_repo = OrganisationRepository(db)
 
-        if status == "all":
-            orgs = org_repo.list_orgs()
-        else:
-            org_status = OrganisationStatus.ACTIVE if status == "active" else OrganisationStatus.SUSPENDED
-            orgs = org_repo.list_orgs(status=org_status)
+            if status == "all":
+                orgs = org_repo.list_orgs()
+            else:
+                org_status = OrganisationStatus.ACTIVE if status == "active" else OrganisationStatus.SUSPENDED
+                orgs = org_repo.list_orgs(status=org_status)
 
         if not orgs:
             click.echo("No organisations found")
@@ -120,8 +131,10 @@ def list_users(org_id, active_only):
 
     db = db_session()
     try:
-        user_repo = UserRepository(db)
-        users = user_repo.list_users_for_org(org_uuid, active_only=active_only)
+        # Admin command targets an arbitrary org via --org-id, same reasoning as create_user.
+        with unscoped():
+            user_repo = UserRepository(db)
+            users = user_repo.list_users_for_org(org_uuid, active_only=active_only)
 
         if not users:
             click.echo("No users found")
@@ -158,21 +171,24 @@ def get_backup_codes(user_id):
 
     db = db_session()
     try:
-        user_repo = UserRepository(db)
-        user = user_repo.get_user_by_id(user_uuid)
+        # Admin command targets an arbitrary user by ID, any org -- no ambient tenant context
+        # here to check against anyway (no Flask request).
+        with unscoped():
+            user_repo = UserRepository(db)
+            user = user_repo.get_user_by_id(user_uuid)
 
-        if not user:
-            click.echo(f"❌ User not found: {user_id}", err=True)
-            return
+            if not user:
+                click.echo(f"❌ User not found: {user_id}", err=True)
+                return
 
-        if not user.two_factor_enabled:
-            click.echo(f"❌ User {user.email} does not have 2FA enabled", err=True)
-            return
+            if not user.two_factor_enabled:
+                click.echo(f"❌ User {user.email} does not have 2FA enabled", err=True)
+                return
 
-        # Get backup codes
-        encryption = BackupCodeEncryption()
-        backup_code_repo = BackupCodeRepository(db, encryption)
-        backup_codes = backup_code_repo.get_all_codes_for_user(user_uuid)
+            # Get backup codes
+            encryption = BackupCodeEncryption()
+            backup_code_repo = BackupCodeRepository(db, encryption)
+            backup_codes = backup_code_repo.get_all_codes_for_user(user_uuid)
 
         if not backup_codes:
             click.echo(f"❌ No backup codes found for user {user.email}", err=True)

@@ -6,10 +6,11 @@ from sqlalchemy import TIMESTAMP, Column, Date, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class CRMTask(Base):
+class CRMTask(TenantScoped, Base):
     __tablename__ = "crm_tasks"
     __table_args__ = (
         Index("ix_crm_tasks_org_due_date", "org_id", "due_date"),
@@ -17,7 +18,6 @@ class CRMTask(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     contact_id = Column(
         UUID(as_uuid=True), ForeignKey("xero_contacts.id", ondelete="SET NULL"), nullable=True, index=True
     )

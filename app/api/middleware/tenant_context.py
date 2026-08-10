@@ -15,6 +15,7 @@ from flask import abort, g, request, session
 from app.core.db import db_session
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
+from app.core.security.tenant_scope import activate_request_org_id, clear_request_org_id
 from app.observability import get_logger
 
 LOGGER = get_logger(__name__)
@@ -35,6 +36,20 @@ PUBLIC_ENDPOINTS = {
 def setup_tenant_context(app):
     @app.before_request
     def load_tenant_context():
+        # Clear any leftover tenant scope FIRST, before this request's own bootstrapping
+        # lookups (get_user_by_id below) run. Without this, a request sharing a reused/
+        # borrowed Flask app context with a PRIOR request (see tenant_scope.py's module
+        # docstring -- this codebase's own test fixtures do this, e.g. test_org_routes.py's
+        # two_org_world wraps two different users' logins in one `with app.app_context():`)
+        # would have its own user lookup silently filtered by the PREVIOUS request's org,
+        # since the global filter (tenant_filter.py) is still active from that request at the
+        # exact moment this one starts -- before this request has had any chance to activate
+        # its own context. Confirmed empirically: test_org_routes.py's second client's login
+        # succeeds (the login endpoint is public) but its first authenticated request then
+        # 403s with "unknown_or_inactive_user_attempt", because get_user_by_id ran under the
+        # first client's still-active org filter.
+        clear_request_org_id()
+
         # Unique ID for this HTTP request — shared by all events emitted during it
         g.correlation_id = uuid4()
 
@@ -91,6 +106,15 @@ def setup_tenant_context(app):
             # Backwards-compatible alias used by org routes / decorators.
             g.current_org_id = org.id
 
+            # Activate the global ORM tenant filter (app/core/db/tenant_filter.py) for the
+            # rest of this request. Paired with clear_request_org_id() in teardown_appcontext
+            # below, NOT a per-request Token reset -- see tenant_scope.py's module docstring
+            # for why: Flask reuses this app context (instead of pushing a fresh one) when a
+            # request runs inside an already-active app_context() for the same app, which
+            # this codebase's own test fixtures do (e.g. tests/test_wastage.py's app_client).
+            # A Token-based reset silently breaks in that scenario; unconditional clear does not.
+            activate_request_org_id(org.id)
+
             g.user_id = str(user.id)
             g.user_email = getattr(user, "email", None)
             g.user_role = getattr(user, "role", None).value if getattr(user, "role", None) else None
@@ -115,6 +139,23 @@ def setup_tenant_context(app):
             LOGGER.exception("failed_to_load_tenant_context")
             abort(500, "Failed to load tenant context")
 
+    @app.after_request
+    def clear_tenant_context(response):
+        # The primary clear point, not teardown_appcontext below: after_request fires once
+        # per REQUEST regardless of app-context reuse (see tenant_scope.py's module
+        # docstring), so this is what actually stops a stale org_id from leaking into
+        # whatever runs next on a shared/reused app context -- including, confirmed while
+        # building this, a TEST's own cross-org fixture cleanup and assertion queries
+        # running immediately after the last `client.get(...)`/`client.post(...)` call
+        # inside a `with app.app_context():` block. Clearing only in teardown_appcontext
+        # left those queries silently scoped to whichever org's request happened to run
+        # last, instead of seeing everything the way un-scoped test code expects to.
+        clear_request_org_id()
+        return response
+
     @app.teardown_appcontext
     def close_db_session(error):
+        # Belt-and-braces: covers exception paths that skip after_request, and the
+        # eventual pop of a manually-pushed/reused app context.
+        clear_request_org_id()
         db_session.remove()

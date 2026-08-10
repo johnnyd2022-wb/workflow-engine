@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.organisation import Organisation
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
@@ -62,6 +63,10 @@ def authed_client(db, flask_app):
     org, client = _make_org_and_client(db, flask_app)
     yield client
     db.rollback()
+    # inventory_items.org_id has no DB-level ON DELETE CASCADE (pre-existing, see .agents/
+    # reports/global-wins/findings-index.md #3) -- clean up before the org, or the delete
+    # below violates inventory_items_org_id_fkey for any item routes created in the test.
+    db.query(InventoryItem).filter(InventoryItem.org_id == org.id).delete(synchronize_session=False)
     db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
     db.commit()
 
@@ -73,7 +78,9 @@ def two_org_clients(db, flask_app):
     org_b, client_b = _make_org_and_client(db, flask_app)
     yield {"org_a": org_a, "client_a": client_a, "org_b": org_b, "client_b": client_b}
     db.rollback()
-    db.query(Organisation).filter(Organisation.id.in_([org_a.id, org_b.id])).delete(synchronize_session=False)
+    org_ids = [org_a.id, org_b.id]
+    db.query(InventoryItem).filter(InventoryItem.org_id.in_(org_ids)).delete(synchronize_session=False)
+    db.query(Organisation).filter(Organisation.id.in_(org_ids)).delete(synchronize_session=False)
     db.commit()
 
 

@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
@@ -21,13 +22,12 @@ class ExecutionStatus(enum.Enum):
     CANCELLED = "cancelled"
 
 
-class Execution(Base):
+class Execution(TenantScoped, Base):
     """Execution model representing a runtime instance of a process"""
 
     __tablename__ = "executions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     process_id = Column(UUID(as_uuid=True), ForeignKey("processes.id"), nullable=False, index=True)
     status = Column(Enum(ExecutionStatus, name="execution_status"), default=ExecutionStatus.PENDING, nullable=False)
     total_steps = Column(Integer, nullable=True)  # Snapshot of step count at creation for progress calculation

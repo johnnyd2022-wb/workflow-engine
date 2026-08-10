@@ -6,6 +6,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 # Status: PENDING_FILE (record created, file not yet moved), ACTIVE (file finalized), FAILED (finalize failed, cleaned)
@@ -14,13 +15,12 @@ EVIDENCE_STATUS_ACTIVE = "active"
 EVIDENCE_STATUS_FAILED = "failed"
 
 
-class ExecutionEvidence(Base):
+class ExecutionEvidence(TenantScoped, Base):
     """Stores metadata for evidence files linked to an execution (and optionally a step)."""
 
     __tablename__ = "execution_evidence"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     execution_id = Column(UUID(as_uuid=True), ForeignKey("executions.id"), nullable=False, index=True)
     step_id = Column(UUID(as_uuid=True), ForeignKey("steps.id"), nullable=True, index=True)
     file_name = Column(String(512), nullable=False)  # Original client filename (for display)

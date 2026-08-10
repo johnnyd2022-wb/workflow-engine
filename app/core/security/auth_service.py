@@ -192,10 +192,11 @@ class AuthService:
         totp = pyotp.TOTP(user.totp_secret)
         return totp.verify(token, valid_window=1)
 
-    def generate_backup_codes(self, user_id: UUID, count: int = 10) -> list[str]:
+    def generate_backup_codes(self, org_id: UUID, user_id: UUID, count: int = 10) -> list[str]:
         """Generate backup codes for a user
 
         Args:
+            org_id: Org ID the user belongs to
             user_id: User ID to generate codes for
             count: Number of codes to generate (default 10)
 
@@ -203,7 +204,7 @@ class AuthService:
             List of plaintext backup codes (for one-time display to user)
             CRITICAL: These codes should NEVER be logged
         """
-        return self.backup_code_repo.generate_and_store_codes(user_id, count)
+        return self.backup_code_repo.generate_and_store_codes(org_id, user_id, count)
 
     def verify_backup_code(self, user_id: UUID, code: str) -> bool:
         """Verify a backup code and mark it as consumed if valid

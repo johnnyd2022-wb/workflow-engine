@@ -2,14 +2,15 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import TIMESTAMP, Boolean, Column, Index, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class SalesTraceabilityConfig(Base):
+class SalesTraceabilityConfig(TenantScoped, Base):
     __tablename__ = "crm_sales_traceability_config"
     __table_args__ = (
         UniqueConstraint("org_id", name="uq_crm_sales_traceability_org"),
@@ -17,7 +18,6 @@ class SalesTraceabilityConfig(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
     matching_strategy = Column(String(30), nullable=False, default="fifo")  # fifo | manual | hybrid
     matching_key = Column(String(30), nullable=False, default="batch_id")
     manual_review_days = Column(Integer, nullable=False, default=7)

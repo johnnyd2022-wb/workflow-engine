@@ -7,10 +7,11 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import backref, relationship
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class ProcessVersion(Base):
+class ProcessVersion(TenantScoped, Base):
     """Immutable snapshot of a process and all its steps at a point in time.
 
     Created on every mutation to processes or steps. Answers the question:
@@ -24,7 +25,6 @@ class ProcessVersion(Base):
     __tablename__ = "process_versions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     process_id = Column(UUID(as_uuid=True), ForeignKey("processes.id", ondelete="CASCADE"), nullable=False)
     version_number = Column(Integer(), nullable=False)
     snapshot = Column(JSONB(), nullable=False)

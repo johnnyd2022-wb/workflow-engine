@@ -7,10 +7,11 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class EntityEvent(Base):
+class EntityEvent(TenantScoped, Base):
     """Single row in the entity_events append-only log.
 
     Never deleted. Tombstone events (e.g. inventory_item.deleted) record deletions.
@@ -21,7 +22,6 @@ class EntityEvent(Base):
     __tablename__ = "entity_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
 
     event_type = Column(String(100), nullable=False)
     entity_type = Column(String(100), nullable=False)

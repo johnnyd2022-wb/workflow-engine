@@ -63,10 +63,11 @@ class TrustedDeviceRepository:
         return hashlib.sha256(fingerprint_string.encode()).hexdigest()
 
     def create_trusted_device(
-        self, user_id: UUID, device_token: str, device_fingerprint: str, expires_at: datetime
+        self, org_id: UUID, user_id: UUID, device_token: str, device_fingerprint: str, expires_at: datetime
     ) -> TrustedDevice:
         """Create a new trusted device record"""
         trusted_device = TrustedDevice(
+            org_id=org_id,
             user_id=user_id,
             device_token=device_token,
             device_fingerprint=device_fingerprint,
