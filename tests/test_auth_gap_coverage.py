@@ -439,6 +439,7 @@ def test_change_password_invalidates_trusted_devices_but_keeps_own_session(app_a
     trusted_repo = TrustedDeviceRepository(db)
     raw_token = trusted_repo.generate_device_token()
     trusted_repo.create_trusted_device(
+        org_id,
         user.id,
         trusted_repo.hash_device_token(raw_token),
         "some-fingerprint",

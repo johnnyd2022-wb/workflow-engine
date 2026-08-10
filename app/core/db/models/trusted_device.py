@@ -7,14 +7,18 @@ from sqlalchemy import Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 
 
-class TrustedDevice(Base):
+class TrustedDevice(TenantScoped, Base):
     """Trusted Device model for storing device tokens that bypass 2FA
 
     When a user enables "Remember this device" during 2FA verification,
     a secure token is generated and stored. This token allows the user
     to skip 2FA on the same device for 30 days.
+
+    org_id is denormalized here (backfilled from user.org_id by migration
+    tenant_org_id_backfill_001) -- see Step's docstring / tenant_org_id_add_001 for why.
     """
 
     __tablename__ = "trusted_devices"

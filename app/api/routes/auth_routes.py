@@ -866,7 +866,7 @@ def verify_two_factor():
                 device_token = trusted_device_repo.generate_device_token()
                 hashed_token = trusted_device_repo.hash_device_token(device_token)
                 expires_at = TrustedDevice.get_expiration_date()
-                trusted_device_repo.create_trusted_device(user_id, hashed_token, device_fingerprint, expires_at)
+                trusted_device_repo.create_trusted_device(user_org_id, user_id, hashed_token, device_fingerprint, expires_at)
 
             db.commit()
 
@@ -1079,7 +1079,7 @@ def enable_2fa():
 
             # Generate backup codes (10 codes, 8 characters each)
             # CRITICAL: Never log the backup codes
-            backup_codes = auth_service.generate_backup_codes(user.id, count=10)
+            backup_codes = auth_service.generate_backup_codes(user.org_id, user.id, count=10)
 
             # Commit transaction atomically
             db.commit()

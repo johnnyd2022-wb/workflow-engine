@@ -7,11 +7,18 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class Step(Base):
-    """Step model representing a sub-process within a process"""
+class Step(TenantScoped, Base):
+    """Step model representing a sub-process within a process.
+
+    org_id is denormalized here (backfilled from process.org_id by migration
+    tenant_org_id_backfill_001) rather than only derived transitively through process_id --
+    see tenant_org_id_add_001's docstring for why: this was exactly the class of table where
+    a join-only tenancy check got dropped in a query and caused a confirmed cross-tenant leak.
+    """
 
     __tablename__ = "steps"
 

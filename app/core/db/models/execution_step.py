@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
@@ -22,8 +23,12 @@ class ExecutionStepStatus(enum.Enum):
     SKIPPED = "skipped"
 
 
-class ExecutionStep(Base):
-    """ExecutionStep model tracking the execution state of each step in an execution"""
+class ExecutionStep(TenantScoped, Base):
+    """ExecutionStep model tracking the execution state of each step in an execution.
+
+    org_id is denormalized here (backfilled from execution.org_id by migration
+    tenant_org_id_backfill_001) -- see Step's docstring / tenant_org_id_add_001 for why.
+    """
 
     __tablename__ = "execution_steps"
 
