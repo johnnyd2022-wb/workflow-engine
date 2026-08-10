@@ -2,19 +2,22 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, String, Text
+from sqlalchemy import TIMESTAMP, Boolean, Column, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class XeroOAuthToken(Base):
+class XeroOAuthToken(TenantScoped, Base):
     __tablename__ = "xero_oauth_tokens"
+    # One active token set per org — UNIQUE enforced at DB level. TenantScoped's org_id
+    # column only adds an index, not uniqueness, so it's asserted here at the table level
+    # instead of the old single-column `unique=True` on the (now mixin-owned) column.
+    __table_args__ = (UniqueConstraint("org_id", name="uq_xero_oauth_tokens_org_id"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # One active token set per org — UNIQUE enforced at DB level
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, unique=True)
     xero_tenant_id = Column(String(100), nullable=False)
     # Fernet-encrypted — never store plaintext
     access_token_encrypted = Column(Text, nullable=False)

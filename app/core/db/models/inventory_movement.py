@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
@@ -20,7 +21,7 @@ class InventoryMovementType(str, enum.Enum):
     PRODUCTION = "PRODUCTION"
 
 
-class InventoryMovement(Base):
+class InventoryMovement(TenantScoped, Base):
     """Signed quantity in the item's canonical storage unit (inventory_items.unit).
 
     This is an event log alongside mutable inventory_items.quantity—not sole source of truth until/unless
@@ -32,7 +33,6 @@ class InventoryMovement(Base):
     __tablename__ = "inventory_movements"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     inventory_item_id = Column(UUID(as_uuid=True), ForeignKey("inventory_items.id"), nullable=False, index=True)
     source_wastage_id = Column(
         UUID(as_uuid=True),

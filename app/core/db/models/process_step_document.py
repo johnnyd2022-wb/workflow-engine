@@ -6,16 +6,16 @@ from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class ProcessStepDocument(Base):
+class ProcessStepDocument(TenantScoped, Base):
     """Stores SOP documentation for a process step: uploaded file or inline markdown."""
 
     __tablename__ = "process_step_documents"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     process_id = Column(UUID(as_uuid=True), ForeignKey("processes.id"), nullable=False, index=True)
     step_id = Column(UUID(as_uuid=True), ForeignKey("steps.id"), nullable=False, index=True)
     title = Column(String(512), nullable=False)

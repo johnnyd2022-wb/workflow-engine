@@ -6,14 +6,14 @@ from sqlalchemy import TIMESTAMP, Column, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class CRMNote(Base):
+class CRMNote(TenantScoped, Base):
     __tablename__ = "crm_notes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     contact_id = Column(
         UUID(as_uuid=True), ForeignKey("xero_contacts.id", ondelete="CASCADE"), nullable=False, index=True
     )

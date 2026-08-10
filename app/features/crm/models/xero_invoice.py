@@ -6,10 +6,11 @@ from sqlalchemy import TIMESTAMP, Column, Date, ForeignKey, Index, Numeric, Stri
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class XeroInvoice(Base):
+class XeroInvoice(TenantScoped, Base):
     __tablename__ = "xero_invoices"
     __table_args__ = (
         UniqueConstraint("org_id", "xero_invoice_id", name="uq_xero_invoices_org_xero"),
@@ -19,7 +20,6 @@ class XeroInvoice(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     xero_invoice_id = Column(String(100), nullable=False)
     xero_tenant_id = Column(String(100), nullable=False)
     # FK to our xero_contacts table (nullable — contact may not be synced yet)

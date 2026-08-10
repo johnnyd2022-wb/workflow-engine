@@ -2,19 +2,19 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Column, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import TIMESTAMP, Column, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class XeroSyncJob(Base):
+class XeroSyncJob(TenantScoped, Base):
     __tablename__ = "xero_sync_jobs"
     __table_args__ = (Index("ix_xero_sync_jobs_org_created", "org_id", "created_at"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     xero_tenant_id = Column(String(100), nullable=False)
     sync_type = Column(String(50), nullable=False)  # contacts | invoices | full
     status = Column(String(50), nullable=False)  # pending | running | completed | failed | partial

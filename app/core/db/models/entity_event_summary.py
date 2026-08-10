@@ -4,10 +4,11 @@ from sqlalchemy import Column, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class EntityEventSummary(Base):
+class EntityEventSummary(TenantScoped, Base):
     """Pre-computed summary for a single entity, upserted atomically on every event write.
 
     Powers list-view card enrichment (inventory list, process list, executions list)
@@ -16,12 +17,16 @@ class EntityEventSummary(Base):
 
     quantity_history in inventory_item summaries is capped at 50 entries to prevent
     unbounded JSONB growth; full history remains in entity_events.
+
+    org_id previously had no FK constraint (declared as a bare column) -- TenantScoped adds
+    one (organisations.id, ON DELETE CASCADE). The column and its values are unchanged; the
+    migration only adds a constraint on already-valid data, see the accompanying Alembic
+    revision.
     """
 
     __tablename__ = "entity_event_summaries"
 
     entity_id = Column(UUID(as_uuid=True), primary_key=True)
-    org_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     entity_type = Column(String(100), nullable=False)
     summary = Column(JSONB(), nullable=False)
     last_event_at = Column(

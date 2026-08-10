@@ -2,14 +2,15 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import TIMESTAMP, Boolean, Column, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class XeroContact(Base):
+class XeroContact(TenantScoped, Base):
     __tablename__ = "xero_contacts"
     __table_args__ = (
         UniqueConstraint("org_id", "xero_contact_id", name="uq_xero_contacts_org_xero"),
@@ -18,7 +19,6 @@ class XeroContact(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     xero_contact_id = Column(String(100), nullable=False)
     xero_tenant_id = Column(String(100), nullable=False)
     name = Column(String(500), nullable=False)

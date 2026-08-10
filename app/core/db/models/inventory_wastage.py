@@ -7,10 +7,11 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class InventoryWastage(Base):
+class InventoryWastage(TenantScoped, Base):
     """Record of inventory quantity written off as wastage. Deducts from inventory_items.quantity.
 
     inventory_movements records WASTAGE lines with signed quantities; this table keeps wastage-specific
@@ -20,7 +21,6 @@ class InventoryWastage(Base):
     __tablename__ = "inventory_wastage"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     inventory_item_id = Column(UUID(as_uuid=True), ForeignKey("inventory_items.id"), nullable=False, index=True)
     quantity_wasted = Column(String(50), nullable=False)  # Same precision as inventory quantity
     unit = Column(String(50), nullable=False)  # Denormalized from item at time of record

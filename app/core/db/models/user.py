@@ -3,11 +3,12 @@
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
@@ -18,13 +19,12 @@ class UserRole(enum.Enum):
     MEMBER = "member"
 
 
-class User(Base):
+class User(TenantScoped, Base):
     """User model with organisation relationship"""
 
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     email = Column(String(255), nullable=False, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)
     phone_number = Column(String(15), nullable=True)  # 6-15 digits

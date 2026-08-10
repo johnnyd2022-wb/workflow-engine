@@ -6,10 +6,11 @@ from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, String, Text, Uni
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class ProductMapping(Base):
+class ProductMapping(TenantScoped, Base):
     __tablename__ = "product_mappings"
     __table_args__ = (
         UniqueConstraint(
@@ -18,7 +19,6 @@ class ProductMapping(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False, index=True)
     biz_e_source_output_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     biz_e_product_name = Column(String(500), nullable=False)
     xero_description_pattern = Column(String(500), nullable=False)

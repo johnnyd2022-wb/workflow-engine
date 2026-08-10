@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
@@ -19,7 +20,7 @@ class InventoryType(enum.Enum):
     FINAL_PRODUCT = "final_product"
 
 
-class InventoryItem(Base):
+class InventoryItem(TenantScoped, Base):
     """InventoryItem model for tracking raw materials, WIP, and final products.
 
     DB enforces UNIQUE (org_id, barcode) where barcode IS NOT NULL (see migration uq_inventory_org_barcode_001).
@@ -33,7 +34,6 @@ class InventoryItem(Base):
     __tablename__ = "inventory_items"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     quantity = Column(Numeric(18, 4), nullable=False, server_default="0")
     unit = Column(String(50), nullable=False)  # kg, g, L, mL, units, pcs, etc.

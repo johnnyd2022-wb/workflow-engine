@@ -6,16 +6,16 @@ from sqlalchemy import JSON, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
+from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
 
 
-class AuditLog(Base):
+class AuditLog(TenantScoped, Base):
     """Audit log model for tracking user actions"""
 
     __tablename__ = "audit_logs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     action = Column(String(100), nullable=False, index=True)
     entity = Column(String(100), nullable=False)
