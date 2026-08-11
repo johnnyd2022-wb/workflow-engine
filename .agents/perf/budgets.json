@@ -45,7 +45,9 @@
       "/core/settings",
       "/crm",
       "/dilution-calculator",
-      "/core/sourcemap"
+      "/core/sourcemap",
+      "/core/inventory/dispose",
+      "/core/inventory/dispose/confirm"
     ],
     "api": [
       "/api/core/dashboard/summary",

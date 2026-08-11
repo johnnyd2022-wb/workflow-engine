@@ -776,6 +776,18 @@ def inventory_dispose_confirm():
                     rs = rs.rstrip("0").rstrip(".")
                 remaining_quantity_display = rs
             elif not error:
+                # Same rationale as record_wastage's access_denied log above: this branch
+                # covers both a genuinely nonexistent id and a cross-org one indistinguishably
+                # (by design — the page must not leak which), so without a log a repeated
+                # probe of this preview page leaves no trace at all.
+                logger.warning(
+                    "access_denied",
+                    reason="inventory_item_not_found_or_cross_org",
+                    feature="wastage",
+                    org_id=str(org_id),
+                    inventory_item_id=str(item_uuid),
+                    path=request.path,
+                )
                 error = "Inventory item was not found."
         except (ValueError, TypeError):
             if not error:
@@ -1662,7 +1674,9 @@ def reorder_steps(process_id: str):
         except Exception:
             return jsonify({"error": "Invalid id or position"}), 400
         if not _is_valid_step_position(position):
-            return jsonify({"error": f"Invalid position: must be a positive, finite multiple of 1000 (got {pos!r})"}), 400
+            return jsonify(
+                {"error": f"Invalid position: must be a positive, finite multiple of 1000 (got {pos!r})"}
+            ), 400
         updates.append((step_uuid, position))
 
     # Use an isolated session for this write endpoint.
@@ -3246,6 +3260,19 @@ def record_wastage():
             # nosemgrep: repository-get-in-for-loop
             item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
             if not item:
+                # A rejected lookup here is a tenant-boundary probe as much as a stale/
+                # mistyped id, and the response is an ordinary 400 either way (AC15: never
+                # distinguishable) — so without this it leaves no trace at all. Same
+                # `access_denied` event name as inventory_repo.py/permissions.py so one
+                # query covers all of them.
+                logger.warning(
+                    "access_denied",
+                    reason="inventory_item_not_found_or_cross_org",
+                    feature="wastage",
+                    org_id=str(org_id),
+                    inventory_item_id=str(item_id),
+                    path=request.path,
+                )
                 validation_errors.append(f"Entry {entry_idx}: inventory item not found or access denied")
                 continue
             current_qty = parse_stored_quantity_to_decimal(item.quantity)
@@ -3529,9 +3556,7 @@ def create_inventory_item():
     # it exactly (`/out-of-stock`, `?type=`). An off-enum value therefore does not error —
     # the item just silently stops appearing in the recall-tracing view. Validate here.
     if inventory_type not in _VALID_INVENTORY_TYPES:
-        return jsonify(
-            {"error": f"inventory_type must be one of: {', '.join(sorted(_VALID_INVENTORY_TYPES))}"}
-        ), 400
+        return jsonify({"error": f"inventory_type must be one of: {', '.join(sorted(_VALID_INVENTORY_TYPES))}"}), 400
     barcode = (data.get("barcode") or "").strip() or None
 
     if quantity is None or (isinstance(quantity, str) and not quantity.strip()):
