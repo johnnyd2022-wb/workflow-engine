@@ -216,7 +216,7 @@ how they get carved.
     subscription: core
     layer:        derived
     flag:         none (candidate for one)
-    reviewed:     never
+    reviewed:     2026-08-11 (see .agents/reports/wastage/review.md)
 
     routes:   /core/inventory/dispose, /core/inventory/dispose/confirm
               /api/core/inventory/wastage [GET POST]
