@@ -301,16 +301,10 @@ def test_wastage_batch_failure_rolls_back_item_wastage_and_movement_together(db,
     assert _quantity_of(item_a.id) == Decimal("10"), "the first entry's deduction must roll back with the batch"
     assert _quantity_of(item_b.id) == Decimal("10")
     assert (
-        db.query(InventoryWastage)
-        .filter(InventoryWastage.inventory_item_id.in_([item_a.id, item_b.id]))
-        .count()
-        == 0
+        db.query(InventoryWastage).filter(InventoryWastage.inventory_item_id.in_([item_a.id, item_b.id])).count() == 0
     ), "no wastage row may survive a rolled-back batch, including the entry staged before the failure"
     assert (
-        db.query(InventoryMovement)
-        .filter(InventoryMovement.inventory_item_id.in_([item_a.id, item_b.id]))
-        .count()
-        == 0
+        db.query(InventoryMovement).filter(InventoryMovement.inventory_item_id.in_([item_a.id, item_b.id])).count() == 0
     ), "no ledger movement row may survive a rolled-back batch"
 
 
@@ -532,11 +526,7 @@ def test_wastage_rejects_reason_over_500_chars(db, app_client, org):
 
     resp = app_client.post(
         "/api/core/inventory/wastage",
-        json={
-            "entries": [
-                {"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": "x" * 501}
-            ]
-        },
+        json={"entries": [{"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": "x" * 501}]},
     )
 
     assert resp.status_code == 400, resp.data

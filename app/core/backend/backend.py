@@ -1674,7 +1674,9 @@ def reorder_steps(process_id: str):
         except Exception:
             return jsonify({"error": "Invalid id or position"}), 400
         if not _is_valid_step_position(position):
-            return jsonify({"error": f"Invalid position: must be a positive, finite multiple of 1000 (got {pos!r})"}), 400
+            return jsonify(
+                {"error": f"Invalid position: must be a positive, finite multiple of 1000 (got {pos!r})"}
+            ), 400
         updates.append((step_uuid, position))
 
     # Use an isolated session for this write endpoint.
@@ -3554,9 +3556,7 @@ def create_inventory_item():
     # it exactly (`/out-of-stock`, `?type=`). An off-enum value therefore does not error —
     # the item just silently stops appearing in the recall-tracing view. Validate here.
     if inventory_type not in _VALID_INVENTORY_TYPES:
-        return jsonify(
-            {"error": f"inventory_type must be one of: {', '.join(sorted(_VALID_INVENTORY_TYPES))}"}
-        ), 400
+        return jsonify({"error": f"inventory_type must be one of: {', '.join(sorted(_VALID_INVENTORY_TYPES))}"}), 400
     barcode = (data.get("barcode") or "").strip() or None
 
     if quantity is None or (isinstance(quantity, str) and not quantity.strip()):
