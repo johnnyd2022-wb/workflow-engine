@@ -564,6 +564,84 @@ def test_wastage_rejects_wasting_more_than_on_hand(db, app_client, org):
     assert _quantity_of(item.id) == Decimal("5")
 
 
+def test_wastage_rejects_wasting_from_zero_quantity_item(db, app_client, org):
+    """AC15: an item already at zero on-hand quantity is rejected with its own message
+    ("item has no quantity to waste"), distinct from the over-deduction case above —
+    covers backend.py's `current_qty <= 0` branch, which no other test reaches (a batch
+    that only ever sends items with positive on-hand quantity can never exercise it)."""
+    item = InventoryItemFactory(org_id=org.id, quantity="0", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={"entries": [{"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": "spillage"}]},
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    assert any("no quantity to waste" in e for e in resp.get_json()["errors"])
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("0")
+
+
+def test_wastage_rejects_non_string_quantity_unit(db, app_client, org):
+    """AC16 at the route: a quantity_unit that isn't a string (e.g. a number) is a
+    validation error, not a crash trying to normalize it as text."""
+    item = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/wastage",
+        json={
+            "entries": [
+                {
+                    "inventory_item_id": str(item.id),
+                    "quantity_wasted": "1",
+                    "quantity_unit": 5,
+                    "reason": "spillage",
+                }
+            ]
+        },
+    )
+
+    assert resp.status_code == 400, resp.data
+    assert resp.get_json()["error_code"] == "VALIDATION_FAILED"
+    assert any("quantity_unit must be a string" in e for e in resp.get_json()["errors"])
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("10")
+
+
+def test_list_wastage_rejects_malformed_inventory_item_id(db, app_client, org):
+    """AC19: GET .../wastage?inventory_item_id=<malformed> is a 400, not a 500 from a
+    bare UUID(...) parse failure."""
+    resp = app_client.get("/api/core/inventory/wastage?inventory_item_id=not-a-uuid")
+
+    assert resp.status_code == 400, resp.data
+    assert "Invalid inventory_item_id" in resp.get_json()["error"]
+
+
+def test_list_wastage_filters_by_inventory_item_id(db, app_client, org):
+    """AC19: the optional inventory_item_id filter narrows the list to that item's
+    records only, and still resolves the item name from the caller's own org."""
+    item_a = InventoryItemFactory(org_id=org.id, name="Filtered Item", quantity="10", unit="kg")
+    item_b = InventoryItemFactory(org_id=org.id, name="Other Item", quantity="10", unit="kg")
+    db.commit()
+
+    for item in (item_a, item_b):
+        resp = app_client.post(
+            "/api/core/inventory/wastage",
+            json={"entries": [{"inventory_item_id": str(item.id), "quantity_wasted": "1", "reason": "spillage"}]},
+        )
+        assert resp.status_code == 201, resp.data
+
+    resp = app_client.get(f"/api/core/inventory/wastage?inventory_item_id={item_a.id}")
+    assert resp.status_code == 200, resp.data
+    records = resp.get_json()["wastage_records"]
+    assert records, "expected at least one record for item_a"
+    assert all(r["inventory_item_id"] == str(item_a.id) for r in records), records
+    assert all(r["item_name"] == "Filtered Item" for r in records), records
+
+
 def test_wastage_records_are_org_scoped(db, two_org_two_user):
     org_a = two_org_two_user["org_a"]
     org_b = two_org_two_user["org_b"]
