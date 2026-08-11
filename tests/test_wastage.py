@@ -642,6 +642,58 @@ def test_list_wastage_filters_by_inventory_item_id(db, app_client, org):
     assert all(r["item_name"] == "Filtered Item" for r in records), records
 
 
+def test_wastage_cross_org_rejection_emits_access_denied(db, app_client, org, caplog):
+    """[REGRESSION] A rejected cross-tenant wastage attempt must be observable.
+
+    The route turns the refusal into an ordinary 400 (AC15: never distinguishable from a
+    nonexistent id), so without an explicit log line a tenant-boundary probe leaves no
+    trace and prod-sentinel has nothing to find. Same `access_denied` event name the auth
+    decorators and inventory_repo.py emit, so one query covers all of them. Mutation this
+    catches: dropping the `logger.warning(...)` call and keeping only the validation-error
+    append.
+    """
+    import logging
+
+    foreign_org = OrganisationFactory()
+    db.commit()
+    foreign_item = InventoryItemFactory(org_id=foreign_org.id, quantity="5", unit="kg")
+    db.commit()
+
+    with caplog.at_level(logging.WARNING):
+        resp = app_client.post(
+            "/api/core/inventory/wastage",
+            json={"entries": [{"inventory_item_id": str(foreign_item.id), "quantity_wasted": "1", "reason": "probe"}]},
+        )
+
+    assert resp.status_code == 400, resp.data
+    denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+    assert denials, f"cross-tenant wastage rejection was not logged: {[r.getMessage() for r in caplog.records]}"
+    logged = denials[0].getMessage()
+    assert "inventory_item_not_found_or_cross_org" in logged, logged
+    assert str(org.id) in logged, "log must record the REQUESTING org, not the target org"
+
+
+def test_dispose_confirm_cross_org_item_emits_access_denied(db, app_client, org, caplog):
+    """[REGRESSION] Same observability gap as above, for the dispose-confirm preview page
+    (AC-D3): a repeated cross-org probe of this GET route must not be silent either."""
+    import logging
+
+    foreign_org = OrganisationFactory()
+    db.commit()
+    foreign_item = InventoryItemFactory(org_id=foreign_org.id, quantity="5", unit="kg")
+    db.commit()
+
+    with caplog.at_level(logging.WARNING):
+        resp = app_client.get(f"/core/inventory/dispose/confirm?inventory_item_id={foreign_item.id}&quantity_wasted=1")
+
+    assert resp.status_code == 200, resp.data
+    denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+    assert denials, f"cross-tenant dispose-confirm preview was not logged: {[r.getMessage() for r in caplog.records]}"
+    logged = denials[0].getMessage()
+    assert "inventory_item_not_found_or_cross_org" in logged, logged
+    assert str(org.id) in logged, "log must record the REQUESTING org, not the target org"
+
+
 def test_wastage_records_are_org_scoped(db, two_org_two_user):
     org_a = two_org_two_user["org_a"]
     org_b = two_org_two_user["org_b"]
