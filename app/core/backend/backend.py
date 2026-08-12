@@ -51,7 +51,7 @@ from app.core.domain.inventory_quantity_guard import (
     allow_inventory_quantity_write,
 )
 from app.core.security.permissions import requires_auth, requires_role
-from app.core.utils.internal_counters import get_counter_snapshot, inc_counter
+from app.core.utils.internal_counters import inc_counter
 from app.core.utils.inventory_quantity import (
     assert_movement_unit_matches_item_canonical,
     coerce_stored_quantity,
@@ -4900,11 +4900,6 @@ def get_metrics():
                     "raw_materials": len(raw_materials),
                     "work_in_progress": len(wip),
                     "final_products": len(final_products),
-                },
-                "operational_counters": {
-                    "scope": "process-local",
-                    "note": "Counts are per web worker process; use an external sink to aggregate in multi-worker deployments.",
-                    "counts": get_counter_snapshot(),
                 },
             }
         ),
