@@ -352,7 +352,7 @@ how they get carved.
     subscription: core
     layer:        derived (composition)
     flag:         none
-    reviewed:     never
+    reviewed:     2026-08-12 (see .agents/reports/dashboard/review.md)
 
     routes:   /core/dashboard, /api/core/dashboard/summary [GET], /api/core/metrics [GET]
     backend:  app/core/backend/backend.py:4100-4780 (summary, action board, weekly series)

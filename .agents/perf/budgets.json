@@ -51,6 +51,7 @@
     ],
     "api": [
       "/api/core/dashboard/summary",
+      "/api/core/metrics",
       "/api/core/processes",
       "/api/core/executions",
       "/api/core/inventory",
