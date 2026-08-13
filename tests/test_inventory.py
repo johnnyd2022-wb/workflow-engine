@@ -411,6 +411,26 @@ def test_create_item_accepts_own_org_source_output_id(db, app_client, org):
     assert str(stored.source_output_id) == output_id
 
 
+def test_create_item_failure_returns_inventory_error_not_process_error(app_client, monkeypatch):
+    """Baseline finding D (.agents/reports/inventory/baseline.md:82): the generic
+    exception handler in create_inventory_item logged "Error creating process" and
+    returned "Failed to create process" — copy-pasted from the process-creation route,
+    misdirecting triage from the observability stack for every inventory-create 500."""
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    def _boom(self, *args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(InventoryRepository, "create_inventory_item", _boom)
+
+    resp = app_client.post(
+        "/api/core/inventory",
+        json={"name": "Whatever", "quantity": "5", "unit": "kg"},
+    )
+    assert resp.status_code == 500
+    assert resp.get_json()["error"] == "Failed to create inventory item"
+
+
 def test_trace_enrichment_enriches_own_org_step_data(db, app_client, org):
     """[CONTROL] Enrichment must actually run for in-org provenance.
 

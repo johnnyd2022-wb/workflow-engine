@@ -3734,8 +3734,8 @@ def create_inventory_item():
         return jsonify({"error": str(e)}), 400
     except Exception:
         # Log the full error for debugging but return generic message to client
-        logger.exception("Error creating process")
-        return jsonify({"error": "Failed to create process"}), 500
+        logger.exception("Error creating inventory item")
+        return jsonify({"error": "Failed to create inventory item"}), 500
 
 
 @core_bp.route("/api/core/inventory/<item_id>", methods=["PUT"])
