@@ -101,3 +101,55 @@ def test_feature_mapping_for_nested_dilution_calculator_blueprints():
     with app.test_client() as client:
         assert client.post("/api/dilution-calculator/solve").get_json()["feature"] == "dilution_calculator"
         assert client.get("/dilution-calculator").get_json()["feature"] == "dilution_calculator"
+
+
+def _build_nested_crm_app():
+    """Mirrors the real nesting in app/features/crm/crm_bp.py:
+    create_crm_blueprint() registers oauth_bp/api_bp/page_bp as sub-blueprints
+    of a parent "crm" blueprint. Like dilution_calculator above, this means
+    request.blueprint for a real CRM request is the dotted "crm.crm_api" /
+    "crm.crm_oauth" / "crm.crm_pages", not the flat child name — unlike
+    test_feature_mapping_for_blueprints_and_platform_routes above, whose `crm`
+    fixture is a single unnested blueprint and would stay green even if the
+    dotted-path mapping were missing.
+    """
+    from flask import Flask
+
+    app = Flask(__name__)
+
+    api_bp = Blueprint("crm_api", __name__)
+    oauth_bp = Blueprint("crm_oauth", __name__)
+    page_bp = Blueprint("crm_pages", __name__)
+
+    @api_bp.route("/api/crm/xero/status", methods=["GET"])
+    def status():
+        return jsonify({"feature": feature_for_request()})
+
+    @oauth_bp.route("/crm/xero/auth", methods=["GET"])
+    def auth():
+        return jsonify({"feature": feature_for_request()})
+
+    @page_bp.route("/crm/customers", methods=["GET"])
+    def customers():
+        return jsonify({"feature": feature_for_request()})
+
+    parent_bp = Blueprint("crm", __name__)
+    parent_bp.register_blueprint(oauth_bp)
+    parent_bp.register_blueprint(api_bp)
+    parent_bp.register_blueprint(page_bp)
+    app.register_blueprint(parent_bp)
+
+    return app
+
+
+def test_feature_mapping_for_nested_crm_blueprints():
+    """Regression test: real CRM requests resolve request.blueprint to
+    "crm.crm_api" / "crm.crm_oauth" / "crm.crm_pages", which without the
+    dotted-path entries in BLUEPRINT_FEATURE fall through to "platform"
+    instead of "crm" — mislabeling every CRM observability event."""
+    app = _build_nested_crm_app()
+
+    with app.test_client() as client:
+        assert client.get("/api/crm/xero/status").get_json()["feature"] == "crm"
+        assert client.get("/crm/xero/auth").get_json()["feature"] == "crm"
+        assert client.get("/crm/customers").get_json()["feature"] == "crm"

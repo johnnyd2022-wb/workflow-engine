@@ -22,6 +22,13 @@ BLUEPRINT_FEATURE = {
     # "dilution_calculator" instead of silently falling through to DEFAULT_FEATURE.
     "dilution_calculator.dilution_calculator_api": "dilution_calculator",
     "dilution_calculator.dilution_calculator_pages": "dilution_calculator",
+    # Same nested-blueprint shape for CRM: create_crm_blueprint() registers
+    # oauth_bp/api_bp/page_bp under a parent "crm" blueprint, so real requests
+    # carry "crm.crm_api" / "crm.crm_oauth" / "crm.crm_pages" — the flat
+    # "crm_api"/"crm_oauth"/"crm_pages" keys above never match a real request.
+    "crm.crm_api": "crm",
+    "crm.crm_oauth": "crm",
+    "crm.crm_pages": "crm",
 }
 DEFAULT_FEATURE = "platform"
 
