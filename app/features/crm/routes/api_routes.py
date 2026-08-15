@@ -270,7 +270,10 @@ def create_note(contact_id: str):
         return jsonify({"error": "content is required"}), 400
 
     svc = _crm_service()
-    note = svc.create_note(org_id, UUID(contact_id), content, UUID(g.user_id) if g.user_id else None)
+    try:
+        note = svc.create_note(org_id, UUID(contact_id), content, UUID(g.user_id) if g.user_id else None)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify({"note": note}), 201
 
 

@@ -377,7 +377,7 @@ how they get carved.
     layer:        integration
     flag:         crm_enabled — a feature toggle, not a tier gate. The only flag that
                   actually gates a blueprint (app_factory.py:112). True in local.ini.
-    reviewed:     never
+    reviewed:     2026-08-15 (see .agents/reports/crm/review.md)
 
     routes:   /crm/* — pages, api, oauth. Parent blueprint composes crm_api/crm_pages/crm_oauth.
     backend:  app/features/crm/{routes,services,repositories,models,frontend}/

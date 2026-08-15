@@ -106,7 +106,7 @@ class XeroSyncService:
                 raise ValueError("No connected Xero tenant for this org.")
 
             modified_after = tenant.last_successful_sync_at
-            job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "full", triggered_by)
+            job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "incremental", triggered_by)
             self.db.commit()
 
             result = SyncResult()
