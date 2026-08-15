@@ -10,7 +10,7 @@ longer exists and `tests/test_*.py` files that appear in no row. It cannot judge
 row's **status** is truthful; that is test-author's job to keep current as it writes, and
 test-evaluator's to catch when a test claims more than it proves.
 
-last_synced: 2026-08-09
+last_synced: 2026-08-16
 status legend: `covered` (happy + unhappy + isolation where scoped) · `partial` (happy
 path only, or missing the hostile-org / unhappy cases) · `none` (no automated pytest
 coverage) · `live` (covered only by `live_server`-marked suites that need the dev app
@@ -86,13 +86,17 @@ server up)
 
 ## Known highest-value gaps (test-author works these first)
 
-1. **Row 8 / 14 / 16** — tenant isolation, the inventory quantity-write guard, and wastage
-   idempotency are the three `none` rows guarding the app's core integrity invariants
-   (multi-tenancy, untracked-mutation prevention, duplicate-wastage prevention). A break in
-   any of them is silent and data-corrupting. These are the highest risk-times-exposure
-   rows in the map.
-2. **Row 12** — execution idempotency: without it, a retried execution can double-apply.
-3. **Rows 6/7** — org CRUD and membership have no direct coverage.
+Rows 6/7/8/12/14/16, listed here in earlier revisions, are now `covered` (or, for row 12,
+corrected away — see its Notes) per the table above; findings-sweep found this section had
+gone stale against its own table (2026-08-16) and `scripts/test_map_check.py` now checks
+for the same drift going forward. Current gaps, in priority order:
+
+1. **Row 18** — CRM/Xero `partial`: `xero_api_client.py`'s live-network paths
+   (`get_all_contacts`/`create_invoice`/etc.) need a stubbed Xero HTTP layer; not attempted
+   yet (34% covered).
+2. **Row 13** — execution lineage `partial`: traversal helpers touch
+   `workflow_execution_lineage`, but lineage-record assertions are absent.
+3. **Row 19** — CRM analytics `partial`: some `/api/crm/analytics/*` endpoints uncovered.
 
 ## Not in this map (owned elsewhere)
 
