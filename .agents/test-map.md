@@ -72,8 +72,8 @@ server up)
 
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
-| 18 | Customers / invoices / notes / tasks | `app/features/crm/routes/api_routes.py` | test_crm.py | partial | 39 tests incl. idempotency; Xero OAuth + authorise/pdf paths mocked-thin |
-| 19 | Analytics (sales, churn, rankings) | crm api_routes `/api/crm/analytics/*` | test_crm.py | partial | some analytics endpoints uncovered |
+| 18 | Customers / invoices / notes / tasks | `app/features/crm/routes/api_routes.py` | test_crm.py, e2e/test_crm_flow.py | partial | review-feature 2026-08-15: 60 unit + 9 e2e tests. Added tenant-ownership check + regression test for notes (was missing, unlike tasks), access_denied observability on all 14 org-scoped lookups, cross-tenant e2e probes for notes/tasks/product-mappings, `xero_api_client.py` pure-helper coverage (0%→covered: status/scope/PDF/error-message parsing). Still partial: `xero_api_client.py`'s live-network paths (get_all_contacts/create_invoice/etc.) need a stubbed Xero HTTP layer, not attempted here (34% covered) |
+| 19 | Analytics (sales, churn, rankings) | crm api_routes `/api/crm/analytics/*` | test_crm.py | partial | some analytics endpoints uncovered — unchanged by 2026-08-15 review, out of scope (no findings there) |
 
 ## Dashboard & cross-cutting
 

@@ -18,7 +18,9 @@ from app.features.crm.repositories.xero_sync_job_repo import XeroSyncJobReposito
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
 from app.features.crm.services.xero_oauth_service import XeroOAuthService, XeroTokenExpiredError
-from app.observability import start_span
+from app.observability import get_logger, start_span
+
+logger = get_logger(__name__)
 
 
 class CRMService:
@@ -55,6 +57,22 @@ class CRMService:
             diff=diff,
             actor_id=actor_id,
             actor_label=actor_label,
+        )
+
+    def _log_access_denied(self, *, org_id: UUID, ref_kind: str, ref_id: UUID) -> None:
+        """Log a rejected org-scoped lookup before the route turns it into a generic
+        404/400. A rejected lookup here is a tenant-boundary probe (or a stale link) —
+        without this it leaves no trace at all. Same `access_denied` event name as
+        app/core/security/permissions.py and app/core/db/repositories/inventory_repo.py
+        so one query covers all three.
+        """
+        logger.warning(
+            "access_denied",
+            reason=f"{ref_kind}_not_found_or_cross_org",
+            feature="crm",
+            org_id=str(org_id),
+            ref_kind=ref_kind,
+            ref_id=str(ref_id),
         )
 
     # ------------------------------------------------------------------
@@ -123,6 +141,7 @@ class CRMService:
     def get_customer(self, contact_id: UUID, org_id: UUID) -> dict | None:
         contact = self.contact_repo.get_by_id(contact_id, org_id)
         if not contact:
+            self._log_access_denied(org_id=org_id, ref_kind="contact_id", ref_id=contact_id)
             return None
         invoices, _ = self.invoice_repo.list_for_contact(contact_id, org_id, page_size=5)
         notes = self.note_repo.list_for_contact(contact_id, org_id)
@@ -259,6 +278,7 @@ class CRMService:
     def suggest_invoice_due_date(self, contact_id: UUID, org_id: UUID, invoice_date) -> date | None:
         contact = self.contact_repo.get_by_id(contact_id, org_id)
         if not contact:
+            self._log_access_denied(org_id=org_id, ref_kind="contact_id", ref_id=contact_id)
             raise ValueError("Customer not found")
         terms = contact.payment_terms
         if not terms and contact.xero_contact_id:
@@ -370,6 +390,7 @@ class CRMService:
         ):
             contact = self.contact_repo.get_by_id(contact_id, org_id)
             if not contact:
+                self._log_access_denied(org_id=org_id, ref_kind="contact_id", ref_id=contact_id)
                 raise ValueError("Customer not found")
             if not contact.xero_contact_id:
                 raise ValueError("Customer is missing Xero contact id")
@@ -477,6 +498,7 @@ class CRMService:
         ):
             inv = self.invoice_repo.get_by_id(invoice_id, org_id)
             if not inv:
+                self._log_access_denied(org_id=org_id, ref_kind="invoice_id", ref_id=invoice_id)
                 raise ValueError("Invoice not found")
             if not inv.xero_invoice_id:
                 raise ValueError("Invoice is missing Xero invoice id")
@@ -525,6 +547,7 @@ class CRMService:
 
         inv = self.invoice_repo.get_by_id(invoice_id, org_id)
         if not inv:
+            self._log_access_denied(org_id=org_id, ref_kind="invoice_id", ref_id=invoice_id)
             raise ValueError("Invoice not found")
         if not inv.xero_invoice_id:
             raise ValueError("Invoice is missing Xero invoice id")
@@ -546,6 +569,7 @@ class CRMService:
 
         inv = self.invoice_repo.get_by_id(invoice_id, org_id)
         if not inv:
+            self._log_access_denied(org_id=org_id, ref_kind="invoice_id", ref_id=invoice_id)
             raise ValueError("Invoice not found")
         if not inv.xero_invoice_id:
             raise ValueError("Invoice is missing Xero invoice id")
@@ -564,6 +588,9 @@ class CRMService:
     # ------------------------------------------------------------------
 
     def create_note(self, org_id: UUID, contact_id: UUID, content: str, user_id: UUID | None) -> dict:
+        if not self.contact_repo.get_by_id(contact_id, org_id):
+            self._log_access_denied(org_id=org_id, ref_kind="contact_id", ref_id=contact_id)
+            raise ValueError("Customer not found")
         note = self.note_repo.create(org_id, contact_id, content, user_id)
         self.db.flush()  # populate note.id (client-side default) before event emission
         self._emit_event(
@@ -584,6 +611,7 @@ class CRMService:
     def update_note(self, note_id: UUID, org_id: UUID, content: str) -> dict | None:
         note = self.note_repo.get_by_id(note_id, org_id)
         if not note:
+            self._log_access_denied(org_id=org_id, ref_kind="note_id", ref_id=note_id)
             return None
         before = {"content_length": len(note.content or "")}
         self.note_repo.update(note, content)
@@ -606,6 +634,7 @@ class CRMService:
     def delete_note(self, note_id: UUID, org_id: UUID) -> bool:
         note = self.note_repo.get_by_id(note_id, org_id)
         if not note:
+            self._log_access_denied(org_id=org_id, ref_kind="note_id", ref_id=note_id)
             return False
         payload = {
             "note_id": str(note.id),
@@ -664,6 +693,7 @@ class CRMService:
             contact_raw = None
         contact_id = UUID(contact_raw) if contact_raw else None
         if contact_id and not self.contact_repo.get_by_id(contact_id, org_id):
+            self._log_access_denied(org_id=org_id, ref_kind="contact_id", ref_id=contact_id)
             raise ValueError("Customer not found")
         assigned_raw = data.get("assigned_to_user_id")
         if isinstance(assigned_raw, str) and assigned_raw.strip().lower() in {"", "null", "none"}:
@@ -700,6 +730,7 @@ class CRMService:
     def update_task(self, task_id: UUID, org_id: UUID, data: dict) -> dict | None:
         task = self.task_repo.get_by_id(task_id, org_id)
         if not task:
+            self._log_access_denied(org_id=org_id, ref_kind="task_id", ref_id=task_id)
             return None
 
         before = _task_event_snapshot(task)
@@ -726,6 +757,7 @@ class CRMService:
             if raw_contact:
                 updates["contact_id"] = UUID(raw_contact)
                 if not self.contact_repo.get_by_id(updates["contact_id"], org_id):
+                    self._log_access_denied(org_id=org_id, ref_kind="contact_id", ref_id=updates["contact_id"])
                     raise ValueError("Customer not found")
             else:
                 updates["contact_id"] = None
@@ -746,6 +778,7 @@ class CRMService:
     def delete_task(self, task_id: UUID, org_id: UUID) -> bool:
         task = self.task_repo.get_by_id(task_id, org_id)
         if not task:
+            self._log_access_denied(org_id=org_id, ref_kind="task_id", ref_id=task_id)
             return False
         payload = _task_event_snapshot(task)
         self.task_repo.delete(task)
@@ -963,6 +996,7 @@ class CRMService:
     def update_mapping(self, mapping_id: UUID, org_id: UUID, data: dict) -> dict | None:
         m = self.mapping_repo.get_by_id(mapping_id, org_id)
         if not m:
+            self._log_access_denied(org_id=org_id, ref_kind="product_mapping_id", ref_id=mapping_id)
             return None
         before = _mapping_event_snapshot(m)
         allowed = {
@@ -994,6 +1028,7 @@ class CRMService:
     def delete_mapping(self, mapping_id: UUID, org_id: UUID) -> bool:
         m = self.mapping_repo.get_by_id(mapping_id, org_id)
         if not m:
+            self._log_access_denied(org_id=org_id, ref_kind="product_mapping_id", ref_id=mapping_id)
             return False
         payload = _mapping_event_snapshot(m)
         self.mapping_repo.delete(m)

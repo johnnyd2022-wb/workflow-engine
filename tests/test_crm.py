@@ -174,7 +174,9 @@ class TestContactRepository:
         repo = XeroContactRepository(db)
         xero_id = f"xero-{uuid4()}"
 
-        repo.upsert(org_id=org.id, xero_contact_id=xero_id, xero_tenant_id="t1", name="Test Co", contact_status="ACTIVE")
+        repo.upsert(
+            org_id=org.id, xero_contact_id=xero_id, xero_tenant_id="t1", name="Test Co", contact_status="ACTIVE"
+        )
         db.commit()
 
         results, total = repo.list_paginated(org_id=org.id, search="Test Co")
@@ -326,6 +328,27 @@ class TestCRMNotes:
         db.query(Organisation).filter(Organisation.id == org_b.id).delete(synchronize_session=False)
         db.commit()
 
+    def test_create_note_rejects_other_org_contact(self, db, org, user):
+        """A caller must not be able to attach a note to another org's contact by
+        guessing/reusing its UUID — create_note has to validate contact ownership the
+        same way create_task already does."""
+        from app.features.crm.services.crm_service import CRMService
+
+        org_b = OrganisationRepository(db).create_org(f"Org B {uuid4()}")
+        db.commit()
+        contact_b = self._make_contact(db, org_b.id)
+
+        svc = CRMService(db)
+        with pytest.raises(ValueError, match="not found"):
+            svc.create_note(org.id, contact_b.id, "Attempted cross-tenant note", user.id)
+
+        # No orphaned note should have been persisted against org A.
+        detail = svc.get_customer(contact_id=contact_b.id, org_id=org_b.id)
+        assert detail["notes"] == []
+
+        db.query(Organisation).filter(Organisation.id == org_b.id).delete(synchronize_session=False)
+        db.commit()
+
 
 # ─────────────────────────────────────────────
 # CRM Service — Task CRUD
@@ -397,6 +420,68 @@ class TestCRMTasks:
 
         db.query(Organisation).filter(Organisation.id == org_b.id).delete(synchronize_session=False)
         db.commit()
+
+
+# ─────────────────────────────────────────────
+# XeroSyncService — sync job bookkeeping
+# ─────────────────────────────────────────────
+
+
+class TestXeroSyncService:
+    def _connect_tenant(self, db, org_id):
+        from datetime import UTC, datetime, timedelta
+
+        from app.features.crm.services.xero_oauth_service import XeroOAuthService
+
+        oauth = XeroOAuthService(db)
+        oauth.store_tokens(
+            org_id,
+            {"access_token": "fake-access", "refresh_token": "fake-refresh", "expires_in": 1800},
+            {"tenantId": "fake-tenant-id", "tenantName": "Fake Tenant", "tenantType": "ORGANISATION"},
+        )
+        # store_tokens computes its own expiry from expires_in — push it comfortably
+        # into the future so get_valid_token doesn't attempt a real refresh call.
+        from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
+
+        token = XeroTokenRepository(db).get(org_id)
+        token.expires_at = datetime.now(UTC) + timedelta(hours=1)
+        db.commit()
+
+    def test_incremental_sync_records_incremental_job_type(self, db, org, monkeypatch):
+        """Regression test: incremental_sync used to hardcode its XeroSyncJob row's
+        sync_type as "full", so the audit trail lied about what kind of sync ran."""
+        from app.features.crm.models.xero_sync_job import XeroSyncJob
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+        from app.features.crm.services.xero_sync_service import XeroSyncService
+
+        self._connect_tenant(db, org.id)
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+
+        result = XeroSyncService(db).incremental_sync(org.id, triggered_by="test")
+        assert result.success
+
+        job = db.query(XeroSyncJob).filter(XeroSyncJob.org_id == org.id).order_by(XeroSyncJob.started_at.desc()).first()
+        assert job is not None
+        assert job.sync_type == "incremental"
+
+    def test_full_sync_records_full_job_type(self, db, org, monkeypatch):
+        """Sibling check so the two sync types can't silently collapse to the same
+        (wrong) value again."""
+        from app.features.crm.models.xero_sync_job import XeroSyncJob
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+        from app.features.crm.services.xero_sync_service import XeroSyncService
+
+        self._connect_tenant(db, org.id)
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+
+        result = XeroSyncService(db).full_sync(org.id, triggered_by="test")
+        assert result.success
+
+        job = db.query(XeroSyncJob).filter(XeroSyncJob.org_id == org.id).order_by(XeroSyncJob.started_at.desc()).first()
+        assert job is not None
+        assert job.sync_type == "full"
 
 
 # ─────────────────────────────────────────────
@@ -559,6 +644,66 @@ class TestCRMTasksAPI:
         assert task_id not in task_ids
 
 
+class TestCRMAccessDeniedLogging:
+    """Regression coverage for the observability gap this review closed: none of CRM's
+    org-scoped "not found" paths used to leave any trace, unlike every other reviewed
+    slice (see tests/test_activity_log.py::TestActivityAccessDeniedLogging,
+    tests/test_traceability.py::TestTraceAccessDeniedLogging,
+    tests/test_inventory.py::test_cross_tenant_reference_rejection_emits_access_denied).
+    Mutation this catches: dropping a `_log_access_denied(...)` call and keeping only the
+    404/None/False return."""
+
+    def test_update_unknown_task_emits_access_denied(self, app_client, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            resp = app_client.put(
+                f"/api/crm/tasks/{uuid4()}",
+                json={"status": "completed"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 404
+        denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+        assert denials, f"unknown task update was not logged: {[r.getMessage() for r in caplog.records]}"
+        assert "task_id" in denials[0].getMessage()
+
+    def test_note_on_unknown_contact_emits_access_denied(self, app_client, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            resp = app_client.post(
+                f"/api/crm/customers/{uuid4()}/notes",
+                json={"content": "attempted note"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 400
+        denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+        assert denials, f"note against unknown contact was not logged: {[r.getMessage() for r in caplog.records]}"
+        assert "contact_id" in denials[0].getMessage()
+
+    def test_real_own_org_task_update_does_not_emit_access_denied(self, app_client, caplog):
+        """The log must not fire on ordinary, legitimate traffic — only on a lookup that
+        resolves to nothing."""
+        import logging
+
+        create_resp = app_client.post(
+            "/api/crm/tasks",
+            json={"title": "Real task for logging test"},
+            content_type="application/json",
+        )
+        task_id = json.loads(create_resp.data)["task"]["id"]
+
+        with caplog.at_level(logging.WARNING):
+            resp = app_client.put(
+                f"/api/crm/tasks/{task_id}",
+                json={"status": "completed"},
+                content_type="application/json",
+            )
+        assert resp.status_code == 200
+        denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+        assert not denials, f"a real, own-org update must not log access_denied: {[r.getMessage() for r in denials]}"
+
+
 class TestCRMCustomersAPI:
     def test_list_customers_empty(self, app_client):
         resp = app_client.get("/api/crm/customers")
@@ -681,3 +826,152 @@ class TestContactUpsertIdempotency:
         results, total = repo.list_paginated(org_id=org.id, search="Idempotent Customer Updated")
         assert total == 1
         assert results[0].name == "Idempotent Customer Updated"
+
+
+# ─────────────────────────────────────────────
+# XeroAPIClient — pure parsing/error-classification helpers
+#
+# These handle untrusted response bytes/exceptions from the real Xero API and had zero
+# coverage — every branch here is reachable with no network/mocking needed, since none of
+# them touch self/db/HTTP.
+# ─────────────────────────────────────────────
+
+
+class TestXeroAPIClientHelpers:
+    def test_extract_status_code_from_plain_status_attribute(self):
+        from app.features.crm.services.xero_api_client import _extract_status_code
+
+        class FakeError(Exception):
+            status = 429
+
+        assert _extract_status_code(FakeError()) == 429
+
+    def test_extract_status_code_from_string_digit_attribute(self):
+        from app.features.crm.services.xero_api_client import _extract_status_code
+
+        class FakeError(Exception):
+            status_code = "503"
+
+        assert _extract_status_code(FakeError()) == 503
+
+    def test_extract_status_code_from_http_resp(self):
+        from app.features.crm.services.xero_api_client import _extract_status_code
+
+        class HttpResp:
+            status = 401
+
+        class FakeError(Exception):
+            http_resp = HttpResp()
+
+        assert _extract_status_code(FakeError()) == 401
+
+    def test_extract_status_code_from_response_object(self):
+        from app.features.crm.services.xero_api_client import _extract_status_code
+
+        class Response:
+            status_code = 500
+
+        class FakeError(Exception):
+            response = Response()
+
+        assert _extract_status_code(FakeError()) == 500
+
+    def test_extract_status_code_none_when_absent(self):
+        from app.features.crm.services.xero_api_client import _extract_status_code
+
+        assert _extract_status_code(Exception("plain error, no status anywhere")) is None
+
+    def test_is_insufficient_scope_detects_message_text(self):
+        from app.features.crm.services.xero_api_client import _is_insufficient_scope
+
+        assert _is_insufficient_scope(Exception("Bearer error='insufficient_scope'")) is True
+
+    def test_is_insufficient_scope_detects_www_authenticate_header(self):
+        from app.features.crm.services.xero_api_client import _is_insufficient_scope
+
+        class HttpResp:
+            headers = {"WWW-Authenticate": 'Bearer error="insufficient_scope"'}
+
+        class FakeError(Exception):
+            http_resp = HttpResp()
+
+        assert _is_insufficient_scope(FakeError()) is True
+
+    def test_is_insufficient_scope_false_for_unrelated_error(self):
+        from app.features.crm.services.xero_api_client import _is_insufficient_scope
+
+        assert _is_insufficient_scope(Exception("connection reset")) is False
+
+    def test_parse_pdf_bytes_or_none_finds_pdf_signature(self):
+        from app.features.crm.services.xero_api_client import _parse_pdf_bytes_or_none
+
+        raw = b"garbage-prefix%PDF-1.4 rest of pdf content"
+        result = _parse_pdf_bytes_or_none(raw)
+        assert result is not None
+        assert result.startswith(b"%PDF")
+
+    def test_parse_pdf_bytes_or_none_decompresses_gzip(self):
+        import gzip
+
+        from app.features.crm.services.xero_api_client import _parse_pdf_bytes_or_none
+
+        raw = gzip.compress(b"%PDF-1.4 fake pdf body")
+        result = _parse_pdf_bytes_or_none(raw)
+        assert result is not None
+        assert result.startswith(b"%PDF")
+
+    def test_parse_pdf_bytes_or_none_returns_none_for_non_pdf(self):
+        from app.features.crm.services.xero_api_client import _parse_pdf_bytes_or_none
+
+        assert _parse_pdf_bytes_or_none(b'{"Message": "not a pdf"}') is None
+
+    def test_string_to_bytes_decodes_base64(self):
+        import base64
+
+        from app.features.crm.services.xero_api_client import _string_to_bytes
+
+        original = b"%PDF-1.4 pdf bytes here"
+        encoded = base64.b64encode(original).decode()
+        assert _string_to_bytes(encoded) == original
+
+    def test_string_to_bytes_passes_through_json_looking_text(self):
+        from app.features.crm.services.xero_api_client import _string_to_bytes
+
+        text = '{"Message": "an error"}'
+        assert _string_to_bytes(text) == text.encode("utf-8")
+
+    def test_extract_json_error_message_reads_message_field(self):
+        from app.features.crm.services.xero_api_client import _extract_json_error_message
+
+        raw = b'{"Message": "Invoice not found", "StatusCode": 404}'
+        assert _extract_json_error_message(raw) == "Invoice not found"
+
+    def test_extract_json_error_message_reads_nested_validation_error(self):
+        from app.features.crm.services.xero_api_client import _extract_json_error_message
+
+        raw = b'{"Elements": [{"ValidationErrors": [{"Message": "Contact is required"}]}]}'
+        assert _extract_json_error_message(raw) == "Contact is required"
+
+    def test_extract_json_error_message_none_for_non_json(self):
+        from app.features.crm.services.xero_api_client import _extract_json_error_message
+
+        assert _extract_json_error_message(b"%PDF-1.4 binary content") is None
+
+    def test_normalise_payment_terms_reads_sales_and_bills(self):
+        from types import SimpleNamespace
+
+        from app.features.crm.services.xero_api_client import _normalise_payment_terms
+
+        raw = SimpleNamespace(
+            sales=SimpleNamespace(day=20, month=None, type=SimpleNamespace(value="DAYSAFTERBILLMONTH")),
+            bills=None,
+        )
+        result = _normalise_payment_terms(raw)
+        assert result == {"sales": {"day": 20, "month": None, "type": "DAYSAFTERBILLMONTH"}, "bills": None}
+
+    def test_normalise_payment_terms_none_when_both_empty(self):
+        from types import SimpleNamespace
+
+        from app.features.crm.services.xero_api_client import _normalise_payment_terms
+
+        assert _normalise_payment_terms(SimpleNamespace(sales=None, bills=None)) is None
