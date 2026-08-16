@@ -116,6 +116,13 @@ def create_app():
 
         app.register_blueprint(create_crm_blueprint())
 
+    # Compliant is a separately mounted, feature-gated product area.  Its checks register
+    # with CoreChecksRunner only when this flag is on; core remains usable without it.
+    if config.compliant_enabled:
+        from app.features.compliant.compliant_bp import create_compliant_blueprint
+
+        app.register_blueprint(create_compliant_blueprint())
+
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
     @limiter.exempt
@@ -409,6 +416,7 @@ def create_app():
     def _inject_feature_flags():
         return dict(
             crm_enabled=config.crm_enabled,
+            compliant_enabled=config.compliant_enabled,
             rum_enabled=config.rum_enabled,
             grafana_data_enabled=config.grafana_data_enabled,
             posthog_data_enabled=config.posthog_data_enabled,

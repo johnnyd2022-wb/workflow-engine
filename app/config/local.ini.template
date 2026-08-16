@@ -24,6 +24,7 @@ receiver_email = your-email@example.com
 invoice_button_enabled = true
 schedule_enabled = true
 crm_enabled = true
+compliant_enabled = true
 workflow_engine_enabled = true
 
 [observability]

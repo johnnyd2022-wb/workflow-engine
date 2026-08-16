@@ -39,10 +39,10 @@ They cross: dashboard is `core` tier but `derived` layer.
 | Tier | Status | What it is |
 |---|---|---|
 | **core** | built — **every slice in this file** | Production control: processes, executions, inventory, traceability, CRM, dashboard. |
-| **compliant** | not built | Sits on top of core. Industry-specific compliance modules capturing everything needed for *live* compliance, automating compliance and audit requirements. **Vanta for physical manufacturing.** |
+| **compliant** | initial NZ Alcohol module on `feat/compliant` | Sits on top of core. Industry-specific compliance modules capturing everything needed for *live* compliance, automating compliance and audit requirements. **Vanta for physical manufacturing.** |
 | **enterprise** | not built | Core + compliant, plus multi-site, plus customer-facing logins so contract manufacturers' customers see live status and data about their own products. |
 
-**Everything in the codebase today is core tier, CRM included.** `crm_enabled` is a feature
+**Everything except the initial Compliant NZ Alcohol module is core tier, CRM included.** `crm_enabled` is a feature
 toggle, not a tier gate — don't read it as a paid-add-on boundary.
 
 Two slices are load-bearing for the unbuilt tiers, and are noted as such in their blocks:

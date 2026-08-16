@@ -275,6 +275,11 @@ class Config:
         return self.getboolean("features", "crm_enabled", True)
 
     @property
+    def compliant_enabled(self) -> bool:
+        """Enable the Compliant product area without coupling it to the core tier."""
+        return self.getboolean("features", "compliant_enabled", True)
+
+    @property
     def workflow_engine_enabled(self) -> bool:
         return self.getboolean("features", "workflow_engine_enabled", True)
 

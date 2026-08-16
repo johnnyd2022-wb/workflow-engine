@@ -1,0 +1,65 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Compliant — NZ Alcohol{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block content %}
+<main class="compliant-shell" data-compliant-root>
+  <header class="compliant-hero">
+    <div>
+      <p class="compliant-eyebrow">COMPLIANT / NZ ALCOHOL</p>
+      <h1>Always know what needs attention.</h1>
+      <p>Live operational evidence for alcohol manufacturing. This is evidence status, not legal certification.</p>
+    </div>
+    <div class="compliant-summary" data-compliant-summary>Loading status…</div>
+  </header>
+
+  <p class="compliant-error" data-compliant-error hidden></p>
+
+  <section class="compliant-setup" data-compliant-setup>
+    <div><h2>Set up your NZ Alcohol profile</h2><p>Choose what you make and configure only the requirements that apply to your operation.</p></div>
+    <form data-profile-form>
+      <fieldset><legend>Alcohol products</legend>
+        <label><input type="checkbox" name="product_type" value="spirits"> Spirits</label><label><input type="checkbox" name="product_type" value="beer"> Beer</label><label><input type="checkbox" name="product_type" value="wine"> Wine</label><label><input type="checkbox" name="product_type" value="cider"> Cider</label><label><input type="checkbox" name="product_type" value="mead"> Mead</label><label><input type="checkbox" name="product_type" value="rtd"> RTDs</label>
+      </fieldset>
+      <label>Council <input name="council_name" maxlength="255" placeholder="e.g. your territorial authority"></label>
+      <label>Trade-waste consent reference <input name="consent" maxlength="255" placeholder="Optional until applicable"></label>
+      <button type="submit">Enable Compliant</button>
+    </form>
+  </section>
+
+  <section class="compliant-frameworks" aria-label="Applicable frameworks" data-frameworks></section>
+
+  <section class="compliant-record-panel">
+    <div><h2>Map alcohol products once</h2><p>Compliant uses this ABV profile to calculate litres of alcohol from your live production and wastage movements.</p><p data-customs-reconciliation></p></div>
+    <form data-product-form>
+      <label>Core inventory name <input name="inventory_name" required maxlength="255" placeholder="Must match the product name in Core"></label>
+      <label>Product type <select name="product_type"><option value="spirits">Spirits</option><option value="beer">Beer</option><option value="wine">Wine</option><option value="cider">Cider</option><option value="mead">Mead</option><option value="rtd">RTD</option><option value="other">Other</option></select></label>
+      <label>ABV % <input name="abv_percent" type="number" min="0.0001" max="100" step="0.0001" required></label>
+      <label>Customs product code <input name="customs_product_code" maxlength="100" placeholder="Optional classification"></label>
+      <button type="submit">Add alcohol profile</button>
+    </form>
+    <div data-alcohol-products></div>
+  </section>
+
+  <section class="compliant-record-panel">
+    <div><h2>Add evidence or an operational record</h2><p>Records are append-only. Link any existing core execution/evidence ID in the source reference field.</p></div>
+    <form data-record-form>
+      <label>Framework <select name="framework_slug" required data-framework-select></select></label>
+      <label>Control <select name="control_id" required data-control-select></select></label>
+      <label>Record type <select name="record_type"><option value="attestation">Attestation</option><option value="reading">Reading / sample</option><option value="lodgement">Lodgement</option><option value="competency">Training / competency</option><option value="incident">Incident / corrective action</option></select></label>
+      <label>Status <select name="status"><option value="complete">Complete</option><option value="open">Open</option><option value="failed">Failed</option></select></label>
+      <label class="span-2">Title <input name="title" required maxlength="255" placeholder="What does this record prove?"></label>
+      <label>Due date <input name="due_date" type="date"></label>
+      <label>Measured value <input name="measured_value" type="number" step="0.0001"></label>
+      <label>Limit <input name="limit_value" type="number" step="0.0001"></label>
+      <label class="span-2">Structured detail <textarea name="details" rows="3" placeholder='Optional JSON, e.g. {"declared_litres_of_alcohol": 123.45}'></textarea></label>
+      <label class="span-2">Evidence reference <input name="evidence_reference" maxlength="1024" placeholder="File location, certificate number, or signed record reference"></label>
+      <label class="span-2">Core source references <input name="source_refs" maxlength="2048" placeholder="Optional comma-separated execution, inventory, or evidence IDs"></label>
+      <button type="submit">Add immutable record</button>
+    </form>
+  </section>
+
+  <section class="compliant-recent"><h2>Recent records</h2><div data-recent-records>No records yet.</div></section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/compliant.js"></script>{% endblock %}
