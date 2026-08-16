@@ -4,7 +4,7 @@
 session can scope work to one slice instead of treating `core` as a single 5763-line feature.
 Read the slice you're touching plus its `depended on by` line before you start.
 
-14 slices + platform. Three — **crm**, **dilution-calculator** and **demo-data** — have the
+16 slices + platform. Five — **crm**, **dilution-calculator**, **demo-data**, **compliant-platform** and **compliant-nz-alcohol** — have the
 target directory layout under `app/features/`; the other eleven are still inside `core_bp`.
 
 Each slice block carries a `reviewed:` line, one of three states: a **date** (last
@@ -39,10 +39,10 @@ They cross: dashboard is `core` tier but `derived` layer.
 | Tier | Status | What it is |
 |---|---|---|
 | **core** | built — **every slice in this file** | Production control: processes, executions, inventory, traceability, CRM, dashboard. |
-| **compliant** | not built | Sits on top of core. Industry-specific compliance modules capturing everything needed for *live* compliance, automating compliance and audit requirements. **Vanta for physical manufacturing.** |
+| **compliant** | initial NZ Alcohol module on `feat/compliant` | Sits on top of core. Industry-specific compliance modules capturing everything needed for *live* compliance, automating compliance and audit requirements. **Vanta for physical manufacturing.** |
 | **enterprise** | not built | Core + compliant, plus multi-site, plus customer-facing logins so contract manufacturers' customers see live status and data about their own products. |
 
-**Everything in the codebase today is core tier, CRM included.** `crm_enabled` is a feature
+**Everything except the initial Compliant NZ Alcohol module is core tier, CRM included.** `crm_enabled` is a feature
 toggle, not a tier gate — don't read it as a paid-add-on boundary.
 
 Two slices are load-bearing for the unbuilt tiers, and are noted as such in their blocks:
@@ -68,6 +68,8 @@ how they get carved.
 | dilution, ABV, proofing down, water to add | dilution-calculator |
 | sidebar, nav, landing page, static assets, settings page | shell |
 | demo data, reset db, seeding | demo-data |
+| compliance evidence, audit packs, framework modules | compliant-platform |
+| New Zealand beer, spirits, wine, Customs, NP3 or trade waste | compliant-nz-alcohol |
 
 ---
 
@@ -428,6 +430,59 @@ how they get carved.
     - The service carries a load-bearing physics distinction in its module docstring: the
       ABV/volume identity is exact, while water_to_add_ml uses an approximate
       mixture-density contraction model. Read it before touching the maths.
+
+## compliant-platform
+
+    subscription: compliant
+    layer:        platform (within the Compliant product; does not import industry identifiers)
+    flag:         compliant_enabled
+    reviewed:     never
+
+    routes:   /compliant, /api/compliant/{overview,profile,records,reports/*}
+    backend:  app/features/compliant/{compliant_bp.py,platform/,models/,routes/,service.py}
+    models:   ComplianceProfile, ComplianceRecord, ComplianceReport
+    frontend: app/features/compliant/frontend/{templates,static}/
+    tests:    tests/test_compliant_routes.py
+
+    depends on:      platform, identity, execution, inventory
+    depended on by:  compliant-nz-alcohol; future industry modules
+
+    - Owns the reusable, tenant-scoped evidence ledger, audit snapshot/export surface and
+      module registration seam. It does not certify compliance or mutate core activity.
+    - Enrolled organisations receive a non-blocking Compliance evidence shelf in every
+      Core execution step. Core remains the system of record for uploaded evidence and
+      captured prompts; Compliant surfaces that proof for reuse rather than duplicating it.
+    - `platform/registry.py` is the only import CoreChecksRunner needs. New modules are
+      composed there; Core must not gain framework IDs, regulator URLs or industry rules.
+    - The evidence ledger is append-only at the product contract level. Audit packs are
+      immutable snapshots, checksummed at generation, so an auditor can distinguish the
+      evidence available at that time from the current dashboard.
+
+## compliant-nz-alcohol
+
+    subscription: compliant
+    layer:        derived module
+    flag:         compliant_enabled
+    reviewed:     never
+
+    routes:   contributes framework cards and /api/compliant/* records through compliant-platform
+    backend:  app/features/compliant/modules/nz_alcohol/{catalogue,councils,module}.py
+              app/features/compliant/service.py (current module evaluator; to split when a second module lands)
+    models:   AlcoholProductProfile
+    frontend: NZ Alcohol profile and evidence flows in compliant-platform dashboard
+    tests:    tests/test_compliant_catalog.py, tests/test_compliant_routes.py
+
+    depends on:      compliant-platform, inventory, execution, crm (optional sales mapping)
+    depended on by:  CoreChecksRunner via the platform composition seam
+
+    - Covers spirits, beer, cider, mead, RTDs and wine with source-versioned Customs,
+      NP3/WSMP and selected-council trade-waste packs. It shows data coverage explicitly:
+      only the Customs production/wastage LAL is derived live from Core today.
+    - Council catalogues provide the applicable authority's source and operational control
+      set. Numeric limits, sampling frequency and expiry are deliberately taken from the
+      individual consent rather than assumed from a generic bylaw.
+    - This is operational evidence status, not a legal certification or automatic regulator
+      filing. The customer remains responsible for scope, inputs and submissions.
 
 ## shell
 

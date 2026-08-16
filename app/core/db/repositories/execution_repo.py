@@ -11,6 +11,7 @@ from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.process import Process
 from app.core.db.models.process_version import ProcessVersion
 from app.core.db.models.step import Step
+from app.core.domain.execution_prompt_rules import validate_execution_prompts
 from app.observability import start_span
 
 
@@ -242,6 +243,10 @@ class ExecutionRepository:
                 self.db.query(ExecutionStep)
                 .join(Execution)
                 .filter(ExecutionStep.id == execution_step_id, Execution.org_id == org_id)
+                # Completion changes inventory and advances downstream state. Lock
+                # the step before inspecting its status so two fast clicks (or
+                # two browser tabs) cannot both complete the same production run.
+                .with_for_update(of=ExecutionStep)
                 .first()
             )
             if not execution_step:
@@ -272,6 +277,12 @@ class ExecutionRepository:
             # Then enforce that this step itself is in a completable state
             if execution_step.status not in (ExecutionStepStatus.READY, ExecutionStepStatus.IN_PROGRESS):
                 raise ValueError(f"Step {execution_step_id} is not in a state that can be completed")
+
+            prompt_errors = validate_execution_prompts(
+                execution_step.step.execution_prompts if execution_step.step else [], execution_data
+            )
+            if prompt_errors:
+                raise ValueError("; ".join(prompt_errors))
 
             # Update step status and data
             execution_step.status = ExecutionStepStatus.COMPLETED

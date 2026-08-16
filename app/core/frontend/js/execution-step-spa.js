@@ -335,7 +335,16 @@
         var inputHtml;
         if (t === 'number') inputHtml = '<input type="number" class="spa-inp" step="0.01"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '">';
         else if (t === 'date') inputHtml = '<input type="date" class="spa-inp"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '">';
-        else if (t === 'select') inputHtml = '<select class="spa-inp"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '"><option value="">Select…</option></select>';
+        else if (t === 'select') {
+          var choices = Array.isArray(p.options)
+            ? p.options.map(function(option) { return String(option == null ? '' : option).trim(); }).filter(Boolean)
+            : [];
+          if (choices.length) {
+            inputHtml = '<select class="spa-inp"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '"><option value="">Select…</option>' + choices.map(function(option) { return '<option value="' + escapeHtml(option) + '">' + escapeHtml(option) + '</option>'; }).join('') + '</select>';
+          } else {
+            inputHtml = '<input type="text" class="spa-inp"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '" placeholder="Enter value">';
+          }
+        }
         else inputHtml = '<input type="text" class="spa-inp"' + (req ? ' data-required="true"' : '') + ' data-prompt="' + escapeHtml(p.label || '') + '">';
         html += '<div><label class="spa-field-label">' + escapeHtml(p.label || 'Prompt') +
           (req ? ' <span style="color: var(--error);">*</span>' : '') + '</label>' + inputHtml + '</div>';

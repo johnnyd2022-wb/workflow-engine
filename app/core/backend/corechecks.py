@@ -78,6 +78,12 @@ class CoreChecksRunner:
         self.register_check("output_expiry", run_output_expiry_check)
         self.register_check(OUTPUT_READY_DATE_CHECK_ID, run_output_ready_date_check)
 
+        # Product modules register through this public composition seam.  The runner
+        # deliberately knows no industry-specific IDs or data shapes.
+        from app.features.compliant.platform.registry import register_enabled_module_checks
+
+        register_enabled_module_checks(self)
+
     def register_check(self, check_id: str, fn: CheckFn) -> None:
         """Register a check so it can be run via run_check(check_id)."""
         self._checks[check_id] = fn

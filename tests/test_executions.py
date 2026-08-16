@@ -275,6 +275,38 @@ class TestGetExecution:
 class TestCompleteStepContract:
     """Complete step stores actual_inputs/actual_outputs (execution modal contract)."""
 
+    def test_complete_step_enforces_configured_prompt_constraints(self, db, synthetic_org_and_process_clean):
+        org_id = synthetic_org_and_process_clean["org_id"]
+        process_id = synthetic_org_and_process_clean["process_id"]
+        step_definition = db.query(Step).filter(Step.process_id == process_id, Step.step_number == 1).one()
+        step_definition.execution_prompts = [
+            {"label": "QC result", "type": "select", "required": True, "options": ["Pass", "Hold"]}
+        ]
+        db.commit()
+
+        repo = ExecutionRepository(db)
+        execution = repo.create_execution(org_id=org_id, process_id=process_id)
+        step = sorted(execution.execution_steps, key=lambda item: item.step_number)[0]
+
+        with pytest.raises(ValueError, match="must be one of: Pass, Hold"):
+            repo.complete_step(
+                execution_step_id=step.id,
+                org_id=org_id,
+                actual_inputs=[],
+                actual_outputs=[],
+                execution_data={"QC result": "Rework"},
+            )
+        db.rollback()
+
+        completed = repo.complete_step(
+            execution_step_id=step.id,
+            org_id=org_id,
+            actual_inputs=[],
+            actual_outputs=[],
+            execution_data={"QC result": "Pass"},
+        )
+        assert completed.status == ExecutionStepStatus.COMPLETED
+
     def test_complete_step_stores_actual_inputs_and_outputs(self, db, synthetic_org_and_process_clean):
         org_id = synthetic_org_and_process_clean["org_id"]
         process_id = synthetic_org_and_process_clean["process_id"]

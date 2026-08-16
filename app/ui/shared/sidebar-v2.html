@@ -68,9 +68,9 @@
           </svg>
         </a>
       </li>
-      {# Compliance hidden for now (desktop + mobile). #}
-      {# <li class="nav-item">
-        <a href="/workflow-engine/compliance" class="nav-link{% if active_page == 'compliance' %} active{% endif %}">
+      {% if compliant_enabled %}
+      <li class="nav-item">
+        <a href="/compliant" class="nav-link{% if active_page == 'compliant' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -81,7 +81,8 @@
             <polyline points="9 18 15 12 9 6"/>
           </svg>
         </a>
-      </li> #}
+      </li>
+      {% endif %}
       {% if crm_enabled %}
       <li class="nav-item">
         <a href="/crm" class="nav-link{% if active_page == 'crm' %} active{% endif %}">
