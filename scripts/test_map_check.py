@@ -40,6 +40,18 @@ TESTS_DIR = REPO_ROOT / "tests"
 # (this very script) from being read as a dangling test-file reference.
 REF_RE = re.compile(r"(?<!scripts/)test_[A-Za-z0-9_*]+\.py")
 
+# A table row: `| 18 | Flow text | App area | Test file(s) | partial | Notes... |`.
+# Cells 2-4 (Flow / App area / Test files) use `[^|]*` rather than `.*` so a greedy `.*`
+# can't skip past the real Status cell and match a later `| covered |`-shaped substring
+# inside the free-text Notes column instead.
+TABLE_ROW_RE = re.compile(r"^\|\s*(\d+)\s*\|[^|]*\|[^|]*\|[^|]*\|\s*(covered|partial|none|live)\s*\|", re.MULTILINE)
+
+GAPS_HEADING = "## Known highest-value gaps"
+
+# A row reference inside that section's bullet list: "**Row 8 / 14 / 16**", "**Row 12**",
+# "**Rows 6/7**" — capture the whole digit/separator run after "Row"/"Rows", then split it.
+GAP_ROW_REF_RE = re.compile(r"\*\*Rows?\s+([\d/,\s]+)\*\*")
+
 
 def real_test_files() -> set[str]:
     """Every tests/test_*.py basename that actually exists on disk."""
@@ -59,7 +71,33 @@ def referenced_patterns() -> list[str]:
     return list(seen)
 
 
+def row_statuses(text: str) -> dict[int, str]:
+    """Row number -> current Status column value, read straight from the table."""
+    return {int(m.group(1)): m.group(2) for m in TABLE_ROW_RE.finditer(text)}
+
+
+def stale_gap_refs(text: str) -> list[str]:
+    """Rows the '## Known highest-value gaps' section still cites as owed, that the
+    table above it already marks `covered` — the gaps section rotting silently out of
+    sync with its own table (this file's own admission: it "cannot judge whether a
+    row's status is truthful", so nothing else catches this)."""
+    if GAPS_HEADING not in text:
+        return []
+    gaps_section = text.split(GAPS_HEADING, 1)[1].split("\n## ", 1)[0]
+    statuses = row_statuses(text)
+    stale: list[str] = []
+    for m in GAP_ROW_REF_RE.finditer(gaps_section):
+        for n in re.findall(r"\d+", m.group(1)):
+            row_num = int(n)
+            if statuses.get(row_num) == "covered":
+                stale.append(f"Row {row_num}")
+    return stale
+
+
 def analyse() -> dict[str, Any]:
+    if not MAP.exists():
+        raise SystemExit(f"no test map at {MAP}")
+    text = MAP.read_text(encoding="utf-8")
     existing = real_test_files()
     patterns = referenced_patterns()
 
@@ -70,7 +108,11 @@ def analyse() -> dict[str, Any]:
     referenced_files = {f for f in existing if any(fnmatch.fnmatch(f, p) for p in patterns)}
     unreferenced = sorted(existing - referenced_files)
 
-    problems = {"dangling_rows": sorted(dangling), "unreferenced_files": unreferenced}
+    problems = {
+        "dangling_rows": sorted(dangling),
+        "unreferenced_files": unreferenced,
+        "stale_gap_refs": stale_gap_refs(text),
+    }
     return {
         "map": str(MAP.relative_to(REPO_ROOT)),
         "test_files_on_disk": len(existing),
@@ -93,6 +135,9 @@ def render(report: dict[str, Any]) -> str:
     if p["unreferenced_files"]:
         out.append("  UNREFERENCED (test file on disk, in no map row — coverage the map is blind to):")
         out += [f"    ✗ {n}" for n in p["unreferenced_files"]]
+    if p["stale_gap_refs"]:
+        out.append("  STALE GAP REFS ('Known highest-value gaps' cites a row the table already marks covered):")
+        out += [f"    ✗ {n}" for n in p["stale_gap_refs"]]
     if report["ok"]:
         out.append("  ✓ every map row resolves to a real test file, and every test file is mapped")
     return "\n".join(out)
