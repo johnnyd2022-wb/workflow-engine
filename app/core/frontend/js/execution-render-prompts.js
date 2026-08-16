@@ -23,8 +23,28 @@
     var signal = ctx.signal;
     var CoreAPI = root.CoreAPI;
     var showNotification = root.showNotification;
-    var executionPrompts = (stepDefinition && stepDefinition.execution_prompts) || [];
+    var executionPrompts = ((stepDefinition && stepDefinition.execution_prompts) || []).slice();
     var currentStepId = stepDefinition && stepDefinition.id ? String(stepDefinition.id) : null;
+    // Organisations enrolled in Compliant get an evidence shelf in every existing workflow.
+    // It is deliberately optional: Compliant is advisory and must never stop production.
+    if (CoreAPI && typeof CoreAPI.getCompliantCaptureContext === 'function') {
+      try {
+        var compliantContext = await CoreAPI.getCompliantCaptureContext({ signal: signal });
+        var hasEvidencePrompt = executionPrompts.some(function (prompt) { return prompt && prompt.type === 'evidence'; });
+        if (compliantContext && compliantContext.enabled && !hasEvidencePrompt) {
+          executionPrompts.push({
+            label: compliantContext.label || 'Compliance evidence',
+            type: 'evidence',
+            required: false,
+            compliant_auto: true,
+            help: compliantContext.help || '',
+          });
+        }
+      } catch (e) {
+        if (e && e.name === 'AbortError') throw e;
+        // Compliant must be an additive layer; a missing module never breaks an execution.
+      }
+    }
     if (executionPrompts.length > 0 && promptsContainer) {
       var executionIdForEvidence = modal.dataset.executionId || '';
       let evidenceListForStep = [];
@@ -109,6 +129,7 @@
           <label style="display: block; font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
             ${escapeHtml(prompt.label)}${prompt.required !== false ? ' <span style="color: var(--error);">*</span>' : ''}${prompt.unit ? ` (${escapeHtml(prompt.unit)})` : ''}
           </label>
+          ${prompt.compliant_auto ? `<p style="margin:-3px 0 10px;font-size:12px;color:var(--text-secondary);">${escapeHtml(prompt.help || '')}</p>` : ''}
           ${inputHtml}
         `;
 

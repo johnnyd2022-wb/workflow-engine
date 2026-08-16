@@ -54,6 +54,24 @@ def overview():
     return jsonify(_service().overview(_org_id())), 200
 
 
+@api_bp.route("/api/compliant/capture-context", methods=["GET"])
+@requires_auth
+def capture_context():
+    """Small, Core-safe context for the execution UI.
+
+    Core owns uploads and execution data. Compliant only asks it to surface a non-blocking
+    capture shelf for enrolled organisations, so operators keep working in one workflow.
+    """
+    profile = _service().get_profile(_org_id())
+    return jsonify(
+        {
+            "enabled": bool(profile and profile.enabled),
+            "label": "Compliance evidence",
+            "help": "Optional photo or PDF saved against this production step and ready to reuse in Compliant. It never blocks production.",
+        }
+    ), 200
+
+
 @api_bp.route("/api/compliant/profile", methods=["PUT"])
 @requires_auth
 @requires_role(UserRole.ADMIN)

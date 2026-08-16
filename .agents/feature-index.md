@@ -449,6 +449,9 @@ how they get carved.
 
     - Owns the reusable, tenant-scoped evidence ledger, audit snapshot/export surface and
       module registration seam. It does not certify compliance or mutate core activity.
+    - Enrolled organisations receive a non-blocking Compliance evidence shelf in every
+      Core execution step. Core remains the system of record for uploaded evidence and
+      captured prompts; Compliant surfaces that proof for reuse rather than duplicating it.
     - `platform/registry.py` is the only import CoreChecksRunner needs. New modules are
       composed there; Core must not gain framework IDs, regulator URLs or industry rules.
     - The evidence ledger is append-only at the product contract level. Audit packs are

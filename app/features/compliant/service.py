@@ -17,9 +17,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.db.models.execution import Execution
-from app.core.db.models.execution_evidence import ExecutionEvidence
+from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
+from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
+from app.core.db.models.step import Step
 from app.features.compliant.models import AlcoholProductProfile, ComplianceProfile, ComplianceRecord, ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import (
     NZ_ALCOHOL_FRAMEWORKS,
@@ -74,6 +76,8 @@ def calculate_customs_reconciliation(profiles: dict[str, Any], movements: list[t
     wastage_lal = Decimal("0")
     unprofiled = 0
     unsupported_unit = 0
+    unprofiled_items: set[str] = set()
+    unsupported_items: set[str] = set()
     for movement, item_name in movements:
         if movement.movement_type not in {
             InventoryMovementType.PRODUCTION.value,
@@ -83,6 +87,7 @@ def calculate_customs_reconciliation(profiles: dict[str, Any], movements: list[t
         product = profiles.get(item_name)
         if product is None:
             unprofiled += 1
+            unprofiled_items.add(item_name)
             continue
         quantity = Decimal(str(movement.quantity))
         unit = (movement.unit or "").lower()
@@ -92,6 +97,7 @@ def calculate_customs_reconciliation(profiles: dict[str, Any], movements: list[t
             litres = quantity
         else:
             unsupported_unit += 1
+            unsupported_items.add(f"{item_name} ({movement.unit})")
             continue
         litres_of_alcohol = abs(litres) * Decimal(str(product.abv_percent)) / Decimal("100")
         if movement.movement_type == InventoryMovementType.PRODUCTION.value:
@@ -104,7 +110,84 @@ def calculate_customs_reconciliation(profiles: dict[str, Any], movements: list[t
         "profiled_product_count": len(profiles),
         "unprofiled_movement_count": unprofiled,
         "unsupported_unit_movement_count": unsupported_unit,
+        "unprofiled_inventory_names": sorted(unprofiled_items),
+        "unsupported_inventory_units": sorted(unsupported_items),
     }
+
+
+def build_priority_actions(
+    profile: ComplianceProfile | None, frameworks: list[dict[str, Any]], reconciliation: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Return the fewest high-value actions needed to improve evidence readiness.
+
+    This is deliberately a work queue, not a synthetic compliance score: each item tells the
+    operator the exact value unlocked and points to one small action in the product.
+    """
+    if profile is None or not profile.enabled:
+        return [
+            {
+                "kind": "profile",
+                "title": "Tell Compliant what you make",
+                "description": "Choose your alcohol products to see only the frameworks that apply.",
+                "value": "Unlock your personalised compliance plan in under a minute.",
+            }
+        ]
+
+    actions: list[dict[str, Any]] = []
+    if not (profile.settings or {}).get("alcohol_product_types"):
+        actions.append(
+            {
+                "kind": "profile",
+                "title": "Choose the alcohol products you make",
+                "description": "This removes irrelevant requirements and keeps your plan specific to your operation.",
+                "value": "Personalise the plan.",
+            }
+        )
+    unmapped = reconciliation.get("unprofiled_inventory_names", [])
+    if unmapped:
+        actions.append(
+            {
+                "kind": "product",
+                "title": f"Map {len(unmapped)} product{'s' if len(unmapped) != 1 else ''} already found in Core",
+                "description": "Add ABV once and Compliant turns future production and wastage movements into live LAL evidence.",
+                "value": "Unlock live Customs production evidence.",
+                "suggestions": unmapped[:5],
+            }
+        )
+    elif not reconciliation.get("profiled_product_count"):
+        actions.append(
+            {
+                "kind": "product",
+                "title": "Map your first alcohol product",
+                "description": "Set its ABV and Compliant will start deriving LAL from Core movements.",
+                "value": "Start the live Customs view.",
+            }
+        )
+
+    controls = [
+        (framework, control)
+        for framework in frameworks
+        for control in framework["controls"]
+        if control["state"] in {"attention", "setup"}
+        and control["control_id"] not in {"product-mapping", "reconciliation"}
+    ]
+    controls.sort(
+        key=lambda item: (0 if item[1]["state"] == "attention" else 1, item[0]["name"], item[1]["control_id"])
+    )
+    for framework, control in controls:
+        actions.append(
+            {
+                "kind": "record",
+                "title": f"{framework['name']}: {control['control_id'].replace('-', ' ').title()}",
+                "description": control["reason"],
+                "value": control["description"],
+                "framework_slug": framework["slug"],
+                "control_id": control["control_id"],
+                "capture": control.get("capture", {}),
+                "state": control["state"],
+            }
+        )
+    return actions[:6]
 
 
 class ComplianceService:
@@ -169,7 +252,7 @@ class ComplianceService:
                 continue
             exists = any(
                 self.session.query(model.id).filter(model.id == source_id, model.org_id == org_id).first()
-                for model in (Execution, ExecutionEvidence, InventoryMovement)
+                for model in (Execution, ExecutionEvidence, ExecutionStep, InventoryMovement)
             )
             if not exists:
                 invalid.append(source_ref)
@@ -197,6 +280,20 @@ class ComplianceService:
         evidence_records = sum(1 for record in records if record.evidence_reference)
         linked_records = sum(1 for record in records if record.source_refs)
         gaps = live["unprofiled_movement_count"] + live["unsupported_unit_movement_count"]
+        completed_prompt_steps = (
+            self.session.query(ExecutionStep)
+            .filter(
+                ExecutionStep.org_id == org_id,
+                ExecutionStep.status == ExecutionStepStatus.COMPLETED,
+                ExecutionStep.execution_data.isnot(None),
+            )
+            .count()
+        )
+        active_evidence_files = (
+            self.session.query(ExecutionEvidence)
+            .filter(ExecutionEvidence.org_id == org_id, ExecutionEvidence.evidence_status == EVIDENCE_STATUS_ACTIVE)
+            .count()
+        )
         return _iso(
             {
                 "inventory_movements_last_updated_at": latest_movement,
@@ -205,9 +302,58 @@ class ComplianceService:
                 "manual_evidence_records": len(records),
                 "records_with_evidence_reference": evidence_records,
                 "records_linked_to_core": linked_records,
+                "completed_core_steps_with_captured_data": completed_prompt_steps,
+                "active_core_evidence_files": active_evidence_files,
                 "scope": "Customs production and wastage LAL is derived from Core inventory movements; other obligations are evidence-led until their data capture is connected.",
             }
         )
+
+    def recent_core_proof(self, org_id: UUID) -> list[dict[str, Any]]:
+        """Offer captured Core proof to reuse, avoiding a parallel compliance record system."""
+        files = (
+            self.session.query(ExecutionEvidence)
+            .filter(ExecutionEvidence.org_id == org_id, ExecutionEvidence.evidence_status == EVIDENCE_STATUS_ACTIVE)
+            .order_by(ExecutionEvidence.created_at.desc())
+            .limit(8)
+            .all()
+        )
+        file_candidates = [
+            _iso(
+                {
+                    "id": record.id,
+                    "execution_id": record.execution_id,
+                    "kind": "file",
+                    "title": record.file_name,
+                    "created_at": record.created_at,
+                }
+            )
+            for record in files
+        ]
+        steps = (
+            self.session.query(ExecutionStep, Step.name)
+            .join(Step, Step.id == ExecutionStep.step_id)
+            .filter(
+                ExecutionStep.org_id == org_id,
+                ExecutionStep.status == ExecutionStepStatus.COMPLETED,
+                ExecutionStep.execution_data.isnot(None),
+            )
+            .order_by(ExecutionStep.completed_at.desc())
+            .limit(8)
+            .all()
+        )
+        step_candidates = [
+            _iso(
+                {
+                    "id": step.id,
+                    "execution_id": step.execution_id,
+                    "kind": "execution-step",
+                    "title": f"Completed Core step: {step_name}",
+                    "created_at": step.completed_at,
+                }
+            )
+            for step, step_name in steps
+        ]
+        return (file_candidates + step_candidates)[:8]
 
     def customs_reconciliation(self, org_id: UUID) -> dict[str, Any]:
         """Calculate litres of alcohol from profiled production and wastage movements.
@@ -378,6 +524,7 @@ class ComplianceService:
     def overview(self, org_id: UUID) -> dict[str, Any]:
         profile = self.get_profile(org_id)
         frameworks = self.evaluate(org_id)
+        reconciliation = self.customs_reconciliation(org_id) if frameworks else {}
         counts = {"compliant": 0, "attention": 0, "setup": 0}
         for framework in frameworks:
             counts[framework["state"]] += 1
@@ -396,8 +543,20 @@ class ComplianceService:
             "frameworks": frameworks,
             "counts": counts,
             "core_movement_summary": self._core_movement_summary(org_id) if frameworks else {},
-            "customs_reconciliation": self.customs_reconciliation(org_id) if frameworks else {},
+            "customs_reconciliation": reconciliation,
             "data_coverage": self.data_coverage(org_id) if frameworks else {},
+            "priority_actions": build_priority_actions(profile, frameworks, reconciliation),
+            "evidence_readiness": {
+                "current_controls": sum(
+                    1
+                    for framework in frameworks
+                    for control in framework["controls"]
+                    if control["state"] == "compliant"
+                ),
+                "total_controls": sum(len(framework["controls"]) for framework in frameworks),
+                "label": "Current operational evidence, not a legal compliance score.",
+            },
+            "core_proof_candidates": self.recent_core_proof(org_id) if profile else [],
             "trade_waste_catalogues": [
                 {key: value for key, value in catalogue.items() if key != "controls"} | {"slug": slug}
                 for slug, catalogue in TRADE_WASTE_CATALOGUES.items()

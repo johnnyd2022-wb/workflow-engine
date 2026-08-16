@@ -139,6 +139,16 @@ def test_execution_render_prompts_module_exists():
     assert "ExecutionRenderPrompts" in body and "renderExecutionPrompts" in body
 
 
+def test_compliant_evidence_shelf_is_additive_to_every_execution_prompt_surface():
+    api_body = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "core-api.js").read_text(encoding="utf-8")
+    prompts_body = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-prompts.js").read_text(
+        encoding="utf-8"
+    )
+    assert "getCompliantCaptureContext" in api_body
+    assert "compliant_auto" in prompts_body
+    assert "must never stop production" in prompts_body
+
+
 def test_execution_modal_calls_render_prompts_api():
     js_path = _REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-modal.js"
     text = js_path.read_text(encoding="utf-8")

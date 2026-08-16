@@ -8,7 +8,7 @@ from app.features.compliant.frameworks import NZ_ALCOHOL_FRAMEWORKS, framework_b
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_for_profile
 from app.features.compliant.modules.nz_alcohol.councils import TRADE_WASTE_CATALOGUES
 from app.features.compliant.registry import CHECK_ID
-from app.features.compliant.service import calculate_customs_reconciliation
+from app.features.compliant.service import build_priority_actions, calculate_customs_reconciliation
 
 
 def test_nz_alcohol_catalog_covers_the_primary_production_types():
@@ -75,3 +75,40 @@ def test_customs_lal_calculation_is_exact_and_exposes_coverage_gaps():
     assert result["wastage_litres_of_alcohol"] == "0.8000"
     assert result["unprofiled_movement_count"] == 1
     assert result["unsupported_unit_movement_count"] == 1
+    assert result["unprofiled_inventory_names"] == ["Unmapped RTD"]
+    assert result["unsupported_inventory_units"] == ["Gin (kg)"]
+
+
+def test_priority_actions_lead_with_live_value_then_the_smallest_evidence_gaps():
+    first_run = build_priority_actions(None, [], {})
+    assert first_run[0]["kind"] == "profile"
+
+    profile = SimpleNamespace(enabled=True, settings={"alcohol_product_types": ["spirits"]})
+    frameworks = [
+        {
+            "name": "Customs alcohol reconciliation",
+            "slug": "customs-alcohol",
+            "controls": [
+                {
+                    "control_id": "period-lodgement",
+                    "state": "setup",
+                    "reason": "Evidence or configuration required",
+                    "description": "Record each lodgement period.",
+                    "capture": {"period": True},
+                },
+                {
+                    "control_id": "movement-evidence",
+                    "state": "attention",
+                    "reason": "Open or failed record",
+                    "description": "Retain dispatch evidence.",
+                    "capture": {"source_refs": True},
+                },
+            ],
+        }
+    ]
+
+    actions = build_priority_actions(profile, frameworks, {"unprofiled_inventory_names": ["House Gin"]})
+
+    assert actions[0]["kind"] == "product"
+    assert actions[0]["suggestions"] == ["House Gin"]
+    assert actions[1]["control_id"] == "movement-evidence"

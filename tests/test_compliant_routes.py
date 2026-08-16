@@ -53,6 +53,9 @@ def test_compliant_profile_records_and_audit_pack_are_org_scoped(db, flask_app):
             },
         )
         assert profile.status_code == 200
+        capture_context = client_a.get("/api/compliant/capture-context")
+        assert capture_context.status_code == 200
+        assert capture_context.get_json()["enabled"] is True
         assert (
             client_a.post(
                 "/api/compliant/alcohol-products",
@@ -91,6 +94,7 @@ def test_compliant_routes_require_auth(flask_app):
     client.environ_base["wsgi.url_scheme"] = "https"
     client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
     assert client.get("/api/compliant/overview").status_code == 401
+    assert client.get("/api/compliant/capture-context").status_code == 401
     assert client.post("/api/compliant/records", json={}).status_code == 401
 
 
