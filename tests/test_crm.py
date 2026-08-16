@@ -485,6 +485,134 @@ class TestXeroSyncService:
 
 
 # ─────────────────────────────────────────────
+# CRM Service — Invoice Creation
+# ─────────────────────────────────────────────
+
+
+class TestCRMInvoiceCreation:
+    """POST /api/crm/customers/<contact_id>/invoices -- the "Customer / invoice CRUD"
+    coverage gap named in .agents/reports/e2e/coverage-index.md: customers are Xero-sourced
+    (read-only sync, no create endpoint -- see .agents/specs/crm.md), so the only real write
+    path here is invoice creation. Stubs XeroAPIClient.create_invoice at the HTTP layer, per
+    that report's explicit requirement that a test must never touch a real Xero tenant.
+    """
+
+    def _make_contact(self, db, org_id, *, xero_contact_id=None):
+        from app.features.crm.models.xero_contact import XeroContact
+
+        c = XeroContact(
+            org_id=org_id,
+            xero_contact_id=xero_contact_id if xero_contact_id is not None else f"fake-xero-{uuid4()}",
+            xero_tenant_id="fake-tenant",
+            name=f"Test Customer {uuid4()}",
+            contact_status="ACTIVE",
+        )
+        db.add(c)
+        db.commit()
+        return c
+
+    def _stub_create_invoice(self, monkeypatch, **overrides):
+        from datetime import date as date_cls
+        from types import SimpleNamespace
+
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+
+        fields = {
+            "invoice_id": f"xero-inv-{uuid4()}",
+            "invoice_number": "INV-0001",
+            "status": "DRAFT",
+            "date": date_cls(2026, 8, 1),
+            "due_date": date_cls(2026, 8, 15),
+            "total": 150.0,
+        }
+        fields.update(overrides)
+        created = SimpleNamespace(**fields)
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "create_invoice", lambda self, **kw: created)
+        # incremental_sync runs best-effort right after create (backend.py wraps it in a
+        # bare try/except) -- stub it inert so the test doesn't depend on that side effect.
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [])
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+        return created
+
+    def test_create_invoice_happy_path(self, db, org, monkeypatch):
+        from app.features.crm.services.crm_service import CRMService
+
+        contact = self._make_contact(db, org.id)
+        created = self._stub_create_invoice(monkeypatch)
+
+        svc = CRMService(db)
+        result = svc.create_customer_invoice(
+            contact.id,
+            org.id,
+            {
+                "invoice_date": "2026-08-01",
+                "line_items": [{"description": "Botanical gin, 700ml case", "quantity": 2, "unit_amount": 75.0}],
+            },
+        )
+
+        assert result["xero_invoice_id"] == created.invoice_id
+        assert result["status"] == "DRAFT"
+        assert result["total"] == 150.0
+        event = _latest_event(db, org.id, "crm_invoice.created")
+        assert event is not None
+        assert event.payload["contact_id"] == str(contact.id)
+
+    def test_create_invoice_requires_line_items(self, db, org, monkeypatch):
+        from app.features.crm.services.crm_service import CRMService
+
+        contact = self._make_contact(db, org.id)
+        self._stub_create_invoice(monkeypatch)
+
+        svc = CRMService(db)
+        with pytest.raises(ValueError, match="line item"):
+            svc.create_customer_invoice(contact.id, org.id, {"invoice_date": "2026-08-01", "line_items": []})
+
+    def test_create_invoice_rejects_contact_missing_xero_id(self, db, org, monkeypatch):
+        """A contact that hasn't synced a real Xero id yet must not be invoiced --
+        create_invoice would otherwise be called with a garbage contact_xero_id."""
+        from app.features.crm.services.crm_service import CRMService
+
+        contact = self._make_contact(db, org.id, xero_contact_id="")
+        self._stub_create_invoice(monkeypatch)
+
+        svc = CRMService(db)
+        with pytest.raises(ValueError, match="Xero contact id"):
+            svc.create_customer_invoice(
+                contact.id,
+                org.id,
+                {"invoice_date": "2026-08-01", "line_items": [{"description": "x", "quantity": 1, "unit_amount": 1}]},
+            )
+
+    def test_org_b_cannot_create_invoice_for_org_a_customer(self, db, org, monkeypatch):
+        """Highest-value case: org B must not be able to push a real Xero invoice against
+        org A's customer by guessing/reusing its contact UUID."""
+        from app.features.crm.services.crm_service import CRMService
+
+        org_b = OrganisationRepository(db).create_org(f"Org B {uuid4()}")
+        db.commit()
+        contact_a = self._make_contact(db, org.id)
+        self._stub_create_invoice(monkeypatch)
+
+        svc = CRMService(db)
+        with pytest.raises(ValueError, match="not found"):
+            svc.create_customer_invoice(
+                contact_a.id,
+                org_b.id,
+                {"invoice_date": "2026-08-01", "line_items": [{"description": "x", "quantity": 1, "unit_amount": 1}]},
+            )
+
+        # No invoice should have been recorded against org A's customer either -- a rejected
+        # cross-tenant attempt must not leave a side effect on the org it targeted.
+        from app.features.crm.repositories.xero_invoice_repo import XeroInvoiceRepository
+
+        _, total = XeroInvoiceRepository(db).list_for_contact(contact_a.id, org.id)
+        assert total == 0, "a rejected cross-org invoice attempt still created a row against org A"
+
+        db.query(Organisation).filter(Organisation.id == org_b.id).delete(synchronize_session=False)
+        db.commit()
+
+
+# ─────────────────────────────────────────────
 # CRM Service — Mapping + Traceability Events
 # ─────────────────────────────────────────────
 
