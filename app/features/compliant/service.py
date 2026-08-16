@@ -244,17 +244,44 @@ class ComplianceService:
         movement, rather than unverified text that merely looks connected.
         """
         invalid: list[str] = []
+        parsed_source_ids: set[UUID] = set()
         for source_ref in source_refs:
             try:
                 source_id = UUID(source_ref)
             except (TypeError, ValueError):
                 invalid.append(source_ref)
                 continue
-            exists = any(
-                self.session.query(model.id).filter(model.id == source_id, model.org_id == org_id).first()
-                for model in (Execution, ExecutionEvidence, ExecutionStep, InventoryMovement)
+            parsed_source_ids.add(source_id)
+
+        if not parsed_source_ids:
+            return invalid
+
+        # A record may join any Core evidence type. Fetch each finite source table once
+        # rather than querying once per reference (audit packs can carry many references).
+        valid_source_ids = {
+            source_id
+            for rows in (
+                self.session.query(Execution.id)
+                .filter(Execution.org_id == org_id, Execution.id.in_(parsed_source_ids))
+                .all(),
+                self.session.query(ExecutionEvidence.id)
+                .filter(ExecutionEvidence.org_id == org_id, ExecutionEvidence.id.in_(parsed_source_ids))
+                .all(),
+                self.session.query(ExecutionStep.id)
+                .filter(ExecutionStep.org_id == org_id, ExecutionStep.id.in_(parsed_source_ids))
+                .all(),
+                self.session.query(InventoryMovement.id)
+                .filter(InventoryMovement.org_id == org_id, InventoryMovement.id.in_(parsed_source_ids))
+                .all(),
             )
-            if not exists:
+            for (source_id,) in rows
+        }
+        for source_ref in source_refs:
+            try:
+                source_id = UUID(source_ref)
+            except (TypeError, ValueError):
+                continue
+            if source_id not in valid_source_ids:
                 invalid.append(source_ref)
         return invalid
 
