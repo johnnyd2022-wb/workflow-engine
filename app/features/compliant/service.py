@@ -616,7 +616,9 @@ class ComplianceService:
                 if (not period_start or not record.period_end or record.period_end >= period_start)
                 and (not period_end or not record.period_start or record.period_start <= period_end)
             ]
-        state = next(item for item in self.evaluate(org_id) if item["slug"] == framework_slug)
+        state = next((item for item in self.evaluate(org_id) if item["slug"] == framework_slug), None)
+        if state is None:
+            raise ValueError("Framework is not applicable to this organisation's current profile")
         payload = _iso(
             {
                 "title": f"{framework['name']} audit pack",

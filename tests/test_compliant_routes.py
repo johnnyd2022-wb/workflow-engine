@@ -89,6 +89,26 @@ def test_compliant_profile_records_and_audit_pack_are_org_scoped(db, flask_app):
         db.commit()
 
 
+def test_report_for_inapplicable_framework_returns_400(db, flask_app):
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile",
+                json={"enabled": True, "settings": {"alcohol_product_types": ["wine"]}},
+            ).status_code
+            == 200
+        )
+        # np3-food-control does not apply to wine-only producers, so it is filtered out
+        # of evaluate() even though it is a real, known framework slug.
+        response = client.post("/api/compliant/reports/np3-food-control", json={})
+        assert response.status_code == 400
+        assert "not applicable" in response.get_json()["error"]
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
 def test_compliant_routes_require_auth(flask_app):
     client = flask_app.test_client()
     client.environ_base["wsgi.url_scheme"] = "https"
