@@ -22,3 +22,16 @@ def test_compliant_dashboard_documents_the_honest_product_boundary():
     ).read_text(encoding="utf-8")
 
     assert "without pretending to be legal certification" in dashboard
+
+
+def test_audit_pack_does_not_overclaim_tamper_evidence():
+    """The stored checksum is self-computed and never re-verified on read, so the pack
+    must not tell an auditor it is tamper-evident — see docs/compliant-nz-alcohol-spec.md
+    §11, which explicitly says not to claim immutability until that exists."""
+    audit_pack = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "audit_pack.html"
+    ).read_text(encoding="utf-8")
+
+    assert "tamper" not in audit_pack.lower()
+    assert "immutable" not in audit_pack.lower()
+    assert "SHA-256 checksum" in audit_pack
