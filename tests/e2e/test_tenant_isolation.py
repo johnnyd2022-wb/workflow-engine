@@ -39,7 +39,11 @@ def two_tenants(browser, app_url, fresh_user):
 
 
 def _create_inventory_item(
-    page, name: str, barcode: str | None = None, quantity_override: int | None = None, inventory_type: str = "raw_material"
+    page,
+    name: str,
+    barcode: str | None = None,
+    quantity_override: int | None = None,
+    inventory_type: str = "raw_material",
 ) -> str:
     payload = {
         "name": name,
@@ -299,3 +303,32 @@ def test_org_b_cannot_reconcile_via_addition_onto_org_a_untracked_item(two_tenan
     b_items = page_b.request.get("/api/core/inventory")
     assert b_items.status == 200, b_items.status
     assert marker not in b_items.text(), "org B received an item from its own rejected reconcile"
+
+
+def test_org_b_dispose_confirm_page_does_not_leak_org_a_item(two_tenants):
+    """AC-D2/AC-D3 (.agents/specs/wastage.md): GET /core/inventory/dispose/confirm looks up
+    inventory_item_id scoped to the caller's org (backend.py inventory_dispose_confirm).
+    org B passing org A's item id must fall to the safe 'item' fallback with no unit and no
+    computed remaining quantity, never org A's real name/unit/balance."""
+    marker = f"Isolation Dispose {uuid.uuid4().hex[:8]}"
+    item_id = _create_inventory_item(two_tenants["a"], marker, quantity_override=5)
+
+    response = two_tenants["b"].request.get(
+        f"/core/inventory/dispose/confirm?inventory_item_id={item_id}&quantity_wasted=1"
+    )
+    assert response.status == 200, f"confirm page failed for org B: {response.status}"
+    body = response.text()
+    assert marker not in body, "org A's item name leaked into org B's dispose-confirm page"
+    assert "Inventory item was not found" in body, "expected the not-found fallback message"
+    # The template's remaining-quantity block only renders in the {% else %} (non-error)
+    # branch; a leak would surface org A's computed remaining balance ("remaining quantity
+    # will be 4") inside the error-branch response.
+    assert "remaining quantity will be" not in body, "org A's computed remaining quantity leaked to org B"
+
+    # Sanity: org A itself resolves the same item and sees the real name — proves the probe
+    # would catch a leak rather than the route being broken outright.
+    owner = two_tenants["a"].request.get(
+        f"/core/inventory/dispose/confirm?inventory_item_id={item_id}&quantity_wasted=1"
+    )
+    assert owner.status == 200, owner.status
+    assert marker in owner.text(), "owner cannot see its own item on the confirm page — probe is inert"
