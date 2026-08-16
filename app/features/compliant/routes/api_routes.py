@@ -13,8 +13,8 @@ from app.core.db import db_session
 from app.core.db.models.user import UserRole
 from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
-from app.features.compliant.frameworks import framework_by_slug
 from app.features.compliant.models import ComplianceReport
+from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
 from app.features.compliant.service import ComplianceService, serialise_record
 
 api_bp = Blueprint("compliant_api", __name__)
@@ -168,6 +168,8 @@ def create_record():
     details = data.get("details") or {}
     if not isinstance(details, dict):
         return jsonify({"error": "details must be an object"}), 400
+    if data.get("declared_litres_of_alcohol") not in (None, ""):
+        details["declared_litres_of_alcohol"] = data["declared_litres_of_alcohol"]
     if "declared_litres_of_alcohol" in details:
         try:
             _decimal(details["declared_litres_of_alcohol"], "declared_litres_of_alcohol")
@@ -200,8 +202,29 @@ def create_record():
         and record_data["period_end"] < record_data["period_start"]
     ):
         return jsonify({"error": "period_end cannot be before period_start"}), 400
-    if _service().get_profile(_org_id()) is None:
+    profile = _service().get_profile(_org_id())
+    if profile is None:
         return jsonify({"error": "Configure Compliant before adding records"}), 409
+    requirements = capture_requirements(framework_slug, control_id, profile.settings or {})
+    if requirements.get("record_types") and record_data["record_type"] not in requirements["record_types"]:
+        allowed = ", ".join(requirements["record_types"])
+        return jsonify({"error": f"This control requires a {allowed} record"}), 400
+    if requirements.get("period") and (not record_data["period_start"] or not record_data["period_end"]):
+        return jsonify({"error": "This control requires both period start and period end"}), 400
+    if requirements.get("due_date") and not record_data["due_date"]:
+        return jsonify({"error": "This control requires a review or expiry date"}), 400
+    if requirements.get("evidence") and not record_data["evidence_reference"]:
+        return jsonify({"error": "This control requires an evidence reference"}), 400
+    if requirements.get("source_refs") and not record_data["source_refs"]:
+        return jsonify({"error": "This control requires a linked Core source reference"}), 400
+    invalid_source_refs = _service().invalid_core_source_references(_org_id(), record_data["source_refs"])
+    if invalid_source_refs:
+        return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
+    missing_fields = [
+        field for field in requirements.get("fields", ()) if not record_data.get(field) and not details.get(field)
+    ]
+    if missing_fields:
+        return jsonify({"error": f"This control requires: {', '.join(missing_fields)}"}), 400
     record = _service().add_record(_org_id(), g.current_user.id, record_data)
     log_action("create", "compliance_record", record.id, {"framework": framework_slug, "control": control_id})
     return jsonify({"record": serialise_record(record)}), 201

@@ -1,6 +1,45 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ report.payload.title }}</title>
-<style>body{font-family:Arial,sans-serif;color:#172033;max-width:1000px;margin:32px auto;padding:0 24px}.muted{color:#5d6778}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;background:#f3f6f8;padding:16px;border-radius:8px}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{padding:9px;border-bottom:1px solid #dce2e8;text-align:left;vertical-align:top}h1{margin-bottom:4px}@media print{button{display:none}body{margin:0;max-width:none}}</style></head>
-<body><button onclick="window.print()">Print / Save as PDF</button><h1>{{ report.payload.title }}</h1><p class="muted">Generated {{ report.created_at }} · Snapshot checksum {{ report.checksum_sha256 }}</p><div class="meta"><div><strong>Framework</strong><br>{{ report.framework_slug }}</div><div><strong>Period</strong><br>{{ report.period_start or 'All recorded history' }} — {{ report.period_end or 'Current' }}</div><div><strong>Status</strong><br>{{ report.payload.framework.state }}</div></div>
-<h2>Control status</h2><table><thead><tr><th>Control</th><th>Status</th><th>Reason</th><th>Evidence count</th></tr></thead><tbody>{% for control in report.payload.framework.controls %}<tr><td>{{ control.control_id }}</td><td>{{ control.state }}</td><td>{{ control.reason }}</td><td>{{ control.record_count }}</td></tr>{% endfor %}</tbody></table>
-<h2>Evidence index</h2><table><thead><tr><th>Control</th><th>Record</th><th>Status</th><th>Period / due</th><th>Evidence reference</th></tr></thead><tbody>{% for record in report.payload.records %}<tr><td>{{ record.control_id }}</td><td>{{ record.title }}</td><td>{{ record.status }}</td><td>{{ record.period_start or '' }} {{ record.period_end or '' }} {{ record.due_date or '' }}</td><td>{{ record.evidence_reference or '' }}</td></tr>{% endfor %}</tbody></table><p class="muted">{{ report.payload.disclaimer }}</p></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ report.payload.title }}</title>
+  <style>
+    :root{--ink:#172033;--muted:#5d6778;--line:#dce2e8;--surface:#f3f6f8;--accent:#175c52}
+    body{font-family:Inter,Arial,sans-serif;color:var(--ink);max-width:1040px;margin:32px auto;padding:0 24px;line-height:1.45}
+    header{border-bottom:3px solid var(--accent);padding:0 0 20px;margin-bottom:26px}.eyebrow{letter-spacing:.12em;font-size:12px;font-weight:700;color:var(--accent)}h1{margin:4px 0;font-size:30px}.muted{color:var(--muted)}
+    .actions{float:right}.button{border:1px solid var(--accent);border-radius:6px;background:#fff;color:var(--accent);padding:8px 12px;font-weight:700;cursor:pointer}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}.meta div,.coverage{background:var(--surface);padding:14px;border-radius:8px}.label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;margin-bottom:4px}.status{text-transform:capitalize;font-weight:700;color:var(--accent)}
+    table{border-collapse:collapse;width:100%;margin:14px 0 28px;font-size:14px}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}a{color:var(--accent)}.checksum{font-family:ui-monospace,monospace;overflow-wrap:anywhere;font-size:12px}
+    @media print{body{margin:0;max-width:none}.actions{display:none}.meta{break-inside:avoid}table{break-inside:auto}tr{break-inside:avoid}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="actions"><button class="button" onclick="window.print()">Print / Save as PDF</button></div>
+    <p class="eyebrow">COMPLIANT / AUDIT EVIDENCE PACK</p>
+    <h1>{{ report.payload.title }}</h1>
+    <p class="muted">Generated {{ report.created_at }}. This is a tamper-evident snapshot of records available at generation time.</p>
+  </header>
+
+  <div class="meta">
+    <div><span class="label">Framework</span>{{ report.payload.framework.name }}</div>
+    <div><span class="label">Period</span>{{ report.period_start or 'All recorded history' }} — {{ report.period_end or 'Current' }}</div>
+    <div><span class="label">Evidence status</span><span class="status">{{ report.payload.framework.state }}</span></div>
+  </div>
+
+  <section class="coverage">
+    <span class="label">Source and scope</span>
+    {% if report.payload.framework.source_url %}<a href="{{ report.payload.framework.source_url }}">{{ report.payload.framework.source_title }}</a>{% else %}{{ report.payload.framework.source_title }}{% endif %}
+    <p class="muted">{{ report.payload.source_data.data_coverage.scope }}</p>
+    <p class="muted">Last Core inventory movement: {{ report.payload.source_data.data_coverage.inventory_movements_last_updated_at or 'none recorded' }} · Unresolved live-data gaps: {{ report.payload.source_data.data_coverage.unresolved_live_data_gaps }}</p>
+  </section>
+
+  <h2>Control status</h2>
+  <table><thead><tr><th>Control</th><th>Status</th><th>Reason</th><th>Evidence count</th></tr></thead><tbody>{% for control in report.payload.framework.controls %}<tr><td>{{ control.control_id }}</td><td>{{ control.state }}</td><td>{{ control.reason }}</td><td>{{ control.record_count }}</td></tr>{% endfor %}</tbody></table>
+
+  <h2>Evidence index</h2>
+  <table><thead><tr><th>Control</th><th>Record</th><th>Status</th><th>Period / due</th><th>Evidence reference</th></tr></thead><tbody>{% for record in report.payload.records %}<tr><td>{{ record.control_id }}</td><td>{{ record.title }}</td><td>{{ record.status }}</td><td>{{ record.period_start or '' }} {{ record.period_end or '' }} {{ record.due_date or '' }}</td><td>{{ record.evidence_reference or '' }}</td></tr>{% endfor %}</tbody></table>
+
+  <footer><span class="label">Snapshot checksum</span><p class="checksum">{{ report.checksum_sha256 }}</p><p class="muted">{{ report.payload.disclaimer }}</p></footer>
+</body>
+</html>

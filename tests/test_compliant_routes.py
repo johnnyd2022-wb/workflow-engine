@@ -47,7 +47,10 @@ def test_compliant_profile_records_and_audit_pack_are_org_scoped(db, flask_app):
         assert client_a.get("/api/compliant/overview").get_json()["frameworks"] == []
         profile = client_a.put(
             "/api/compliant/profile",
-            json={"enabled": True, "settings": {"alcohol_product_types": ["spirits"]}},
+            json={
+                "enabled": True,
+                "settings": {"alcohol_product_types": ["spirits"], "trade_waste_council": "auckland-watercare"},
+            },
         )
         assert profile.status_code == 200
         assert (
@@ -64,6 +67,8 @@ def test_compliant_profile_records_and_audit_pack_are_org_scoped(db, flask_app):
                 "control_id": "period-lodgement",
                 "record_type": "lodgement",
                 "title": "July excise entry",
+                "period_start": "2026-07-01",
+                "period_end": "2026-07-31",
                 "evidence_reference": "NZCS filing 123",
             },
         )
@@ -72,6 +77,9 @@ def test_compliant_profile_records_and_audit_pack_are_org_scoped(db, flask_app):
         assert report.status_code == 201
         report_id = report.get_json()["report"]["report_id"]
         assert client_a.get(f"/api/compliant/reports/{report_id}?format=csv").status_code == 200
+        audit_html = client_a.get(f"/api/compliant/reports/{report_id}?format=html")
+        assert audit_html.status_code == 200
+        assert b"Source and scope" in audit_html.data
         assert client_b.get(f"/api/compliant/reports/{report_id}").status_code == 404
     finally:
         db.query(Organisation).filter(Organisation.id.in_([org_a.id, org_b.id])).delete(synchronize_session=False)
@@ -84,3 +92,36 @@ def test_compliant_routes_require_auth(flask_app):
     client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
     assert client.get("/api/compliant/overview").status_code == 401
     assert client.post("/api/compliant/records", json={}).status_code == 401
+
+
+def test_control_capture_requirements_are_enforced(db, flask_app):
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert client.put("/api/compliant/profile", json={"enabled": True, "settings": {}}).status_code == 200
+        invalid = client.post(
+            "/api/compliant/records",
+            json={
+                "framework_slug": "customs-alcohol",
+                "control_id": "period-lodgement",
+                "record_type": "lodgement",
+                "title": "Missing the period and evidence",
+            },
+        )
+        assert invalid.status_code == 400
+        assert "period start" in invalid.get_json()["error"]
+        invalid_link = client.post(
+            "/api/compliant/records",
+            json={
+                "framework_slug": "customs-alcohol",
+                "control_id": "movement-evidence",
+                "record_type": "attestation",
+                "title": "Unverified core link",
+                "evidence_reference": "dispatch-note-7",
+                "source_refs": [str(uuid4())],
+            },
+        )
+        assert invalid_link.status_code == 400
+        assert "this organisation" in invalid_link.get_json()["error"]
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()

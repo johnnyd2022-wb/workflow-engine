@@ -16,10 +16,18 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.db.models.execution import Execution
+from app.core.db.models.execution_evidence import ExecutionEvidence
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
-from app.features.compliant.frameworks import NZ_ALCOHOL_FRAMEWORKS, framework_by_slug
 from app.features.compliant.models import AlcoholProductProfile, ComplianceProfile, ComplianceRecord, ComplianceReport
+from app.features.compliant.modules.nz_alcohol.catalogue import (
+    NZ_ALCOHOL_FRAMEWORKS,
+    capture_requirements,
+    framework_by_slug,
+    framework_for_profile,
+)
+from app.features.compliant.modules.nz_alcohol.councils import TRADE_WASTE_CATALOGUES, council_catalogue
 from app.features.crm.models.product_mapping import ProductMapping
 
 
@@ -145,6 +153,28 @@ class ComplianceService:
             query = query.filter(ComplianceRecord.framework_slug == framework_slug)
         return query.order_by(ComplianceRecord.created_at.desc()).all()
 
+    def invalid_core_source_references(self, org_id: UUID, source_refs: list[str]) -> list[str]:
+        """Ensure a claimed Core link actually belongs to this tenant.
+
+        External documents stay in ``evidence_reference``.  ``source_refs`` is deliberately
+        stricter: it is a trustable link to a known core execution, evidence file or inventory
+        movement, rather than unverified text that merely looks connected.
+        """
+        invalid: list[str] = []
+        for source_ref in source_refs:
+            try:
+                source_id = UUID(source_ref)
+            except (TypeError, ValueError):
+                invalid.append(source_ref)
+                continue
+            exists = any(
+                self.session.query(model.id).filter(model.id == source_id, model.org_id == org_id).first()
+                for model in (Execution, ExecutionEvidence, InventoryMovement)
+            )
+            if not exists:
+                invalid.append(source_ref)
+        return invalid
+
     def _core_movement_summary(self, org_id: UUID) -> dict[str, str]:
         rows = (
             self.session.query(InventoryMovement.movement_type, func.coalesce(func.sum(InventoryMovement.quantity), 0))
@@ -153,6 +183,31 @@ class ComplianceService:
             .all()
         )
         return {str(kind): str(quantity) for kind, quantity in rows}
+
+    def data_coverage(self, org_id: UUID) -> dict[str, Any]:
+        """Make the boundary of derived insight visible instead of implying omniscience."""
+        latest_movement = (
+            self.session.query(func.max(InventoryMovement.created_at))
+            .filter(InventoryMovement.org_id == org_id)
+            .scalar()
+        )
+        profiles = self.product_profiles(org_id)
+        live = self.customs_reconciliation(org_id)
+        records = self.records(org_id)
+        evidence_records = sum(1 for record in records if record.evidence_reference)
+        linked_records = sum(1 for record in records if record.source_refs)
+        gaps = live["unprofiled_movement_count"] + live["unsupported_unit_movement_count"]
+        return _iso(
+            {
+                "inventory_movements_last_updated_at": latest_movement,
+                "alcohol_product_profiles": len(profiles),
+                "unresolved_live_data_gaps": gaps,
+                "manual_evidence_records": len(records),
+                "records_with_evidence_reference": evidence_records,
+                "records_linked_to_core": linked_records,
+                "scope": "Customs production and wastage LAL is derived from Core inventory movements; other obligations are evidence-led until their data capture is connected.",
+            }
+        )
 
     def customs_reconciliation(self, org_id: UUID) -> dict[str, Any]:
         """Calculate litres of alcohol from profiled production and wastage movements.
@@ -289,7 +344,8 @@ class ComplianceService:
         records = self.records(org_id)
         product_types = set((profile.settings or {}).get("alcohol_product_types") or [])
         frameworks: list[dict[str, Any]] = []
-        for framework in NZ_ALCOHOL_FRAMEWORKS:
+        for base_framework in NZ_ALCOHOL_FRAMEWORKS:
+            framework = framework_for_profile(base_framework, profile.settings or {})
             applies_to = framework.get("applies_to", "all_alcohol")
             if applies_to == "consent_required" and not (
                 profile.trade_waste_consent_reference or (profile.settings or {}).get("trade_waste_required")
@@ -297,10 +353,12 @@ class ComplianceService:
                 continue
             if isinstance(applies_to, tuple) and product_types and not product_types.intersection(applies_to):
                 continue
-            controls = [
-                self._control_state(profile, framework, control_id, records)
-                for control_id, _description in framework["controls"]
-            ]
+            controls = []
+            for control_id, description in framework["controls"]:
+                control = self._control_state(profile, framework, control_id, records)
+                control["description"] = description
+                control["capture"] = capture_requirements(framework["slug"], control_id, profile.settings or {})
+                controls.append(control)
             states = {control["state"] for control in controls}
             state = "attention" if "attention" in states else "setup" if "setup" in states else "compliant"
             frameworks.append(
@@ -339,6 +397,14 @@ class ComplianceService:
             "counts": counts,
             "core_movement_summary": self._core_movement_summary(org_id) if frameworks else {},
             "customs_reconciliation": self.customs_reconciliation(org_id) if frameworks else {},
+            "data_coverage": self.data_coverage(org_id) if frameworks else {},
+            "trade_waste_catalogues": [
+                {key: value for key, value in catalogue.items() if key != "controls"} | {"slug": slug}
+                for slug, catalogue in TRADE_WASTE_CATALOGUES.items()
+            ],
+            "selected_trade_waste_catalogue": council_catalogue((profile.settings or {}).get("trade_waste_council"))
+            if profile
+            else None,
             "disclaimer": "Operational evidence status only. Review requirements with the relevant regulator or adviser.",
         }
 
@@ -376,6 +442,7 @@ class ComplianceService:
                 "source_data": {
                     "inventory_movements": self._core_movement_summary(org_id),
                     "customs_reconciliation": self.customs_reconciliation(org_id),
+                    "data_coverage": self.data_coverage(org_id),
                 },
                 "records": [serialise_record(record) for record in records],
                 "disclaimer": "This pack presents recorded evidence and derived operational checks; it is not a certification of legal compliance.",

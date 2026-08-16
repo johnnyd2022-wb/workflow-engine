@@ -11,6 +11,8 @@
   var setupEl = root.querySelector('[data-compliant-setup]');
   var frameworkSelect = root.querySelector('[data-framework-select]');
   var controlSelect = root.querySelector('[data-control-select]');
+  var captureGuidance = root.querySelector('[data-capture-guidance]');
+  var declaredLalField = root.querySelector('[data-declared-lal-field]');
 
   function showError(message) {
     errorEl.textContent = message || '';
@@ -40,9 +42,24 @@
       var framework = (state.overview.frameworks || []).find(function (item) { return item.slug === frameworkSelect.value; });
       if (!framework) return;
       framework.controls.forEach(function (control) { controlSelect.appendChild(option(control.control_id, control.control_id.replace(/-/g, ' '))); });
+      renderCaptureGuidance();
     }
     frameworkSelect.onchange = renderControls;
+    controlSelect.onchange = renderCaptureGuidance;
     renderControls();
+  }
+  function renderCaptureGuidance() {
+    var framework = (state.overview.frameworks || []).find(function (item) { return item.slug === frameworkSelect.value; });
+    var control = framework && framework.controls.find(function (item) { return item.control_id === controlSelect.value; });
+    if (!control) { captureGuidance.textContent = ''; declaredLalField.hidden = true; return; }
+    var capture = control.capture || {}; var needs = [];
+    if (capture.period) needs.push('period start and end');
+    if (capture.evidence) needs.push('evidence reference');
+    if (capture.source_refs) needs.push('linked Core source');
+    if (capture.due_date) needs.push('review or expiry date');
+    (capture.fields || []).forEach(function (field) { needs.push(field.replace(/_/g, ' ')); });
+    captureGuidance.textContent = control.description + (needs.length ? ' Required: ' + needs.join(', ') + '.' : '');
+    declaredLalField.hidden = !(capture.fields || []).includes('declared_litres_of_alcohol');
   }
   function frameworkCard(framework) {
     var card = document.createElement('article'); card.className = 'compliant-framework';
@@ -75,13 +92,23 @@
   }
   function render() {
     var overview = state.overview; var counts = overview.counts || {};
-    summaryEl.textContent = (counts.attention || 0) + ' need attention · ' + (counts.compliant || 0) + ' on track';
+    var coverage = overview.data_coverage || {};
+    summaryEl.textContent = (counts.attention || 0) + ' need attention · ' + (counts.compliant || 0) + ' on track · ' + (coverage.unresolved_live_data_gaps || 0) + ' live-data gaps';
     setupEl.hidden = !!(overview.profile && overview.profile.enabled);
     var reconciliation = overview.customs_reconciliation || {};
     root.querySelector('[data-customs-reconciliation]').textContent = 'Live calculated: ' + (reconciliation.production_litres_of_alcohol || '0') + ' LAL produced, ' + (reconciliation.wastage_litres_of_alcohol || '0') + ' LAL wasted. ' + (reconciliation.unprofiled_movement_count || 0) + ' movement(s) need a product profile.';
     clear(frameworkRoot);
     if (!overview.frameworks.length) { var empty = document.createElement('p'); empty.textContent = 'Enable Compliant to see your applicable framework packs.'; frameworkRoot.appendChild(empty); }
     overview.frameworks.forEach(function (framework) { frameworkRoot.appendChild(frameworkCard(framework)); });
+    var catalogueSelect = root.querySelector('[data-trade-waste-council]');
+    clear(catalogueSelect); catalogueSelect.appendChild(option('', 'Choose if trade waste applies'));
+    (overview.trade_waste_catalogues || []).forEach(function (catalogue) { catalogueSelect.appendChild(option(catalogue.slug, catalogue.name)); });
+    if (overview.profile && overview.profile.settings) {
+      catalogueSelect.value = overview.profile.settings.trade_waste_council || '';
+      root.querySelector('[data-profile-form]').council_name.value = overview.profile.council_name || '';
+      root.querySelector('[data-profile-form]').consent.value = overview.profile.trade_waste_consent_reference || '';
+      root.querySelector('[data-profile-form]').require_core_source_refs.checked = Boolean(overview.profile.settings.require_core_source_refs);
+    }
     populateControls();
   }
   async function load() {
@@ -90,14 +117,12 @@
   }
   root.querySelector('[data-profile-form]').addEventListener('submit', async function (event) {
     event.preventDefault(); var form = event.currentTarget; var types = Array.prototype.map.call(form.querySelectorAll('input[name="product_type"]:checked'), function (input) { return input.value; });
-    try { showError(''); await api('/api/compliant/profile', { method: 'PUT', headers: csrfHeaders(), body: JSON.stringify({ enabled: true, council_name: form.council_name.value || null, trade_waste_consent_reference: form.consent.value || null, settings: { alcohol_product_types: types, trade_waste_required: Boolean(form.consent.value) } }) }); await load(); }
+    try { showError(''); await api('/api/compliant/profile', { method: 'PUT', headers: csrfHeaders(), body: JSON.stringify({ enabled: true, council_name: form.council_name.value || null, trade_waste_consent_reference: form.consent.value || null, settings: { alcohol_product_types: types, trade_waste_required: Boolean(form.consent.value || form.trade_waste_council.value), trade_waste_council: form.trade_waste_council.value || null, require_core_source_refs: form.require_core_source_refs.checked } }) }); await load(); }
     catch (err) { showError(err.message); }
   });
   root.querySelector('[data-record-form]').addEventListener('submit', async function (event) {
     event.preventDefault(); var form = event.currentTarget; var refs = form.source_refs.value.split(',').map(function (value) { return value.trim(); }).filter(Boolean);
-    var details = {};
-    try { details = form.details.value ? JSON.parse(form.details.value) : {}; } catch (_err) { showError('Structured detail must be valid JSON'); return; }
-    var data = { framework_slug: form.framework_slug.value, control_id: form.control_id.value, record_type: form.record_type.value, status: form.status.value, title: form.title.value, due_date: form.due_date.value || null, measured_value: form.measured_value.value || null, limit_value: form.limit_value.value || null, evidence_reference: form.evidence_reference.value || null, source_refs: refs, details: details };
+    var data = { framework_slug: form.framework_slug.value, control_id: form.control_id.value, record_type: form.record_type.value, status: form.status.value, title: form.title.value, period_start: form.period_start.value || null, period_end: form.period_end.value || null, due_date: form.due_date.value || null, measured_value: form.measured_value.value || null, limit_value: form.limit_value.value || null, declared_litres_of_alcohol: form.declared_litres_of_alcohol.value || null, evidence_reference: form.evidence_reference.value || null, source_refs: refs, details: {} };
     try { showError(''); await api('/api/compliant/records', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(data) }); form.reset(); await load(); }
     catch (err) { showError(err.message); }
   });

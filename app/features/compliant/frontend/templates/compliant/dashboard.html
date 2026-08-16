@@ -21,8 +21,10 @@
       <fieldset><legend>Alcohol products</legend>
         <label><input type="checkbox" name="product_type" value="spirits"> Spirits</label><label><input type="checkbox" name="product_type" value="beer"> Beer</label><label><input type="checkbox" name="product_type" value="wine"> Wine</label><label><input type="checkbox" name="product_type" value="cider"> Cider</label><label><input type="checkbox" name="product_type" value="mead"> Mead</label><label><input type="checkbox" name="product_type" value="rtd"> RTDs</label>
       </fieldset>
-      <label>Council <input name="council_name" maxlength="255" placeholder="e.g. your territorial authority"></label>
+      <label>Council catalogue <select name="trade_waste_council" data-trade-waste-council><option value="">Choose if trade waste applies</option></select></label>
+      <label>Council or water provider name <input name="council_name" maxlength="255" placeholder="Required when your authority is not listed"></label>
       <label>Trade-waste consent reference <input name="consent" maxlength="255" placeholder="Optional until applicable"></label>
+      <label><input type="checkbox" name="require_core_source_refs"> Enforce a linked Core source for every evidence record</label>
       <button type="submit">Enable Compliant</button>
     </form>
   </section>
@@ -42,19 +44,21 @@
   </section>
 
   <section class="compliant-record-panel">
-    <div><h2>Add evidence or an operational record</h2><p>Records are append-only. Link any existing core execution/evidence ID in the source reference field.</p></div>
+    <div><h2>Add evidence without a compliance spreadsheet</h2><p>Choose a control and Compliant asks only for its essential proof. Records are append-only; mandatory fields are enforced server-side.</p><p data-capture-guidance></p></div>
     <form data-record-form>
       <label>Framework <select name="framework_slug" required data-framework-select></select></label>
       <label>Control <select name="control_id" required data-control-select></select></label>
       <label>Record type <select name="record_type"><option value="attestation">Attestation</option><option value="reading">Reading / sample</option><option value="lodgement">Lodgement</option><option value="competency">Training / competency</option><option value="incident">Incident / corrective action</option></select></label>
       <label>Status <select name="status"><option value="complete">Complete</option><option value="open">Open</option><option value="failed">Failed</option></select></label>
       <label class="span-2">Title <input name="title" required maxlength="255" placeholder="What does this record prove?"></label>
+      <label>Period start <input name="period_start" type="date"></label>
+      <label>Period end <input name="period_end" type="date"></label>
       <label>Due date <input name="due_date" type="date"></label>
       <label>Measured value <input name="measured_value" type="number" step="0.0001"></label>
       <label>Limit <input name="limit_value" type="number" step="0.0001"></label>
-      <label class="span-2">Structured detail <textarea name="details" rows="3" placeholder='Optional JSON, e.g. {"declared_litres_of_alcohol": 123.45}'></textarea></label>
+      <label data-declared-lal-field hidden>Declared LAL <input name="declared_litres_of_alcohol" type="number" min="0" step="0.0001" placeholder="Filed litres of alcohol"></label>
       <label class="span-2">Evidence reference <input name="evidence_reference" maxlength="1024" placeholder="File location, certificate number, or signed record reference"></label>
-      <label class="span-2">Core source references <input name="source_refs" maxlength="2048" placeholder="Optional comma-separated execution, inventory, or evidence IDs"></label>
+      <label class="span-2">Core source references <input name="source_refs" maxlength="2048" placeholder="Optional comma-separated execution, movement, or evidence UUIDs"></label>
       <button type="submit">Add immutable record</button>
     </form>
   </section>
