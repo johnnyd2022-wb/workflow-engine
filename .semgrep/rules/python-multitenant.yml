@@ -25,7 +25,6 @@ rules:
     paths:
       exclude:
         - "**/auth_routes.py"
-        - "**/app.py"
     patterns:
       - pattern-either:
           - pattern: |
@@ -58,6 +57,23 @@ rules:
             ...
       - pattern-not: |
           @limiter.exempt
+          def $FUNC(...):
+            ...
+      # app.py carries a handful of routes that are deliberately public (pre-login
+      # surface + ops probe) alongside blueprint-style @app.route views that need the
+      # same auth check as everywhere else (shell review, .agents/reports/shell/security-audit.md
+      # F3) — a file-level exclude was blinding the scanner to the latter, so the
+      # public ones are named explicitly instead of exempting the whole file.
+      - pattern-not: |
+          @app.route("/")
+          def $FUNC(...):
+            ...
+      - pattern-not: |
+          @app.route("/landing-diagram")
+          def $FUNC(...):
+            ...
+      - pattern-not: |
+          @app.route("/healthcheck")
           def $FUNC(...):
             ...
 

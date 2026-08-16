@@ -434,7 +434,7 @@ how they get carved.
     subscription: n/a
     layer:        shell
     flag:         none
-    reviewed:     never
+    reviewed:     2026-08-15 (see .agents/reports/shell/review.md)
 
     routes:   /core (hub), /core/dashboard chrome, /core/settings, /core/integrations
               /core/static/{js,css,img,inventory}/<filename>  (4 serving routes)

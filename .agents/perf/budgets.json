@@ -37,6 +37,7 @@
   },
   "measure": {
     "pages": [
+      "/core",
       "/core/dashboard",
       "/core/processes",
       "/core/flows",
