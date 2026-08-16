@@ -121,7 +121,17 @@
         } else if (prompt.type === 'date') {
           inputHtml = `<input type="date" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''}>`;
         } else if (prompt.type === 'select') {
-          inputHtml = `<select class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''}><option value="">Select...</option></select>`;
+          const options = Array.isArray(prompt.options)
+            ? prompt.options.map(function(option) { return String(option == null ? '' : option).trim(); }).filter(Boolean)
+            : [];
+          if (options.length > 0) {
+            inputHtml = `<select class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''}><option value="">Select...</option>${options.map(function(option) { return `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`; }).join('')}</select>`;
+          } else {
+            // Older workflows could contain a select prompt before choices were
+            // supported. Keep those runs operable while clearly treating them
+            // as an unconstrained text record until the workflow is updated.
+            inputHtml = `<input type="text" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''} placeholder="Enter value">`;
+          }
         }
 
         // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through escapeHtml()
