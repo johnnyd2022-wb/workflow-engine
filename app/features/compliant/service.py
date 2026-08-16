@@ -294,16 +294,26 @@ class ComplianceService:
         )
         return {str(kind): str(quantity) for kind, quantity in rows}
 
-    def data_coverage(self, org_id: UUID) -> dict[str, Any]:
-        """Make the boundary of derived insight visible instead of implying omniscience."""
+    def data_coverage(
+        self,
+        org_id: UUID,
+        reconciliation: dict[str, Any] | None = None,
+        records: list[ComplianceRecord] | None = None,
+    ) -> dict[str, Any]:
+        """Make the boundary of derived insight visible instead of implying omniscience.
+
+        Accepts already-computed reconciliation/records so callers building a full overview
+        or audit pack don't re-run the org-wide movement scan and records query a second time.
+        """
         latest_movement = (
             self.session.query(func.max(InventoryMovement.created_at))
             .filter(InventoryMovement.org_id == org_id)
             .scalar()
         )
         profiles = self.product_profiles(org_id)
-        live = self.customs_reconciliation(org_id)
-        records = self.records(org_id)
+        live = reconciliation if reconciliation is not None else self.customs_reconciliation(org_id)
+        if records is None:
+            records = self.records(org_id)
         evidence_records = sum(1 for record in records if record.evidence_reference)
         linked_records = sum(1 for record in records if record.source_refs)
         gaps = live["unprofiled_movement_count"] + live["unsupported_unit_movement_count"]
@@ -398,7 +408,12 @@ class ComplianceService:
         return calculate_customs_reconciliation(profiles, movements)
 
     def _control_state(
-        self, profile: ComplianceProfile, framework: dict[str, Any], control_id: str, records: list[ComplianceRecord]
+        self,
+        profile: ComplianceProfile,
+        framework: dict[str, Any],
+        control_id: str,
+        records: list[ComplianceRecord],
+        reconciliation: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         relevant = [record for record in records if record.control_id == control_id]
         today = date.today()
@@ -443,7 +458,7 @@ class ComplianceService:
                     "record_count": crm_mapping_count,
                 }
         if control_id == "reconciliation":
-            live = self.customs_reconciliation(profile.org_id)
+            live = reconciliation if reconciliation is not None else self.customs_reconciliation(profile.org_id)
             if not live["profiled_product_count"]:
                 return {
                     "control_id": control_id,
@@ -510,11 +525,17 @@ class ComplianceService:
             "record_count": 0,
         }
 
-    def evaluate(self, org_id: UUID) -> list[dict[str, Any]]:
+    def evaluate(
+        self,
+        org_id: UUID,
+        records: list[ComplianceRecord] | None = None,
+        reconciliation: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         profile = self.get_profile(org_id)
         if profile is None or not profile.enabled:
             return []
-        records = self.records(org_id)
+        if records is None:
+            records = self.records(org_id)
         product_types = set((profile.settings or {}).get("alcohol_product_types") or [])
         frameworks: list[dict[str, Any]] = []
         for base_framework in NZ_ALCOHOL_FRAMEWORKS:
@@ -528,7 +549,7 @@ class ComplianceService:
                 continue
             controls = []
             for control_id, description in framework["controls"]:
-                control = self._control_state(profile, framework, control_id, records)
+                control = self._control_state(profile, framework, control_id, records, reconciliation)
                 control["description"] = description
                 control["capture"] = capture_requirements(framework["slug"], control_id, profile.settings or {})
                 controls.append(control)
@@ -550,8 +571,18 @@ class ComplianceService:
 
     def overview(self, org_id: UUID) -> dict[str, Any]:
         profile = self.get_profile(org_id)
-        frameworks = self.evaluate(org_id)
-        reconciliation = self.customs_reconciliation(org_id) if frameworks else {}
+        # Computed once and threaded through evaluate()/data_coverage() below: both would
+        # otherwise re-run the org-wide movement scan and records query on every dashboard
+        # load. profile.enabled is a precondition for evaluate() ever returning frameworks
+        # (customs-alcohol always matches once enabled), so this mirrors the old `if frameworks`
+        # gate without needing frameworks computed first.
+        if profile is not None and profile.enabled:
+            records = self.records(org_id)
+            reconciliation = self.customs_reconciliation(org_id)
+        else:
+            records = []
+            reconciliation = {}
+        frameworks = self.evaluate(org_id, records=records, reconciliation=reconciliation)
         counts = {"compliant": 0, "attention": 0, "setup": 0}
         for framework in frameworks:
             counts[framework["state"]] += 1
@@ -571,7 +602,9 @@ class ComplianceService:
             "counts": counts,
             "core_movement_summary": self._core_movement_summary(org_id) if frameworks else {},
             "customs_reconciliation": reconciliation,
-            "data_coverage": self.data_coverage(org_id) if frameworks else {},
+            "data_coverage": self.data_coverage(org_id, reconciliation=reconciliation, records=records)
+            if frameworks
+            else {},
             "priority_actions": build_priority_actions(profile, frameworks, reconciliation),
             "evidence_readiness": {
                 "current_controls": sum(
@@ -616,7 +649,18 @@ class ComplianceService:
                 if (not period_start or not record.period_end or record.period_end >= period_start)
                 and (not period_end or not record.period_start or record.period_start <= period_end)
             ]
-        state = next((item for item in self.evaluate(org_id) if item["slug"] == framework_slug), None)
+        # Computed once and reused below: evaluate() and data_coverage() would otherwise
+        # each re-run the same org-wide movement scan and records query.
+        all_records = self.records(org_id)
+        reconciliation = self.customs_reconciliation(org_id)
+        state = next(
+            (
+                item
+                for item in self.evaluate(org_id, records=all_records, reconciliation=reconciliation)
+                if item["slug"] == framework_slug
+            ),
+            None,
+        )
         if state is None:
             raise ValueError("Framework is not applicable to this organisation's current profile")
         payload = _iso(
@@ -629,8 +673,8 @@ class ComplianceService:
                 "profile": {"council_name": profile.council_name, "consent": profile.trade_waste_consent_reference},
                 "source_data": {
                     "inventory_movements": self._core_movement_summary(org_id),
-                    "customs_reconciliation": self.customs_reconciliation(org_id),
-                    "data_coverage": self.data_coverage(org_id),
+                    "customs_reconciliation": reconciliation,
+                    "data_coverage": self.data_coverage(org_id, reconciliation=reconciliation, records=all_records),
                 },
                 "records": [serialise_record(record) for record in records],
                 "disclaimer": "This pack presents recorded evidence and derived operational checks; it is not a certification of legal compliance.",
