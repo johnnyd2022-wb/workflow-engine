@@ -1,5 +1,6 @@
 """HTTP contracts for the tenant-scoped Compliant product area."""
 
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -8,6 +9,7 @@ from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
+from app.features.compliant.service import ComplianceService
 from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
 
 
@@ -104,6 +106,30 @@ def test_report_for_inapplicable_framework_returns_400(db, flask_app):
         response = client.post("/api/compliant/reports/np3-food-control", json={})
         assert response.status_code == 400
         assert "not applicable" in response.get_json()["error"]
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_report_for_inapplicable_framework_skips_the_reconciliation_scan(db, flask_app):
+    """The 400 above must come from a cheap applicability check, not from evaluate()
+    completing an expensive org-wide movement scan and then discarding the result."""
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile",
+                json={"enabled": True, "settings": {"alcohol_product_types": ["wine"]}},
+            ).status_code
+            == 200
+        )
+        with patch.object(
+            ComplianceService,
+            "customs_reconciliation",
+            side_effect=AssertionError("customs_reconciliation() must not run for an inapplicable framework"),
+        ):
+            response = client.post("/api/compliant/reports/np3-food-control", json={})
+        assert response.status_code == 400
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()

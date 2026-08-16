@@ -26,6 +26,7 @@ from app.features.compliant.models import AlcoholProductProfile, ComplianceProfi
 from app.features.compliant.modules.nz_alcohol.catalogue import (
     NZ_ALCOHOL_FRAMEWORKS,
     capture_requirements,
+    framework_applies,
     framework_by_slug,
     framework_for_profile,
 )
@@ -536,16 +537,11 @@ class ComplianceService:
             return []
         if records is None:
             records = self.records(org_id)
-        product_types = set((profile.settings or {}).get("alcohol_product_types") or [])
         frameworks: list[dict[str, Any]] = []
         for base_framework in NZ_ALCOHOL_FRAMEWORKS:
             framework = framework_for_profile(base_framework, profile.settings or {})
             applies_to = framework.get("applies_to", "all_alcohol")
-            if applies_to == "consent_required" and not (
-                profile.trade_waste_consent_reference or (profile.settings or {}).get("trade_waste_required")
-            ):
-                continue
-            if isinstance(applies_to, tuple) and product_types and not product_types.intersection(applies_to):
+            if not framework_applies(applies_to, profile.settings, profile.trade_waste_consent_reference):
                 continue
             controls = []
             for control_id, description in framework["controls"]:
@@ -641,6 +637,13 @@ class ComplianceService:
         profile = self.get_profile(org_id)
         if profile is None or not profile.enabled:
             raise ValueError("Compliant is not enabled for this organisation")
+        # Reject an inapplicable-but-real framework before any query: applicability is a
+        # pure function of the profile's settings and the static catalogue, so it costs
+        # nothing to check first and it saves every caller of a known-inapplicable slug
+        # from paying for the org-wide movement scan below.
+        applies_to = framework.get("applies_to", "all_alcohol")
+        if not framework_applies(applies_to, profile.settings, profile.trade_waste_consent_reference):
+            raise ValueError("Framework is not applicable to this organisation's current profile")
         records = self.records(org_id, framework_slug)
         if period_start or period_end:
             records = [
@@ -662,6 +665,9 @@ class ComplianceService:
             None,
         )
         if state is None:
+            # Unreachable given the framework_applies() gate above, which uses the same
+            # predicate evaluate() filters on — kept as a guard, not an assertion, so any
+            # future drift between the two fails as a clean 400 instead of a 500.
             raise ValueError("Framework is not applicable to this organisation's current profile")
         payload = _iso(
             {

@@ -112,6 +112,23 @@ def capture_requirements(framework_slug: str, control_id: str, profile_settings:
     return requirements
 
 
+def framework_applies(
+    applies_to: str | tuple[str, ...], profile_settings: dict | None, trade_waste_consent_reference: str | None
+) -> bool:
+    """Single source of truth for whether a framework applies to a profile.
+
+    Mirrors the filter ComplianceService.evaluate() runs per framework, so a caller that
+    only needs a yes/no answer (e.g. rejecting an inapplicable audit-pack request) can get
+    one without evaluating every control or touching the database.
+    """
+    if applies_to == "consent_required":
+        return bool(trade_waste_consent_reference or (profile_settings or {}).get("trade_waste_required"))
+    if isinstance(applies_to, tuple):
+        product_types = set((profile_settings or {}).get("alcohol_product_types") or [])
+        return not product_types or bool(product_types.intersection(applies_to))
+    return True
+
+
 def framework_for_profile(framework: dict, profile_settings: dict | None) -> dict:
     """Bind the trade-waste pack to the selected authority's current catalogue."""
     if framework["slug"] != "trade-waste":
