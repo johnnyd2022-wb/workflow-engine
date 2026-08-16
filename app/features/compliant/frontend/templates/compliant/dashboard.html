@@ -21,16 +21,10 @@
   </section>
 
   <section class="compliant-setup" data-compliant-setup>
-    <form data-profile-form>
-      <fieldset><legend>Alcohol products</legend>
-        <label><input type="checkbox" name="product_type" value="spirits"> Spirits</label><label><input type="checkbox" name="product_type" value="beer"> Beer</label><label><input type="checkbox" name="product_type" value="wine"> Wine</label><label><input type="checkbox" name="product_type" value="cider"> Cider</label><label><input type="checkbox" name="product_type" value="mead"> Mead</label><label><input type="checkbox" name="product_type" value="rtd"> RTDs</label>
     <div><p class="compliant-eyebrow">ONE-MINUTE SETUP</p><h2>Tell us what you make.</h2><p>We remove irrelevant frameworks first. You can add the council details later if trade waste applies.</p></div>
     <form data-profile-form data-profile-target>
       <fieldset><legend>What leaves your site?</legend>
         <label><input type="checkbox" name="product_type" value="spirits"> Spirits</label><label><input type="checkbox" name="product_type" value="beer"> Beer</label><label><input type="checkbox" name="product_type" value="wine"> Wine / vineyard</label><label><input type="checkbox" name="product_type" value="cider"> Cider</label><label><input type="checkbox" name="product_type" value="mead"> Mead</label><label><input type="checkbox" name="product_type" value="rtd"> RTDs</label>
-    <form data-profile-form>
-      <fieldset><legend>Alcohol products</legend>
-        <label><input type="checkbox" name="product_type" value="spirits"> Spirits</label><label><input type="checkbox" name="product_type" value="beer"> Beer</label><label><input type="checkbox" name="product_type" value="wine"> Wine</label><label><input type="checkbox" name="product_type" value="cider"> Cider</label><label><input type="checkbox" name="product_type" value="mead"> Mead</label><label><input type="checkbox" name="product_type" value="rtd"> RTDs</label>
       </fieldset>
       <label>Council catalogue <select name="trade_waste_council" data-trade-waste-council><option value="">Choose if trade waste applies</option></select></label>
       <label>Council or water provider name <input name="council_name" maxlength="255" placeholder="Required when your authority is not listed"></label>
@@ -44,7 +38,7 @@
 
   <section class="compliant-record-panel" data-product-target>
     <div><p class="compliant-eyebrow">LIVE VALUE FROM CORE</p><h2>Map alcohol products once.</h2><p>Compliant uses the ABV to calculate litres of alcohol from production and wastage movements as they happen.</p><p data-customs-reconciliation></p><div data-product-suggestions class="product-suggestions"></div></div>
-    <form data-product-form data-product-form>
+    <form data-product-form>
       <label>Core inventory name <input name="inventory_name" required maxlength="255" placeholder="Must match the product name in Core"></label>
       <label>Product type <select name="product_type"><option value="spirits">Spirits</option><option value="beer">Beer</option><option value="wine">Wine</option><option value="cider">Cider</option><option value="mead">Mead</option><option value="rtd">RTD</option><option value="other">Other</option></select></label>
       <label>ABV % <input name="abv_percent" type="number" min="0.0001" max="100" step="0.0001" required></label>
@@ -56,7 +50,7 @@
 
   <section class="compliant-record-panel" data-record-target>
     <div><p class="compliant-eyebrow">PROVE IT ONCE</p><h2>Add evidence without a compliance spreadsheet.</h2><p>Choose a control and Compliant asks only for its essential proof. Use an existing Core file when it is already the evidence—no duplicate upload.</p><p data-capture-guidance></p><div data-existing-evidence class="existing-evidence"></div></div>
-    <form data-record-form data-record-form>
+    <form data-record-form>
       <label>Framework <select name="framework_slug" required data-framework-select></select></label>
       <label>Control <select name="control_id" required data-control-select></select></label>
       <label>Record type <select name="record_type"><option value="attestation">Attestation</option><option value="reading">Reading / sample</option><option value="lodgement">Lodgement</option><option value="competency">Training / competency</option><option value="incident">Incident / corrective action</option></select></label>
