@@ -92,10 +92,9 @@ were never given AC numbers in inventory.md and are ASSUMPTION lines here.
 - AC33 (wastage scope): a user authenticated into org A cannot read, list, waste, or
   preview-dispose any inventory item or wastage record belonging to org B, on all four
   routes above. Failure mode must be 404/400 "not found", never 403-with-detail or
-  partial disclosure. Already covered by `tests/e2e/test_tenant_isolation.py`
-  (`test_org_b_wastage_list_excludes_org_a_records` and the wastage-on-foreign-id case) —
-  confirm these still pass and extend to the two HTML pages (AC-D2/D3), which have no
-  cross-tenant e2e probe yet.
+  partial disclosure. Covered by `tests/e2e/test_tenant_isolation.py`
+  (`test_org_b_wastage_list_excludes_org_a_records`, the wastage-on-foreign-id case, and
+  `test_org_b_dispose_confirm_page_does_not_leak_org_a_item` for the AC-D2/D3 HTML page).
 
 ## Data model
 - tables: `inventory_wastage` (org-scoped via `TenantScoped`, FK to `inventory_items`,
@@ -115,8 +114,8 @@ were never given AC numbers in inventory.md and are ASSUMPTION lines here.
 
 ## Notes for the audit
 AC12–19/AC33(API) are shape-checks already exercised by `tests/test_wastage.py` (25/25
-green) and `tests/e2e/test_tenant_isolation.py`. The genuinely untested surface this
-review should focus adversarial effort on: AC-D1–D3 (the two HTML pages have no
-dedicated test file — GAP noted in feature-index), and whether AC18's advisory-lock
-concurrency claim has ever been proven under true concurrency (the inventory review's
-disclosed-gaps section flagged this as unresolved there too — same lock, same gap).
+green) and `tests/e2e/test_tenant_isolation.py`. AC-D3's cross-tenant probe is now covered
+(`test_org_b_dispose_confirm_page_does_not_leak_org_a_item`), and AC18's advisory-lock
+concurrency claim is proven under true two-thread concurrency
+(`tests/test_wastage.py::test_wastage_advisory_lock_serializes_concurrent_duplicate_submissions`).
+Remaining gap: AC-D1 (`GET /core/inventory/dispose`) still has no dedicated test file.

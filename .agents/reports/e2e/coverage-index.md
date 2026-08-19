@@ -72,7 +72,7 @@ before writing tests rather than re-deriving this by hand. Legend:
 | Pages render clean | ✅ | test_pages_render |
 | Xero auth redirect well-formed (state/CSRF) | ✅ | test_crm_flow |
 | Customers API auth-gated + org-scoped | ✅ | test_crm_flow |
-| Customer / invoice CRUD | 🔵 deferred — customers are Xero-sourced; needs a stubbed tenant |
+| Customer / invoice CRUD | 🟡 unit-covered (`tests/test_crm.py::TestCRMInvoiceCreation`); no e2e browser flow yet |
 | **Cross-cutting** | | |
 | Security headers, cookie flags, CSRF rejection | ✅ | test_security_headers |
 | 21 authenticated pages render clean | ✅ | test_pages_render |
@@ -81,9 +81,12 @@ before writing tests rather than re-deriving this by hand. Legend:
 
 - **CSV / barcode inventory add** — file-drop and hardware-scanner UIs; the add path is
   covered via manual. Worth a follow-up with a fixture CSV.
-- **CRM customer / invoice CRUD** — customers are sourced from Xero sync, not a create
-  endpoint; needs a stubbed Xero at the HTTP layer (a test must never touch a real
-  tenant). Tracked in the spec.
+- **CRM customer / invoice CRUD (e2e)** — customers are sourced from Xero sync, not a
+  create endpoint, so the only write path is invoice creation. Now covered at the
+  unit/service level (`tests/test_crm.py::TestCRMInvoiceCreation`, stubbing
+  `XeroAPIClient.create_invoice` — never touches a real tenant), including the
+  cross-tenant case. A browser-driven e2e flow through `test_crm_flow.py` remains
+  deferred; this row tracks that narrower gap now.
 - **Full process-wizard click-through** — the wizard is many SPA fragments. Creation is
   driven through the real browser session's API (exercising auth, CSRF, org-scope, and
   the business logic) and verified in the UI; clicking every fragment is a higher-
