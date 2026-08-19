@@ -18,7 +18,7 @@
     <div class="actions"><button class="button" onclick="window.print()">Print / Save as PDF</button></div>
     <p class="eyebrow">COMPLIANT / AUDIT EVIDENCE PACK</p>
     <h1>{{ report.payload.title }}</h1>
-    <p class="muted">Generated {{ report.created_at }}. This is a tamper-evident snapshot of records available at generation time.</p>
+    <p class="muted">Generated {{ report.created_at }}. This is a snapshot of records as they stood at generation time, recorded with the SHA-256 checksum below.</p>
   </header>
 
   <div class="meta">
