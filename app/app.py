@@ -157,6 +157,7 @@ def initialize_database():
 
 
 @app.route("/initialize", methods=["POST"])
+@requires_auth
 def initialize():
     LOGGER.info("initialize_route_accessed")
     try:
@@ -164,7 +165,7 @@ def initialize():
         return redirect(url_for("index"))
     except Exception as e:
         LOGGER.exception("initialize_route_failed", error=str(e))
-        return f"Database initialization failed: {str(e)}", 500
+        return "Database initialization failed", 500
 
 
 if __name__ == "__main__":

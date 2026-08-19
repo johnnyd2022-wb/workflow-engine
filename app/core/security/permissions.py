@@ -58,6 +58,12 @@ def requires_auth(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not hasattr(g, "current_user") or not g.current_user:
+            logger.warning(
+                "access_denied",
+                reason="unauthenticated",
+                path=request.path,
+                method=request.method,
+            )
             abort(401, description="Authentication required")
 
         return f(*args, **kwargs)

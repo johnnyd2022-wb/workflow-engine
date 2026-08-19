@@ -1106,14 +1106,19 @@ def serve_core_js(filename):
         abort(400, "Invalid filename")
 
     # File serving must be done exclusively via send_from_directory
+    from werkzeug.exceptions import NotFound
+
     try:
         response = send_from_directory(core_frontend_dir, filename)
         response.headers["Content-Type"] = "application/javascript; charset=utf-8"
         response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=60"
         # X-Content-Type-Options is set globally in after_request handler
         return response
-    except FileNotFoundError:
-        # Missing static file - log at info level (not error)
+    except (FileNotFoundError, NotFound):
+        # Missing static file - log at info level (not error). On this Werkzeug pin,
+        # send_from_directory raises NotFound (an HTTPException), not FileNotFoundError,
+        # for a missing file — both are caught here so a missing asset 404s instead of
+        # falling into the generic 500 handler below (shell review, security-audit.md).
         logger.info(f"Static JS file not found: {filename} from {core_frontend_dir}")
         # Return 404 - do not fall back to Flask's global static handler
         abort(404, "File not found")
@@ -1145,14 +1150,19 @@ def serve_core_css(filename):
         abort(400, "Invalid filename")
 
     # File serving must be done exclusively via send_from_directory
+    from werkzeug.exceptions import NotFound
+
     try:
         response = send_from_directory(core_frontend_dir, filename)
         response.headers["Content-Type"] = "text/css; charset=utf-8"
         response.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=60"
         # X-Content-Type-Options is set globally in after_request handler
         return response
-    except FileNotFoundError:
-        # Missing static file - log at info level (not error)
+    except (FileNotFoundError, NotFound):
+        # Missing static file - log at info level (not error). On this Werkzeug pin,
+        # send_from_directory raises NotFound (an HTTPException), not FileNotFoundError,
+        # for a missing file — both are caught here so a missing asset 404s instead of
+        # falling into the generic 500 handler below (shell review, security-audit.md).
         logger.info(f"Static CSS file not found: {filename} from {core_frontend_dir}")
         # Return 404 - do not fall back to Flask's global static handler
         abort(404, "File not found")
@@ -1187,6 +1197,8 @@ def serve_core_inventory_static(filename):
     if safe_path is None:
         abort(400, "Invalid filename")
 
+    from werkzeug.exceptions import NotFound
+
     try:
         response = send_from_directory(inventory_dir, filename)
         if ext == ".svg":
@@ -1194,7 +1206,7 @@ def serve_core_inventory_static(filename):
         else:
             response.headers["Content-Type"] = "text/css; charset=utf-8"
         return response
-    except FileNotFoundError:
+    except (FileNotFoundError, NotFound):
         logger.info("Inventory static file not found: %s", filename)
         abort(404, "File not found")
     except Exception:
@@ -1223,6 +1235,8 @@ def serve_core_img(filename):
     if safe_path is None:
         abort(400, "Invalid filename")
 
+    from werkzeug.exceptions import NotFound
+
     try:
         response = send_from_directory(img_dir, filename)
         if ext in (".jpg", ".jpeg"):
@@ -1233,7 +1247,7 @@ def serve_core_img(filename):
             response.headers["Content-Type"] = "image/webp"
         response.headers["Cache-Control"] = "public, max-age=86400"
         return response
-    except FileNotFoundError:
+    except (FileNotFoundError, NotFound):
         logger.info("Image static file not found: %s", filename)
         abort(404, "File not found")
     except Exception:

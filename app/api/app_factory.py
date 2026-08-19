@@ -55,8 +55,25 @@ def create_app():
     if upload_limits_mb:
         app.config["MAX_CONTENT_LENGTH"] = max(upload_limits_mb) * 1024 * 1024
 
-    # Set secret key for sessions (should be in config in production)
-    app.secret_key = config.get("app", "secret_key", fallback="dev-secret-key-change-in-production")
+    # Set secret key for sessions. This key signs every session cookie and CSRF token
+    # app-wide (shell review, .agents/reports/shell/security-audit.md F1) — a hardcoded
+    # fallback here is a full session-forgery/CSRF-bypass vector the moment it's the
+    # live value, not just a placeholder, so it may only stand in for local/test.
+    _secret_key = config.get("app", "secret_key", fallback=None)
+    if not _secret_key:
+        if config.environment not in ("local", "test"):
+            raise RuntimeError(
+                "app.secret_key is not configured. Refusing to start with an insecure "
+                "default outside local/test — set [app] secret_key via this environment's "
+                "config (KeePassXC locally, env var in CI/CD, per this repo's secrets "
+                "pattern)."
+            )
+        logger.warning(
+            "secret_key_using_insecure_default",
+            detail="[app] secret_key unset — using dev fallback, allowed only for local/test",
+        )
+        _secret_key = "dev-secret-key-change-in-production"
+    app.secret_key = _secret_key
 
     # Configure session cookies for production security
     # CRITICAL: Always use Secure=True (HTTPS is used in both local dev and production)
@@ -138,6 +155,12 @@ def create_app():
         from werkzeug.security import safe_join
 
         if filename not in PUBLIC_UI_SHARED_FILES and (not hasattr(g, "current_user") or not g.current_user):
+            logger.warning(
+                "access_denied",
+                reason="unauthenticated",
+                path=request.path,
+                method=request.method,
+            )
             abort(401, description="Authentication required")
 
         # Path traversal protection: reject filenames with .. or /
@@ -164,6 +187,8 @@ def create_app():
             abort(400, "Invalid filename")
 
         # File serving must be done exclusively via send_from_directory
+        from werkzeug.exceptions import NotFound
+
         try:
             response = send_from_directory(shared_dir, filename)
             # Set explicit Content-Type headers
@@ -173,8 +198,12 @@ def create_app():
                 response.headers["Content-Type"] = "text/css; charset=utf-8"
             # X-Content-Type-Options is set globally in after_request handler
             return response
-        except FileNotFoundError:
-            # Missing static file - log at info level (not error)
+        except (FileNotFoundError, NotFound):
+            # Missing static file - log at info level (not error). On this Werkzeug pin,
+            # send_from_directory raises NotFound (an HTTPException), not
+            # FileNotFoundError, for a missing file — both are caught here so a missing
+            # asset 404s instead of falling into the generic 500 handler below (shell
+            # review, .agents/reports/shell/e2e-playwright.md).
             logger.info(f"Static file not found: {filename} from {shared_dir}")
             abort(404, "File not found")
         except Exception:

@@ -445,3 +445,22 @@ def test_forbidden_role_check_logs_access_denied(org_world, monkeypatch):
     assert kw["reason"] == "role_not_allowed"
     assert kw["path"] == "/org/users"
     assert kw["user_role"] == "member"
+
+
+def test_unauthenticated_request_logs_access_denied(org_world, monkeypatch):
+    """observability: @requires_auth must log an access_denied warning, not fail silently."""
+    from app.core.security import permissions
+
+    calls = []
+    monkeypatch.setattr(permissions.logger, "warning", lambda event, **kw: calls.append((event, kw)))
+
+    resp = org_world["anon_client"].get("/org")
+    assert resp.status_code == 302  # global 401 handler redirects HTML page requests
+
+    assert len(calls) == 1
+    event, kw = calls[0]
+    assert event == "access_denied"
+    assert kw["reason"] == "unauthenticated"
+    assert kw["path"] == "/org"
+    assert kw["method"] == "GET"
+    assert "user_id" not in kw
