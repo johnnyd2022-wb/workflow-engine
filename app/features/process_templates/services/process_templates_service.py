@@ -16,6 +16,9 @@ from app.core.db.repositories.process_repo import ProcessRepository
 from app.features.compliant.service import ComplianceService
 from app.features.process_templates.catalog import registry
 from app.features.process_templates.catalog.registry import ProcessTemplate
+from app.observability import get_logger
+
+logger = get_logger(__name__)
 
 _DESCRIPTION_MAX_LEN = 1000
 
@@ -83,6 +86,15 @@ def get_template_detail(session: Session, org_id: UUID, template_id: str) -> dic
     families = _resolve_permitted_families(session, org_id)
     template = registry.get_permitted_template(template_id, families)
     if template is None:
+        if registry.get_template_by_id(template_id) is not None:
+            # A real catalogue id, wrong family for this org — the tenant-boundary
+            # probe this feature's whole capability-gating design exists to catch.
+            # Same generic event name every other cross-tenant 404 in the app uses
+            # (backend.py's _log_process_access_denied/_log_trace_access_denied),
+            # so one query covers all of them.
+            logger.warning(
+                "access_denied", reason="template_family_not_permitted", org_id=str(org_id), template_id=template_id
+            )
         return None
     return _template_detail(template)
 
@@ -105,6 +117,10 @@ def copy_template(session: Session, org_id: UUID, template_id: str) -> Process |
     families = _resolve_permitted_families(session, org_id)
     template = registry.get_permitted_template(template_id, families)
     if template is None:
+        if registry.get_template_by_id(template_id) is not None:
+            logger.warning(
+                "access_denied", reason="template_family_not_permitted", org_id=str(org_id), template_id=template_id
+            )
         return None
 
     repo = ProcessRepository(session)
@@ -151,6 +167,13 @@ def copy_template(session: Session, org_id: UUID, template_id: str) -> Process |
         payload={"template_id": template.id, "family": template.family, "process_id": str(process.id)},
     )
     session.commit()
+    logger.info(
+        "process_templates_template_copied",
+        org_id=str(org_id),
+        template_id=template.id,
+        family=template.family,
+        process_id=str(process.id),
+    )
     return process
 
 

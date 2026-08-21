@@ -10,6 +10,7 @@ events (AC11).
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID, uuid4
 
 import pytest
@@ -492,6 +493,62 @@ class TestCatalogPageAndResume:
 
         resp = compliant_app_client.get(f"/core/flows/create/summary?id={process_id}")
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------------
+# Observability: structured log lines (observability skill's per-feature instrumentation)
+# ---------------------------------------------------------------------------------
+
+
+class _LogRecordCollector(logging.Handler):
+    """Collects raw LogRecords for direct inspection of the structlog event dict.
+    Same renderer-independent technique test_dilution_calculator.py uses.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+class TestObservabilityLogging:
+    def test_access_denied_logged_for_unpermitted_template_family(self, app_client):
+        collector = _LogRecordCollector()
+        root_logger = logging.getLogger()
+        root_logger.addHandler(collector)
+        try:
+            resp = app_client.get("/api/core/process-templates/distillery_receive_ingredient_lot")
+        finally:
+            root_logger.removeHandler(collector)
+
+        assert resp.status_code == 404
+        denied = [r.msg for r in collector.records if isinstance(r.msg, dict) and r.msg.get("event") == "access_denied"]
+        assert denied, f"Expected an access_denied log record, got: {collector.records}"
+        assert denied[0]["level"] == "warning"
+        assert denied[0]["reason"] == "template_family_not_permitted"
+        assert denied[0]["template_id"] == "distillery_receive_ingredient_lot"
+
+    def test_template_copied_logged_on_success(self, compliant_app_client):
+        collector = _LogRecordCollector()
+        root_logger = logging.getLogger()
+        root_logger.addHandler(collector)
+        try:
+            resp = compliant_app_client.post("/api/core/process-templates/distillery_receive_ingredient_lot/copy")
+        finally:
+            root_logger.removeHandler(collector)
+
+        assert resp.status_code == 201
+        copied = [
+            r.msg
+            for r in collector.records
+            if isinstance(r.msg, dict) and r.msg.get("event") == "process_templates_template_copied"
+        ]
+        assert copied, f"Expected a process_templates_template_copied log record, got: {collector.records}"
+        assert copied[0]["level"] == "info"
+        assert copied[0]["template_id"] == "distillery_receive_ingredient_lot"
+        assert copied[0]["family"] == "distillery"
 
 
 # ---------------------------------------------------------------------------------

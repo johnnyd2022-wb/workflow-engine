@@ -41,3 +41,35 @@
   8/8 e2e tests green after fixes; full regression (unit + e2e + the wizard suite)
   re-run clean, 59/59. Reports: .agents/reports/process_templates/security-audit.md,
   .agents/reports/process_templates/e2e-playwright.md
+
+## security-tenant-audit (Codex, blocking)
+
+- Round 1 (2026-08-22): clean. Ran directly via `codex exec --sandbox read-only`
+  (avoided the "Architect/Breaker" phrasing that derailed build-review). Independently
+  re-verified org_id provenance through every service call site, the registry's
+  family-permission intersection at both the detail and copy call sites, the
+  sample_only override's scoping, every route's @requires_auth, and — by actually
+  registering the blueprint and inspecting `app.url_map` — that the static-route
+  rename genuinely produces a non-`.static` endpoint name. No findings. Report file
+  written by the orchestrator on the grader's behalf (its own write was correctly
+  rejected by the read-only sandbox): .agents/reports/process_templates/security-tenant-audit.md
+
+## perf-guardrails
+
+- Round 1 (2026-08-22): within-budget. Added `/core/flows/create/template-catalog`
+  and `/api/core/process-templates` to .agents/perf/budgets.json's measure lists.
+  Measured: page 4.8ms/2 queries/68ms LCP, api 8.2ms/4 queries — both comfortably
+  inside shared defaults, no custom calibration needed. 0 ceiling breaches. The one
+  standing advisory breach (`/api/core/dashboard/summary`, 39 vs pinned 38 queries) is
+  pre-existing and unrelated to this diff. Report:
+  .agents/reports/perf/2026-08-22-process-templates.md
+
+## observability
+
+- Round 1 (2026-08-22): instrumented. Added the missing snake_case structlog channel
+  (entity_events/EventWriter was already in place from the build step) — one INFO
+  state-change log (`process_templates_template_copied`) and reuse of the repo-wide
+  generic `access_denied` WARNING log for the tenant-boundary-probe case AC3 guards.
+  Two new tests assert both log lines fire, using the same log-capture technique
+  test_dilution_calculator.py established. Report:
+  .agents/reports/process_templates/observability.md
