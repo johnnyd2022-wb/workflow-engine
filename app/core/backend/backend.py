@@ -895,6 +895,22 @@ def flows_batches_start():
     )
 
 
+@core_bp.route("/core/flows/create/start", methods=["GET"])
+@requires_auth
+def flows_create_start_chooser():
+    """Two-choice entry point (process_templates feature): Start from scratch / Start
+    from a template. This is a new page, not a change to `flows_create` below — that
+    route is the wizard's own long-established entry/reset point and several existing
+    e2e tests (test_process_wizard_flow.py) treat a bare `GET /core/flows/create` as an
+    unconditional redirect straight to process-overview; branching that route on the
+    chooser broke those. The two real "Create process" UI links (processes/list.html,
+    core/core2.html) point here instead; "Start from scratch" here links straight to
+    the unmodified `/core/flows/create` below, and "Start from a template" links to
+    process_templates' own catalogue page.
+    """
+    return render_template("processes/flow-create-chooser.html", active_page="core")
+
+
 @core_bp.route("/core/flows/create", methods=["GET"])
 @requires_auth
 def flows_create():
@@ -2301,6 +2317,24 @@ def complete_step(execution_id: str, execution_step_id: str):
                 inventory_type = InventoryType.WORK_IN_PROGRESS.value
                 if execution_step.is_terminal_step:
                     inventory_type = InventoryType.FINAL_PRODUCT.value
+
+                # sample_only override: a step's static output definition can force
+                # WORK_IN_PROGRESS regardless of terminal-step position, for outputs that
+                # must never be presented as saleable finished stock (e.g. process_templates'
+                # R&D/QA-sample templates, which are structurally single-step and therefore
+                # always terminal). Same extra_data-on-output-definition pattern custom_expiry
+                # uses below, checked here so it can override before extra_data is built.
+                _sample_only_step_def = getattr(execution_step, "step", None)
+                _sample_only_outputs_def = (
+                    _sample_only_step_def.outputs
+                    if _sample_only_step_def and getattr(_sample_only_step_def, "outputs", None)
+                    else []
+                )
+                for _od in _sample_only_outputs_def or []:
+                    if isinstance(_od, dict) and (_od.get("name") or "").strip() == output_name:
+                        if (_od.get("extra_data") or {}).get("sample_only"):
+                            inventory_type = InventoryType.WORK_IN_PROGRESS.value
+                        break
 
                 # EXTRA_DATA DISCIPLINE: Store only source execution data (not derived data)
                 # extra_data schema:

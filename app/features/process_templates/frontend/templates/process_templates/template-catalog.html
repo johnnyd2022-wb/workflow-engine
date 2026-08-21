@@ -1,0 +1,41 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Start from a template | SupplyChain V2{% endblock %}
+{% block body_class %}process-templates-catalog-page{% endblock %}
+{% block head_extras %}
+{{ super() }}
+<link rel="stylesheet" href="/process-templates/static/template-catalog.css">
+{% endblock %}
+{% block content %}
+<div class="pt-catalog-shell" data-pt-root>
+  <header class="pt-catalog-header">
+    <div>
+      <h1>Start from a template</h1>
+      <p class="pt-tagline">Pick an industry workflow to copy into your organisation. You can edit every label, unit and prompt before you use it.</p>
+    </div>
+    <a class="pt-back-link" href="/core/flows/create?scratch=1">Start from scratch instead</a>
+  </header>
+
+  <p class="pt-error" data-pt-error hidden></p>
+
+  <div class="pt-family-filters" data-pt-family-filters>
+    <button type="button" class="pt-family-chip is-active" data-family="">All available templates</button>
+  </div>
+
+  <div class="pt-empty-state" data-pt-empty hidden>
+    <p>No templates are available for your organisation yet. You can still create a process from scratch.</p>
+  </div>
+
+  <div class="pt-card-grid" data-pt-card-grid></div>
+
+  <div class="pt-modal-overlay" data-pt-preview-modal hidden>
+    <div class="pt-modal">
+      <button type="button" class="pt-modal-close" data-pt-preview-close aria-label="Close">&times;</button>
+      <div data-pt-preview-body>Loading…</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script src="/process-templates/static/template-catalog.js"></script>
+{% endblock %}
