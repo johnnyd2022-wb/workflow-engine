@@ -99,3 +99,4 @@
 {"duration_s": null, "findings": 2, "notes": null, "ref": "mc/testing-agent-objective-feat-20260815-081454-358485", "run_type": "chained", "scope": "shell", "skill": "observability", "ts": "2026-08-15T10:08:25+00:00", "verdict": "patched"}
 {"duration_s": null, "findings": 0, "notes": null, "ref": "mc/testing-agent-objective-feat-20260815-081454-358485", "run_type": "chained", "scope": "shell", "skill": "ci-gate", "ts": "2026-08-15T10:08:25+00:00", "verdict": "clean"}
 {"duration_s": null, "findings": 10, "notes": null, "ref": "mc/testing-agent-objective-feat-20260815-081454-358485", "run_type": "chained", "scope": "shell", "skill": "review-feature", "ts": "2026-08-15T10:08:25+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 4, "notes": null, "ref": "feat/process_templates", "run_type": "chained", "scope": "process_templates", "skill": "spec-critic", "ts": "2026-08-21T19:27:03+00:00", "verdict": "findings-open"}
