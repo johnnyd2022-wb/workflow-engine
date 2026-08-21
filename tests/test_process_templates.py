@@ -37,9 +37,16 @@ from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory, UserFact
 
 def _purge_org(db, org_id):
     """Delete every org-scoped row this test file might have created, in FK-safe
-    (child-before-parent) order, then the org itself. None of these tables cascade
-    from `organisations` at the DB level, so a plain `Organisation` delete 409s with a
-    FK violation the moment a test has created a process/execution/etc for the org.
+    (child-before-parent) order, then the org itself. None of the FKs *into*
+    `organisations` cascade — a plain `Organisation` delete 409s with a FK violation
+    the moment a test has created a process/execution/etc for the org (some
+    intra-table FKs do cascade, e.g. ProcessVersion.process_id -> processes.id, but
+    that's irrelevant here since nothing in this list FK's to another row in this
+    same list — deleting each table by org_id directly is sufficient; this ordering
+    only matters for organisations.id, not for cross-referencing itself). This table
+    list is not exhaustive of every TenantScoped model in the app — only the ones
+    this file's fixtures/tests actually create; a new test that creates a
+    different org-scoped row needs to extend it.
     """
     db.query(InventoryItem).filter(InventoryItem.org_id == org_id).delete(synchronize_session=False)
     db.query(EntityEvent).filter(EntityEvent.org_id == org_id).delete(synchronize_session=False)
@@ -169,9 +176,18 @@ class TestCapabilityPolicy:
     def test_ac2_empty_when_wrong_module(self):
         assert registry.resolve_permitted_families(compliant_enabled=True, industry_module="food_manufacturing") == []
 
-    def test_ac4_new_capability_module_mapping_requires_no_route_or_service_change(self, db, compliant_org):
+    def test_ac4_new_capability_module_mapping_requires_no_route_or_service_change(
+        self, db, compliant_org, compliant_app_client
+    ):
         """Registering a synthetic second module/family proves the seam is generic
         data, not an `if nz_alcohol` branch — no route/service code changes here.
+
+        test-evaluator finding: an earlier version only called `list_catalog`/
+        `get_template_detail` directly, which proves the *service* layer is generic
+        but not the *route* layer AC4 actually names ("no route/service code
+        changes") — a route handler could still hardcode `nz_alcohol` somewhere
+        above the service call without this test catching it. Now hits the real
+        HTTP endpoints too.
         """
         synthetic_family = f"synthetic_family_{uuid4().hex[:8]}"
         synthetic_template_id = f"synthetic_template_{uuid4().hex[:8]}"
@@ -207,6 +223,14 @@ class TestCapabilityPolicy:
             detail = service.get_template_detail(db, compliant_org.id, synthetic_template_id)
             assert detail is not None
             assert detail["family"] == synthetic_family
+
+            # Same seam, exercised through the real HTTP route layer.
+            list_resp = compliant_app_client.get("/api/core/process-templates")
+            assert list_resp.status_code == 200
+            assert synthetic_template_id in {t["id"] for t in list_resp.get_json()["templates"]}
+            detail_resp = compliant_app_client.get(f"/api/core/process-templates/{synthetic_template_id}")
+            assert detail_resp.status_code == 200
+            assert detail_resp.get_json()["family"] == synthetic_family
         finally:
             registry.unregister_template(synthetic_template_id)
             registry.unregister_family(synthetic_family)
@@ -294,12 +318,23 @@ class TestCatalogApi:
         assert resp.get_json()["templates"] == []
 
     def test_ac10_advisory_present_in_list_and_detail(self, compliant_app_client):
+        """Compares against a literal copy of the wording, not `registry.TEMPLATE_
+        CUSTOMISE_ADVISORY` — test-evaluator finding: importing the production
+        constant as "expected" makes a wording corruption move expected and actual
+        together, so the test can never fail no matter what the string says. A
+        literal here means an intentional wording change must also touch this test.
+        """
+        expected_advisory = (
+            "This template accelerates setup. It is not legal, food-safety, Customs, or Council "
+            "advice — review and customise every label, unit and prompt against your own SOPs and "
+            "regulatory obligations before use."
+        )
         list_resp = compliant_app_client.get("/api/core/process-templates").get_json()
-        assert all(t["advisory"] == registry.TEMPLATE_CUSTOMISE_ADVISORY for t in list_resp["templates"])
+        assert all(t["advisory"] == expected_advisory for t in list_resp["templates"])
         detail_resp = compliant_app_client.get(
             "/api/core/process-templates/distillery_receive_ingredient_lot"
         ).get_json()
-        assert detail_resp["advisory"] == registry.TEMPLATE_CUSTOMISE_ADVISORY
+        assert detail_resp["advisory"] == expected_advisory
 
 
 # ---------------------------------------------------------------------------------
@@ -328,23 +363,33 @@ class TestCopyTemplate:
         assert resp.status_code == 404
 
     def test_ac7_copy_is_tenant_scoped(self, compliant_app_client, db, compliant_org):
-        """Cross-org read proven at the repository layer (not a second HTTP session):
-        two independently-created `create_app()` instances each wrap the whole fixture
-        body in their own `with flask_app.app_context():` (matching the established
-        app_client pattern elsewhere in this suite), and nesting two of those across
-        one test trips Flask's context-stack assertions. The repository call is what
-        AC7 actually claims holds (`ProcessRepository.get_process_by_id`'s org filter,
-        no new isolation logic) — proving it directly is both simpler and more precise.
+        """Proven against the exact method the real route uses (test-evaluator finding:
+        an earlier version called `ProcessRepository.get_process_by_id`, but
+        `GET /api/core/processes/<id>` (backend.py's `get_process` handler) actually
+        calls `get_process_with_steps` — a different method whose org filter could
+        silently break without this test catching it). The in-org path is proven
+        through the real HTTP route (the same `compliant_app_client` session that
+        created it); the cross-org rejection is proven against `get_process_with_steps`
+        directly, since a real second authenticated HTTP session isn't safe to add here
+        — two independently-created `create_app()` instances each wrap the whole
+        fixture body in their own `with flask_app.app_context():`, and nesting two of
+        those in one test trips Flask's context-stack assertions (see the now-removed
+        two-client version of this test for that failure).
         """
         resp = compliant_app_client.post("/api/core/process-templates/distillery_receive_ingredient_lot/copy")
         process_id = UUID(resp.get_json()["process_id"])
+
+        # In-org: the real route the frontend actually calls.
+        own_org_resp = compliant_app_client.get(f"/api/core/processes/{process_id}")
+        assert own_org_resp.status_code == 200
+        assert own_org_resp.get_json()["id"] == str(process_id)
 
         other_org = OrganisationFactory()
         db.commit()
         try:
             repo = ProcessRepository(db)
-            assert repo.get_process_by_id(process_id, org_id=other_org.id) is None
-            assert repo.get_process_by_id(process_id, org_id=compliant_org.id) is not None
+            assert repo.get_process_with_steps(process_id, org_id=other_org.id) is None
+            assert repo.get_process_with_steps(process_id, org_id=compliant_org.id) is not None
         finally:
             _purge_org(db, other_org.id)
 
@@ -352,10 +397,16 @@ class TestCopyTemplate:
         resp = compliant_app_client.post("/api/core/process-templates/distillery_receive_ingredient_lot/copy")
         process_id = resp.get_json()["process_id"]
 
-        compliant_app_client.put(
+        put_resp = compliant_app_client.put(
             f"/api/core/processes/{process_id}",
             json={"name": "My Customised Intake"},
         )
+        # test-evaluator finding: an earlier version never checked this — a 404 or a
+        # silent no-op edit would still make the assertions below pass vacuously,
+        # since they'd be checking that nothing changed when nothing was ever
+        # attempted successfully in the first place.
+        assert put_resp.status_code == 200
+        assert put_resp.get_json()["name"] == "My Customised Intake"
 
         template = registry.get_template_by_id("distillery_receive_ingredient_lot")
         assert template.name == "Receive ingredient lot"  # catalog untouched
@@ -488,11 +539,20 @@ class TestCatalogPageAndResume:
         assert resp.status_code == 200
 
     def test_ac13_wizard_resumes_on_copied_draft(self, compliant_app_client):
+        """200 alone doesn't distinguish a genuine resume from a route that always
+        returns 200 regardless of `id` (test-evaluator finding). Pairing it with a
+        random, never-created id — which `_assert_flow_process_access` 404s per
+        process-design's own AC10/11 — proves this specific 200 required the real
+        copied process to actually resolve, not a contentless catch-all render.
+        """
         copy_resp = compliant_app_client.post("/api/core/process-templates/distillery_receive_ingredient_lot/copy")
         process_id = copy_resp.get_json()["process_id"]
 
         resp = compliant_app_client.get(f"/core/flows/create/summary?id={process_id}")
         assert resp.status_code == 200
+
+        fake_resp = compliant_app_client.get(f"/core/flows/create/summary?id={uuid4()}")
+        assert fake_resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------------
@@ -558,6 +618,8 @@ class TestObservabilityLogging:
 
 class TestAnalyticsEvents:
     def test_ac11_list_call_emits_catalog_viewed(self, compliant_app_client, db, compliant_org):
+        # == 1, not >= 1 (test-evaluator finding): a single GET must emit exactly one
+        # event — >= 1 would silently accept a duplicate-emission bug.
         compliant_app_client.get("/api/core/process-templates")
         events = (
             db.query(EntityEvent)
@@ -567,7 +629,7 @@ class TestAnalyticsEvents:
             )
             .all()
         )
-        assert len(events) >= 1
+        assert len(events) == 1
 
     def test_ac11_detail_call_emits_template_selected(self, compliant_app_client, db, compliant_org):
         compliant_app_client.get("/api/core/process-templates/distillery_receive_ingredient_lot")
@@ -579,8 +641,8 @@ class TestAnalyticsEvents:
             )
             .all()
         )
-        assert len(events) >= 1
-        assert events[-1].payload["template_id"] == "distillery_receive_ingredient_lot"
+        assert len(events) == 1
+        assert events[0].payload["template_id"] == "distillery_receive_ingredient_lot"
 
     def test_ac11_copy_emits_template_copied_with_payload(self, compliant_app_client, db, compliant_org):
         resp = compliant_app_client.post("/api/core/process-templates/distillery_receive_ingredient_lot/copy")

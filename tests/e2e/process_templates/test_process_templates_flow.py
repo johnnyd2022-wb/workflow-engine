@@ -117,21 +117,38 @@ def test_ac12_catalogue_page_lists_cards_for_a_compliant_org(compliant_page: Pag
 
 
 def test_ac5_family_filter_narrows_the_card_grid(compliant_page: Page):
+    """Asserts both directions — test-evaluator finding: only checking that the
+    Distillery card disappears would still pass if the filter simply cleared every
+    card regardless of family (a "filter" that hides everything narrows a
+    Distillery-only search too). The Winery card staying visible is what proves this
+    is a real family filter, not a blanket clear.
+    """
     page = compliant_page
     page.goto("/core/flows/create/template-catalog")
     expect(page.get_by_role("button", name=re.compile(_DISTILLERY_TEMPLATE_NAME))).to_be_visible()
 
     page.locator("[data-pt-family-filters]").get_by_role("button", name="Winery / Vineyard").click()
     expect(page.get_by_role("button", name=re.compile(_DISTILLERY_TEMPLATE_NAME))).to_have_count(0)
+    expect(page.get_by_role("button", name=re.compile("Grape intake"))).to_be_visible()
 
 
 def test_ac10_preview_panel_shows_the_fixed_customise_advisory(compliant_page: Page):
+    """Compares against a literal copy of the wording, not the imported
+    `TEMPLATE_CUSTOMISE_ADVISORY` constant — test-evaluator finding: importing the
+    production constant as "expected" makes a wording corruption move expected and
+    actual together, so the test can never fail no matter what the string says.
+    """
+    expected_advisory = (
+        "This template accelerates setup. It is not legal, food-safety, Customs, or Council "
+        "advice — review and customise every label, unit and prompt against your own SOPs and "
+        "regulatory obligations before use."
+    )
     page = compliant_page
     page.goto("/core/flows/create/template-catalog")
     page.get_by_role("button", name=re.compile(_DISTILLERY_TEMPLATE_NAME)).click()
 
     expect(page.get_by_role("heading", name=_DISTILLERY_TEMPLATE_NAME)).to_be_visible()
-    expect(page.locator("[data-pt-preview-body]")).to_contain_text(TEMPLATE_CUSTOMISE_ADVISORY)
+    expect(page.locator("[data-pt-preview-body]")).to_contain_text(expected_advisory)
 
 
 # --------------------------------------------------------------------------------------
