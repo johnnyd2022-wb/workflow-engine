@@ -14,6 +14,7 @@ Manager** the shipping.
 | **Xero integration** (OAuth, invoices, multi-org tenant selection) | paused (was in progress) | Johnny | TBD | Tenant selection + encrypted token storage | On resume: confirm remaining scope; plan release |
 | Compliance reporting feature | idea/roadmap | Johnny | TBD | — | Define MVP scope |
 | Onboarding flow | idea/roadmap | Johnny | TBD | — | Define first-run experience |
+| Industry process templates | idea/roadmap | Johnny | TBD | Start-from-scratch vs curated-template setup | Review [feature specification](../../../../docs/industry-process-templates-spec.md) and validate with distillery, brewery and winery pilots |
 | Landing page / positioning | idea/roadmap | Johnny | TBD | — | Draft hero + pain-led copy (Marketing) |
 | Customer pilot | idea | Johnny | TBD | — | Identify 1–2 distilleries for a pilot |
 
