@@ -64,6 +64,21 @@
   pre-existing and unrelated to this diff. Report:
   .agents/reports/perf/2026-08-22-process-templates.md
 
+## test-evaluator (Codex, blocking, two-round circuit breaker)
+
+- Round 1 (2026-08-22): weakened. 7 findings across the unit + e2e suites (wrong
+  repo method in AC7, ignored PUT result, service-only AC4 coverage, missing positive
+  control in the e2e family filter, advisory tests comparing against the production
+  constant they were proving, AC11's `>= 1` permitting duplicate events, AC13 with no
+  negative control). All 7 fixed; 37/37 green. Report:
+  .agents/reports/process_templates/test-evaluator.md
+- Round 2 (2026-08-22): valid. Every fix independently re-verified against the real
+  code it claims to match (confirmed `get_process_with_steps` is what the route
+  actually calls, confirmed the AC4 fixture ordering is sound, confirmed the literal
+  advisory strings match the production constant verbatim). No new issues from the
+  round-1 edits themselves. Report:
+  .agents/reports/process_templates/test-evaluator-round2.md
+
 ## observability
 
 - Round 1 (2026-08-22): instrumented. Added the missing snake_case structlog channel
