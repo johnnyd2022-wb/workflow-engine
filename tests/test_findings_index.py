@@ -417,6 +417,80 @@ def test_findings_not_actioned_heading_still_opens_a_section(tmp_path, monkeypat
     assert "rate limit" in items[0].detail
 
 
+def test_bullet_syntax_inside_a_fenced_code_block_is_not_a_finding(tmp_path, monkeypatch):
+    """A YAML/code snippet quoted as evidence inside a finding often contains lines that
+    look exactly like markdown bullets (`- "**/app.py"`). This is exactly what
+    `.agents/reports/shell/security-audit.md`'s F3 finding does, and it produced a
+    standalone garbage item per fenced list line -- the fence must gate bullet scanning
+    off, the same way a heading does, since these are code contents, not report prose."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Findings
+### F3 [fix] `.semgrep/rules/python-multitenant.yml:26-28` -- exclude list is too broad, which is exactly why the scanner reported 0 findings on the real gap
+```yaml
+paths:
+  exclude:
+    - "**/auth_routes.py"
+    - "**/app.py"
+```
+recommendation: narrow the exclude list.
+""",
+    )
+    items = fi.parse_doc(path)
+    assert items == [], f"fenced code-block lines were indexed as findings: {[i.detail for i in items]}"
+
+
+def test_bullet_continuation_passes_through_an_embedded_fence(tmp_path, monkeypatch):
+    """A bullet's own multi-line body legitimately embeds a fenced snippet as evidence,
+    followed by more prose -- e.g. a `python` block then a 'Recommended fix:' sentence,
+    the real shape of `.agents/reports/traceability/security-audit.md`'s F3 finding.
+    Stopping continuation at the fence (rather than passing through it) truncates the
+    bullet and silently drops that trailing prose -- including, in the real report, the
+    part naming the recommended fix."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Findings
+- **`GET /api/x` 500s on bad input.** No try/except around the parse call:
+  ```python
+  page = int(request.args.get("page", 1))
+  ```
+  Recommended fix: wrap in try/except and return 400 at `app/x.py:12`.
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "Recommended fix" in items[0].detail
+    assert "app/x.py:12" in items[0].code_refs
+
+
+def test_h1_document_title_does_not_open_an_unclosable_section(tmp_path, monkeypatch):
+    """`docs/findings-sweep-setup.md`'s own title, '# Findings sweep -- setup', contains
+    the word 'findings' and (before this fix) opened a level-1 `finding` section. A
+    level-1 section can only be closed by another level-1 heading -- and this repo writes
+    exactly one H1 per doc -- so the whole rest of the file, every `##` subsection's
+    prose bullets included, was swept in as findings. Level-1 headings are this repo's
+    document titles, never section markers, so they must never open a section."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "docs/x.md",
+        """# Findings sweep -- setup
+
+## Files
+- `scripts/findings_index.py` -- the index builder.
+
+## How the loop closes
+- Source text gone, no MR from this loop -> `gone` (someone removed it by hand).
+- A closed finding reappears -> reopened and flagged `regressed`.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
 def test_multi_line_bullet_is_gathered_whole(tmp_path, monkeypatch):
     """Findings here wrap across several lines; truncating at the newline loses the part
     that names the file, which is the half the skill needs to act."""
@@ -1012,3 +1086,46 @@ def test_mr_trailer_parses_multiple_ids():
     ids = fi.TRAILER_RE.search("body text\nFindings-Index: a1b2c3d4, 09d144c1\nmore text")
     assert ids is not None
     assert [i.strip() for i in ids.group("ids").split(",")] == ["a1b2c3d4", "09d144c1"]
+
+
+# --- MR description parsing -------------------------------------------------------------
+
+
+def test_mr_description_bullet_under_a_findings_heading_is_indexed():
+    items = fi._parse_mr_description(
+        "## Follow-ups\n- the export endpoint has no rate limit and could be abused for a DoS\n",
+        "gitlab:!1",
+    )
+    assert len(items) == 1
+    assert items[0].kind == "follow-up"
+
+
+def test_mr_description_unchecked_task_box_is_indexed_outside_any_heading():
+    """GitLab renders `- [ ]` as a task list; this repo uses it for agreed-but-deferred
+    work with no heading wrapping it at all, unlike every other bullet source here."""
+    items = fi._parse_mr_description("- [ ] wire the rate limiter before merging\n", "gitlab:!1")
+    assert len(items) == 1
+    assert items[0].kind == "mr-task"
+
+
+def test_mr_description_checked_task_box_is_not_indexed():
+    items = fi._parse_mr_description("- [x] wire the rate limiter before merging\n", "gitlab:!1")
+    assert items == []
+
+
+def test_mr_description_fenced_yaml_bullet_is_not_indexed():
+    """The same fence bug `parse_doc` had: a `- "..."` list line inside a fenced snippet
+    must not be read as a real bullet just because a findings section is open above it."""
+    items = fi._parse_mr_description(
+        '## Follow-ups\n```yaml\npaths:\n  exclude:\n    - "**/auth_routes.py"\n```\n',
+        "gitlab:!1",
+    )
+    assert items == []
+
+
+def test_mr_description_fenced_task_box_is_not_indexed():
+    """A `- [ ]` inside a fenced snippet (e.g. quoted as an example) must not be read as
+    a real agreed-but-deferred task -- the checkbox path matches anywhere in the
+    description, unguarded by section, so it needs its own fence check."""
+    items = fi._parse_mr_description("```bash\n# example only\n- [ ] not a real task\n```\n", "gitlab:!1")
+    assert items == []
