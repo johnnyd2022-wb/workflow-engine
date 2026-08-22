@@ -1,5 +1,5 @@
 # SPEC: process_templates
-status: approved-unattended
+status: built
 name: Industry Process Templates
 slug: process_templates
 blueprint: app/features/process_templates/ (plus one small, precedented change to

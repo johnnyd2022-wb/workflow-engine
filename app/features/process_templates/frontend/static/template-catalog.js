@@ -126,6 +126,9 @@
       return "<li>" + escapeHtml(p.label) + (p.required ? " (required)" : " (optional)") + "</li>";
     }).join("");
 
+    // nosemgrep: innerhtml-string-concat -- audited: every interpolated value (name,
+    // description, traceability_shape, advisory, and each input/output/prompt list
+    // item built above) is passed through escapeHtml() before concatenation.
     modalBodyEl.innerHTML =
       "<h2>" + escapeHtml(detail.name) + "</h2>" +
       "<p>" + escapeHtml(detail.description) + "</p>" +
@@ -142,6 +145,9 @@
   }
 
   function useTemplate(templateId) {
+    // nosemgrep: raw-fetch-post -- audited: csrfHeaders() reads meta[name="csrf-token"]
+    // and sets X-CSRFToken explicitly, the rule's own suggested mitigation for a
+    // non-CoreAPI-client fetch.
     fetch("/api/core/process-templates/" + encodeURIComponent(templateId) + "/copy", {
       method: "POST",
       headers: csrfHeaders(),

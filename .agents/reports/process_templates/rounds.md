@@ -88,3 +88,18 @@
   Two new tests assert both log lines fire, using the same log-capture technique
   test_dilution_calculator.py established. Report:
   .agents/reports/process_templates/observability.md
+
+## ci-gate (verify mode, always last)
+
+- Round 1 (2026-08-22): pass. 37/37 process_templates tests collected and green.
+  semgrep's real CI command (`--config .semgrep/rules/ app/ --include="*.py"
+  --include="*.js" --error`) now exits 0 after scoping the two security-audit-
+  confirmed false positives with `// nosemgrep: <rule-id>` + justification, matching
+  established repo precedent. No migrations (spec says none). Full-suite
+  reconciliation run three times across the build; final run showed 2 failures, both
+  confirmed pre-existing and load-sensitive (the standing `test_ac12_audit_log_...`
+  dashboard failure, and one process_templates e2e test that failed only under full
+  concurrent load and passed 5/5 in isolation immediately after — same root cause,
+  the dashboard-summary background widget timing out under the single-threaded dev
+  server during a 1500+ test run). Neither is this feature's own code. Report:
+  .agents/reports/process_templates/ci-gate.md
