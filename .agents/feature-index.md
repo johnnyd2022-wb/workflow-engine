@@ -402,7 +402,7 @@ how they get carved.
     subscription: core
     layer:        domain (stateless — no models, no repos, no tenant data)
     flag:         none — registered unconditionally (app_factory.py:106)
-    reviewed:     never
+    reviewed:     2026-08-21 (see .agents/reports/dilution-calculator/review.md)
 
     routes:   /dilution-calculator [GET]                    (page)
               /api/dilution-calculator/solve [POST]         (stateless solve)
