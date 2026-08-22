@@ -26,7 +26,7 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from app.features.process_templates.catalog.registry import TEMPLATE_CUSTOMISE_ADVISORY
-from tests.e2e.conftest import assert_clean_page
+from tests.e2e.conftest import assert_clean_page, csrf_headers
 
 pytestmark = pytest.mark.e2e
 
@@ -100,6 +100,18 @@ def test_ac3_direct_template_id_404s_for_org_without_permitted_family(no_complia
     assert resp.status == 404
 
 
+def test_ac6_copy_404s_for_org_without_permitted_family(no_compliant_page: Page):
+    """Same tenant-boundary rule as AC3, proven against the mutating copy endpoint
+    itself, not just the read-only detail route -- a client cannot obtain an
+    inapplicable-family template by skipping straight to POST .../copy either."""
+    page = no_compliant_page
+    resp = page.request.post(
+        f"/api/core/process-templates/{_DISTILLERY_TEMPLATE_ID}/copy",
+        headers=csrf_headers(page),
+    )
+    assert resp.status == 404
+
+
 # --------------------------------------------------------------------------------------
 # AC5, AC10, AC12: catalogue page, family filter, preview advisory.
 # --------------------------------------------------------------------------------------
@@ -130,6 +142,20 @@ def test_ac5_family_filter_narrows_the_card_grid(compliant_page: Page):
     page.locator("[data-pt-family-filters]").get_by_role("button", name="Winery / Vineyard").click()
     expect(page.get_by_role("button", name=re.compile(_DISTILLERY_TEMPLATE_NAME))).to_have_count(0)
     expect(page.get_by_role("button", name=re.compile("Grape intake"))).to_be_visible()
+
+
+def test_ac5_unknown_family_filter_returns_empty_list_not_400(compliant_page: Page):
+    """The filter is a UI convenience, not a validated enum boundary: a family value
+    that doesn't exist in the catalogue narrows to nothing rather than erroring, so a
+    stale/mistyped `?family=` query never breaks the page."""
+    page = compliant_page
+    resp = page.request.get("/api/core/process-templates?family=not_a_real_family")
+    assert resp.status == 200
+    body = resp.json()
+    assert body["templates"] == []
+    # The org's own permitted families are still reported -- the filter narrows
+    # templates, it does not change which families this org may see.
+    assert len(body["families"]) == 3
 
 
 def test_ac10_preview_panel_shows_the_fixed_customise_advisory(compliant_page: Page):
@@ -179,3 +205,31 @@ def test_ac13_using_a_template_lands_on_wizard_summary_with_the_copied_step(comp
     expect(panel).to_contain_text(_DISTILLERY_TEMPLATE_NAME)
     expect(panel).to_contain_text(_DISTILLERY_OUTPUT_NAME)
     assert_clean_page(page)
+
+
+# --------------------------------------------------------------------------------------
+# AC7: mandatory cross-tenant probe -- a template-sourced process is tenant-scoped too.
+# --------------------------------------------------------------------------------------
+
+
+def test_ac7_second_org_cannot_reach_a_template_sourced_process(cross_tenant_pages: dict[str, Page]):
+    """Copying a template creates an ordinary org-owned draft `Process` -- proves the
+    existing `ProcessRepository.get_process_by_id` org filter (no new isolation logic
+    per AC7) holds for template-sourced processes exactly as it does for scratch ones.
+    """
+    page_a, page_b = cross_tenant_pages["a"], cross_tenant_pages["b"]
+
+    copy_resp = page_a.request.post(
+        f"/api/core/process-templates/{_DISTILLERY_TEMPLATE_ID}/copy",
+        headers=csrf_headers(page_a),
+    )
+    assert copy_resp.status == 201, f"org A could not copy the template: {copy_resp.status} {copy_resp.text()}"
+    process_id = copy_resp.json()["process_id"]
+
+    # Org A can see its own copy.
+    own_resp = page_a.request.get(f"/api/core/processes/{process_id}")
+    assert own_resp.status == 200
+
+    # Org B, a total stranger to org A, gets 404 -- not 403, so existence isn't leaked.
+    cross_resp = page_b.request.get(f"/api/core/processes/{process_id}")
+    assert cross_resp.status == 404

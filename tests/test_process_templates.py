@@ -556,6 +556,89 @@ class TestCatalogPageAndResume:
 
 
 # ---------------------------------------------------------------------------------
+# Static-asset route: path-traversal/extension guard (process_templates_bp.py:31-33)
+# ---------------------------------------------------------------------------------
+
+
+class TestStaticAssetRoute:
+    def test_path_traversal_attempt_returns_400(self, app_client):
+        resp = app_client.get("/process-templates/static/../../../etc/passwd")
+        assert resp.status_code == 400
+
+    def test_disallowed_extension_returns_400(self, app_client):
+        resp = app_client.get("/process-templates/static/evil.py")
+        assert resp.status_code == 400
+
+    def test_real_js_asset_returns_200(self, app_client):
+        resp = app_client.get("/process-templates/static/template-catalog.js")
+        assert resp.status_code == 200
+
+    def test_real_css_asset_returns_200(self, app_client):
+        resp = app_client.get("/process-templates/static/template-catalog.css")
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------------
+# AC6: _build_description branches (process_templates_service.py:104-113)
+# ---------------------------------------------------------------------------------
+
+
+class TestBuildDescription:
+    def _template(self, *, description: str, name: str = "Template Name", version: int = 1) -> ProcessTemplate:
+        return ProcessTemplate(
+            id="synthetic_build_description_template",
+            family="synthetic",
+            name=name,
+            description=description,
+            traceability_shape="a → b",
+            category=ProcessCategory.OTHER,
+            version=version,
+            step_name="Synthetic step",
+            outputs=(TemplateOutput(name="Out", unit="units"),),
+        )
+
+    def test_no_description_returns_provenance_suffix_alone(self):
+        template = self._template(description="", name="Bare Template", version=3)
+        result = service._build_description(template)
+        assert result == "Created from: Bare Template v3"
+
+    def test_short_description_returns_combined_string(self):
+        template = self._template(description="Does a thing.", name="Short Template", version=1)
+        result = service._build_description(template)
+        assert result == "Does a thing.\n\nCreated from: Short Template v1"
+
+    def test_long_description_is_truncated_so_suffix_survives_intact(self):
+        template = self._template(description="x" * 990, name="Long Template", version=1)
+        suffix = "Created from: Long Template v1"
+        result = service._build_description(template)
+
+        assert len(result) == 1000
+        assert result.endswith(f"\n\n{suffix}")
+        room_for_description = 1000 - len(suffix) - 2
+        assert result == f"{'x' * room_for_description}\n\n{suffix}"
+        # The template's own text was cut; the suffix was not.
+        assert result.count(suffix) == 1
+
+
+# ---------------------------------------------------------------------------------
+# AC3 (genuinely-missing id): get_template_by_id / get_template_detail
+# ---------------------------------------------------------------------------------
+
+
+class TestMissingTemplateId:
+    def test_detail_404_for_template_id_not_in_catalog_at_all(self, compliant_app_client):
+        """Distinct from test_ac3_detail_404_for_org_without_permitted_family: that
+        case is a real catalogue id in a family the org isn't permitted to see.
+        This id doesn't exist in the catalogue for any org, exercising
+        registry.get_template_by_id's None return (registry.py:118) through
+        get_template_detail directly, rather than the wrong-family path.
+        """
+        assert registry.get_template_by_id("not-a-real-template-id") is None
+        resp = compliant_app_client.get("/api/core/process-templates/not-a-real-template-id")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------------
 # Observability: structured log lines (observability skill's per-feature instrumentation)
 # ---------------------------------------------------------------------------------
 
