@@ -46,6 +46,7 @@
       "/core/settings",
       "/crm",
       "/dilution-calculator",
+      "/compliant",
       "/core/sourcemap",
       "/core/inventory/dispose",
       "/core/inventory/dispose/confirm",
@@ -65,6 +66,7 @@
       "/api/core/sourcemap/objects",
       "/api/core/entities/activity",
       "/api/core/process-templates",
+      "/api/compliant/overview",
       {
         "route": "/api/dilution-calculator/solve",
         "method": "POST",

