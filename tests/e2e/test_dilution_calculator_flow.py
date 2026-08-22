@@ -202,3 +202,213 @@ def test_invalid_direction_shows_error_in_ui_not_silent_failure(logged_in_page: 
     expect(page.get_by_test_id("dilcalc-result")).to_be_hidden()
 
     assert_clean_page(page)
+
+
+def test_ac5_solving_abv_field_rejects_shrinking_volume_in_ui(logged_in_page: Page):
+    """AC5's other branch: when solve_for is an ABV field, the check flips to
+    final_volume_ml <= starting_volume_ml. The existing AC5 test only exercises the
+    volume-field branch (solve_for=final_volume_ml); this covers the ABV-field branch
+    end to end through the real form."""
+    page = logged_in_page
+    page.goto("/dilution-calculator")
+    page.wait_for_load_state("networkidle")
+
+    page.get_by_role("button", name="Final ABV (%)").click()
+    expect(page.locator("#dilcalc-final_abv")).to_be_disabled()
+
+    page.get_by_label("Starting ABV (%)").fill("40")
+    page.get_by_label("Starting volume (mL)").fill("1000")
+    page.get_by_label("Final volume (mL)").fill("500")  # not > starting_volume_ml: invalid
+
+    page.get_by_role("button", name="Calculate").click()
+
+    error = page.get_by_test_id("dilcalc-error")
+    expect(error).to_be_visible()
+    expect(error).to_contain_text("final_volume_ml must be greater than starting_volume_ml")
+    expect(page.get_by_test_id("dilcalc-result")).to_be_hidden()
+
+    assert_clean_page(page)
+
+
+def test_ac5_divisor_guard_final_abv_zero_shows_error_in_ui(logged_in_page: Page):
+    """AC5's explicit divisor guard: final_abv=0 passes the `final_abv < starting_abv`
+    pair check but is the divisor for solving final_volume_ml, so it must be rejected
+    with its own distinct message (not a ZeroDivisionError, not a blank/500 page) —
+    exercised here as a real form submission, not just the service-level unit test."""
+    page = logged_in_page
+    page.goto("/dilution-calculator")
+    page.wait_for_load_state("networkidle")
+
+    page.get_by_role("button", name="Final volume (mL)").click()
+
+    page.get_by_label("Starting ABV (%)").fill("40")
+    page.get_by_label("Starting volume (mL)").fill("1000")
+    page.get_by_label("Final ABV (%)").fill("0")
+
+    page.get_by_role("button", name="Calculate").click()
+
+    error = page.get_by_test_id("dilcalc-error")
+    expect(error).to_be_visible()
+    expect(error).to_contain_text("final_abv must be greater than 0 to solve for final_volume_ml")
+    expect(page.get_by_test_id("dilcalc-result")).to_be_hidden()
+
+    assert_clean_page(page)
+
+
+# ---------------------------------------------------------------------------------
+# AC4: server-side validation errors surfaced in the UI, beyond the direction check
+# ---------------------------------------------------------------------------------
+
+
+def test_ac4_abv_out_of_range_shows_error_in_ui(logged_in_page: Page):
+    """An ABV outside [0, 100] passes the client's own required/finite checks (140 is a
+    finite number) so this is a genuine server round trip, not client-side validation —
+    proves AC4's range check is actually wired to a visible error, not just a unit test."""
+    page = logged_in_page
+    page.goto("/dilution-calculator")
+    page.wait_for_load_state("networkidle")
+
+    page.get_by_role("button", name="Final volume (mL)").click()
+
+    page.get_by_label("Starting ABV (%)").fill("140")
+    page.get_by_label("Starting volume (mL)").fill("1000")
+    page.get_by_label("Final ABV (%)").fill("20")
+
+    page.get_by_role("button", name="Calculate").click()
+
+    error = page.get_by_test_id("dilcalc-error")
+    expect(error).to_be_visible()
+    expect(error).to_contain_text("'starting_abv' must be between 0 and 100")
+    expect(page.get_by_test_id("dilcalc-result")).to_be_hidden()
+
+    assert_clean_page(page)
+
+
+def test_ac4_non_positive_volume_shows_error_in_ui(logged_in_page: Page):
+    """0 is a finite number, so the client's own validation lets it through — this
+    exercises the server's volume > 0 rule as a real round trip."""
+    page = logged_in_page
+    page.goto("/dilution-calculator")
+    page.wait_for_load_state("networkidle")
+
+    page.get_by_role("button", name="Final volume (mL)").click()
+
+    page.get_by_label("Starting ABV (%)").fill("40")
+    page.get_by_label("Starting volume (mL)").fill("0")
+    page.get_by_label("Final ABV (%)").fill("20")
+
+    page.get_by_role("button", name="Calculate").click()
+
+    error = page.get_by_test_id("dilcalc-error")
+    expect(error).to_be_visible()
+    expect(error).to_contain_text("'starting_volume_ml' must be greater than 0")
+    expect(page.get_by_test_id("dilcalc-result")).to_be_hidden()
+
+    assert_clean_page(page)
+
+
+def test_ac4_blank_required_field_shows_error_in_ui_without_calling_api(logged_in_page: Page):
+    """A blank required field is caught client-side before any fetch — the message text
+    ("Final ABV (%) is required", the field's display label) is distinct from the
+    server's own missing-field message ("'final_abv' is required", the raw field name),
+    so asserting on the client wording confirms this path never reaches the API."""
+    page = logged_in_page
+    page.goto("/dilution-calculator")
+    page.wait_for_load_state("networkidle")
+
+    page.get_by_role("button", name="Final volume (mL)").click()
+
+    page.get_by_label("Starting ABV (%)").fill("40")
+    page.get_by_label("Starting volume (mL)").fill("1000")
+    # Final ABV left blank.
+
+    page.get_by_role("button", name="Calculate").click()
+
+    error = page.get_by_test_id("dilcalc-error")
+    expect(error).to_be_visible()
+    expect(error).to_contain_text("Final ABV (%) is required")
+    expect(page.get_by_test_id("dilcalc-result")).to_be_hidden()
+
+    assert_clean_page(page)
+
+
+# ---------------------------------------------------------------------------------
+# AC3 (round-trip, symmetric across all four solve directions) driven through the UI,
+# which as a side effect exercises the two solve_for directions (final_abv,
+# starting_abv/starting_volume_ml) the tests above never click through.
+#
+# Numbers are chosen (matching the spec's own worked example / the unit test's round
+# trip fixtures) so every intermediate solved_value is an exact whole number. The
+# result is displayed via `toLocaleString(maximumFractionDigits: 2)`, i.e. rounded for
+# display — feeding a *non*-whole displayed value back into the next step would fail
+# AC3's 1e-6 tolerance for a UI-rendering reason unrelated to the calculation itself.
+# ---------------------------------------------------------------------------------
+
+
+def test_ac3_round_trip_final_volume_then_final_abv_via_ui(logged_in_page: Page):
+    page = logged_in_page
+    page.goto("/dilution-calculator")
+    page.wait_for_load_state("networkidle")
+
+    # Step 1: solve final_volume_ml from (a=40, b=1000, c=20) -> exact 2000.
+    page.get_by_role("button", name="Final volume (mL)").click()
+    page.get_by_label("Starting ABV (%)").fill("40")
+    page.get_by_label("Starting volume (mL)").fill("1000")
+    page.get_by_label("Final ABV (%)").fill("20")
+    page.get_by_role("button", name="Calculate").click()
+
+    result = page.get_by_test_id("dilcalc-result")
+    expect(result).to_be_visible()
+    solved_final_volume = _numeric(page.get_by_test_id("dilcalc-solved-value").inner_text())
+    assert solved_final_volume == pytest.approx(2000.0, abs=1e-6)
+
+    # Step 2: switch to solving final_abv, feed the solved final_volume_ml back in
+    # alongside the same (a, b). starting_abv/starting_volume_ml fields keep their
+    # step-1 values; only final_abv (now the target) and final_volume_ml need filling.
+    page.get_by_role("button", name="Final ABV (%)").click()
+    expect(page.locator("#dilcalc-final_abv")).to_be_disabled()
+    page.get_by_label("Final volume (mL)").fill(str(solved_final_volume))
+    page.get_by_role("button", name="Calculate").click()
+
+    expect(result).to_be_visible()
+    solved_final_abv = _numeric(page.get_by_test_id("dilcalc-solved-value").inner_text())
+    assert solved_final_abv == pytest.approx(20.0, abs=1e-6), (
+        f"round trip through the UI should recover the original final_abv=20, got {solved_final_abv}"
+    )
+
+    assert_clean_page(page)
+
+
+def test_ac3_round_trip_starting_volume_then_starting_abv_via_ui(logged_in_page: Page):
+    page = logged_in_page
+    page.goto("/dilution-calculator")
+    page.wait_for_load_state("networkidle")
+
+    # Step 1: solve starting_volume_ml from (starting_abv=40, final_abv=20,
+    # final_volume_ml=2000) -> exact 1000.
+    page.get_by_role("button", name="Starting volume (mL)").click()
+    expect(page.locator("#dilcalc-starting_volume_ml")).to_be_disabled()
+    page.get_by_label("Starting ABV (%)").fill("40")
+    page.get_by_label("Final ABV (%)").fill("20")
+    page.get_by_label("Final volume (mL)").fill("2000")
+    page.get_by_role("button", name="Calculate").click()
+
+    result = page.get_by_test_id("dilcalc-result")
+    expect(result).to_be_visible()
+    solved_starting_volume = _numeric(page.get_by_test_id("dilcalc-solved-value").inner_text())
+    assert solved_starting_volume == pytest.approx(1000.0, abs=1e-6)
+
+    # Step 2: switch to solving starting_abv, feed the solved starting_volume_ml back
+    # in. final_abv/final_volume_ml fields keep their step-1 values (20 / 2000).
+    page.get_by_role("button", name="Starting ABV (%)").click()
+    expect(page.locator("#dilcalc-starting_abv")).to_be_disabled()
+    page.get_by_label("Starting volume (mL)").fill(str(solved_starting_volume))
+    page.get_by_role("button", name="Calculate").click()
+
+    expect(result).to_be_visible()
+    solved_starting_abv = _numeric(page.get_by_test_id("dilcalc-solved-value").inner_text())
+    assert solved_starting_abv == pytest.approx(40.0, abs=1e-6), (
+        f"round trip through the UI should recover the original starting_abv=40, got {solved_starting_abv}"
+    )
+
+    assert_clean_page(page)

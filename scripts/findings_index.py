@@ -130,6 +130,7 @@ EXCLUDE_GLOBS = (
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*$")
 BULLET_RE = re.compile(r"^(?P<indent>[ \t]*)(?:[-*+]|\d+\.)\s+(?P<text>.*)$")
 CHECKBOX_RE = re.compile(r"^\[(?P<mark>[ xX])\]\s*(?P<rest>.*)$")
+FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
 # Headings that open a section of actionable items. Matched against the heading text,
 # case-insensitively. Kept deliberately tight -- "## Notes" or "## Summary" are prose,
@@ -566,17 +567,37 @@ def parse_doc(path: Path) -> list[Item]:
     lines = text.splitlines()
     items: list[Item] = []
     section: tuple[int, str] | None = None  # (heading level, kind)
+    in_fence = False
     i = 0
 
     while i < len(lines):
         line = lines[i]
 
+        # Evidence snippets inside a finding are fenced code, not report prose. A YAML/
+        # code line that happens to start with "- " (this repo's F3 shell finding quotes
+        # a semgrep exclude list) or "#" must not be read as a bullet or heading just
+        # because it's indented like one -- the fence gates both off until it closes.
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            i += 1
+            continue
+        if in_fence:
+            i += 1
+            continue
+
         heading = HEADING_RE.match(line)
         if heading:
             level, title = len(heading.group(1)), heading.group(2)
             declares_closed = CLOSED_HEADING_RE.search(title) and not NEGATED_CLOSURE_RE.search(title)
+            # A level-1 heading is this repo's document title, written once, never a
+            # section marker -- and since a level-1 section can only be closed by another
+            # level-1 heading, a title that happens to contain a trigger word (e.g. this
+            # very file's "# Findings sweep") would otherwise open a section nothing in
+            # the rest of the document could ever close, sweeping in every later bullet.
             kind = (
-                None if declares_closed else next((k for pattern, k in FINDING_HEADINGS if pattern.search(title)), None)
+                None
+                if declares_closed or level == 1
+                else next((k for pattern, k in FINDING_HEADINGS if pattern.search(title)), None)
             )
             if kind:
                 section = (level, kind)
@@ -590,10 +611,25 @@ def parse_doc(path: Path) -> list[Item]:
             indent = len(bullet.group("indent").expandtabs(4))
             block = [bullet.group("text").strip()]
             j = i + 1
+            nested_fence = False
             # Gather continuation lines: this repo wraps bullets across 3-5 lines, and a
-            # finding truncated at the first newline loses the part naming the file.
+            # finding truncated at the first newline loses the part naming the file. A
+            # bullet's evidence commonly embeds a fenced snippet before further prose
+            # (e.g. "Recommended fix:" after a ```python block) -- pass through fence
+            # markers rather than stopping at them, or that trailing prose is lost and
+            # the item's id churns for no reason. Only a blank line, heading, or sibling
+            # bullet *outside* a fence still ends the bullet.
             while j < len(lines):
                 nxt = lines[j]
+                if FENCE_RE.match(nxt):
+                    nested_fence = not nested_fence
+                    block.append(nxt.strip())
+                    j += 1
+                    continue
+                if nested_fence:
+                    block.append(nxt.strip())
+                    j += 1
+                    continue
                 if not nxt.strip() or HEADING_RE.match(nxt):
                     break
                 nxt_bullet = BULLET_RE.match(nxt)
@@ -782,14 +818,29 @@ def _parse_mr_description(desc: str, pseudo_path: str) -> list[Item]:
     lines = desc.splitlines()
     items: list[Item] = []
     section: tuple[int, str] | None = None
+    in_fence = False
 
     for idx, line in enumerate(lines):
+        # See parse_doc's matching comment: fenced evidence isn't description prose, and
+        # the checkbox path below matches "anywhere in the description" -- unguarded, a
+        # `- [ ]` inside a ```bash``` snippet indexes as a real task the same way a YAML
+        # `- "..."` list line indexed as a standalone finding in the report parser.
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+
         heading = HEADING_RE.match(line)
         if heading:
             level, title = len(heading.group(1)), heading.group(2)
             declares_closed = CLOSED_HEADING_RE.search(title) and not NEGATED_CLOSURE_RE.search(title)
+            # See parse_doc's matching comment: a level-1 heading must never open a
+            # section, or a title-word match becomes unclosable for the rest of the text.
             kind = (
-                None if declares_closed else next((k for pattern, k in FINDING_HEADINGS if pattern.search(title)), None)
+                None
+                if declares_closed or level == 1
+                else next((k for pattern, k in FINDING_HEADINGS if pattern.search(title)), None)
             )
             if kind:
                 section = (level, kind)

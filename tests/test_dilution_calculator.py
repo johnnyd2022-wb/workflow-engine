@@ -25,6 +25,7 @@ from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
 from app.features.dilution_calculator.services.dilution_service import (
     DilutionValidationError,
+    _mass_fraction_for_abv,
     solve_dilution,
 )
 
@@ -149,6 +150,31 @@ class TestDilutionServiceHappyPath:
         assert result["starting_abv"] * result["starting_volume_ml"] == pytest.approx(
             result["final_abv"] * result["final_volume_ml"], rel=1e-9
         )
+
+    def test_ac4_starting_abv_of_100_is_a_valid_given_value(self):
+        """AC4 allows ABV in the closed range [0, 100] for *given* values, not just
+        solved ones — starting_abv=100 must be accepted, not rejected by validation
+        (pure ethanol diluted down to a lower final_abv is a legal request).
+        """
+        result = solve_dilution(
+            {
+                "solve_for": "final_volume_ml",
+                "starting_abv": 100.0,
+                "starting_volume_ml": 500,
+                "final_abv": 50,
+            }
+        )
+        assert result["starting_abv"] == 100.0
+
+    def test_mass_fraction_for_abv_100_boundary_is_exact_pure_ethanol(self):
+        """_mass_fraction_for_abv's abv_pct >= 100.0 fast path must return exactly w=1.0
+        (pure ethanol), not run the bisection or return some other value — a wrong
+        constant here wouldn't be caught by a solve_dilution-level test alone, since
+        starting_abv is an echoed input and water_to_add_ml stays finite regardless of
+        which mass fraction feeds it.
+        """
+        assert _mass_fraction_for_abv(100.0) == 1.0
+        assert _mass_fraction_for_abv(150.0) == 1.0
 
 
 class TestDilutionServiceValidation:
@@ -306,6 +332,47 @@ class TestDilutionServiceValidation:
             }
         )
         assert result["solved_value"] == pytest.approx(0.0, abs=1e-9)
+
+    def test_ac4_rejects_non_dict_payload_direct_call(self):
+        """The HTTP route already 400s a non-dict body before calling solve_dilution
+        (test_ac4_endpoint_rejects_non_object_body below), so that path never reaches
+        this guard. It's still a real defensive check in solve_dilution's own contract
+        for any direct/non-HTTP caller — exercise it directly.
+        """
+        with pytest.raises(DilutionValidationError, match="JSON object"):
+            solve_dilution([1, 2, 3])
+
+    def test_ac5_post_solve_starting_abv_over_100_is_rejected(self):
+        """AC5's pre-solve pair check (final_volume_ml > starting_volume_ml) doesn't by
+        itself bound the solved starting_abv — a large enough final/starting volume
+        ratio still pushes the closed-form result past 100, which only the post-solve
+        guard catches (90 * 2000 / 100 = 1800).
+        """
+        with pytest.raises(DilutionValidationError, match="outside 0-100"):
+            solve_dilution(
+                {
+                    "solve_for": "starting_abv",
+                    "starting_volume_ml": 100,
+                    "final_abv": 90,
+                    "final_volume_ml": 2000,
+                }
+            )
+
+    def test_ac5_post_solve_starting_volume_non_positive_is_rejected(self):
+        """final_abv=0.0 is a legal boundary value (AC4) and passes the AC5 pre-check for
+        this direction (0 < starting_abv), but the closed-form solve for
+        starting_volume_ml then divides through to exactly 0 — the post-solve guard must
+        reject that rather than silently return a 0 mL volume.
+        """
+        with pytest.raises(DilutionValidationError, match="non-positive volume"):
+            solve_dilution(
+                {
+                    "solve_for": "starting_volume_ml",
+                    "starting_abv": 40,
+                    "final_abv": 0,
+                    "final_volume_ml": 1000,
+                }
+            )
 
 
 class TestDilutionServiceDeterminism:
