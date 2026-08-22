@@ -16,10 +16,28 @@ from app.core.utils.log_action import log_action
 from app.features.compliant.models import ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
 from app.features.compliant.service import ComplianceService, serialise_record
+from app.observability import get_logger
+
+logger = get_logger(__name__)
 
 api_bp = Blueprint("compliant_api", __name__)
 _RECORD_TYPES = {"attestation", "reading", "lodgement", "competency", "incident"}
 _RECORD_STATUSES = {"complete", "failed", "open", "superseded"}
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value):
+    """Neutralise formula/DDE injection in a CSV cell.
+
+    ``title``/``evidence_reference`` are free text a caller controls (validated only for
+    length, not content) that ends up opened by an auditor in Excel/Sheets/LibreOffice. A
+    cell whose text begins with a formula-trigger character is prefixed with a leading
+    apostrophe so spreadsheet software renders it as text instead of evaluating it.
+    """
+    text = "" if value is None else str(value)
+    if text.startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + text
+    return text
 
 
 def _service() -> ComplianceService:
@@ -221,7 +239,7 @@ def create_record():
     ):
         return jsonify({"error": "period_end cannot be before period_start"}), 400
     profile = _service().get_profile(_org_id())
-    if profile is None:
+    if profile is None or not profile.enabled:
         return jsonify({"error": "Configure Compliant before adding records"}), 409
     requirements = capture_requirements(framework_slug, control_id, profile.settings or {})
     if requirements.get("record_types") and record_data["record_type"] not in requirements["record_types"]:
@@ -237,6 +255,18 @@ def create_record():
         return jsonify({"error": "This control requires a linked Core source reference"}), 400
     invalid_source_refs = _service().invalid_core_source_references(_org_id(), record_data["source_refs"])
     if invalid_source_refs:
+        # A source_ref that parses as a UUID but doesn't resolve inside this org is a
+        # tenant-boundary probe (or a stale reference) the route turns into an ordinary
+        # 400 -- without this it leaves no trace. Same `access_denied` event name
+        # app/core/security/permissions.py and inventory_repo.py use, so one query
+        # covers all three.
+        logger.warning(
+            "access_denied",
+            reason="source_ref_not_in_org",
+            feature="compliant",
+            org_id=str(_org_id()),
+            invalid_source_refs=invalid_source_refs,
+        )
         return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
     missing_fields = [
         field for field in requirements.get("fields", ()) if not record_data.get(field) and not details.get(field)
@@ -280,6 +310,18 @@ def get_report(report_id: str):
         .one_or_none()
     )
     if report is None:
+        # A rejected org-scoped report lookup is a tenant-boundary probe (or a stale/
+        # mistyped id) the route turns into a generic 404 -- must not distinguish
+        # "doesn't exist" from "exists in another org" in status code or body (spec), so
+        # the log doesn't try to either. Same `access_denied` event name as
+        # permissions.py/inventory_repo.py, so one query covers all three.
+        logger.warning(
+            "access_denied",
+            reason="report_not_found_or_cross_org",
+            feature="compliant",
+            org_id=str(_org_id()),
+            report_id=str(report_uuid),
+        )
         return jsonify({"error": "Report not found"}), 404
     output = (request.args.get("format") or "json").lower()
     if output == "html":
@@ -307,11 +349,11 @@ def get_report(report_id: str):
                     record.get("control_id"),
                     record.get("record_type"),
                     record.get("status"),
-                    record.get("title"),
+                    _csv_safe(record.get("title")),
                     record.get("period_start"),
                     record.get("period_end"),
                     record.get("due_date"),
-                    record.get("evidence_reference"),
+                    _csv_safe(record.get("evidence_reference")),
                 ]
             )
         return Response(

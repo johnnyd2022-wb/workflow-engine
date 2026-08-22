@@ -436,7 +436,7 @@ how they get carved.
     subscription: compliant
     layer:        platform (within the Compliant product; does not import industry identifiers)
     flag:         compliant_enabled
-    reviewed:     never
+    reviewed:     2026-08-22 (see .agents/reports/compliant-platform/review.md)
 
     routes:   /compliant, /api/compliant/{overview,profile,records,reports/*}
     backend:  app/features/compliant/{compliant_bp.py,platform/,models/,routes/,service.py}
