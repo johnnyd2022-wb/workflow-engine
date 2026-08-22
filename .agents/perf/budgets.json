@@ -48,7 +48,8 @@
       "/dilution-calculator",
       "/core/sourcemap",
       "/core/inventory/dispose",
-      "/core/inventory/dispose/confirm"
+      "/core/inventory/dispose/confirm",
+      "/core/flows/create/template-catalog"
     ],
     "api": [
       "/api/core/dashboard/summary",
@@ -63,6 +64,7 @@
       "/org/users",
       "/api/core/sourcemap/objects",
       "/api/core/entities/activity",
+      "/api/core/process-templates",
       {
         "route": "/api/dilution-calculator/solve",
         "method": "POST",

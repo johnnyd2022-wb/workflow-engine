@@ -127,6 +127,15 @@ def create_app():
 
     app.register_blueprint(create_dilution_calculator_blueprint())
 
+    # Register process templates blueprint (always on — exposure is gated per-org,
+    # per-request by ComplianceProfile inside the routes, not by a static config flag;
+    # see .agents/specs/process_templates.md's "no new feature flag" ASSUMPTION).
+    from app.features.process_templates.process_templates_bp import (
+        create_process_templates_blueprint,
+    )
+
+    app.register_blueprint(create_process_templates_blueprint())
+
     # Register CRM blueprint (feature-flagged)
     if config.crm_enabled:
         from app.features.crm.crm_bp import create_crm_blueprint
