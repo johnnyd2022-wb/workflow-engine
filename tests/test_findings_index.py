@@ -417,6 +417,31 @@ def test_findings_not_actioned_heading_still_opens_a_section(tmp_path, monkeypat
     assert "rate limit" in items[0].detail
 
 
+def test_no_gap_found_heading_variants_do_not_open_a_section(tmp_path, monkeypatch):
+    """This repo's spec-critic and observability reports also write '(not gaps)' and
+    'no gap(s) found' -- variants of the checked-and-clean convention that
+    `\\bnot a gap\\b` / `\\bno issues?\\b` don't catch on their own. Real misfire: both
+    headings below appear verbatim in `.agents/reports/process_templates/spec-critic.md`
+    (99, 116) and indexed 11 non-findings as open P0/P1 items -- including a bullet whose
+    own text ends '... AC7 explicitly tests cross-org 404 ... No gap.' -- because neither
+    heading contains the word 'finding' or 'issue'."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Assumptions judged reasonable (not gaps)
+- Full three-industry MVP in one build -- explicitly surfaced as an override of the PRD's own phased-rollout plan.
+
+## Other checks performed, no gap found
+- Tenant scoping: decided and grounded -- resolved via g.current_org_id server-side. No gap.
+
+## Scanned, no gap found
+- AC5/AC6 path-traversal 400s: considered and not instrumented, routine background noise.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
 def test_bullet_syntax_inside_a_fenced_code_block_is_not_a_finding(tmp_path, monkeypatch):
     """A YAML/code snippet quoted as evidence inside a finding often contains lines that
     look exactly like markdown bullets (`- "**/app.py"`). This is exactly what

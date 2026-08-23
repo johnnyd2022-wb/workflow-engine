@@ -175,8 +175,17 @@ RESOLVED_MARKERS = re.compile(
 # "not"/"no" directly against "finding(s)" or "issue(s)" must close instead. Word order
 # matters: "Findings not actioned" puts "not" *after* "Findings" and must stay open --
 # see NEGATED_CLOSURE_RE and the contrast test in test_findings_index.py.
+#
+# Same convention, spelled with "gap(s)" instead of "finding(s)"/"issue(s)" --
+# "## Assumptions judged reasonable (not gaps)" and "## Other checks performed, no gap
+# found" (both verbatim in .agents/reports/process_templates/spec-critic.md) matched
+# neither the old `\bnot a gap\b` (singular, no "found") nor `\bno issues?\b", so their
+# bullets -- including one literally ending "... No gap." -- were indexed as 11 open
+# P0/P1 items in one real sweep. `\bnot a gap\b` widens to plural/no-article; `no gap(s)
+# found` is a separate branch since "found" trails the noun instead of "not"/"no" leading it.
 CLOSED_HEADING_RE = re.compile(
-    r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot a gap\b|\balready (?:done|fixed|handled)\b"
+    r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
+    r"|\balready (?:done|fixed|handled)\b"
     r"|\b(?:not|no)\s+(?:a\s+|an\s+)?findings?\b|\bno issues?\b",
     re.I,
 )
