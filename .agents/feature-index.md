@@ -523,7 +523,7 @@ how they get carved.
     subscription: n/a (dev only)
     layer:        non-product
     flag:         none — but the route self-gates on config.environment
-    reviewed:     never
+    reviewed:     2026-08-23 (see .agents/reports/demo-data/review.md)
 
     routes:   /api/core/reset-demo-db [POST]
     backend:  app/features/demo_data/           <-- CARVED (Phase 1, first slice out)
