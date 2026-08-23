@@ -24,6 +24,23 @@ def _enable_compliant(page) -> None:
     assert resp.status == 200, f"could not enable Compliant: {resp.status} {resp.text()}"
 
 
+def _settle_dashboard(page) -> None:
+    """Let the post-login dashboard's own background fetches finish before a test
+    navigates away.
+
+    `login_through_ui` returns as soon as the URL becomes `/dashboard`, but
+    `dashboard.js` kicks off `getDashboardSummary`/`getSystemFindings` fetches
+    asynchronously after that. Chromium's `fetch()` rejects an in-flight request cancelled
+    by navigation with a plain `TypeError: Failed to fetch` — indistinguishable, from
+    `core-api.js`'s catch block, from a real network failure (no `AbortError`, since that
+    name is reserved for explicit `AbortController` cancellation) — so it logs a console
+    error `assert_clean_page` then treats as a genuine app fault. Waiting for network idle
+    here (test-side; `app/core/frontend/js/core-api.js` is shared infra well outside this
+    feature's blueprint) lets those fetches resolve before the fixture yields.
+    """
+    page.wait_for_load_state("networkidle")
+
+
 @pytest.fixture()
 def compliant_page(browser, app_url, fresh_user):
     """A logged-in page in its own fresh org with Compliant + nz_alcohol enabled."""
@@ -32,6 +49,7 @@ def compliant_page(browser, app_url, fresh_user):
     page = context.new_page()
     attach_probe(page)
     login_through_ui(page, user["email"], user["password"])
+    _settle_dashboard(page)
     _enable_compliant(page)
     yield page
     context.close()
@@ -45,5 +63,37 @@ def no_compliant_page(browser, app_url, fresh_user):
     page = context.new_page()
     attach_probe(page)
     login_through_ui(page, user["email"], user["password"])
+    _settle_dashboard(page)
     yield page
     context.close()
+
+
+@pytest.fixture()
+def cross_tenant_pages(browser, app_url, fresh_user):
+    """Org A (Compliant + nz_alcohol enabled, can copy templates) and Org B (plain,
+    unrelated org) -- the AC7 hostile-neighbour probe: org B must never reach a process
+    that org A created by copying a template.
+
+    Org B does not need Compliant enabled -- the isolation this probes is
+    `ProcessRepository`'s own org filter, not the catalogue's capability gate.
+    """
+    user_a = fresh_user(role=UserRole.ADMIN)  # PUT /api/compliant/profile requires ADMIN
+    user_b = fresh_user()
+    contexts = []
+
+    def _sign_in(user):
+        context = browser.new_context(base_url=app_url, ignore_https_errors=True)
+        contexts.append(context)
+        page = context.new_page()
+        attach_probe(page)
+        login_through_ui(page, user["email"], user["password"])
+        _settle_dashboard(page)
+        return page
+
+    page_a = _sign_in(user_a)
+    _enable_compliant(page_a)
+    page_b = _sign_in(user_b)
+
+    yield {"a": page_a, "b": page_b}
+    for context in contexts:
+        context.close()
