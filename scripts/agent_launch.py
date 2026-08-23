@@ -244,6 +244,39 @@ def _herdr_json(argv: list[str], timeout: int = 30, *, allow_empty: bool = False
     return payload.get("result", payload)
 
 
+def _workspace_for_workdir(workdir: str) -> str:
+    """Return the live Herdr workspace whose running agent owns the workdir.
+
+    herdr tab create otherwise defaults to the focused workspace. A coordinator
+    can be focused while it dispatches a worker's review chain, which used to put
+    that worker's stage tabs inside the coordinator's workspace. Match the live
+    agent's actual checkout and refuse to guess when it is absent.
+    """
+    target = Path(workdir).resolve()
+    result = _herdr_json(["herdr", "agent", "list"])
+    agents = result.get("agents")
+    if not isinstance(agents, list):
+        raise RoutingError("herdr agent list returned an unexpected response")
+    matches: set[str] = set()
+    for agent in agents:
+        if not isinstance(agent, dict):
+            continue
+        candidate = agent.get("foreground_cwd") or agent.get("cwd")
+        workspace_id = agent.get("workspace_id")
+        if not isinstance(candidate, str) or not isinstance(workspace_id, str):
+            continue
+        try:
+            if Path(candidate).resolve() == target:
+                matches.add(workspace_id)
+        except OSError:
+            continue
+    if len(matches) == 1:
+        return matches.pop()
+    if not matches:
+        raise RoutingError(f"no live Herdr workspace owns {target}; refusing to put a stage in the focused workspace")
+    raise RoutingError(f"multiple live Herdr workspaces own {target}: {', '.join(sorted(matches))}")
+
+
 def launch(
     stage: str,
     *,
@@ -262,8 +295,11 @@ def launch(
     prefix = routing.get("defaults", {}).get("tab_label_prefix", "")
     label = f"{prefix}{stage}·{scope}" if scope else f"{prefix}{stage}"
     workdir = cwd or str(REPO_ROOT)
+    workspace_id = _workspace_for_workdir(workdir)
 
-    tab = _herdr_json(["herdr", "tab", "create", "--label", label, "--cwd", workdir, "--no-focus"])
+    tab = _herdr_json(
+        ["herdr", "tab", "create", "--workspace", workspace_id, "--label", label, "--cwd", workdir, "--no-focus"]
+    )
     tab_id = tab["tab"]["tab_id"]
     pane_id = tab["root_pane"]["pane_id"]
 
@@ -291,9 +327,48 @@ def launch(
         "tab_id": tab_id,
         "pane_id": pane_id,
         "label": label,
+        "workspace_id": workspace_id,
         "command": command,
         "mission_run_id": mission_run_id,
     }
+
+
+def close_stage(pane_id: str) -> dict[str, Any]:
+    """Close a completed chain-stage tab after its verdict has been handed back.
+
+    Stage tabs are disposable. Refuse to touch a live process or a workspace's
+    root tab: either case is a real worker, not a completed review stage.
+    """
+    result = _herdr_json(["herdr", "pane", "get", pane_id], timeout=5)
+    pane = result.get("pane", result)
+    if not isinstance(pane, dict):
+        raise RoutingError(f"herdr pane get returned an unexpected response for {pane_id}")
+    status = str(pane.get("agent_status") or "unknown")
+    tab_id = pane.get("tab_id")
+    workspace_id = pane.get("workspace_id")
+    if not isinstance(tab_id, str) or not isinstance(workspace_id, str):
+        raise RoutingError(f"pane {pane_id} has no tab/workspace identity")
+    if tab_id == f"{workspace_id}:t1":
+        raise RoutingError(f"refusing to close root worker tab {tab_id}")
+    if status not in {"idle", "done", "unknown"}:
+        raise RoutingError(f"refusing to close active stage pane {pane_id} (status {status})")
+    try:
+        _herdr_json(["herdr", "tab", "close", tab_id], timeout=10, allow_empty=True)
+    except RoutingError as exc:
+        # Herdr protects the final tab in a workspace. This can happen when a
+        # worker exited and only its completed stage remains. It is still safe
+        # to remove because this helper has already rejected live/root panes.
+        if "cannot close the last tab in a workspace" not in str(exc):
+            raise
+        _herdr_json(["herdr", "workspace", "close", workspace_id], timeout=10, allow_empty=True)
+        return {
+            "pane_id": pane_id,
+            "tab_id": tab_id,
+            "status": status,
+            "closed": True,
+            "workspace_closed": True,
+        }
+    return {"pane_id": pane_id, "tab_id": tab_id, "status": status, "closed": True, "workspace_closed": False}
 
 
 def wait_for(
@@ -372,8 +447,12 @@ def check(routing: dict[str, Any], skills_dir: Path = SKILLS_DIR) -> list[str]:
     valid_effort = {"low", "medium", "high", "xhigh", "max", "ultra"}
     # A grader that can edit the thing it grades is not an independent grader.
     graders = {
-        "spec-critic", "test-evaluator", "build-review", "security-tenant-audit",
-        "security-audit", "findings-review",
+        "spec-critic",
+        "test-evaluator",
+        "build-review",
+        "security-tenant-audit",
+        "security-audit",
+        "findings-review",
     }
 
     for name in routing.get("stages", {}):
@@ -444,6 +523,9 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("pane_id")
     w.add_argument("--timeout", type=int, default=1800000)
 
+    c = sub.add_parser("close", help="close a completed, non-root chain-stage tab")
+    c.add_argument("pane_id")
+
     args = parser.parse_args(argv)
 
     try:
@@ -462,12 +544,19 @@ def main(argv: list[str] | None = None) -> int:
             print(build_command(cfg, prompt_file=args.prompt_file, base=args.base))
             return 0
         if args.cmd == "launch":
-            print(json.dumps(launch(args.stage, scope=args.scope, prompt_file=args.prompt_file, base=args.base, cwd=args.cwd)))
+            print(
+                json.dumps(
+                    launch(args.stage, scope=args.scope, prompt_file=args.prompt_file, base=args.base, cwd=args.cwd)
+                )
+            )
             return 0
         if args.cmd == "wait":
             result = wait_for(args.pane_id, args.timeout)
             print(json.dumps(result))
             return 0 if result["ok"] else 1
+        if args.cmd == "close":
+            print(json.dumps(close_stage(args.pane_id)))
+            return 0
     except RoutingError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
