@@ -54,3 +54,23 @@ def test_all_environment_configs_disable_observability_data_exports():
 
         assert parser.getboolean("observability", "grafana_data_enabled") is False
         assert parser.getboolean("observability", "posthog_data_enabled") is False
+
+
+def test_test_environment_disables_rum_entirely():
+    """[REGRESSION] test.ini's rum_enabled must stay False.
+
+    grafana_data_enabled/posthog_data_enabled already gate the server-side telemetry
+    proxy and the client-side SDK init (app_factory._telemetry_response,
+    observability-rum.js), but test.biz-e.app is a publicly reachable environment whose
+    local observability stack (Alloy/PostHog) isn't guaranteed to be running — and rum
+    upstream hosts (rum_faro_upstream etc.) only resolve inside the Docker network at all.
+    rum_enabled=True there means the browser RUM SDK loads and repeatedly POSTs to
+    /telemetry regardless of those data-export gates, producing 503 console noise on every
+    page. Belt-and-braces: this flag must independently be off for `test`, not just rely
+    on the data-export gates.
+    """
+    config_dir = Path(__file__).resolve().parents[1] / "app" / "config"
+    parser = configparser.ConfigParser()
+    parser.read(config_dir / "test.ini")
+
+    assert parser.getboolean("observability", "rum_enabled") is False

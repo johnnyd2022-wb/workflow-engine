@@ -911,3 +911,40 @@ def test_list_inventory_enriches_items_with_their_own_org_event_summary(db, app_
     )
     neighbour_ids = {row["id"] for row in resp.get_json()["inventory_items"]}
     assert str(neighbour_item_id) not in neighbour_ids, "another org's item must never appear in this org's list"
+
+
+# --------------------------------------------------------------------------------------
+# previous_steps_data DAG trace — GET /api/core/inventory issues 2 DB queries per node
+# per item to build the "trace back through prior steps" enrichment (backend.py, the
+# trace_step_chain closure), unbatched. An org with a long production history (a real
+# distillery account with 200+ completed batches) pays that cost on every inventory list
+# call, which is what makes the page slow to populate even though the SPA shell paints
+# instantly. Root cause: this closure re-implements DAG traversal instead of reusing the
+# bulk-load-then-walk-in-memory pattern DAGTracer.traverse() already uses.
+# --------------------------------------------------------------------------------------
+
+
+def test_list_inventory_query_count_does_not_scale_with_chain_depth(db, app_client, org):
+    """[REGRESSION] GET /api/core/inventory's previous_steps_data trace must not issue
+    O(chain depth x item count) queries. Before the fix, each WIP/final-product item with
+    variable_inputs walked its full production chain with 2 unbatched queries per node —
+    for a 60-step linear chain, that's ~2 * sum(1..60) = 3660 queries just for tracing.
+    The fix bulk-loads the org's inventory items and execution steps once per request and
+    walks them in memory, so the query count stays flat regardless of chain depth.
+    """
+    from tests.dag_traversal_helpers import QueryCounter, build_large_linear_chain
+
+    build_large_linear_chain(db, org.id, length=60)
+
+    with QueryCounter(db) as counter:
+        resp = app_client.get("/api/core/inventory")
+
+    assert resp.status_code == 200, resp.data
+    items = resp.get_json()["inventory_items"]
+    assert len(items) == 61, "sanity: the 60-step chain (61 nodes) must all come back"
+    # Bulk-loaded, batched query count for this route is a small constant regardless of
+    # chain depth. The pre-fix code blew past 3000 queries for this same fixture.
+    assert counter.count < 40, (
+        f"list_inventory issued {counter.count} queries for a 60-node chain — "
+        "query count is scaling with DAG depth again (N+1 regression in trace_step_chain)"
+    )

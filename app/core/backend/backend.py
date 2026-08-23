@@ -2790,6 +2790,33 @@ def list_inventory():
         )
         event_summary_by_id = {str(r.entity_id): r.summary for r in ees_rows}
 
+    # Lazy, request-scoped cache for the backward DAG trace below (previous_steps_data).
+    # Populated on first use, not unconditionally: an org whose inventory is all raw
+    # materials never pays for it. Once populated it holds every org-scoped InventoryItem
+    # and ExecutionStep, so trace_step_chain() below does in-memory dict lookups instead
+    # of two DB queries per node — same bulk-load-then-walk-in-memory shape as
+    # DAGTracer.traverse() (dagtraversal.py), just inlined here to keep this function's
+    # existing previous_steps_data output shape unchanged.
+    _dag_trace_cache: dict[str, dict] = {}
+
+    def _dag_trace_lookups():
+        if not _dag_trace_cache:
+            # DAG traversal needs the complete graph in memory — a LIMIT would silently
+            # truncate a chain mid-trace (same rationale as DAGTracer.traverse() above).
+            all_items = (  # nosemgrep: sqlalchemy-all-without-limit
+                db_session.query(InventoryItem).filter(InventoryItem.org_id == org_id).all()
+            )
+            all_steps = (  # nosemgrep: sqlalchemy-all-without-limit
+                db_session.query(ExecutionStep)
+                .join(Execution, ExecutionStep.execution_id == Execution.id)
+                .filter(Execution.org_id == org_id)
+                .options(joinedload(ExecutionStep.step))
+                .all()
+            )
+            _dag_trace_cache["items_by_id"] = {str(i.id): i for i in all_items}
+            _dag_trace_cache["steps_by_id"] = {s.id: s for s in all_steps}
+        return _dag_trace_cache["items_by_id"], _dag_trace_cache["steps_by_id"]
+
     result = []
     for item in items:
         # Filter out items with zero or negative quantity
@@ -2890,26 +2917,19 @@ def list_inventory():
 
                     steps_data = []
 
-                    # Look up the input inventory item
-                    input_inventory_item = (
-                        db_session.query(  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
-                            InventoryItem
-                        )
-                        .filter(InventoryItem.id == UUID(inventory_item_id), InventoryItem.org_id == org_id)
-                        .first()
-                    )
+                    # Look up the input inventory item (in-memory; see _dag_trace_lookups above —
+                    # this used to be a per-node query, which made list_inventory() O(items x depth)
+                    # queries for orgs with any WIP/final-product history).
+                    items_by_id, steps_by_id = _dag_trace_lookups()
+                    input_inventory_item = items_by_id.get(str(inventory_item_id))
 
                     if not input_inventory_item or not input_inventory_item.source_execution_step_id:
                         return steps_data
 
-                    # Look up the execution step that produced this input
-                    input_execution_step = (
-                        db_session.query(  # nosemgrep: sqlalchemy-query-in-for-loop — recursive DAG traversal, each node fetched on demand
-                            ExecutionStep
-                        )
-                        .filter(ExecutionStep.id == input_inventory_item.source_execution_step_id)
-                        .first()
-                    )
+                    # Look up the execution step that produced this input (in-memory; org-scoped
+                    # via the bulk load's Execution.org_id join, which is a stricter tenant check
+                    # than the previous unscoped-by-org query relied on the FK invariant for).
+                    input_execution_step = steps_by_id.get(input_inventory_item.source_execution_step_id)
 
                     if not input_execution_step:
                         return steps_data
