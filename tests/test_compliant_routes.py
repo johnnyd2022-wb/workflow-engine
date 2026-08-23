@@ -14,6 +14,7 @@ from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
+from app.features.compliant.modules.nz_alcohol.module import run_check
 from app.features.compliant.routes.api_routes import _csv_safe
 from app.features.compliant.service import ComplianceService, calculate_customs_reconciliation
 from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
@@ -494,6 +495,76 @@ def test_cross_org_source_ref_emits_access_denied(db, flask_app, caplog):
         denials = [r for r in caplog.records if "access_denied" in r.getMessage()]
         assert denials, f"invalid source_ref was not logged: {[r.getMessage() for r in caplog.records]}"
         assert "source_ref_not_in_org" in denials[0].getMessage()
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_run_check_is_not_flagged_when_module_not_enrolled(db, flask_app):
+    """AC: module.py's CoreChecksRunner check -- an org with no ComplianceProfile at all
+    (never enrolled) returns flagged=False with an empty frameworks list, not an error."""
+    org, _client = _admin_client(db, flask_app)
+    try:
+        result = run_check(org.id, db)
+        assert result.flagged is False
+        assert result.data == {"frameworks": []}
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_run_check_is_not_flagged_when_no_control_needs_attention(db, flask_app):
+    """AC: a freshly-enrolled profile with no records yet has every control in setup/
+    compliant state, never attention -- run_check must not flag a brand-new org."""
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert client.put("/api/compliant/profile", json={"enabled": True, "settings": {}}).status_code == 200
+        result = run_check(org.id, db)
+        assert result.flagged is False
+        assert result.message is None
+        assert result.data["frameworks"], "an enabled profile should still evaluate applicable frameworks"
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_run_check_flags_and_counts_attention_frameworks(db, flask_app):
+    """AC: run_check is flagged=True with a message that counts *how many* applicable
+    frameworks are in the attention state -- two failed records in two different
+    frameworks must produce a count of 2, not a hardcoded '1' that happens to match a
+    single-framework case."""
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert client.put("/api/compliant/profile", json={"enabled": True, "settings": {}}).status_code == 200
+        first = client.post(
+            "/api/compliant/records",
+            json={
+                "framework_slug": "customs-alcohol",
+                "control_id": "product-mapping",
+                "record_type": "attestation",
+                "status": "failed",
+                "title": "Product mapping review failed",
+            },
+        )
+        assert first.status_code == 201
+        second = client.post(
+            "/api/compliant/records",
+            json={
+                "framework_slug": "np3-food-control",
+                "control_id": "registration-scope",
+                "record_type": "attestation",
+                "status": "failed",
+                "title": "Registration scope review failed",
+            },
+        )
+        assert second.status_code == 201
+
+        result = run_check(org.id, db)
+
+        assert result.flagged is True
+        assert result.message == "2 NZ Alcohol compliance framework(s) need attention"
+        attention_frameworks = [f for f in result.data["frameworks"] if f["state"] == "attention"]
+        assert {f["slug"] for f in attention_frameworks} == {"customs-alcohol", "np3-food-control"}
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()

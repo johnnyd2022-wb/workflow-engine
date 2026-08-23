@@ -463,7 +463,7 @@ how they get carved.
     subscription: compliant
     layer:        derived module
     flag:         compliant_enabled
-    reviewed:     never
+    reviewed:     2026-08-23 (see .agents/reports/compliant-nz-alcohol/review.md)
 
     routes:   contributes framework cards and /api/compliant/* records through compliant-platform
     backend:  app/features/compliant/modules/nz_alcohol/{catalogue,councils,module}.py

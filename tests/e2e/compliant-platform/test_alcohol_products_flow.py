@@ -63,8 +63,10 @@ def test_create_alcohol_product_rejects_unknown_product_type(admin_page):
     assert "type" in response.json()["error"]
 
 
-@pytest.mark.parametrize("abv_percent", ["0", "-5", "100.01", "not-a-number"])
+@pytest.mark.parametrize("abv_percent", ["0", "-5", "100.01", "not-a-number", "nan", "-nan", "Infinity"])
 def test_create_alcohol_product_rejects_invalid_abv(admin_page, abv_percent):
+    """AC (security-audit F1): a non-finite Decimal (NaN/Infinity) must 400 cleanly, not
+    crash with an unhandled decimal.InvalidOperation on the `<`/`<=` comparison."""
     response = admin_page.request.post(
         "/api/compliant/alcohol-products",
         headers=csrf_headers(admin_page),
@@ -81,3 +83,21 @@ def test_create_alcohol_product_rejects_missing_inventory_name(admin_page):
     )
     assert response.status == 400
     assert "inventory_name" in response.json()["error"]
+
+
+def test_create_alcohol_product_rejects_overlong_customs_product_code(admin_page):
+    """AC (security-audit F2): customs_product_code is String(100); an overlong value must
+    400 before insert, not raise an uncaught sqlalchemy.exc.DataError (not an IntegrityError
+    subclass, so it fell through the existing except block)."""
+    response = admin_page.request.post(
+        "/api/compliant/alcohol-products",
+        headers=csrf_headers(admin_page),
+        data={
+            "inventory_name": "Overlong Customs Code",
+            "product_type": "spirits",
+            "abv_percent": "40",
+            "customs_product_code": "X" * 101,
+        },
+    )
+    assert response.status == 400
+    assert "customs_product_code" in response.json()["error"]
