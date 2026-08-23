@@ -140,12 +140,15 @@ def create_alcohol_product():
     inventory_name = str(data.get("inventory_name") or "").strip()
     if not inventory_name or len(inventory_name) > 255:
         return jsonify({"error": "inventory_name is required and must be at most 255 characters"}), 400
+    customs_product_code = str(data.get("customs_product_code") or "").strip() or None
+    if customs_product_code and len(customs_product_code) > 100:
+        return jsonify({"error": "customs_product_code must be at most 100 characters"}), 400
     try:
         abv_percent = Decimal(_decimal(data.get("abv_percent"), "abv_percent") or "0")
-    except ValueError:
+        if not abv_percent.is_finite() or not Decimal("0") < abv_percent <= Decimal("100"):
+            return jsonify({"error": "abv_percent must be greater than 0 and at most 100"}), 400
+    except (ValueError, InvalidOperation):
         return jsonify({"error": "abv_percent must be a number"}), 400
-    if not Decimal("0") < abv_percent <= Decimal("100"):
-        return jsonify({"error": "abv_percent must be greater than 0 and at most 100"}), 400
     try:
         product = _service().add_product_profile(
             _org_id(),
@@ -153,7 +156,7 @@ def create_alcohol_product():
                 "inventory_name": inventory_name,
                 "product_type": product_type,
                 "abv_percent": str(abv_percent),
-                "customs_product_code": str(data.get("customs_product_code") or "").strip() or None,
+                "customs_product_code": customs_product_code,
             },
         )
     except IntegrityError as exc:
