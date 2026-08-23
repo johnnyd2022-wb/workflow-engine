@@ -53,6 +53,24 @@ rather than fixing them. The chain and verdicts are identical in every mode.
 6. **observability** in instrument mode: add the event logging the feature is missing, especially `access_denied` warnings.
 7. **ci-gate verify** last, always: everything added above must be collected and enforced or it evaporates.
 
+### Herdr stage hygiene
+
+When verification_mode=herdr-tabs, launch every chain stage with
+python3 scripts/agent_launch.py launch ... --cwd "$PWD". The launcher binds the
+new tab to the live worker workspace that owns that worktree; never run raw
+herdr tab create, which can attach a worker's stage to Sauron's focused
+workspace instead.
+
+As soon as a stage's output has been read, its verdict/report has been persisted,
+and the result has been handed back to this orchestrator, close its disposable
+stage tab:
+
+    python3 scripts/agent_launch.py close <pane_id>
+
+This command refuses live agents and a worker workspace's root tab. Do not defer
+stage-tab cleanup until the end of the review or leave completed Codex/Claude
+stage panes for Sauron to discover later.
+
 ## Step 4: Aggregate, patch, re-verify
 
 Merge all reports into `.agents/reports/<slug>/review.md`:

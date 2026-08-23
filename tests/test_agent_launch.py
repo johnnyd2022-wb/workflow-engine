@@ -171,9 +171,12 @@ def test_mission_reporting_is_disabled_by_default(routing, monkeypatch):
     called = []
     monkeypatch.setattr(agent_launch, "_run", lambda argv, timeout=30: called.append(argv) or (0, "{}", ""))
     cfg = agent_launch.resolve_stage(routing, "build")
-    assert agent_launch._report_mission_start(
-        stage="build", scope="auth", pane_id="w1:p2", tab_id="w1:t1", workdir="/tmp/wt", cfg=cfg
-    ) is None
+    assert (
+        agent_launch._report_mission_start(
+            stage="build", scope="auth", pane_id="w1:p2", tab_id="w1:t1", workdir="/tmp/wt", cfg=cfg
+        )
+        is None
+    )
     assert called == []
 
 
@@ -182,9 +185,12 @@ def test_mission_reporting_failure_never_raises(routing, monkeypatch):
     monkeypatch.setattr(agent_launch.shutil, "which", lambda name: "/bin/mission-control")
     monkeypatch.setattr(agent_launch, "_run", lambda argv, timeout=30: (1, "", "state unavailable"))
     cfg = agent_launch.resolve_stage(routing, "build")
-    assert agent_launch._report_mission_start(
-        stage="build", scope="auth", pane_id="w1:p2", tab_id="w1:t1", workdir="/tmp/wt", cfg=cfg
-    ) is None
+    assert (
+        agent_launch._report_mission_start(
+            stage="build", scope="auth", pane_id="w1:p2", tab_id="w1:t1", workdir="/tmp/wt", cfg=cfg
+        )
+        is None
+    )
 
 
 def test_mission_reporting_returns_run_id_when_enabled(routing, monkeypatch):
@@ -216,9 +222,12 @@ def test_launch_cli_accepts_an_explicit_working_directory(monkeypatch, capsys):
 
     monkeypatch.setattr(agent_launch, "load_routing", lambda: {})
     monkeypatch.setattr(agent_launch, "launch", fake_launch)
-    assert agent_launch.main(
-        ["launch", "build", "--scope", "auth", "--prompt-file", "/tmp/p.md", "--cwd", "/tmp/worktree"]
-    ) == 0
+    assert (
+        agent_launch.main(
+            ["launch", "build", "--scope", "auth", "--prompt-file", "/tmp/p.md", "--cwd", "/tmp/worktree"]
+        )
+        == 0
+    )
     assert seen["cwd"] == "/tmp/worktree"
     assert json.loads(capsys.readouterr().out)["pane_id"] == "w1:p2"
 
@@ -239,9 +248,7 @@ def test_wait_returns_failure_for_blocked_agent(monkeypatch):
 
 def test_wait_does_not_hang_when_noninteractive_agent_exits(monkeypatch):
     states = iter(["working", "unknown"])
-    monkeypatch.setattr(
-        agent_launch, "_herdr_json", lambda argv, timeout=5: {"pane": {"agent_status": next(states)}}
-    )
+    monkeypatch.setattr(agent_launch, "_herdr_json", lambda argv, timeout=5: {"pane": {"agent_status": next(states)}})
     monkeypatch.setattr(agent_launch.time, "sleep", lambda seconds: None)
     result = agent_launch.wait_for("w1:p2", timeout_ms=1000, poll_interval=0.01)
     assert result["ok"] is False
@@ -385,6 +392,131 @@ def test_launch_refuses_outside_herdr(routing, monkeypatch):
     monkeypatch.delenv("HERDR_ENV", raising=False)
     with pytest.raises(agent_launch.RoutingError, match="not running inside Herdr"):
         agent_launch.launch("build", scope="x", prompt_file="/tmp/p.md", routing=routing)
+
+
+def test_workspace_for_workdir_uses_the_worker_owning_that_checkout(monkeypatch, tmp_path):
+    worker = tmp_path / "worker"
+    worker.mkdir()
+    monkeypatch.setattr(
+        agent_launch,
+        "_herdr_json",
+        lambda argv, **_kwargs: {
+            "agents": [
+                {"workspace_id": "w-sauron", "foreground_cwd": str(tmp_path / "sauron")},
+                {"workspace_id": "w-worker", "foreground_cwd": str(worker)},
+            ]
+        },
+    )
+
+    assert agent_launch._workspace_for_workdir(str(worker)) == "w-worker"
+
+
+def test_workspace_for_workdir_refuses_to_fall_back_to_the_focused_workspace(monkeypatch, tmp_path):
+    worker = tmp_path / "worker"
+    worker.mkdir()
+    monkeypatch.setattr(agent_launch, "_herdr_json", lambda argv, **_kwargs: {"agents": []})
+
+    with pytest.raises(agent_launch.RoutingError, match="refusing to put a stage in the focused workspace"):
+        agent_launch._workspace_for_workdir(str(worker))
+
+
+def test_launch_places_the_stage_in_the_worker_workspace(routing, monkeypatch, tmp_path):
+    worker = tmp_path / "worker"
+    worker.mkdir()
+    calls: list[list[str]] = []
+
+    def fake_herdr(argv, **_kwargs):
+        calls.append(argv)
+        if argv[1:3] == ["agent", "list"]:
+            return {"agents": [{"workspace_id": "w-worker", "foreground_cwd": str(worker)}]}
+        if argv[1:3] == ["tab", "create"]:
+            return {"tab": {"tab_id": "w-worker:t2"}, "root_pane": {"pane_id": "w-worker:p2"}}
+        if argv[1:3] == ["pane", "run"]:
+            return {}
+        raise AssertionError(argv)
+
+    monkeypatch.setenv("HERDR_ENV", "1")
+    monkeypatch.setattr(agent_launch, "_herdr_json", fake_herdr)
+    monkeypatch.setattr(agent_launch, "_report_mission_start", lambda **_kwargs: None)
+
+    result = agent_launch.launch("build", scope="demo", prompt_file="/tmp/p.md", routing=routing, cwd=str(worker))
+
+    assert result["workspace_id"] == "w-worker"
+    assert calls[1] == [
+        "herdr",
+        "tab",
+        "create",
+        "--workspace",
+        "w-worker",
+        "--label",
+        "build·demo",
+        "--cwd",
+        str(worker),
+        "--no-focus",
+    ]
+
+
+def test_close_stage_closes_only_a_completed_non_root_tab(monkeypatch):
+    calls: list[list[str]] = []
+
+    def fake_herdr(argv, **_kwargs):
+        calls.append(argv)
+        if argv[1:3] == ["pane", "get"]:
+            return {"pane": {"agent_status": "unknown", "tab_id": "w-worker:t2", "workspace_id": "w-worker"}}
+        if argv[1:3] == ["tab", "close"]:
+            return {}
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(agent_launch, "_herdr_json", fake_herdr)
+
+    result = agent_launch.close_stage("w-worker:p2")
+    assert result["closed"] is True
+    assert result["workspace_closed"] is False
+    assert calls[1] == ["herdr", "tab", "close", "w-worker:t2"]
+
+
+def test_close_stage_closes_an_empty_stage_only_workspace(monkeypatch):
+    calls: list[list[str]] = []
+
+    def fake_herdr(argv, **_kwargs):
+        calls.append(argv)
+        if argv[1:3] == ["pane", "get"]:
+            return {"pane": {"agent_status": "unknown", "tab_id": "w-stage:t2", "workspace_id": "w-stage"}}
+        if argv[1:3] == ["tab", "close"]:
+            raise agent_launch.RoutingError("herdr tab close failed: cannot close the last tab in a workspace")
+        if argv[1:3] == ["workspace", "close"]:
+            return {}
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(agent_launch, "_herdr_json", fake_herdr)
+
+    result = agent_launch.close_stage("w-stage:p2")
+
+    assert result["closed"] is True
+    assert result["workspace_closed"] is True
+    assert calls[2] == ["herdr", "workspace", "close", "w-stage"]
+
+
+def test_close_stage_refuses_a_live_agent_or_root_tab(monkeypatch):
+    monkeypatch.setattr(
+        agent_launch,
+        "_herdr_json",
+        lambda argv, **_kwargs: {
+            "pane": {"agent_status": "working", "tab_id": "w-worker:t2", "workspace_id": "w-worker"}
+        },
+    )
+    with pytest.raises(agent_launch.RoutingError, match="refusing to close active"):
+        agent_launch.close_stage("w-worker:p2")
+
+    monkeypatch.setattr(
+        agent_launch,
+        "_herdr_json",
+        lambda argv, **_kwargs: {
+            "pane": {"agent_status": "unknown", "tab_id": "w-worker:t1", "workspace_id": "w-worker"}
+        },
+    )
+    with pytest.raises(agent_launch.RoutingError, match="refusing to close root"):
+        agent_launch.close_stage("w-worker:p1")
 
 
 def test_render_plan_lists_every_stage(routing):
