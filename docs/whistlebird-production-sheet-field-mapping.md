@@ -43,7 +43,7 @@ stage 1. Quantities use the target item's canonical unit; tally/checkbox columns
 | `maceration` (botanical charge, Shape A rows) | WIP inventory + `Sheet: flavour preparation` execution | Ingredient names/weights become execution data; the twin-column layout in rows 1–221 (two parallel observed runs of the same charge) is folded into one manifest record with both readings retained in `extra_data.observed_runs`, not imported as two executions. | needs curation |
 | `distillation` (Shape C date+event rows) | WIP inventory + `Sheet: distillation` execution | Event label and resolved date only; ABV readings from nearby rows attach as `extra_data`, not as separate movements. | needs curation |
 | `vat_fill` | WIP inventory + `Sheet: flavour vat` execution | Ethanol/water volumes from Shape B rows, excluding tally-mark columns. Wildflower VAT1–25 and Rosella's global-VAT26 origin already exist in the legacy import (confirmed `WBWF01`–`WBWF25`, `WBRS26` — WB-024/WB-027); sheet rows for these link via `linked_legacy_source` to the matching `legacy_id` rather than creating new items. Only Solstice (global VAT27+) fills create wholly new items. | needs curation; cross-boundary link targets confirmed for VAT23/24/25/Rosella-26 |
-| `bottling` | finished-product inventory + production movement | Bottle count from the event row. Resolved (WB-022): row 1751 ("Bottling VAT47", 79 bottles) is actually VAT44's bottling, mislabeled — imports under VAT44. Row 1913 is a duplicate/premature note of the same event as row 1936 and is excluded. VAT47's real bottling is one event: row 1936, 78.5 bottles, 2026-05-07. | ready |
+| `bottling` | finished-product inventory + production movement | Bottle count from the event row. Mislabelled VAT numbers are a recurring pattern, not a one-off: VAT44/47 (WB-022), VAT42/45 (WB-032) both had a bottling event's own header naming the wrong batch, caught by cross-checking neighbouring distill/fill records and (for VAT42) an explicit chronological impossibility (the named batch hadn't been distilled yet). Where no bottle count is recorded at all (VAT42, WB-032), the founder-supplied average of comparable same-product bottlings is used and flagged as an estimate, never fabricated silently. | ready — 21 bottling records curated |
 | `sample` | completed historical sample execution | Same "no fabricated inventory output" rule as stage 1's `apply_sample_history`, if any sample-labelled rows are found during curation (none confirmed yet in the analysed range). | not yet found |
 | Solstice-to-Rosella maceration (VAT48 and any future batch following the same pattern) | `Sheet: flavour vat` execution (Solstice output) → separate `Sheet: fruit maceration` execution (consumes that Solstice item, outputs Rosella) | Resolved (WB-023): Solstice is the deliberate base spirit for Rosella — a real post-maceration production step (rhubarb), not a relabel. VAT48 imports as **two linked executions**, using the same `actual_inputs`/`vat_batch` reference-resolution pattern stage 1's `apply_evidenced_production` already uses for flavour-vat/bottling lineage. The Solstice-fill execution (rows 1755–1775) produces the input item; the new `Sheet: fruit maceration` execution (rows 1786–1846, bottled 2026-03-26, 64 bottles) consumes it and produces the Rosella output. | ready |
 | scratch/planning rows ("Math for VAT...", tally checklists) | — | Explicitly excluded. Not a manifest record. | no action |
@@ -56,6 +56,21 @@ stage 1. Quantities use the target item's canonical unit; tally/checkbox columns
 | Wildflower | Yes — `WBWF01`–`WBWF25` all already imported in stage 1 (confirmed by direct query, WB-024) | Row 1 (VAT1) | VAT1–25 are **not new data**; only continuation events after each batch's own `legacy_date` (e.g. VAT23–25's post-cutoff bottling) attach via `linked_legacy_source`. VAT26+ (global counter) onward is new — but global VAT26 is Rosella's, see below. |
 | Rosella | Yes — first vat (`WBRS26`, legacy_id 26, legacy_date 2025-05-06) already imported in stage 1 (WB-027) | Row 1016 ("Rosella VAT1 (26)") | Cross-boundary, same treatment as Wildflower VAT23–25: the vat's origin already exists in `whistlebird_test`; only its post-cutoff continuation (ABV drop note, rhubarb addition, second bottling attempt — rows 1022–1257) is new and links via `linked_legacy_source` to legacy_id 26. |
 | Solstice | No — confirmed no legacy row exists for global VAT27+ | Row 1083 ("Solstice VAT1 (27)") | Genuinely wholly new product/process; first line with no cross-boundary linkage. VAT48 later converts to Rosella mid-batch (WB-023) — a wholly-new Solstice fill retroactively relabelled, not a link back to legacy data. |
+
+## Coverage progress
+
+As of 2026-08-24: **38 of ~55+ sheet production events curated** (VAT23–VAT45 range,
+excluding VAT50 which never appears in the sheet at all). Curated: Wildflower VAT23–24
+bottling (cross-boundary), Rosella VAT26 bottling (cross-boundary), Wildflower VAT29,
+31, 36–38, 40–41, 43 fill/bottling, Solstice VAT27–28, 30, 32–35, 39, 42, 45 fill/bottling,
+and VAT48's Solstice→Rosella maceration. Still excluded pending founder review (see
+`whistlebird-findings.md` WB-028 through WB-031): row 1846's contradictory date, two
+rows with an unknown VAT number (WB-029), VAT23's possibly-duplicate 77-bottle bottling
+(WB-030), and the VAT51/VAT52 product-identity conflict near the sheet's end (WB-031).
+VAT49's bottling remains excluded — no bottle count is recorded anywhere near it and no
+comparable-average estimate was requested for it. Rows 1–900 (Wildflower VAT1–22's
+original fill/bottle events, all pre-dating or matching the legacy cutoff) were
+confirmed as legacy-DB duplicates, not curated as new records.
 
 ## Repeatable reset
 

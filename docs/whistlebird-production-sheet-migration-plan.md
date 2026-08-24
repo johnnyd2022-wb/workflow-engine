@@ -15,15 +15,16 @@ legacy provenance, and reset/replay must be exact and repeatable.
 
 ## Two confirmed execution gaps
 
-Cross-referencing the legacy migration's target tenant (`whistlebird_test`) against the
-real live Biz-E org (`Whistlebird Ltd`, org_id `fce20553-da3f-4c26-a125-ad3585b0f2c6`)
-established the actual gaps this stage must fill:
+Cross-referencing the legacy migration's target tenant (`whistlebird_test`) against
+`Whistlebird Ltd` (org_id `fce20553-da3f-4c26-a125-ad3585b0f2c6`, an org the founder used
+for his own experimentation with the live app — not a protected production tenant,
+see "Target org" below) established the actual gaps this stage must fill:
 
 | Period | Coverage today |
 | --- | --- |
 | 2023-01-18 → 2025-05-20 | Legacy v1 DB, migrated into `whistlebird_test` (stage 1, done) |
 | **2025-05-20 → 2026-01-17** | **Nothing.** No legacy DB rows, no live Biz-E executions. |
-| 2026-01-17 → 2026-05-11 | Live Biz-E executions in `Whistlebird Ltd` (real usage, not migrated) |
+| 2026-01-17 → 2026-05-11 | Live Biz-E executions in `Whistlebird Ltd` (founder's own experimentation) |
 | **2026-05-11 → sheet data end (2026-07-23)** | **Nothing recorded as executions**, though Xero sales continued to 2026-07-07 |
 
 Xero sales/contacts are out of scope for this stage: they can be resynced into any org
@@ -32,12 +33,12 @@ production/execution history.
 
 ## Target org for this stage
 
-**`whistlebird_test`** (the same disposable migration sandbox stage 1 used), not the
-real `Whistlebird Ltd` org. This keeps the reset-and-retry loop safe while the importer
-is being built and validated. Promoting a verified result into `Whistlebird Ltd` is a
-deliberate, separately-confirmed one-time step — never let the automated
-reset/dry-run/apply commands target `Whistlebird Ltd` directly. `RESET_ORG_NAME` in
-`scripts/whistlebird_migration.py` stays hardcoded to `whistlebird_test`.
+**`whistlebird_test`**. This keeps the reset-and-retry loop safe while the importer is
+being built out. There is no separate real-production org this data needs to be
+"promoted" into — the founder's plan is to rename `whistlebird_test` itself once he is
+satisfied its data is accurate (confirmed 2026-08-24; see WB-026). `RESET_ORG_NAME` in
+`scripts/whistlebird_migration.py` stays hardcoded to `whistlebird_test` because that is
+the tenant actually being worked on, not because any other org needs protecting from it.
 
 ## Why this can't be a direct structured import
 
