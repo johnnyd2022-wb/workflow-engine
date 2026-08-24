@@ -246,4 +246,10 @@ when chromium/cert/DB is absent.
   hundreds of rows. Not from E2E, whose teardown is verified to leave zero. It means unit
   fixtures elsewhere aren't cleaning up. Flagged for a `suite-warden` / `test-fixtures`
   pass; out of scope here.
-- **Stages 1–6 not started.** Next is Stage 1 (auth/2FA flows).
+- **Stages 1–6 not started.** Next is Stage 1 (auth/2FA flows). Stale point-in-time note
+  — superseded the same day by `.agents/specs/playwright-e2e.md` (Stage 1 "mostly done",
+  Stage 5 "done"), and long since superseded further: current repo has 43 e2e test files
+  across process wizard, execution flow, inventory, CRM, org users, settings, session
+  expiry, activity log, compliant-platform, dashboard, demo-data, process templates,
+  reconciliation, and traceability (verified 2026-08-25 by findings-sweep). See the
+  spec's own checklist for current per-stage status, not this snapshot.

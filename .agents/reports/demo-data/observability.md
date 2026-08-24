@@ -38,8 +38,8 @@ silently discard it):
 
 ## Gaps, stated honestly
 - No trace/span instrumentation added — OTel tracing is app-wide middleware
-  (`app/observability/tracing.py`), already covers this route by virtue of being a
-  Flask route; nothing feature-specific needed.
+  (`app/observability/tracing.py`), already handled for this route by virtue of being a
+  Flask route; nothing feature-specific needed (reviewed 2026-08-25 by findings-sweep).
 - The exception path (`RESET_FAILED`) already had `logger.exception` before this
   review; left as-is, just paired with F2's generic client-facing message.
 - No RUM/browser-side event: this route has no dedicated UI of its own in this slice

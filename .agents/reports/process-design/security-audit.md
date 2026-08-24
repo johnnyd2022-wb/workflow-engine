@@ -40,6 +40,9 @@ manual_checklist: 7/7 completed
   rule_added: none — not mechanically distinguishable from other unused-helper cases
   without high false-positive rate; recommend `ruff`/vulture dead-code pass instead of a
   bespoke semgrep rule.
+  Already fixed: `_assert_valid_step_write` has been deleted entirely — `grep -rn
+  "_assert_valid_step_write" app/ tests/` now returns zero matches (verified 2026-08-25
+  by findings-sweep).
 
 - F2 [fix] backend.py:1638-1663 `reorder_steps` — **CONFIRMED, both parts.**
   (a) Connection leak: opens `sess = SessionLocal()`, enters `with sess.begin():`, and
@@ -79,6 +82,9 @@ manual_checklist: 7/7 completed
   inconsistent rather than deliberate, and is worth a human call rather than being
   waved through. Recommend: either drop the process-docs ADMIN gate for consistency,
   or add one to process delete — not a decision this audit self-approves.
+  Already fixed: `DELETE /api/core/processes/<id>` now carries
+  `@requires_role(UserRole.ADMIN)` (backend.py:1463), with a comment citing this exact
+  finding as the reason (verified 2026-08-25 by findings-sweep).
 
 ## Attempted but clean
 
@@ -187,5 +193,7 @@ manual_checklist: 7/7 completed
   route: F1/F2 are scoped-to-feature fixes (small patches, could be done in-place with
   a test); F3 is a design/authorization-model question that should go to a human
   call, not be silently patched either direction.
+  All three are now fixed — see the "Already fixed" notes on F1/F2/F3 above (verified
+  2026-08-25 by findings-sweep).
 
 VERDICT: findings-open

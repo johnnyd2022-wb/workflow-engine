@@ -354,10 +354,10 @@ Fix: add a parameterized route-level test for zero, negative, NaN/Infinity, and 
 
 ## Remaining disclosed gaps and severity
 
-- AC18 true advisory-lock concurrency remains valuable coverage, but is not independently as severe as the former AC14 gap: the unique `(org_id, key)` constraint and transaction rollback provide a secondary race-safety mechanism. It should still be tested before claiming AC18 is protected.
-- AC9–AC11 guard-internal coverage remains disclosed; the separately verified live PostgreSQL trigger materially reduces release risk.
+- AC18 true advisory-lock concurrency remains valuable coverage, but is not independently as severe as the former AC14 gap: the unique `(org_id, key)` constraint and transaction rollback provide a secondary race-safety mechanism. It should still be tested before claiming AC18 is protected. Already fixed: `tests/test_wastage.py:128 test_wastage_advisory_lock_serializes_concurrent_duplicate_submissions` (commit `6faecfe`) deliberately forces real `pg_advisory_xact_lock` contention via a delayed-lock wrapper and two real threads (verified 2026-08-25 by findings-sweep).
+- AC9–AC11 guard-internal coverage remains disclosed; the separately verified live PostgreSQL trigger materially reduces release risk. Already fixed: `tests/test_inventory_quantity_guard.py` (commit `f5f268e`) now covers the Python-level guard, all three repository write paths, the raw-SQL trigger rejection, and rearm behavior (verified 2026-08-25 by findings-sweep).
 - AC31/AC32 Path B remains outside this router-focused batch.
-- The `EntityEventSummary.org_id` filter remains an untested defense-in-depth change and is not a release blocker on the supplied evidence.
+- The `EntityEventSummary.org_id` filter remains an untested defense-in-depth change and is not a release blocker on the supplied evidence. Already fixed: `tests/test_inventory.py:881 test_list_inventory_enriches_items_with_their_own_org_event_summary` now covers it (verified 2026-08-25 by findings-sweep).
 - None of these disclosed gaps independently rises to AC14’s previous ship-blocking severity.
 
 ## Runtime verification

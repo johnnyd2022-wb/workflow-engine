@@ -33,12 +33,19 @@ is signed, not encrypted — its contents, including the raw CSRF value, are als
 whoever holds the cookie). Anyone who knows this fallback string (public in this source tree, or
 guessable as a well-known Flask-tutorial idiom even without repo access) can:
 - forge a session cookie asserting any `user_id`, defeating `@requires_auth` and tenant_context
-  wholesale (full session-forgery-based auth bypass, not scoped to shell)
+  wholesale (full session-forgery-based auth bypass, not scoped to shell) — already fixed by
+  commit `57027e9` (verified 2026-08-25 by findings-sweep)
 - forge a matching CSRF token, defeating Flask-WTF's `CSRFProtect(app)` entirely (this is what
-  makes F2 below exploitable by a cold, unauthenticated attacker — see PoC there)
+  makes F2 below exploitable by a cold, unauthenticated attacker — see PoC there) — already
+  fixed by commit `57027e9` (verified 2026-08-25 by findings-sweep)
 - per the existing accepted-risk note in `.agents/reports/crm/review.md` §4, decrypt every
   tenant's stored Xero OAuth tokens, since `XeroOAuthService._fernet()` derives its key as
   `SHA256(app.secret_key)` with no per-tenant salt (`app/features/crm/services/xero_oauth_service.py:47`)
+  — wont-fix, not this skill's to re-litigate: already resolved by a recorded human
+  accepted-risk decision, `.agents/history/findings.jsonl` sig `a325cdc713ca`
+  (area=crm, kind=crypto-key-management, 2026-08-15), "user chose to proceed without
+  fixing in this review... would need a dedicated per-tenant or dedicated-secret key
+  design decision, not a mechanical patch" (reviewed 2026-08-25 by findings-sweep).
 
 Note: that CRM finding was accepted-risk under a narrower framing ("*if* the key leaks"). This
 finding is different and worse: the key isn't a secret that could leak, it's a hardcoded default
@@ -58,6 +65,9 @@ shell-local patch.
 rule_added: none (read-only chain stage; recommend a `learned.yml` rule flagging
 `config.get(..., "secret_key", fallback=...)` with a non-empty string literal fallback)
 history: recorded `confirmed`, sig `9de11bd0dda7`
+Already fixed by commit `57027e9`: `app/api/app_factory.py:59-76` now refuses to start
+with the insecure default outside local/test (raises `RuntimeError`), only falling back
+in local/test with a logged warning (verified 2026-08-25 by findings-sweep).
 
 ### F2 [fix] `app/app.py:159-167` (spec AC11) — `POST /initialize` is genuinely exploitable by an unauthenticated, cold attacker — CONFIRMED, not a false alarm
 ```python
@@ -98,13 +108,19 @@ missing" today.** It does not, because of F1. End-to-end PoC (Flask test client,
 
 1. Cold, zero-prior-request attacker signs their own session cookie and `X-CSRFToken` value
    using the known fallback `SECRET_KEY` (`itsdangerous.URLSafeTimedSerializer`, matching
-   Flask-WTF's own `generate_csrf`/`validate_csrf` scheme, salt `"wtf-csrf-token"`).
+   Flask-WTF's own `generate_csrf`/`validate_csrf` scheme, salt `"wtf-csrf-token"`). Already
+   fixed by commit `57027e9` (verified 2026-08-25 by findings-sweep).
 2. Sets a `Referer` header matching the target host (defeats Flask-WTF's `ssl_strict`
    same-origin-referrer check — this header is attacker-controlled on a direct API call, not
-   browser-enforced).
+   browser-enforced). Already fixed by commit `57027e9` (verified 2026-08-25 by
+   findings-sweep).
 3. `POST /initialize` with the forged cookie + `X-CSRFToken` + `Referer` →
    **`initialize_database()` executes** (`initialize_database called: True` in the PoC output),
-   route returns `302` to `/`.
+   route returns `302` to `/`. Already fixed by commit `57027e9`: `app/app.py:159-168` now
+   requires `@requires_auth` on `/initialize`, closing this PoC's exploit path (an
+   unauthenticated attacker can no longer reach the route regardless of forged
+   CSRF/session), and the exception handler no longer returns `str(e)` (verified
+   2026-08-25 by findings-sweep).
 
 This proves the CSRF gate is not a meaningful barrier for a direct (non-browser-mediated)
 attacker armed with F1 — and even independent of F1, CSRF tokens were never designed to

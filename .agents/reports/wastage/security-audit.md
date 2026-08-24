@@ -57,6 +57,10 @@ invoked_as: chain stage (read-only) — findings reported here, not patched. rev
   e2e-playwright gap-fill stage (Step 3.2) and unit-coverage stage (Step 3.3).
   rule_added: none — this is a coverage gap, not a mechanically-detectable code pattern.
   history: recorded `confirmed`, sig `6af62c9cbb24` (`finding_history.py`).
+  Already fixed: `tests/e2e/test_inventory_dispose_pages.py` (commit `25e6ec7`) now
+  exists with dedicated coverage for both routes, including
+  `test_org_b_cannot_preview_dispose_org_a_item` — the exact cross-tenant regression
+  test this finding asked for (verified 2026-08-25 by findings-sweep).
 
 ## Attempted but clean
 - Advisory-lock key scoping (`org_id:idem_key` hash, `backend.py:3056`) — confirmed the

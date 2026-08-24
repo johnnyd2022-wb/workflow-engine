@@ -63,6 +63,11 @@ manual_checklist: 7/7 completed
   here: (a) key counters by `org_id` and only return the caller's own bucket, or (b) if these
   are genuinely meant as ops/SRE signals rather than tenant-facing data, drop the `counts`
   field from this response entirely and expose it only via an internal/ops-only surface.
+  Already fixed: `get_counter_snapshot()`/`operational_counters` is no longer called from
+  `GET /api/core/metrics` at all — the field was removed from the response entirely
+  (option (b) above). Regression coverage:
+  `tests/e2e/dashboard/test_tenant_isolation.py:138` (verified 2026-08-25 by
+  findings-sweep).
 
 ## Attempted but clean
 

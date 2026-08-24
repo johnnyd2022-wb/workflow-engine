@@ -81,6 +81,9 @@ Routes: `/core/flows`, `/core/flows/executions/step`, `/core/flows/batches/start
   it isn't lost.)
   finding_history: recorded `confirmed` (sig d6ece0b3f6a8, area
   `app/core/backend/dagtraversal.py`, kind `cross-tenant-execution-step-lookup`).
+  Already fixed by commit `715bb1e`/`7650042`: `find_impacted_by_expired_raw`
+  (dagtraversal.py:576-584) now joins `Execution` and filters `Execution.org_id ==
+  self.org_id`, exactly the suggested fix (verified 2026-08-25 by findings-sweep).
 
 - F2 [accepted-risk candidate — recommend, not self-approved] `app/core/backend/evidence/evidence_routes.py:53,67,91`
   — `evidence_upload` accepts `step_id` from `request.form` and passes it straight through

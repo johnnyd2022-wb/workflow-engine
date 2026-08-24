@@ -179,3 +179,6 @@ observability-instrumentation one); flagged as a gap below.
   fails in this environment because `/usr/bin/node` is v12.22.9 (predates the
   `--test` flag it shells out with). Not touched by or related to this
   feature's changes; a toolchain fix, not an observability one.
+  Already fixed: the test now self-skips with a clear reason instead of failing
+  (`tests/test_execution_shared_utils_js.py:31`, commit `b022b5a`), verified
+  2026-08-25 by findings-sweep (`1 passed, 1 skipped`, no failure).

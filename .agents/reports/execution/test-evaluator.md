@@ -32,7 +32,9 @@ Blocking findings:
 - `tests/test_evidence.py:555` — finalize-failure test never checks whether the
   temporary upload file is removed.
 - `tests/test_evidence.py:403` — idempotency test uses two different UUIDs instead of
-  retrying the same deletion.
+  retrying the same deletion. Already fixed:
+  `test_delete_is_idempotent_on_missing` now reuses the same `missing_id` for both
+  delete calls (verified 2026-08-25 by findings-sweep).
 
 VERDICT (as returned by the stage): invalid
 

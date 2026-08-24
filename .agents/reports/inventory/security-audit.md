@@ -36,9 +36,17 @@ Compare with the correctly-scoped sibling in the same file (`:314-319`, join `Ex
 **Attack:** an authenticated member of Org A calls `POST /api/core/inventory` with `source_execution_step_id` set to a UUID belonging to Org B (obtained via any prior leak, enumeration, or simply because they used to be a member of Org B before an org switch). They then call `GET /api/core/inventory/trace/<their_own_item_id>`. `_enrich_items_bulk` fetches Org B's `ExecutionStep` (including `execution_data` — prompts/internal fields, `actual_inputs`, `actual_outputs`) and `Process.name`, and stitches them into Org A's response as `extra_data.execution_prompts`, `variable_inputs`, `variable_output`, `process_name`. This is a genuine tenant-boundary break, not just a dangling/globally-unique FK: production process data (recipes, prompts, quantities) from one tenant becomes readable by another.
 
 fix: two independent layers, do both:
-1. In `create_inventory_item` (backend.py:3591-3599) and `InventoryRepository.create_inventory_item`, validate `source_execution_id` (and, transitively, the step/output) belongs to `org_id` before writing — reject with 400 otherwise. This is the root cause.
-2. In `_enrich_items_bulk` (dagtraversal.py:635,637,640), scope every query: join `ExecutionStep`→`Execution` filtered on `self.org_id` (same pattern as line 314-319 and `_hydrate_step_data`), and filter `Process` by joining through the already-org-scoped executions. Do this even after (1) is fixed — it's the actual defense-in-depth backstop and the only thing that would have contained this bug's blast radius on day one.
+1. In `create_inventory_item` (backend.py:3591-3599) and `InventoryRepository.create_inventory_item`, validate `source_execution_id` (and, transitively, the step/output) belongs to `org_id` before writing — reject with 400 otherwise. This is the root cause. Already fixed by commit `7650042`: `InventoryRepository._assert_source_refs_belong_to_org` now does exactly this (verified 2026-08-25 by findings-sweep).
+2. In `_enrich_items_bulk` (dagtraversal.py:635,637,640), scope every query: join `ExecutionStep`→`Execution` filtered on `self.org_id` (same pattern as line 314-319 and `_hydrate_step_data`), and filter `Process` by joining through the already-org-scoped executions. Do this even after (1) is fixed — it's the actual defense-in-depth backstop and the only thing that would have contained this bug's blast radius on day one. Already fixed by commit `7650042`: `_enrich_items_bulk` now org-scopes every lookup (verified 2026-08-25 by findings-sweep).
 rule_added: none — flagged as `escalate`-class per skill routing (tenant isolation / auth bypass); this skill run is read-only, remediation to be routed via fix-bug with a red-then-green org-A/org-B repro test per the skill's table.
+
+Already fixed by commit `7650042`: both layers are in place. (1)
+`InventoryRepository._assert_source_refs_belong_to_org` (inventory_repo.py:132-170)
+validates `source_execution_id`/`source_execution_step_id`/`source_output_id` against
+`org_id` before `create_inventory_item` writes, raising `ValueError` which
+`backend.py:3801` catches and returns 400. (2) `_enrich_items_bulk`
+(dagtraversal.py:636-668) now joins `Execution`/`Process` filtered on `self.org_id` for
+every lookup. Verified 2026-08-25 by findings-sweep.
 
 ### F2 [HIGH] `adjust_inventory_item_quantity`: "nan" causes an unhandled 500, not a 400
 file: `app/core/backend/backend.py:3796-3821`, `app/core/db/repositories/inventory_repo.py:222-251`

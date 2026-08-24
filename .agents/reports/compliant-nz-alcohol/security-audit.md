@@ -84,6 +84,9 @@ here per the same boundary.
   `InvalidOperation` guard"; not added here per read-only scope (no writes under `.semgrep/`
   in this stage).
   history: recorded `confirmed` in `.agents/history/findings.jsonl` (sig `110e879dd1a0`).
+  Already fixed by commit `6cdbea7`: `api_routes.py:144-148` now wraps both the `Decimal()`
+  construction and the `is_finite()`/range comparison in one `try/except (ValueError,
+  InvalidOperation)` (verified 2026-08-25 by findings-sweep).
 
 - F2 [fix] `app/features/compliant/routes/api_routes.py:156` — `customs_product_code` has no
   server-side length validation before insert; the column is `String(100)`
@@ -101,6 +104,9 @@ here per the same boundary.
   rule_added: none — same candidate learned-rule class as F1 (unvalidated field length
   before insert into a bounded `String(N)` column); not added here per read-only scope.
   history: recorded `confirmed` in `.agents/history/findings.jsonl` (sig `0e7d865883c7`).
+  Already fixed by commit `6cdbea7`: `api_routes.py:141-143` now validates
+  `customs_product_code` length (<=100 chars, 400 otherwise) matching the DB column
+  (verified 2026-08-25 by findings-sweep).
 
 Both F1 and F2 are the same underlying pattern (validate happy-path shape, not edge-case
 input, before handing data to a DB layer that will raise a non-`IntegrityError` exception) —

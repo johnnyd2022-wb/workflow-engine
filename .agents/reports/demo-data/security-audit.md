@@ -49,6 +49,10 @@ manual_checklist: 7/7 completed
   auth-only routes (e.g. `/auth/*`, user-profile-only endpoints). Not scaffolded.
   history: recorded `confirmed` (sig `29d57f523c88`) — first observation, no prior
   verdict existed.
+  Already fixed by commit `df26e40`: `app/features/demo_data/routes/api_routes.py:36-56`
+  now has an explicit `unscoped()` caller-identity check requiring
+  `g.current_org_id == demo_user.org_id`, logging `access_denied` on mismatch, tested by
+  `tests/test_demo_data.py` (verified 2026-08-25 by findings-sweep).
 
 - F2 [accepted-risk candidate] `app/features/demo_data/routes/api_routes.py:44` — raw
   exception string returned in 500 response body.
@@ -75,6 +79,10 @@ manual_checklist: 7/7 completed
   F2 to scaffold via `scripts/rule_candidates.py` (`bize-raw-exception-in-response` or
   similar) as part of that fix.
   history: recorded `confirmed` (sig `674ec59db2d3`) — first observation.
+  Already fixed by commit `df26e40`: the exception handler now returns
+  `{"success": False, "message": "Demo reset failed, see server logs", "error":
+  "RESET_FAILED"}` — no `str(e)` in the response body (verified 2026-08-25 by
+  findings-sweep).
 
 ## Attempted but clean
 

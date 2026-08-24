@@ -55,6 +55,10 @@ own call site.
   rule_added: none (route this to `fix-bug` per SKILL.md §5 — tenant isolation / data leak class needs
   a red-then-green repro test first: "org A's session, org B's InventoryItem UUID as root_id, as_of set
   → 404, not 200 with org B's data").
+  Already fixed by commit `7c32b89`: `TemporalDAGTracer` now filters all three
+  `EntityEvent` queries (`trace`'s step_events, `_snapshot_at`, `_build_timeline`) by
+  `EntityEvent.org_id == self.org_id` — `_snapshot_at` previously had no org filter at
+  all, now does (verified 2026-08-25 by findings-sweep).
 
 - F2 [fix] `app/core/backend/backend.py:5771-5786` — `POST /api/core/sourcemap/trace`'s current-state
   (no `as_of`) branch is dead code that always 500s.
@@ -87,6 +91,10 @@ own call site.
   a semgrep rule for "import from a module path that doesn't resolve" is not something semgrep's AST
   matching does (that's what `ruff`/import linting already catches — worth checking why CI didn't flag
   this; see note below).
+  Already fixed by commit `7c32b89`: `backend.py`'s current-state branch now imports
+  from the real `app.core.backend.dagtraversal` module and calls `trace_forward`/
+  `trace_backward` with the real signature and dict return shape (verified 2026-08-25
+  by findings-sweep).
 
 - F3 [fix] `app/core/backend/backend.py:5606-5607` — `GET /api/core/sourcemap/objects` 500s on
   non-numeric `page`/`limit`.
@@ -108,6 +116,9 @@ own call site.
   with no enclosing try/except" — this is the second instance of the exact same class in this one
   route file (see F4), which is exactly the "mechanically recognizable, write the rule" trigger in
   SKILL.md §3. Not added from this stage (read-only); recommend to whichever skill picks up F3/F4's fix.
+  Already fixed: `backend.py:5750-5753` now wraps both `int()` parses in
+  `try/except (TypeError, ValueError)`, returning 400 (verified 2026-08-25 by
+  findings-sweep).
 
 - F4 [fix] `app/core/backend/backend.py:5704` — `POST /api/core/sourcemap/trace` 500s on non-numeric
   `depth`. **Not one of the two candidate findings — found during independent review of the same
