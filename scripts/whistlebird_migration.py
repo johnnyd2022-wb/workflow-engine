@@ -99,7 +99,18 @@ HISTORICAL_PROCESS_TEMPLATES = (
     ("Legacy bottling", "Bottle a historical finished-product batch", "Bottle batch", "units"),
     ("Legacy samples", "Record historical sample creation or consumption", "Sample record", "units"),
     ("Legacy ex-stock storage", "Record historical off-site finished stock", "Stored bottle batch", "units"),
+    ("Sheet: flavour vat", "Combine a production-sheet-recorded flavour into a vat", "Vat batch", "L"),
+    ("Sheet: bottling", "Bottle a production-sheet-recorded finished-product batch", "Bottle batch", "units"),
+    (
+        "Sheet: fruit maceration",
+        "Post-macerate a vat batch (e.g. Solstice + rhubarb) into a distinct finished product",
+        "Macerated batch",
+        "units",
+    ),
 )
+PRODUCTION_SHEET_SOURCE_TABLE = "production_sheet"
+PRODUCTION_SHEET_SOURCE_SYSTEM = "whistlebird_production_sheet"
+PRODUCTION_SHEET_DATE_CONFIDENCE = ("clean", "resolved_by_context")
 
 
 @dataclass(frozen=True)
@@ -158,6 +169,28 @@ class HistoricalSampleRecord:
     details: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class ProductionSheetRecord:
+    """One curated production-sheet event, validated from the stage-2 manifest file.
+
+    Never read directly from the live Google Sheet -- the manifest is a frozen,
+    human-reviewed snapshot so reset-and-replay stays deterministic.
+    """
+
+    manifest_id: int
+    record_type: str
+    process_name: str
+    product_line: str
+    batch_label: str
+    legacy_date: date
+    date_confidence: str
+    quantity: Decimal
+    unit: str
+    input_references: tuple[tuple[str, str], ...]
+    linked_legacy_source: dict[str, Any] | None
+    notes: str
+
+
 def _identifier(value: str) -> str:
     if not IDENTIFIER.fullmatch(value):
         raise ValueError(f"Unsafe SQL identifier: {value!r}")
@@ -208,6 +241,66 @@ def _legacy_provenance(legacy_table: str, legacy_id: int, legacy_date: date) -> 
 def _decimal_label(value: Decimal) -> str:
     rendered = format(value.normalize(), "f")
     return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
+
+
+def _production_sheet_records(manifest_path: Path) -> list[ProductionSheetRecord]:
+    """Load and validate the curated production-sheet manifest.
+
+    This never reads the live Google Sheet: the manifest at ``manifest_path`` is a
+    frozen, human-reviewed JSON file (see docs/whistlebird-production-sheet-source.json)
+    that a founder edits directly to correct a date, quantity, or link before rerunning.
+    A record whose ``date_confidence`` is not in PRODUCTION_SHEET_DATE_CONFIDENCE must
+    not appear here at all -- exclude it from the manifest's "records" list instead.
+    """
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    records: list[ProductionSheetRecord] = []
+    for entry in payload.get("records", []):
+        manifest_id = int(entry["id"])
+        date_confidence = entry.get("date_confidence")
+        if date_confidence not in PRODUCTION_SHEET_DATE_CONFIDENCE:
+            raise ValueError(
+                f"production_sheet#{manifest_id} has unresolved date_confidence {date_confidence!r}; "
+                "move it to the manifest's 'excluded' list instead of 'records'"
+            )
+        try:
+            legacy_date = date.fromisoformat(entry["legacy_date"])
+        except (KeyError, ValueError) as exc:
+            raise ValueError(f"production_sheet#{manifest_id} has no valid legacy_date") from exc
+        quantity = _decimal(entry["quantity"], "quantity", PRODUCTION_SHEET_SOURCE_TABLE, manifest_id)
+        input_references = tuple((kind, reference) for kind, reference in entry.get("input_references", []))
+        records.append(
+            ProductionSheetRecord(
+                manifest_id=manifest_id,
+                record_type=entry["record_type"],
+                process_name=entry["process_name"],
+                product_line=entry["product_line"],
+                batch_label=entry["batch_label"],
+                legacy_date=legacy_date,
+                date_confidence=date_confidence,
+                quantity=quantity,
+                unit=entry["unit"],
+                input_references=input_references,
+                linked_legacy_source=entry.get("linked_legacy_source"),
+                notes=_optional_text(entry.get("notes")) or "",
+            )
+        )
+    return records
+
+
+def _production_sheet_provenance(record: ProductionSheetRecord) -> dict[str, Any]:
+    provenance: dict[str, Any] = {
+        "source_system": PRODUCTION_SHEET_SOURCE_SYSTEM,
+        "legacy_source": {"table": PRODUCTION_SHEET_SOURCE_TABLE, "id": record.manifest_id},
+        "legacy_date": record.legacy_date.isoformat(),
+        "timestamp_policy": "derived_noon_pacific_auckland",
+        "date_confidence": record.date_confidence,
+        "sheet_batch_label": record.batch_label,
+        "sheet_product_line": record.product_line,
+        "record_type": record.record_type,
+    }
+    if record.linked_legacy_source:
+        provenance["linked_legacy_source"] = record.linked_legacy_source
+    return provenance
 
 
 def _legacy_list(value: Any) -> tuple[str, ...]:
@@ -1436,6 +1529,196 @@ def apply_sample_history(legacy_url: str, target_url: str, requested_org_name: s
         engine.dispose()
 
 
+def build_production_sheet_dry_run(manifest_path: Path) -> dict[str, Any]:
+    """Validate the curated production-sheet manifest without writing to either database."""
+    records = _production_sheet_records(manifest_path)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    excluded = payload.get("excluded", [])
+    return {
+        "dry_run": True,
+        "manifest_records": len(records),
+        "proposed_records_by_type": dict(Counter(record.record_type for record in records)),
+        "proposed_records_by_product_line": dict(Counter(record.product_line for record in records)),
+        "linked_to_legacy_import": sum(1 for record in records if record.linked_legacy_source),
+        "cross_referenced_inputs": sum(len(record.input_references) for record in records),
+        "excluded_pending_curation": len(excluded),
+        "notes": [
+            "Aggregate-only report: no batch labels, ingredient names, or quantities are emitted.",
+            "Excluded manifest entries require founder confirmation before they can become records; "
+            "see whistlebird-findings.md WB-020 onward.",
+        ],
+    }
+
+
+def apply_production_sheet(manifest_path: Path, target_url: str, requested_org_name: str) -> dict[str, int]:
+    """Import curated production-sheet records (stage 2) into the target tenant.
+
+    Mirrors apply_evidenced_production's create-or-skip idempotency pattern exactly, but
+    reads from the frozen manifest instead of the legacy database, and keys idempotency
+    on {"table": "production_sheet", "id": <manifest id>} instead of a legacy DB row id.
+    """
+    if requested_org_name != RESET_ORG_NAME:
+        raise ValueError(f"Production-sheet import is only permitted for {RESET_ORG_NAME!r}")
+
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
+    from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401 - resolves ORM relationship
+    from app.core.db.models.organisation import Organisation
+    from app.core.db.models.process import Process
+    from app.core.db.models.step import Step
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    records = _production_sheet_records(manifest_path)
+
+    engine = create_engine(target_url)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    imported = 0
+    skipped = 0
+    linked_inputs = 0
+    try:
+        org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
+        if org is None:
+            raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
+        session.execute(text("SELECT set_config('app.inventory_qty_guard', '1', true)"))
+
+        processes = {
+            process.name: process
+            for process in session.query(Process)
+            .filter(Process.org_id == org.id, Process.name.in_([record.process_name for record in records]))
+            .all()
+        }
+        missing_processes = sorted({record.process_name for record in records} - set(processes))
+        if missing_processes:
+            raise RuntimeError(f"Missing production-sheet process templates: {', '.join(missing_processes)}")
+
+        # A vat_batch lookup spanning BOTH stage-1 (whistlebird_v1) and stage-2
+        # (production_sheet) items, keyed by their shared free-text batch label, so a
+        # sheet record (e.g. the Rosella maceration consuming Solstice VAT48) can link
+        # to either source without caring which stage created it.
+        vat_by_batch: dict[str, list[InventoryItem]] = defaultdict(list)
+        for item in session.query(InventoryItem).filter(InventoryItem.org_id == org.id).all():
+            extra_data = item.extra_data or {}
+            label = extra_data.get("sheet_batch_label") or extra_data.get("legacy_batch_label")
+            if label:
+                vat_by_batch[str(label)].append(item)
+
+        execution_repository = ExecutionRepository(session)
+        inventory_repository = InventoryRepository(session)
+        for record in records:
+            source = {"table": PRODUCTION_SHEET_SOURCE_TABLE, "id": record.manifest_id}
+            existing = (
+                session.query(InventoryItem)
+                .filter(InventoryItem.org_id == org.id, InventoryItem.extra_data.contains({"legacy_source": source}))
+                .one_or_none()
+            )
+            if existing is not None:
+                skipped += 1
+                item = existing
+            else:
+                resolved_inputs: list[dict[str, Any]] = []
+                for kind, reference in record.input_references:
+                    if kind != "vat_batch":  # Defensive: this is the only reference kind stage 2 emits so far.
+                        raise RuntimeError(f"Unsupported production-sheet reference kind: {kind}")
+                    candidates = vat_by_batch.get(reference, [])
+                    if not candidates:
+                        raise RuntimeError(
+                            f"production_sheet#{record.manifest_id} references unresolved vat_batch {reference!r}"
+                        )
+                    resolved_inputs.extend(
+                        {
+                            "inventory_item_id": str(candidate.id),
+                            "name": candidate.name,
+                            "quantity": None,
+                            "unit": candidate.unit,
+                            "legacy_link_kind": kind,
+                            "legacy_reference": reference,
+                            "legacy_quantity_recorded": False,
+                        }
+                        for candidate in candidates
+                    )
+
+                process = processes[record.process_name]
+                execution = execution_repository.create_execution(org.id, process.id, commit=False)
+                execution_step = (
+                    session.query(ExecutionStep)
+                    .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.org_id == org.id)
+                    .one()
+                )
+                step = session.query(Step).filter(Step.id == execution_step.step_id).one()
+                provenance = _production_sheet_provenance(record)
+                inventory_type = "final_product" if record.record_type == "bottling" else "work_in_progress"
+                item = inventory_repository.create_inventory_item(
+                    org_id=org.id,
+                    name=f"{record.product_line.title()} {record.record_type.replace('_', ' ')} {record.batch_label}",
+                    quantity=record.quantity,
+                    unit=record.unit,
+                    inventory_type=inventory_type,
+                    supplier_batch_number=f"{record.batch_label} [sheet-{record.manifest_id}]",
+                    source_execution_id=execution.id,
+                    source_execution_step_id=execution_step.id,
+                    source_output_id=step.outputs[0]["id"],
+                    source_step_name=step.name,
+                    extra_data={**provenance, "historical_import": True},
+                    commit=False,
+                )
+                execution_repository.complete_step(
+                    execution_step.id,
+                    org.id,
+                    actual_inputs=resolved_inputs,
+                    actual_outputs=[
+                        {
+                            "inventory_item_id": str(item.id),
+                            "name": item.name,
+                            "quantity": str(record.quantity),
+                            "unit": record.unit,
+                        }
+                    ],
+                    execution_data={**provenance, "historical_import": True},
+                    completed_at_override=_derived_timestamp(record.legacy_date),
+                    commit=False,
+                )
+                business_at = _derived_timestamp(record.legacy_date)
+                execution.started_at = business_at
+                execution.completed_at = business_at
+                execution.created_at = business_at
+                execution.updated_at = business_at
+                execution_step.started_at = business_at
+                execution_step.completed_at = business_at
+                execution_step.created_at = business_at
+                execution_step.updated_at = business_at
+                item.created_at = business_at
+                item.updated_at = business_at
+                session.add(
+                    InventoryMovement(
+                        org_id=org.id,
+                        inventory_item_id=item.id,
+                        movement_type=InventoryMovementType.PRODUCTION.value,
+                        quantity=record.quantity,
+                        unit=record.unit,
+                        created_at=business_at,
+                        movement_metadata={**provenance, "historical_import": True},
+                    )
+                )
+                linked_inputs += len(resolved_inputs)
+                imported += 1
+
+            extra_data = item.extra_data or {}
+            label = extra_data.get("sheet_batch_label") or extra_data.get("legacy_batch_label")
+            if label:
+                vat_by_batch[str(label)].append(item)
+
+        session.commit()
+        return {"imported_executions": imported, "skipped_executions": skipped, "linked_inputs": linked_inputs}
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def reset_target_org(target_url: str, requested_org_name: str) -> dict[str, Any]:
     """Delete imported tenant data while preserving the target organisation and its users.
 
@@ -1666,6 +1949,56 @@ def build_import_verification(legacy_url: str, target_url: str, requested_org_na
     }
 
 
+def build_production_sheet_verification(manifest_path: Path, target_url: str, requested_org_name: str) -> dict[str, Any]:
+    """Compare the curated manifest's expected counts against imported stage-2 rows."""
+    if requested_org_name != RESET_ORG_NAME:
+        raise ValueError(f"Verification is only permitted for {RESET_ORG_NAME!r}")
+    records = _production_sheet_records(manifest_path)
+    expected_by_type = dict(Counter(record.record_type for record in records))
+    with create_engine(target_url).connect() as target:
+        org_id = target.execute(
+            text("SELECT id FROM organisations WHERE name = :name"), {"name": requested_org_name}
+        ).scalar_one_or_none()
+        if org_id is None:
+            raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
+        actual_by_type = dict(
+            target.execute(
+                text(
+                    """
+                    SELECT execution_data ->> 'record_type' AS record_type, count(*)
+                    FROM execution_steps es
+                    JOIN executions e ON e.id = es.execution_id
+                    WHERE e.org_id = :org_id
+                      AND execution_data ->> 'source_system' = :source_system
+                    GROUP BY record_type
+                    """
+                ),
+                {"org_id": org_id, "source_system": PRODUCTION_SHEET_SOURCE_SYSTEM},
+            ).all()
+        )
+        date_mismatches = target.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM execution_steps es
+                JOIN executions e ON e.id = es.execution_id
+                WHERE e.org_id = :org_id
+                  AND execution_data ->> 'source_system' = :source_system
+                  AND (es.completed_at AT TIME ZONE 'Pacific/Auckland')::date
+                      <> (execution_data ->> 'legacy_date')::date
+                """
+            ),
+            {"org_id": org_id, "source_system": PRODUCTION_SHEET_SOURCE_SYSTEM},
+        ).scalar_one()
+    return {
+        "by_record_type": {
+            record_type: {"expected": expected, "actual": actual_by_type.get(record_type, 0)}
+            for record_type, expected in expected_by_type.items()
+        },
+        "date_mismatches": date_mismatches,
+    }
+
+
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1725,9 +2058,35 @@ def _arguments() -> argparse.Namespace:
         action="store_true",
         help="Compare source and target Whistlebird import counts and dates without writing.",
     )
+    parser.add_argument(
+        "--sheet-manifest",
+        type=Path,
+        help="Path to the curated stage-2 production-sheet JSON manifest "
+        "(docs/whistlebird-production-sheet-source.json). Never the live Google Sheet.",
+    )
+    parser.add_argument(
+        "--dry-run-production-sheet",
+        action="store_true",
+        help="Validate the curated production-sheet manifest without writing.",
+    )
+    parser.add_argument(
+        "--apply-production-sheet",
+        action="store_true",
+        help="Import curated production-sheet (stage 2) records only into whistlebird_test.",
+    )
+    parser.add_argument(
+        "--verify-production-sheet",
+        action="store_true",
+        help="Compare the curated manifest's expected counts against imported stage-2 rows without writing.",
+    )
     arguments = parser.parse_args()
     if not arguments.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
+    sheet_actions = (
+        arguments.dry_run_production_sheet or arguments.apply_production_sheet or arguments.verify_production_sheet
+    )
+    if sheet_actions and not arguments.sheet_manifest:
+        parser.error("--sheet-manifest is required for the production-sheet actions")
     if (
         not (
             arguments.confirm_reset_whistlebird_test
@@ -1736,6 +2095,7 @@ def _arguments() -> argparse.Namespace:
             or arguments.apply_evidenced_production
             or arguments.apply_sample_history
             or arguments.verify_import
+            or sheet_actions
         )
         and not arguments.legacy_url
     ):
@@ -1757,6 +2117,12 @@ def main() -> int:
         report = apply_sample_history(arguments.legacy_url, arguments.target_url, arguments.org_name)
     elif arguments.verify_import:
         report = build_import_verification(arguments.legacy_url, arguments.target_url, arguments.org_name)
+    elif arguments.apply_production_sheet:
+        report = apply_production_sheet(arguments.sheet_manifest, arguments.target_url, arguments.org_name)
+    elif arguments.verify_production_sheet:
+        report = build_production_sheet_verification(arguments.sheet_manifest, arguments.target_url, arguments.org_name)
+    elif arguments.dry_run_production_sheet:
+        report = build_production_sheet_dry_run(arguments.sheet_manifest)
     elif arguments.dry_run_core:
         report = build_core_dry_run(arguments.legacy_url)
     elif arguments.dry_run_traceability:

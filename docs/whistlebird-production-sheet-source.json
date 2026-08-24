@@ -1,0 +1,107 @@
+{
+  "_comment": "Curated, human-reviewed manifest for scripts/whistlebird_migration.py --dry-run-production-sheet / --apply-production-sheet. Never auto-regenerated from the live Google Sheet. Edit this file directly to correct a date, quantity, or link, then rerun --confirm-reset-whistlebird-test followed by --apply-production-sheet to replay deterministically. See docs/whistlebird-production-sheet-migration-plan.md and whistlebird-findings.md (WB-020 onward) for how each field below was resolved.",
+  "source": {
+    "spreadsheet_id": "1R_4r1s1bIlHNPH_bSRNWUVcj3_iDiKu717u736Iiank",
+    "tab_name": "Production!!",
+    "gid": "1370312095"
+  },
+  "records": [
+    {
+      "id": 1751,
+      "record_type": "bottling",
+      "process_name": "Sheet: bottling",
+      "product_line": "wildflower",
+      "batch_label": "VAT44",
+      "legacy_date": "2026-02-19",
+      "date_confidence": "resolved_by_context",
+      "quantity": "79",
+      "unit": "units",
+      "sheet_row_range": "1657-1751",
+      "input_references": [],
+      "linked_legacy_source": null,
+      "notes": "Sheet text says 'Bottling VAT47 (WF)' but founder confirmed (WB-022) this is VAT44's missing bottling, mislabeled. Date resolved from surrounding rows 1727 (2026-02-12) and 1755 (2026-02-19); no explicit date on this row itself."
+    },
+    {
+      "id": 1757,
+      "record_type": "bottling",
+      "process_name": "Sheet: bottling",
+      "product_line": "solstice",
+      "batch_label": "VAT45",
+      "legacy_date": "2026-02-19",
+      "date_confidence": "clean",
+      "quantity": "61",
+      "unit": "units",
+      "sheet_row_range": "1696-1757",
+      "input_references": [],
+      "linked_legacy_source": null,
+      "notes": "Same date row as row 1755 (19/02/2026)."
+    },
+    {
+      "id": 1789,
+      "record_type": "bottling",
+      "process_name": "Sheet: bottling",
+      "product_line": "wildflower",
+      "batch_label": "VAT46",
+      "legacy_date": "2026-03-19",
+      "date_confidence": "resolved_by_context",
+      "quantity": "79",
+      "unit": "units",
+      "sheet_row_range": "1702-1789",
+      "input_references": [],
+      "linked_legacy_source": null,
+      "notes": "No explicit date on this row; sits between row 1786 (19/03/2026) and row 1812 (26/03/26). Using the nearer preceding date."
+    },
+    {
+      "id": 1936,
+      "record_type": "bottling",
+      "process_name": "Sheet: bottling",
+      "product_line": "wildflower",
+      "batch_label": "VAT47",
+      "legacy_date": "2026-05-07",
+      "date_confidence": "resolved_by_context",
+      "quantity": "78.5",
+      "unit": "units",
+      "sheet_row_range": "1727-1936",
+      "input_references": [],
+      "linked_legacy_source": null,
+      "notes": "Single confirmed VAT47 bottling (WB-022). Raw serial resolved day/month-swapped; founder corrected to 2026-05-07 by checking it falls before row 1959 (2026-06-28). Row 1913 (identical 78.5 bottles) is a duplicate/premature note of this same event and is intentionally excluded from this manifest."
+    },
+    {
+      "id": 1755,
+      "record_type": "vat_fill",
+      "process_name": "Sheet: flavour vat",
+      "product_line": "solstice",
+      "batch_label": "VAT48",
+      "legacy_date": "2026-02-19",
+      "date_confidence": "clean",
+      "quantity": "42.84",
+      "unit": "L",
+      "sheet_row_range": "1755-1775",
+      "input_references": [],
+      "linked_legacy_source": null,
+      "notes": "Quantity computed as Ethanol 17.776 + Water 25.064 (rows 1761/1767), mirroring the Wildflower fill pattern. This is the Solstice base batch later macerated into Rosella (WB-023) -- see linked record id 1786."
+    },
+    {
+      "id": 1786,
+      "record_type": "fruit_maceration",
+      "process_name": "Sheet: fruit maceration",
+      "product_line": "rosella",
+      "batch_label": "VAT48",
+      "legacy_date": "2026-03-26",
+      "date_confidence": "resolved_by_context",
+      "quantity": "64",
+      "unit": "units",
+      "sheet_row_range": "1778-1846",
+      "input_references": [["vat_batch", "VAT48"]],
+      "linked_legacy_source": null,
+      "notes": "Founder confirmed (WB-023): Solstice is the deliberate base spirit for Rosella -- rhubarb post-maceration is a real production step, not a relabel. Consumes the Solstice VAT48 batch (record id 1755) as input via vat_batch reference, matching apply_evidenced_production's existing input-resolution pattern. Modelled as one execution producing the 64-bottle finished output directly (row 1821, dated by row 1812's 26/03/26); the intermediate 44L post-rhubarb WIP volume (row 1817) is recorded in notes only, not as a separate inventory item, in this first curation pass."
+    }
+  ],
+  "excluded": [
+    {"sheet_row": 743, "reason": "WB-021: unparseable raw date, resolved by founder to 2025-01-24 -- not yet curated into a record."},
+    {"sheet_row": 1846, "reason": "WB-028: date contradicts surrounding sequence (resolves to 2026-02-04 but follows the 2026-03-26 bottling in sheet order); unresolved."},
+    {"sheet_row": 1883, "reason": "WB-029: 'Bottling VATXX' -- sheet itself doesn't record which VAT this is; unresolved."},
+    {"sheet_row": 1939, "reason": "WB-029: 'Distilling Solstice (VAT52?)' -- question mark in source; unresolved."},
+    {"sheet_row": 2015, "reason": "VAT49 bottling has no recorded bottle count anywhere nearby in the sheet; excluded rather than guessed."}
+  ]
+}
