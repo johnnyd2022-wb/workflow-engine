@@ -185,4 +185,10 @@ if __name__ == "__main__":
     else:
         LOGGER.warning("ssl_certificates_missing", cert_file=cert_file, key_file=key_file)
 
-    app.run(host=config.host, port=config.port, debug=config.debug, ssl_context=ssl_context)
+    # threaded=True: the SPA fires several /api/core/* calls in parallel on page load
+    # (metrics, processes, executions, inventory...); Werkzeug's default single-threaded
+    # dev server queues them and serves one at a time regardless of how fast each one's
+    # own DB query is, which is directly visible as multi-second page loads even though
+    # server-side per-request duration_ms stays under 250ms. DB sessions are already
+    # request-scoped (teardown_appcontext), so concurrent handling is safe.
+    app.run(host=config.host, port=config.port, debug=config.debug, ssl_context=ssl_context, threaded=True)
