@@ -54,6 +54,7 @@
     ],
     "api": [
       "/api/core/dashboard/summary",
+      "/api/core/system-findings",
       "/api/core/metrics",
       "/api/core/processes",
       "/api/core/executions",
@@ -80,6 +81,25 @@
     ]
   },
   "overrides": {
+    "/api/core/system-findings": {
+      "_why": [
+        "Added 2026-08-27 by a perf-guardrails review of MR !181 (Core tab 15.8s -> 2.7s).",
+        "This is the Core page's hottest endpoint -- it runs the whole system-check suite,",
+        "including a DAG traversal per expired-with-stock raw material -- and it had no",
+        "budget at all while three separate widgets called it on every page load.",
+        "Calibrated per SKILL.md from three runs on the E2E fixture org: queries 11/11/11,",
+        "backend_ms medians 12.7/15.2/13.2. queries is PINNED at the observed 11 as a",
+        "ratchet (must only ever go down); backend_ms budget is ~4x the worst median.",
+        "CAVEAT, deliberately written down rather than assumed away: this fixture org has",
+        "ONE expired-with-stock raw material. A probe against the same code measured +2",
+        "queries per additional expired raw material (1 -> 9 queries, 10 -> 27), so on a",
+        "real org (whistlebird_test: ~47) this endpoint issues ~100 queries per request",
+        "and a fixture-calibrated ceiling will never see it. Fixing that means one",
+        "multi-root traverse() instead of one per root -- see the review notes."
+      ],
+      "queries": { "budget": 11, "ceiling": 60 },
+      "backend_ms": { "budget": 60, "ceiling": 1000 }
+    },
     "/api/core/dashboard/summary": {
       "queries": { "budget": 38, "ceiling": 60 }
     }
