@@ -13,6 +13,17 @@ This continues the same non-negotiable rules as stage 1: never mutate the source
 (the sheet is read as a frozen snapshot, never written to), every imported row carries
 legacy provenance, and reset/replay must be exact and repeatable.
 
+**Status as of 2026-08-24**: 38 of ~55+ sheet production events curated and applied to
+`whistlebird_test` (VAT23–45 range). See
+[`docs/whistlebird-production-sheet-field-mapping.md`](whistlebird-production-sheet-field-mapping.md#coverage-progress)
+for exactly what's curated vs. still excluded, and `whistlebird-findings.md` WB-020
+onward for every decision made along the way. To resume: pick up the next open finding
+(WB-030 or WB-031 first — both are waiting on the founder checking his own records),
+then continue curating sheet rows past ~1846 once WB-031 resolves (VAT52 sits in that
+range). `docs/whistlebird-production-sheet-source.json` is the actual working state —
+edit it directly, then `--confirm-reset-whistlebird-test` and `--apply-production-sheet`
+to replay.
+
 ## Two confirmed execution gaps
 
 Cross-referencing the legacy migration's target tenant (`whistlebird_test`) against
@@ -49,8 +60,9 @@ notebook, not a table export. Concretely (full detail in the source analysis kep
 alongside this plan):
 
 - Three product lines are interleaved: **Wildflower** (continuation of the legacy
-  `WBWF01`–`WBWF14` batches), and two lines with **no legacy-DB counterpart at all**:
-  **Rosella** and **Solstice**.
+  `WBWF01`–`WBWF25` batches) and **Rosella** (continuation of the legacy `WBRS26`
+  batch, WB-024/WB-027), both of which have a legacy-DB origin their post-cutoff sheet
+  rows link back to; only **Solstice** has no legacy-DB counterpart at all.
 - Each VAT's lifecycle (maceration → distillation → vat fill → bottling) is often
   split across non-adjacent row ranges, sometimes with a follow-up note physically
   re-inserted near the block's start rather than appended at the end.
@@ -145,9 +157,12 @@ therefore adds a **curation step** stage 1 didn't need.
      `--apply-production-sheet` must reproduce identical row counts, provenance links,
      and inventory totals — the manifest being a static file is what makes this
      actually deterministic, unlike re-reading the live, editable sheet each time.
-   - Extend `build_import_verification` with a `production_sheet` block comparing the
-     manifest's expected counts against `source_system = 'whistlebird_production_sheet'`
-     actual counts, mirroring the existing `whistlebird_v1` comparison.
+   - `build_production_sheet_verification` (a separate function alongside stage 1's
+     `build_import_verification`, not an extension of it — reusing that function would
+     have required it to take a manifest path instead of a legacy DB URL) compares the
+     manifest's expected counts by record type against actual
+     `source_system = 'whistlebird_production_sheet'` rows, mirroring the shape of the
+     existing `whistlebird_v1` comparison. Wired to `--verify-production-sheet`.
 
 ## Non-negotiable rules (unchanged from stage 1, restated for this stage)
 
