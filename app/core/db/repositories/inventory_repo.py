@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
@@ -424,6 +424,21 @@ class InventoryRepository:
                 or_(and_(Execution.org_id == org_id, Execution.process_id == process_id), tagged_pid)
             )
         return query.order_by(InventoryItem.created_at.desc()).all()
+
+    def count_inventory_items_by_type(self, org_id: UUID) -> dict[str, int]:
+        """Count inventory items per inventory_type without fetching full rows.
+
+        A caller that only needs counts (e.g. dashboard metrics) should use this instead
+        of filtering the full list_inventory_items(...) result in Python -- that fetches
+        every item's columns (including extra_data) just to discard them.
+        """
+        rows = (
+            self.db.query(InventoryItem.inventory_type, func.count(InventoryItem.id))
+            .filter(InventoryItem.org_id == org_id)
+            .group_by(InventoryItem.inventory_type)
+            .all()
+        )
+        return {inventory_type: count for inventory_type, count in rows}
 
     def update_inventory_item(
         self,
