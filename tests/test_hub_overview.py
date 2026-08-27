@@ -325,6 +325,32 @@ def test_throughput_7d_is_keyed_by_process_id_not_name(db, authed):
     assert all("process_id" in r and "name" in r and "count" in r for r in rows)
 
 
+def test_processes_min_always_contains_active_execution_processes(db, authed, monkeypatch):
+    """A process that owns an active execution must be in processes_min even when it is
+    older than the newest HUB_PROCESSES_MIN_CAP processes -- otherwise the active-batches
+    panel shows a batch the picker cannot select."""
+    from app.core.backend import backend as backend_mod
+
+    monkeypatch.setattr(backend_mod, "HUB_PROCESSES_MIN_CAP", 3)
+    org, client = authed
+
+    old_proc = ProcessFactory(org_id=org.id, name="Legacy line")
+    ex = ExecutionFactory(org_id=org.id, process_id=old_proc.id)
+    db.query(Execution).filter(Execution.id == ex.id).update(
+        {Execution.status: ExecutionStatus.IN_PROGRESS}, synchronize_session=False
+    )
+    # 5 newer processes -> old_proc is well outside the cap of 3
+    for _ in range(5):
+        ProcessFactory(org_id=org.id)
+    db.commit()
+
+    wf = client.get(OVERVIEW).get_json()["workflows"]
+    ids = {p["id"] for p in wf["processes_min"]}
+    assert str(old_proc.id) in ids, "active execution's process dropped from the picker"
+    # cap still bounds the newest-process fill (1 forced active + up to 3 newest here)
+    assert len(wf["processes_min"]) <= 4
+
+
 def _cleanup_repo(db, org_id):
     db.rollback()
     db.query(InventoryItem).filter(InventoryItem.org_id == org_id).delete(synchronize_session=False)

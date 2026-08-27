@@ -1380,17 +1380,22 @@
     // inventory list + journey CTA, leaving the new compact-overview widgets and the
     // active-batches graph showing pre-mutation state. Now it rebuilds the overview from
     // the single hub call (which also re-publishes core2:hub-overview for the graph) and
-    // refreshes the detail tabs that have data.
+    // re-fetches a detail tab's data ONLY if that tab is already loaded or currently
+    // shown -- a mutation while the user sits on Overview must not pull the full
+    // inventory list back onto the critical path.
     async function loadInventoryV2() {
       if (window.CoreAPI && typeof CoreAPI.invalidateSystemFindings === 'function') {
         CoreAPI.invalidateSystemFindings();
       }
       await loadCore2Overview();
-      // Inventory almost always changes on these events; keep its panel current even if
-      // hidden, so switching to it shows fresh data.
-      await loadCore2InventoryTab(true);
-      if (core2TabLoaded.workflows) {
-        await loadCore2WorkflowsTab(true);
+      var tab = core2CurrentMainTab();
+      if (core2TabLoaded.inventory || tab === 'inventory') {
+        core2TabLoaded.inventory = false;
+        await loadCore2InventoryTab();
+      }
+      if (core2TabLoaded.workflows || tab === 'workflows') {
+        core2TabLoaded.workflows = false;
+        await loadCore2WorkflowsTab();
       }
     }
     
@@ -2408,7 +2413,11 @@
       // Set synchronously (before the await) so the active-batches graph, which also runs
       // on DOMContentLoaded, knows the overview is coming and must NOT issue its own
       // processes/executions fallback fetch -- it waits for the core2:hub-overview event.
+      // Also clear any previous payload: on a refresh that then FAILS, a stale
+      // __core2HubOverview would be read by the graph before its pending/fallback branches
+      // and it would render pre-mutation data and never fall back.
       window.__core2HubOverviewPending = true;
+      window.__core2HubOverview = null;
       var sfData = null;
       try {
         overview = await CoreAPI.getHubOverview();
@@ -2894,13 +2903,9 @@
           document.body.style.overflow = 'auto';
         }
         
-        // Reload inventory
+        // Rebuild overview (metrics + insight widgets + graph) and refresh open tabs.
         await loadInventoryV2();
-        
-        // Reload metrics
-        const metrics = await CoreAPI.getMetrics();
-        updateMetricsV2(metrics);
-        
+
         currentEditInventoryId = null;
         form.reset();
         return false;
@@ -2936,13 +2941,9 @@
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
         
-        // Reload inventory
+        // Rebuild overview (metrics + insight widgets + graph) and refresh open tabs.
         await loadInventoryV2();
-        
-        // Reload metrics
-        const metrics = await CoreAPI.getMetrics();
-        updateMetricsV2(metrics);
-        
+
         currentDeleteInventoryId = null;
         currentDeleteInventoryName = null;
       } catch (error) {

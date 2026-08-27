@@ -202,16 +202,34 @@ keyset list queries do an index-ordered scan with **no Sort node** after the mig
 exactly one `hub/overview` call and no `inventory` / `executions` /
 `processes?include_steps=true`, and that tab data loads once, on open.
 
+### Adversarial review (herdr Breaker = codex, 2 rounds)
+
+Round 1 found 5 issues, all fixed in `8bc43fa`: a 60 ms timer race that let the
+active-batches graph restore the old processes+executions fan-out when the overview was
+slow (F1); a double serial `/api/core/system-findings` run on populated orgs (F2); 7-day
+throughput merged across processes sharing a name (F3); unbounded `processes_min` (F4);
+and a post-step-completion path (`loadInventoryV2`) that reintroduced the old triple
+fetch and left the overview stale (F5). Round 2 found 4 follow-ups, fixed in the next
+commit: the `processes_min` cap could hide an active batch's own process from the picker
+(now the active-execution processes are always included first); `loadInventoryV2` still
+force-fetched the full inventory on every mutation even from Overview (now only when the
+Inventory tab is open/loaded); a failed *refresh* left stale `__core2HubOverview` for the
+graph (now cleared at refresh start); and redundant `getMetrics()` calls after inventory
+edit/delete/reconcile (removed — `loadCore2Overview()` already refreshes metrics).
+
 ### Deliberately deferred (call-outs for the MR reviewer)
 
 - **`low_stock` is hard-coded 0** in the overview. There is no per-item reorder threshold
   in the schema, and the frontend's ratio check was already inert (it needs an
   `initial_quantity` the API has never sent). Wired as a named field so a real
   implementation has a home; not implemented here.
-- **Hub Inventory/Workflows tabs still fetch their full lists** (just lazily, on tab
-  open). Converting their grouped/category rendering to consume paginated pages is a
-  UX change, not a perf tweak — left as a follow-up. The pagination *endpoint capability*
-  is in place and tested.
+- **Hub Inventory/Workflows tabs still fetch their full lists** (only on first open, and
+  post-mutation only if already open). Converting their grouped/category rendering to
+  consume paginated pages is a UX change, not a perf tweak — left as a follow-up. The
+  pagination *endpoint capability* is in place and tested.
+- **`processes_min` can still exceed `HUB_PROCESSES_MIN_CAP`** — every distinct process
+  behind the ≤20 active executions is always included (so the picker can never hide a
+  live batch), then the cap bounds the newest-process fill. Worst case is cap + 20.
 - **Paginated `/api/core/inventory` page sizes are not uniform**: the route drops
   zero-quantity rows *after* the DB page is fetched, so a page can return fewer than
   `limit` display rows while `has_more` is true. `next_cursor` correctly points at the

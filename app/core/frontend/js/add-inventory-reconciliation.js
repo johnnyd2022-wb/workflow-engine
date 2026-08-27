@@ -125,10 +125,9 @@
             document.body.style.overflow = 'auto';
           }
           form.reset();
+          // loadInventoryV2() already rebuilds the compact overview (metrics included)
+          // -- no separate getMetrics() call needed.
           if (typeof window.loadInventoryV2 === 'function') window.loadInventoryV2();
-          if (typeof window.updateMetricsV2 === 'function' && window.CoreAPI.getMetrics) {
-            window.CoreAPI.getMetrics().then(window.updateMetricsV2);
-          }
           var msg = 'Inventory added.';
           if (result.reconciled_amount && parseFloat(result.reconciled_amount) > 0) {
             msg = 'Inventory added and ' + result.reconciled_amount + ' ' + (result.unit || '') + ' reconciled from untracked.';

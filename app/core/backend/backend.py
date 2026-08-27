@@ -5140,6 +5140,24 @@ def get_hub_overview():
     active_execs = execution_repo.list_active_execution_summaries(org_id, limit=20)
     throughput = execution_repo.count_completed_by_process_since(org_id, week_ago)
 
+    # processes_min feeds the active-batches picker. Every process that owns one of the
+    # returned active executions MUST be selectable, even if it is older than the newest
+    # HUB_PROCESSES_MIN_CAP processes -- otherwise the panel shows an active batch the user
+    # cannot open. Seed with those, then fill the rest of the cap with newest processes.
+    processes_min: list[dict] = []
+    seen_pids: set[str] = set()
+    for e in active_execs:
+        if e.process and str(e.process.id) not in seen_pids:
+            seen_pids.add(str(e.process.id))
+            processes_min.append({"id": str(e.process.id), "name": e.process.name or "Untitled process"})
+    for pid, name in process_repo.list_process_names(org_id, limit=HUB_PROCESSES_MIN_CAP):
+        if str(pid) in seen_pids:
+            continue
+        if len(processes_min) >= HUB_PROCESSES_MIN_CAP:
+            break
+        seen_pids.add(str(pid))
+        processes_min.append({"id": str(pid), "name": name})
+
     payload = {
         "generated_at": now.isoformat(),
         "metrics": {
@@ -5186,12 +5204,9 @@ def get_hub_overview():
             "pending": pending,
             "completed_7d": sum(count for _pid, _name, count in throughput),
             "process_count": process_count,
-            # Bounded so the picker payload can't balloon on an org with a huge process
-            # catalogue; HUB_PROCESSES_MIN_CAP is generous (a real manufacturer has tens).
-            "processes_min": [
-                {"id": str(pid), "name": name}
-                for pid, name in process_repo.list_process_names(org_id, limit=HUB_PROCESSES_MIN_CAP)
-            ],
+            # Bounded (HUB_PROCESSES_MIN_CAP) but always contains every active-execution
+            # process -- built above.
+            "processes_min": processes_min,
             "active_executions": [_hub_active_execution_payload(e) for e in active_execs],
             # One row per process with a completion in the window (bounded by process
             # count). Keyed by process_id -- names are not unique within an org.
