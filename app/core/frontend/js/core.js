@@ -109,18 +109,22 @@ function createProcessCard(process) {
 
 async function loadInventory() {
     try {
-        // Load raw materials
-        const rawMaterials = await CoreAPI.getInventory('raw_material');
-        renderInventoryTab('tab-raw', rawMaterials.inventory || []);
-        
-        // Load WIP
-        const wip = await CoreAPI.getInventory('work_in_progress');
-        renderInventoryTab('tab-wip', wip.inventory || []);
-        
-        // Load final products
-        const finalProducts = await CoreAPI.getInventory('final_product');
-        renderInventoryTab('tab-final', finalProducts.inventory || []);
-        
+        // One unfiltered fetch, split by type client-side. Previously this made three
+        // separate type-filtered requests; each one independently reran the full system-
+        // findings check suite server-side (expired materials, untracked items, etc.),
+        // tripling that cost for no benefit -- the three tabs are just a partition of the
+        // same org-wide inventory list.
+        const response = await CoreAPI.getInventory();
+        const items = response.inventory_items || [];
+
+        const rawMaterials = items.filter(item => item.inventory_type === 'raw_material');
+        const wip = items.filter(item => item.inventory_type === 'work_in_progress');
+        const finalProducts = items.filter(item => item.inventory_type === 'final_product');
+
+        renderInventoryTab('tab-raw', rawMaterials);
+        renderInventoryTab('tab-wip', wip);
+        renderInventoryTab('tab-final', finalProducts);
+
     } catch (error) {
         console.error('Failed to load inventory:', error);
     }
