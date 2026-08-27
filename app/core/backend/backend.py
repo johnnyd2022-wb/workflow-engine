@@ -5150,7 +5150,9 @@ def get_hub_overview():
         if e.process and str(e.process.id) not in seen_pids:
             seen_pids.add(str(e.process.id))
             processes_min.append({"id": str(e.process.id), "name": e.process.name or "Untitled process"})
-    for pid, name in process_repo.list_process_names(org_id, limit=HUB_PROCESSES_MIN_CAP):
+    # One query, evaluated before the loop -- not a per-iteration repository lookup.
+    newest_process_names = process_repo.list_process_names(org_id, limit=HUB_PROCESSES_MIN_CAP)
+    for pid, name in newest_process_names:
         if str(pid) in seen_pids:
             continue
         if len(processes_min) >= HUB_PROCESSES_MIN_CAP:
