@@ -626,6 +626,10 @@
         else url.searchParams.set('tab', safeTab);
         window.history.replaceState({}, '', url.toString());
       } catch (e) {}
+
+      // Lazy-load the detail data the first time each tab is shown.
+      if (safeTab === 'inventory' && typeof loadCore2InventoryTab === 'function') loadCore2InventoryTab();
+      else if (safeTab === 'workflows' && typeof loadCore2WorkflowsTab === 'function') loadCore2WorkflowsTab();
     }
 
     function initCore2MainTabs() {
@@ -2407,47 +2411,173 @@
       card.remove();
     }
     
-    // Load dashboard data on full page load and after HTMX swaps #page-content back to Process Hub (see base_spa.html)
-    async function loadCoreHubDashboardData() {
+    // ---------------------------------------------------------------------------
+    // Hub load: one small call on first paint (Overview), tab detail loaded lazily.
+    //
+    // The old loadCoreHubDashboardData() fired getMetrics + getProcesses +
+    // getInventory + getExecutions in parallel on every visit, and the
+    // active-batches graph then fetched processes?include_steps=true again --
+    // inventory/executions payloads grow unbounded with an org's history. Now:
+    //   - loadCore2Overview()      -> GET /api/core/hub/overview only (SQL aggregates)
+    //   - loadCore2InventoryTab()  -> getInventory(), first time the Inventory tab opens
+    //   - loadCore2WorkflowsTab()  -> getProcesses()+getExecutions(), first Workflows open
+    // See docs/core-load-performance-design.md.
+    // ---------------------------------------------------------------------------
+    var core2TabLoaded = { inventory: false, workflows: false };
+
+    // The journey-CTA widget only reads array lengths (and execs need a truthy .id);
+    // build minimal stand-ins from the overview's boolean flags.
+    function core2StubList(n) {
+      var out = [];
+      for (var i = 0; i < (n | 0); i++) out.push({ id: 'stub-' + i });
+      return out;
+    }
+
+    function applyCore2OverviewInsights(ov) {
+      var wf = (ov && ov.workflows) || {};
+      var inv = (ov && ov.inventory) || {};
+      var now = new Date();
+
+      // Batch dwell by current step -- computed from the <=20 active-execution summaries.
+      var dwellByStep = {};
+      (wf.active_executions || []).forEach(function (e) {
+        if (!e || !e.started_at) return;
+        var startDt = new Date(e.started_at);
+        if (Number.isNaN(startDt.getTime())) return;
+        var processName = e.process_name || 'Untitled process';
+        var stepName = e.current_step && e.current_step.name ? e.current_step.name : 'Awaiting step';
+        var key = processName + ' · ' + stepName;
+        var ageH = (now.getTime() - startDt.getTime()) / (3600 * 1000);
+        if (!dwellByStep[key]) dwellByStep[key] = { totalHours: 0, count: 0 };
+        dwellByStep[key].totalHours += ageH;
+        dwellByStep[key].count += 1;
+      });
+      var dwellRows = Object.keys(dwellByStep).map(function (label) {
+        var bucket = dwellByStep[label];
+        var avg = bucket.count > 0 ? bucket.totalHours / bucket.count : 0;
+        return { label: label + ' (' + bucket.count + ')', value: Math.max(0, Math.round(avg)) };
+      }).sort(function (a, b) { return b.value - a.value; }).slice(0, 6);
+      core2RenderKpiBars('core2-overview-batch-aging', dwellRows);
+
+      var linked = Number(inv.linked || 0);
+      var totalLines = Number(inv.nonzero_lines || 0);
+      var tracePct = totalLines ? Math.round((linked / totalLines) * 100) : 0;
+      core2RenderKpiStack('core2-overview-traceability', [
+        { label: 'Linked items', value: linked + ' / ' + totalLines },
+        { label: 'Coverage', value: tracePct + '%' },
+        { label: 'Unlinked items', value: Math.max(0, totalLines - linked) },
+      ]);
+
+      var expiry = inv.expiry || {};
+      core2RenderKpiStack('core2-overview-inventory-alerts', [
+        { label: 'Low stock', value: Number(inv.low_stock || 0) },
+        { label: 'Expiring in 7 days', value: Number(expiry.d0_7 || 0) },
+        { label: 'Expired', value: Number(expiry.expired || 0) },
+        { label: 'Allocated to executions', value: Number(inv.allocated || 0) },
+      ]);
+    }
+
+    async function loadCore2Overview() {
+      var overview = null;
       try {
-        const [metrics, processesData, inventoryData, executionsData] = await Promise.all([
-          CoreAPI.getMetrics(),
-          CoreAPI.getProcesses(),
-          CoreAPI.getInventory(),
-          CoreAPI.getExecutions(),
-        ]);
-        updateMetricsV2(metrics);
-        const items = inventoryData.inventory_items || [];
-        updateCore2InventorySummary(items);
-        updateCore2InventoryInsights(items, processesData.processes || [], executionsData.executions || []);
-        renderInventoryV2(items);
-        const procsHub = processesData.processes || [];
-        const execsHub = (executionsData.executions || []).filter(function (e) { return e && e.id; });
-        updateCore2WorkflowSummary(procsHub, execsHub);
-        updateCore2WorkflowInsights(procsHub, execsHub);
-        updateCore2OverviewInsights(items, procsHub, execsHub);
-        var systemStatusHub = null;
-        if (items.length > 0 && procsHub.length > 0 && execsHub.length > 0 && window.CoreAPI && typeof CoreAPI.getSystemFindings === 'function') {
+        overview = await CoreAPI.getHubOverview();
+        updateMetricsV2(overview.metrics || {});
+        applyCore2OverviewInsights(overview);
+
+        // Publish for the active-batches graph so it reuses this data instead of
+        // issuing its own processes?include_steps=true + executions calls.
+        window.__core2HubOverview = overview;
+        document.dispatchEvent(new CustomEvent('core2:hub-overview', { detail: overview }));
+
+        var journey = overview.journey || {};
+        var invStub = core2StubList(journey.has_inventory ? 1 : 0);
+        var procStub = core2StubList(journey.has_process ? 1 : 0);
+        var execStub = core2StubList(journey.has_execution ? 1 : 0);
+        var systemStatus = null;
+        if (journey.has_inventory && journey.has_process && journey.has_execution
+            && window.CoreAPI && typeof CoreAPI.getSystemFindings === 'function') {
           try {
-            var sfHub = await CoreAPI.getSystemFindings();
-            systemStatusHub = sfHub && sfHub.system_status ? sfHub.system_status : null;
+            var sf = await CoreAPI.getSystemFindings();
+            systemStatus = sf && sf.system_status ? sf.system_status : null;
           } catch (err) {
             console.warn('Could not load system status for journey bar:', err);
           }
         }
-        updateCore2JourneyCtasFromData(items, procsHub, execsHub, systemStatusHub);
+        updateCore2JourneyCtasFromData(invStub, procStub, execStub, systemStatus);
       } catch (error) {
-        console.error('Failed to load dashboard data:', error);
+        console.error('Failed to load core overview:', error);
       }
       if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
       setupModalHandlers();
+      return overview;
+    }
+
+    async function loadCore2InventoryTab(force) {
+      if (core2TabLoaded.inventory && !force) return;
+      core2TabLoaded.inventory = true;
+      try {
+        const inventoryData = await CoreAPI.getInventory();
+        const items = inventoryData.inventory_items || [];
+        updateCore2InventorySummary(items);
+        updateCore2InventoryInsights(items, [], []);
+        renderInventoryV2(items);
+      } catch (error) {
+        core2TabLoaded.inventory = false;
+        console.error('Failed to load inventory tab:', error);
+      }
+    }
+
+    async function loadCore2WorkflowsTab(force) {
+      if (core2TabLoaded.workflows && !force) return;
+      core2TabLoaded.workflows = true;
+      try {
+        const [processesData, executionsData] = await Promise.all([
+          CoreAPI.getProcesses(),
+          CoreAPI.getExecutions(),
+        ]);
+        const procs = processesData.processes || [];
+        const execs = (executionsData.executions || []).filter(function (e) { return e && e.id; });
+        updateCore2WorkflowSummary(procs, execs);
+        updateCore2WorkflowInsights(procs, execs);
+      } catch (error) {
+        core2TabLoaded.workflows = false;
+        console.error('Failed to load workflows tab:', error);
+      }
+    }
+
+    function core2CurrentMainTab() {
+      try {
+        var fromUrl = (new URL(window.location.href)).searchParams.get('tab');
+        if (fromUrl === 'inventory' || fromUrl === 'workflows') return fromUrl;
+        var stored = window.localStorage.getItem('core2.mainTab');
+        if (stored === 'inventory' || stored === 'workflows') return stored;
+      } catch (e) {}
+      return 'overview';
+    }
+
+    // Called by base_spa.html after an HTMX swap returns to the hub, and after
+    // mutations. Refresh the Overview plus whichever detail tab is currently shown.
+    function loadCoreHubDashboardData() {
+      loadCore2Overview();
+      var tab = core2CurrentMainTab();
+      if (tab === 'inventory') loadCore2InventoryTab(true);
+      else if (tab === 'workflows') loadCore2WorkflowsTab(true);
     }
     window.loadCoreHubDashboardData = loadCoreHubDashboardData;
+    window.loadCore2InventoryTab = loadCore2InventoryTab;
+    window.loadCore2WorkflowsTab = loadCore2WorkflowsTab;
+
+    function initCore2HubLoad() {
+      loadCore2Overview();
+      var tab = core2CurrentMainTab();
+      if (tab === 'inventory') loadCore2InventoryTab();
+      else if (tab === 'workflows') loadCore2WorkflowsTab();
+    }
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', loadCoreHubDashboardData);
+      document.addEventListener('DOMContentLoaded', initCore2HubLoad);
     } else {
-      loadCoreHubDashboardData();
+      initCore2HubLoad();
     }
     
     // Modal handlers

@@ -5094,7 +5094,9 @@ def get_hub_overview():
             "process_count": process_count,
             "processes_min": [{"id": str(pid), "name": name} for pid, name in process_repo.list_process_names(org_id)],
             "active_executions": [_hub_active_execution_payload(e) for e in active_execs],
-            "throughput_7d": [{"name": name, "count": count} for name, count in throughput[:6]],
+            # One row per process with a completion in the window (bounded by process
+            # count). Consumers that only show a top-N slice it themselves.
+            "throughput_7d": [{"name": name, "count": count} for name, count in throughput],
         },
     }
     return jsonify(payload), 200

@@ -351,6 +351,13 @@ window.CoreAPI = window.CoreAPI || {
         return this.request('/metrics');
     },
 
+    // Single above-the-fold payload for the /core hub Overview (SQL aggregates +
+    // <=20 active-execution summaries). Replaces the metrics + processes + inventory +
+    // executions fan-out on first paint. See docs/core-load-performance-design.md.
+    async getHubOverview() {
+        return this.request('/hub/overview');
+    },
+
     // Dashboard aggregate summary
     async getDashboardSummary(windowDays = 30) {
         const days = Number(windowDays) || 30;
