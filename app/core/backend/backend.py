@@ -4975,6 +4975,131 @@ def get_metrics():
     )
 
 
+def _hub_active_execution_payload(execution) -> dict:
+    """Slim projection of one active execution for /api/core/hub/overview.
+
+    Deliberately a fraction of what /api/core/executions returns: no actual_inputs/outputs,
+    no execution_data, no evidence, no event summary -- just what the hub's Active Batches
+    pipeline and workflow-readiness widgets read. `current_step` mirrors list_executions:
+    the first READY step, numbered by 1-based position within the execution.
+    """
+    steps = sorted(execution.execution_steps or [], key=lambda es: es.step_number)  # nosemgrep: orm-relationship-access-in-loop
+    ready = [es for es in steps if es.status.value == "ready"]
+    completed = sum(1 for es in steps if es.status.value == "completed")
+    total_steps = execution.total_steps or (len(steps) if steps else 0)
+
+    current_step = None
+    if ready:
+        nxt = ready[0]
+        try:
+            display_index = 1 + next(i for i, es in enumerate(steps) if es.id == nxt.id)
+        except StopIteration:
+            display_index = nxt.step_number
+        current_step = {
+            "step_number": display_index,
+            "name": nxt.step.name if nxt.step else None,
+        }
+
+    return {
+        "id": str(execution.id),
+        "process_id": str(execution.process_id),
+        "process_name": (execution.process.name if execution.process else None) or "Untitled process",
+        "status": execution.status.value,
+        "started_at": execution.started_at.isoformat() if execution.started_at else None,
+        "current_step": current_step,
+        "steps": [{"step_number": es.step_number, "status": es.status.value} for es in steps],
+        "total_steps": total_steps,
+        "progress": (completed / total_steps * 100) if total_steps > 0 else 0,
+    }
+
+
+@core_bp.route("/api/core/hub/overview", methods=["GET"])
+@requires_auth
+def get_hub_overview():
+    """One org-scoped payload for the /core hub's above-the-fold Overview.
+
+    Exists so initial /core navigation makes a single small API call instead of the old
+    four-call fan-out (metrics + full processes + fully-enriched inventory + full execution
+    history) plus a duplicate processes?include_steps=true from the active-batches graph.
+    Every number is an aggregate computed in SQL; the only rows returned are <=20 active
+    executions and <=6 traceability-gap items. The Inventory and Workflows tabs still load
+    their detailed data lazily on first open -- this endpoint does not replace them.
+
+    See docs/core-load-performance-design.md.
+    """
+    org_id = UUID(g.org_id)
+    now = datetime.now(UTC)
+    today = now.date()
+    week_ago = now - timedelta(days=7)
+    day_ago = now - timedelta(days=1)
+
+    process_repo = ProcessRepository(db_session)
+    execution_repo = ExecutionRepository(db_session)
+    inventory_repo = InventoryRepository(db_session)
+
+    process_count = process_repo.count_processes(org_id)
+    exec_by_status = execution_repo.count_executions_by_status(org_id)
+    in_progress = exec_by_status.get(ExecutionStatus.IN_PROGRESS.value, 0)
+    pending = exec_by_status.get(ExecutionStatus.PENDING.value, 0)
+    completed_total = exec_by_status.get(ExecutionStatus.COMPLETED.value, 0)
+
+    items_by_type = inventory_repo.count_inventory_items_by_type(org_id)
+    inv_total = sum(items_by_type.values())
+
+    inv_agg = inventory_repo.hub_overview_aggregates(org_id, today)
+    gap_items = inventory_repo.list_traceability_gap_items(org_id, limit=6)
+    movement = inventory_repo.movement_totals_since(org_id, day_ago)
+
+    active_execs = execution_repo.list_active_execution_summaries(org_id, limit=20)
+    throughput = execution_repo.count_completed_by_process_since(org_id, week_ago)
+
+    payload = {
+        "generated_at": now.isoformat(),
+        "metrics": {
+            "total_processes": process_count,
+            "active_executions": in_progress,
+            "completed_executions": completed_total,
+            "inventory_items": {
+                "total": inv_total,
+                "raw_materials": items_by_type.get(InventoryType.RAW_MATERIAL.value, 0),
+                "work_in_progress": items_by_type.get(InventoryType.WORK_IN_PROGRESS.value, 0),
+                "final_products": items_by_type.get(InventoryType.FINAL_PRODUCT.value, 0),
+            },
+        },
+        "journey": {
+            "has_inventory": inv_total > 0,
+            "has_process": process_count > 0,
+            "has_execution": (in_progress + pending + completed_total + exec_by_status.get("failed", 0) + exec_by_status.get("cancelled", 0)) > 0,
+        },
+        "inventory": {
+            "nonzero_lines": inv_agg["nonzero_lines"],
+            "allocated": inv_agg["allocated"],
+            "linked": inv_agg["linked"],
+            "low_stock": inv_agg["low_stock"],
+            "expiry": inv_agg["expiry"],
+            "traceability_gaps": [
+                {
+                    "name": it.name or "Inventory item",
+                    "quantity": str(it.quantity),
+                    "unit": it.unit or "",
+                }
+                for it in gap_items
+            ],
+            "movement_24h": movement,
+        },
+        "workflows": {
+            "in_flight": in_progress + pending,
+            "pending": pending,
+            "completed_7d": sum(count for _name, count in throughput),
+            "process_count": process_count,
+            "processes_min": [{"id": str(pid), "name": name} for pid, name in process_repo.list_process_names(org_id)],
+            "active_executions": [_hub_active_execution_payload(e) for e in active_execs],
+            "throughput_7d": [{"name": name, "count": count} for name, count in throughput[:6]],
+        },
+    }
+    return jsonify(payload), 200
+
+
 # ---------------------------------------------------------------------------
 # Entity Event Endpoints — Summary, Story, and Sourcemap
 # ---------------------------------------------------------------------------

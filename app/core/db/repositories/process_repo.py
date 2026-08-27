@@ -128,6 +128,22 @@ class ProcessRepository:
         """List all processes for an organisation"""
         return self.db.query(Process).filter(Process.org_id == org_id).order_by(Process.created_at.desc()).all()
 
+    def list_process_names(self, org_id: UUID) -> list[tuple[UUID, str]]:
+        """(id, name) for every process, newest first -- the minimal shape the /core hub
+        needs to populate its Active Batches process picker without hydrating full rows.
+        """
+        rows = (
+            self.db.query(Process.id, Process.name)
+            .filter(Process.org_id == org_id)
+            .order_by(Process.created_at.desc())
+            .all()
+        )
+        return [(pid, name or "Untitled process") for pid, name in rows]
+
+    def count_processes(self, org_id: UUID) -> int:
+        """Count an org's processes without fetching the rows."""
+        return self.db.query(func.count(Process.id)).filter(Process.org_id == org_id).scalar() or 0
+
     def update_process(
         self,
         process_id: UUID,

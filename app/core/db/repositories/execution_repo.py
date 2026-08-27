@@ -207,6 +207,50 @@ class ExecutionRepository:
         )
         return {status.value: count for status, count in rows}
 
+    # Active statuses shown on the /core hub "Active Batches" panel and workflow insights.
+    _ACTIVE_STATUSES = (ExecutionStatus.IN_PROGRESS, ExecutionStatus.PENDING)
+
+    def list_active_execution_summaries(self, org_id: UUID, limit: int = 20) -> list[Execution]:
+        """The N most recently touched in-progress/pending executions, steps eager-loaded.
+
+        Backs /api/core/hub/overview. Bounded by ``limit`` (the hub only renders a handful
+        of active batches above the fold) so the payload and step hydration do not grow
+        with an org's execution history the way ``list_executions`` does.
+        """
+        safe_limit = max(1, min(int(limit or 20), 100))
+        return (
+            self.db.query(Execution)
+            .options(
+                joinedload(Execution.process),
+                joinedload(Execution.execution_steps).joinedload(ExecutionStep.step),
+            )
+            .filter(Execution.org_id == org_id, Execution.status.in_(self._ACTIVE_STATUSES))
+            .order_by(Execution.updated_at.desc())
+            .limit(safe_limit)
+            .all()
+        )
+
+    def count_completed_by_process_since(self, org_id: UUID, since: datetime) -> list[tuple[str, int]]:
+        """(process_name, completed_count) for executions completed on/after ``since``.
+
+        One grouped query for the hub's "throughput (last 7d)" widget instead of pulling
+        every completed execution and bucketing in Python.
+        """
+        rows = (
+            self.db.query(Process.name, func.count(Execution.id))
+            .join(Process, Execution.process_id == Process.id)
+            .filter(
+                Execution.org_id == org_id,
+                Execution.status == ExecutionStatus.COMPLETED,
+                Execution.completed_at.isnot(None),
+                Execution.completed_at >= since,
+            )
+            .group_by(Process.name)
+            .order_by(func.count(Execution.id).desc())
+            .all()
+        )
+        return [(name or "Untitled process", count) for name, count in rows]
+
     def get_execution_with_steps(self, execution_id: UUID, org_id: UUID) -> Execution | None:
         """Get execution with execution steps and related Step rows loaded (no N+1)."""
         q = self.db.query(Execution).options(joinedload(Execution.execution_steps).joinedload(ExecutionStep.step))
