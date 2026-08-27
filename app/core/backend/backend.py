@@ -1,5 +1,6 @@
 """Core backend API routes for process execution platform"""
 
+import base64
 import hashlib
 import json
 import os
@@ -86,6 +87,43 @@ LIST_INVENTORY_MAX_RECONCILIATION_HISTORY = 60
 
 _LIST_ITEM_MAX_CHARS = 4096
 _LIST_ITEM_MAX_NESTED = 20
+
+# Opt-in keyset pagination for the big list endpoints (executions, inventory). A caller
+# that passes no ?limit gets the full list exactly as before -- every existing consumer
+# (process pickers, sourcemap, reconciliation, the dispose flow) is unchanged. Only the
+# /core hub tabs pass a limit. Cursor is an opaque base64url("<created_at_iso>|<id>") of
+# the last row returned; the sort is (created_at DESC, id DESC).
+LIST_PAGE_MAX = 50
+
+
+def _encode_list_cursor(created_at: datetime, row_id) -> str:
+    raw = f"{created_at.isoformat()}|{row_id}".encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _decode_list_cursor(token: str) -> tuple[datetime, UUID]:
+    """Parse a cursor token. Raises ValueError on anything malformed -- the caller turns
+    that into a 400 rather than a 500."""
+    pad = "=" * (-len(token) % 4)
+    raw = base64.urlsafe_b64decode(token + pad).decode()
+    ts_str, id_str = raw.split("|", 1)
+    return datetime.fromisoformat(ts_str), UUID(id_str)
+
+
+def _parse_page_params(args) -> tuple[int | None, tuple[datetime, UUID] | None]:
+    """(limit, cursor) from request args. limit is None when the caller wants the full
+    list; otherwise it is clamped to [1, LIST_PAGE_MAX]. Raises ValueError for a bad
+    limit or cursor."""
+    limit_str = args.get("limit")
+    if limit_str is None or limit_str == "":
+        return None, None
+    limit = int(limit_str)  # ValueError -> 400
+    if limit < 1:
+        raise ValueError("limit must be >= 1")
+    limit = min(limit, LIST_PAGE_MAX)
+    cursor_str = args.get("cursor")
+    cursor = _decode_list_cursor(cursor_str) if cursor_str else None
+    return limit, cursor
 
 
 def _trim_value(v):
@@ -1834,8 +1872,22 @@ def list_executions():
         except ValueError:
             return jsonify({"error": f"Invalid status: {status_str}"}), 400
 
+    try:
+        page_limit, cursor = _parse_page_params(request.args)
+    except ValueError:
+        return jsonify({"error": "Invalid limit or cursor parameter"}), 400
+
     repo = ExecutionRepository(db_session)
-    executions = repo.list_executions(org_id=org_id, process_id=process_id, status=status)
+    executions = repo.list_executions(
+        org_id=org_id,
+        process_id=process_id,
+        status=status,
+        limit=(page_limit + 1 if page_limit is not None else None),
+        cursor=cursor,
+    )
+    has_more = page_limit is not None and len(executions) > page_limit
+    if has_more:
+        executions = executions[:page_limit]
 
     # Batch-fetch all evidence for all executions in a single query
     executions_by_id = {str(e.id): e for e in executions}
@@ -1919,7 +1971,13 @@ def list_executions():
             }
         )
 
-    return jsonify({"executions": result}), 200
+    body = {"executions": result}
+    if page_limit is not None:
+        body["has_more"] = has_more
+        body["next_cursor"] = (
+            _encode_list_cursor(executions[-1].created_at, executions[-1].id) if has_more and executions else None
+        )
+    return jsonify(body), 200
 
 
 @core_bp.route("/api/core/executions/<execution_id>", methods=["GET"])
@@ -2717,8 +2775,25 @@ def list_inventory():
         except ValueError:
             return jsonify({"error": "Invalid process_id parameter"}), 400
 
+    try:
+        page_limit, cursor = _parse_page_params(request.args)
+    except ValueError:
+        return jsonify({"error": "Invalid limit or cursor parameter"}), 400
+
     repo = InventoryRepository(db_session)
-    items = repo.list_inventory_items(org_id=org_id, inventory_type=inventory_type, process_id=process_id)
+    items = repo.list_inventory_items(
+        org_id=org_id,
+        inventory_type=inventory_type,
+        process_id=process_id,
+        limit=(page_limit + 1 if page_limit is not None else None),
+        cursor=cursor,
+    )
+    has_more = page_limit is not None and len(items) > page_limit
+    if has_more:
+        items = items[:page_limit]
+    next_cursor = (
+        _encode_list_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
+    )
 
     # System findings per item (all checks) for UI: red border + reasons in dropdown
     findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
@@ -3122,7 +3197,14 @@ def list_inventory():
             }
         )
 
-    return jsonify({"inventory_items": result}), 200
+    body = {"inventory_items": result}
+    if page_limit is not None:
+        # next_cursor points at the last FETCHED row (pre zero-quantity filtering) so the
+        # next page's keyset scan continues from the right place regardless of how many
+        # rows the display filter dropped.
+        body["has_more"] = has_more
+        body["next_cursor"] = next_cursor
+    return jsonify(body), 200
 
 
 def _pg_advisory_lock_wastage_idempotency(session, org_id: UUID, idem_key: str) -> None:

@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, tuple_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.backend.event_writer import EventWriter
@@ -178,9 +178,19 @@ class ExecutionRepository:
         return query.first()
 
     def list_executions(
-        self, org_id: UUID, process_id: UUID | None = None, status: ExecutionStatus | None = None
+        self,
+        org_id: UUID,
+        process_id: UUID | None = None,
+        status: ExecutionStatus | None = None,
+        limit: int | None = None,
+        cursor: tuple[datetime, UUID] | None = None,
     ) -> list[Execution]:
-        """List executions for an organisation, optionally filtered by process or status"""
+        """List executions for an organisation, optionally filtered by process or status.
+
+        ``limit``/``cursor`` are opt-in keyset pagination: with no ``limit`` the full list
+        is returned exactly as before. ``cursor`` is (created_at, id) of the last row a
+        previous page returned; the sort is (created_at DESC, id DESC).
+        """
         query = (
             self.db.query(Execution)
             .options(joinedload(Execution.execution_steps).joinedload(ExecutionStep.step))
@@ -190,7 +200,12 @@ class ExecutionRepository:
             query = query.filter(Execution.process_id == process_id)
         if status:
             query = query.filter(Execution.status == status)
-        return query.order_by(Execution.created_at.desc()).all()
+        if cursor is not None:
+            query = query.filter(tuple_(Execution.created_at, Execution.id) < tuple_(cursor[0], cursor[1]))
+        query = query.order_by(Execution.created_at.desc(), Execution.id.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def count_executions_by_status(self, org_id: UUID) -> dict[str, int]:
         """Count executions per status without fetching execution/step object graphs.

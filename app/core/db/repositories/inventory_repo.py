@@ -406,9 +406,21 @@ class InventoryRepository:
         return items
 
     def list_inventory_items(
-        self, org_id: UUID, inventory_type: str | None = None, process_id: UUID | None = None
+        self,
+        org_id: UUID,
+        inventory_type: str | None = None,
+        process_id: UUID | None = None,
+        limit: int | None = None,
+        cursor: tuple | None = None,
     ) -> list[InventoryItem]:
-        """List inventory items for an organisation, optionally filtered by type or process"""
+        """List inventory items for an organisation, optionally filtered by type or process.
+
+        ``limit``/``cursor`` are opt-in keyset pagination: with no ``limit`` the full list
+        is returned exactly as before. ``cursor`` is (created_at, id) of the last row a
+        previous page returned; the sort is (created_at DESC, id DESC).
+        """
+        from sqlalchemy import tuple_ as _tuple
+
         query = self.db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
         if inventory_type:
             query = query.filter(InventoryItem.inventory_type == inventory_type)
@@ -423,7 +435,12 @@ class InventoryRepository:
             query = query.outerjoin(Execution, InventoryItem.source_execution_id == Execution.id).filter(
                 or_(and_(Execution.org_id == org_id, Execution.process_id == process_id), tagged_pid)
             )
-        return query.order_by(InventoryItem.created_at.desc()).all()
+        if cursor is not None:
+            query = query.filter(_tuple(InventoryItem.created_at, InventoryItem.id) < _tuple(cursor[0], cursor[1]))
+        query = query.order_by(InventoryItem.created_at.desc(), InventoryItem.id.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def count_inventory_items_by_type(self, org_id: UUID) -> dict[str, int]:
         """Count inventory items per inventory_type without fetching full rows.
