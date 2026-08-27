@@ -59,6 +59,7 @@
       "/api/core/processes",
       "/api/core/executions",
       "/api/core/inventory",
+      "/api/core/hub/overview",
       "/api/core/inventory/wastage",
       "/api/crm/overview",
       "/auth/me",
@@ -102,6 +103,21 @@
     },
     "/api/core/dashboard/summary": {
       "queries": { "budget": 38, "ceiling": 60 }
+    },
+    "/api/core/hub/overview": {
+      "_why": [
+        "Added 2026-08-27 with the endpoint (docs/core-load-performance-design.md). This is",
+        "the single call /core makes on first paint, replacing a four-call fan-out plus a",
+        "duplicate processes?include_steps=true. Its whole value is a query count that does",
+        "NOT scale with an org's history: a fixed set of SQL aggregates + one bounded",
+        "(<=20) active-execution fetch + one bounded (<=6) gap fetch. The tight queries",
+        "ceiling exists to catch an N+1 creeping back onto this path -- e.g. per-active-",
+        "execution process-name lookups if the joinedload is dropped.",
+        "PLACEHOLDER pending a measured run on the E2E fixture org: recalibrate budget to",
+        "the observed median and pin queries at the observed value per SKILL.md."
+      ],
+      "queries": { "budget": 15, "ceiling": 25 },
+      "backend_ms": { "budget": 80, "ceiling": 1000 }
     }
   }
 }
