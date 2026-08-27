@@ -154,9 +154,32 @@ CODE_MARKER_RE = re.compile(r"(?:^|[^\w])(?P<marker>TODO|FIXME|HACK|XXX|BUG)\b[:
 CODE_MARKER_RG = r"\b(TODO|FIXME|HACK|XXX|BUG)\b"
 
 # Text that means an item is already dealt with, so it should not enter the worklist.
+#
+# The trailing alternatives were added after the first real sweep: a `review-feature` /
+# `spec-critic` "revisit" section lists each prior item as `N. <topic> → closed, <why>`,
+# and a previous findings-sweep run -- which predates this index existing to hold the
+# status -- annotated already-fixed report bullets in place with
+# "(verified <date> by findings-sweep)" / "Reconfirmed already-closed ... no outstanding
+# action" / "Stale point-in-time note ...". The heading-level CLOSED_HEADING_RE never saw
+# these because they close an item mid-bullet, not in its heading, so 8 long-dead items
+# (7 of them one spec-critic "Original 8 gaps -- status" checklist) re-entered the
+# worklist on every tick.
+#
+# Kept deliberately narrow so an open item is never dropped:
+#   - `-> not closed` cannot match: the negation sits between the arrow and the word.
+#   - `-> **skill**` handoffs stay indexed: the word after the arrow must be a disposition.
+#   - `-> closed|closes|resolved` are dispositional after an arrow; `-> fixed|done` also
+#     read as adjectives ("-> fixed timeout"), so those two require a clause end right
+#     after -- `-> fixed in <sha>` is still caught by the `fixed (?:in|by)` branch above.
+#   - `stale point-in-time note` (not bare `stale point-in-time`) to avoid a data-freshness
+#     bug description ("shows a stale point-in-time snapshot").
 RESOLVED_MARKERS = re.compile(
     r"(^\s*(?:✅|✔|~~))|(\b(?:done|resolved|fixed|shipped|landed|completed|no longer)\b\s*[.:—-]?\s*$)"
-    r"|(\bresolved (?:in|by)\b)|(\bfixed (?:in|by)\b)|(\balready (?:done|fixed|handled)\b)",
+    r"|(\bresolved (?:in|by)\b)|(\bfixed (?:in|by)\b)|(\balready (?:done|fixed|handled)\b)"
+    r"|((?:→|->)\s*(?:\*\*)?(?:closed|closes|resolved)\b)"
+    r"|((?:→|->)\s*(?:\*\*)?(?:fixed|done)(?:\*\*)?(?=\s*[.,;:)—]|\s*$))"
+    r"|(\(verified\b[^)]{0,80}\bby findings-sweep\))"
+    r"|(\balready[- ]closed\b)|(\bno outstanding action\b)|(\bstale point-in-time note\b)",
     re.I,
 )
 

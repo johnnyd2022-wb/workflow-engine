@@ -281,6 +281,71 @@ def test_ticked_checkbox_and_resolved_prose_are_skipped(tmp_path, monkeypatch):
     assert "still open" in items[0].detail
 
 
+def test_revisit_checklist_bullet_that_closes_itself_with_an_arrow_is_skipped(tmp_path, monkeypatch):
+    """`spec-critic` / `review-feature` round-N sections list each prior item as
+    `N. <topic> → closed, <why>`. The closure word is in the bullet body, never the
+    heading, so CLOSED_HEADING_RE never saw it and every one re-entered the worklist."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/dilution/spec-critic-round2.md",
+        """## Original 8 gaps — status
+
+1. **Density/mass-fraction formula unpinned** → closed. Exact equation given.
+2. **AC4 malformed-request coverage** → closed, solve_for missing/unknown is explicit now.
+3. **Response schema** -> resolved, all echoed fields are named in AC1.
+4. **Volume monotonicity** → **done**, folded into the ABV branch.
+5. **AC7 bisection depth still unbounded** → not closed this pass, carried forward.
+6. **CSV import path** → fixed timeout that still must become configurable before launch.
+7. the tenant scope on the summary lookup is still missing and needs an org_id filter
+8. Belongs to auth/org, not this feature → **follow-up review-feature pass**
+""",
+    )
+    items = fi.parse_doc(path)
+    details = [i.detail for i in items]
+    assert not any("Density/mass-fraction" in d for d in details)
+    assert not any("malformed-request" in d for d in details)
+    assert not any("Response schema" in d for d in details)
+    assert not any("Volume monotonicity" in d for d in details)  # "→ **done**," clause-end
+    # "→ not closed this pass" must survive — the negation sits after the arrow.
+    assert any("bisection depth" in d for d in details)
+    # "→ fixed timeout that ..." is an adjective, not a disposition — must stay indexed.
+    assert any("must become configurable" in d for d in details)
+    assert any("org_id filter" in d for d in details)
+    # An `X → **skill**` handoff bullet is not a closure — must stay indexed.
+    assert any("follow-up review-feature pass" in d for d in details)
+
+
+def test_prior_findings_sweep_in_place_annotation_closes_a_stale_bullet(tmp_path, monkeypatch):
+    """Before this index existed, a findings-sweep run marked already-fixed report bullets
+    in place. Each annotation phrase must read as closed *on its own* or the item recurs
+    forever."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/e2e/stage-0-changes.md",
+        """## Known-failing / deferred
+
+- **Stages 1-6 not started.** Next is Stage 1 (auth/2FA flows). Stale point-in-time
+  note — superseded the same day; the repo now has 43 e2e files.
+- The barcode decode endpoint returns 410 as designed (verified 2026-08-25 by findings-sweep).
+- The wastage hash order-sensitivity was reconfirmed already-closed this pass.
+- The CRM analytics rollup gap — no outstanding action, the endpoint was added.
+- the inventory reconcile decoys are still missing and the test needs differently-named rows
+- a report showing a stale point-in-time snapshot instead of a live figure is a real bug
+""",
+    )
+    items = fi.parse_doc(path)
+    details = [i.detail for i in items]
+    assert not any("Stages 1-6" in d for d in details)  # "Stale point-in-time note"
+    assert not any("barcode decode" in d for d in details)  # "(verified ... by findings-sweep)"
+    assert not any("wastage hash order-sensitivity" in d for d in details)  # "already-closed"
+    assert not any("CRM analytics rollup" in d for d in details)  # "no outstanding action"
+    assert any("reconcile decoys are still missing" in d for d in details)
+    # bare "stale point-in-time snapshot" (no "note") is a bug description, not a disposition
+    assert any("live figure is a real bug" in d for d in details)
+
+
 def test_bullets_outside_a_findings_heading_are_ignored(tmp_path, monkeypatch):
     """Heading scoping is what keeps the index signal-dense; policy prose that merely
     says 'follow-up' must contribute nothing."""
