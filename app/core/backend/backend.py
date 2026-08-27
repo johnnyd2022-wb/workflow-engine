@@ -4943,19 +4943,19 @@ def get_metrics():
     processes = process_repo.list_processes(org_id)
     total_processes = len(processes)
 
-    # Active executions
-    executions = execution_repo.list_executions(org_id, status=ExecutionStatus.IN_PROGRESS)
-    active_executions = len(executions)
+    # Counted in SQL rather than len(list_executions(...)) -- that fetched every
+    # execution's joined steps (twice: once per status) just to discard the objects
+    # and keep a count, which got slower as an org's execution history grew.
+    executions_by_status = execution_repo.count_executions_by_status(org_id)
+    active_executions = executions_by_status.get(ExecutionStatus.IN_PROGRESS.value, 0)
+    completed_count = executions_by_status.get(ExecutionStatus.COMPLETED.value, 0)
 
-    # Completed executions
-    completed_executions = execution_repo.list_executions(org_id, status=ExecutionStatus.COMPLETED)
-    completed_count = len(completed_executions)
-
-    # Inventory items
-    inventory_items = inventory_repo.list_inventory_items(org_id)
-    raw_materials = [i for i in inventory_items if i.inventory_type == InventoryType.RAW_MATERIAL.value]
-    wip = [i for i in inventory_items if i.inventory_type == InventoryType.WORK_IN_PROGRESS.value]
-    final_products = [i for i in inventory_items if i.inventory_type == InventoryType.FINAL_PRODUCT.value]
+    # Same reasoning: counted in SQL rather than filtering list_inventory_items(...)
+    # (every column, including extra_data) in Python.
+    items_by_type = inventory_repo.count_inventory_items_by_type(org_id)
+    raw_materials_count = items_by_type.get(InventoryType.RAW_MATERIAL.value, 0)
+    wip_count = items_by_type.get(InventoryType.WORK_IN_PROGRESS.value, 0)
+    final_products_count = items_by_type.get(InventoryType.FINAL_PRODUCT.value, 0)
 
     return (
         jsonify(
@@ -4964,10 +4964,10 @@ def get_metrics():
                 "active_executions": active_executions,
                 "completed_executions": completed_count,
                 "inventory_items": {
-                    "total": len(inventory_items),
-                    "raw_materials": len(raw_materials),
-                    "work_in_progress": len(wip),
-                    "final_products": len(final_products),
+                    "total": sum(items_by_type.values()),
+                    "raw_materials": raw_materials_count,
+                    "work_in_progress": wip_count,
+                    "final_products": final_products_count,
                 },
             }
         ),

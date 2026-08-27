@@ -23,7 +23,7 @@ def run_expired_materials_check(org_id: UUID, session: Session) -> CheckResult:
     Find expired raw materials (with stock) and products made with them.
     Uses DAG traversal (find_impacted_by_expired_raw) for impacted items.
     """
-    from app.core.backend.dagtraversal import find_impacted_by_expired_raw
+    from app.core.backend.dagtraversal import DAGTracer
 
     # Impacted items are products produced by executions that consumed expired raw
     # materials while stock was present. This aligns with compliance and recall semantics.
@@ -57,6 +57,12 @@ def run_expired_materials_check(org_id: UUID, session: Session) -> CheckResult:
     result_connections: list[dict[str, Any]] = []
     impacted_item_ids: set[str] = set()
 
+    # One tracer, reused for every expired raw material: DAGTracer caches the org's
+    # step/produced-item graph on first use, so this turns N full-org bulk-loads (one
+    # per expired raw material) into one -- each subsequent call only pays for the
+    # in-memory traversal from its own root.
+    tracer = DAGTracer(org_id=org_id, session=session)
+
     for raw_material in expired_with_stock:
         result_expired.append(
             {
@@ -74,7 +80,7 @@ def run_expired_materials_check(org_id: UUID, session: Session) -> CheckResult:
                 "is_expired": True,
             }
         )
-        data = find_impacted_by_expired_raw(org_id, session, raw_material)
+        data = tracer.find_impacted_by_expired_raw(raw_material)
         for item in data["impacted_items"]:
             item_id = item.get("id")
             if not item_id or item_id in impacted_item_ids:

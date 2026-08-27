@@ -32,8 +32,9 @@ def start():
     from app.app import app
     from app.utils.config_loader import config
 
-    # Run the app using the same configuration as app.py
-    app.run(host=config.host, port=config.port, debug=config.debug, ssl_context=get_ssl_context())
+    # Run the app using the same configuration as app.py.
+    # See app/app.py's identical app.run() for why threaded=True matters here.
+    app.run(host=config.host, port=config.port, debug=config.debug, ssl_context=get_ssl_context(), threaded=True)
 
 
 @click.command()
@@ -51,4 +52,4 @@ def serve(host, port, debug):
     port = port or config.port
     debug = debug if debug is not None else config.debug
 
-    app.run(host=host, port=port, debug=debug, ssl_context=get_ssl_context())
+    app.run(host=host, port=port, debug=debug, ssl_context=get_ssl_context(), threaded=True)

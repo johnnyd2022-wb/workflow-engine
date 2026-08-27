@@ -30,7 +30,7 @@ EXPOSE 8001
 # Optional healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f -k https://localhost:8001/healthcheck || exit 1
-CMD ["uv", "run", "workflow", "start"]
+CMD ["uv", "run", "gunicorn", "--config", "gunicorn.conf.py", "app.app:app"]
 
 # Production environment stage
 FROM base as production
@@ -39,4 +39,4 @@ EXPOSE 8000
 EXPOSE 443
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f -k https://localhost:8000/healthcheck || exit 1
-CMD ["uv", "run", "workflow", "start"]
+CMD ["uv", "run", "gunicorn", "--config", "gunicorn.conf.py", "app.app:app"]

@@ -28,4 +28,5 @@ if __name__ == "__main__":
     else:
         print(f"⚠️  SSL certificates not found at {cert_file} or {key_file}, running without SSL")
 
-    app.run(host=config.host, port=config.port, debug=config.debug, ssl_context=ssl_context)
+    # See app/app.py's identical app.run() for why threaded=True matters here.
+    app.run(host=config.host, port=config.port, debug=config.debug, ssl_context=ssl_context, threaded=True)

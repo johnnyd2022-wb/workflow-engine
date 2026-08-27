@@ -14,8 +14,30 @@ function _getRumTraceHeaders(url, method) {
 
 window.CoreAPI = window.CoreAPI || {
     baseURL: '/api/core',
-    
+    _inFlightGets: new Map(),
+
+    // Several independent widgets on one page (dashboard summary, the notification
+    // badge, the findings banner) routinely ask for the same data within milliseconds
+    // of each other on page load -- e.g. three separate CoreAPI.getSystemFindings()
+    // callers firing off the same /api/core/system-findings request. Dedupe plain,
+    // uncancellable GETs by sharing the in-flight promise instead of firing a second
+    // identical request; a caller with its own AbortSignal wants its own request
+    // lifecycle (e.g. a search box cancelling a stale query) and is excluded.
     async request(endpoint, options = {}) {
+        const method = (options.method || 'GET').toUpperCase();
+        if (method === 'GET' && !options.signal) {
+            const existing = this._inFlightGets.get(endpoint);
+            if (existing) return existing;
+            const promise = this._doRequest(endpoint, options).finally(() => {
+                this._inFlightGets.delete(endpoint);
+            });
+            this._inFlightGets.set(endpoint, promise);
+            return promise;
+        }
+        return this._doRequest(endpoint, options);
+    },
+
+    async _doRequest(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
         const method = (options.method || 'GET').toUpperCase();
         const mutating = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);

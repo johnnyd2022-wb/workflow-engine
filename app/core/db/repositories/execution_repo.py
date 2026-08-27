@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.backend.event_writer import EventWriter
@@ -190,6 +191,21 @@ class ExecutionRepository:
         if status:
             query = query.filter(Execution.status == status)
         return query.order_by(Execution.created_at.desc()).all()
+
+    def count_executions_by_status(self, org_id: UUID) -> dict[str, int]:
+        """Count executions per status without fetching execution/step object graphs.
+
+        A caller that only needs counts (e.g. dashboard metrics) should use this instead
+        of len(list_executions(...)) -- that fetches every execution's joined steps just
+        to discard them, which gets slower as an org's execution history grows.
+        """
+        rows = (
+            self.db.query(Execution.status, func.count(Execution.id))
+            .filter(Execution.org_id == org_id)
+            .group_by(Execution.status)
+            .all()
+        )
+        return {status.value: count for status, count in rows}
 
     def get_execution_with_steps(self, execution_id: UUID, org_id: UUID) -> Execution | None:
         """Get execution with execution steps and related Step rows loaded (no N+1)."""
