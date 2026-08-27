@@ -2791,9 +2791,7 @@ def list_inventory():
     has_more = page_limit is not None and len(items) > page_limit
     if has_more:
         items = items[:page_limit]
-    next_cursor = (
-        _encode_list_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
-    )
+    next_cursor = _encode_list_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
 
     # System findings per item (all checks) for UI: red border + reasons in dropdown
     findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
@@ -5065,7 +5063,9 @@ def _hub_active_execution_payload(execution) -> dict:
     pipeline and workflow-readiness widgets read. `current_step` mirrors list_executions:
     the first READY step, numbered by 1-based position within the execution.
     """
-    steps = sorted(execution.execution_steps or [], key=lambda es: es.step_number)  # nosemgrep: orm-relationship-access-in-loop
+    steps = sorted(
+        execution.execution_steps or [], key=lambda es: es.step_number
+    )  # nosemgrep: orm-relationship-access-in-loop
     ready = [es for es in steps if es.status.value == "ready"]
     completed = sum(1 for es in steps if es.status.value == "completed")
     total_steps = execution.total_steps or (len(steps) if steps else 0)
@@ -5151,7 +5151,14 @@ def get_hub_overview():
         "journey": {
             "has_inventory": inv_total > 0,
             "has_process": process_count > 0,
-            "has_execution": (in_progress + pending + completed_total + exec_by_status.get("failed", 0) + exec_by_status.get("cancelled", 0)) > 0,
+            "has_execution": (
+                in_progress
+                + pending
+                + completed_total
+                + exec_by_status.get("failed", 0)
+                + exec_by_status.get("cancelled", 0)
+            )
+            > 0,
         },
         "inventory": {
             "nonzero_lines": inv_agg["nonzero_lines"],

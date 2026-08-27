@@ -485,9 +485,7 @@ class InventoryRepository:
                 .label("allocated"),
                 func.count(InventoryItem.id).filter(nz, linked_expr).label("linked"),
                 func.count(InventoryItem.id).filter(nz, exp.isnot(None), exp < today).label("expired"),
-                func.count(InventoryItem.id)
-                .filter(nz, exp >= today, exp <= today + timedelta(days=7))
-                .label("d0_7"),
+                func.count(InventoryItem.id).filter(nz, exp >= today, exp <= today + timedelta(days=7)).label("d0_7"),
                 func.count(InventoryItem.id)
                 .filter(nz, exp > today + timedelta(days=7), exp <= today + timedelta(days=30))
                 .label("d8_30"),
