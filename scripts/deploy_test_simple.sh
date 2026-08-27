@@ -18,9 +18,13 @@ echo "Config file: config/$ENVIRONMENT.ini"
 
 IMAGE_REF="${1:-}"
 
-# Build and run Docker container for test
-docker stop $(docker ps -aqf "name=workflow-engine-test") 2>/dev/null || true
-docker rm $(docker ps -aqf "name=workflow-engine-test") 2>/dev/null || true
+# Build and run Docker container for test.
+# The filter must match the app container's name exactly -- "name=workflow-engine-test"
+# is a substring filter and also matches "workflow-engine-test-db", which stops and
+# removes the database container along with the app container (data survives on its
+# named volume, but the container has to be manually recreated afterwards).
+docker stop $(docker ps -aqf "name=^workflow-engine-test$") 2>/dev/null || true
+docker rm $(docker ps -aqf "name=^workflow-engine-test$") 2>/dev/null || true
 
 if [ -n "$IMAGE_REF" ]; then
     echo "Pulling $IMAGE_REF from registry..."
