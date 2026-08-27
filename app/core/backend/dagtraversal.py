@@ -249,6 +249,12 @@ class DAGTracer:
         self.session = session
         self._log = get_logger(__name__)
         self._enrichment_cache: dict[UUID, dict[str, Any]] = {}
+        # The org's full step/produced-item graph is identical across every traverse()
+        # call on this instance (org_id and session are fixed at construction) -- only
+        # start_nodes and direction vary. Caching it here is what makes repeated
+        # single-root traversals (e.g. one call per expired raw material) cheap instead
+        # of re-querying the whole org's execution history on every call.
+        self._graph_cache: dict[str, Any] | None = None
 
     @traced("dag.traverse", attributes_fn=_traverse_span_attrs)
     def traverse(
@@ -311,40 +317,58 @@ class DAGTracer:
 
         # Bulk-load all execution steps for org (and items produced by them for forward).
         # DAG traversal needs the complete graph in memory — a LIMIT would silently truncate it.
-        steps = (  # nosemgrep: sqlalchemy-all-without-limit
-            self.session.query(ExecutionStep)
-            .join(Execution, ExecutionStep.execution_id == Execution.id)
-            .filter(Execution.org_id == self.org_id)
-            .all()
-        )
-        steps_by_id = {s.id: s for s in steps}
-        steps_by_input_item_id: dict[UUID, list[ExecutionStep]] = {}
-        for step in steps:
-            if not step.actual_inputs:
-                continue
-            for inp in step.actual_inputs:
-                inp_id = inp.get("inventory_item_id")
-                if inp_id is not None:
-                    try:
-                        uid = UUID(str(inp_id))
-                        steps_by_input_item_id.setdefault(uid, []).append(step)
-                    except (ValueError, TypeError):
-                        pass
-
-        # Items produced by these steps (for forward: step -> output item)
-        step_ids = {s.id for s in steps}
-        produced_items = (
-            self.session.query(InventoryItem)
-            .filter(
-                InventoryItem.source_execution_step_id.in_(step_ids),
-                InventoryItem.org_id == self.org_id,
+        # Cached on the instance: this data is identical for every traverse() call on this
+        # tracer (org_id/session are fixed at construction), so a caller doing repeated
+        # single-root traversals (e.g. one call per expired raw material) only pays for
+        # this query once instead of once per root.
+        if self._graph_cache is None:
+            steps = (  # nosemgrep: sqlalchemy-all-without-limit
+                self.session.query(ExecutionStep)
+                .join(Execution, ExecutionStep.execution_id == Execution.id)
+                .filter(Execution.org_id == self.org_id)
+                .all()
             )
-            .all()
-        )
-        items_by_source_step_id: dict[UUID, list[InventoryItem]] = {}
-        for inv in produced_items:
-            if inv.source_execution_step_id:
-                items_by_source_step_id.setdefault(inv.source_execution_step_id, []).append(inv)
+            steps_by_input_item_id: dict[UUID, list[ExecutionStep]] = {}
+            for step in steps:
+                if not step.actual_inputs:
+                    continue
+                for inp in step.actual_inputs:
+                    inp_id = inp.get("inventory_item_id")
+                    if inp_id is not None:
+                        try:
+                            uid = UUID(str(inp_id))
+                            steps_by_input_item_id.setdefault(uid, []).append(step)
+                        except (ValueError, TypeError):
+                            pass
+
+            # Items produced by these steps (for forward: step -> output item)
+            step_ids = {s.id for s in steps}
+            produced_items = (
+                self.session.query(InventoryItem)
+                .filter(
+                    InventoryItem.source_execution_step_id.in_(step_ids),
+                    InventoryItem.org_id == self.org_id,
+                )
+                .all()
+            )
+            items_by_source_step_id: dict[UUID, list[InventoryItem]] = {}
+            for inv in produced_items:
+                if inv.source_execution_step_id:
+                    items_by_source_step_id.setdefault(inv.source_execution_step_id, []).append(inv)
+
+            self._graph_cache = {
+                "steps": steps,
+                "steps_by_id": {s.id: s for s in steps},
+                "steps_by_input_item_id": steps_by_input_item_id,
+                "produced_items": produced_items,
+                "items_by_source_step_id": items_by_source_step_id,
+            }
+
+        steps = self._graph_cache["steps"]
+        steps_by_id = self._graph_cache["steps_by_id"]
+        steps_by_input_item_id = self._graph_cache["steps_by_input_item_id"]
+        produced_items = self._graph_cache["produced_items"]
+        items_by_source_step_id = self._graph_cache["items_by_source_step_id"]
 
         # For backward: bulk-load all potentially reachable items (inputs/outputs of steps, start nodes)
         input_item_ids = set(steps_by_input_item_id.keys())
