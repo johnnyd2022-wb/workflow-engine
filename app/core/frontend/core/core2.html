@@ -1375,29 +1375,22 @@
       if (actionsWrap) actionsWrap.appendChild(actionsRoot);
     }
 
+    // Post-mutation refresh (step completed, inventory added, item disposed). Was a
+    // getInventory + getProcesses + getExecutions triple fetch that rendered only the
+    // inventory list + journey CTA, leaving the new compact-overview widgets and the
+    // active-batches graph showing pre-mutation state. Now it rebuilds the overview from
+    // the single hub call (which also re-publishes core2:hub-overview for the graph) and
+    // refreshes the detail tabs that have data.
     async function loadInventoryV2() {
-      try {
-        const [inventoryData, processesData, executionsData] = await Promise.all([
-          CoreAPI.getInventory(),
-          CoreAPI.getProcesses(),
-          CoreAPI.getExecutions(),
-        ]);
-        const items = inventoryData.inventory_items || [];
-        renderInventoryV2(items);
-        const procs = processesData.processes || [];
-        const execs = (executionsData.executions || []).filter(function (e) { return e && e.id; });
-        var systemStatus = null;
-        if (items.length > 0 && procs.length > 0 && execs.length > 0 && window.CoreAPI && typeof CoreAPI.getSystemFindings === 'function') {
-          try {
-            var sf = await CoreAPI.getSystemFindings();
-            systemStatus = sf && sf.system_status ? sf.system_status : null;
-          } catch (err) {
-            console.warn('Could not load system status for journey bar:', err);
-          }
-        }
-        updateCore2JourneyCtasFromData(items, procs, execs, systemStatus);
-      } catch (error) {
-        console.error('Failed to load inventory:', error);
+      if (window.CoreAPI && typeof CoreAPI.invalidateSystemFindings === 'function') {
+        CoreAPI.invalidateSystemFindings();
+      }
+      await loadCore2Overview();
+      // Inventory almost always changes on these events; keep its panel current even if
+      // hidden, so switching to it shows fresh data.
+      await loadCore2InventoryTab(true);
+      if (core2TabLoaded.workflows) {
+        await loadCore2WorkflowsTab(true);
       }
     }
     
@@ -2412,6 +2405,11 @@
 
     async function loadCore2Overview() {
       var overview = null;
+      // Set synchronously (before the await) so the active-batches graph, which also runs
+      // on DOMContentLoaded, knows the overview is coming and must NOT issue its own
+      // processes/executions fallback fetch -- it waits for the core2:hub-overview event.
+      window.__core2HubOverviewPending = true;
+      var sfData = null;
       try {
         overview = await CoreAPI.getHubOverview();
         updateMetricsV2(overview.metrics || {});
@@ -2420,7 +2418,6 @@
         // Publish for the active-batches graph so it reuses this data instead of
         // issuing its own processes?include_steps=true + executions calls.
         window.__core2HubOverview = overview;
-        document.dispatchEvent(new CustomEvent('core2:hub-overview', { detail: overview }));
 
         var journey = overview.journey || {};
         var invStub = core2StubList(journey.has_inventory ? 1 : 0);
@@ -2430,8 +2427,8 @@
         if (journey.has_inventory && journey.has_process && journey.has_execution
             && window.CoreAPI && typeof CoreAPI.getSystemFindings === 'function') {
           try {
-            var sf = await CoreAPI.getSystemFindings();
-            systemStatus = sf && sf.system_status ? sf.system_status : null;
+            sfData = await CoreAPI.getSystemFindings();
+            systemStatus = sfData && sfData.system_status ? sfData.system_status : null;
           } catch (err) {
             console.warn('Could not load system status for journey bar:', err);
           }
@@ -2439,8 +2436,15 @@
         updateCore2JourneyCtasFromData(invStub, procStub, execStub, systemStatus);
       } catch (error) {
         console.error('Failed to load core overview:', error);
+      } finally {
+        window.__core2HubOverviewPending = false;
+        // Always signal the graph: with data on success, or so it can run its own
+        // fallback fetch on failure (window.__core2HubOverview stays undefined then).
+        document.dispatchEvent(new CustomEvent('core2:hub-overview', { detail: overview }));
       }
-      if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
+      // Reuse the system-findings result the journey CTA already fetched (getSystemFindings
+      // shares it for a few seconds) so the banner does not run the whole check suite again.
+      if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner(sfData || undefined);
       setupModalHandlers();
       return overview;
     }

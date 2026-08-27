@@ -95,6 +95,11 @@ _LIST_ITEM_MAX_NESTED = 20
 # the last row returned; the sort is (created_at DESC, id DESC).
 LIST_PAGE_MAX = 50
 
+# Upper bound on the (id, name) process list embedded in /api/core/hub/overview for the
+# active-batches picker. A real manufacturer has tens of processes; this only stops the
+# payload ballooning on a pathological catalogue.
+HUB_PROCESSES_MIN_CAP = 500
+
 
 def _encode_list_cursor(created_at: datetime, row_id) -> str:
     raw = f"{created_at.isoformat()}|{row_id}".encode()
@@ -5179,13 +5184,20 @@ def get_hub_overview():
         "workflows": {
             "in_flight": in_progress + pending,
             "pending": pending,
-            "completed_7d": sum(count for _name, count in throughput),
+            "completed_7d": sum(count for _pid, _name, count in throughput),
             "process_count": process_count,
-            "processes_min": [{"id": str(pid), "name": name} for pid, name in process_repo.list_process_names(org_id)],
+            # Bounded so the picker payload can't balloon on an org with a huge process
+            # catalogue; HUB_PROCESSES_MIN_CAP is generous (a real manufacturer has tens).
+            "processes_min": [
+                {"id": str(pid), "name": name}
+                for pid, name in process_repo.list_process_names(org_id, limit=HUB_PROCESSES_MIN_CAP)
+            ],
             "active_executions": [_hub_active_execution_payload(e) for e in active_execs],
             # One row per process with a completion in the window (bounded by process
-            # count). Consumers that only show a top-N slice it themselves.
-            "throughput_7d": [{"name": name, "count": count} for name, count in throughput],
+            # count). Keyed by process_id -- names are not unique within an org.
+            "throughput_7d": [
+                {"process_id": str(pid), "name": name, "count": count} for pid, name, count in throughput
+            ],
         },
     }
     return jsonify(payload), 200

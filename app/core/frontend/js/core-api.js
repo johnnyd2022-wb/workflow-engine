@@ -254,9 +254,38 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
 
-    /** Run all system checks and return banner-ready findings (one request for the system-findings banner). */
+    // /api/core/system-findings runs the whole system-check suite server-side (a DAG
+    // traversal per expired-with-stock raw material -- ~100 queries on a real org). On
+    // /core it has several independent callers within one page load: the findings banner's
+    // own init, and the hub's journey-CTA state. The in-flight dedupe only helps while a
+    // request is still open; a caller that fires just after the first one settled would
+    // run the suite a second time. This short settle-window cache collapses that burst
+    // without introducing meaningful staleness (findings are a slow-moving health
+    // summary). Post-mutation refreshes land well outside the window.
+    _systemFindingsCache: null,
+    SYSTEM_FINDINGS_TTL_MS: 3000,
+
+    /** Run all system checks and return banner-ready findings. Result is shared for a
+     *  few seconds so the several page-load callers trigger one server-side run. */
     async getSystemFindings() {
-        return this.request('/system-findings');
+        const c = this._systemFindingsCache;
+        if (c && (Date.now() - c.ts) < this.SYSTEM_FINDINGS_TTL_MS) {
+            return c.promise;
+        }
+        const promise = this.request('/system-findings');
+        this._systemFindingsCache = { ts: Date.now(), promise };
+        promise.catch(() => {
+            // don't cache a rejection past its own settle
+            if (this._systemFindingsCache && this._systemFindingsCache.promise === promise) {
+                this._systemFindingsCache = null;
+            }
+        });
+        return promise;
+    },
+
+    /** Drop the system-findings settle-window cache (call after an action that changes findings). */
+    invalidateSystemFindings() {
+        this._systemFindingsCache = null;
     },
 
     /** @deprecated Use getExpiredMaterials() */

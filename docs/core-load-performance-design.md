@@ -1,6 +1,6 @@
 # `/core` performance, reliability, and security review
 
-**Reviewed:** 2026-08-27  
+**Reviewed:** 2026-08-27
 **Baseline:** merge request !181, merged as `40cc276` (`perf/core-tab-load-time`)
 
 ## Decision record

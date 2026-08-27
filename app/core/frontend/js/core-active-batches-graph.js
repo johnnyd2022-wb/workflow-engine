@@ -311,10 +311,11 @@
     }).length;
 
     // In hub mode processExecutions holds only active rows (no completed history), so the
-    // 7-day completed count comes from the overview payload's per-process throughput.
-    if (!completed7d && Array.isArray(state.throughput7d) && process) {
+    // 7-day completed count comes from the overview payload's per-process throughput,
+    // matched by process_id (process names are not unique within an org).
+    if (!completed7d && Array.isArray(state.throughput7d) && process && process.id) {
       var match = state.throughput7d.find(function (row) {
-        return row && String(row.name) === String(process.name);
+        return row && String(row.process_id) === String(process.id);
       });
       if (match) completed7d = Number(match.count || 0);
     }
@@ -820,10 +821,19 @@
       if (overview && overview.workflows) {
         // Reuse the /core hub's single overview call -- no second processes+executions fetch.
         adoptHubOverview(overview);
+      } else if (window.__core2HubOverviewPending) {
+        // The hub is fetching /api/core/hub/overview right now. Do NOT start our own
+        // processes/executions fetch on a timer -- that would restore the exact fan-out
+        // this change removes when the overview is slower than queueLoad's delay. The
+        // core2:hub-overview event re-runs us with the data (or, on failure, lets this
+        // fallback run because the pending flag is cleared and __core2HubOverview stays
+        // undefined).
+        return;
       } else if (window.CoreAPI && typeof window.CoreAPI.getProcesses === 'function'
                  && typeof window.CoreAPI.getExecutions === 'function') {
-        // Fallback: graph rendered before the hub overview resolved (e.g. standalone HTMX
-        // swap). Minimal fetch -- no include_steps; steps load lazily per selected process.
+        // Fallback: no hub overview on this page and none pending (e.g. standalone HTMX
+        // swap, or the overview request failed). Minimal fetch -- no include_steps; steps
+        // load lazily per selected process.
         var results = await Promise.all([
           window.CoreAPI.getProcesses(),
           window.CoreAPI.getExecutions(),

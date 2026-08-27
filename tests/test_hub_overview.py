@@ -303,6 +303,28 @@ def test_movement_totals_since_is_org_scoped_and_windowed(db):
     _cleanup_repo(db, other.id)
 
 
+def test_throughput_7d_is_keyed_by_process_id_not_name(db, authed):
+    """Two processes sharing a name must not have their 7-day completions merged into one
+    row -- the graph attributes throughput by process_id, and names are not unique."""
+    org, client = authed
+    p1 = ProcessFactory(org_id=org.id, name="Gin Run")
+    p2 = ProcessFactory(org_id=org.id, name="Gin Run")  # same name, different id
+    for proc, n in ((p1, 1), (p2, 3)):
+        for _ in range(n):
+            ExecutionFactory(org_id=org.id, process_id=proc.id)
+    db.query(Execution).filter(Execution.org_id == org.id).update(
+        {Execution.status: ExecutionStatus.COMPLETED, Execution.completed_at: datetime.now(UTC)},
+        synchronize_session=False,
+    )
+    db.commit()
+
+    rows = client.get(OVERVIEW).get_json()["workflows"]["throughput_7d"]
+    by_id = {r["process_id"]: r["count"] for r in rows}
+    assert by_id[str(p1.id)] == 1
+    assert by_id[str(p2.id)] == 3
+    assert all("process_id" in r and "name" in r and "count" in r for r in rows)
+
+
 def _cleanup_repo(db, org_id):
     db.rollback()
     db.query(InventoryItem).filter(InventoryItem.org_id == org_id).delete(synchronize_session=False)

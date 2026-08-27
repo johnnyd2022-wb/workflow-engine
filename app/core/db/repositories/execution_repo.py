@@ -245,14 +245,17 @@ class ExecutionRepository:
             .all()
         )
 
-    def count_completed_by_process_since(self, org_id: UUID, since: datetime) -> list[tuple[str, int]]:
-        """(process_name, completed_count) for executions completed on/after ``since``.
+    def count_completed_by_process_since(self, org_id: UUID, since: datetime) -> list[tuple[UUID, str, int]]:
+        """(process_id, process_name, completed_count) for executions completed on/after
+        ``since``.
 
         One grouped query for the hub's "throughput (last 7d)" widget instead of pulling
-        every completed execution and bucketing in Python.
+        every completed execution and bucketing in Python. Grouped by ``Process.id`` (not
+        name -- process names are not unique within an org) so the caller can attribute
+        each count to the right process.
         """
         rows = (
-            self.db.query(Process.name, func.count(Execution.id))
+            self.db.query(Process.id, Process.name, func.count(Execution.id))
             .join(Process, Execution.process_id == Process.id)
             .filter(
                 Execution.org_id == org_id,
@@ -260,11 +263,11 @@ class ExecutionRepository:
                 Execution.completed_at.isnot(None),
                 Execution.completed_at >= since,
             )
-            .group_by(Process.name)
+            .group_by(Process.id, Process.name)
             .order_by(func.count(Execution.id).desc())
             .all()
         )
-        return [(name or "Untitled process", count) for name, count in rows]
+        return [(pid, name or "Untitled process", count) for pid, name, count in rows]
 
     def get_execution_with_steps(self, execution_id: UUID, org_id: UUID) -> Execution | None:
         """Get execution with execution steps and related Step rows loaded (no N+1)."""

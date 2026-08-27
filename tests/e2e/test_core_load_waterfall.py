@@ -46,6 +46,9 @@ def test_initial_core_load_makes_one_overview_call_and_no_heavy_lists(logged_in_
     assert not any(c == "inventory" or c.startswith("inventory?") for c in calls), calls
     assert not any(c == "executions" or c.startswith("executions?") for c in calls), calls
     assert not any("include_steps=true" in c for c in calls), calls
+    # /api/core/system-findings runs the whole check suite server-side; the several
+    # page-load callers must collapse to one request, never fire it twice serially.
+    assert calls.count("system-findings") <= 1, calls
 
 
 def test_inventory_tab_loads_on_open_and_not_again(logged_in_page):
