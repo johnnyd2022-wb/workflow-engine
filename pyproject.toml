@@ -28,6 +28,7 @@ dependencies = [
     "requests==2.33.0",
     "sqlalchemy>=2.0.43,<2.1",
     "xero-python==4.0.0",
+    "gunicorn>=26.2.0",
 ]
 
 [project.optional-dependencies]
