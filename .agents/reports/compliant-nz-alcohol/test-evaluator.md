@@ -38,7 +38,9 @@ static reasoning, per its own report below.
    `behavior-broken=True`). The spec's own AC text explicitly includes `controls` in what
    must be bound (`"its source_url/version/controls match that council's catalogue
    entry"` — `.agents/specs/compliant-nz-alcohol.md`), so this is a real gap against the
-   AC as written, not just a nice-to-have.
+   AC as written, not just a nice-to-have. Already fixed by commit `6cdbea7`:
+   `tests/e2e/compliant-platform/test_nz_alcohol_framework_applicability.py:89-91` now
+   asserts `controls` (verified 2026-08-25 by findings-sweep).
 
 2. **`test_run_check_flags_and_counts_attention_frameworks` under-asserts the count** — it
    creates exactly one attention-state framework and asserts the message says "1 ...".
@@ -47,6 +49,9 @@ static reasoning, per its own report below.
    the grader's harness (`hardcode-count-one: two-framework-behavior-broken=True`, i.e.
    the hardcoded version's output for a 2-framework case differs from what the real
    pluralized count would say, and the existing 1-framework assertion doesn't catch it).
+   Already fixed by commit `6cdbea7`: `tests/test_compliant_routes.py:531-556` now creates
+   two failed records across two frameworks and asserts the count is 2 (verified
+   2026-08-25 by findings-sweep).
 
 3. **Minor, not a defect**: the audit-pack test
    (`test_build_audit_pack_rejects_a_real_but_inapplicable_framework`) proves the 400
@@ -59,7 +64,8 @@ static reasoning, per its own report below.
    extended `abv_percent` parametrize list is harmless (still correctly 400s) but doesn't
    itself prove the F1 crash regression — `Decimal("0") < Decimal("Infinity") <=
    Decimal("100")` never raised `InvalidOperation` even before the fix (only NaN variants
-   do). The `nan`/`-nan` cases do validly reproduce and pin F1.
+   do). The `nan`/`-nan` cases do validly reproduce and pin F1. Already handled: not a
+   defect, no action needed (reviewed 2026-08-25 by findings-sweep).
 
 5. Explicitly confirmed clean: an `is_finite()` short-circuit alone (without also moving
    the comparison inside the `try`/`except`) is a legitimate, sufficient fix for F1 — the

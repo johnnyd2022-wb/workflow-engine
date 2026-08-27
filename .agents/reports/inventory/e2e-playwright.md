@@ -61,6 +61,8 @@ encoding check, so those two tests specifically exercise multipart uploads.
 - `test_wastage_idempotent_replay_does_not_double_deduct` (AC17): same key+payload replayed
   → `idempotent_replay: true`, quantity deducted exactly once (20→15, not 20→10); same key
   with a different payload → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`, still no further deduction.
+  Already done: present at `tests/e2e/test_inventory_flow.py:350` (verified 2026-08-25 by
+  findings-sweep).
 
 ### (d) Remaining endpoints — shape checks in `tests/e2e/test_inventory_flow.py`
 

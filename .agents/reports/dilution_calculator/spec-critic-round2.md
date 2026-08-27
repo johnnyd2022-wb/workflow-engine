@@ -52,7 +52,8 @@ All 8 are substantively closed:
    that it's always-rejected-downstream and that `final_abv=0` solved from `starting_abv=0`
    round-tripping is an intentionally-allowed degenerate case.
 7. **AC4 malformed-request coverage** → closed, `solve_for` missing/unknown and
-   non-numeric/non-finite fields are now explicit.
+   non-numeric/non-finite fields are now explicit. (Reconfirmed already-closed
+   2026-08-25 by findings-sweep — no outstanding action.)
 8. **"Real-time" wording unbacked by an AC** → closed, now a stated `ASSUMPTION:` line.
 
 ## New/residual gaps

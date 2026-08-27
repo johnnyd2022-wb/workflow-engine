@@ -90,4 +90,7 @@ before writing tests rather than re-deriving this by hand. Legend:
 - **Full process-wizard click-through** — the wizard is many SPA fragments. Creation is
   driven through the real browser session's API (exercising auth, CSRF, org-scope, and
   the business logic) and verified in the UI; clicking every fragment is a higher-
-  maintenance follow-up with lower marginal value.
+  maintenance follow-up with lower marginal value. wont-fix, already resolved by a
+  deliberate scope decision, not an oversight (reviewed 2026-08-25 by findings-sweep) —
+  re-litigating it is outside findings-sweep's remit; a human can promote it if
+  priorities change.

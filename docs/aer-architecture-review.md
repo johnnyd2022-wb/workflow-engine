@@ -75,6 +75,10 @@ not ad hoc effort.
 - **Step:** when a `security-audit`/`perf-guardrails` finding is confirmed and its fix
   merges, `skill-smith` (or a new lightweight `rule-smith` handoff) proposes a semgrep
   rule candidate that would catch the class next time — reviewed via the normal MR gate.
+  Already done: `scripts/rule_candidates.py` (commit `7cb82ec`, "enforced finding->rule
+  pipeline, AER Phase 2") + `.semgrep/rules/learned.yml` + the `semgrep_learned_rules` CI
+  gate implement exactly this step; `security-audit` SKILL.md §3 documents the workflow
+  (verified 2026-08-25 by findings-sweep).
 - **Payoff:** directly serves the North Star (reduce the need for LLM reasoning over
   time). This is the highest-leverage idea in the whole AER doc and it's aligned with what
   we already do.
@@ -85,7 +89,11 @@ have `error_scan`'s known-issues registry and the test-quarantine registry, but 
 skills start cold on *"what did we already find/reject here."*
 - **Step:** persist review verdicts per file/area under `.agents/history/` so
   `review-feature`/`security-audit` can suppress already-rejected findings and re-surface
-  recurring ones. This also *feeds gap #1*.
+  recurring ones. This also *feeds gap #1*. Already done: `scripts/finding_history.py` +
+  `.agents/history/findings.jsonl` (commit `a08c9bb`, "compounding review memory —
+  findings history store, AER Phase 3") implement exactly this — sha1 area|kind|evidence
+  signatures, confirmed/fixed/false-positive/accepted-risk verdict vocabulary,
+  suppress-on-human-verdict (verified 2026-08-25 by findings-sweep).
 - **Payoff:** fewer repeat false positives; compounding memory.
 
 ### 4. Declarative capability graph — partial, lower ROI

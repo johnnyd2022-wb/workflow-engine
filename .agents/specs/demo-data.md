@@ -82,15 +82,21 @@ fixed org (the org of `demo@whistlebird.co.nz`).
 - No dedicated test file (`tests/test_demo_data.py`) exercises the route or
   `reset_demo_db`/`clear_demo_db` directly — only indirectly via three other suites'
   fixture usage. Zero coverage of AC1, AC2, AC4, AC5 (auth/env-gate/error paths).
+  Already fixed: `tests/test_demo_data.py` now exists with 7 tests (verified 2026-08-25
+  by findings-sweep).
 - Route authorization: any authenticated user of *any* org (not just the demo org) can
   trigger a destructive reset of the demo org's data — `@requires_auth` without
   `@requires_org_scope` or an explicit identity check. Confined to non-production
   environments, but still a tenant-isolation gap against this repo's own invariant #1
   ("every query filters on `org_id`" — here the target `org_id` is not derived from the
-  caller at all).
+  caller at all). Already fixed by commit `df26e40`:
+  `app/features/demo_data/routes/api_routes.py:36-56` now has an explicit `unscoped()`
+  caller-identity check requiring `g.current_org_id == demo_user.org_id` (verified
+  2026-08-25 by findings-sweep).
 - AC5's raw exception string in the JSON response body is a minor info-disclosure
   surface (stack-trace-adjacent detail returned to any authenticated caller), scoped to
-  non-production only.
+  non-production only. Already fixed by commit `df26e40`: the exception handler now
+  returns a generic message, no `str(e)` (verified 2026-08-25 by findings-sweep).
 
 ## Assumptions (reconstructed spec — no user available to interview)
 - ASSUMPTION: The route's intended caller is Whistlebird's own staff/demo account, not

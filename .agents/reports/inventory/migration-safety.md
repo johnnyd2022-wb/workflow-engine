@@ -114,11 +114,21 @@ definition (§2: "a data-losing type change"):
 - **Precision narrowing**: any pre-existing string value with more than 4 decimal
   digits is silently rounded by the `USING ...::numeric` cast. There is no row-count or
   sample-row check before/after in the migration, and none was possible retroactively
-  (this ran 2026-03-28, `git log` shows commit `68268ab`).
+  (this ran 2026-03-28, `git log` shows commit `68268ab`). Already resolved by a
+  recorded human decision — see the permit file note below (reviewed 2026-08-25 by
+  findings-sweep).
 - **Silent data substitution**: the `CASE WHEN trim(...) = '' THEN 0::numeric ELSE
   ...::numeric END` clause turns any blank legacy quantity into `0` with no logging —
   a data edit hidden inside a schema-type-change migration (skill §1: "No data edits
-  hidden in schema migrations. Backfills live in their own revision").
+  hidden in schema migrations. Backfills live in their own revision"). Already resolved
+  by a recorded human decision — see the permit file note below (reviewed 2026-08-25 by
+  findings-sweep).
+
+The permit file this section asks for now exists at
+`.agents/reports/migrations/inventory_quantity_numeric_001.md`, with both data losses
+above documented and a recorded human decision (johnny, 2026-07-29): "Acknowledged; roll
+forward" — accepted risk on pre-production data, no code change follows. Reconfirmed
+2026-08-25 by findings-sweep; not something findings-sweep may re-litigate.
 
 Per skill §2, a destructive migration needs (a) an `ALLOW_DESTRUCTIVE=<revision_id>`
 env-var guard in `upgrade()`, (b) a permit file at

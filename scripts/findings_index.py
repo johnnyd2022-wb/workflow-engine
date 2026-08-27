@@ -1169,11 +1169,17 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
 
     # 1. Merged-MR closures first. An item this loop shipped is `done`, and must be
     #    settled BEFORE the disappearance pass, or it would be miscounted as `gone`.
+    #    explicit=True matters here as much as it does for a manual `record gone`: the
+    #    finding's source is almost always a historical audit report whose bullet text
+    #    is never edited out after the fix ships, so step 2 below (or tomorrow's sweep)
+    #    would otherwise find that same unchanged text, see status="done", and flip it
+    #    straight back to "outstanding" as a false regression -- undoing the trailer's
+    #    entire purpose in the same run it fired in.
     for item_id, ref in closures.items():
         record = records.get(item_id)
         if record and record.get("status") != "done":
             record["mr"] = ref
-            _note(record, "done", f"merged in {ref}")
+            _note(record, "done", f"merged in {ref}", explicit=True)
             stats["closed_by_merge"] += 1
 
     # 2. Everything present in the tree/MRs right now.

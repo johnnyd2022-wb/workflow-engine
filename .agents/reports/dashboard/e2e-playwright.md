@@ -84,12 +84,15 @@ regardless of what the baseline itself is.
 in `tests/test_multi_tenant_api.py`/`tests/test_multi_tenant_isolation.py`, not in any e2e
 suite. Added:
 - route-level correctness (`total_processes`, inventory breakdown by type, well-formed
-  shape for a fresh org, auth-gating)
+  shape for a fresh org, auth-gating). Already fixed: present at
+  `tests/e2e/dashboard/test_metrics_api.py` (verified 2026-08-25 by findings-sweep).
 - the mandatory cross-tenant probe (`test_ac16_ac17_metrics_cross_tenant_isolation`),
   mirroring `test_org_b_dashboard_summary_excludes_org_a_data`'s pattern but per-field:
   org B's `total_processes`/`active_executions`/`completed_executions`/`inventory_items`
   must all read exactly zero after org A creates a process and an inventory item, plus the
-  marker-string check and an org-A-sees-its-own-data sanity check.
+  marker-string check and an org-A-sees-its-own-data sanity check. Already fixed: present
+  at `tests/e2e/dashboard/test_tenant_isolation.py:138` (verified 2026-08-25 by
+  findings-sweep).
 
 **Cross-reference to the parallel security-audit stage**: that stage's report
 (`.agents/reports/dashboard/security-audit.md`, finding F1) found that

@@ -10,7 +10,8 @@ gaps-found (patched in this pass)
 - G1 (real, patched): `AuthService.authenticate()`'s F1 fix pays a dummy-bcrypt-hash cost
   for nonexistent email, wrong org_id, *and* inactive user — but only the first two had a
   test. No test proved the inactive-user path also gets timing parity. Patched: added
-  `test_authenticate_invokes_bcrypt_for_inactive_user`.
+  `test_authenticate_invokes_bcrypt_for_inactive_user`. Already fixed: present and passing
+  at `tests/test_auth_login_security.py:123` (verified 2026-08-25 by findings-sweep).
 - G2 (real, patched — the more serious of the two): `test_login_generic_401_for_...locked_account`
   (in `tests/test_auth_gap_coverage.py`) proves the *response body* is identical across
   nonexistent/wrong-password/locked-account, but F1's route-level half of the fix was

@@ -71,11 +71,16 @@ Description says selecting a card "opens the existing process wizard prefilled w
 steps" — but no AC exists for:
 - what renders at `/core/flows/create/template-catalog` (page existence, auth, chooser-page
   link target) — AC1 only specifies the *chooser* page and the *scratch* branch's
-  destination; the *template* branch's destination is unstated.
+  destination; the *template* branch's destination is unstated. Already fixed:
+  `.agents/specs/process_templates.md` now has AC12 (page-existence/auth/empty-state
+  contract), implemented at `app/features/process_templates/routes/page_routes.py:10`,
+  tested by `tests/e2e/process_templates/test_process_templates_flow.py` (verified
+  2026-08-25 by findings-sweep).
 - what happens immediately after a successful `POST .../copy` — which wizard page the
   operator lands on (`process-overview`? `summary`, since the process/step/inputs/outputs
   are already populated?), and how that page's URL is constructed (`?id=<process_id>`
-  presumably, but never stated).
+  presumably, but never stated). Already fixed: AC13 now specifies navigation to
+  `/core/flows/create/summary?id=<process_id>` (verified 2026-08-25 by findings-sweep).
 
 This matters concretely because `_maybe_enforce_flow_wizard_step`
 (`app/core/backend/backend.py:417-450`) gates step navigation off session `flow_state` keyed

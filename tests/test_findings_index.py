@@ -685,6 +685,35 @@ def test_merged_mr_trailer_closes_the_items_it_fixed(store, monkeypatch):
     assert result["stats"]["closed_by_merge"] == 1
 
 
+def test_merge_closure_survives_a_sweep_that_still_finds_the_text(store, monkeypatch):
+    """The finding's source prose is a historical audit report -- merging the fix doesn't
+    edit that report's bullet out of existence, it just makes the bug it describes no
+    longer true. So the very next sweep's tree scan finds the exact same unchanged text
+    again. Without `closed_explicitly` on the merge-closure path, step 2 ("everything
+    present in the tree right now") would see status="done" and immediately flip it back
+    to "outstanding" as a false "regressed" -- undoing the trailer's whole point in the
+    same run it fired in, and again on every sweep after that, forever."""
+    item = make_item(detail="a finding whose report prose nobody will ever edit, fixed elsewhere")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+
+    # The MR that fixed it merges, but the report bullet describing the old bug is still
+    # sitting there unedited -- same text, same item, found again by this same sweep.
+    monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({item.id: "!142"}, ["!142"]))
+    result = fi.sweep()
+    record = result["store"]["items"][item.id]
+    assert record["status"] == "done"
+    assert not record.get("regressed")
+    assert result["stats"]["reopened"] == 0
+
+    # And it must stay closed on every subsequent sweep too, not just the one that closed it.
+    result = fi.sweep()
+    record = result["store"]["items"][item.id]
+    assert record["status"] == "done"
+    assert not record.get("regressed")
+    assert result["stats"]["reopened"] == 0
+
+
 def test_merge_closure_wins_over_the_disappearance_pass(store, monkeypatch):
     """Order matters: an item whose text is gone BECAUSE it was fixed must read 'done',
     never 'gone'. Getting this backwards would log real shipped work as vanished."""
