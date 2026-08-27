@@ -325,6 +325,29 @@ def test_throughput_7d_is_keyed_by_process_id_not_name(db, authed):
     assert all("process_id" in r and "name" in r and "count" in r for r in rows)
 
 
+def test_throughput_7d_is_bounded_to_the_picker(db, authed, monkeypatch):
+    """throughput_7d must not grow with the recipe catalogue: it is restricted to the
+    processes in the (capped) picker. completed_7d still counts every process."""
+    from app.core.backend import backend as backend_mod
+
+    monkeypatch.setattr(backend_mod, "HUB_PROCESSES_MIN_CAP", 2)
+    org, client = authed
+    for _ in range(6):
+        p = ProcessFactory(org_id=org.id)
+        ex = ExecutionFactory(org_id=org.id, process_id=p.id)
+        db.query(Execution).filter(Execution.id == ex.id).update(
+            {Execution.status: ExecutionStatus.COMPLETED, Execution.completed_at: datetime.now(UTC)},
+            synchronize_session=False,
+        )
+    db.commit()
+
+    wf = client.get(OVERVIEW).get_json()["workflows"]
+    picker_ids = {p["id"] for p in wf["processes_min"]}
+    assert len(wf["throughput_7d"]) <= len(picker_ids)
+    assert all(r["process_id"] in picker_ids for r in wf["throughput_7d"])
+    assert wf["completed_7d"] == 6  # scalar total over ALL 6 processes, not just the picker
+
+
 def test_processes_min_always_contains_active_execution_processes(db, authed, monkeypatch):
     """A process that owns an active execution must be in processes_min even when it is
     older than the newest HUB_PROCESSES_MIN_CAP processes -- otherwise the active-batches

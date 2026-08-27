@@ -227,9 +227,14 @@ edit/delete/reconcile (removed — `loadCore2Overview()` already refreshes metri
   post-mutation only if already open). Converting their grouped/category rendering to
   consume paginated pages is a UX change, not a perf tweak — left as a follow-up. The
   pagination *endpoint capability* is in place and tested.
-- **`processes_min` can still exceed `HUB_PROCESSES_MIN_CAP`** — every distinct process
-  behind the ≤20 active executions is always included (so the picker can never hide a
-  live batch), then the cap bounds the newest-process fill. Worst case is cap + 20.
+- **`processes_min` is bounded at `HUB_PROCESSES_MIN_CAP`** — every distinct process
+  behind the ≤20 active executions is included first (so the picker can never hide a live
+  batch), then newest processes fill the remainder up to the cap.
+- **`throughput_7d` is restricted to the `processes_min` set** — its only consumer is the
+  active-batches graph's per-process 7-day count, which can only address a process that is
+  in the picker. `completed_7d` (the scalar the Workflows card shows) is still summed over
+  every process. This keeps the payload bounded on an org with a large recent
+  recipe/SKU catalogue.
 - **Paginated `/api/core/inventory` page sizes are not uniform**: the route drops
   zero-quantity rows *after* the DB page is fetched, so a page can return fewer than
   `limit` display rows while `has_more` is true. `next_cursor` correctly points at the

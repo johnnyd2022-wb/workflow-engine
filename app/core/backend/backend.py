@@ -5157,6 +5157,7 @@ def get_hub_overview():
             break
         seen_pids.add(str(pid))
         processes_min.append({"id": str(pid), "name": name})
+    _pmin_ids = {p["id"] for p in processes_min}
 
     payload = {
         "generated_at": now.isoformat(),
@@ -5202,16 +5203,23 @@ def get_hub_overview():
         "workflows": {
             "in_flight": in_progress + pending,
             "pending": pending,
+            # completed_7d is the scalar total over ALL processes (unbounded input, bounded
+            # output) -- what the Workflows summary card shows.
             "completed_7d": sum(count for _pid, _name, count in throughput),
             "process_count": process_count,
             # Bounded (HUB_PROCESSES_MIN_CAP) but always contains every active-execution
             # process -- built above.
             "processes_min": processes_min,
             "active_executions": [_hub_active_execution_payload(e) for e in active_execs],
-            # One row per process with a completion in the window (bounded by process
-            # count). Keyed by process_id -- names are not unique within an org.
+            # Per-process throughput, keyed by process_id (names aren't unique). Its only
+            # consumer is the active-batches graph, which looks up the selected process's
+            # row -- so it is restricted to the processes actually in the (capped) picker.
+            # This keeps the first-paint payload bounded on an org with a huge recipe/SKU
+            # catalogue where many processes have a recent completion.
             "throughput_7d": [
-                {"process_id": str(pid), "name": name, "count": count} for pid, name, count in throughput
+                {"process_id": str(pid), "name": name, "count": count}
+                for pid, name, count in throughput
+                if str(pid) in _pmin_ids
             ],
         },
     }
