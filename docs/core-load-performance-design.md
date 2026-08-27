@@ -154,3 +154,73 @@ on port 8401 was unavailable, Docker socket access was denied, and the isolated 
 environment could not download a missing dependency. `glab` was also blocked because its
 Snap confinement cannot start here; the local merged commit and
 `origin/perf/core-tab-load-time` branch were used to review !181.
+
+---
+
+## As-built (2026-08-27, branch `mc/agent-20260827-085133-21407d`)
+
+The design above was implemented in five commits on this branch.
+
+### What shipped
+
+1. **`GET /api/core/hub/overview`** (`backend.py:get_hub_overview`) — one org-scoped,
+   `@requires_auth` payload: the `/api/core/metrics` numbers, inventory aggregates
+   (non-zero lines, allocated, linked, expiry buckets, ≤6 traceability-gap rows, 24h
+   movement totals), `journey` booleans, ≤20 most-recently-updated active-execution
+   summaries, and per-process 7-day throughput. Every number is a SQL aggregate; nothing
+   in the payload scales with an org's history. New repo helpers:
+   `ExecutionRepository.list_active_execution_summaries` / `count_completed_by_process_since`,
+   `InventoryRepository.hub_overview_aggregates` / `list_traceability_gap_items` /
+   `movement_totals_since`, `ProcessRepository.list_process_names` / `count_processes`.
+2. **Frontend first paint** (`core2.html`) split into `loadCore2Overview()` (the one call
+   above) + `loadCore2InventoryTab()` / `loadCore2WorkflowsTab()`, which fire only when
+   their tab is first shown (or on paint if the restored `?tab=` is that tab).
+3. **Active-batches graph** (`core-active-batches-graph.js`) consumes the published
+   `window.__core2HubOverview` (event `core2:hub-overview`) instead of its own
+   `getProcesses(true)` + `getExecutions()`; it lazily fetches only the *selected*
+   process's steps via `getProcess(id)`. A pre-hub fallback fetch (no `include_steps`)
+   remains for standalone HTMX swaps.
+4. **Opt-in keyset pagination** on `/api/core/executions` and `/api/core/inventory`:
+   `?limit` (clamped to 50) + opaque `?cursor` (`base64url("<created_at_iso>|<id>")`,
+   sort `created_at DESC, id DESC`). **No `?limit` ⇒ byte-for-byte the old full list** —
+   none of the ~20 existing callers change. Paginated responses add `has_more` /
+   `next_cursor`; a bad limit/cursor is a 400.
+5. **Migration `core_hub_perf_indexes_001`** — composite indexes
+   `executions(org_id, created_at DESC, id DESC)`,
+   `executions(org_id, status, updated_at DESC)`,
+   `inventory_items(org_id, created_at DESC, id DESC)`,
+   `processes(org_id, created_at DESC)`. Index-only, reversible.
+
+### Measured
+
+Direct repo-call timing of the overview against the real `whistlebird_test` org
+(252 executions, 243 inventory items), cold: **9 DB queries, ~73 ms wall**. Flat in query
+count regardless of history — contrast `/api/core/system-findings` on the same org
+(~100 queries per the `budgets.json` note). `EXPLAIN` on `whistlebird_test` confirms the
+keyset list queries do an index-ordered scan with **no Sort node** after the migration.
+`tests/e2e/test_core_load_waterfall.py` (real browser) confirms initial `/core` makes
+exactly one `hub/overview` call and no `inventory` / `executions` /
+`processes?include_steps=true`, and that tab data loads once, on open.
+
+### Deliberately deferred (call-outs for the MR reviewer)
+
+- **`low_stock` is hard-coded 0** in the overview. There is no per-item reorder threshold
+  in the schema, and the frontend's ratio check was already inert (it needs an
+  `initial_quantity` the API has never sent). Wired as a named field so a real
+  implementation has a home; not implemented here.
+- **Hub Inventory/Workflows tabs still fetch their full lists** (just lazily, on tab
+  open). Converting their grouped/category rendering to consume paginated pages is a
+  UX change, not a perf tweak — left as a follow-up. The pagination *endpoint capability*
+  is in place and tested.
+- **Paginated `/api/core/inventory` page sizes are not uniform**: the route drops
+  zero-quantity rows *after* the DB page is fetched, so a page can return fewer than
+  `limit` display rows while `has_more` is true. `next_cursor` correctly points at the
+  last *fetched* row so the scan continues correctly. Acceptable for the opt-in v1.
+- **Index necessity is unproven at scale.** Local/CI data is tiny; the reversibility
+  check proves the indexes build/drop cleanly and `EXPLAIN` shows they're *used*, not
+  that the planner *needs* them yet. Recalibrate with production-shaped volume.
+- **`budgets.json` override for `/api/core/hub/overview` is a placeholder** (queries
+  budget 15 / ceiling 25) pending a measured E2E-fixture run per the perf-guardrails
+  SKILL.md procedure.
+- **Security findings in "requiring owner action" above are untouched** — they need the
+  credential owner and deployment access, not an engineering worktree.
