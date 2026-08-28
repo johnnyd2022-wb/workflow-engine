@@ -22,9 +22,12 @@ from app.observability import get_logger
 
 logger = get_logger(__name__)
 
-# Findings are a slow-moving health summary; 10 min of staleness between mutations (which
-# invalidate immediately anyway) is fine and caps the recompute rate per org.
-TTL = timedelta(minutes=10)
+# Findings are a slow-moving health summary and every inventory/execution/process mutation
+# invalidates the row immediately anyway. This TTL is only the backstop for time-only
+# changes (an item crossing its expiry date with nothing else happening) -- 30 min of lag
+# there is fine, and the longer window keeps more sessions on the fast (cached) path
+# instead of eating the ~1s recompute.
+TTL = timedelta(minutes=30)
 
 # Event-type prefixes whose mutations can change what the checks report.
 _INVALIDATING_PREFIXES = ("inventory_item.", "execution.", "process.")
