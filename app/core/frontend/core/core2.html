@@ -2418,7 +2418,6 @@
       // and it would render pre-mutation data and never fall back.
       window.__core2HubOverviewPending = true;
       window.__core2HubOverview = null;
-      var sfData = null;
       try {
         overview = await CoreAPI.getHubOverview();
         updateMetricsV2(overview.metrics || {});
@@ -2432,28 +2431,34 @@
         var invStub = core2StubList(journey.has_inventory ? 1 : 0);
         var procStub = core2StubList(journey.has_process ? 1 : 0);
         var execStub = core2StubList(journey.has_execution ? 1 : 0);
-        var systemStatus = null;
+        // Render the journey bar NOW from the overview payload (setup/progress state needs
+        // no health data). /api/core/system-findings runs the whole check suite -- a DAG
+        // traversal per expired-with-stock raw material, ~1.3s / 380KB on a real org --
+        // so it must NOT block first paint (design doc "Target request shape"). Fetch it
+        // after, and upgrade the journey health + banner when it lands.
+        updateCore2JourneyCtasFromData(invStub, procStub, execStub, null);
         if (journey.has_inventory && journey.has_process && journey.has_execution
             && window.CoreAPI && typeof CoreAPI.getSystemFindings === 'function') {
-          try {
-            sfData = await CoreAPI.getSystemFindings();
-            systemStatus = sfData && sfData.system_status ? sfData.system_status : null;
-          } catch (err) {
+          Promise.resolve().then(function () { return CoreAPI.getSystemFindings(); }).then(function (sf) {
+            var systemStatus = sf && sf.system_status ? sf.system_status : null;
+            updateCore2JourneyCtasFromData(invStub, procStub, execStub, systemStatus);
+            if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner(sf || undefined);
+          }).catch(function (err) {
             console.warn('Could not load system status for journey bar:', err);
-          }
+            if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
+          });
+        } else if (window.loadSystemFindingsBanner) {
+          window.loadSystemFindingsBanner();
         }
-        updateCore2JourneyCtasFromData(invStub, procStub, execStub, systemStatus);
       } catch (error) {
         console.error('Failed to load core overview:', error);
+        if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
       } finally {
         window.__core2HubOverviewPending = false;
         // Always signal the graph: with data on success, or so it can run its own
         // fallback fetch on failure (window.__core2HubOverview stays undefined then).
         document.dispatchEvent(new CustomEvent('core2:hub-overview', { detail: overview }));
       }
-      // Reuse the system-findings result the journey CTA already fetched (getSystemFindings
-      // shares it for a few seconds) so the banner does not run the whole check suite again.
-      if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner(sfData || undefined);
       setupModalHandlers();
       return overview;
     }
