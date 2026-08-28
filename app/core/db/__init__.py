@@ -35,8 +35,31 @@ if db_ssl_mode and db_ssl_mode != "disable":
     if ssl_root_cert:
         connect_args["sslrootcert"] = ssl_root_cert
 
+# Connection pool sizing. Each gunicorn worker process gets its own engine + pool
+# (gunicorn.conf.py runs with preload_app=False), and with the gthread worker class
+# every request thread can hold one connection. So the ceiling on Postgres connections
+# from the app is roughly:  workers * (pool_size + max_overflow).
+# Keep that comfortably under Postgres `max_connections` (default 100), leaving headroom
+# for migrations, psql sessions, and any pgbouncer/replica tooling. Defaults below match
+# SQLAlchemy's own (5 + 10), so this is a no-op until a deployment sets them in the
+# [database] config section. pool_recycle drops connections older than 30 min to avoid
+# handing out ones a load balancer / pgbouncer has already closed.
+_pool_size = config.getint("database", "pool_size", fallback=5)
+_max_overflow = config.getint("database", "max_overflow", fallback=10)
+_pool_recycle = config.getint("database", "pool_recycle", fallback=1800)
+_pool_timeout = config.getint("database", "pool_timeout", fallback=30)
+
 # Create engine with SSL/TLS support
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, echo=False, connect_args=connect_args)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    echo=False,
+    connect_args=connect_args,
+    pool_size=_pool_size,
+    max_overflow=_max_overflow,
+    pool_recycle=_pool_recycle,
+    pool_timeout=_pool_timeout,
+)
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, expire_on_commit=False, bind=engine)
