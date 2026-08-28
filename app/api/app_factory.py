@@ -479,4 +479,42 @@ def create_app():
     # Trust Cloudflare's forwarded headers (1 proxy hop)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
+    # Serve the unauthenticated JS/CSS bundles straight from the WSGI layer, before Flask
+    # routing / logging / tracing / tenant middleware ever run. A full /core load pulls
+    # ~65 of these; through the Flask routes each one is a full request cycle occupying a
+    # gunicorn worker slot, which starves the slots and (behind a Cloudflare tunnel) 524s
+    # the page. WhiteNoise turns each into a ~1ms stat + sendfile with ETag/Last-Modified,
+    # so the CDN edge-caches them after the first hit and the origin stops being in the
+    # asset path.
+    #
+    # Scope: ONLY /static/js and /static/css (+ /crm/static/* when CRM is on) -- the
+    # "serve any file in this dir" prefixes. /static/inventory and /static/img (hardcoded
+    # filename allowlist) and /ui/shared (per-file auth gate) stay on their Flask routes.
+    # WhiteNoise falls through to the wrapped app for any path it has no file for, so the
+    # traversal (400) / bad-extension (400) / 404 / allowlist guards on every route are
+    # untouched -- only the happy path (an existing, valid asset) is short-circuited.
+    from whitenoise import WhiteNoise
+
+    def _static_asset_headers(headers, path, url):
+        # WhiteNoise bypasses Flask's after_request, so re-assert the header that matters
+        # on a script/style response and pin the exact Cache-Control the Flask /static
+        # routes emit (asserted byte-for-byte by tests/e2e/test_static_asset_security.py).
+        headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=60"
+        headers["X-Content-Type-Options"] = "nosniff"
+
+    app.wsgi_app = WhiteNoise(
+        app.wsgi_app,
+        add_headers_function=_static_asset_headers,
+        # Re-scan the source dirs on each request only in local dev (edit-and-refresh);
+        # in the Docker image the files are immutable, so scan once at boot.
+        autorefresh=(config.environment == "local"),
+    )
+    _core_frontend = os.path.join(app_dir, "core", "frontend")
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "js"), prefix="static/js/")
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "css"), prefix="static/css/")
+    if config.crm_enabled:
+        _crm_frontend = os.path.join(app_dir, "features", "crm", "frontend")
+        app.wsgi_app.add_files(os.path.join(_crm_frontend, "js"), prefix="crm/static/js/")
+        app.wsgi_app.add_files(os.path.join(_crm_frontend, "css"), prefix="crm/static/css/")
+
     return app
