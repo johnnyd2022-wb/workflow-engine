@@ -1,5 +1,6 @@
 """Core backend API routes for process execution platform"""
 
+import base64
 import hashlib
 import json
 import os
@@ -86,6 +87,48 @@ LIST_INVENTORY_MAX_RECONCILIATION_HISTORY = 60
 
 _LIST_ITEM_MAX_CHARS = 4096
 _LIST_ITEM_MAX_NESTED = 20
+
+# Opt-in keyset pagination for the big list endpoints (executions, inventory). A caller
+# that passes no ?limit gets the full list exactly as before -- every existing consumer
+# (process pickers, sourcemap, reconciliation, the dispose flow) is unchanged. Only the
+# /core hub tabs pass a limit. Cursor is an opaque base64url("<created_at_iso>|<id>") of
+# the last row returned; the sort is (created_at DESC, id DESC).
+LIST_PAGE_MAX = 50
+
+# Upper bound on the (id, name) process list embedded in /api/core/hub/overview for the
+# active-batches picker. A real manufacturer has tens of processes; this only stops the
+# payload ballooning on a pathological catalogue.
+HUB_PROCESSES_MIN_CAP = 500
+
+
+def _encode_list_cursor(created_at: datetime, row_id) -> str:
+    raw = f"{created_at.isoformat()}|{row_id}".encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _decode_list_cursor(token: str) -> tuple[datetime, UUID]:
+    """Parse a cursor token. Raises ValueError on anything malformed -- the caller turns
+    that into a 400 rather than a 500."""
+    pad = "=" * (-len(token) % 4)
+    raw = base64.urlsafe_b64decode(token + pad).decode()
+    ts_str, id_str = raw.split("|", 1)
+    return datetime.fromisoformat(ts_str), UUID(id_str)
+
+
+def _parse_page_params(args) -> tuple[int | None, tuple[datetime, UUID] | None]:
+    """(limit, cursor) from request args. limit is None when the caller wants the full
+    list; otherwise it is clamped to [1, LIST_PAGE_MAX]. Raises ValueError for a bad
+    limit or cursor."""
+    limit_str = args.get("limit")
+    if limit_str is None or limit_str == "":
+        return None, None
+    limit = int(limit_str)  # ValueError -> 400
+    if limit < 1:
+        raise ValueError("limit must be >= 1")
+    limit = min(limit, LIST_PAGE_MAX)
+    cursor_str = args.get("cursor")
+    cursor = _decode_list_cursor(cursor_str) if cursor_str else None
+    return limit, cursor
 
 
 def _trim_value(v):
@@ -1834,8 +1877,22 @@ def list_executions():
         except ValueError:
             return jsonify({"error": f"Invalid status: {status_str}"}), 400
 
+    try:
+        page_limit, cursor = _parse_page_params(request.args)
+    except ValueError:
+        return jsonify({"error": "Invalid limit or cursor parameter"}), 400
+
     repo = ExecutionRepository(db_session)
-    executions = repo.list_executions(org_id=org_id, process_id=process_id, status=status)
+    executions = repo.list_executions(
+        org_id=org_id,
+        process_id=process_id,
+        status=status,
+        limit=(page_limit + 1 if page_limit is not None else None),
+        cursor=cursor,
+    )
+    has_more = page_limit is not None and len(executions) > page_limit
+    if has_more:
+        executions = executions[:page_limit]
 
     # Batch-fetch all evidence for all executions in a single query
     executions_by_id = {str(e.id): e for e in executions}
@@ -1919,7 +1976,13 @@ def list_executions():
             }
         )
 
-    return jsonify({"executions": result}), 200
+    body = {"executions": result}
+    if page_limit is not None:
+        body["has_more"] = has_more
+        body["next_cursor"] = (
+            _encode_list_cursor(executions[-1].created_at, executions[-1].id) if has_more and executions else None
+        )
+    return jsonify(body), 200
 
 
 @core_bp.route("/api/core/executions/<execution_id>", methods=["GET"])
@@ -2717,8 +2780,23 @@ def list_inventory():
         except ValueError:
             return jsonify({"error": "Invalid process_id parameter"}), 400
 
+    try:
+        page_limit, cursor = _parse_page_params(request.args)
+    except ValueError:
+        return jsonify({"error": "Invalid limit or cursor parameter"}), 400
+
     repo = InventoryRepository(db_session)
-    items = repo.list_inventory_items(org_id=org_id, inventory_type=inventory_type, process_id=process_id)
+    items = repo.list_inventory_items(
+        org_id=org_id,
+        inventory_type=inventory_type,
+        process_id=process_id,
+        limit=(page_limit + 1 if page_limit is not None else None),
+        cursor=cursor,
+    )
+    has_more = page_limit is not None and len(items) > page_limit
+    if has_more:
+        items = items[:page_limit]
+    next_cursor = _encode_list_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
 
     # System findings per item (all checks) for UI: red border + reasons in dropdown
     findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
@@ -3122,7 +3200,14 @@ def list_inventory():
             }
         )
 
-    return jsonify({"inventory_items": result}), 200
+    body = {"inventory_items": result}
+    if page_limit is not None:
+        # next_cursor points at the last FETCHED row (pre zero-quantity filtering) so the
+        # next page's keyset scan continues from the right place regardless of how many
+        # rows the display filter dropped.
+        body["has_more"] = has_more
+        body["next_cursor"] = next_cursor
+    return jsonify(body), 200
 
 
 def _pg_advisory_lock_wastage_idempotency(session, org_id: UUID, idem_key: str) -> None:
@@ -4973,6 +5058,174 @@ def get_metrics():
         ),
         200,
     )
+
+
+def _hub_active_execution_payload(execution) -> dict:
+    """Slim projection of one active execution for /api/core/hub/overview.
+
+    Deliberately a fraction of what /api/core/executions returns: no actual_inputs/outputs,
+    no execution_data, no evidence, no event summary -- just what the hub's Active Batches
+    pipeline and workflow-readiness widgets read. `current_step` mirrors list_executions:
+    the first READY step, numbered by 1-based position within the execution.
+    """
+    steps = sorted(
+        execution.execution_steps or [], key=lambda es: es.step_number
+    )  # nosemgrep: orm-relationship-access-in-loop
+    ready = [es for es in steps if es.status.value == "ready"]
+    completed = sum(1 for es in steps if es.status.value == "completed")
+    total_steps = execution.total_steps or (len(steps) if steps else 0)
+
+    current_step = None
+    if ready:
+        nxt = ready[0]
+        try:
+            display_index = 1 + next(i for i, es in enumerate(steps) if es.id == nxt.id)
+        except StopIteration:
+            display_index = nxt.step_number
+        current_step = {
+            "step_number": display_index,
+            "name": nxt.step.name if nxt.step else None,
+        }
+
+    return {
+        "id": str(execution.id),
+        "process_id": str(execution.process_id),
+        "process_name": (execution.process.name if execution.process else None) or "Untitled process",
+        "status": execution.status.value,
+        "started_at": execution.started_at.isoformat() if execution.started_at else None,
+        "current_step": current_step,
+        "steps": [{"step_number": es.step_number, "status": es.status.value} for es in steps],
+        "total_steps": total_steps,
+        "progress": (completed / total_steps * 100) if total_steps > 0 else 0,
+    }
+
+
+@core_bp.route("/api/core/hub/overview", methods=["GET"])
+@requires_auth
+def get_hub_overview():
+    """One org-scoped payload for the /core hub's above-the-fold Overview.
+
+    Exists so initial /core navigation makes a single small API call instead of the old
+    four-call fan-out (metrics + full processes + fully-enriched inventory + full execution
+    history) plus a duplicate processes?include_steps=true from the active-batches graph.
+    Every number is an aggregate computed in SQL; the only rows returned are <=20 active
+    executions and <=6 traceability-gap items. The Inventory and Workflows tabs still load
+    their detailed data lazily on first open -- this endpoint does not replace them.
+
+    See docs/core-load-performance-design.md.
+    """
+    org_id = UUID(g.org_id)
+    now = datetime.now(UTC)
+    today = now.date()
+    week_ago = now - timedelta(days=7)
+    day_ago = now - timedelta(days=1)
+
+    process_repo = ProcessRepository(db_session)
+    execution_repo = ExecutionRepository(db_session)
+    inventory_repo = InventoryRepository(db_session)
+
+    process_count = process_repo.count_processes(org_id)
+    exec_by_status = execution_repo.count_executions_by_status(org_id)
+    in_progress = exec_by_status.get(ExecutionStatus.IN_PROGRESS.value, 0)
+    pending = exec_by_status.get(ExecutionStatus.PENDING.value, 0)
+    completed_total = exec_by_status.get(ExecutionStatus.COMPLETED.value, 0)
+
+    items_by_type = inventory_repo.count_inventory_items_by_type(org_id)
+    inv_total = sum(items_by_type.values())
+
+    inv_agg = inventory_repo.hub_overview_aggregates(org_id, today)
+    gap_items = inventory_repo.list_traceability_gap_items(org_id, limit=6)
+    movement = inventory_repo.movement_totals_since(org_id, day_ago)
+
+    active_execs = execution_repo.list_active_execution_summaries(org_id, limit=20)
+    throughput = execution_repo.count_completed_by_process_since(org_id, week_ago)
+
+    # processes_min feeds the active-batches picker. Every process that owns one of the
+    # returned active executions MUST be selectable, even if it is older than the newest
+    # HUB_PROCESSES_MIN_CAP processes -- otherwise the panel shows an active batch the user
+    # cannot open. Seed with those, then fill the rest of the cap with newest processes.
+    processes_min: list[dict] = []
+    seen_pids: set[str] = set()
+    for e in active_execs:
+        if e.process and str(e.process.id) not in seen_pids:
+            seen_pids.add(str(e.process.id))
+            processes_min.append({"id": str(e.process.id), "name": e.process.name or "Untitled process"})
+    # One query, evaluated before the loop -- not a per-iteration repository lookup.
+    newest_process_names = process_repo.list_process_names(org_id, limit=HUB_PROCESSES_MIN_CAP)
+    for pid, name in newest_process_names:
+        if str(pid) in seen_pids:
+            continue
+        if len(processes_min) >= HUB_PROCESSES_MIN_CAP:
+            break
+        seen_pids.add(str(pid))
+        processes_min.append({"id": str(pid), "name": name})
+    _pmin_ids = {p["id"] for p in processes_min}
+
+    payload = {
+        "generated_at": now.isoformat(),
+        "metrics": {
+            "total_processes": process_count,
+            "active_executions": in_progress,
+            "completed_executions": completed_total,
+            "inventory_items": {
+                "total": inv_total,
+                "raw_materials": items_by_type.get(InventoryType.RAW_MATERIAL.value, 0),
+                "work_in_progress": items_by_type.get(InventoryType.WORK_IN_PROGRESS.value, 0),
+                "final_products": items_by_type.get(InventoryType.FINAL_PRODUCT.value, 0),
+            },
+        },
+        "journey": {
+            "has_inventory": inv_total > 0,
+            "has_process": process_count > 0,
+            "has_execution": (
+                in_progress
+                + pending
+                + completed_total
+                + exec_by_status.get("failed", 0)
+                + exec_by_status.get("cancelled", 0)
+            )
+            > 0,
+        },
+        "inventory": {
+            "nonzero_lines": inv_agg["nonzero_lines"],
+            "allocated": inv_agg["allocated"],
+            "linked": inv_agg["linked"],
+            "low_stock": inv_agg["low_stock"],
+            "expiry": inv_agg["expiry"],
+            "traceability_gaps": [
+                {
+                    "name": it.name or "Inventory item",
+                    "quantity": str(it.quantity),
+                    "unit": it.unit or "",
+                }
+                for it in gap_items
+            ],
+            "movement_24h": movement,
+        },
+        "workflows": {
+            "in_flight": in_progress + pending,
+            "pending": pending,
+            # completed_7d is the scalar total over ALL processes (unbounded input, bounded
+            # output) -- what the Workflows summary card shows.
+            "completed_7d": sum(count for _pid, _name, count in throughput),
+            "process_count": process_count,
+            # Bounded (HUB_PROCESSES_MIN_CAP) but always contains every active-execution
+            # process -- built above.
+            "processes_min": processes_min,
+            "active_executions": [_hub_active_execution_payload(e) for e in active_execs],
+            # Per-process throughput, keyed by process_id (names aren't unique). Its only
+            # consumer is the active-batches graph, which looks up the selected process's
+            # row -- so it is restricted to the processes actually in the (capped) picker.
+            # This keeps the first-paint payload bounded on an org with a huge recipe/SKU
+            # catalogue where many processes have a recent completion.
+            "throughput_7d": [
+                {"process_id": str(pid), "name": name, "count": count}
+                for pid, name, count in throughput
+                if str(pid) in _pmin_ids
+            ],
+        },
+    }
+    return jsonify(payload), 200
 
 
 # ---------------------------------------------------------------------------

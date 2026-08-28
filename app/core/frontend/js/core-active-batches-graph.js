@@ -11,6 +11,7 @@
     executions: [],
     selectedProcessId: '',
     view: 'pipeline',
+    throughput7d: null,
   };
 
   var latestRequest = 0;
@@ -297,7 +298,7 @@
       '<div class="core2-step-rail-track" style="--core2-step-count:' + String(steps.length) + '">' + nodes + '</div>';
   }
 
-  function renderStatusSummary(processExecutions, activeExecutions, now) {
+  function renderStatusSummary(processExecutions, activeExecutions, now, process) {
     var inflightNode = document.querySelector('[data-core2-inflight-count]');
     var completed7dNode = document.querySelector('[data-core2-completed7d-count]');
     var noteNode = document.querySelector('[data-core2-active-total-note]');
@@ -308,6 +309,16 @@
       var completedAt = toDate(execution.completed_at);
       return completedAt && completedAt >= sevenDaysAgo;
     }).length;
+
+    // In hub mode processExecutions holds only active rows (no completed history), so the
+    // 7-day completed count comes from the overview payload's per-process throughput,
+    // matched by process_id (process names are not unique within an org).
+    if (!completed7d && Array.isArray(state.throughput7d) && process && process.id) {
+      var match = state.throughput7d.find(function (row) {
+        return row && String(row.process_id) === String(process.id);
+      });
+      if (match) completed7d = Number(match.count || 0);
+    }
 
     if (inflightNode) inflightNode.textContent = String(activeExecutions.length);
     if (completed7dNode) completed7dNode.textContent = String(completed7d);
@@ -659,7 +670,7 @@
     if (processSelect && !processSelect.dataset.boundCore2Active) {
       processSelect.addEventListener('change', function (event) {
         state.selectedProcessId = String(event.target.value || '');
-        renderAll();
+        ensureSelectedProcessSteps().then(function () { renderAll(); });
       });
       processSelect.dataset.boundCore2Active = '1';
     }
@@ -735,7 +746,7 @@
     var activeExecutions = processExecutions.filter(isActiveExecution);
 
     renderStepRail(process, activeExecutions, now);
-    renderStatusSummary(processExecutions, activeExecutions, now);
+    renderStatusSummary(processExecutions, activeExecutions, now, process);
 
     if (process) {
       renderPipeline(process, activeExecutions, now);
@@ -748,25 +759,94 @@
     }
   }
 
+  // Steps for the selected process, fetched once and cached on the state.processes entry.
+  var stepFetchInFlight = {};
+
+  function adoptHubOverview(overview) {
+    var wf = (overview && overview.workflows) || {};
+    state.processes = (wf.processes_min || []).map(function (p) {
+      return { id: String(p.id), name: p.name || 'Untitled process', steps: null };
+    });
+    state.executions = (wf.active_executions || []).map(function (e) {
+      return {
+        id: e.id,
+        process_id: e.process_id,
+        process_name: e.process_name,
+        status: e.status,
+        started_at: e.started_at,
+        current_step: e.current_step,
+        execution_steps: e.steps || [],
+        total_steps: e.total_steps,
+        progress: e.progress,
+      };
+    });
+    state.throughput7d = wf.throughput_7d || [];
+  }
+
+  function ensureSelectedProcessSteps() {
+    var pid = String(state.selectedProcessId || '');
+    if (!pid) return Promise.resolve();
+    var proc = state.processes.find(function (p) { return String(p.id) === pid; });
+    if (proc && Array.isArray(proc.steps)) return Promise.resolve();
+    if (stepFetchInFlight[pid]) return stepFetchInFlight[pid];
+    if (!window.CoreAPI || typeof window.CoreAPI.getProcess !== 'function') return Promise.resolve();
+
+    stepFetchInFlight[pid] = window.CoreAPI.getProcess(pid).then(function (res) {
+      var full = res && (res.process || res);
+      if (full && full.id) {
+        var merged = {
+          id: String(full.id),
+          name: full.name || (proc && proc.name) || 'Untitled process',
+          steps: full.steps || [],
+        };
+        var idx = state.processes.findIndex(function (p) { return String(p.id) === String(full.id); });
+        if (idx >= 0) state.processes[idx] = merged; else state.processes.push(merged);
+      }
+    }).catch(function (err) {
+      console.warn('Could not load process steps for active-batches graph', err);
+    }).finally(function () {
+      delete stepFetchInFlight[pid];
+    });
+    return stepFetchInFlight[pid];
+  }
+
   async function loadData() {
     var panel = byId('core2-active-pipeline-grid');
     if (!panel) return;
 
-    if (!window.CoreAPI || typeof window.CoreAPI.getProcesses !== 'function' || typeof window.CoreAPI.getExecutions !== 'function') {
-      return;
-    }
-
     var requestId = ++latestRequest;
 
     try {
-      var results = await Promise.all([
-        window.CoreAPI.getProcesses(true),
-        window.CoreAPI.getExecutions(),
-      ]);
-      if (requestId !== latestRequest) return;
-
-      state.processes = (results[0] && results[0].processes) ? results[0].processes : [];
-      state.executions = (results[1] && results[1].executions) ? results[1].executions : [];
+      var overview = window.__core2HubOverview;
+      if (overview && overview.workflows) {
+        // Reuse the /core hub's single overview call -- no second processes+executions fetch.
+        adoptHubOverview(overview);
+      } else if (window.__core2HubOverviewPending) {
+        // The hub is fetching /api/core/hub/overview right now. Do NOT start our own
+        // processes/executions fetch on a timer -- that would restore the exact fan-out
+        // this change removes when the overview is slower than queueLoad's delay. The
+        // core2:hub-overview event re-runs us with the data (or, on failure, lets this
+        // fallback run because the pending flag is cleared and __core2HubOverview stays
+        // undefined).
+        return;
+      } else if (window.CoreAPI && typeof window.CoreAPI.getProcesses === 'function'
+                 && typeof window.CoreAPI.getExecutions === 'function') {
+        // Fallback: no hub overview on this page and none pending (e.g. standalone HTMX
+        // swap, or the overview request failed). Minimal fetch -- no include_steps; steps
+        // load lazily per selected process.
+        var results = await Promise.all([
+          window.CoreAPI.getProcesses(),
+          window.CoreAPI.getExecutions(),
+        ]);
+        if (requestId !== latestRequest) return;
+        state.processes = ((results[0] && results[0].processes) || []).map(function (p) {
+          return { id: String(p.id), name: p.name || 'Untitled process', steps: Array.isArray(p.steps) ? p.steps : null };
+        });
+        state.executions = (results[1] && results[1].executions) ? results[1].executions : [];
+        state.throughput7d = null;
+      } else {
+        return;
+      }
 
       var selectedStillExists = state.processes.some(function (process) {
         return String(process.id) === String(state.selectedProcessId);
@@ -774,6 +854,9 @@
       if (!selectedStillExists) {
         state.selectedProcessId = chooseDefaultProcessId(state.processes, state.executions);
       }
+
+      await ensureSelectedProcessSteps();
+      if (requestId !== latestRequest) return;
 
       renderAll();
       bindInteractions();
@@ -804,6 +887,14 @@
   } else {
     queueLoad();
   }
+
+  // The /core hub publishes its single overview payload here; re-run so we render from
+  // it instead of the pre-hub fallback fetch.
+  document.addEventListener('core2:hub-overview', function () {
+    if (byId('core2-active-pipeline-grid')) {
+      queueLoad();
+    }
+  });
 
   document.body.addEventListener('htmx:afterSettle', function () {
     if (byId('core2-active-pipeline-grid')) {

@@ -19,7 +19,10 @@
   /**
    * Fetch system findings (one API call) and render banner. Call on DOMContentLoaded and optionally after navigation.
    */
-  async function loadSystemFindingsBanner() {
+  async function loadSystemFindingsBanner(preloaded) {
+    /* `preloaded` is an already-fetched /api/core/system-findings response (same shape as
+       CoreAPI.getSystemFindings()). The /core hub passes the result its journey-CTA code
+       already fetched so this does not run the whole system-check suite a second time. */
     /* Notifications page renders its own list from the API; do not overwrite #system-findings-list. */
     if (document.getElementById('notifications-page-marker')) {
       return;
@@ -38,10 +41,13 @@
     var findings = [];
     try {
       var api = window.CoreAPI;
-      if (!api || typeof api.getSystemFindings !== 'function') {
-        return;
+      var data = preloaded;
+      if (!data) {
+        if (!api || typeof api.getSystemFindings !== 'function') {
+          return;
+        }
+        data = await api.getSystemFindings();
       }
-      var data = await api.getSystemFindings();
       findings = (data && Array.isArray(data.findings)) ? data.findings : [];
     } catch (e) {
       return;

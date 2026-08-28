@@ -128,6 +128,22 @@ class ProcessRepository:
         """List all processes for an organisation"""
         return self.db.query(Process).filter(Process.org_id == org_id).order_by(Process.created_at.desc()).all()
 
+    def list_process_names(self, org_id: UUID, limit: int | None = None) -> list[tuple[UUID, str]]:
+        """(id, name) for an org's processes, newest first -- the minimal shape the /core
+        hub needs to populate its Active Batches process picker without hydrating full
+        rows. ``limit`` bounds the result for a payload that must stay small.
+        """
+        query = (
+            self.db.query(Process.id, Process.name).filter(Process.org_id == org_id).order_by(Process.created_at.desc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        return [(pid, name or "Untitled process") for pid, name in query.all()]
+
+    def count_processes(self, org_id: UUID) -> int:
+        """Count an org's processes without fetching the rows."""
+        return self.db.query(func.count(Process.id)).filter(Process.org_id == org_id).scalar() or 0
+
     def update_process(
         self,
         process_id: UUID,

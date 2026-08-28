@@ -1,6 +1,6 @@
 """Inventory repository with tenancy enforcement"""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
@@ -406,9 +406,21 @@ class InventoryRepository:
         return items
 
     def list_inventory_items(
-        self, org_id: UUID, inventory_type: str | None = None, process_id: UUID | None = None
+        self,
+        org_id: UUID,
+        inventory_type: str | None = None,
+        process_id: UUID | None = None,
+        limit: int | None = None,
+        cursor: tuple | None = None,
     ) -> list[InventoryItem]:
-        """List inventory items for an organisation, optionally filtered by type or process"""
+        """List inventory items for an organisation, optionally filtered by type or process.
+
+        ``limit``/``cursor`` are opt-in keyset pagination: with no ``limit`` the full list
+        is returned exactly as before. ``cursor`` is (created_at, id) of the last row a
+        previous page returned; the sort is (created_at DESC, id DESC).
+        """
+        from sqlalchemy import tuple_ as _tuple
+
         query = self.db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
         if inventory_type:
             query = query.filter(InventoryItem.inventory_type == inventory_type)
@@ -423,7 +435,12 @@ class InventoryRepository:
             query = query.outerjoin(Execution, InventoryItem.source_execution_id == Execution.id).filter(
                 or_(and_(Execution.org_id == org_id, Execution.process_id == process_id), tagged_pid)
             )
-        return query.order_by(InventoryItem.created_at.desc()).all()
+        if cursor is not None:
+            query = query.filter(_tuple(InventoryItem.created_at, InventoryItem.id) < _tuple(cursor[0], cursor[1]))
+        query = query.order_by(InventoryItem.created_at.desc(), InventoryItem.id.desc())
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def count_inventory_items_by_type(self, org_id: UUID) -> dict[str, int]:
         """Count inventory items per inventory_type without fetching full rows.
@@ -439,6 +456,94 @@ class InventoryRepository:
             .all()
         )
         return {inventory_type: count for inventory_type, count in rows}
+
+    # Items with quantity at/below this are "empty" and excluded from every hub count,
+    # matching the frontend's `Number(quantity) > 0.0001` guard (core2.html).
+    _NONZERO_QTY = Decimal("0.0001")
+
+    def hub_overview_aggregates(self, org_id: UUID, today: date) -> dict:
+        """All the scalar inventory numbers the /core hub Overview renders, in one query.
+
+        Replaces the old path where the hub fetched every enriched inventory row via
+        ``/api/core/inventory`` (all compliance checks + DAG traces per item) and bucketed
+        it in JavaScript. Every count here is over non-empty items only. ``low_stock`` is
+        reported as 0: there is no per-item reorder threshold in the schema, and the
+        frontend's ratio check was already inert (it needs an ``initial_quantity`` the API
+        never sent) -- wired here as a named field so a real implementation has a home.
+        """
+        nz = InventoryItem.quantity > self._NONZERO_QTY
+        linked_expr = or_(
+            InventoryItem.source_execution_id.isnot(None),
+            InventoryItem.supplier_batch_number.isnot(None),
+        )
+        exp = InventoryItem.expiry_date
+        row = (
+            self.db.query(
+                func.count(InventoryItem.id).filter(nz).label("nonzero_lines"),
+                func.count(InventoryItem.id)
+                .filter(nz, InventoryItem.source_execution_id.isnot(None))
+                .label("allocated"),
+                func.count(InventoryItem.id).filter(nz, linked_expr).label("linked"),
+                func.count(InventoryItem.id).filter(nz, exp.isnot(None), exp < today).label("expired"),
+                func.count(InventoryItem.id).filter(nz, exp >= today, exp <= today + timedelta(days=7)).label("d0_7"),
+                func.count(InventoryItem.id)
+                .filter(nz, exp > today + timedelta(days=7), exp <= today + timedelta(days=30))
+                .label("d8_30"),
+                func.count(InventoryItem.id)
+                .filter(nz, exp > today + timedelta(days=30), exp <= today + timedelta(days=90))
+                .label("d31_90"),
+            )
+            .filter(InventoryItem.org_id == org_id)
+            .one()
+        )
+        return {
+            "nonzero_lines": row.nonzero_lines or 0,
+            "allocated": row.allocated or 0,
+            "linked": row.linked or 0,
+            "low_stock": 0,
+            "expiry": {
+                "expired": row.expired or 0,
+                "d0_7": row.d0_7 or 0,
+                "d8_30": row.d8_30 or 0,
+                "d31_90": row.d31_90 or 0,
+            },
+        }
+
+    def list_traceability_gap_items(self, org_id: UUID, limit: int = 6) -> list[InventoryItem]:
+        """Non-empty items with no execution link and no supplier batch number (most recent
+        first). Feeds the hub's short "traceability gaps" list -- bounded by ``limit``.
+        """
+        safe_limit = max(1, min(int(limit or 6), 50))
+        return (
+            self.db.query(InventoryItem)
+            .filter(
+                InventoryItem.org_id == org_id,
+                InventoryItem.quantity > self._NONZERO_QTY,
+                InventoryItem.source_execution_id.is_(None),
+                InventoryItem.supplier_batch_number.is_(None),
+            )
+            .order_by(InventoryItem.created_at.desc())
+            .limit(safe_limit)
+            .all()
+        )
+
+    def movement_totals_since(self, org_id: UUID, since) -> dict:
+        """Signed net, absolute total and event count of inventory movements since
+        ``since`` (a tz-aware datetime). One aggregate query for the hub's 24h movement
+        widget instead of walking per-item audit logs client-side.
+        """
+        from app.core.db.models.inventory_movement import InventoryMovement
+
+        row = (
+            self.db.query(
+                func.coalesce(func.sum(InventoryMovement.quantity), 0).label("net"),
+                func.coalesce(func.sum(func.abs(InventoryMovement.quantity)), 0).label("abs_total"),
+                func.count(InventoryMovement.id).label("events"),
+            )
+            .filter(InventoryMovement.org_id == org_id, InventoryMovement.created_at >= since)
+            .one()
+        )
+        return {"net": float(row.net or 0), "abs": float(row.abs_total or 0), "events": row.events or 0}
 
     def update_inventory_item(
         self,
