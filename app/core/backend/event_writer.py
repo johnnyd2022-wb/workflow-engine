@@ -146,6 +146,12 @@ class EventWriter:
         except Exception:
             logger.exception("Failed to upsert entity_event_summary for event %s", event_type)
             # Summary failure must not block the main event write
+
+        # Invalidate the per-org system-findings cache for mutations the check suite reads
+        # (inventory/execution/process). Guarded inside mark_stale -- never fails the write.
+        from app.core.backend.system_findings_cache import mark_stale
+
+        mark_stale(self.session, self.org_id, event_type)
         return event
 
 
