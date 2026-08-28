@@ -1,6 +1,7 @@
 """Core backend API routes for process execution platform"""
 
 import base64
+import functools
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
 from pydantic import ValidationError
@@ -181,6 +183,46 @@ core_bp = Blueprint(
     static_folder="../frontend",
     static_url_path="/static",
 )
+
+
+@functools.lru_cache(maxsize=1)
+def _asset_version() -> str:
+    """Short digest of the bundled JS/CSS files (name + mtime + size), computed once per
+    process. Appended as ``?v=`` to serve_core_js / serve_core_css URLs so a deploy that
+    ships changed assets busts the browser and CDN cache -- these routes send
+    ``Cache-Control: public, max-age=3600`` on otherwise-stable paths, so without this a
+    freshly rendered page can run hour-old JS that predates the endpoints it calls."""
+    h = hashlib.blake2b(digest_size=8)
+    frontend = os.path.join(os.path.dirname(__file__), "..", "frontend")
+    for sub in ("js", "css", "inventory", "img"):
+        directory = os.path.join(frontend, sub)
+        try:
+            names = sorted(os.listdir(directory))
+        except OSError:
+            continue
+        for name in names:
+            try:
+                st = os.stat(os.path.join(directory, name))
+            except OSError:
+                continue
+            h.update(f"{name}:{int(st.st_mtime)}:{st.st_size}\n".encode())
+    return h.hexdigest()
+
+
+_VERSIONED_STATIC_ENDPOINTS = frozenset(
+    {
+        "core.serve_core_js",
+        "core.serve_core_css",
+        "core.serve_core_inventory_static",
+        "core.serve_core_img",
+    }
+)
+
+
+@core_bp.url_defaults
+def _core_static_asset_version(endpoint: str, values: dict) -> None:
+    if endpoint in _VERSIONED_STATIC_ENDPOINTS and "v" not in values:
+        values["v"] = _asset_version()
 
 
 # --- Flow wizard safety helpers (query filtering + step integrity) ---
@@ -4487,6 +4529,27 @@ def _dashboard_build_compliance_summary(results: list[Any], system_status: dict[
     }
 
 
+# The app runs in NZ local time (container TZ = Pacific/Auckland) but Postgres sessions
+# are UTC, so a naive local-midnight datetime bound into a query is read as UTC midnight --
+# which hid the current NZ day's rows from the "today"/"this week" dashboard widgets until
+# noon NZ. Boundaries are built tz-aware in this zone so SQLAlchemy binds timestamptz and
+# the comparison is correct. Matches system_findings_cache._LOCAL_TZ.
+_APP_TZ = ZoneInfo("Pacific/Auckland")
+
+
+def _local_midnight(day: date) -> datetime:
+    """Tz-aware start-of-day for ``day`` in the app's local zone (DST-correct: the offset
+    is resolved for that specific date)."""
+    return datetime.combine(day, datetime.min.time(), tzinfo=_APP_TZ)
+
+
+def _local_date_expr(col):
+    """SQL: the local calendar date of a timestamptz column, for day-bucket GROUP BYs.
+    ``date(col)`` alone truncates in the session TZ (UTC) and buckets rows near local
+    midnight into the wrong day."""
+    return func.date(func.timezone("Pacific/Auckland", col))
+
+
 def _dashboard_event_log_period(
     org_id: UUID, session, period_start: datetime, period_end: datetime, limit: int = 10
 ) -> dict[str, Any]:
@@ -4545,9 +4608,10 @@ def _dashboard_operations_summary(
 
 def _dashboard_week_boundaries(today: date) -> tuple[datetime, datetime, datetime]:
     week_start_date = today - timedelta(days=today.weekday())
-    week_start = datetime.combine(week_start_date, datetime.min.time())
-    next_week_start = week_start + timedelta(days=7)
-    prev_week_start = week_start - timedelta(days=7)
+    # each boundary built from its own date so a DST change inside the window can't skew it
+    week_start = _local_midnight(week_start_date)
+    next_week_start = _local_midnight(week_start_date + timedelta(days=7))
+    prev_week_start = _local_midnight(week_start_date - timedelta(days=7))
     return week_start, next_week_start, prev_week_start
 
 
@@ -4612,13 +4676,13 @@ def _dashboard_event_counts_by_day(
     org_id: UUID, session, start_dt: datetime, end_dt: datetime, actor_type: str | None = None
 ) -> dict[date, int]:
     q = (
-        session.query(func.date(EntityEvent.created_at).label("event_day"), func.count(EntityEvent.id).label("total"))
+        session.query(_local_date_expr(EntityEvent.created_at).label("event_day"), func.count(EntityEvent.id).label("total"))
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= start_dt, EntityEvent.created_at < end_dt)
     )
     if actor_type:
         q = q.filter(EntityEvent.actor_type == actor_type)
-    rows = q.group_by(func.date(EntityEvent.created_at)).all()
+    rows = q.group_by(_local_date_expr(EntityEvent.created_at)).all()
     out: dict[date, int] = {}
     for row in rows:
         day = _dashboard_parse_date_like(getattr(row, "event_day", None))
@@ -4634,7 +4698,7 @@ def _dashboard_execution_counts_by_day(
     if column == "completed":
         day_col = Execution.completed_at
         q = (
-            session.query(func.date(day_col).label("event_day"), func.count(Execution.id).label("total"))
+            session.query(_local_date_expr(day_col).label("event_day"), func.count(Execution.id).label("total"))
             .filter(Execution.org_id == org_id)
             .filter(Execution.status == ExecutionStatus.COMPLETED)
             .filter(day_col.isnot(None))
@@ -4643,12 +4707,12 @@ def _dashboard_execution_counts_by_day(
     else:
         day_col = Execution.started_at
         q = (
-            session.query(func.date(day_col).label("event_day"), func.count(Execution.id).label("total"))
+            session.query(_local_date_expr(day_col).label("event_day"), func.count(Execution.id).label("total"))
             .filter(Execution.org_id == org_id)
             .filter(day_col.isnot(None))
             .filter(day_col >= start_dt, day_col < end_dt)
         )
-    rows = q.group_by(func.date(day_col)).all()
+    rows = q.group_by(_local_date_expr(day_col)).all()
     out: dict[date, int] = {}
     for row in rows:
         day = _dashboard_parse_date_like(getattr(row, "event_day", None))
@@ -4830,9 +4894,9 @@ def get_dashboard_summary():
         return jsonify({"error": "window_days must be between 7 and 180"}), 400
 
     today = date.today()
-    now_dt = datetime.now()
-    day_start = datetime.combine(today, datetime.min.time())
-    next_day_start = day_start + timedelta(days=1)
+    now_dt = datetime.now(_APP_TZ)
+    day_start = _local_midnight(today)
+    next_day_start = _local_midnight(today + timedelta(days=1))
     week_start, next_week_start, _prev_week_start = _dashboard_week_boundaries(today)
 
     # The DAG-heavy expired_materials check is served from the per-org system-findings
