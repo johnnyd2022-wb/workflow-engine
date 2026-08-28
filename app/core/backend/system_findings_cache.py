@@ -3,8 +3,9 @@
 The check suite (CoreChecksRunner + build_system_status_payload) runs a DAG traversal per
 expired-with-stock raw material -- on a real org that is ~1.3s and hundreds of queries,
 and /core hits the endpoint on every load. This module serves the last computed payload
-from `system_findings_cache` and only recomputes when the row is missing, past its TTL,
-or was marked ``stale`` by a mutation.
+from `system_findings_cache` and only recomputes when the row is missing, was computed
+before the last NZ midnight (the date-driven checks roll over there), or was marked
+``stale`` by a mutation.
 
 Recompute is single-flight: a pg transaction-scoped advisory lock keyed on the org means
 a burst of /core loads for one org runs the suite once, not once per request. The lock
@@ -15,6 +16,7 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
 
@@ -22,15 +24,28 @@ from app.observability import get_logger
 
 logger = get_logger(__name__)
 
-# Findings are a slow-moving health summary and every inventory/execution/process mutation
-# invalidates the row immediately anyway. This TTL is only the backstop for time-only
-# changes (an item crossing its expiry date with nothing else happening) -- 30 min of lag
-# there is fine, and the longer window keeps more sessions on the fast (cached) path
-# instead of eating the ~1s recompute.
-TTL = timedelta(minutes=30)
+# Every inventory/execution/process mutation invalidates the row immediately (mark_stale).
+# The only thing left for a time-based backstop to catch is the DATE-driven check
+# (expired_materials: `expiry_date < date.today()`), which the app evaluates in NZ local
+# time and which therefore only changes at NZ midnight. So a cached payload stays fresh
+# until the next Pacific/Auckland midnight -- the expensive DAG traversal then runs about
+# once per NZ day per active org instead of on every /core load. `_MAX_AGE` is a hard
+# ceiling (DST-safe) in case a clock jump makes the midnight math misbehave.
+_LOCAL_TZ = ZoneInfo("Pacific/Auckland")
+_MAX_AGE = timedelta(hours=25)
+
+# Kept as a module symbol: tests and any external caller that wants "the freshness
+# window" get the hard ceiling.
+TTL = _MAX_AGE
 
 # Event-type prefixes whose mutations can change what the checks report.
 _INVALIDATING_PREFIXES = ("inventory_item.", "execution.", "process.")
+
+
+def _last_local_midnight(now: datetime) -> datetime:
+    """UTC instant of the most recent Pacific/Auckland midnight at or before ``now``."""
+    local = now.astimezone(_LOCAL_TZ)
+    return local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
 
 
 def _lock_key(org_id: UUID) -> int:
@@ -48,7 +63,13 @@ def _fetch(session):
 
 
 def _fresh(row, now: datetime) -> bool:
-    return bool(row) and not row.stale and (now - row.computed_at) < TTL
+    if not row or row.stale:
+        return False
+    computed_at = row.computed_at
+    if computed_at.tzinfo is None:
+        computed_at = computed_at.replace(tzinfo=UTC)
+    # Fresh only if computed on/after the last NZ midnight AND not absurdly old.
+    return computed_at >= _last_local_midnight(now) and (now - computed_at) < _MAX_AGE
 
 
 def _compute(org_id: UUID, session) -> dict:

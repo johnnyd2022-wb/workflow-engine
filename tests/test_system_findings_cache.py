@@ -143,7 +143,7 @@ def test_expired_row_recomputes(db, authed, monkeypatch):
     client.get(ENDPOINT)
     assert calls["n"] == 1
 
-    # backdate the row past the TTL
+    # backdate the row well past the max age (and any midnight boundary)
     old = datetime.now(UTC) - sfc.TTL - timedelta(minutes=1)
     db.execute(
         text("UPDATE system_findings_cache SET computed_at = :t WHERE org_id = :o"),
@@ -151,6 +151,39 @@ def test_expired_row_recomputes(db, authed, monkeypatch):
     )
     db.commit()
 
+    client.get(ENDPOINT)
+    assert calls["n"] == 2
+
+
+def test_freshness_rolls_over_at_nz_midnight(db, authed, monkeypatch):
+    """A row computed before the last Pacific/Auckland midnight is stale; one computed
+    after it is fresh -- so the DAG traversal runs about once per NZ day."""
+    org, client = authed
+    calls = {"n": 0}
+    real = sfc._compute
+    monkeypatch.setattr(sfc, "_compute", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
+
+    client.get(ENDPOINT)
+    assert calls["n"] == 1
+
+    now = datetime.now(UTC)
+    last_midnight = sfc._last_local_midnight(now)
+
+    # computed one minute BEFORE the last NZ midnight -> stale -> recompute
+    db.execute(
+        text("UPDATE system_findings_cache SET computed_at = :t WHERE org_id = :o"),
+        {"t": last_midnight - timedelta(minutes=1), "o": str(org.id)},
+    )
+    db.commit()
+    client.get(ENDPOINT)
+    assert calls["n"] == 2
+
+    # computed one minute AFTER the last NZ midnight -> still fresh -> no recompute
+    db.execute(
+        text("UPDATE system_findings_cache SET computed_at = :t, stale = false WHERE org_id = :o"),
+        {"t": last_midnight + timedelta(minutes=1), "o": str(org.id)},
+    )
+    db.commit()
     client.get(ENDPOINT)
     assert calls["n"] == 2
 
