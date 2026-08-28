@@ -70,13 +70,13 @@ def authed(db, flask_app):
 def test_first_call_computes_and_stores_then_serves_from_cache(db, authed, monkeypatch):
     org, client = authed
     calls = {"n": 0}
-    real_compute = sfc._compute
+    real_compute = sfc._compute_expensive
 
     def counting_compute(org_id, session):
         calls["n"] += 1
         return real_compute(org_id, session)
 
-    monkeypatch.setattr(sfc, "_compute", counting_compute)
+    monkeypatch.setattr(sfc, "_compute_expensive", counting_compute)
 
     first = client.get(ENDPOINT)
     assert first.status_code == 200
@@ -95,8 +95,8 @@ def test_first_call_computes_and_stores_then_serves_from_cache(db, authed, monke
 def test_invalidating_event_marks_stale_and_forces_recompute(db, authed, monkeypatch):
     org, client = authed
     calls = {"n": 0}
-    real = sfc._compute
-    monkeypatch.setattr(sfc, "_compute", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
+    real = sfc._compute_expensive
+    monkeypatch.setattr(sfc, "_compute_expensive", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
 
     client.get(ENDPOINT)
     assert calls["n"] == 1
@@ -119,8 +119,8 @@ def test_invalidating_event_marks_stale_and_forces_recompute(db, authed, monkeyp
 def test_unrelated_event_does_not_invalidate(db, authed, monkeypatch):
     org, client = authed
     calls = {"n": 0}
-    real = sfc._compute
-    monkeypatch.setattr(sfc, "_compute", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
+    real = sfc._compute_expensive
+    monkeypatch.setattr(sfc, "_compute_expensive", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
 
     client.get(ENDPOINT)
     from app.core.backend.event_writer import EventWriter
@@ -137,8 +137,8 @@ def test_unrelated_event_does_not_invalidate(db, authed, monkeypatch):
 def test_expired_row_recomputes(db, authed, monkeypatch):
     org, client = authed
     calls = {"n": 0}
-    real = sfc._compute
-    monkeypatch.setattr(sfc, "_compute", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
+    real = sfc._compute_expensive
+    monkeypatch.setattr(sfc, "_compute_expensive", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
 
     client.get(ENDPOINT)
     assert calls["n"] == 1
@@ -160,8 +160,8 @@ def test_freshness_rolls_over_at_nz_midnight(db, authed, monkeypatch):
     after it is fresh -- so the DAG traversal runs about once per NZ day."""
     org, client = authed
     calls = {"n": 0}
-    real = sfc._compute
-    monkeypatch.setattr(sfc, "_compute", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
+    real = sfc._compute_expensive
+    monkeypatch.setattr(sfc, "_compute_expensive", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
 
     client.get(ENDPOINT)
     assert calls["n"] == 1
@@ -188,6 +188,26 @@ def test_freshness_rolls_over_at_nz_midnight(db, authed, monkeypatch):
     assert calls["n"] == 2
 
 
+def test_only_the_dag_check_is_cached_cheap_checks_run_every_request(db, authed, monkeypatch):
+    """The expensive (expired_materials) slice is cached; every other check runs live on
+    each request so the banner reflects time-sensitive checks (output_expiry etc.) in
+    real time."""
+    org, client = authed
+    exp = {"n": 0}
+    live = {"n": 0}
+    real_exp = sfc._compute_expensive
+    real_live = sfc._run_live
+    monkeypatch.setattr(sfc, "_compute_expensive", lambda o, s: (exp.__setitem__("n", exp["n"] + 1) or real_exp(o, s)))
+    monkeypatch.setattr(sfc, "_run_live", lambda o, s: (live.__setitem__("n", live["n"] + 1) or real_live(o, s)))
+
+    for _ in range(3):
+        assert client.get(ENDPOINT).status_code == 200
+
+    assert exp["n"] == 1, "expensive slice recomputed more than once despite a fresh cache"
+    assert live["n"] == 3, "cheap checks did not run on every request"
+    assert "expired_materials" in {r["check_id"] for r in _cache_row(db, org.id).payload["results"]}
+
+
 def test_cache_is_per_org(db, flask_app):
     org_a, client_a = _make_org_and_client(db, flask_app)
     org_b, client_b = _make_org_and_client(db, flask_app)
@@ -212,3 +232,17 @@ def test_cache_is_per_org(db, flask_app):
             db.query(SystemFindingsCache).filter_by(org_id=oid).delete(synchronize_session=False)
             db.query(Organisation).filter_by(id=oid).delete(synchronize_session=False)
         db.commit()
+
+
+def test_prewarm_populates_a_fresh_row_without_a_request(db, authed):
+    """The scheduled warm job recomputes the cached slice ahead of the first user."""
+    org, _client = authed
+    assert _cache_row(db, org.id) is None
+
+    sfc.prewarm(org.id, db)
+
+    db.expire_all()
+    row = _cache_row(db, org.id)
+    assert row is not None and row.stale is False
+    assert sfc._fresh(row, datetime.now(UTC))
+    assert "expired_materials" in {r["check_id"] for r in row.payload["results"]}

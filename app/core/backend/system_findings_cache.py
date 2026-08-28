@@ -1,15 +1,23 @@
-"""Read-through cache for /api/core/system-findings.
+"""Read-through cache for /api/core/system-findings, split by check cost.
 
-The check suite (CoreChecksRunner + build_system_status_payload) runs a DAG traversal per
-expired-with-stock raw material -- on a real org that is ~1.3s and hundreds of queries,
-and /core hits the endpoint on every load. This module serves the last computed payload
-from `system_findings_cache` and only recomputes when the row is missing, was computed
-before the last NZ midnight (the date-driven checks roll over there), or was marked
-``stale`` by a mutation.
+The endpoint feeds the /core banner and the Notifications page, and /core hits it on every
+load. Its checks split cleanly:
 
-Recompute is single-flight: a pg transaction-scoped advisory lock keyed on the org means
-a burst of /core loads for one org runs the suite once, not once per request. The lock
-auto-releases on commit/rollback, so a failed request cannot leak it.
+- **expired_materials** runs a DAG traversal per expired-with-stock raw material (~1.3s /
+  hundreds of queries on a real org) and is purely DATE-driven -- it only changes when a
+  raw material crosses `expiry_date < date.today()`, evaluated in NZ local time. That one
+  is CACHED here: fresh until the next Pacific/Auckland midnight, invalidated immediately
+  by any inventory/execution/process mutation, recomputed single-flight (a pg
+  transaction-scoped advisory lock keyed on the org, so a burst of /core loads runs it
+  once). It effectively runs ~once per NZ day per active org.
+
+- **untracked_items / output_expiry / output_ready_date / compliant.<module>** are cheap
+  (no DAG -- targeted queries + date math) and some are sub-day time-sensitive
+  (output_expiry supports an `hours` unit). Those run LIVE on every request so the banner
+  reflects them in real time.
+
+The merged `{findings, system_status}` is round-tripped through Flask's JSON provider once
+so the response shape is identical whether the expensive part came from cache or compute.
 """
 
 import hashlib
@@ -24,21 +32,17 @@ from app.observability import get_logger
 
 logger = get_logger(__name__)
 
-# Every inventory/execution/process mutation invalidates the row immediately (mark_stale).
-# The only thing left for a time-based backstop to catch is the DATE-driven check
-# (expired_materials: `expiry_date < date.today()`), which the app evaluates in NZ local
-# time and which therefore only changes at NZ midnight. So a cached payload stays fresh
-# until the next Pacific/Auckland midnight -- the expensive DAG traversal then runs about
-# once per NZ day per active org instead of on every /core load. `_MAX_AGE` is a hard
-# ceiling (DST-safe) in case a clock jump makes the midnight math misbehave.
+# Only these check ids are cached (the DAG-heavy, date-driven ones). Everything else the
+# CoreChecksRunner registers runs live on every request.
+_CACHED_CHECK_IDS = frozenset({"expired_materials"})
+
+# Freshness of the cached (expensive) slice: until the next Pacific/Auckland midnight,
+# hard-capped at 25h for DST / clock-jump safety.
 _LOCAL_TZ = ZoneInfo("Pacific/Auckland")
 _MAX_AGE = timedelta(hours=25)
+TTL = _MAX_AGE  # kept as a module symbol for callers/tests wanting "the freshness ceiling"
 
-# Kept as a module symbol: tests and any external caller that wants "the freshness
-# window" get the hard ceiling.
-TTL = _MAX_AGE
-
-# Event-type prefixes whose mutations can change what the checks report.
+# Event-type prefixes whose mutations can change what the cached check reports.
 _INVALIDATING_PREFIXES = ("inventory_item.", "execution.", "process.")
 
 
@@ -68,37 +72,58 @@ def _fresh(row, now: datetime) -> bool:
     computed_at = row.computed_at
     if computed_at.tzinfo is None:
         computed_at = computed_at.replace(tzinfo=UTC)
-    # Fresh only if computed on/after the last NZ midnight AND not absurdly old.
     return computed_at >= _last_local_midnight(now) and (now - computed_at) < _MAX_AGE
 
 
-def _compute(org_id: UUID, session) -> dict:
-    """Run the check suite and normalise the result to plain JSON types.
+def _result_to_dict(r) -> dict:
+    return {"check_id": r.check_id, "flagged": r.flagged, "message": r.message, "data": r.data}
 
-    The payload carries Decimal/UUID/datetime values from the check data; round-tripping
-    it through Flask's JSON provider (the same one jsonify uses) once here means the
-    cache-miss response and every cache-hit response are byte-identical, and the raw
-    json.dumps in _upsert cannot choke.
-    """
+
+def _dict_to_result(d: dict):
+    from app.core.backend.corechecks import CheckResult
+
+    return CheckResult(
+        check_id=d["check_id"], flagged=bool(d.get("flagged")), message=d.get("message"), data=d.get("data")
+    )
+
+
+def _compute_expensive(org_id: UUID, session) -> list[dict]:
+    """Run only the cached (DAG-heavy) checks; return their results as plain-JSON dicts."""
     from flask import json as flask_json
 
     from app.core.backend.corechecks import CoreChecksRunner
-    from app.core.backend.system_status import build_system_status_payload
 
-    results = CoreChecksRunner(org_id=org_id, session=session).run_all_checks()
-    findings = []
-    for r in results:
-        if not r.flagged or not r.message:
+    runner = CoreChecksRunner(org_id=org_id, session=session)
+    out = []
+    for cid in _CACHED_CHECK_IDS:
+        r = runner.run_check(cid)
+        if r is not None:
+            out.append(_result_to_dict(r))
+    # Normalise Decimal/UUID/datetime out now so _upsert's json.dumps is safe and the
+    # cached bytes match what jsonify would produce.
+    return flask_json.loads(flask_json.dumps(out))
+
+
+def _run_live(org_id: UUID, session) -> list:
+    """Run every registered check that is NOT cached, fresh. Returns [CheckResult]."""
+    from app.core.backend.corechecks import CoreChecksRunner
+
+    runner = CoreChecksRunner(org_id=org_id, session=session)
+    results = []
+    for cid in runner._checks:  # noqa: SLF001 -- the runner has no public id iterator
+        if cid in _CACHED_CHECK_IDS:
             continue
-        finding = {"text": r.message, "check_id": r.check_id}
-        if r.data is not None:
-            finding["data"] = r.data
-        findings.append(finding)
-    system_status = build_system_status_payload(org_id, session, results)
-    return flask_json.loads(flask_json.dumps({"findings": findings, "system_status": system_status}))
+        try:
+            r = runner.run_check(cid)
+        except Exception:
+            logger.exception("live system check %s failed for org %s", cid, org_id)
+            continue
+        if r is not None:
+            results.append(r)
+    return results
 
 
-def _upsert(session, org_id: UUID, payload: dict, now: datetime) -> None:
+def _upsert(session, org_id: UUID, expensive_results: list[dict], now: datetime) -> None:
     session.execute(
         sa.text(
             """
@@ -108,48 +133,87 @@ def _upsert(session, org_id: UUID, payload: dict, now: datetime) -> None:
             SET payload = EXCLUDED.payload, computed_at = EXCLUDED.computed_at, stale = false
             """
         ),
-        {"org_id": str(org_id), "payload": json.dumps(payload), "now": now},
+        {"org_id": str(org_id), "payload": json.dumps({"results": expensive_results}), "now": now},
     )
 
 
-def get_or_compute(org_id: UUID, session) -> dict:
-    """Return the system-findings payload for ``org_id``, computing + caching it if the
-    cached copy is missing / stale / expired. Safe to call concurrently."""
+def _cached_expensive(org_id: UUID, session) -> list[dict]:
+    """The cached (DAG-heavy) check results as plain-JSON dicts. Read-through with
+    single-flight recompute; safe to call concurrently."""
     now = datetime.now(UTC)
     row = _fetch(session)
     if _fresh(row, now):
-        return row.payload
+        return row.payload.get("results", [])
 
     key = _lock_key(org_id)
     got_lock = session.execute(sa.text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": key}).scalar()
     if not got_lock:
-        # Another request holds the lock and is (re)computing. Serve the stale copy now if
-        # we have one; otherwise wait for the lock and read what that request wrote.
+        # Another request is recomputing. Serve the stale copy if we have one; else wait.
         if row is not None:
-            return row.payload
+            return row.payload.get("results", [])
         session.execute(sa.text("SELECT pg_advisory_xact_lock(:k)"), {"k": key})
         row = _fetch(session)
         if row is not None:
-            return row.payload
+            return row.payload.get("results", [])
 
-    # We hold the lock. Re-check: another request may have written just before we locked.
-    row = _fetch(session)
+    row = _fetch(session)  # double-check: someone may have written just before we locked
     if _fresh(row, now):
-        return row.payload
+        return row.payload.get("results", [])
 
-    payload = _compute(org_id, session)
+    results = _compute_expensive(org_id, session)
     try:
-        _upsert(session, org_id, payload, now)
-        session.commit()  # persist the row AND release the xact advisory lock
+        _upsert(session, org_id, results, now)
+        session.commit()  # persist AND release the xact advisory lock
     except Exception:
         session.rollback()
         logger.exception("Failed to write system_findings_cache for org %s", org_id)
-    return payload
+    return results
+
+
+def get_or_compute(org_id: UUID, session) -> dict:
+    """The full `{findings, system_status}` payload: the DAG-heavy checks from the per-org
+    cache, the cheap checks recomputed live, merged."""
+    from flask import json as flask_json
+
+    from app.core.backend.system_status import build_system_status_payload
+
+    cached_results = [_dict_to_result(d) for d in _cached_expensive(org_id, session)]
+    live_results = _run_live(org_id, session)
+    results = cached_results + live_results
+
+    findings = []
+    for r in results:
+        if not r.flagged or not r.message:
+            continue
+        finding = {"text": r.message, "check_id": r.check_id}
+        if r.data is not None:
+            finding["data"] = r.data
+        findings.append(finding)
+
+    system_status = build_system_status_payload(org_id, session, results)
+    return flask_json.loads(flask_json.dumps({"findings": findings, "system_status": system_status}))
+
+
+def prewarm(org_id: UUID, session) -> None:
+    """Force-recompute the cached (expensive) slice for one org. Used by the scheduled
+    just-after-NZ-midnight warm job so the first user of the day never eats the DAG cost."""
+    now = datetime.now(UTC)
+    key = _lock_key(org_id)
+    if not session.execute(sa.text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": key}).scalar():
+        return  # someone is already computing it
+    results = _compute_expensive(org_id, session)
+    try:
+        _upsert(session, org_id, results, now)
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception("prewarm system_findings_cache failed for org %s", org_id)
 
 
 def mark_stale(session, org_id: UUID, event_type: str) -> None:
-    """Called by EventWriter after a mutation. Marks the org's cache stale so the next
-    request recomputes. Guarded -- a cache-bookkeeping failure must never fail a mutation."""
+    """Called by EventWriter after a mutation. Marks the cached slice stale so the next
+    request recomputes it. Guarded -- a cache-bookkeeping failure must never fail a
+    mutation."""
     if not event_type or not event_type.startswith(_INVALIDATING_PREFIXES):
         return
     try:
