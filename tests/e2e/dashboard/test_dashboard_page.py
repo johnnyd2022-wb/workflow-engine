@@ -28,6 +28,26 @@ def test_ac1_dashboard_page_highlights_active_nav(logged_in_page: Page):
     assert_clean_page(page)
 
 
+def test_dashboard_landing_fires_one_summary_call_and_stays_clean(logged_in_page: Page):
+    """dashboard.js inits from both DOMContentLoaded and htmx:afterSettle; the landing
+    load must still make exactly one /api/core/dashboard/summary call and log no console
+    errors (a boosted-nav race previously aborted the fetch -> `TypeError: Failed to
+    fetch`)."""
+    page = logged_in_page
+    calls: list[str] = []
+    page.on(
+        "request",
+        lambda r: calls.append(r.url) if r.method == "GET" and "/api/core/dashboard/summary" in r.url else None,
+    )
+
+    page.goto("/core/dashboard")
+    page.wait_for_load_state("networkidle")
+
+    assert len(calls) == 1, f"expected exactly one dashboard/summary call, got {len(calls)}: {calls}"
+    expect(page.locator("[data-dashboard-error]")).to_be_hidden()
+    assert_clean_page(page)
+
+
 def test_ac2_dashboard_shows_inline_error_when_summary_fetch_fails(logged_in_page: Page):
     """A failed client-side fetch of /api/core/dashboard/summary must surface
     `data-dashboard-error` rather than leave the page blank or throw uncaught."""

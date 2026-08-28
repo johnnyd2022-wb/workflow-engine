@@ -170,6 +170,18 @@ def _cached_expensive(org_id: UUID, session) -> list[dict]:
     return results
 
 
+def get_check_results(org_id: UUID, session) -> list:
+    """The merged check-result list: the DAG-heavy checks from the per-org cache, the
+    cheap checks recomputed live. Same set `CoreChecksRunner.run_all_checks()` returns,
+    but the expensive slice is read-through cached. Returns `[CheckResult]`.
+
+    Consumers that want findings + system_status should call `get_or_compute`; consumers
+    that need the raw results (the dashboard summary) call this."""
+    cached_results = [_dict_to_result(d) for d in _cached_expensive(org_id, session)]
+    live_results = _run_live(org_id, session)
+    return cached_results + live_results
+
+
 def get_or_compute(org_id: UUID, session) -> dict:
     """The full `{findings, system_status}` payload: the DAG-heavy checks from the per-org
     cache, the cheap checks recomputed live, merged."""
@@ -177,9 +189,7 @@ def get_or_compute(org_id: UUID, session) -> dict:
 
     from app.core.backend.system_status import build_system_status_payload
 
-    cached_results = [_dict_to_result(d) for d in _cached_expensive(org_id, session)]
-    live_results = _run_live(org_id, session)
-    results = cached_results + live_results
+    results = get_check_results(org_id, session)
 
     findings = []
     for r in results:

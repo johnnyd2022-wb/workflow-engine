@@ -4835,8 +4835,14 @@ def get_dashboard_summary():
     next_day_start = day_start + timedelta(days=1)
     week_start, next_week_start, _prev_week_start = _dashboard_week_boundaries(today)
 
-    runner = corechecks.CoreChecksRunner(org_id=org_id, session=db_session)
-    check_results = runner.run_all_checks()
+    # The DAG-heavy expired_materials check is served from the per-org system-findings
+    # cache (fresh until NZ midnight, invalidated on inventory/execution/process
+    # mutations, pre-warmed by the warm-system-findings job); the cheap checks run live.
+    # Same result set as CoreChecksRunner.run_all_checks() without the ~640ms DAG cost on
+    # every landing-page load.
+    from app.core.backend.system_findings_cache import get_check_results
+
+    check_results = get_check_results(org_id, db_session)
 
     from app.core.backend.system_status import build_system_status_payload
 

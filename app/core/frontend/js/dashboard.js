@@ -287,32 +287,60 @@
         }
     }
 
+    var pendingLoad = null;
+
+    function abortPendingLoad() {
+        if (pendingLoad) {
+            pendingLoad.abort();
+            pendingLoad = null;
+        }
+    }
+
     async function loadDashboard(root) {
         var loading = byData(root, '[data-dashboard-loading]');
         var error = byData(root, '[data-dashboard-error]');
         if (loading) loading.hidden = false;
         if (error) error.hidden = true;
 
+        abortPendingLoad();
+        var controller = new AbortController();
+        pendingLoad = controller;
+
         try {
             if (!window.CoreAPI || typeof window.CoreAPI.getDashboardSummary !== 'function') {
                 throw new Error('Dashboard API client unavailable');
             }
-            var data = await window.CoreAPI.getDashboardSummary(30);
+            var data = await window.CoreAPI.getDashboardSummary(30, { signal: controller.signal });
+            if (!root.isConnected) return;
             renderDashboard(root, data || {});
             if (loading) loading.hidden = true;
         } catch (err) {
+            // The request was aborted because the page navigated away (hx-boost swaps
+            // the dashboard root out mid-flight). Nothing to show an error on.
+            if ((err && err.name === 'AbortError') || !root.isConnected) return;
             console.error('Failed to load dashboard summary', err);
             if (loading) loading.hidden = true;
             if (error) {
                 error.hidden = false;
                 error.textContent = 'Could not load dashboard summary. Refresh and try again.';
             }
+            // A real failure: let a later htmx:afterSettle retry (a navigation-abort
+            // returned above and never gets here).
+            delete root.dataset.dashboardLoaded;
+        } finally {
+            if (pendingLoad === controller) pendingLoad = null;
+            delete root.dataset.dashboardLoading;
         }
     }
 
     function initDashboardPage() {
         var root = document.querySelector(ROOT_SELECTOR);
         if (!root) return;
+        // DOMContentLoaded and htmx:afterSettle can both fire for one navigation; don't
+        // start a second fetch over a root that is already loading or rendered.
+        if (root.dataset.dashboardLoading === '1' || root.dataset.dashboardLoaded === '1') return;
+        root.dataset.dashboardLoading = '1';
+        root.dataset.dashboardLoaded = '1';
         loadDashboard(root);
     }
 
@@ -325,4 +353,9 @@
     document.body.addEventListener('htmx:afterSettle', function () {
         if (document.querySelector(ROOT_SELECTOR)) initDashboardPage();
     });
+
+    // Cancel an in-flight summary fetch the moment the page starts to go away, so it
+    // doesn't surface as a "Failed to fetch" error against a detached root.
+    document.body.addEventListener('htmx:beforeSwap', abortPendingLoad);
+    window.addEventListener('pagehide', abortPendingLoad);
 })();
