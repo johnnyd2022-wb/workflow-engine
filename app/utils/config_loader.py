@@ -8,6 +8,12 @@ from app.observability import get_logger
 
 LOGGER = get_logger(__name__)
 
+# ENVIRONMENT tokens that select the production configuration. Two spellings live
+# in the tree today: Dockerfile.multi sets ENVIRONMENT=production, scripts/run_prod.sh
+# sets ENVIRONMENT=prod. Both must be treated as production when resolving database
+# credentials, or a `prod` deploy would silently read the tracked config file.
+PRODUCTION_ENVIRONMENTS = frozenset({"prod", "production"})
+
 
 class Config:
     """Configuration loader for environment-specific settings"""
@@ -155,6 +161,15 @@ class Config:
         return (self.environment or "").strip().lower() == "production"
 
     @property
+    def _is_production_env(self) -> bool:
+        """True for either production spelling (``production`` or ``prod``).
+
+        Used only for database-credential resolution, where a tracked-file fallback
+        must never apply. Deliberately broader than :attr:`is_production`.
+        """
+        return (self.environment or "").strip().lower() in PRODUCTION_ENVIRONMENTS
+
+    @property
     def host(self) -> str:
         return self.get("app", "host", "localhost")
 
@@ -201,6 +216,19 @@ class Config:
                     env_password = env_password.strip("\"'")
                     if env_password:
                         return env_password
+        # Production must never read a database password from a tracked config file.
+        # Require it from the deployment environment (POSTGRES_PASSWORD) and fail
+        # fast at startup if it is absent -- a missing secret is a deployment
+        # failure, not a reason to fall back to app/config/prod.ini.
+        if self._is_production_env:
+            env_password = self._clean_config_secret(os.getenv("POSTGRES_PASSWORD"))
+            if env_password:
+                return env_password
+            raise RuntimeError(
+                "Production database password is not configured: set the "
+                "POSTGRES_PASSWORD environment variable from the deployment secret "
+                "store. app/config/prod.ini must not carry a database credential."
+            )
         # Try KeePassXC first (for local environment), fallback to config file
         if self._keepass_creds and "Password" in self._keepass_creds:
             return self._keepass_creds["Password"]

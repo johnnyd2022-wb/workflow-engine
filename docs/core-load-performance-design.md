@@ -111,9 +111,13 @@ HTTPS and cookies are Secure; that is an availability failure, not a safe fallba
 These findings are outside !181's functional changes but matter before commercial
 deployment:
 
-1. `app/config/prod.ini` is tracked and includes a database password. Treat it as exposed:
-   rotate the real credential, remove the value from Git history using the team's incident
-   procedure, and require a deployment secret/environment value at production startup.
+1. `app/config/prod.ini` was tracked with a database password. **Application-side: done** —
+   the tracked value is removed and production now fails fast at startup unless
+   `POSTGRES_PASSWORD` is supplied from the deployment environment
+   (`app/utils/config_loader.py`, `tests/test_config_production_secrets.py`).
+   **Still owed, and needs the credential owner + deployment access:** rotate the
+   superseded credential and remove its value from Git history using the team's incident
+   procedure.
 2. `app/tls/app_cert.key` is tracked. Treat it as compromised: replace the certificate/key
    pair, remove the private key from version control/history, and generate development/test
    certificates at setup or image-build time. Production TLS belongs in the deployment
@@ -245,5 +249,7 @@ edit/delete/reconcile (removed — `loadCore2Overview()` already refreshes metri
 - **`budgets.json` override for `/api/core/hub/overview` is a placeholder** (queries
   budget 15 / ceiling 25) pending a measured E2E-fixture run per the perf-guardrails
   SKILL.md procedure.
-- **Security findings in "requiring owner action" above are untouched** — they need the
-  credential owner and deployment access, not an engineering worktree.
+- **Security findings in "requiring owner action" above:** the `prod.ini` application-side
+  clause is now handled (see that section). Credential rotation + Git-history purge, and
+  the tracked `app/tls/app_cert.key`, still need the credential owner and deployment
+  access, not an engineering worktree.
