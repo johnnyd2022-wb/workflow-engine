@@ -244,23 +244,16 @@ def register_routes(bp):
     @bp.route("/api/core/system-findings", methods=["GET"])
     @requires_auth
     def list_system_findings():
-        """Run all registered checks and return banner-ready findings (flagged checks with messages).
+        """Banner-ready findings for the system-findings banner and the /core journey health.
 
-        Single endpoint for the system-findings banner so the UI always reflects current checks.
+        Served from a per-org read-through cache (system_findings_cache): the underlying
+        check suite is a DAG traversal per expired-with-stock raw material -- ~1.3s on a
+        real org -- and this endpoint is hit on every /core load. The cache is invalidated
+        immediately by any inventory/execution/process mutation and recomputed once,
+        lazily, on the next request. See app/core/backend/system_findings_cache.py.
         """
-        from app.core.backend.system_status import build_system_status_payload
+        from app.core.backend.system_findings_cache import get_or_compute
 
         org_id = UUID(g.org_id)
-        session = db_session()
-        runner = CoreChecksRunner(org_id=org_id, session=session)
-        results = runner.run_all_checks()
-        findings = []
-        for r in results:
-            if not r.flagged or not r.message:
-                continue
-            finding = {"text": r.message, "check_id": r.check_id}
-            if r.data is not None:
-                finding["data"] = r.data
-            findings.append(finding)
-        system_status = build_system_status_payload(org_id, session, results)
-        return jsonify({"findings": findings, "system_status": system_status}), 200
+        payload = get_or_compute(org_id, db_session())
+        return jsonify(payload), 200

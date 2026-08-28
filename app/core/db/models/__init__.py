@@ -7,6 +7,7 @@ from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_evidence import ExecutionEvidence
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.system_findings_cache import SystemFindingsCache
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.process import Process, ProcessCategory
 from app.core.db.models.process_step_document import ProcessStepDocument
@@ -36,4 +37,5 @@ __all__ = [
     "ExecutionStepStatus",
     "InventoryItem",
     "InventoryType",
+    "SystemFindingsCache",
 ]
