@@ -10,6 +10,7 @@ app/app.py`) -- those keep Werkzeug's dev server for its live reloader.
 Docker's test/production images use this instead.
 """
 
+import os
 from pathlib import Path
 
 from app.utils.config_loader import config as app_config
@@ -33,9 +34,17 @@ if _cert_file.exists() and _key_file.exists():
 # need. Values are a conservative starting point for a small self-hosted box,
 # not a capacity-tested ceiling.
 worker_class = "gthread"
-workers = 2
-threads = 4
-timeout = 60
+# Tunable per deployment without a code change. Defaults (2 x 4 = 8 concurrent request
+# slots) are a conservative floor for a small self-hosted box, NOT a capacity result --
+# a full /core load alone fires ~65 static-asset requests plus the API calls, so a box
+# under real customer load will need this raised (and static assets moved off the
+# workers). Before raising: cap the SQLAlchemy pool ([database] pool_size/max_overflow)
+# so workers * (pool_size + max_overflow) stays under Postgres max_connections, and move
+# the rate limiter to shared storage ([ratelimit] storage_uri) so per-worker buckets
+# don't dilute the auth limits.
+workers = int(os.getenv("WEB_CONCURRENCY", "2"))
+threads = int(os.getenv("GUNICORN_THREADS", "4"))
+timeout = int(os.getenv("GUNICORN_TIMEOUT", "60"))
 
 # Do not preload the app: gunicorn's --preload imports the app once in the
 # master process and forks workers from it, which would fork this app's

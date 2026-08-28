@@ -10,6 +10,13 @@ port = 8432
 name = workflow-engine
 user = postgres
 password = YOUR_PASSWORD_HERE
+# Optional connection-pool tuning (defaults shown; SQLAlchemy defaults are 5/10).
+# Keep  workers * (pool_size + max_overflow)  under Postgres max_connections.
+# pool_size = 5
+# max_overflow = 10
+# pool_recycle = 1800
+# pool_timeout = 30
+
 
 [xero]
 client_id = YOUR_PROD_XERO_CLIENT_ID
@@ -42,3 +49,8 @@ rum_mask_inputs = true
 rum_faro_upstream = http://localhost:12347
 rum_posthog_upstream = http://localhost:8000
 rum_posthog_api_key =
+
+# [ratelimit]
+# Shared storage for auth rate limits. REQUIRED for any multi-worker deploy --
+# without it each gunicorn worker keeps its own bucket and the limits are diluted.
+# storage_uri = redis://localhost:6379/0

@@ -92,6 +92,16 @@ def create_app():
     # Import limiter from auth_routes and initialize it with the app
     from app.api.routes.auth_routes import limiter
 
+    # Rate-limit state defaults to in-process memory (flask-limiter's default). That is
+    # PER WORKER: with N gunicorn workers the effective auth brute-force limits are N x
+    # looser than configured, because a caller round-robined across workers gets a fresh
+    # bucket each time. Set [ratelimit] storage_uri (e.g. redis://host:6379/0) in the
+    # config for any multi-worker deployment so the limit is shared and real. Unset =
+    # unchanged single-process behaviour.
+    _ratelimit_storage = config.get("ratelimit", "storage_uri", fallback=None)
+    if _ratelimit_storage:
+        app.config["RATELIMIT_STORAGE_URI"] = _ratelimit_storage
+
     limiter.init_app(app)
     app.limiter = limiter
 
