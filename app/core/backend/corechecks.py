@@ -124,9 +124,13 @@ def get_system_findings_by_item(org_id: UUID, session: Session) -> dict[str, lis
     New checks: add an extractor below for the check's result.data shape; no change to check implementations.
     """
     from app.core.backend.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
+    from app.core.backend.system_findings_cache import get_check_results
 
-    runner = CoreChecksRunner(org_id=org_id, session=session)
-    results = runner.run_all_checks()
+    # Same read-through cache the /core banner and dashboard use: the DAG-heavy
+    # expired_materials slice (incl. its impacted_items list, which this enrichment needs)
+    # comes from the per-org row; the cheap checks run live. Keeps /api/core/inventory off
+    # the per-expired-material DAG traversal on the warm path.
+    results = get_check_results(org_id, session)
     out: dict[str, list[dict[str, Any]]] = {}
 
     def add(item_id: str, check_id: str, reason: str) -> None:

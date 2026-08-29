@@ -68,65 +68,11 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-content dilcalc-root" x-data="dilutionCalculator()">
-  <div class="dilcalc-card">
-    <h1 class="dilcalc-title">Dilution Calculator</h1>
-    <p class="dilcalc-subtitle">Solve for any one of starting ABV, starting volume, final ABV, or final volume — and see how much water to actually add.</p>
-
-    <div class="dilcalc-solve-for">
-      <template x-for="opt in fieldOptions" :key="opt.key">
-        <button type="button" :class="{active: solveFor === opt.key}" @click="setSolveFor(opt.key)" x-text="opt.label"></button>
-      </template>
-    </div>
-
-    <div x-show="error" x-cloak class="dilcalc-error" role="alert" data-testid="dilcalc-error" x-text="error"></div>
-
-    {# hx-boost="false": base_spa.html boosts every descendant form by default
-       (hx-boost="true" on <body>); without opting out here, htmx intercepts this
-       submit alongside Alpine's own handler and fires its own boosted GET back to
-       this page, swapping #page-content and wiping the Alpine result/error state
-       right as the real POST resolves. Same opt-out pattern already used for the
-       notifications link in base_spa.html. #}
-    <form @submit.prevent="submit()" hx-boost="false">
-      <div class="dilcalc-field-grid">
-        <template x-for="opt in fieldOptions" :key="opt.key">
-          <div class="dilcalc-field">
-            <label :for="'dilcalc-' + opt.key" x-text="opt.label"></label>
-            <input
-              :id="'dilcalc-' + opt.key"
-              type="number"
-              step="any"
-              :placeholder="solveFor === opt.key ? 'solving for this' : opt.placeholder"
-              :disabled="solveFor === opt.key"
-              x-model="fields[opt.key]">
-          </div>
-        </template>
-      </div>
-
-      <button type="submit" class="dilcalc-submit" :disabled="loading" x-text="loading ? 'Calculating…' : 'Calculate'"></button>
-    </form>
-  </div>
-
-  <div class="dilcalc-card" x-show="result" x-cloak data-testid="dilcalc-result">
-    <h2 class="dilcalc-title" style="font-size:1.1rem;">Result</h2>
-    <div class="dilcalc-result-row dilcalc-highlight">
-      <span class="dilcalc-result-label" x-text="result ? fieldLabel(result.solved_field) : ''"></span>
-      <span class="dilcalc-result-value" data-testid="dilcalc-solved-value" x-text="result ? formatNumber(result.solved_value) : ''"></span>
-    </div>
-    <div class="dilcalc-result-row">
-      <span class="dilcalc-result-label">Water to add (contraction-aware)</span>
-      <span class="dilcalc-result-value" data-testid="dilcalc-water-to-add" x-text="result ? formatNumber(result.water_to_add_ml) + ' mL' : ''"></span>
-    </div>
-    <div class="dilcalc-result-row">
-      <span class="dilcalc-result-label">Water to add (naive, additive)</span>
-      <span class="dilcalc-result-value" data-testid="dilcalc-water-to-add-naive" x-text="result ? formatNumber(result.water_to_add_naive_ml) + ' mL' : ''"></span>
-    </div>
-    <p class="dilcalc-disclaimer" x-text="result ? result.disclaimer : ''"></p>
-  </div>
-</div>
-
+{# Defined before the x-data element and assigned to window so it resolves on a boosted
+   #page-content swap (htmx re-executes this inline script; Alpine then evaluates x-data).
+   Also registered as a named Alpine component so it survives later boosted navigations. #}
 <script>
-  function dilutionCalculator() {
+  window.dilutionCalculator = function dilutionCalculator() {
     return {
       fieldOptions: [
         { key: 'starting_abv', label: 'Starting ABV (%)', placeholder: 'e.g. 40' },
@@ -204,6 +150,69 @@
         }
       },
     };
+  };
+  if (window.Alpine && typeof window.Alpine.data === 'function') {
+    window.Alpine.data('dilutionCalculator', window.dilutionCalculator);
+  } else {
+    document.addEventListener('alpine:init', function () {
+      window.Alpine.data('dilutionCalculator', window.dilutionCalculator);
+    });
   }
 </script>
+<div class="max-content dilcalc-root" x-data="dilutionCalculator()">
+  <div class="dilcalc-card">
+    <h1 class="dilcalc-title">Dilution Calculator</h1>
+    <p class="dilcalc-subtitle">Solve for any one of starting ABV, starting volume, final ABV, or final volume — and see how much water to actually add.</p>
+
+    <div class="dilcalc-solve-for">
+      <template x-for="opt in fieldOptions" :key="opt.key">
+        <button type="button" :class="{active: solveFor === opt.key}" @click="setSolveFor(opt.key)" x-text="opt.label"></button>
+      </template>
+    </div>
+
+    <div x-show="error" x-cloak class="dilcalc-error" role="alert" data-testid="dilcalc-error" x-text="error"></div>
+
+    {# hx-boost="false": base_spa.html boosts every descendant form by default
+       (hx-boost="true" on <body>); without opting out here, htmx intercepts this
+       submit alongside Alpine's own handler and fires its own boosted GET back to
+       this page, swapping #page-content and wiping the Alpine result/error state
+       right as the real POST resolves. Same opt-out pattern already used for the
+       notifications link in base_spa.html. #}
+    <form @submit.prevent="submit()" hx-boost="false">
+      <div class="dilcalc-field-grid">
+        <template x-for="opt in fieldOptions" :key="opt.key">
+          <div class="dilcalc-field">
+            <label :for="'dilcalc-' + opt.key" x-text="opt.label"></label>
+            <input
+              :id="'dilcalc-' + opt.key"
+              type="number"
+              step="any"
+              :placeholder="solveFor === opt.key ? 'solving for this' : opt.placeholder"
+              :disabled="solveFor === opt.key"
+              x-model="fields[opt.key]">
+          </div>
+        </template>
+      </div>
+
+      <button type="submit" class="dilcalc-submit" :disabled="loading" x-text="loading ? 'Calculating…' : 'Calculate'"></button>
+    </form>
+  </div>
+
+  <div class="dilcalc-card" x-show="result" x-cloak data-testid="dilcalc-result">
+    <h2 class="dilcalc-title" style="font-size:1.1rem;">Result</h2>
+    <div class="dilcalc-result-row dilcalc-highlight">
+      <span class="dilcalc-result-label" x-text="result ? fieldLabel(result.solved_field) : ''"></span>
+      <span class="dilcalc-result-value" data-testid="dilcalc-solved-value" x-text="result ? formatNumber(result.solved_value) : ''"></span>
+    </div>
+    <div class="dilcalc-result-row">
+      <span class="dilcalc-result-label">Water to add (contraction-aware)</span>
+      <span class="dilcalc-result-value" data-testid="dilcalc-water-to-add" x-text="result ? formatNumber(result.water_to_add_ml) + ' mL' : ''"></span>
+    </div>
+    <div class="dilcalc-result-row">
+      <span class="dilcalc-result-label">Water to add (naive, additive)</span>
+      <span class="dilcalc-result-value" data-testid="dilcalc-water-to-add-naive" x-text="result ? formatNumber(result.water_to_add_naive_ml) + ' mL' : ''"></span>
+    </div>
+    <p class="dilcalc-disclaimer" x-text="result ? result.disclaimer : ''"></p>
+  </div>
+</div>
 {% endblock %}

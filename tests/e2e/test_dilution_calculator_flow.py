@@ -11,6 +11,8 @@ strictly more than the naive 1000 mL), and the one uniform validation rule (AC5)
 as a real, visible error in the UI rather than a silent failure or a raw 500.
 """
 
+import re
+
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -83,6 +85,28 @@ def test_dilution_calculator_page_renders_for_authenticated_user(logged_in_page:
     )
     page.wait_for_load_state("networkidle")
     expect(page.get_by_role("heading", name="Dilution Calculator")).to_be_visible()
+    expect(page.get_by_role("button", name="Calculate")).to_be_visible()
+    assert_clean_page(page)
+
+
+def test_dilution_calculator_survives_a_boosted_nav(logged_in_page: Page):
+    """hx-boost swaps only #page-content, so the inline dilutionCalculator() factory has
+    to be defined before Alpine initialises the x-data node in the swapped fragment --
+    otherwise every x-model / x-text on the page throws 'dilutionCalculator is not
+    defined'. Reaching the page by an in-app link (not page.goto) exercises that path."""
+    page = logged_in_page
+    page.goto("/core/dashboard")
+    page.wait_for_load_state("networkidle")
+
+    page.evaluate(
+        "() => { const a=document.createElement('a'); a.href='/dilution-calculator';"
+        " a.textContent='dilcalc'; document.body.appendChild(a); a.click(); }"
+    )
+    page.wait_for_url(re.compile(r"/dilution-calculator"))
+    page.wait_for_load_state("networkidle")
+
+    # the Alpine component is actually live: x-for rendered the four solve-for buttons
+    expect(page.locator(".dilcalc-solve-for button")).to_have_count(4)
     expect(page.get_by_role("button", name="Calculate")).to_be_visible()
     assert_clean_page(page)
 
