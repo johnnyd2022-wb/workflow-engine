@@ -96,6 +96,10 @@
       const card = document.createElement('div');
       card.className = 'step-card flows2-step';
       card.setAttribute('data-step-id', step.id || `step-new-${Date.now()}`);
+      // Optimistic-concurrency token: the updated_at this card was rendered from. Sent
+      // as If-Match on save so a colleague's edit since then is caught (409) rather than
+      // silently overwritten.
+      if (step.updated_at) card.setAttribute('data-step-updated-at', step.updated_at);
       card.setAttribute('data-expanded', 'false');
       
       const inputs = step.inputs || [];
@@ -919,22 +923,25 @@
         if (stepId && stepId.startsWith('step-new-')) {
           // This is a new step, create it
           result = await CoreAPI.createStep(processId, stepData);
-          
+
           // Update the step card with the real ID
           stepCard.setAttribute('data-step-id', result.id);
         } else {
-          // This is an existing step, update it
-          result = await CoreAPI.updateStep(processId, stepId, stepData);
+          // This is an existing step, update it -- If-Match guards against a colleague's
+          // concurrent edit (see data-step-updated-at, set at render time).
+          const expected = stepCard.getAttribute('data-step-updated-at') || undefined;
+          result = await CoreAPI.updateStep(processId, stepId, stepData, expected);
         }
-        
+        if (result && result.updated_at) stepCard.setAttribute('data-step-updated-at', result.updated_at);
+
         // Update the step header with saved data
         const stepNameEl = stepCard.querySelector('.step-name');
         const stepDescriptionEl = stepCard.querySelector('.step-description');
         if (stepNameEl) stepNameEl.textContent = stepName;
         if (stepDescriptionEl) stepDescriptionEl.textContent = stepDescription;
-        
+
         showNotification('success', 'Step Saved', `Step "${stepName}" has been saved successfully.`);
-        
+
         // Reload process data to get updated step list
         await loadProcessData();
         
@@ -945,6 +952,15 @@
         updateFromOutputButtonVisibility();
         
       } catch (error) {
+        if (typeof CoreAPI !== 'undefined' && CoreAPI.isStaleWrite && CoreAPI.isStaleWrite(error)) {
+          showNotification(
+            'warning',
+            'Changed elsewhere',
+            'Someone else edited this step while you had it open. Showing the latest — re-apply your change if you still need it.'
+          );
+          await loadProcessData();
+          return;
+        }
         console.error('Failed to save step:', error);
         showNotification('error', 'Failed to Save Step', error.message || 'Failed to save step. Please try again.');
       }

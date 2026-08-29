@@ -285,7 +285,12 @@ def test_ac6_add_step_rejects_expiry_shorter_than_ready_date(authed_client):
         {
             "name": "Batch",
             "extra_data": {
-                "ready_date": {"enabled": True, "mode": "fixed_duration", "duration_value": 10, "duration_unit": "days"},
+                "ready_date": {
+                    "enabled": True,
+                    "mode": "fixed_duration",
+                    "duration_value": 10,
+                    "duration_unit": "days",
+                },
                 "custom_expiry": {
                     "enabled": True,
                     "mode": "fixed_duration",
@@ -363,7 +368,12 @@ def test_ac7_update_step_rejects_expiry_shorter_than_ready_date(authed_client):
         {
             "name": "Batch",
             "extra_data": {
-                "ready_date": {"enabled": True, "mode": "fixed_duration", "duration_value": 10, "duration_unit": "days"},
+                "ready_date": {
+                    "enabled": True,
+                    "mode": "fixed_duration",
+                    "duration_value": 10,
+                    "duration_unit": "days",
+                },
                 "custom_expiry": {
                     "enabled": True,
                     "mode": "fixed_duration",
@@ -710,3 +720,110 @@ def test_validate_process_and_step_rejects_step_not_in_process(db):
     )
     db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
     db.commit()
+
+
+# --------------------------------------------------------------------------------------
+# Optimistic concurrency (If-Match) -- Phase D of the live-sync work
+# --------------------------------------------------------------------------------------
+
+
+def test_get_process_exposes_updated_at_on_process_and_steps(authed_client):
+    proc = _create_process(authed_client)
+    _add_step(authed_client, proc["id"], 1, "Mix")
+    body = _get_process(authed_client, proc["id"])
+    assert isinstance(body.get("updated_at"), str) and body["updated_at"]
+    assert body["steps"] and isinstance(body["steps"][0].get("updated_at"), str)
+
+
+def test_update_process_without_if_match_is_unchanged_last_write_wins(authed_client):
+    proc = _create_process(authed_client)
+    r1 = authed_client.put(f"/api/core/processes/{proc['id']}", json={"name": "First"})
+    assert r1.status_code == 200
+    # A second write with no If-Match still wins, exactly as before.
+    r2 = authed_client.put(f"/api/core/processes/{proc['id']}", json={"name": "Second"})
+    assert r2.status_code == 200
+    assert _get_process(authed_client, proc["id"])["name"] == "Second"
+
+
+def test_update_process_stale_if_match_returns_409_with_current_state(authed_client):
+    proc = _create_process(authed_client)
+    stale = _get_process(authed_client, proc["id"])["updated_at"]
+
+    # Someone else saves in the meantime (bumps updated_at).
+    assert authed_client.put(f"/api/core/processes/{proc['id']}", json={"name": "Theirs"}).status_code == 200
+
+    resp = authed_client.put(
+        f"/api/core/processes/{proc['id']}",
+        json={"name": "Mine"},
+        headers={"If-Match": stale},
+    )
+    assert resp.status_code == 409
+    body = resp.get_json()
+    assert body["error"] == "stale_write"
+    assert body["current"]["name"] == "Theirs"
+    # The rejected write did not land.
+    assert _get_process(authed_client, proc["id"])["name"] == "Theirs"
+
+
+def test_update_process_current_if_match_succeeds(authed_client):
+    proc = _create_process(authed_client)
+    current = _get_process(authed_client, proc["id"])["updated_at"]
+    resp = authed_client.put(
+        f"/api/core/processes/{proc['id']}",
+        json={"name": "Renamed"},
+        headers={"If-Match": current},
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["name"] == "Renamed"
+
+
+def test_update_step_stale_if_match_returns_409(authed_client):
+    proc = _create_process(authed_client)
+    step = _add_step(authed_client, proc["id"], 1, "Mix").get_json()
+    stale = _get_process(authed_client, proc["id"])["steps"][0]["updated_at"]
+
+    assert (
+        authed_client.put(f"/api/core/processes/{proc['id']}/steps/{step['id']}", json={"name": "Theirs"}).status_code
+        == 200
+    )
+
+    resp = authed_client.put(
+        f"/api/core/processes/{proc['id']}/steps/{step['id']}",
+        json={"name": "Mine"},
+        headers={"If-Match": stale},
+    )
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "stale_write"
+
+
+def test_reorder_steps_stale_if_match_returns_409(authed_client):
+    proc = _create_process(authed_client)
+    s1 = _add_step(authed_client, proc["id"], 1, "One").get_json()
+    s2 = _add_step(authed_client, proc["id"], 2, "Two").get_json()
+    steps = _get_process(authed_client, proc["id"])["steps"]
+    stale = max(s["updated_at"] for s in steps)
+
+    # A step edit bumps a step's updated_at, making `stale` no longer current.
+    assert (
+        authed_client.put(
+            f"/api/core/processes/{proc['id']}/steps/{s1['id']}", json={"description": "touched"}
+        ).status_code
+        == 200
+    )
+
+    resp = _reorder_with_if_match(
+        authed_client,
+        proc["id"],
+        [{"id": s2["id"], "position": 1000}, {"id": s1["id"], "position": 2000}],
+        stale,
+    )
+    assert resp.status_code == 409
+    assert resp.get_json()["error"] == "stale_write"
+
+
+def _reorder_with_if_match(client, process_id, orders, if_match):
+    return client.post(
+        f"/api/core/processes/{process_id}/steps/reorder",
+        json={"orders": orders},
+        headers={"If-Match": if_match},
+    )

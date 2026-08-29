@@ -1484,6 +1484,65 @@ def create_process():
         return jsonify({"error": "Failed to create process"}), 500
 
 
+def _iso(dt):
+    return dt.isoformat() if dt else None
+
+
+def _serialize_step(step) -> dict:
+    return {
+        "id": str(step.id),
+        "step_number": step.step_number,
+        "position": str(step.position) if getattr(step, "position", None) is not None else None,
+        "name": step.name,
+        "description": step.description,
+        "inputs": step.inputs or [],
+        "outputs": step.outputs or [],
+        "execution_prompts": step.execution_prompts or [],
+        "updated_at": _iso(getattr(step, "updated_at", None)),
+    }
+
+
+def _serialize_process(process, *, with_steps: bool = False) -> dict:
+    out = {
+        "id": str(process.id),
+        "name": process.name,
+        "description": process.description,
+        "category": process.category.value if process.category else None,
+        "is_draft": process.is_draft,
+        "created_at": _iso(getattr(process, "created_at", None)),
+        "updated_at": _iso(getattr(process, "updated_at", None)),
+    }
+    if with_steps:
+        out["steps"] = [_serialize_step(s) for s in process.steps]
+    return out
+
+
+def _if_match_conflict(current_updated_at, current_entity: dict):
+    """Optimistic-concurrency gate for edit endpoints.
+
+    Opt-in: a request with no ``If-Match`` header keeps the old last-write-wins
+    behaviour, so nothing that doesn't send the header changes. When the header IS
+    present and doesn't equal the row's current ``updated_at`` (ISO 8601, optional
+    surrounding quotes), someone else has saved since this client last read the entity;
+    return a 409 whose body carries the *current* server state for the client to show.
+    Returns ``None`` when the write may proceed.
+    """
+    want = request.headers.get("If-Match")
+    if not want:
+        return None
+    want = want.strip().strip('"')
+    have = current_updated_at.isoformat() if current_updated_at else ""
+    if want == have:
+        return None
+    return jsonify(
+        {
+            "error": "stale_write",
+            "message": "This was changed by someone else. Showing the latest.",
+            "current": current_entity,
+        }
+    ), 409
+
+
 @core_bp.route("/api/core/processes/<process_id>", methods=["PUT"])
 @requires_auth
 def update_process(process_id: str):
@@ -1509,6 +1568,13 @@ def update_process(process_id: str):
 
     repo = ProcessRepository(db_session)
     try:
+        current = repo.get_process_by_id(process_uuid, org_id)
+        if not current:
+            return jsonify({"error": "Process not found"}), 404
+        conflict = _if_match_conflict(current.updated_at, _serialize_process(current))
+        if conflict:
+            return conflict
+
         process = repo.update_process(
             process_id=process_uuid,
             org_id=org_id,
@@ -1521,19 +1587,7 @@ def update_process(process_id: str):
         if not process:
             return jsonify({"error": "Process not found"}), 404
 
-        return (
-            jsonify(
-                {
-                    "id": str(process.id),
-                    "name": process.name,
-                    "description": process.description,
-                    "category": process.category.value if process.category else None,
-                    "is_draft": process.is_draft,
-                    "created_at": process.created_at.isoformat() if process.created_at else None,
-                }
-            ),
-            200,
-        )
+        return jsonify(_serialize_process(process)), 200
     except Exception:
         # Log the full error for debugging but return generic message to client
         logger.exception("Error updating process")
@@ -1587,35 +1641,7 @@ def get_process(process_id: str):
     if not process:
         return jsonify({"error": "Process not found"}), 404
 
-    steps = []
-    for step in process.steps:
-        steps.append(
-            {
-                "id": str(step.id),
-                "step_number": step.step_number,
-                "position": str(step.position) if getattr(step, "position", None) is not None else None,
-                "name": step.name,
-                "description": step.description,
-                "inputs": step.inputs or [],
-                "outputs": step.outputs or [],
-                "execution_prompts": step.execution_prompts or [],
-            }
-        )
-
-    return (
-        jsonify(
-            {
-                "id": str(process.id),
-                "name": process.name,
-                "description": process.description,
-                "category": process.category.value if process.category else None,
-                "is_draft": process.is_draft,
-                "steps": steps,
-                "created_at": process.created_at.isoformat() if process.created_at else None,
-            }
-        ),
-        200,
-    )
+    return jsonify(_serialize_process(process, with_steps=True)), 200
 
 
 @core_bp.route("/api/core/processes/<process_id>/steps", methods=["POST"])
@@ -1708,6 +1734,16 @@ def update_step(process_id: str, step_id: str):
             return jsonify({"error": expiry_ready_errors[0]}), 400
 
     repo = ProcessRepository(db_session)
+
+    if request.headers.get("If-Match"):
+        owning = repo.get_process_with_steps(process_uuid, org_id)
+        current_step = next((s for s in owning.steps if s.id == step_uuid), None) if owning else None
+        if not current_step:
+            return jsonify({"error": "Step or process not found"}), 404
+        conflict = _if_match_conflict(current_step.updated_at, _serialize_step(current_step))
+        if conflict:
+            return conflict
+
     try:
         step = repo.update_step(
             step_id=step_uuid,
@@ -1729,18 +1765,7 @@ def update_step(process_id: str, step_id: str):
         return jsonify({"error": "Step or process not found"}), 404
 
     return (
-        jsonify(
-            {
-                "id": str(step.id),
-                "step_number": step.step_number,
-                "position": str(step.position) if getattr(step, "position", None) is not None else None,
-                "name": step.name,
-                "description": step.description,
-                "inputs": step.inputs or [],
-                "outputs": step.outputs or [],
-                "execution_prompts": step.execution_prompts or [],
-            }
-        ),
+        jsonify(_serialize_step(step)),
         200,
     )
 
@@ -1790,6 +1815,19 @@ def reorder_steps(process_id: str):
                 {"error": f"Invalid position: must be a positive, finite multiple of 1000 (got {pos!r})"}
             ), 400
         updates.append((step_uuid, position))
+
+    # Optimistic concurrency: a reorder bumps each moved step's updated_at, so the newest
+    # step updated_at across the process is the structural-version token -- it advances on
+    # any reorder or step edit, which is exactly the staleness a reordering client cares
+    # about. Opt-in via If-Match; absent header = unchanged behaviour.
+    if request.headers.get("If-Match"):
+        current = ProcessRepository(db_session).get_process_with_steps(process_uuid, org_id)
+        if not current:
+            return jsonify({"error": "Process not found"}), 404
+        token = max((s.updated_at for s in current.steps if s.updated_at), default=current.updated_at)
+        conflict = _if_match_conflict(token, _serialize_process(current, with_steps=True))
+        if conflict:
+            return conflict
 
     # Use an isolated session for this write endpoint.
     # The app's before_request tenant middleware uses the scoped_session for reads and can leave

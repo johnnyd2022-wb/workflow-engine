@@ -82,7 +82,10 @@ window.CoreAPI = window.CoreAPI || {
                 const msg = data.message || data.error || `HTTP error! status: ${response.status}`;
                 const details = data.details ? ` ${data.details}` : '';
                 const errList = Array.isArray(data.errors) && data.errors.length ? ` ${data.errors.join('; ')}` : '';
-                throw new Error(msg + details + errList);
+                const err = new Error(msg + details + errList);
+                err.status = response.status;
+                err.body = data;   // e.g. a 409 stale_write carries { current: <server state> }
+                throw err;
             }
             return data;
         } catch (error) {
@@ -105,6 +108,12 @@ window.CoreAPI = window.CoreAPI || {
         }
     },
     
+    // True when a write was rejected because someone else saved first (409 stale_write
+    // from an If-Match request). `err.body.current` holds the current server state.
+    isStaleWrite(err) {
+        return !!(err && err.status === 409 && err.body && err.body.error === 'stale_write');
+    },
+
     // Processes
     async getProcesses(includeSteps = false) {
         const query = includeSteps ? '?include_steps=true' : '';
@@ -122,10 +131,13 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
     
-    async updateProcess(processId, data) {
+    // `expectedUpdatedAt` (optional): the `updated_at` this client last read. When given,
+    // sends `If-Match`; the server replies 409 { current } if someone else saved since.
+    async updateProcess(processId, data, expectedUpdatedAt) {
         return this.request(`/processes/${processId}`, {
             method: 'PUT',
             body: data,
+            headers: expectedUpdatedAt ? { 'If-Match': expectedUpdatedAt } : undefined,
         });
     },
     
@@ -142,10 +154,11 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
     
-    async updateStep(processId, stepId, stepData) {
+    async updateStep(processId, stepId, stepData, expectedUpdatedAt) {
         return this.request(`/processes/${processId}/steps/${stepId}`, {
             method: 'PUT',
             body: stepData,
+            headers: expectedUpdatedAt ? { 'If-Match': expectedUpdatedAt } : undefined,
         });
     },
     
@@ -155,7 +168,9 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
 
-    async reorderSteps(processId, orders) {
+    // `expectedUpdatedAt` (optional): the newest step `updated_at` this client last read
+    // (max across the process's steps) -- the reorder's structural-version token.
+    async reorderSteps(processId, orders, expectedUpdatedAt) {
         // `orders` can be either an array of step ids (preferred) or an array of {id,...}.
         const stepIds = Array.isArray(orders)
             ? orders.map(o => (o && typeof o === 'object') ? (o.id || o.step_id) : o).filter(Boolean)
@@ -163,6 +178,7 @@ window.CoreAPI = window.CoreAPI || {
         return this.request(`/processes/${processId}/steps/reorder`, {
             method: 'POST',
             body: { step_ids: stepIds },
+            headers: expectedUpdatedAt ? { 'If-Match': expectedUpdatedAt } : undefined,
         });
     },
     
