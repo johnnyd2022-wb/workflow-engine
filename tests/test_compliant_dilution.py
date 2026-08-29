@@ -578,24 +578,32 @@ class TestDilutionCalculatorAPI:
         resp = app_client.post("/api/compliant/tools/dilution/solve", json=[1, 2, 3])
         assert resp.status_code == 400
 
-    def test_ac7_endpoint_issues_no_write_and_no_extra_query(self, app_client, monkeypatch):
-        """The solve endpoint is pure — after the subscription gate's one entitlement
-        lookup it must touch no table. Assert directly: any INSERT/UPDATE/DELETE, or any
-        query against a compliance/inventory/execution table, during the solve request
-        fails the test.
+    def test_ac7_endpoint_issues_no_write_and_no_query_beyond_the_gate(self, app_client):
+        """The solve endpoint is pure. The ONLY SQL a solve request may run is the auth
+        middleware's user/org load and the blueprint gate's single feature_subscriptions
+        lookup — no write, and no SELECT that names any other table.
         """
+        import re
+
         from sqlalchemy import event
 
         from app.core.db import engine
 
+        allowed = {"users", "organisations", "feature_subscriptions"}
         offending: list[str] = []
+        saw_gate = False
 
         def _before_cursor(conn, cursor, statement, parameters, context, executemany):
+            nonlocal saw_gate
             s = " ".join(statement.split()).lower()
+            if "feature_subscriptions" in s:
+                saw_gate = True
             if s.startswith(("insert", "update", "delete")):
-                offending.append(f"WRITE: {s[:80]}")
-            elif any(t in s for t in ("compliance_", "alcohol_product", "inventory_", "executions")):
-                offending.append(f"TENANT-READ: {s[:80]}")
+                offending.append(f"WRITE: {s[:90]}")
+            elif s.startswith("select"):
+                tables = {m.group(1) for m in re.finditer(r"\b(?:from|join)\s+([a-z_][a-z0-9_]*)", s)}
+                if tables - allowed:
+                    offending.append(f"READ: {s[:90]}")
 
         event.listen(engine, "before_cursor_execute", _before_cursor)
         try:
@@ -612,6 +620,7 @@ class TestDilutionCalculatorAPI:
             event.remove(engine, "before_cursor_execute", _before_cursor)
 
         assert resp.status_code == 200
+        assert saw_gate, "the feature_subscriptions gate query never ran — test wired wrong"
         assert offending == [], offending
 
 

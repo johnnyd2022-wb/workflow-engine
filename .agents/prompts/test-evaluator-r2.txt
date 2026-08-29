@@ -1,0 +1,12 @@
+Read and follow the skill at: /home/johnny/.mission-control/worktrees/workflow-engine/nz-alc-tools/.claude/skills/test-evaluator/SKILL.md
+Scope: compliant_tools
+Branch: nz-alc-tools (grade `git diff main...HEAD -- 'tests/**'`)
+Round: 2. Round 1 was `gamed`. The 3 blocking findings + the coverage gaps are addressed — see .agents/reports/compliant_tools/test-evaluator.md "Round 1 -> Round 2 resolution" for the full list. Notably:
+- AC18: `test_ac18_migration_downgrade_logs_row_count_before_dropping` now records call order and asserts `regclass -> count -> warning -> drop_index -> drop_table`; re-run your "move drop_table before the warning" mutation and confirm it now goes RED.
+- AC13: `test_ac13_overflowing_inputs_raise_validation_error_not_500` uses `pytest.raises` for the 5 genuinely-overflowing calculators only; plus a route-level 400 test and a direct `finalise()` test. The 3 non-extreme inputs were removed.
+- AC16 (JS): added assertions for the flattened `steps` item_fields + `parent`, the `per_step` render rows, meta-key omission, and HTML escaping.
+- Plus: AC13 per_step/brix pins, no-rel_tol, AC9/AC14 cursor-listener no-write tests, AC3 forbidden-terms, AC4 second admin route, AC7 both sidebars, AC10 compliant_pages + dilution-keys-gone, AC15 `= 10.0` ban, AC11 json-equal-vs-Appendix-A.
+
+Task: Re-grade. For each round-1 blocking finding, run a mutation and confirm the guarding test now goes RED. Hunt any NEW permissiveness introduced by the round-1 fixes. You may run pytest (test DB at localhost:8401, ENVIRONMENT unset). Read-only: do not edit code or tests.
+
+End your reply with exactly one line: VERDICT: valid | weakened | gamed | inconclusive

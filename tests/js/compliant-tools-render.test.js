@@ -163,16 +163,29 @@ test('buildFormFields flattens an array field into its item_fields with a parent
   assert.equal(nameField.required, true);
 });
 
-test('renderResult omits meta keys from the value rows and escapes text', () => {
-  const html = R.renderResult(byKey.lal, {
-    solved_field: 'lal',
-    lal: 40,
+test('renderResult renders each meta key ONLY in its proper place, never as a value row', () => {
+  const html = R.renderResult(byKey.yield_loss, {
+    solved_field: 'final_volume_l',
+    final_volume_l: 856.52,
+    per_step: [{ name: 'brewhouse', remaining_l: 920 }],
     disclaimer: '<b>x</b> & y',
     sources: ['a <script>'],
   });
-  assert.ok(!html.includes('>solved_field<') && !html.includes('>Solved field<'));
-  assert.ok(html.includes('&lt;b&gt;x&lt;/b&gt; &amp; y'), 'disclaimer not HTML-escaped');
-  assert.ok(html.includes('a &lt;script&gt;'), 'source not HTML-escaped');
+  // No meta key leaks into a .ct-result-label value row (guards against META_KEYS shrinking).
+  for (const label of ['Solved field', 'Disclaimer', 'Sources', 'Per step']) {
+    assert.ok(
+      !html.includes(`ct-result-label">${label}<`),
+      `meta key "${label}" rendered as an ordinary value row`
+    );
+  }
+  // ...but a real numeric key IS a value row,
+  assert.ok(html.includes('ct-result-label">Final volume l<'));
+  assert.ok(html.includes('ct-result-value">856.52<'));
+  // per_step has its own substep rows,
+  assert.ok(html.includes('ct-result-substep') && html.includes('>brewhouse<') && html.includes('920 L'));
+  // and disclaimer/sources render in their own blocks, HTML-escaped.
+  assert.ok(html.includes('ct-disclaimer">&lt;b&gt;x&lt;/b&gt; &amp; y<'), 'disclaimer not escaped / not in its block');
+  assert.ok(html.includes('<li>a &lt;script&gt;</li>'), 'source not escaped / not in the sources list');
 });
 
 test('renderError echoes the message', () => {

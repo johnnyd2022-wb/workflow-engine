@@ -260,10 +260,37 @@ def test_ac14_solvers_do_no_io(monkeypatch):
         assert isinstance(result, dict)
 
 
-@pytest.mark.parametrize("key", ["dilution", "lal", "yield_loss", "tank_volume"])
-def test_ac14_solve_route_issues_no_query_after_the_gate(subbed_client, key):
-    """Past `before_request` (which does the single `org_has_feature` lookup), a solve
-    request must run ZERO further SQL — no write, no tenant-table read.
+# Tables a solve request is allowed to touch: the auth middleware's user+org load and the
+# blueprint gate's single feature_subscriptions lookup. Nothing else — no write, no read
+# of ANY other table (calculator, compliance, inventory, execution, crm, ...).
+_GATE_INFRA_TABLES = ("users", "organisations", "feature_subscriptions")
+
+
+def _sql_beyond_gate_infra(seen: list[str]) -> list[str]:
+    out = []
+    for s in seen:
+        if s.startswith(("insert", "update", "delete")):
+            out.append(f"WRITE: {s[:90]}")
+            continue
+        if not s.startswith("select"):
+            continue
+        # a plain read that names no table other than the gate-infra ones is fine
+        touches_other = any(tok not in _GATE_INFRA_TABLES for tok in _table_names(s))
+        if touches_other:
+            out.append(f"READ: {s[:90]}")
+    return out
+
+
+def _table_names(sql: str) -> set[str]:
+    import re
+
+    return {m.group(1) for m in re.finditer(r"\b(?:from|join)\s+([a-z_][a-z0-9_]*)", sql)}
+
+
+@pytest.mark.parametrize("key", ["dilution", "lal", "yield_loss", "tank_volume", "gravity_convert"])
+def test_ac14_solve_route_issues_no_query_beyond_the_gate(subbed_client, key):
+    """A solve request runs ONLY the auth middleware's user/org load and the gate's one
+    feature_subscriptions lookup — the solver + route touch no other table and never write.
     """
     from sqlalchemy import event
 
@@ -281,11 +308,8 @@ def test_ac14_solve_route_issues_no_query_after_the_gate(subbed_client, key):
         event.remove(engine, "before_cursor_execute", _listen)
 
     assert resp.status_code == 200
-    # The gate + auth middleware already ran (session lookup happens before the blueprint
-    # before_request and outside this listener's window on a warm client); anything the
-    # listener catches here is the solve path itself.
-    offending = [s for s in seen if s.startswith(("insert", "update", "delete")) or "compliance_" in s]
-    assert offending == [], offending
+    assert any("feature_subscriptions" in s for s in seen), "gate query missing — test wired wrong"
+    assert _sql_beyond_gate_infra(seen) == [], _sql_beyond_gate_infra(seen)
 
 
 # ── AC13: per-calculator fixtures, rejections, disclaimer/sources ──────────────
