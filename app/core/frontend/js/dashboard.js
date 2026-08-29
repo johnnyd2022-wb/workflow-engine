@@ -358,4 +358,37 @@
     // doesn't surface as a "Failed to fetch" error against a detached root.
     document.body.addEventListener('htmx:beforeSwap', abortPendingLoad);
     window.addEventListener('pagehide', abortPendingLoad);
+
+    // Live: the summary aggregates batches, tasks and events -- refresh it when a
+    // colleague changes any of those, debounced so a burst is one reload. live-sync.js
+    // loads *after* #page-content (this script), so defer the subscribe until it exists.
+    var liveTimer = null;
+    function subscribeDashboardLive() {
+        window.LiveSync.subscribe({
+            key: 'dashboard',
+            match: function (evt) {
+                var t = evt.entity_type;
+                return t === 'process' || t === 'execution' || t === 'execution_step' || t === 'inventory_item';
+            },
+            onChange: function () {
+                if (liveTimer) return;
+                liveTimer = setTimeout(function () {
+                    liveTimer = null;
+                    var root = document.querySelector(ROOT_SELECTOR);
+                    if (!root) return;
+                    delete root.dataset.dashboardLoaded;
+                    delete root.dataset.dashboardLoading;
+                    loadDashboard(root);
+                    if (typeof window.liveSyncFlash === 'function') window.liveSyncFlash('Updated just now');
+                }, 500);
+            },
+        });
+    }
+    if (window.LiveSync) {
+        subscribeDashboardLive();
+    } else {
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.LiveSync) subscribeDashboardLive();
+        });
+    }
 })();

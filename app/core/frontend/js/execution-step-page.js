@@ -163,10 +163,68 @@
     return inFlightPromise;
   }
 
+  // --- Live: warn if the execution changes underneath the user -----------------------
+  // Someone on another device could complete this same step, or advance / cancel the
+  // batch, while this page is open. We must NOT auto-reload -- the user may have
+  // half-entered inputs or an evidence upload in progress -- so we surface a sticky
+  // strip with a Reload button and leave the choice to them.
+  var _execStepLiveOff = null;
+
+  function showStaleWarning() {
+    var existing = qs('exec-step-stale-warning');
+    if (existing) return;
+    var host = document.querySelector('.max-content') || qs('execute-step-modal');
+    if (!host) return;
+    var bar = document.createElement('div');
+    bar.id = 'exec-step-stale-warning';
+    bar.setAttribute('role', 'alert');
+    bar.style.cssText =
+      'position:sticky;top:0;z-index:50;margin:0 0 14px;padding:10px 14px;border-radius:8px;' +
+      'background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:13px;' +
+      'display:flex;align-items:center;gap:12px;flex-wrap:wrap;';
+    var msg = document.createElement('span');
+    msg.style.flex = '1';
+    msg.textContent =
+      'This batch changed elsewhere — someone may have completed this step or updated the batch. Reload to see the current state.';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.textContent = 'Reload';
+    btn.addEventListener('click', function () { window.location.reload(); });
+    bar.appendChild(msg);
+    bar.appendChild(btn);
+    host.insertBefore(bar, host.firstChild);
+  }
+
+  function subscribeExecStepLive() {
+    if (_execStepLiveOff) { _execStepLiveOff(); _execStepLiveOff = null; }
+    if (!window.LiveSync) return;
+    var ctx = window.ExecutionStepPageContext || {};
+    var executionId = ctx.executionId ? String(ctx.executionId) : null;
+    if (!executionId) return;   // a draft has no execution yet -- nothing to go stale
+    _execStepLiveOff = window.LiveSync.subscribe({
+      key: 'exec-step:' + executionId,
+      match: function (evt) {
+        var k = evt.keys || {};
+        return (
+          evt.entity_id === executionId ||
+          k.execution_id === executionId ||
+          k.source_execution_id === executionId
+        );
+      },
+      onChange: function () { showStaleWarning(); },
+    });
+  }
+
+  document.body.addEventListener('htmx:beforeSwap', function () {
+    if (_execStepLiveOff) { _execStepLiveOff(); _execStepLiveOff = null; }
+  });
+
   // Expose for HTMX swaps.
   window.initExecutionStepScreen = function () {
     // Only run if the fragment is present.
     if (!qs('execute-step-modal')) return;
+    subscribeExecStepLive();
     scheduleInit();
   };
 

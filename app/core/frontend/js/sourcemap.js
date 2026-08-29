@@ -39,6 +39,50 @@
     smInitSearch();
     smBindModal();
     smLoadAllData();
+    smSubscribeLive();
+  }
+
+  /* ── Live sync ─────────────────────────────────────────────
+     A colleague's mutation (batch run, item added/consumed/disposed) changes what the
+     browse grid and Findings show. Refetch and re-render in place. If a trace is open,
+     only refresh Findings + the search pool -- never yank the trace view away. */
+  let _smLiveTimer = null;
+  function smSubscribeLive() {
+    if (!window.LiveSync) return;
+    window.LiveSync.subscribe({
+      key: 'sourcemap',
+      match: function (evt) {
+        const t = evt.entity_type;
+        return t === 'inventory_item' || t === 'process' || t === 'execution' || t === 'execution_step';
+      },
+      onChange: function () {
+        if (_smLiveTimer) return;
+        _smLiveTimer = setTimeout(smLiveRefresh, 500);
+      },
+    });
+  }
+
+  async function smLiveRefresh() {
+    _smLiveTimer = null;
+    try {
+      const [invData, oosData] = await Promise.all([
+        CoreAPI.getInventory(null, null, { compact: true }).catch(() => null),
+        CoreAPI.getOutOfStockRawMaterials().catch(() => null),
+      ]);
+      if (invData) allInventory = invData.inventory_items || [];
+      if (oosData) allOutOfStockRawMaterials = oosData.inventory_items || [];
+      smUpdateSearchPool();
+
+      if (!tracedItemId && !showWastage) {
+        _smSecondaryLoaded = false;
+        smLoadSecondaryData();     // processes / executions / activity, for the Activity tab
+        smRenderBrowseGrid();
+      }
+      smLoadFindings();
+      if (typeof window.liveSyncFlash === 'function') window.liveSyncFlash('Updated just now');
+    } catch (e) {
+      /* non-fatal: the page keeps its current data */
+    }
   }
 
   /* ── Data loading ──────────────────────────────────────── */

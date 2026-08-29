@@ -2534,6 +2534,33 @@
       var tab = core2CurrentMainTab();
       if (tab === 'inventory') loadCore2InventoryTab();
       else if (tab === 'workflows') loadCore2WorkflowsTab();
+      core2SubscribeLive();
+    }
+
+    // Live: when a colleague (or another tab) changes a process / batch / inventory item,
+    // rebuild the hub the same way a boosted return does. The local user's own mutations
+    // still refresh instantly via base_spa's htmx:afterOnLoad hook -- this only covers the
+    // changes that never produce an HTMX request in *this* browser. Debounced so a
+    // multi-row batch completion is one refetch; key-scoped so the afterSettle re-init
+    // replaces it cleanly rather than stacking.
+    var _core2LiveTimer = null;
+    function core2SubscribeLive() {
+      if (!window.LiveSync) return;
+      window.LiveSync.subscribe({
+        key: 'core2-hub',
+        match: function (evt) {
+          var t = evt.entity_type;
+          return t === 'process' || t === 'execution' || t === 'execution_step' || t === 'step' || t === 'inventory_item';
+        },
+        onChange: function () {
+          if (_core2LiveTimer) return;
+          _core2LiveTimer = setTimeout(function () {
+            _core2LiveTimer = null;
+            loadCoreHubDashboardData();
+            if (typeof window.liveSyncFlash === 'function') window.liveSyncFlash('Updated just now');
+          }, 400);
+        },
+      });
     }
 
     if (document.readyState === 'loading') {
