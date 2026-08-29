@@ -95,7 +95,8 @@ def test_ac3_unsubscribed_org_gets_exact_404_on_every_compliant_route(db, app_ct
                 resp = client.open(path, method=method, json={} if method in ("POST", "PUT") else None)
                 assert resp.status_code == 404, f"{method} {path} -> {resp.status_code}"
                 body = resp.get_data(as_text=True).lower()
-                assert "subscription" not in body and "not subscribed" not in body
+                for term in ("subscription", "not subscribed", "compliant", "feature", "entitle"):
+                    assert term not in body, f"{method} {path} 404 body leaks {term!r}: {body[:120]}"
                 checked += 1
         assert checked >= 10
     finally:
@@ -124,9 +125,17 @@ def test_ac4_subscribed_org_routes_work_and_role_gate_survives(db, app_ctx):
         assert admin.get("/api/compliant/tools").status_code == 200
 
         member = _client(app_ctx, member_email)
-        # subscription gate passed, but the ADMIN role gate still applies
+        # subscription gate passed, but BOTH existing ADMIN role gates still apply
         assert member.put("/api/compliant/profile", json={"enabled": True}).status_code == 403
+        assert (
+            member.post(
+                "/api/compliant/alcohol-products",
+                json={"inventory_name": "Gin", "product_type": "spirits", "abv_percent": "40"},
+            ).status_code
+            == 403
+        )
         assert member.get("/api/compliant/overview").status_code == 200
+        assert member.get("/compliant/tools").status_code == 200  # no role gate on tools
     finally:
         _cleanup(db, [admin_org.id, member_org.id])
 
@@ -243,3 +252,17 @@ def test_ac7_nav_hidden_when_deployment_flag_off_even_if_subscribed(db, monkeypa
             assert not _sidebar_has_compliance(html)
         finally:
             _cleanup(db, [org.id])
+
+
+def test_ac7_both_sidebars_drop_dilution_and_gate_compliance_on_subscription():
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[1]
+    for rel in ("app/ui/templates/shared/sidebar-v2.html", "app/ui/shared/sidebar-v2.html"):
+        src = (repo / rel).read_text()
+        assert "/dilution-calculator" not in src, f"{rel} still links the removed dilution page"
+        assert "Dilution Calculator" not in src, f"{rel} still names the removed dilution page"
+        assert "compliant_subscribed" in src, f"{rel} does not gate the Compliance item on the subscription"
+        assert "{% if compliant_enabled %}" not in src.replace("{% if compliant_subscribed %}", ""), (
+            f"{rel} still gates Compliance on the deployment flag alone"
+        )

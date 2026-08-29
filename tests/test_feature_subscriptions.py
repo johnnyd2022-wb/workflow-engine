@@ -134,25 +134,68 @@ def test_ac8_cli_rejects_bad_and_unknown_org():
 # ── AC18: destructive downgrade warns with a row count ─────────────────────────
 
 
-def test_ac18_migration_downgrade_logs_row_count(monkeypatch, caplog):
+def test_ac18_migration_downgrade_logs_row_count_before_dropping(monkeypatch, caplog):
+    """The row-count WARNING must fire *before* the destructive drop, and must carry the
+    real count — so an operator sees what they are about to lose. Records call order and
+    asserts the exact sequence, not just that a warning happened somewhere.
+    """
     import app.core.db.migrations.versions.feature_subscriptions_001 as mig
+
+    calls: list[str] = []
+
+    class _Bind:
+        def execute(self, stmt, *_a, **_k):
+            text = str(getattr(stmt, "text", stmt))
+            calls.append(f"execute:{'regclass' if 'to_regclass' in text else 'count' if 'count(' in text else 'other'}")
+
+            class _R:
+                @staticmethod
+                def scalar():
+                    return "public.feature_subscriptions" if "to_regclass" in text else 3
+
+            return _R()
+
+    monkeypatch.setattr(mig.op, "get_bind", lambda: _Bind())
+    monkeypatch.setattr(mig.op, "drop_index", lambda *a, **k: calls.append("drop_index"))
+    monkeypatch.setattr(mig.op, "drop_table", lambda *a, **k: calls.append("drop_table"))
+
+    real_warning = logging.getLogger("alembic.runtime.migration").warning
+
+    def _tracking_warning(msg, *a, **k):
+        calls.append("warning")
+        return real_warning(msg, *a, **k)
+
+    monkeypatch.setattr(logging.getLogger("alembic.runtime.migration"), "warning", _tracking_warning)
+
+    with caplog.at_level(logging.WARNING, logger="alembic.runtime.migration"):
+        mig.downgrade()
+
+    # The count query and the warning both happen before either drop.
+    assert calls == ["execute:regclass", "execute:count", "warning", "drop_index", "drop_table"], calls
+    warn = next(r for r in caplog.records if "feature_subscriptions" in r.getMessage())
+    assert "3" in warn.getMessage() and "irrecoverable" in warn.getMessage()
+
+
+def test_ac18_migration_downgrade_noops_when_table_absent(monkeypatch, caplog):
+    import app.core.db.migrations.versions.feature_subscriptions_001 as mig
+
+    dropped: list[str] = []
 
     class _Bind:
         def execute(self, *_a, **_k):
             class _R:
                 @staticmethod
                 def scalar():
-                    return 3
+                    return None  # to_regclass -> table absent
 
             return _R()
 
     monkeypatch.setattr(mig.op, "get_bind", lambda: _Bind())
-    monkeypatch.setattr(mig.op, "drop_index", lambda *a, **k: None)
-    monkeypatch.setattr(mig.op, "drop_table", lambda *a, **k: None)
+    monkeypatch.setattr(mig.op, "drop_index", lambda *a, **k: dropped.append("index"))
+    monkeypatch.setattr(mig.op, "drop_table", lambda *a, **k: dropped.append("table"))
 
     with caplog.at_level(logging.WARNING, logger="alembic.runtime.migration"):
         mig.downgrade()
 
-    warnings = [r for r in caplog.records if "feature_subscriptions" in r.getMessage()]
-    assert warnings and "3" in warnings[0].getMessage()
-    assert "irrecoverable" in warnings[0].getMessage()
+    assert dropped == []
+    assert any("already absent" in r.getMessage() for r in caplog.records)

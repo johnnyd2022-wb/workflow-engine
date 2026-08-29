@@ -527,10 +527,11 @@ No calculator module redefines these as literals; each imports from the shared m
   equality of `key`, `title`, `category`, `sources` (list, order-sensitive), `solve`, and
   `inputs` (every field, every descriptor key/value including `unit`, `default`, `help`,
   `enum`, `item_fields`, `min_items`/`max_items`, and all bound keys). The canonical
-  literal is committed as `tests/fixtures/compliant_tools_catalogue.json` (byte-copy of
-  Appendix A); the test loads that file and asserts equality. A second test asserts the
-  file itself contains exactly the 10 Tier-1 keys and that Appendix A and the fixture
-  file are identical.
+  literal is committed as `tests/fixtures/compliant_tools_catalogue.json` and served from
+  `app/features/compliant/tools/catalogue.json`; a test asserts the served catalogue, the
+  committed fixture, **and the Appendix A JSON block** are all `json.loads`-equal (the
+  invariant is field/value content, not byte formatting), and that the key set is exactly
+  the 10 Tier-1 keys.
 
 - AC12: `POST /api/compliant/tools/<key>/solve` dispatches to `CALCULATORS[key].solve`.
   Unknown `<key>` → `404 {"error": "unknown calculator"}`. A payload failing the

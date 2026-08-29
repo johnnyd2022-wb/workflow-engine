@@ -578,22 +578,41 @@ class TestDilutionCalculatorAPI:
         resp = app_client.post("/api/compliant/tools/dilution/solve", json=[1, 2, 3])
         assert resp.status_code == 400
 
-    def test_ac7_endpoint_writes_no_rows(self, app_client, db, org):
-        """Stateless: calling the endpoint must not create any rows for the org."""
-        from app.core.db.models.user import User
+    def test_ac7_endpoint_issues_no_write_and_no_extra_query(self, app_client, monkeypatch):
+        """The solve endpoint is pure — after the subscription gate's one entitlement
+        lookup it must touch no table. Assert directly: any INSERT/UPDATE/DELETE, or any
+        query against a compliance/inventory/execution table, during the solve request
+        fails the test.
+        """
+        from sqlalchemy import event
 
-        before = db.query(User).filter(User.org_id == org.id).count()
-        app_client.post(
-            "/api/compliant/tools/dilution/solve",
-            json={
-                "solve_for": "final_volume_ml",
-                "starting_abv": 40,
-                "starting_volume_ml": 1000,
-                "final_abv": 20,
-            },
-        )
-        after = db.query(User).filter(User.org_id == org.id).count()
-        assert before == after
+        from app.core.db import engine
+
+        offending: list[str] = []
+
+        def _before_cursor(conn, cursor, statement, parameters, context, executemany):
+            s = " ".join(statement.split()).lower()
+            if s.startswith(("insert", "update", "delete")):
+                offending.append(f"WRITE: {s[:80]}")
+            elif any(t in s for t in ("compliance_", "alcohol_product", "inventory_", "executions")):
+                offending.append(f"TENANT-READ: {s[:80]}")
+
+        event.listen(engine, "before_cursor_execute", _before_cursor)
+        try:
+            resp = app_client.post(
+                "/api/compliant/tools/dilution/solve",
+                json={
+                    "solve_for": "final_volume_ml",
+                    "starting_abv": 40,
+                    "starting_volume_ml": 1000,
+                    "final_abv": 20,
+                },
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", _before_cursor)
+
+        assert resp.status_code == 200
+        assert offending == [], offending
 
 
 class TestDilutionCalculatorAuth:

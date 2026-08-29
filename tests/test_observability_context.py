@@ -68,10 +68,15 @@ def _build_nested_compliant_app():
     app = Flask(__name__)
 
     api_bp = Blueprint("compliant_api", __name__)
+    page_bp = Blueprint("compliant_pages", __name__)
     tools_bp = Blueprint("compliant_tools", __name__)
 
     @api_bp.route("/api/compliant/overview", methods=["GET"])
     def overview():
+        return jsonify({"feature": feature_for_request()})
+
+    @page_bp.route("/compliant", methods=["GET"])
+    def dashboard():
         return jsonify({"feature": feature_for_request()})
 
     @tools_bp.route("/compliant/tools", methods=["GET"])
@@ -84,6 +89,7 @@ def _build_nested_compliant_app():
 
     parent_bp = Blueprint("compliant", __name__)
     parent_bp.register_blueprint(api_bp)
+    parent_bp.register_blueprint(page_bp)
     parent_bp.register_blueprint(tools_bp)
     app.register_blueprint(parent_bp)
 
@@ -101,8 +107,20 @@ def test_feature_mapping_for_nested_compliant_blueprints():
 
     with app.test_client() as client:
         assert client.get("/api/compliant/overview").get_json()["feature"] == "compliant"
+        assert client.get("/compliant").get_json()["feature"] == "compliant"
         assert client.get("/compliant/tools").get_json()["feature"] == "compliant"
         assert client.post("/api/compliant/tools/dilution/solve").get_json()["feature"] == "compliant"
+
+
+def test_dilution_calculator_feature_mappings_are_gone():
+    """The standalone dilution_calculator blueprint was removed — its dotted-path
+    BLUEPRINT_FEATURE entries must not linger (a map key for a nonexistent blueprint is
+    dead config that hides a real mapping bug)."""
+    from app.observability.context import BLUEPRINT_FEATURE
+
+    assert not any("dilution_calculator" in k for k in BLUEPRINT_FEATURE)
+    assert BLUEPRINT_FEATURE.get("compliant") == "compliant"
+    assert BLUEPRINT_FEATURE.get("compliant.compliant_pages") == "compliant"
 
 
 def _build_nested_crm_app():

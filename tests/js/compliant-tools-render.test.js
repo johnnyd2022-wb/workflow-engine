@@ -139,8 +139,41 @@ for (const key of TIER1) {
     });
     assert.ok(html.includes(res.disclaimer), `${key}: missing disclaimer`);
     (res.sources || []).forEach((s) => assert.ok(html.includes(s), `${key}: missing source ${s}`));
+    // A calculator that returns per_step (yield_loss) must render each substep row.
+    (res.per_step || []).forEach((step) => {
+      assert.ok(html.includes(step.name), `${key}: per_step '${step.name}' not rendered`);
+      assert.ok(html.includes(String(step.remaining_l)), `${key}: per_step remaining_l not rendered`);
+    });
   });
 }
+
+test('buildFormFields flattens an array field into its item_fields with a parent marker', () => {
+  const yl = byKey.yield_loss;
+  const steps = R.buildFormFields(yl).find((f) => f.name === 'steps');
+  assert.equal(steps.type, 'array');
+  assert.equal(steps.min_items, 1);
+  assert.equal(steps.max_items, 50);
+  assert.deepEqual(
+    steps.item_fields.map((f) => f.name),
+    ['name', 'loss_pct', 'loss_l']
+  );
+  steps.item_fields.forEach((f) => assert.equal(f.parent, 'steps'));
+  const nameField = steps.item_fields.find((f) => f.name === 'name');
+  assert.equal(nameField.type, 'text');
+  assert.equal(nameField.required, true);
+});
+
+test('renderResult omits meta keys from the value rows and escapes text', () => {
+  const html = R.renderResult(byKey.lal, {
+    solved_field: 'lal',
+    lal: 40,
+    disclaimer: '<b>x</b> & y',
+    sources: ['a <script>'],
+  });
+  assert.ok(!html.includes('>solved_field<') && !html.includes('>Solved field<'));
+  assert.ok(html.includes('&lt;b&gt;x&lt;/b&gt; &amp; y'), 'disclaimer not HTML-escaped');
+  assert.ok(html.includes('a &lt;script&gt;'), 'source not HTML-escaped');
+});
 
 test('renderError echoes the message', () => {
   assert.ok(R.renderError('bad input').includes('bad input'));

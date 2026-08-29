@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import ast
 import json
-import math
 from pathlib import Path
 from uuid import uuid4
 
@@ -186,9 +185,15 @@ def test_ac15_constants_single_source():
 
     assert constants.ETHANOL_DENSITY_20C_G_PER_ML == 0.78924
     assert constants.NZ_STANDARD_DRINK_GRAMS_ETHANOL == 10.0
+    # Neither NZ-specific constant may be re-typed as a literal in a calculator module —
+    # it must be imported from the shared constants module.
+    banned = ("0.78924", "= 10.0", "=10.0")
     for path in _SOLVER_DIR.glob("*.py"):
         src = path.read_text()
-        assert "0.78924" not in src, f"{path.name} hard-codes the ethanol density literal"
+        for literal in banned:
+            assert literal not in src, f"{path.name} hard-codes {literal!r} instead of importing the constant"
+        if "NZ_STANDARD_DRINK_GRAMS_ETHANOL" in src:
+            assert "from app.features.compliant.modules.nz_alcohol.constants import" in src
 
 
 # ── AC14: solver purity ───────────────────────────────────────────────────────
@@ -255,6 +260,34 @@ def test_ac14_solvers_do_no_io(monkeypatch):
         assert isinstance(result, dict)
 
 
+@pytest.mark.parametrize("key", ["dilution", "lal", "yield_loss", "tank_volume"])
+def test_ac14_solve_route_issues_no_query_after_the_gate(subbed_client, key):
+    """Past `before_request` (which does the single `org_has_feature` lookup), a solve
+    request must run ZERO further SQL — no write, no tenant-table read.
+    """
+    from sqlalchemy import event
+
+    from app.core.db import engine
+
+    seen: list[str] = []
+
+    def _listen(conn, cursor, statement, parameters, context, executemany):
+        seen.append(" ".join(statement.split()).lower())
+
+    event.listen(engine, "before_cursor_execute", _listen)
+    try:
+        resp = subbed_client.post(f"/api/compliant/tools/{key}/solve", json=FIXTURES[key][0][0])
+    finally:
+        event.remove(engine, "before_cursor_execute", _listen)
+
+    assert resp.status_code == 200
+    # The gate + auth middleware already ran (session lookup happens before the blueprint
+    # before_request and outside this listener's window on a warm client); anything the
+    # listener catches here is the solve path itself.
+    offending = [s for s in seen if s.startswith(("insert", "update", "delete")) or "compliance_" in s]
+    assert offending == [], offending
+
+
 # ── AC13: per-calculator fixtures, rejections, disclaimer/sources ──────────────
 
 
@@ -264,12 +297,29 @@ def test_ac13_fixtures(key):
         result = CALCULATORS[key](dict(inp))
         for field, (value, tol) in expected.items():
             got = result[field]
-            if isinstance(value, float):
-                assert math.isclose(got, value, abs_tol=tol) or abs(got - value) <= tol, (
-                    f"{key}.{field}: {got} != {value} (tol {tol})"
-                )
+            if tol == 0:
+                assert got == value, f"{key}.{field}: {got!r} != {value!r} (exact)"
             else:
-                assert got == value, f"{key}.{field}: {got} != {value}"
+                # absolute tolerance only — no hidden relative component (math.isclose's
+                # default rel_tol=1e-9 would let a spec fixture pinned at tol 0.0 through).
+                assert abs(got - value) <= tol, f"{key}.{field}: {got} != {value} (tol {tol})"
+
+
+def test_ac13_extra_pinned_fixture_fields():
+    """Two spec fixture assertions that don't fit the {field: (value, tol)} shape."""
+    yl = CALCULATORS["yield_loss"](
+        {
+            "start_volume_l": 1000,
+            "steps": [
+                {"name": "brewhouse", "loss_pct": 8},
+                {"name": "fermentation", "loss_pct": 5},
+                {"name": "packaging", "loss_pct": 2},
+            ],
+        }
+    )
+    assert yl["per_step"][1] == {"name": "fermentation", "remaining_l": pytest.approx(874.0, abs=1e-6)}
+    gc = CALCULATORS["gravity_convert"]({"sg": 1.048})
+    assert gc["brix"] == gc["plato"]  # spec: brix is returned equal to plato
 
 
 @pytest.mark.parametrize("key", [k for k in TIER1_KEYS if k in REJECTIONS])
@@ -279,33 +329,44 @@ def test_ac13_rejections(key):
             CALCULATORS[key](dict(bad))
 
 
-# Extreme-but-finite inputs whose product/quotient overflows or underflows a divisor.
-# Every one must surface as a CalculatorValidationError (route -> 400), never a 500 or an
-# `Infinity` in the JSON body. (build-review 2026-08-29.)
-_EXTREME_INPUTS = {
-    "lal": {"abv_pct": 100, "lal": 1e308},
-    "standard_drinks": {"solve_for": "volume_ml", "standard_drinks": 1e308, "abv_pct": 5e-324},
-    "abv_abw": {"abv_pct": 1e308, "solution_sg": 0.9},
-    "gravity_convert": {"sg": 1.0000000001},
-    "tank_volume": {"diameter_m": 1e308, "cyl_height_m": 1, "fill_height_m": 1},
-    "yield_loss": {"start_volume_l": 1e308, "steps": [{"name": "a", "loss_pct": 99}]},
-    "yeast_pitch": {"volume_l": 1e308, "gravity_plato": 40, "pitch_rate_m_per_ml_per_p": 5},
-    "keg_fill": {"available_l": 1e308, "keg_size_l": 5e-324},
-    "abv_from_og_fg": {"og_sg": 1.2, "fg_sg": 0.98},
+# Inputs that are individually in-range but whose product/quotient overflows to inf or
+# underflows a divisor to 0 mid-calculation. Each MUST raise CalculatorValidationError
+# (via @guarded / finalise()) — never an OverflowError/ZeroDivisionError/500 and never an
+# `Infinity` in the returned dict. (build-review 2026-08-29.)
+_OVERFLOWING_INPUTS = {
+    "lal": {"abv_pct": 100, "lal": 1e308},  # lal*100 -> inf
+    "standard_drinks": {"solve_for": "volume_ml", "standard_drinks": 1e308, "abv_pct": 5e-324},  # divisor -> 0
+    "tank_volume": {"diameter_m": 1e308, "cyl_height_m": 1, "fill_height_m": 1},  # r**2 -> OverflowError
+    "yeast_pitch": {"volume_l": 1e308, "gravity_plato": 40, "pitch_rate_m_per_ml_per_p": 5},  # ceil(inf)
+    "keg_fill": {"available_l": 1e308, "keg_size_l": 5e-324},  # floor(inf)
 }
 
 
-@pytest.mark.parametrize("key", [k for k in TIER1_KEYS if k in _EXTREME_INPUTS])
-def test_ac13_extreme_finite_inputs_are_rejected_not_crashed(key):
-    try:
-        result = CALCULATORS[key](dict(_EXTREME_INPUTS[key]))
-    except CalculatorValidationError:
-        return  # rejected at the door or by finalise() — good
-    # If it did return, every numeric value must be finite (no Infinity leaking to JSON).
-    for v in result.values():
-        assert not (isinstance(v, float) and (v != v or v in (float("inf"), float("-inf")))), (
-            f"{key} returned non-finite {v!r} for extreme input"
-        )
+@pytest.mark.parametrize("key", sorted(_OVERFLOWING_INPUTS))
+def test_ac13_overflowing_inputs_raise_validation_error_not_500(key):
+    with pytest.raises(CalculatorValidationError):
+        CALCULATORS[key](dict(_OVERFLOWING_INPUTS[key]))
+
+
+@pytest.mark.parametrize("key", sorted(_OVERFLOWING_INPUTS))
+def test_ac13_overflowing_inputs_return_400_via_the_route(subbed_client, key):
+    r = subbed_client.post(f"/api/compliant/tools/{key}/solve", json=_OVERFLOWING_INPUTS[key])
+    assert r.status_code == 400, (key, r.status_code, r.get_data(as_text=True)[:200])
+    assert "Traceback" not in r.get_data(as_text=True)
+    body = r.get_json()
+    assert isinstance(body.get("error"), str) and body["error"]
+
+
+def test_ac13_finalise_rejects_a_non_finite_result_directly():
+    from app.features.compliant.tools.calculators._validate import finalise
+
+    with pytest.raises(CalculatorValidationError):
+        finalise({"x": float("inf"), "disclaimer": "d", "sources": ["s"]})
+    with pytest.raises(CalculatorValidationError):
+        finalise({"per_step": [{"name": "a", "remaining_l": float("nan")}]})
+    # a wholly-finite dict passes through unchanged
+    ok = {"x": 1.0, "n": 3, "sources": ["s"]}
+    assert finalise(ok) is ok
 
 
 @pytest.mark.parametrize("key", [k for k in TIER1_KEYS if k != "dilution"])
@@ -346,10 +407,22 @@ def test_ac11_catalogue_matches_pinned_fixture():
                 assert "item_fields" in d and "min_items" in d and "max_items" in d
 
 
-def test_ac11_app_and_repo_catalogue_files_identical():
-    a = (_REPO_ROOT / "app" / "features" / "compliant" / "tools" / "catalogue.json").read_text()
-    b = (_REPO_ROOT / "tests" / "fixtures" / "compliant_tools_catalogue.json").read_text()
-    assert json.loads(a) == json.loads(b)
+def test_ac11_app_and_repo_catalogue_are_json_equal_and_match_appendix_a():
+    """The served catalogue, the committed test fixture, and spec Appendix A must all be
+    the same JSON document. (JSON-equal, not byte-identical — formatting is not the
+    invariant; the field/value content is.)
+    """
+    import re
+
+    app_json = json.loads((_REPO_ROOT / "app" / "features" / "compliant" / "tools" / "catalogue.json").read_text())
+    fixture_json = json.loads((_REPO_ROOT / "tests" / "fixtures" / "compliant_tools_catalogue.json").read_text())
+    spec = (_REPO_ROOT / ".agents" / "specs" / "compliant_tools.md").read_text()
+    m = re.search(r"## Appendix A.*?```json\n(.*?)\n```", spec, re.S)
+    assert m, "Appendix A JSON block not found in the spec"
+    appendix_json = json.loads(m.group(1))
+
+    assert app_json == fixture_json == appendix_json
+    assert app_json == CATALOGUE  # the module loads the same file the route serves
 
 
 # ── route-level tests (need a subscribed authed client) ────────────────────────
