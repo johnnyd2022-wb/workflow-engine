@@ -25,6 +25,7 @@ from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
 
 PASSWORD = DEFAULT_TEST_PASSWORD
 ENDPOINT = "/api/core/system-findings"
+DASHBOARD_ENDPOINT = "/api/core/dashboard/summary?window_days=30"
 
 
 @pytest.fixture
@@ -232,6 +233,47 @@ def test_cache_is_per_org(db, flask_app):
             db.query(SystemFindingsCache).filter_by(org_id=oid).delete(synchronize_session=False)
             db.query(Organisation).filter_by(id=oid).delete(synchronize_session=False)
         db.commit()
+
+
+def test_get_check_results_is_the_full_merged_set(db, authed):
+    """get_check_results() returns the same check ids CoreChecksRunner.run_all_checks()
+    does -- the expensive slice from cache, the cheap ones live."""
+    from app.core.backend.corechecks import CoreChecksRunner
+
+    org, _client = authed
+    merged = sfc.get_check_results(org.id, db)
+    live_ref = CoreChecksRunner(org_id=org.id, session=db).run_all_checks()
+
+    assert {r.check_id for r in merged} == {r.check_id for r in live_ref}
+    assert "expired_materials" in {r.check_id for r in merged}
+
+
+def test_dashboard_summary_shares_the_cached_dag_slice(db, authed, monkeypatch):
+    """The landing-page /api/core/dashboard/summary no longer runs the expired_materials
+    DAG traversal on every load -- it reads the same per-org cached slice /core does, so a
+    burst of dashboard loads computes it once, and a mutation still forces a recompute."""
+    org, client = authed
+    calls = {"n": 0}
+    real = sfc._compute_expensive
+    monkeypatch.setattr(sfc, "_compute_expensive", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
+
+    first = client.get(DASHBOARD_ENDPOINT)
+    assert first.status_code == 200
+    # the dashboard shape, not the banner shape
+    assert {"compliance", "action_board", "audit_log", "operations"} <= set(first.get_json())
+    assert calls["n"] == 1
+
+    for _ in range(3):
+        assert client.get(DASHBOARD_ENDPOINT).status_code == 200
+    assert calls["n"] == 1, "dashboard summary recomputed the DAG slice despite a fresh cache"
+
+    from app.core.backend.event_writer import EventWriter
+
+    EventWriter(db, org.id).emit("inventory_item.updated", "inventory_item", uuid4(), {"x": 1})
+    db.commit()
+
+    assert client.get(DASHBOARD_ENDPOINT).status_code == 200
+    assert calls["n"] == 2, "an inventory mutation did not invalidate the slice for the dashboard"
 
 
 def test_prewarm_populates_a_fresh_row_without_a_request(db, authed):

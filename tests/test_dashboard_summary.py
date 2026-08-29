@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.backend.backend import (
+    _APP_TZ,
     _dashboard_build_action_board,
     _dashboard_build_compliance_summary,
     _dashboard_count_red_amber,
@@ -16,6 +17,8 @@ from app.core.backend.backend import (
     _dashboard_priority_rank,
     _dashboard_series_from_date_counts,
     _dashboard_summarize_tasks,
+    _dashboard_week_boundaries,
+    _local_midnight,
 )
 from app.core.db import db_session
 from app.core.db.models.audit_log import AuditLog
@@ -40,6 +43,24 @@ def db():
     finally:
         session.close()
         db_session.remove()
+
+
+def test_dashboard_day_and_week_boundaries_are_tz_aware_local_midnight():
+    """The 'today' / 'this week' widgets filter timestamptz columns. A naive local-midnight
+    bound is read by Postgres as UTC midnight, which hid the current NZ day's rows until
+    noon (test_ac12). Boundaries must be tz-aware and land on local midnight."""
+    d = date(2026, 8, 29)
+    start = _local_midnight(d)
+    assert start.tzinfo is not None
+    assert (start.year, start.month, start.day, start.hour, start.minute) == (2026, 8, 29, 0, 0)
+    assert start.utcoffset() == _APP_TZ.utcoffset(start.replace(tzinfo=None))
+
+    week_start, next_week_start, prev_week_start = _dashboard_week_boundaries(d)
+    for b in (week_start, next_week_start, prev_week_start):
+        assert b.tzinfo is not None and b.hour == 0 and b.minute == 0
+    assert week_start.weekday() == 0  # Monday
+    assert (next_week_start.date() - week_start.date()).days == 7
+    assert (week_start.date() - prev_week_start.date()).days == 7
 
 
 def test_dashboard_task_bucketing_due_today_and_overdue():

@@ -387,10 +387,12 @@ window.CoreAPI = window.CoreAPI || {
         return this.request('/hub/overview');
     },
 
-    // Dashboard aggregate summary
-    async getDashboardSummary(windowDays = 30) {
+    // Dashboard aggregate summary. Accepts an AbortSignal so the landing page can cancel
+    // the request cleanly when the user navigates away mid-load (a bare navigation-abort
+    // otherwise surfaces as a "Failed to fetch" error).
+    async getDashboardSummary(windowDays = 30, options = {}) {
         const days = Number(windowDays) || 30;
-        return this.request(`/dashboard/summary?window_days=${encodeURIComponent(days)}`);
+        return this.request(`/dashboard/summary?window_days=${encodeURIComponent(days)}`, options);
     },
 
     // Reset demo DB (test environment only)

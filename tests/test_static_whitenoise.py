@@ -57,6 +57,27 @@ def test_conditional_get_returns_304(client):
     assert second.status_code == 304
 
 
+def test_static_urls_carry_a_cache_busting_version(client):
+    """url_for on the bundled-asset endpoints appends ?v=<digest> so a deploy that ships
+    changed JS/CSS gets a new URL instead of serving hour-old assets against fresh HTML.
+    The digest is stable within a process and the asset still serves with or without it."""
+    from app.api.app_factory import create_app
+
+    app = create_app()
+    with app.test_request_context():
+        from flask import url_for
+
+        js_url = url_for("core.serve_core_js", filename="app.js")
+        css_url = url_for("core.serve_core_css", filename="core2.css")
+
+    assert "?v=" in js_url and "?v=" in css_url
+    assert js_url.split("v=")[1] == css_url.split("v=")[1], "one version for all core bundles"
+    # the file serves whether or not the param is present (routing ignores the query)
+    assert client.get(js_url).status_code == 200
+    assert client.get("/static/js/app.js").status_code == 200
+    assert client.get("/static/js/app.js?v=deadbeef").status_code == 200
+
+
 def test_fallthrough_preserves_flask_guards(client):
     # traversal + bad extension -> Flask route's 400; missing -> Flask route's 404
     assert client.get("/static/js/..secret.js").status_code == 400

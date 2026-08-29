@@ -15,9 +15,10 @@
     "Calibrated 2026-07-18 from a real run on an empty-org baseline (last-run.json):",
     "API medians 3.6-34ms, page shells ~4ms, LCP 56-108ms, queries 2-11. Budgets sit at",
     "roughly 4x the worst observed value; ceilings where only a real regression lands.",
-    "The /api/core/dashboard/summary override RATCHETS its known 38-query debt: any new",
-    "query trips the advisory, and the number must only ever go down. Recalibrate with the",
-    "procedure in the SKILL.md rather than hand-tuning numbers to make a red run green.",
+    "The /api/core/dashboard/summary override was a 38-query ratchet until 2026-08-29,",
+    "when the endpoint moved its DAG-heavy slice to the shared system-findings cache (its",
+    "own _why has the detail). Recalibrate with the procedure in the SKILL.md rather than",
+    "hand-tuning numbers to make a red run green.",
     "measure.api entries are normally a bare route string (GET, no body). A route that",
     "requires a request body to be measured meaningfully (e.g. a POST-only solve/compute",
     "endpoint) uses the object form {route, method, body} instead — test_perf_budgets.py",
@@ -102,7 +103,22 @@
       "backend_ms": { "budget": 60, "ceiling": 1000 }
     },
     "/api/core/dashboard/summary": {
-      "queries": { "budget": 38, "ceiling": 60 }
+      "_why": [
+        "The landing page's only data call. Until 2026-08-29 it ran the full check suite",
+        "inline (CoreChecksRunner.run_all_checks), including a DAG traversal per expired-",
+        "with-stock raw material -- ~285 queries / ~660ms on whistlebird_test (48 expired).",
+        "It now reads the expired_materials slice from the shared per-org system-findings",
+        "cache (see /api/core/system-findings override) and runs only the cheap checks",
+        "live. WARM path: 1 SELECT for the cached row. COLD path (empty cache, once per NZ",
+        "day per org or after a mutation): +~4 bookkeeping statements (fetch, advisory",
+        "lock, re-fetch, upsert) around the same compute.",
+        "The E2E fixture org has ONE expired raw material, so its DAG is trivial and this",
+        "route's fixture query count barely moved (38 -> 39 on a cold miss). The point of",
+        "the change is that the count NO LONGER SCALES with expired-material history --",
+        "measured warm on whistlebird_test: ~660ms -> ~100ms. queries.budget carries",
+        "headroom for the cold-miss bookkeeping; ceiling stays where only an N+1 lands."
+      ],
+      "queries": { "budget": 44, "ceiling": 60 }
     },
     "/api/core/hub/overview": {
       "_why": [
