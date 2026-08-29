@@ -61,7 +61,10 @@ def downgrade() -> None:
     import logging
 
     bind = op.get_bind()
-    logger = logging.getLogger("alembic.runtime.migration")
+    # A migration runs in the alembic process, outside the app/request lifecycle;
+    # app.observability.get_logger would drag the app config stack into env.py. Alembic's
+    # own logger is the correct sink here.
+    logger = logging.getLogger("alembic.runtime.migration")  # nosemgrep: no-stdlib-getlogger
     exists = bind.execute(sa.text("SELECT to_regclass('public.feature_subscriptions')")).scalar()
     if exists is None:
         logger.warning("feature_subscriptions_001.downgrade: table already absent, nothing to drop")
