@@ -83,6 +83,21 @@ def index():
     return send_from_directory(templates_dir, "landing.html")
 
 
+@app.route("/favicon.ico")
+def favicon():
+    """Inline SVG favicon so browsers stop 404ing /favicon.ico on every page (base_spa
+    also carries a <link rel=icon>, but auth/landing pages that don't extend it hit this)."""
+    from flask import Response
+
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+        "<rect width='32' height='32' rx='7' fill='#2DD4BF'/>"
+        "<text x='16' y='23' font-size='19' text-anchor='middle' fill='#fff'"
+        " font-family='system-ui,sans-serif' font-weight='700'>F</text></svg>"
+    )
+    return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.route("/landing-diagram")
 def landing_diagram():
     """Serve the biz-e operational diagram (embedded on landing page via iframe)"""

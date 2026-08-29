@@ -407,13 +407,18 @@ def create_app():
                 "connect-src 'self' blob:"
             )
         else:
+            # static.cloudflareinsights.com is Cloudflare's RUM beacon, auto-injected by
+            # the CF proxy on the deployed environments (it POSTs back to
+            # cloudflareinsights.com/cdn-cgi/rum). Allowed here so it doesn't spam a CSP
+            # violation on every page; disable "Web Analytics / Browser Insights" in the
+            # Cloudflare dashboard instead if the same-origin /telemetry RUM is enough.
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "font-src 'self' https://fonts.gstatic.com; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://static.cloudflareinsights.com; "
                 "img-src 'self' data:; "
-                "connect-src 'self'; "
+                "connect-src 'self' https://cloudflareinsights.com; "
                 # PostHog's vendored session-recording bundle spins up its rrweb
                 # compression worker from a data: URI rather than a same-origin
                 # script file; without this, browsers silently refuse to create
