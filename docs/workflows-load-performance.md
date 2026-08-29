@@ -47,7 +47,19 @@ is already lean.
 
 ## Work items
 
-### 1. Slim the `system-findings` banner payload — `[ ]`
+### 1. Slim the `system-findings` banner payload — `[x]` (commit: system_findings_cache `_banner_finding_data`)
+
+**Done.** `/api/core/system-findings` 405 KB → 24 KB on `whistlebird_test` (~17x), on
+every authenticated page (the sidebar notification badge in `base_spa.html` fetches it on
+`DOMContentLoaded` **and** every `htmx:afterOnLoad`). `_banner_finding_data` projects the
+`expired_materials` finding's `data` to the fields the banner / badge / Notifications page
+actually read (`expired_raw_materials` → id/name/date fields; `impacted_items` →
+id/name/`expired_raw_material_id`) and drops the `connections` DAG edge list entirely.
+The cached expensive slice on disk and `/api/core/inventory/expired-materials` (full
+shape, sourcemap) are untouched. Notifications page + banner verified via Playwright: 47
+items, correct dates/names, 0 console errors.
+
+<details><summary>original plan</summary>
 
 **Files:** `app/core/backend/system_findings_cache.py` (or `corechecks.py` route),
 `app/core/frontend/js/system-findings-banner.js`, `tests/test_system_findings_cache.py`,
@@ -81,10 +93,10 @@ isn't enough.
 keep `id` in `expired_raw_materials`. The Notifications page renders its own list from a
 separate call, so it's unaffected (confirm: grep `getSystemFindings` callers).
 
-**Test:** `test_system_findings_cache.py` — assert the response `findings[].data` has no
-`connections` key and the item lists are `{id, name, ...}` shaped, and payload size is
-under a ceiling on a seeded multi-expired fixture. `test_corechecks_routes.py` — banner
-contract (shape, 401) still holds.
+**Test:** `test_system_findings_cache.py::test_banner_payload_is_slimmed` — response
+`findings[].data` has no `connections`, item objects carry only the kept keys.
+
+</details>
 
 ---
 
