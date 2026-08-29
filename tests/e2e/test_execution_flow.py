@@ -72,7 +72,7 @@ def _execution_step(bundle: dict, step_number: int) -> dict:
     return next(s for s in steps if s["step_number"] == step_number)
 
 
-def _complete_step_via_api(page, eid: str, esid: str) -> "object":
+def _complete_step_via_api(page, eid: str, esid: str) -> object:
     return page.request.post(
         f"/api/core/executions/{eid}/steps/{esid}/complete",
         headers=csrf_headers(page),

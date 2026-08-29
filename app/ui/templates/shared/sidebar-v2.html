@@ -68,24 +68,9 @@
           </svg>
         </a>
       </li>
+      {% if compliant_subscribed %}
       <li class="nav-item">
-        <a href="/dilution-calculator" class="nav-link{% if active_page == 'dilution_calculator' %} active{% endif %}">
-          <div class="nav-link-icon-wrapper">
-            <svg class="nav-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 2v6l-6 10a2 2 0 0 0 1.8 3h14.4a2 2 0 0 0 1.8-3L15 8V2"/>
-              <path d="M8.5 12h7"/>
-              <path d="M9 2h6"/>
-            </svg>
-          </div>
-          <span class="nav-link-text">Dilution Calculator</span>
-          <svg class="nav-link-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-        </a>
-      </li>
-      {# Compliance hidden for now (desktop + mobile). #}
-      {# <li class="nav-item">
-        <a href="/workflow-engine/compliance" class="nav-link{% if active_page == 'compliance' %} active{% endif %}">
+        <a href="/compliant" class="nav-link{% if active_page == 'compliant' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -96,7 +81,8 @@
             <polyline points="9 18 15 12 9 6"/>
           </svg>
         </a>
-      </li> #}
+      </li>
+      {% endif %}
       {% if crm_enabled %}
       <li class="nav-item">
         <a href="/crm" class="nav-link{% if active_page == 'crm' %} active{% endif %}">

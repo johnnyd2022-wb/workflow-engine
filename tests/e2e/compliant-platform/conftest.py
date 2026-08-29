@@ -23,6 +23,19 @@ import pytest
 from app.core.db.models.user import UserRole
 from tests.e2e.conftest import attach_probe, csrf_headers, login_through_ui
 
+
+def _grant_compliant(org_id) -> None:
+    """Every Compliant route is gated on an active per-org `compliant` subscription
+    (spec compliant_tools.md). Seed it right after the org is minted so the E2E flows
+    below reach the real handlers instead of the subscription 404.
+    """
+    from app.core.db import db_session
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+
+    FeatureSubscriptionRepository(db_session()).grant(org_id, "compliant")
+    db_session().commit()
+
+
 # customs-alcohol/product-mapping carries no CONTROL_REQUIREMENTS entry (see
 # app/features/compliant/modules/nz_alcohol/catalogue.py), so it is the simplest control
 # for a happy-path record: only the always-required fields (record_type, status, title)
@@ -40,6 +53,7 @@ def admin_page(browser, app_url, fresh_user):
     default identity for single-org flow tests.
     """
     user = fresh_user(role=UserRole.ADMIN)
+    _grant_compliant(user["org_id"])
     context = browser.new_context(base_url=app_url, ignore_https_errors=True)
     page = context.new_page()
     attach_probe(page)
@@ -53,6 +67,7 @@ def member_page(browser, app_url, fresh_user):
     """A logged-in page for a plain MEMBER, in its own fresh org -- for the ADMIN-gate
     (403) checks on `PUT /profile` and `POST /alcohol-products`."""
     user = fresh_user(role=UserRole.MEMBER)
+    _grant_compliant(user["org_id"])
     context = browser.new_context(base_url=app_url, ignore_https_errors=True)
     page = context.new_page()
     attach_probe(page)
@@ -81,6 +96,7 @@ def admin_and_member_pages(browser, app_url, fresh_user):
     admin_user = UserFactory(org_id=org.id, email=f"e2e-compliant-admin-{run_id}@example.test", role=UserRole.ADMIN)
     member_user = UserFactory(org_id=org.id, email=f"e2e-compliant-member-{run_id}@example.test", role=UserRole.MEMBER)
     session.commit()
+    _grant_compliant(org.id)
 
     contexts = []
 
@@ -117,6 +133,7 @@ def two_tenants(browser, app_url, fresh_user):
 
     def _sign_in():
         user = fresh_user(role=UserRole.ADMIN)
+        _grant_compliant(user["org_id"])
         context = browser.new_context(base_url=app_url, ignore_https_errors=True)
         contexts.append(context)
         page = context.new_page()

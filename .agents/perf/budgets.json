@@ -3,14 +3,14 @@
     "Performance budgets for the perf-guardrails skill. Consumed by",
     "tests/e2e/test_perf_budgets.py (measurement + gating) and scripts/perf_triage.py",
     "(priority checklist). Two levels per metric, per spec D2 (.agents/specs/playwright-e2e.md):",
-    "  budget  — advisory. A breach is reported in .agents/reports/perf/last-run.json and",
+    "  budget  \u2014 advisory. A breach is reported in .agents/reports/perf/last-run.json and",
     "            raises the route's priority in the triage checklist. It never fails a test.",
-    "  ceiling — blocking. Generous enough that only a real regression (an N+1 explosion,",
+    "  ceiling \u2014 blocking. Generous enough that only a real regression (an N+1 explosion,",
     "            a hung query, a render stall) trips it; a breach fails the perf test.",
     "Units: *_ms are milliseconds; queries is DB statements per request (deterministic, so",
     "its ceiling can be tight). backend_ms is measured SERVER-SIDE (request_started ->",
     "request_finished inside the app process), not client wall-clock. lcp_ms is Chromium's",
-    "largest-contentful-paint on a warm cache, median of 3 — a local regression tripwire,",
+    "largest-contentful-paint on a warm cache, median of 3 \u2014 a local regression tripwire,",
     "NOT a real-user metric; production LCP truth is the Faro RUM web-vitals stream.",
     "Calibrated 2026-07-18 from a real run on an empty-org baseline (last-run.json):",
     "API medians 3.6-34ms, page shells ~4ms, LCP 56-108ms, queries 2-11. Budgets sit at",
@@ -21,19 +21,34 @@
     "hand-tuning numbers to make a red run green.",
     "measure.api entries are normally a bare route string (GET, no body). A route that",
     "requires a request body to be measured meaningfully (e.g. a POST-only solve/compute",
-    "endpoint) uses the object form {route, method, body} instead — test_perf_budgets.py",
+    "endpoint) uses the object form {route, method, body} instead \u2014 test_perf_budgets.py",
     "sends `body` as the JSON payload with CSRF headers attached, same as any other",
     "mutating core-API call in the E2E suite."
   ],
   "defaults": {
     "page": {
-      "backend_ms": { "budget": 50, "ceiling": 500 },
-      "lcp_ms": { "budget": 1000, "ceiling": 5000 },
-      "queries": { "budget": 5, "ceiling": 20 }
+      "backend_ms": {
+        "budget": 50,
+        "ceiling": 500
+      },
+      "lcp_ms": {
+        "budget": 1000,
+        "ceiling": 5000
+      },
+      "queries": {
+        "budget": 5,
+        "ceiling": 20
+      }
     },
     "api": {
-      "backend_ms": { "budget": 150, "ceiling": 1000 },
-      "queries": { "budget": 15, "ceiling": 60 }
+      "backend_ms": {
+        "budget": 150,
+        "ceiling": 1000
+      },
+      "queries": {
+        "budget": 15,
+        "ceiling": 60
+      }
     }
   },
   "measure": {
@@ -46,8 +61,8 @@
       "/core/executions/live",
       "/core/settings",
       "/crm",
-      "/dilution-calculator",
       "/compliant",
+      "/compliant/tools",
       "/core/sourcemap",
       "/core/inventory/dispose",
       "/core/inventory/dispose/confirm",
@@ -71,7 +86,7 @@
       "/api/core/process-templates",
       "/api/compliant/overview",
       {
-        "route": "/api/dilution-calculator/solve",
+        "route": "/api/compliant/tools/dilution/solve",
         "method": "POST",
         "body": {
           "solve_for": "final_volume_ml",
@@ -99,8 +114,14 @@
         "and a fixture-calibrated ceiling will never see it. Fixing that means one",
         "multi-root traverse() instead of one per root -- see the review notes."
       ],
-      "queries": { "budget": 11, "ceiling": 60 },
-      "backend_ms": { "budget": 60, "ceiling": 1000 }
+      "queries": {
+        "budget": 11,
+        "ceiling": 60
+      },
+      "backend_ms": {
+        "budget": 60,
+        "ceiling": 1000
+      }
     },
     "/api/core/dashboard/summary": {
       "_why": [
@@ -118,7 +139,10 @@
         "measured warm on whistlebird_test: ~660ms -> ~100ms. queries.budget carries",
         "headroom for the cold-miss bookkeeping; ceiling stays where only an N+1 lands."
       ],
-      "queries": { "budget": 44, "ceiling": 60 }
+      "queries": {
+        "budget": 44,
+        "ceiling": 60
+      }
     },
     "/api/core/hub/overview": {
       "_why": [
@@ -132,8 +156,14 @@
         "PLACEHOLDER pending a measured run on the E2E fixture org: recalibrate budget to",
         "the observed median and pin queries at the observed value per SKILL.md."
       ],
-      "queries": { "budget": 15, "ceiling": 25 },
-      "backend_ms": { "budget": 80, "ceiling": 1000 }
+      "queries": {
+        "budget": 15,
+        "ceiling": 25
+      },
+      "backend_ms": {
+        "budget": 80,
+        "ceiling": 1000
+      }
     }
   }
 }

@@ -18,6 +18,7 @@ from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement
 from app.core.db.models.entity_event import EntityEvent
+from app.core.db.models.feature_subscription import FeatureSubscription
 from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.process_version import ProcessVersion
 from app.features.crm.models.xero_tenant import XeroTenant

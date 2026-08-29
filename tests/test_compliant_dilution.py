@@ -1,13 +1,18 @@
-"""Tests for the dilution calculator feature.
+"""Tests for the relocated dilution calculator (now Compliant Tools).
+
+The dilution solver moved verbatim from app/features/dilution_calculator/ into
+app/features/compliant/tools/calculators/dilution.py and its API from
+POST /api/dilution-calculator/solve to POST /api/compliant/tools/dilution/solve, gated by
+the per-org Compliant subscription. Maths, validation, error strings and payload are
+unchanged — every assertion below is the migrated one (spec compliant_tools.md AC9).
 
 Coverage:
-  - DilutionService: the exact (a,b,c,d) identity, water_to_add contraction model,
-    validation (AC1, AC2, AC3, AC4, AC5, AC7, AC8, AC9)
-  - API endpoint: auth guard, happy path, validation errors (AC1, AC4, AC5)
-  - Page route: renders for an authenticated user, rejects unauthenticated (AC6)
+  - solver: the exact (a,b,c,d) identity, water_to_add contraction model, validation,
+    determinism (AC1-AC5, AC7-AC9 of the original dilution_calculator spec)
+  - API endpoint at the new path: happy path, validation errors, auth + subscription gate
+  - the old /dilution-calculator page/API URLs are gone (404)
 
-See .agents/specs/dilution_calculator.md for the AC definitions these tests are named
-against.
+See .agents/specs/dilution_calculator.md for the original AC definitions.
 """
 
 from __future__ import annotations
@@ -20,10 +25,11 @@ import pytest
 
 from app.core.db import db_session
 from app.core.db.models.organisation import Organisation
+from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
-from app.features.dilution_calculator.services.dilution_service import (
+from app.features.compliant.tools.calculators.dilution import (
     DilutionValidationError,
     _mass_fraction_for_abv,
     solve_dilution,
@@ -445,7 +451,12 @@ def user(db, org):
     user_repo = UserRepository(db)
     email = f"dilution_calc_test_{uuid4()}@test.com"
     password_hash = AuthService.hash_password("TestPass123!")
-    return user_repo.create_user(org_id=org.id, email=email, password_hash=password_hash)
+    u = user_repo.create_user(org_id=org.id, email=email, password_hash=password_hash)
+    # Every Compliant route (including the relocated dilution solve endpoint) is gated
+    # on an active per-org subscription.
+    FeatureSubscriptionRepository(db).grant(org.id, "compliant")
+    db.commit()
+    return u
 
 
 @pytest.fixture()
@@ -473,7 +484,7 @@ def app_client(db, org, user):
 class TestDilutionCalculatorAPI:
     def test_ac1_endpoint_solves_and_returns_200(self, app_client):
         resp = app_client.post(
-            "/api/dilution-calculator/solve",
+            "/api/compliant/tools/dilution/solve",
             json={
                 "solve_for": "final_volume_ml",
                 "starting_abv": 40,
@@ -487,18 +498,15 @@ class TestDilutionCalculatorAPI:
         assert body["solved_value"] == pytest.approx(2000.0, abs=1e-6)
 
     def test_ac1_endpoint_logs_solved_event_on_success(self, app_client):
-        """A successful solve must leave a structured log line behind — this is the
-        `<slug>_<verb_past_tense>` counterpart to the rejection event below, using the
-        same renderer-independent root-logger-handler technique. Event name is
-        underscore-separated (`dilution_calculator_solved`), matching this repo's
-        stable-event-name convention (e.g. `xero_contacts_sync_started`), not dotted.
+        """A successful solve must leave a structured log line behind. The shared tools
+        dispatch route logs `compliant.tool_solved` with the calculator key.
         """
         collector = _LogRecordCollector()
         root_logger = logging.getLogger()
         root_logger.addHandler(collector)
         try:
             resp = app_client.post(
-                "/api/dilution-calculator/solve",
+                "/api/compliant/tools/dilution/solve",
                 json={
                     "solve_for": "final_volume_ml",
                     "starting_abv": 40,
@@ -514,15 +522,15 @@ class TestDilutionCalculatorAPI:
         solved = [
             r.msg
             for r in collector.records
-            if isinstance(r.msg, dict) and r.msg.get("event") == "dilution_calculator_solved"
+            if isinstance(r.msg, dict) and r.msg.get("event") == "compliant.tool_solved"
         ]
-        assert solved, f"Expected a dilution_calculator_solved log record, got: {collector.records}"
+        assert solved, f"Expected a compliant.tool_solved log record, got: {collector.records}"
         assert solved[0]["level"] == "info"
-        assert solved[0]["solve_for"] == "final_volume_ml"
+        assert solved[0]["tool"] == "dilution"
 
     def test_ac4_endpoint_returns_400_with_error_message(self, app_client):
         resp = app_client.post(
-            "/api/dilution-calculator/solve",
+            "/api/compliant/tools/dilution/solve",
             json={"solve_for": "final_volume_ml", "starting_abv": 40, "starting_volume_ml": 1000, "final_abv": 900},
         )
         assert resp.status_code == 400
@@ -543,7 +551,7 @@ class TestDilutionCalculatorAPI:
         root_logger.addHandler(collector)
         try:
             resp = app_client.post(
-                "/api/dilution-calculator/solve",
+                "/api/compliant/tools/dilution/solve",
                 json={
                     "solve_for": "final_volume_ml",
                     "starting_abv": 40,
@@ -559,32 +567,49 @@ class TestDilutionCalculatorAPI:
         rejected = [
             r.msg
             for r in collector.records
-            if isinstance(r.msg, dict) and r.msg.get("event") == "dilution_calculator_rejected"
+            if isinstance(r.msg, dict) and r.msg.get("event") == "compliant.tool_rejected"
         ]
-        assert rejected, f"Expected a dilution_calculator_rejected log record, got: {collector.records}"
+        assert rejected, f"Expected a compliant.tool_rejected log record, got: {collector.records}"
         assert rejected[0]["level"] == "warning"
+        assert rejected[0]["tool"] == "dilution"
         assert "reason" in rejected[0]
 
     def test_ac4_endpoint_rejects_non_object_body(self, app_client):
-        resp = app_client.post("/api/dilution-calculator/solve", json=[1, 2, 3])
+        resp = app_client.post("/api/compliant/tools/dilution/solve", json=[1, 2, 3])
         assert resp.status_code == 400
 
-    def test_ac7_endpoint_writes_no_rows(self, app_client, db, org):
-        """Stateless: calling the endpoint must not create any rows for the org."""
-        from app.core.db.models.user import User
+    def test_ac7_endpoint_issues_no_write_and_no_query_beyond_the_gate(self, app_client):
+        """The solve endpoint is pure. The ONLY SQL a solve request may run is the auth
+        middleware's user/org load and the blueprint gate's single feature_subscriptions
+        lookup — no write, and no read of any other table (quoting/CTE-robust).
+        """
+        from sqlalchemy import event
 
-        before = db.query(User).filter(User.org_id == org.id).count()
-        app_client.post(
-            "/api/dilution-calculator/solve",
-            json={
-                "solve_for": "final_volume_ml",
-                "starting_abv": 40,
-                "starting_volume_ml": 1000,
-                "final_abv": 20,
-            },
-        )
-        after = db.query(User).filter(User.org_id == org.id).count()
-        assert before == after
+        from app.core.db import engine
+        from tests._sql_probe import sql_beyond_gate_infra
+
+        seen: list[str] = []
+
+        def _before_cursor(conn, cursor, statement, parameters, context, executemany):
+            seen.append(statement)
+
+        event.listen(engine, "before_cursor_execute", _before_cursor)
+        try:
+            resp = app_client.post(
+                "/api/compliant/tools/dilution/solve",
+                json={
+                    "solve_for": "final_volume_ml",
+                    "starting_abv": 40,
+                    "starting_volume_ml": 1000,
+                    "final_abv": 20,
+                },
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", _before_cursor)
+
+        assert resp.status_code == 200
+        assert any("feature_subscriptions" in s for s in seen), "gate query never ran — test wired wrong"
+        assert sql_beyond_gate_infra(seen) == [], sql_beyond_gate_infra(seen)
 
 
 class TestDilutionCalculatorAuth:
@@ -597,21 +622,17 @@ class TestDilutionCalculatorAuth:
         with flask_app.test_client() as client:
             client.environ_base["wsgi.url_scheme"] = "https"
             client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
-            resp = client.post("/api/dilution-calculator/solve", json={"solve_for": "final_volume_ml"})
+            resp = client.post("/api/compliant/tools/dilution/solve", json={"solve_for": "final_volume_ml"})
         assert resp.status_code in (401, 302)
 
-    def test_ac6_page_requires_auth(self):
-        from app.api.app_factory import create_app
+    def test_ac9_old_dilution_urls_are_gone(self, app_client):
+        """The standalone /dilution-calculator page and /api/dilution-calculator/solve
+        no longer exist — the calculator lives on /compliant/tools now.
+        """
+        assert app_client.get("/dilution-calculator").status_code == 404
+        assert app_client.post("/api/dilution-calculator/solve", json={}).status_code == 404
 
-        flask_app = create_app()
-        flask_app.config["TESTING"] = True
-        with flask_app.test_client() as client:
-            client.environ_base["wsgi.url_scheme"] = "https"
-            client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
-            resp = client.get("/dilution-calculator")
-        assert resp.status_code in (302, 401)
-
-    def test_ac6_page_renders_for_authenticated_user(self, app_client):
-        resp = app_client.get("/dilution-calculator")
+    def test_ac9_dilution_form_is_on_the_tools_page(self, app_client):
+        resp = app_client.get("/compliant/tools")
         assert resp.status_code == 200
-        assert b"Dilution Calculator" in resp.data
+        assert b'data-calculator="dilution"' in resp.data
