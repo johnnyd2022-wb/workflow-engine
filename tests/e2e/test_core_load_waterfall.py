@@ -84,3 +84,30 @@ def test_workflows_tab_defers_execution_history_until_opened(logged_in_page):
     page.click('[data-core2-tab-target="workflows"]')
     _wait(page)
     assert sum(1 for c in calls if c == "executions" or c.startswith("executions?")) == 1, calls
+
+
+def test_auth_me_is_fetched_once_per_page(logged_in_page):
+    """The profile mascot (base_spa), the sidebar account widget and flows2 each used to
+    fetch /auth/me; they now share CoreAPI.getMe."""
+    page = logged_in_page
+    me: list[str] = []
+    page.on("request", lambda r: me.append(r.url) if r.method == "GET" and "/auth/me" in r.url else None)
+
+    for path in ("/core", "/core/processes", "/core/flows"):
+        me.clear()
+        page.goto(path)
+        _wait(page)
+        assert len(me) <= 1, f"{path}: /auth/me fetched {len(me)}x"
+
+
+def test_executions_live_reuses_hub_overview_no_heavy_lists(logged_in_page):
+    page = logged_in_page
+    calls = _core_api_calls(page)
+
+    page.goto("/core/executions/live")
+    _wait(page)
+
+    assert calls.count("hub/overview") == 1, calls
+    assert not any(c == "executions" or c.startswith("executions?") for c in calls), calls
+    assert not any("include_steps=true" in c for c in calls), calls
+    assert not any(c == "inventory" or c.startswith("inventory?") for c in calls), calls

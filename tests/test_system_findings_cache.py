@@ -235,6 +235,52 @@ def test_cache_is_per_org(db, flask_app):
         db.commit()
 
 
+def test_banner_payload_is_slimmed(db, authed):
+    """The /api/core/system-findings response feeds only the banner / badge /
+    Notifications page. `_banner_finding_data` drops the expired_materials DAG edge list
+    and the wide item objects (~400 KB on a real org) -- keep only the fields those three
+    consumers read."""
+
+    real = sfc._compute_expensive
+
+    # a check result carrying the full shape the DAG check produces
+    def fake_expensive(org_id, session):
+        return [
+            {
+                "check_id": "expired_materials",
+                "flagged": True,
+                "message": "1 expired raw material with stock",
+                "data": {
+                    "expired_raw_materials": [
+                        {"id": "r1", "name": "juniper", "expiry_date": "2025-01-01", "supplier": "ACME", "quantity": "3.0"}
+                    ],
+                    "impacted_items": [
+                        {"id": "w1", "name": "batch", "expired_raw_material_id": "r1", "extra_data": {"big": "x" * 500}}
+                    ],
+                    "connections": [{"from_id": "r1", "to_id": "w1", "execution_id": "e1"}] * 50,
+                },
+            }
+        ]
+
+    org, client = authed
+    import pytest as _pytest  # noqa
+
+    sfc._compute_expensive = fake_expensive
+    try:
+        body = client.get(ENDPOINT).get_json()
+    finally:
+        sfc._compute_expensive = real
+
+    finding = next(f for f in body["findings"] if f["check_id"] == "expired_materials")
+    data = finding["data"]
+    assert "connections" not in data, "the DAG edge list must be dropped"
+    assert set(data["expired_raw_materials"][0]) <= set(sfc._EXPIRED_RAW_KEEP)
+    assert "supplier" not in data["expired_raw_materials"][0] and "quantity" not in data["expired_raw_materials"][0]
+    assert set(data["impacted_items"][0]) <= set(sfc._IMPACTED_KEEP)
+    assert data["impacted_items"][0]["expired_raw_material_id"] == "r1"  # kept -- Notifications groups on it
+    assert "extra_data" not in data["impacted_items"][0]
+
+
 def test_get_check_results_is_the_full_merged_set(db, authed):
     """get_check_results() returns the same check ids CoreChecksRunner.run_all_checks()
     does -- the expensive slice from cache, the cheap ones live."""
