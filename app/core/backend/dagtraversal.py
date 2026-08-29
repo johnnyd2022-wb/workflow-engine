@@ -322,11 +322,11 @@ class DAGTracer:
         # single-root traversals (e.g. one call per expired raw material) only pays for
         # this query once instead of once per root.
         if self._graph_cache is None:
+            # org_id is denormalised onto execution_steps (tenant_org_id_backfill_001,
+            # NOT NULL), so filter it directly instead of joining executions -- lets the
+            # planner use ix_execution_steps_org_id instead of a seq scan + hash join.
             steps = (  # nosemgrep: sqlalchemy-all-without-limit
-                self.session.query(ExecutionStep)
-                .join(Execution, ExecutionStep.execution_id == Execution.id)
-                .filter(Execution.org_id == self.org_id)
-                .all()
+                self.session.query(ExecutionStep).filter(ExecutionStep.org_id == self.org_id).all()
             )
             steps_by_input_item_id: dict[UUID, list[ExecutionStep]] = {}
             for step in steps:
@@ -897,6 +897,44 @@ def trace_backward(
         root_set={traced_item_id if traced_item_id is not None else item_id},
     )
     return {"items": result.nodes, "connections": result.edges}
+
+
+def trace_bidirectional(
+    org_id: UUID,
+    session: Session,
+    item_id: UUID,
+    include_quantity_filter: bool = True,
+    root_item_id: UUID | None = None,
+) -> dict[str, Any]:
+    """Forward + backward trace from one item on a single DAGTracer, so the org's
+    step/produced-item graph (bulk-loaded on the instance's _graph_cache) and per-item
+    enrichment are loaded once instead of once per direction. Returns the two legacy
+    dict-shaped results under "forward" / "backward" -- callers that only want one
+    direction should keep using trace_forward / trace_backward.
+    """
+    tracer = DAGTracer(org_id=org_id, session=session)
+    root_set = {root_item_id if root_item_id is not None else item_id}
+
+    fwd = tracer.traverse(
+        start_nodes=[item_id],
+        direction="forward",
+        include_quantity_filter=include_quantity_filter,
+        root_set=root_set,
+    )
+    fwd_items, fwd_conns = fwd.nodes, fwd.edges
+    tracer.add_step_order_connections(fwd_items, fwd_conns)
+
+    bwd = tracer.traverse(
+        start_nodes=[item_id],
+        direction="backward",
+        include_quantity_filter=include_quantity_filter,
+        root_set=root_set,
+        clear_enrichment_cache=False,  # reuse enrichment from the forward pass
+    )
+    return {
+        "forward": {"items": fwd_items, "connections": fwd_conns},
+        "backward": {"items": bwd.nodes, "connections": bwd.edges},
+    }
 
 
 def find_impacted_by_expired_raw(org_id: UUID, session: Session, raw_material: InventoryItem) -> dict[str, Any]:

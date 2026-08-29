@@ -2837,6 +2837,32 @@ def list_inventory():
         items = items[:page_limit]
     next_cursor = _encode_list_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
 
+    # Compact view: just the core item fields, no per-item enrichment (system findings,
+    # producing-step hydration, ready-date lookups, audit history). The sourcemap browse
+    # grid groups the whole list by name / batch / supplier and needs none of that; the
+    # full representation is ~20x larger.
+    if request.args.get("view") == "compact":
+        return jsonify(
+            {
+                "inventory_items": [
+                    {
+                        "id": str(i.id),
+                        "name": i.name,
+                        "display_label": i.display_label,
+                        "inventory_type": i.inventory_type,
+                        "quantity": str(i.quantity),
+                        "unit": i.unit,
+                        "supplier": i.supplier,
+                        "supplier_batch_number": i.supplier_batch_number,
+                        "expiry_date": i.expiry_date.isoformat() if i.expiry_date else None,
+                    }
+                    for i in items
+                ],
+                "has_more": has_more,
+                "next_cursor": next_cursor,
+            }
+        ), 200
+
     # System findings per item (all checks) for UI: red border + reasons in dropdown
     findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
 
@@ -6239,10 +6265,11 @@ def sourcemap_trace():
         return jsonify({"error": "Item not found"}), 404
 
     try:
-        from app.core.backend.dagtraversal import trace_backward, trace_forward
+        from app.core.backend.dagtraversal import trace_bidirectional
 
-        result_fwd = trace_forward(org_id, db, root_id, include_quantity_filter=False, root_item_id=root_id)
-        result_bwd = trace_backward(org_id, db, root_id, include_quantity_filter=False, traced_item_id=root_id)
+        both = trace_bidirectional(org_id, db, root_id, include_quantity_filter=False, root_item_id=root_id)
+        result_fwd = both["forward"]
+        result_bwd = both["backward"]
 
         all_nodes = {n["id"]: n for n in (result_fwd["items"] + result_bwd["items"])}
         all_edges = {(e["from_id"], e["to_id"]): e for e in (result_fwd["connections"] + result_bwd["connections"])}

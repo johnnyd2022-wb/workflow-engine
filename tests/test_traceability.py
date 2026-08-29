@@ -140,6 +140,43 @@ class TestCurrentStateTraceBranch:
         assert str(dag["w1_id"]) in node_ids
         assert str(dag["f1_id"]) in node_ids
 
+    def test_bidirectional_equals_separate_traces_with_fewer_queries(self, db, org):
+        """trace_bidirectional shares one DAGTracer across both directions, so the org's
+        step/produced-item graph is bulk-loaded once, not once per direction. Same nodes
+        and edges as the two separate calls; strictly fewer DB round trips."""
+        from sqlalchemy import event
+
+        from app.core.backend.dagtraversal import trace_backward, trace_bidirectional, trace_forward
+        from app.core.db import engine
+        from app.core.security.tenant_scope import tenant_scope
+
+        d = build_linear_dag(db, org.id)
+        db.commit()
+        root = d["w1_id"]
+
+        counter = {"n": 0}
+        listener = lambda *a, **k: counter.__setitem__("n", counter["n"] + 1)  # noqa: E731
+        event.listen(engine, "after_cursor_execute", listener)
+        try:
+            with tenant_scope(org.id):
+                counter["n"] = 0
+                fwd = trace_forward(org.id, db, root, include_quantity_filter=False, root_item_id=root)
+                bwd = trace_backward(org.id, db, root, include_quantity_filter=False, traced_item_id=root)
+                separate_queries = counter["n"]
+
+                counter["n"] = 0
+                both = trace_bidirectional(org.id, db, root, include_quantity_filter=False, root_item_id=root)
+                combined_queries = counter["n"]
+        finally:
+            event.remove(engine, "after_cursor_execute", listener)
+
+        assert {n["id"] for n in both["forward"]["items"]} == {n["id"] for n in fwd["items"]}
+        assert {n["id"] for n in both["backward"]["items"]} == {n["id"] for n in bwd["items"]}
+        assert {(e["from_id"], e["to_id"]) for e in both["forward"]["connections"]} == {
+            (e["from_id"], e["to_id"]) for e in fwd["connections"]
+        }
+        assert combined_queries < separate_queries, (separate_queries, combined_queries)
+
     def test_current_state_trace_unknown_item_returns_404_not_500(self, app_client, org):
         resp = app_client.post(
             "/api/core/sourcemap/trace",

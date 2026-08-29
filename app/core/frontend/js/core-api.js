@@ -204,6 +204,10 @@ window.CoreAPI = window.CoreAPI || {
         const params = new URLSearchParams();
         if (type) params.append('type', type);
         if (processId) params.append('process_id', processId);
+        // view=compact drops per-item enrichment (system findings, producing-step
+        // hydration, audit history) -- ~20x smaller, for callers that only need the
+        // core item fields (e.g. the sourcemap browse grid).
+        if (options.compact) params.append('view', 'compact');
         const query = params.toString() ? `?${params.toString()}` : '';
         const signal = options.signal;
         return this.request(`/inventory${query}`, signal ? { signal } : {});
