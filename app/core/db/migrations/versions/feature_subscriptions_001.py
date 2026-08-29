@@ -61,11 +61,13 @@ def downgrade() -> None:
     import logging
 
     bind = op.get_bind()
-    try:
-        row_count = bind.execute(sa.text("SELECT count(*) FROM feature_subscriptions")).scalar()
-    except Exception:  # table already gone / not created
-        row_count = 0
-    logging.getLogger("alembic.runtime.migration").warning(
+    logger = logging.getLogger("alembic.runtime.migration")
+    exists = bind.execute(sa.text("SELECT to_regclass('public.feature_subscriptions')")).scalar()
+    if exists is None:
+        logger.warning("feature_subscriptions_001.downgrade: table already absent, nothing to drop")
+        return
+    row_count = bind.execute(sa.text("SELECT count(*) FROM feature_subscriptions")).scalar()
+    logger.warning(
         "feature_subscriptions_001.downgrade dropping feature_subscriptions table with %s entitlement row(s) "
         "-- this is irrecoverable except from a prior CSV export (see migration docstring)",
         row_count,

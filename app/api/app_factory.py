@@ -461,19 +461,21 @@ def create_app():
     @app.context_processor
     def _inject_feature_flags():
         # Per-org Compliant entitlement for the sidebar. Reuse the value the compliant
-        # blueprint's before_request already cached on g for /compliant* requests; on
-        # any other page compute it once (only when there is a tenant context). The nav
-        # item shows iff the deployment flag AND the org's subscription are both on.
-        compliant_subscribed = getattr(g, "compliant_subscribed", None)
-        if compliant_subscribed is None:
-            org_id = getattr(g, "current_org_id", None)
-            if org_id and config.compliant_enabled:
-                from app.core.db import db_session
-                from app.core.security.entitlements import org_has_feature
+        # blueprint's before_request cached on g for /compliant* requests — but ONLY when
+        # it was cached for THIS request's org (g.compliant_subscribed_org), since a
+        # reused Flask app context can carry a prior request's g attributes. On any other
+        # page, compute it once when there is a tenant context. The nav item shows iff the
+        # deployment flag AND the org's subscription are both on.
+        org_id = getattr(g, "current_org_id", None)
+        if getattr(g, "compliant_subscribed_org", None) == org_id and org_id is not None:
+            compliant_subscribed = bool(getattr(g, "compliant_subscribed", False))
+        elif org_id and config.compliant_enabled:
+            from app.core.db import db_session
+            from app.core.security.entitlements import org_has_feature
 
-                compliant_subscribed = org_has_feature(db_session(), org_id, "compliant")
-            else:
-                compliant_subscribed = False
+            compliant_subscribed = org_has_feature(db_session(), org_id, "compliant")
+        else:
+            compliant_subscribed = False
 
         return dict(
             crm_enabled=config.crm_enabled,

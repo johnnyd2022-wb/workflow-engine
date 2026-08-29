@@ -8,7 +8,7 @@ outside another unit's input range and that is not an error.
 
 from __future__ import annotations
 
-from app.features.compliant.tools.calculators._validate import as_number, bounded, one_provided_of
+from app.features.compliant.tools.calculators._validate import as_number, bounded, finalise, guarded, one_provided_of
 from app.features.compliant.tools.errors import CalculatorValidationError
 
 KEY = "gravity_convert"
@@ -44,6 +44,7 @@ def _sg_from_plato(plato: float) -> float:
     return (lo + hi) / 2.0
 
 
+@guarded
 def solve(payload: dict) -> dict:
     given = one_provided_of(payload, ["sg", "plato", "brix", "baume"])
 
@@ -57,11 +58,13 @@ def solve(payload: dict) -> dict:
         sg = 145.0 / (145.0 - baume_in)
 
     plato = _plato_from_sg(sg)
-    return {
-        "sg": sg,
-        "plato": plato,
-        "brix": plato,
-        "baume": 145.0 - 145.0 / sg,
-        "disclaimer": DISCLAIMER,
-        "sources": SOURCES,
-    }
+    return finalise(
+        {
+            "sg": sg,
+            "plato": plato,
+            "brix": plato,
+            "baume": 145.0 - 145.0 / sg,
+            "disclaimer": DISCLAIMER,
+            "sources": SOURCES,
+        }
+    )

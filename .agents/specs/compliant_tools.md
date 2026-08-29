@@ -79,11 +79,14 @@ modules they have"); "Tools" is a sub-navigation entry within that area.
      `g.compliant_subscribed`.
   3. If `subscribed` is false → `abort(404)` with a generic body (Flask's default
      "Not Found"; no "compliant"/"subscription"/"feature" text).
+- `before_request` also stores `g.compliant_subscribed_org = org_id` so the cache is
+  tenant-tagged (a reused Flask app context can carry a prior request's `g` attributes;
+  `tenant_context.py` clears `g.current_org_id` per request but not arbitrary `g` keys).
 - The app-factory context processor injects `compliant_subscribed`: reuse
-  `g.compliant_subscribed` if `before_request` already set it this request; else, if
-  `g.current_org_id` is set, compute it the same way (one query); else `False`. It never
-  runs a second query when `before_request` already cached one — which is every
-  `/compliant*` page.
+  `g.compliant_subscribed` **only** when `g.compliant_subscribed_org == g.current_org_id`
+  (i.e. cached for this request's org); else, if `g.current_org_id` is set, compute it
+  (one query); else `False`. It never runs a second query when `before_request` already
+  cached one for this org — which is every `/compliant*` page.
 - No calculator solver touches the DB, filesystem, network, or a subprocess. The tools
   routes issue no query beyond reading the cached `g.compliant_subscribed`. (The auth
   middleware's own pre-existing user/org lookups are out of scope and unchanged.)
@@ -546,7 +549,8 @@ No calculator module redefines these as literals; each imports from the shared m
 - AC14: Solver purity is enforced two ways:
   (a) **Import allowlist** — a test parses each solver module's AST and asserts every
   top-level `import`/`from` target is in the allowlist `{math, decimal, typing,
-  collections.abc, __future__, app.features.compliant.modules.nz_alcohol.constants,
+  collections.abc, functools, __future__,
+  app.features.compliant.modules.nz_alcohol.constants,
   app.features.compliant.tools.errors,
   app.features.compliant.tools.calculators._validate}`. Any of `os`, `io`, `pathlib`,
   `socket`, `urllib`, `subprocess`, `requests`, `flask`, `sqlalchemy`, `app.core.db`,

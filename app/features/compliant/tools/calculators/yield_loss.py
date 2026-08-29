@@ -9,6 +9,8 @@ from __future__ import annotations
 from app.features.compliant.tools.calculators._validate import (
     as_number,
     bounded,
+    finalise,
+    guarded,
     is_absent,
     required_number,
 )
@@ -30,6 +32,7 @@ def _step_name(raw, index: int) -> str:
     return raw.strip()
 
 
+@guarded
 def solve(payload: dict) -> dict:
     start_volume_l = required_number(payload, "start_volume_l", exclusive_min=0)
 
@@ -66,17 +69,21 @@ def solve(payload: dict) -> dict:
     remaining = start_volume_l
     per_step = []
     for name, key, value in parsed:
-        remaining = remaining - (remaining * value / 100.0 if key == "loss_pct" else value)
+        # `remaining * (value / 100)` not `remaining * value / 100` — the latter overflows
+        # its intermediate product for a very large `remaining` before the divide.
+        remaining = remaining - (remaining * (value / 100.0) if key == "loss_pct" else value)
         if remaining < 0.0:
             raise CalculatorValidationError("cumulative loss exceeds available volume")
         per_step.append({"name": name, "remaining_l": remaining})
 
-    return {
-        "start_volume_l": start_volume_l,
-        "final_volume_l": remaining,
-        "total_loss_l": start_volume_l - remaining,
-        "effective_yield_pct": remaining / start_volume_l * 100.0,
-        "per_step": per_step,
-        "disclaimer": DISCLAIMER,
-        "sources": SOURCES,
-    }
+    return finalise(
+        {
+            "start_volume_l": start_volume_l,
+            "final_volume_l": remaining,
+            "total_loss_l": start_volume_l - remaining,
+            "effective_yield_pct": remaining / start_volume_l * 100.0,
+            "per_step": per_step,
+            "disclaimer": DISCLAIMER,
+            "sources": SOURCES,
+        }
+    )

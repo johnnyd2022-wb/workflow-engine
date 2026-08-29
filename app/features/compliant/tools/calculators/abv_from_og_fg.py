@@ -6,7 +6,7 @@ apparent_attenuation_pct = (og_sg - fg_sg) / (og_sg - 1.0) * 100
 
 from __future__ import annotations
 
-from app.features.compliant.tools.calculators._validate import required_number
+from app.features.compliant.tools.calculators._validate import finalise, guarded, required_number
 from app.features.compliant.tools.errors import CalculatorValidationError
 
 KEY = "abv_from_og_fg"
@@ -18,17 +18,20 @@ DISCLAIMER = "The ×131.25 approximation; for tax or label ABV use a measured me
 _ABV_FACTOR = 131.25
 
 
+@guarded
 def solve(payload: dict) -> dict:
     og_sg = required_number(payload, "og_sg", exclusive_min=1.0, maximum=1.2)
     fg_sg = required_number(payload, "fg_sg", minimum=0.98, maximum=1.1)
     if og_sg <= fg_sg:
         raise CalculatorValidationError("og_sg must be greater than fg_sg")
 
-    return {
-        "abv_pct": (og_sg - fg_sg) * _ABV_FACTOR,
-        "apparent_attenuation_pct": (og_sg - fg_sg) / (og_sg - 1.0) * 100.0,
-        "og_sg": og_sg,
-        "fg_sg": fg_sg,
-        "disclaimer": DISCLAIMER,
-        "sources": SOURCES,
-    }
+    return finalise(
+        {
+            "abv_pct": (og_sg - fg_sg) * _ABV_FACTOR,
+            "apparent_attenuation_pct": (og_sg - fg_sg) / (og_sg - 1.0) * 100.0,
+            "og_sg": og_sg,
+            "fg_sg": fg_sg,
+            "disclaimer": DISCLAIMER,
+            "sources": SOURCES,
+        }
+    )

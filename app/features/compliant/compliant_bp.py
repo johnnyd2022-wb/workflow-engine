@@ -42,7 +42,11 @@ def create_compliant_blueprint() -> Blueprint:
             return None
 
         subscribed = bool(config.compliant_enabled) and org_has_feature(db_session(), org_id, COMPLIANT_FEATURE_KEY)
+        # Cache for the context processor, tagged with the org it was computed for so a
+        # reused Flask app context can't serve a prior request's value (tenant_context.py
+        # clears g.current_org_id per request but not arbitrary g attributes).
         g.compliant_subscribed = subscribed
+        g.compliant_subscribed_org = org_id
         if not subscribed:
             logger.warning(
                 "access_denied",

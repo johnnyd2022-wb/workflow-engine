@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from app.features.compliant.tools.calculators._validate import is_absent, required_number
+from app.features.compliant.tools.calculators._validate import finalise, guarded, is_absent, required_number
 
 KEY = "yeast_pitch"
 TITLE = "Yeast pitch rate"
@@ -20,6 +20,7 @@ DISCLAIMER = "Assumes 100% viability; adjust for yeast age and a starter."
 _DEFAULT_PACK_BILLION = 100.0
 
 
+@guarded
 def solve(payload: dict) -> dict:
     volume_l = required_number(payload, "volume_l", exclusive_min=0)
     gravity_plato = required_number(payload, "gravity_plato", exclusive_min=0, maximum=40)
@@ -31,10 +32,12 @@ def solve(payload: dict) -> dict:
     )
 
     cells_required_billion = pitch_rate * volume_l * gravity_plato
-    return {
-        "cells_required_billion": cells_required_billion,
-        "packs": math.ceil(cells_required_billion / pack_billion),
-        "pack_billion": pack_billion,
-        "disclaimer": DISCLAIMER,
-        "sources": SOURCES,
-    }
+    return finalise(
+        {
+            "cells_required_billion": cells_required_billion,
+            "packs": math.ceil(cells_required_billion / pack_billion),
+            "pack_billion": pack_billion,
+            "disclaimer": DISCLAIMER,
+            "sources": SOURCES,
+        }
+    )

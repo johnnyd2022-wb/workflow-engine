@@ -52,6 +52,11 @@ def tools_solve(key: str):
     except CalculatorValidationError as exc:
         logger.warning("compliant.tool_rejected", tool=key, reason=str(exc))
         return jsonify({"error": str(exc)}), 400
+    except (OverflowError, ZeroDivisionError) as exc:
+        # A product/quotient of two in-range but extreme inputs. Not a server fault —
+        # turn it into the same 400 shape a CalculatorValidationError would produce.
+        logger.warning("compliant.tool_rejected", tool=key, reason=f"arithmetic:{type(exc).__name__}")
+        return jsonify({"error": "input magnitudes produced a result outside the representable range"}), 400
 
     logger.info("compliant.tool_solved", tool=key)
     return jsonify(result), 200

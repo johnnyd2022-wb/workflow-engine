@@ -17,6 +17,19 @@
     return meta ? meta.getAttribute('content') : '';
   }
 
+  // Mutating request helper: assembles options (incl. the X-CSRFToken header this
+  // non-core blueprint needs) so callers never hand-roll a raw fetch(). Mirrors
+  // compliant.js's own `api()` shape.
+  function postJson(url, body) {
+    var options = {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+      body: JSON.stringify(body),
+    };
+    return fetch(url, options);
+  }
+
   function readArrayField(form, name) {
     var group = form.querySelector('[data-array-field="' + name + '"]');
     if (!group) return undefined;
@@ -50,11 +63,33 @@
     var resultEl = form.parentNode.querySelector('[data-result]');
     wireArrayAdd(form);
 
+    // For an explicit `solve_for` calculator: disable + clear the currently-targeted
+    // field so its stale value is never re-submitted (which the API rejects with
+    // "'<field>' must be omitted"). Re-applied whenever the target changes.
+    var solveSelect = form.querySelector('[name="solve_for"]');
+    var solveEnum = entry && entry.solve && entry.solve.field ? entry.solve.enum : null;
+    function syncSolveTarget() {
+      if (!solveSelect || !solveEnum) return;
+      var target = solveSelect.value;
+      solveEnum.forEach(function (name) {
+        var input = form.querySelector('[name="' + name + '"]');
+        if (!input) return;
+        var isTarget = name === target;
+        input.disabled = isTarget;
+        input.placeholder = isTarget ? 'solving for this' : '';
+        if (isTarget) input.value = '';
+      });
+    }
+    if (solveSelect && solveEnum) {
+      solveSelect.addEventListener('change', syncSolveTarget);
+      syncSolveTarget();
+    }
+
     form.addEventListener('submit', function (event) {
       event.preventDefault();
       var values = {};
       Array.prototype.forEach.call(form.querySelectorAll('input, select'), function (el) {
-        if (el.type === 'submit' || el.closest('.ct-array-row')) return;
+        if (el.type === 'submit' || el.disabled || el.closest('.ct-array-row')) return;
         values[el.name] = el.value;
       });
       if (entry) {
@@ -64,12 +99,7 @@
       }
       var payload = entry ? R.buildPayload(entry, values) : values;
       resultEl.innerHTML = '<p class="ct-loading">Calculating…</p>';
-      fetch('/api/compliant/tools/' + key + '/solve', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
-        body: JSON.stringify(payload),
-      })
+      postJson('/api/compliant/tools/' + key + '/solve', payload)
         .then(function (res) {
           return res.json().then(function (body) {
             resultEl.innerHTML = res.ok

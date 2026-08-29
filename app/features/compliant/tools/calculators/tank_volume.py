@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 
-from app.features.compliant.tools.calculators._validate import is_absent, required_number
+from app.features.compliant.tools.calculators._validate import finalise, guarded, is_absent, required_number
 from app.features.compliant.tools.errors import CalculatorValidationError
 
 KEY = "tank_volume"
@@ -19,6 +19,7 @@ DISCLAIMER = "Nominal cylinder+cone geometry; ignores dished heads, wall thickne
 _M3_TO_L = 1000.0
 
 
+@guarded
 def solve(payload: dict) -> dict:
     diameter_m = required_number(payload, "diameter_m", exclusive_min=0)
     cyl_height_m = required_number(payload, "cyl_height_m", exclusive_min=0)
@@ -43,10 +44,12 @@ def solve(payload: dict) -> dict:
     else:
         filled_l = (cone_full + math.pi * r**2 * (fill_height_m - cone_height_m)) * _M3_TO_L
 
-    return {
-        "capacity_l": capacity_l,
-        "filled_l": filled_l,
-        "headspace_l": capacity_l - filled_l,
-        "disclaimer": DISCLAIMER,
-        "sources": SOURCES,
-    }
+    return finalise(
+        {
+            "capacity_l": capacity_l,
+            "filled_l": filled_l,
+            "headspace_l": capacity_l - filled_l,
+            "disclaimer": DISCLAIMER,
+            "sources": SOURCES,
+        }
+    )

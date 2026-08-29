@@ -210,6 +210,24 @@ def test_ac7_nav_item_visibility(db, app_ctx):
         _cleanup(db, [sub_org.id, unsub_org.id])
 
 
+def test_ac7_nav_state_does_not_leak_across_orgs_in_a_reused_context(db, app_ctx):
+    """`g.compliant_subscribed` is tagged with the org it was computed for, so a reused
+    Flask app context cannot serve a subscribed org's nav state to an unsubscribed one.
+    """
+    sub_org, sub_email = _mk_user(db, subscribed=True)
+    unsub_org, unsub_email = _mk_user(db, subscribed=False)
+    try:
+        sub_client = _client(app_ctx, sub_email)
+        unsub_client = _client(app_ctx, unsub_email)
+        # subscribed org first — visits a /compliant page so before_request caches True on g
+        assert sub_client.get("/compliant/tools").status_code == 200
+        # then the unsubscribed org renders a non-compliant page in the same app context
+        html = unsub_client.get("/core/dashboard").get_data(as_text=True)
+        assert not _sidebar_has_compliance(html)
+    finally:
+        _cleanup(db, [sub_org.id, unsub_org.id])
+
+
 def test_ac7_nav_hidden_when_deployment_flag_off_even_if_subscribed(db, monkeypatch):
     from app.utils.config_loader import config
 

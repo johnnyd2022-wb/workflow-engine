@@ -8,6 +8,8 @@ from __future__ import annotations
 from app.features.compliant.tools.calculators._validate import (
     as_number,
     bounded,
+    finalise,
+    guarded,
     is_absent,
     one_omitted_of,
 )
@@ -27,6 +29,7 @@ def _num(payload: dict, field: str, **bounds) -> float:
     return bounded(as_number(payload[field], field), field, **bounds)
 
 
+@guarded
 def solve(payload: dict) -> dict:
     target = one_omitted_of(payload, ["volume_l", "abv_pct", "lal"])
 
@@ -47,11 +50,13 @@ def solve(payload: dict) -> dict:
         if not 0.0 <= abv_pct <= 100.0:
             raise CalculatorValidationError("solving for abv_pct produced a value outside 0-100 — check inputs")
 
-    return {
-        "solved_field": target,
-        "volume_l": volume_l,
-        "abv_pct": abv_pct,
-        "lal": lal,
-        "disclaimer": DISCLAIMER,
-        "sources": SOURCES,
-    }
+    return finalise(
+        {
+            "solved_field": target,
+            "volume_l": volume_l,
+            "abv_pct": abv_pct,
+            "lal": lal,
+            "disclaimer": DISCLAIMER,
+            "sources": SOURCES,
+        }
+    )

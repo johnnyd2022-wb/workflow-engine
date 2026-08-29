@@ -198,6 +198,7 @@ _IMPORT_ALLOWLIST = {
     "decimal",
     "typing",
     "collections.abc",
+    "functools",
     "__future__",
     "app.features.compliant.modules.nz_alcohol.constants",
     "app.features.compliant.tools.errors",
@@ -276,6 +277,35 @@ def test_ac13_rejections(key):
     for bad in REJECTIONS[key]:
         with pytest.raises(CalculatorValidationError):
             CALCULATORS[key](dict(bad))
+
+
+# Extreme-but-finite inputs whose product/quotient overflows or underflows a divisor.
+# Every one must surface as a CalculatorValidationError (route -> 400), never a 500 or an
+# `Infinity` in the JSON body. (build-review 2026-08-29.)
+_EXTREME_INPUTS = {
+    "lal": {"abv_pct": 100, "lal": 1e308},
+    "standard_drinks": {"solve_for": "volume_ml", "standard_drinks": 1e308, "abv_pct": 5e-324},
+    "abv_abw": {"abv_pct": 1e308, "solution_sg": 0.9},
+    "gravity_convert": {"sg": 1.0000000001},
+    "tank_volume": {"diameter_m": 1e308, "cyl_height_m": 1, "fill_height_m": 1},
+    "yield_loss": {"start_volume_l": 1e308, "steps": [{"name": "a", "loss_pct": 99}]},
+    "yeast_pitch": {"volume_l": 1e308, "gravity_plato": 40, "pitch_rate_m_per_ml_per_p": 5},
+    "keg_fill": {"available_l": 1e308, "keg_size_l": 5e-324},
+    "abv_from_og_fg": {"og_sg": 1.2, "fg_sg": 0.98},
+}
+
+
+@pytest.mark.parametrize("key", [k for k in TIER1_KEYS if k in _EXTREME_INPUTS])
+def test_ac13_extreme_finite_inputs_are_rejected_not_crashed(key):
+    try:
+        result = CALCULATORS[key](dict(_EXTREME_INPUTS[key]))
+    except CalculatorValidationError:
+        return  # rejected at the door or by finalise() — good
+    # If it did return, every numeric value must be finite (no Infinity leaking to JSON).
+    for v in result.values():
+        assert not (isinstance(v, float) and (v != v or v in (float("inf"), float("-inf")))), (
+            f"{key} returned non-finite {v!r} for extreme input"
+        )
 
 
 @pytest.mark.parametrize("key", [k for k in TIER1_KEYS if k != "dilution"])

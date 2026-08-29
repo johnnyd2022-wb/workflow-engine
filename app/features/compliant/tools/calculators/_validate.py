@@ -7,13 +7,57 @@ non-bool numbers, missing-required messages, and the `solve` shapes
 
 from __future__ import annotations
 
+import functools
 import math
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from app.features.compliant.tools.errors import CalculatorValidationError
 
 _MISSING = object()
+
+_OUT_OF_RANGE_MSG = "input magnitudes produced a result outside the representable range — check your values"
+
+
+def finalise(result: dict) -> dict:
+    """Last-line guard: reject a result carrying any non-finite number (inf/nan).
+
+    Individual inputs are range-checked, but a product/quotient of two in-range extremes
+    can still overflow to inf or underflow a divisor to 0. Every solver pipes its return
+    dict through this so such a case surfaces as a clean 400, never an ``Infinity`` in the
+    JSON body or a 500 from a downstream ``int()`` / ``math.ceil``.
+    """
+
+    def _check(value: Any) -> None:
+        if isinstance(value, bool):
+            return
+        if isinstance(value, (int, float)) and not math.isfinite(value):
+            raise CalculatorValidationError(_OUT_OF_RANGE_MSG)
+        if isinstance(value, list):
+            for item in value:
+                _check(item)
+        elif isinstance(value, dict):
+            for item in value.values():
+                _check(item)
+
+    _check(result)
+    return result
+
+
+def guarded(solve: Callable[[dict], dict]) -> Callable[[dict], dict]:
+    """Decorator: turn an arithmetic blow-up on extreme-but-finite inputs into a clean
+    ``CalculatorValidationError`` so the solver contract ("raises CalculatorValidationError")
+    holds even when a product overflows or a divisor underflows to zero mid-calculation.
+    """
+
+    @functools.wraps(solve)
+    def _wrapped(payload: dict) -> dict:
+        try:
+            return solve(payload)
+        except (OverflowError, ZeroDivisionError):
+            raise CalculatorValidationError(_OUT_OF_RANGE_MSG) from None
+
+    return _wrapped
 
 
 def as_number(value: Any, field: str) -> float:
