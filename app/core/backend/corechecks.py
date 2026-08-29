@@ -184,12 +184,19 @@ def register_routes(bp):
     def list_expired_materials():
         """List expired raw materials and products made with expired ingredients.
 
-        Uses CoreChecksRunner (expired_materials check) which delegates to DAG traversal
-        for impacted items. Returns same shape for sourcemap and flows2.
+        The expired_materials check runs a DAG traversal per expired-with-stock raw
+        material (~700ms / hundreds of queries on a real org). This endpoint feeds the
+        sourcemap Findings tab and flows2 on page load, so it reads the slice from the
+        shared per-org system-findings cache (fresh until NZ midnight, invalidated on
+        inventory/execution/process mutations) rather than recomputing every request.
         """
+        from app.core.backend.system_findings_cache import get_check_results
+
         org_id = UUID(g.org_id)
-        runner = CoreChecksRunner(org_id=org_id, session=db_session())
-        result = runner.run_check("expired_materials")
+        result = next(
+            (r for r in get_check_results(org_id, db_session()) if r.check_id == "expired_materials"),
+            None,
+        )
         if result is None or result.data is None:
             return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
         return jsonify(result.data), 200

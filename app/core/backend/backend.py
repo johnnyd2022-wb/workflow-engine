@@ -2840,6 +2840,32 @@ def list_inventory():
         items = items[:page_limit]
     next_cursor = _encode_list_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
 
+    # Compact view: just the core item fields, no per-item enrichment (system findings,
+    # producing-step hydration, ready-date lookups, audit history). The sourcemap browse
+    # grid groups the whole list by name / batch / supplier and needs none of that; the
+    # full representation is ~20x larger.
+    if request.args.get("view") == "compact":
+        return jsonify(
+            {
+                "inventory_items": [
+                    {
+                        "id": str(i.id),
+                        "name": i.name,
+                        "display_label": i.display_label,
+                        "inventory_type": i.inventory_type,
+                        "quantity": str(i.quantity),
+                        "unit": i.unit,
+                        "supplier": i.supplier,
+                        "supplier_batch_number": i.supplier_batch_number,
+                        "expiry_date": i.expiry_date.isoformat() if i.expiry_date else None,
+                    }
+                    for i in items
+                ],
+                "has_more": has_more,
+                "next_cursor": next_cursor,
+            }
+        ), 200
+
     # System findings per item (all checks) for UI: red border + reasons in dropdown
     findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
 
