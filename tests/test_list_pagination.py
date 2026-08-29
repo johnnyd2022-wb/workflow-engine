@@ -88,6 +88,16 @@ def test_executions_without_limit_returns_full_list_and_no_page_keys(db, client_
     assert "has_more" not in body and "next_cursor" not in body
 
 
+def test_executions_count_returns_just_the_total(db, client_org):
+    """flows2's Batches badge is always visible; it reads a bare count so the number is
+    right without pulling any execution rows (which grow with a process's history)."""
+    org, client = client_org
+    _seed_executions(db, org, 9)
+    body = client.get("/api/core/executions?count=1").get_json()
+    assert body == {"count": 9}
+    assert "executions" not in body
+
+
 def test_inventory_without_limit_returns_full_list_and_no_page_keys(db, client_org):
     org, client = client_org
     _seed_items(db, org, 7)

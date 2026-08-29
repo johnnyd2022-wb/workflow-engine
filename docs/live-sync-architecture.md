@@ -44,7 +44,13 @@ This design just exposes it as a feed.
 
 ## Status
 
-**Phase A shipped** (feat/live-sync): the change feed + `LiveSync` + flows2 + the badge. Measured: a batch started by user B appears on user A's open flows2 in ~1.9 s, no reload. Feed query is an index scan, ~0.3 ms.
+**Phase A shipped** (feat/live-sync, MR !196): change feed + `LiveSync` + flows2 + the
+badge. A batch started by user B appears on user A's open flows2 in ~1.9 s, no reload.
+
+**Phase C shipped** (feat/flows2-scale): flows2 payloads bounded — lazy panels, executions
+pagination, per-panel retry. First paint 5 calls / 34 KB, executions/inventory deferred
+to tab open. Plus fixes for the `ERR_TOO_MANY_RETRIES` static-serve bug and a noisy
+abort log.
 
 ## Work plan (tick as landed)
 
@@ -111,7 +117,40 @@ event) instead of its own `htmx:afterOnLoad` blanket hook. Cuts redundant
 dashboard, execute-step page (warn if the execution changed underneath). Each is a
 `LiveSync.subscribe` + a targeted refetch. Own MR.
 
-### Phase C — bound the growing payloads  `[ ]`
+### Phase C — bound the growing payloads  `[x]`  (feat/flows2-scale)
+
+**Shipped.** flows2 first paint is now flat regardless of how many runs a process has:
+- `list_executions` gained `?count=1` (just the total; `ExecutionRepository.count_executions`)
+  on top of the `?limit`+keyset already there.
+- flows2 Batches tab: **all active** batches (bounded -- few run at once) + the **most
+  recent 25 completed** + a total count for the badge; older completed page in via a
+  "Load N more (M older)" button (`loadMoreCompleted`, keyset cursor).
+- flows2 **lazy panels**: Structure renders on load; Batches / Inventory load the first
+  time their tab is shown (`window.flows2EnsurePanel`); re-opening a tab is 0 fetches.
+  LiveSync's `onChange` only refetches panels the user has opened, and always refreshes
+  the cheap badge count.
+- **Per-panel retry**: a transient load failure renders an inline "Couldn't load -- Retry"
+  in that panel (`flows2ShowPanelError` / `flows2ClearPanelError`), not a dead panel +
+  a toast the user can't act on.
+- flows2 inventory stays on the full (enriched) representation -- it's process-scoped and
+  small, and needs `system_findings` / `producing_step_name` / ready-date fields the
+  compact view omits. (The pre-!191 767 ms was a query problem, fixed there, not payload.)
+
+Measured (`whistlebird_test`): flows2 initial load **5 calls / 34 KB** (was `inventory`
+4 KB + `executions` 3 KB + more), with **no executions list and no inventory** until a
+tab is opened. Badge is correct from a 17-byte `count` call.
+
+**Also fixed two pre-existing bugs surfaced here:**
+- `/static/inventory/*` and `/static/img/*` served an **empty 200** for
+  `inventory-spa-header.css` under the threaded test server → the browser retried it to
+  `ERR_TOO_MANY_RETRIES` (broke `/core/executions/live` and anything loading that CSS).
+  Routed both through WhiteNoise like `/static/js|css` -- robust serving, allowlist
+  guards intact via fall-through.
+- `core-api.js` logged a scary `API request failed ... invalid JSON` when a fetch's
+  **body read** (not the fetch itself) was aborted by a navigation. Now silent, like
+  every other abort.
+
+<details><summary>original plan</summary>
 
 - `list_executions` `?process_id=` path gains `?limit` + keyset cursor (reuse the !183
   `_encode_list_cursor` helpers). flows2 Batches tab: first page + "Load more" / infinite
@@ -121,6 +160,8 @@ dashboard, execute-step page (warn if the execution changed underneath). Each is
   tab is first opened (keeps "instant after first open"), then keep them warm.
 - flows2 panel load errors → inline "couldn't load — retry" per panel, not a dead panel.
 - A manual refresh control on each volatile panel.
+
+</details>
 
 ### Phase D — optimistic concurrency  `[ ]`
 

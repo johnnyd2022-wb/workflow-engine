@@ -510,12 +510,15 @@ def create_app():
     # so the CDN edge-caches them after the first hit and the origin stops being in the
     # asset path.
     #
-    # Scope: ONLY /static/js and /static/css (+ /crm/static/* when CRM is on) -- the
-    # "serve any file in this dir" prefixes. /static/inventory and /static/img (hardcoded
-    # filename allowlist) and /ui/shared (per-file auth gate) stay on their Flask routes.
+    # Scope: /static/js, /static/css, /static/inventory, /static/img (+ /crm/static/*
+    # when CRM is on). /ui/shared (per-file auth gate) stays on its Flask route.
     # WhiteNoise falls through to the wrapped app for any path it has no file for, so the
-    # traversal (400) / bad-extension (400) / 404 / allowlist guards on every route are
-    # untouched -- only the happy path (an existing, valid asset) is short-circuited.
+    # traversal (400) / bad-extension (400) / 404 / filename-allowlist guards on every
+    # route are untouched -- only the happy path (an existing, valid asset) is
+    # short-circuited. inventory/ and img/ moved here after the Flask route was seen
+    # returning an empty 200 for inventory-spa-header.css under the threaded test server
+    # -> the browser retried it to ERR_TOO_MANY_RETRIES. WhiteNoise serves it the same
+    # robust way it serves js/css.
     from whitenoise import WhiteNoise
 
     def _static_asset_headers(headers, path, url):
@@ -535,6 +538,8 @@ def create_app():
     _core_frontend = os.path.join(app_dir, "core", "frontend")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "js"), prefix="static/js/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "css"), prefix="static/css/")
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory"), prefix="static/inventory/")
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
     if config.crm_enabled:
         _crm_frontend = os.path.join(app_dir, "features", "crm", "frontend")
         app.wsgi_app.add_files(os.path.join(_crm_frontend, "js"), prefix="crm/static/js/")

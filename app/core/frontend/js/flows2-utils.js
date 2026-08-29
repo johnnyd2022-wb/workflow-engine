@@ -95,6 +95,42 @@
     }
 
     /**
+     * Inline per-panel error state -- a transient fetch failure should offer a retry in
+     * place, not leave a dead panel plus a toast the user can't act on.
+     */
+    function flows2ShowPanelError(containerId, message, onRetry) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.replaceChildren();
+      const box = document.createElement('div');
+      box.className = 'flows2-panel-error';
+      box.style.cssText = 'padding:20px;text-align:center;color:var(--text-secondary,#6b7280);';
+      const p = document.createElement('p');
+      p.style.margin = '0 0 10px';
+      p.textContent = message || 'Couldn’t load this.';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-secondary btn-sm';
+      btn.textContent = 'Retry';
+      btn.addEventListener('click', function () {
+        box.replaceChildren();
+        const s = document.createElement('p');
+        s.textContent = 'Loading…';
+        box.appendChild(s);
+        Promise.resolve().then(onRetry);
+      });
+      box.appendChild(p);
+      box.appendChild(btn);
+      container.appendChild(box);
+    }
+
+    function flows2ClearPanelError(containerId) {
+      const container = document.getElementById(containerId);
+      const box = container && container.querySelector('.flows2-panel-error');
+      if (box) box.remove();
+    }
+
+    /**
      * Encoding contract for flows2 UI code:
      * - User/API text in the DOM: prefer element.textContent = …
      * - Legacy HTML strings: escapeHtml() once at interpolation time
