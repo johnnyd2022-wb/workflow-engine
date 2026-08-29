@@ -111,3 +111,14 @@ CI-exact commands run locally:
 - New test files collect (119 tests across the 4 new py files); node JS tests run via the
   `test_execution_shared_utils_js.py` wrapper.
 - Full pytest suite: **1799 passed, 5 skipped, 0 failures** (unit/integration).
+
+## MR & pipeline
+
+- MR: https://gitlab.com/whistlebird/workflow-engine/-/merge_requests/198 (`nz-alc-tools` → `main`, assignee johnnyd2022, not draft).
+- Merge-request pipeline `2801634254` (`merge_request_event`): **passed** — `ruff`,
+  `unit_tests`, `semgrep`, `semgrep_observability`, `semgrep_learned_rules`, `gitleaks`,
+  `uv_audit`, `lockfile_consistency`, `data_stores`, `migration_reversibility` all green.
+  (No Playwright job in the MR pipeline — e2e was verified locally: compliant-platform 74
+  + process_templates + AC19 5, all green.)
+- Push pipeline `2801634154`: `semgrep-sast` green.
+- Announced in `#code-changes` (Slack).
