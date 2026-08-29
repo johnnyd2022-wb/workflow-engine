@@ -35,48 +35,35 @@
       return;
     }
     
-    // Load user/org data asynchronously
+    // Load user/org data asynchronously (shared /auth/me cache -- see CoreAPI.getMe)
     try {
-      const response = await fetch('/auth/me', {
-        method: 'GET',
-        credentials: 'include'
-      });
-      
-      // Check for 401 before parsing JSON
-      if (response.status === 401) {
-        // Not authenticated - hide component
+      const data = (window.CoreAPI && typeof window.CoreAPI.getMe === 'function')
+        ? await window.CoreAPI.getMe()
+        : await (await fetch('/auth/me', { method: 'GET', credentials: 'include' })).json();
+
+      if (!data || data._status === 401 || !data.user || !data.organisation) {
+        // Not authenticated / unexpected shape - hide component
         component.style.display = 'none';
         return;
       }
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.user && data.organisation) {
-          // Update account info
-          const emailEl = component.querySelector('#account-info-email');
-          const orgEl = component.querySelector('#account-info-org');
-          
-          if (emailEl) {
-            const email = data.user.email || 'Unknown';
-            emailEl.textContent = email;
-            emailEl.title = email; // Show full email on hover
-          }
-          if (orgEl) {
-            const orgName = data.organisation.name || 'Unknown';
-            orgEl.textContent = orgName;
-            orgEl.title = orgName; // Show full org name on hover
-          }
-          
-          // Show component (already visible by default, but ensure it's shown)
-          component.style.display = 'block';
-        } else {
-          // Not authenticated - hide component
-          component.style.display = 'none';
-        }
-      } else {
-        // Error - hide component
-        component.style.display = 'none';
+
+      // Update account info
+      const emailEl = component.querySelector('#account-info-email');
+      const orgEl = component.querySelector('#account-info-org');
+
+      if (emailEl) {
+        const email = data.user.email || 'Unknown';
+        emailEl.textContent = email;
+        emailEl.title = email; // Show full email on hover
       }
+      if (orgEl) {
+        const orgName = data.organisation.name || 'Unknown';
+        orgEl.textContent = orgName;
+        orgEl.title = orgName; // Show full org name on hover
+      }
+
+      // Show component (already visible by default, but ensure it's shown)
+      component.style.display = 'block';
     } catch (error) {
       console.error('Error loading account info:', error);
       // Hide component on error

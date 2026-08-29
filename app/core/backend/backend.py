@@ -1365,15 +1365,12 @@ def list_processes():
     repo = ProcessRepository(db_session)
     processes = repo.list_processes(org_id)
 
-    # Batch-fetch all executions for the org once, then group by process_id in Python.
-    # Avoids N queries (one per process) when calculating active/completed counts.
-    execution_repo = ExecutionRepository(db_session)
-    all_executions = execution_repo.list_executions(org_id)
+    # Active/completed counts per process from one GROUP BY -- not by loading every org
+    # execution (with joined steps) into Python, which scales with execution history.
     from collections import defaultdict
 
-    execs_by_process: dict = defaultdict(list)
-    for e in all_executions:
-        execs_by_process[e.process_id].append(e)
+    execution_repo = ExecutionRepository(db_session)
+    counts_by_process = execution_repo.count_by_process_and_status(org_id)
 
     # Batch-load process event summaries
     from app.core.db.models.entity_event_summary import EntityEventSummary
@@ -1400,9 +1397,9 @@ def list_processes():
 
     result = []
     for process in processes:
-        proc_execs = execs_by_process.get(process.id, [])
-        active_count = sum(1 for e in proc_execs if e.status == ExecutionStatus.IN_PROGRESS)
-        completed_count = sum(1 for e in proc_execs if e.status == ExecutionStatus.COMPLETED)
+        proc_counts = counts_by_process.get(process.id, {})
+        active_count = proc_counts.get(ExecutionStatus.IN_PROGRESS.value, 0)
+        completed_count = proc_counts.get(ExecutionStatus.COMPLETED.value, 0)
         step_list = steps_by_process.get(process.id, [])
         step_count = len(step_list)
 

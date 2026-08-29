@@ -404,19 +404,15 @@
       if (!window.currentUserPromise) {
         window.currentUserPromise = (async () => {
           try {
-            const response = await fetch('/auth/me', {
-              method: 'GET',
-              credentials: 'include'
-            });
-            if (response.ok) {
-              const data = await response.json();
-              if (data.user) {
-                currentUser = {
-                  email: data.user.email || 'Unknown',
-                  username: data.user.email || 'Unknown'
-                };
-                return currentUser;
-              }
+            const data = (window.CoreAPI && typeof window.CoreAPI.getMe === 'function')
+              ? await window.CoreAPI.getMe()
+              : await (await fetch('/auth/me', { method: 'GET', credentials: 'include' })).json();
+            if (data && !data._status && data.user) {
+              currentUser = {
+                email: data.user.email || 'Unknown',
+                username: data.user.email || 'Unknown'
+              };
+              return currentUser;
             }
           } catch (error) {
             console.error('Failed to get current user:', error);

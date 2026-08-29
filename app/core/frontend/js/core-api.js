@@ -288,6 +288,31 @@ window.CoreAPI = window.CoreAPI || {
         this._systemFindingsCache = null;
     },
 
+    // GET /auth/me, shared for a short window so the page-load user/name widgets (sidebar
+    // account info + flows2's getCurrentUser, at least) don't each fetch it. Identity is
+    // stable within a session; the window is short enough that a role/2FA change picked up
+    // on the next navigation. Callers needing a guaranteed-fresh read (audit fields, the
+    // 2FA status toggle) fetch /auth/me directly and are intentionally not routed here.
+    _meCache: null,
+    ME_TTL_MS: 30000,
+    async getMe(force) {
+        if (force) this._meCache = null;
+        const c = this._meCache;
+        if (c && (Date.now() - c.ts) < this.ME_TTL_MS) {
+            return c.promise;
+        }
+        const promise = fetch('/auth/me', { method: 'GET', credentials: 'include' }).then((r) => {
+            if (r.status === 401) return { _status: 401 };
+            if (!r.ok) throw new Error('auth/me ' + r.status);
+            return r.json();
+        });
+        this._meCache = { ts: Date.now(), promise };
+        promise.catch(() => {
+            if (this._meCache && this._meCache.promise === promise) this._meCache = null;
+        });
+        return promise;
+    },
+
     /** @deprecated Use getExpiredMaterials() */
     async getCheckNeededItems() {
         return this.getExpiredMaterials();
