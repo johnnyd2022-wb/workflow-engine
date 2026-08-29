@@ -22,9 +22,24 @@ approach, the risk, and the test.
 | 5 | `/core/processes` scaling | **done** — counts via `GROUP BY`, no longer loads all executions |
 | 6 | wizard fragment queries | audited — clean |
 | 7 | `/core/executions/live` overview reuse | verified — clean |
+| 8 | create/edit-workflow wizard "Inputs" step loads 1.3 MB | **done** — `?view=compact`, drop redundant call → 142 KB |
 
 Net: every workflows page dropped from ~640 KB to ~35–45 KB of API payload on first
-paint. `/core/flows?id=<p>` still ~1.4 s pending !191.
+paint. `/core/flows?id=<p>` still ~1.4 s pending !191. The create/edit-workflow wizard's
+Inputs step went 1.3 MB → 142 KB.
+
+### Deep interactive audit (2026-08-29, post items 1/3/5)
+
+Walked every workflows page + tab with Playwright — process list → open a process →
+flows2 sub-tabs (Structure / Batches / Inventory) + inventory filters → the full
+create-workflow wizard (7 steps) → batch start → execute step. **Every tab / filter click
+on flows2 is 0 API calls** (client-side re-render from data loaded on page open — good).
+The only fat spot found: **the wizard "Inputs" step (and the Create-Process modal that
+shares `create-process-modal.js::loadInventoryItems`) fetched `/api/core/inventory` three
+times** — process-scoped, `?type=raw_material` (174 KB), and unfiltered (**1.09 MB**) —
+then deduped by name. Fixed: both remaining calls use `?view=compact` and the redundant
+`?type=raw_material` call is dropped (the unfiltered set already contains raw materials).
+**1,303,832 B → 141,718 B**, 0 console errors, wizard/templates e2e green.
 
 ## Methodology
 

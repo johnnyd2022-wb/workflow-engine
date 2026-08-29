@@ -2417,35 +2417,24 @@
       
       console.log('Loading inventory items, processId:', processId);
       
-      // Always try to load all inventory types to give users full selection
-      // 1. Try loading with processId (if available)
+      // This is a name/unit/type picker -- view=compact drops the per-item enrichment
+      // (system findings, producing-step hydration, audit history), ~10x smaller.
+      // 1. Process-scoped items first (surfaces outputs of earlier steps in this workflow).
       if (processId) {
         try {
-          const inventoryData = await CoreAPI.getInventory(null, processId);
+          const inventoryData = await CoreAPI.getInventory(null, processId, { compact: true });
           const processItems = inventoryData.inventory_items || [];
           items.push(...processItems);
-          console.log('Loaded inventory with processId:', processItems.length);
         } catch (err) {
           console.warn('Failed to load inventory with processId:', err);
         }
       }
-      
-      // 2. Always load raw materials (these are commonly used)
+
+      // 2. All inventory (already includes raw materials; the dedupe below handles overlap).
       try {
-        const rawMaterialsData = await CoreAPI.getInventory('raw_material');
-        const rawItems = rawMaterialsData.inventory_items || [];
-        items.push(...rawItems);
-        console.log('Loaded raw materials:', rawItems.length);
-      } catch (err) {
-        console.warn('Failed to load raw materials:', err);
-      }
-      
-      // 3. Try loading all inventory without filters (catch-all)
-      try {
-        const allInventoryData = await CoreAPI.getInventory();
+        const allInventoryData = await CoreAPI.getInventory(null, null, { compact: true });
         const allItems = allInventoryData.inventory_items || [];
         items.push(...allItems);
-        console.log('Loaded all inventory:', allItems.length);
       } catch (err) {
         console.warn('Failed to load all inventory:', err);
       }
