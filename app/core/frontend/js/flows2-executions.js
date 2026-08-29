@@ -5,7 +5,11 @@
       try {
         const executionsData = await CoreAPI.getExecutions(processId);
         const executions = executionsData.executions || [];
-        
+
+        // Track this process's execution ids so LiveSync can route execution.step_completed
+        // and inventory_item.* events (which don't carry process_id) back to this page.
+        window.flows2ExecutionIds = new Set(executions.map(e => String(e.id)));
+
         // Update badge
         document.getElementById('executions-badge').textContent = executions.length;
         
