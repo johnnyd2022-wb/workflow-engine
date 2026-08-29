@@ -6268,10 +6268,11 @@ def sourcemap_trace():
         return jsonify({"error": "Item not found"}), 404
 
     try:
-        from app.core.backend.dagtraversal import trace_backward, trace_forward
+        from app.core.backend.dagtraversal import trace_bidirectional
 
-        result_fwd = trace_forward(org_id, db, root_id, include_quantity_filter=False, root_item_id=root_id)
-        result_bwd = trace_backward(org_id, db, root_id, include_quantity_filter=False, traced_item_id=root_id)
+        both = trace_bidirectional(org_id, db, root_id, include_quantity_filter=False, root_item_id=root_id)
+        result_fwd = both["forward"]
+        result_bwd = both["backward"]
 
         all_nodes = {n["id"]: n for n in (result_fwd["items"] + result_bwd["items"])}
         all_edges = {(e["from_id"], e["to_id"]): e for e in (result_fwd["connections"] + result_bwd["connections"])}
