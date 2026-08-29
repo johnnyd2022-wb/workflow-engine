@@ -565,8 +565,59 @@
 
     // startExecutionSpa removed: startExecution() routes to the dedicated execution-step screen.
 
+    // --- LiveSync: keep this process's batches + inventory current when a colleague
+    //     (or another tab) mutates them, without a page reload. ------------------------
+    var _flows2LiveOff = null;
+    var _flows2LiveRefreshTimer = null;
+
+    function flows2LiveRefresh() {
+      // Debounce a burst of events (a multi-step batch completion emits several) into one
+      // refetch of the volatile panels.
+      if (_flows2LiveRefreshTimer) return;
+      _flows2LiveRefreshTimer = setTimeout(function () {
+        _flows2LiveRefreshTimer = null;
+        if (typeof loadExecutions === 'function') loadExecutions();
+        if (typeof loadInventory === 'function') loadInventory();
+        flows2FlashUpdated();
+      }, 250);
+    }
+
+    function flows2FlashUpdated() {
+      var host = document.getElementById('flows2-live-updated');
+      if (!host) {
+        host = document.createElement('div');
+        host.id = 'flows2-live-updated';
+        host.setAttribute('role', 'status');
+        host.style.cssText = 'position:fixed;bottom:16px;right:16px;background:var(--surface,#111);color:#fff;' +
+          'padding:8px 14px;border-radius:999px;font-size:12px;opacity:0;transition:opacity .2s;z-index:1200;pointer-events:none;';
+        host.textContent = 'Updated just now';
+        document.body.appendChild(host);
+      }
+      host.style.opacity = '1';
+      clearTimeout(host._t);
+      host._t = setTimeout(function () { host.style.opacity = '0'; }, 1800);
+    }
+
+    function flows2SubscribeLive() {
+      if (_flows2LiveOff) { _flows2LiveOff(); _flows2LiveOff = null; }
+      var pid = window.processId ? String(window.processId) : null;
+      if (!pid || !window.LiveSync) return;
+      _flows2LiveOff = window.LiveSync.subscribe({
+        key: 'flows2:' + pid,
+        match: function (evt) {
+          var k = evt.keys || {};
+          if (k.process_id === pid || evt.entity_id === pid) return true;
+          var ids = window.flows2ExecutionIds;
+          if (ids && (ids.has(k.execution_id) || ids.has(k.source_execution_id))) return true;
+          return false;
+        },
+        onChange: function () { flows2LiveRefresh(); },
+      });
+    }
+
     // Works on both initial page load (DOMContentLoaded not yet fired) and HTMX swap (DOM already ready)
     function flows2InitPage() {
+      flows2SubscribeLive();
       if (window.processId) {
         loadProcessData();
       } else {
@@ -583,6 +634,18 @@
     } else {
       flows2InitPage();
     }
+
+    // flows2's scripts live in the template scripts block (outside #page-content), so an
+    // hx-boost return to /core/flows swaps in fresh markup they never re-touch -- the
+    // panels would be inert and the LiveSync subscription would point at a detached DOM.
+    // Re-run the page bootstrap on settle. loadProcessData re-fetches+re-renders and
+    // flows2SubscribeLive is key-guarded, so repeated calls are safe.
+    document.body.addEventListener('htmx:afterSettle', function (evt) {
+      var tgt = evt && evt.detail && evt.detail.target;
+      if (!tgt || tgt.id !== 'page-content') return;
+      if (!document.getElementById('flows2-panel-structure')) return;  // not the flows2 page
+      flows2InitPage();
+    });
 
     // After an inline quantity adjustment, reload the inventory tab so the new
     // quantity is reflected without a full page refresh.

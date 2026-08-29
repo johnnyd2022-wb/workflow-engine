@@ -17,7 +17,7 @@ from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
-from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
+from app.core.backend import changes_feed, corechecks, inventory_upload_routes, reconciliation_routes
 from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.complete_step_payload import (
     MAX_COMPLETE_STEP_CONTENT_LENGTH,
@@ -3750,6 +3750,7 @@ def list_out_of_stock_raw_materials():
     return jsonify({"inventory_items": result}), 200
 
 
+changes_feed.register_routes(core_bp)
 corechecks.register_routes(core_bp)
 reconciliation_routes.register_routes(core_bp)
 inventory_upload_routes.register_routes(core_bp)

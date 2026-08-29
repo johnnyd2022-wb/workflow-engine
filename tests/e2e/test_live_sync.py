@@ -1,0 +1,96 @@
+"""LiveSync end-to-end: a change one user makes shows up on another user's open page
+within a poll interval, no reload. This is the whole point of the change feed."""
+
+import uuid
+
+import pytest
+from playwright.sync_api import expect
+
+from tests.e2e.conftest import login_through_ui, purge_org
+
+pytestmark = pytest.mark.e2e
+
+
+@pytest.fixture
+def two_users_one_org(browser, app_url):
+    """One org, two committed users, each in its own logged-in browser context."""
+    from app.core.db import db_session
+    from app.core.db.models.user import User
+    from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory, UserFactory
+
+    session = db_session()
+    run = uuid.uuid4().hex[:8]
+    org = OrganisationFactory(name=f"LiveSync Org {run}")
+    u1 = UserFactory(org_id=org.id, email=f"livesync-a-{run}@example.test")
+    u2 = UserFactory(org_id=org.id, email=f"livesync-b-{run}@example.test")
+    session.commit()
+    uids = [u1.id, u2.id]
+
+    contexts = []
+
+    def _signed_in(email):
+        ctx = browser.new_context(base_url=app_url, ignore_https_errors=True)
+        contexts.append(ctx)
+        page = ctx.new_page()
+        login_through_ui(page, email, DEFAULT_TEST_PASSWORD)
+        return page
+
+    yield org, _signed_in(u1.email), _signed_in(u2.email)
+
+    for ctx in contexts:
+        ctx.close()
+    session.rollback()
+    for uid in uids:
+        purge_org(session, org.id, uid)
+        session.query(User).filter(User.id == uid).delete(synchronize_session=False)
+    session.commit()
+
+
+def _csrf(page):
+    return page.evaluate("() => document.querySelector('meta[name=csrf-token]').content")
+
+
+def test_a_batch_started_by_one_user_appears_on_another_users_flows2(two_users_one_org):
+    _org, page_a, page_b = two_users_one_org
+
+    # B creates a process with a step (via API, the shape the wizard produces).
+    hdrs = {"X-CSRFToken": _csrf(page_b), "Content-Type": "application/json", "Referer": page_b.url}
+    proc = page_b.request.post("/api/core/processes", headers=hdrs, data='{"name": "LiveSync Line", "category": "manufacturing"}')
+    assert proc.status == 201, proc.text()
+    pid = proc.json()["id"]
+    step = page_b.request.post(
+        f"/api/core/processes/{pid}/steps", headers=hdrs, data='{"step_number": 1, "name": "Mix"}'
+    )
+    assert step.status == 201, step.text()
+
+    # A opens that process's flows2 and lands on Batches (0 batches).
+    exec_fetches: list[str] = []
+    page_a.on(
+        "request",
+        lambda r: exec_fetches.append(r.url)
+        if r.method == "GET" and "/api/core/executions?process_id" in r.url
+        else None,
+    )
+    page_a.goto(f"/core/flows?id={pid}")
+    page_a.wait_for_load_state("networkidle")
+    page_a.wait_for_selector('[data-flows2-target="batches"]')
+    baseline = len(exec_fetches)
+    expect(page_a.locator("#executions-badge")).to_have_text("0")
+
+    # B starts a batch. A never touches the page.
+    started = page_b.request.post("/api/core/executions", headers={**hdrs, "Referer": page_b.url}, data=f'{{"process_id": "{pid}"}}')
+    assert started.status == 201, started.text()
+
+    # Within a couple of poll intervals A's flows2 refetches and the badge ticks to 1.
+    expect(page_a.locator("#executions-badge")).to_have_text("1", timeout=15_000)
+    assert len(exec_fetches) > baseline, "flows2 did not refetch executions after the live change"
+
+
+def test_live_sync_starts_and_tracks_a_cursor(logged_in_page):
+    page = logged_in_page
+    page.goto("/core")
+    page.wait_for_load_state("networkidle")
+    status = page.evaluate("() => (window.LiveSync ? window.LiveSync.status() : null)")
+    assert status is not None, "LiveSync did not load"
+    assert status["started"] is True
+    assert isinstance(status["cursor"], int) and status["cursor"] >= 0
