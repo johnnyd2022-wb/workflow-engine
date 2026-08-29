@@ -15,12 +15,14 @@ import factory
 
 from app.core.db import db_session
 from app.core.db.models.execution import Execution
+from app.core.db.models.feature_subscription import FeatureSubscription
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.process import Process
 from app.core.db.models.user import User, UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
+from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.process_repo import ProcessRepository
@@ -162,3 +164,21 @@ class WastageFactory(factory.Factory):
             reason=reason,
             **kwargs,
         )
+
+
+class FeatureSubscriptionFactory(factory.Factory):
+    """A per-org feature entitlement grant, created through its repository."""
+
+    class Meta:
+        model = FeatureSubscription
+
+    org_id = None
+    feature_key = "compliant"
+
+    @classmethod
+    def _create(cls, model_class, org_id, feature_key, **kwargs):
+        if org_id is None:
+            raise ValueError(
+                "FeatureSubscriptionFactory requires org_id, e.g. FeatureSubscriptionFactory(org_id=org.id)"
+            )
+        return FeatureSubscriptionRepository(db_session()).grant(org_id, feature_key, **kwargs)

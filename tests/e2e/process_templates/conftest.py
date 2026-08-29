@@ -15,6 +15,16 @@ from app.core.db.models.user import UserRole
 from tests.e2e.conftest import attach_probe, csrf_headers, login_through_ui
 
 
+def _grant_compliant(org_id) -> None:
+    """`/api/compliant/*` is gated on an active per-org `compliant` subscription
+    (spec compliant_tools.md); seed it before enabling the profile below."""
+    from app.core.db import db_session
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+
+    FeatureSubscriptionRepository(db_session()).grant(org_id, "compliant")
+    db_session().commit()
+
+
 def _enable_compliant(page) -> None:
     resp = page.request.put(
         "/api/compliant/profile",
@@ -45,6 +55,7 @@ def _settle_dashboard(page) -> None:
 def compliant_page(browser, app_url, fresh_user):
     """A logged-in page in its own fresh org with Compliant + nz_alcohol enabled."""
     user = fresh_user(role=UserRole.ADMIN)  # PUT /api/compliant/profile requires ADMIN
+    _grant_compliant(user["org_id"])
     context = browser.new_context(base_url=app_url, ignore_https_errors=True)
     page = context.new_page()
     attach_probe(page)
@@ -78,6 +89,7 @@ def cross_tenant_pages(browser, app_url, fresh_user):
     `ProcessRepository`'s own org filter, not the catalogue's capability gate.
     """
     user_a = fresh_user(role=UserRole.ADMIN)  # PUT /api/compliant/profile requires ADMIN
+    _grant_compliant(user_a["org_id"])
     user_b = fresh_user()
     contexts = []
 

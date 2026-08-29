@@ -1,0 +1,100 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Compliant — NZ alcohol tools{% endblock %}
+{% block body_class %}compliant-tools-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/tools.css">{% endblock %}
+
+{% block content %}
+{% set categories = [
+  ('general', 'General — excise & labelling'),
+  ('beer', 'Beer & brewing'),
+  ('wine', 'Wine & cider'),
+  ('vessel', 'Vessels & yield'),
+] %}
+<main class="ct-shell" data-compliant-tools-root>
+  <header class="ct-hero">
+    <p class="ct-eyebrow">COMPLIANT / NZ ALCOHOL</p>
+    <h1>Tools</h1>
+    <p>Quick calculators for the numbers you reach for every day. Each is an operational
+      aid — results carry their source and a disclaimer, and anything feeding a legal
+      obligation should be confirmed against the instrument or the regulator.</p>
+    <p><a href="/compliant" class="ct-back">← Compliant dashboard</a></p>
+  </header>
+
+  {% for cat_key, cat_label in categories %}
+    {% set cat_calcs = calculators | selectattr('category', 'equalto', cat_key) | list %}
+    {% if cat_calcs %}
+    <section class="ct-category" aria-label="{{ cat_label }}">
+      <h2>{{ cat_label }}</h2>
+      <div class="ct-grid">
+        {% for calc in cat_calcs %}
+        <article class="ct-card">
+          <h3>{{ calc.title }}</h3>
+          {# hx-boost="false": base_spa.html sets hx-boost="true" on <body>, so htmx
+             otherwise intercepts this submit and fires its own boosted GET back to this
+             page (query params in the URL), instead of letting tools-page.js's
+             preventDefault + fetch run. Same opt-out the old dilution page used. #}
+          <form data-calculator="{{ calc.key }}" autocomplete="off" hx-boost="false">
+            <div data-fields class="ct-fields">
+              {% if calc.solve and calc.solve.field %}
+              <label class="ct-field">
+                <span>Solve for</span>
+                <select name="{{ calc.solve.field }}">
+                  {% for opt in calc.solve.enum %}
+                  <option value="{{ opt }}"{% if opt == calc.solve.default %} selected{% endif %}>{{ opt.replace('_', ' ') }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              {% endif %}
+              {% for name, d in calc.inputs.items() %}
+                {% if d.type == 'array' %}
+                <div class="ct-array" data-array-field="{{ name }}">
+                  <span class="ct-array-label">{{ name.replace('_', ' ') | title }}</span>
+                  <div data-rows>
+                    <div class="ct-array-row">
+                      {% for item_name, item_d in d.item_fields.items() %}
+                      <label class="ct-field">
+                        <span>{{ item_name.replace('_', ' ') | title }}{% if item_d.unit %} ({{ item_d.unit }}){% endif %}</span>
+                        <input data-item="{{ item_name }}" type="{{ 'text' if item_d.type == 'text' else 'number' }}"{% if item_d.type != 'text' %} step="any"{% endif %}>
+                      </label>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <button type="button" class="ct-array-add">+ add row</button>
+                </div>
+                {% elif d.type == 'enum' %}
+                <label class="ct-field">
+                  <span>{{ name.replace('_', ' ') | title }}</span>
+                  <select name="{{ name }}">
+                    {% for opt in d.enum %}<option value="{{ opt }}">{{ opt }}</option>{% endfor %}
+                  </select>
+                </label>
+                {% else %}
+                <label class="ct-field">
+                  <span>{{ name.replace('_', ' ') | title }}{% if d.unit %} ({{ d.unit }}){% endif %}</span>
+                  <input name="{{ name }}" type="{{ 'text' if d.type == 'text' else 'number' }}"{% if d.type != 'text' %} step="any"{% endif %}
+                    {%- if d.help %} placeholder="{{ d.help }}"{% endif %}>
+                </label>
+                {% endif %}
+              {% endfor %}
+            </div>
+            <button type="submit" class="ct-submit">Calculate</button>
+          </form>
+          <div data-result class="ct-result-wrap" aria-live="polite"></div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  {% endfor %}
+</main>
+
+<script>
+  window.__compliantToolsCatalogue = (function () {
+    var map = {};
+    ({{ calculators | tojson }}).forEach(function (c) { map[c.key] = c; });
+    return map;
+  })();
+</script>
+<script src="/compliant/static/tools-render.js"></script>
+<script src="/compliant/static/tools-page.js"></script>
+{% endblock %}

@@ -130,13 +130,6 @@ def create_app():
 
     app.register_blueprint(core_bp)
 
-    # Register dilution calculator blueprint (always on — no data model, no rollout risk)
-    from app.features.dilution_calculator.dilution_calculator_bp import (
-        create_dilution_calculator_blueprint,
-    )
-
-    app.register_blueprint(create_dilution_calculator_blueprint())
-
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
     # see .agents/specs/process_templates.md's "no new feature flag" ASSUMPTION).
@@ -467,9 +460,25 @@ def create_app():
 
     @app.context_processor
     def _inject_feature_flags():
+        # Per-org Compliant entitlement for the sidebar. Reuse the value the compliant
+        # blueprint's before_request already cached on g for /compliant* requests; on
+        # any other page compute it once (only when there is a tenant context). The nav
+        # item shows iff the deployment flag AND the org's subscription are both on.
+        compliant_subscribed = getattr(g, "compliant_subscribed", None)
+        if compliant_subscribed is None:
+            org_id = getattr(g, "current_org_id", None)
+            if org_id and config.compliant_enabled:
+                from app.core.db import db_session
+                from app.core.security.entitlements import org_has_feature
+
+                compliant_subscribed = org_has_feature(db_session(), org_id, "compliant")
+            else:
+                compliant_subscribed = False
+
         return dict(
             crm_enabled=config.crm_enabled,
             compliant_enabled=config.compliant_enabled,
+            compliant_subscribed=bool(compliant_subscribed),
             rum_enabled=config.rum_enabled,
             grafana_data_enabled=config.grafana_data_enabled,
             posthog_data_enabled=config.posthog_data_enabled,

@@ -6,6 +6,7 @@ from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_evidence import ExecutionEvidence
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
+from app.core.db.models.feature_subscription import FeatureSubscription
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.process import Process, ProcessCategory
@@ -37,5 +38,6 @@ __all__ = [
     "ExecutionStepStatus",
     "InventoryItem",
     "InventoryType",
+    "FeatureSubscription",
     "SystemFindingsCache",
 ]

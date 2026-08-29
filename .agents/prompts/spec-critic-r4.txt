@@ -1,0 +1,15 @@
+Read and follow the skill at: /home/johnny/.mission-control/worktrees/workflow-engine/nz-alc-tools/.claude/skills/spec-critic/SKILL.md
+Scope: compliant_tools
+Spec: .agents/specs/compliant_tools.md
+Branch: nz-alc-tools
+Round: 4 (final). Rounds 1-3: 13 -> 9 -> 5 gaps; the excise circuit-breaker gap was resolved by removing excise_duty from scope (do NOT re-raise it). Round-3's 5 gaps are now addressed:
+ 1. Catalogue not deep-equality-testable -> added "## Appendix A" with the COMPLETE canonical catalogue literal for all 10 calculators; AC11 is now deep-equality against Appendix A (byte-copied to tests/fixtures/compliant_tools_catalogue.json); descriptor key-presence rules pinned.
+ 2. UI not functionally tested -> split into AC16 (pure node --test render/payload/url helpers, every calculator), AC17 (served markup + control counts), AC19 (e2e-playwright real browser fill->submit->result for dilution + standard_drinks, plus unsubscribed 404 / no nav / old URL 404). Removed the contradicting assumption.
+ 3. Unauth 404-before-auth contradiction -> "## Entitlement resolution" step 1 now: before_request RETURNS WITHOUT ACTING when g.current_org_id is unset; @requires_auth then gives 302/401. AC3 adds an unauthenticated-iteration companion asserting never-404. Assumption added.
+ 4. gravity_convert boundary -> added "bounds constrain caller-provided values only; derived outputs may lie outside a sibling range" rule; aligned the four input domains (sg 1.0-1.15, baume 0-18).
+ 5. AC14 didn't test I/O -> now (a) AST import allowlist and (b) sandboxed fixture run with open/socket/urlopen/Popen patched to raise.
+Round 1-3 report: .agents/reports/compliant_tools/spec-critic.md.
+Task: Final re-grade of .agents/specs/compliant_tools.md as written. Confirm the five round-3 gaps are closed. Check Appendix A is internally consistent with the per-calculator "## Calculator contracts" (field names, types, bounds, solve shapes, units, defaults). Flag only genuine build-blocking ambiguity — a builder reading this spec plus Appendix A should not have to guess. Do NOT re-raise excise_duty.
+
+You are read-only. Print your full report as your final message; the orchestrator captures it.
+End your reply with exactly one line: VERDICT: sound | gaps-found

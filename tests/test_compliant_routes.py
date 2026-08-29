@@ -12,6 +12,7 @@ import pytest
 from app.core.db.models.inventory_movement import InventoryMovementType
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import UserRole
+from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
 from app.features.compliant.modules.nz_alcohol.module import run_check
@@ -38,6 +39,8 @@ def _admin_client(db, flask_app):
         role=UserRole.ADMIN,
         is_active=True,
     )
+    # Every Compliant route is now gated on an active per-org subscription.
+    FeatureSubscriptionRepository(db).grant(org.id, "compliant")
     db.commit()
     client = flask_app.test_client()
     client.environ_base["wsgi.url_scheme"] = "https"

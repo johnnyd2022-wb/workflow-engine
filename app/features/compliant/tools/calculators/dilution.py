@@ -1,8 +1,14 @@
 """Dilution calculator: solve any one of (starting ABV, starting volume, final ABV,
 final volume) given the other three, plus how much water to actually pour in.
 
-See .agents/specs/dilution_calculator.md "Calculation model" for the derivation. Two
-distinct pieces of physics live here, and they must not be conflated:
+Relocated verbatim from app/features/dilution_calculator/services/dilution_service.py —
+maths, validation, error messages and payload are unchanged (see
+.agents/specs/dilution_calculator.md "Calculation model"). Only the module location and
+the exception base class changed (now a `CalculatorValidationError` so the shared tools
+dispatch route handles it uniformly); `DilutionValidationError` remains as an alias and
+every message is byte-identical to the pre-move service.
+
+Two distinct pieces of physics live here, and they must not be conflated:
 
 1. The (a, b, c, d) relationship itself is an *exact* identity
    (`starting_abv * starting_volume_ml = final_abv * final_volume_ml`), a direct
@@ -17,11 +23,18 @@ from __future__ import annotations
 
 import math
 
+from app.features.compliant.tools.errors import CalculatorValidationError
+
+KEY = "dilution"
+TITLE = "Dilution / proofing down"
+CATEGORY = "general"
+SOURCES = ["Dilution calculator spec (.agents/specs/dilution_calculator.md), Calculation model"]
+
 ABV_FIELDS = frozenset({"starting_abv", "final_abv"})
 VOLUME_FIELDS = frozenset({"starting_volume_ml", "final_volume_ml"})
 FIELD_NAMES = ABV_FIELDS | VOLUME_FIELDS
 
-_BISECTION_ITERATIONS = 60  # fixed and deterministic (AC7/AC9) — far beyond float64 precision
+_BISECTION_ITERATIONS = 60  # fixed and deterministic — far beyond float64 precision
 
 DISCLAIMER = (
     "water_to_add_ml uses an approximate ethanol-water mixture density model (not "
@@ -30,8 +43,8 @@ DISCLAIMER = (
 )
 
 
-class DilutionValidationError(ValueError):
-    """Raised for any invalid request; message is safe to return to the caller."""
+class DilutionValidationError(CalculatorValidationError):
+    """Backwards-compatible alias; message text is unchanged from the pre-move service."""
 
 
 def _is_finite_number(value: object) -> bool:
@@ -103,15 +116,12 @@ def _validate_and_extract(payload: dict) -> tuple[str, dict[str, float]]:
 def _check_dilution_direction(solve_for: str, given: dict[str, float]) -> None:
     """AC5: one rule, checked on whichever pair is fully known pre-solve. Adding water can
     only lower ABV and raise volume, so a request implying otherwise is rejected before
-    any division happens (both mathematically equivalent per the spec's proof, and one is
-    always the pair available without needing the solved value first).
+    any division happens.
     """
     if solve_for in VOLUME_FIELDS:
         if given["final_abv"] >= given["starting_abv"]:
             raise DilutionValidationError("final_abv must be less than starting_abv")
         if solve_for == "final_volume_ml" and given["final_abv"] == 0.0:
-            # Explicit divisor guard (round-2 spec-critic finding): final_abv < starting_abv
-            # alone doesn't rule out final_abv == 0, which would divide by zero below.
             raise DilutionValidationError("final_abv must be greater than 0 to solve for final_volume_ml")
     else:
         if given["final_volume_ml"] <= given["starting_volume_ml"]:
@@ -128,7 +138,7 @@ def _solve_value(solve_for: str, given: dict[str, float]) -> float:
     return given["final_abv"] * given["final_volume_ml"] / given["starting_volume_ml"]  # starting_abv
 
 
-def solve_dilution(payload: dict) -> dict:
+def solve(payload: dict) -> dict:
     """Validate `payload` and return the full result dict, or raise DilutionValidationError."""
     solve_for, given = _validate_and_extract(payload)
     _check_dilution_direction(solve_for, given)
@@ -163,3 +173,7 @@ def solve_dilution(payload: dict) -> dict:
         "water_to_add_naive_ml": water_to_add_naive_ml,
         "disclaimer": DISCLAIMER,
     }
+
+
+# Backwards-compatible name used by the pre-move API route and its tests.
+solve_dilution = solve
