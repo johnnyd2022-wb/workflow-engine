@@ -1266,7 +1266,8 @@
           description: step.description,
           inputs: step.inputs || [],
           outputs: step.outputs || [],
-          execution_prompts: step.execution_prompts || []
+          execution_prompts: step.execution_prompts || [],
+          updated_at: step.updated_at
         }));
         
         // Store all steps for summaries (excluding the one we'll restore for editing)
@@ -1392,7 +1393,8 @@
                 description: step.description,
                 inputs: step.inputs || [],
                 outputs: step.outputs || [],
-                execution_prompts: step.execution_prompts || []
+                execution_prompts: step.execution_prompts || [],
+                updated_at: step.updated_at
               }));
               isEditingExistingProcess = true;
               showExistingStepsView();
@@ -5077,7 +5079,9 @@
     const wasEditingStepId = eid;
     let saved;
     if (eid) {
-      saved = await CoreAPI.updateStep(processId, eid, stepData);
+      // If-Match guards against a colleague editing this step while the wizard held it.
+      const expectedUpdatedAt = stepBeingEdited && stepBeingEdited.updated_at;
+      saved = await CoreAPI.updateStep(processId, eid, stepData, expectedUpdatedAt);
     } else {
       saved = await CoreAPI.createStep(processId, stepData);
     }
@@ -5156,7 +5160,8 @@
             description: s.description,
             inputs: s.inputs || [],
             outputs: s.outputs || [],
-            execution_prompts: s.execution_prompts || []
+            execution_prompts: s.execution_prompts || [],
+            updated_at: s.updated_at
           }));
         }
       } catch (err) {
@@ -5195,6 +5200,16 @@
       window.location.href = '/core/flows/create/next-steps' + qs;
       return;
     } catch (e) {
+      if (typeof CoreAPI !== 'undefined' && CoreAPI.isStaleWrite && CoreAPI.isStaleWrite(e)) {
+        if (window.showNotification) {
+          window.showNotification(
+            'warning',
+            'Changed elsewhere',
+            'Someone else edited this step while you had it open. Reload the page to get the latest, then re-apply your change.'
+          );
+        }
+        return;
+      }
       console.error(e);
       if (window.showNotification) {
         window.showNotification('error', 'Could not save step', e.message || 'Unknown error');
@@ -5922,12 +5937,29 @@
   async function persistStepOrderIfPossible() {
     const pid = new URLSearchParams(window.location.search || '').get('id');
     if (!pid || typeof CoreAPI === 'undefined' || !CoreAPI.reorderSteps) return;
-    const orders = sortStepsForDisplay(createdSteps)
-      .filter(function(s) { return s && s.id; })
-      .map(function(s) { return s.id; });
+    const ordered = sortStepsForDisplay(createdSteps).filter(function(s) { return s && s.id; });
+    const orders = ordered.map(function(s) { return s.id; });
+    // Reorder's concurrency token is the newest step updated_at across the process.
+    const expectedUpdatedAt = ordered
+      .map(function(s) { return s.updated_at; })
+      .filter(Boolean)
+      .sort()
+      .pop();
     try {
-      await CoreAPI.reorderSteps(pid, orders);
+      await CoreAPI.reorderSteps(pid, orders, expectedUpdatedAt);
     } catch (e) {
+      if (typeof CoreAPI !== 'undefined' && CoreAPI.isStaleWrite && CoreAPI.isStaleWrite(e)) {
+        if (window.showNotification) {
+          window.showNotification(
+            'warning',
+            'Changed elsewhere',
+            'Someone else changed this process’s steps. Reloading the current order.'
+          );
+        }
+        await mergeProcessStepsFromApiForCurrentProcess(function() { return true; });
+        if (typeof updateStepSummaries === 'function') await updateStepSummaries();
+        return;
+      }
       console.warn('persistStepOrderIfPossible failed', e);
     }
   }

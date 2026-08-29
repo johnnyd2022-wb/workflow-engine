@@ -207,13 +207,21 @@ state> }`**; the rejected write does not land.
 
 Client: `CoreAPI.updateProcess/updateStep/reorderSteps` take an optional
 `expectedUpdatedAt`; `_doRequest` now attaches `err.status` / `err.body` and
-`CoreAPI.isStaleWrite(err)` recognises the 409. The flows2 step editor is wired
-end-to-end — the step card stashes `data-step-updated-at` at render, sends it on save,
-and on a 409 shows "Someone else edited this step … Showing the latest" + reloads.
+`CoreAPI.isStaleWrite(err)` recognises the 409. Wired end-to-end, each stashing the
+`updated_at` it rendered from and showing "changed elsewhere" + a re-pull on a 409:
 
-**Not wired (backend accepts them unchanged, follow-up):** the `is_draft` toggles
-(`flows2-init.js`, `create-process-modal.js`) and the big `create-process-modal.js`
-designer's step editor + reorder — each needs its own render-time token stash.
+- **flows2 step editor** (`flows2-steps.js`) — the step card carries `data-step-updated-at`.
+- **flows2 "Mark as draft / ready"** menu action (`flows2-init.js`) — uses
+  `currentProcess.updated_at`.
+- **create-process designer** (`create-process-modal.js`) — `createdSteps` entries carry
+  `updated_at`; the step-save and the drag-reorder both send `If-Match`, reorder using
+  `max(step.updated_at)`.
+
+**Deliberately headerless:** the two `is_draft` writes inside the *create wizard*
+(`create-process-modal.js` — `is_draft:true` before a wizard save, `is_draft:false` on
+finish). The wizard owns a fresh draft no one else is editing; a 409 there would abort
+the user's own save for no real conflict, and neither site holds a render-time
+`updated_at` to send anyway.
 
 ---
 
