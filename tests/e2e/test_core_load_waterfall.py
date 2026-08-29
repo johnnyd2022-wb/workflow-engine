@@ -10,6 +10,7 @@ data call (`/api/core/hub/overview`), and the Inventory / Workflows tab data mus
 until its tab is actually opened -- and must not reload on a second visit.
 """
 
+
 import pytest
 
 pytestmark = [pytest.mark.e2e]
@@ -111,3 +112,35 @@ def test_executions_live_reuses_hub_overview_no_heavy_lists(logged_in_page):
     assert not any(c == "executions" or c.startswith("executions?") for c in calls), calls
     assert not any("include_steps=true" in c for c in calls), calls
     assert not any(c == "inventory" or c.startswith("inventory?") for c in calls), calls
+
+
+def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page):
+    """core2.html's scripts live in the template's scripts block, outside #page-content,
+    so an hx-boost return to /core swaps in fresh markup they never re-touch. Without the
+    htmx:afterSettle re-bootstrap the tab buttons have no handlers -- the page looks fine
+    but every click is dead until a hard refresh -- and Overview never (re)loads. Bounce a
+    few times and prove the tabs still respond and the overview call still fires."""
+    page = logged_in_page
+    page.goto("/core/dashboard")
+    page.wait_for_selector("[data-dashboard-root]")
+    _wait(page)
+    calls = _core_api_calls(page)
+
+    for i in range(3):
+        page.locator('a.nav-link[href="/core"]').click()
+        page.wait_for_selector('[data-core2-tab-target="inventory"]')
+        _wait(page)
+        assert calls.count("hub/overview") == i + 1, ("overview not re-fetched on return", calls)
+
+        page.click('[data-core2-tab-target="inventory"]')
+        page.wait_for_function(
+            "() => { const e = document.querySelector('[data-core2-tab-panel=\"inventory\"]'); return e && !e.hidden; }"
+        )
+        page.click('[data-core2-tab-target="overview"]')
+        page.wait_for_function(
+            "() => { const e = document.querySelector('[data-core2-tab-panel=\"overview\"]'); return e && !e.hidden; }"
+        )
+
+        page.locator('a.nav-link[href="/core/dashboard"]').click()
+        page.wait_for_selector("[data-dashboard-root]")
+        _wait(page)
