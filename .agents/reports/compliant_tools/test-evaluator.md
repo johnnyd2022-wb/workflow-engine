@@ -63,3 +63,43 @@ catalogue reddened it), and the AC13 FIXTURES values are literal, not solver-rec
   content is the invariant, not byte formatting). Spec AC11 wording updated to match.
 
 Re-graded in round 2 below.
+
+## Round 2 — VERDICT: gamed
+
+Round-1 blockers all now go red under mutation. 3 NEW permissiveness gaps introduced by
+the round-1 fixes:
+1. JS `renderResult` meta-key test only checked `solved_field` — shrinking `META_KEYS`
+   left disclaimer/sources/per_step rendering as value rows undetected.
+2. `test_ac14_solve_route_..._no_query` filtered writes + `compliance_` reads only — a
+   `SELECT * FROM inventory_items` slipped through.
+3. Same in the dilution AC7 equivalent.
+
+### Round 2 → 3 fixes
+- JS test: assert NO meta key renders as a `.ct-result-label` row AND each renders in its
+  own block; shrinking `META_KEYS` now fails.
+- Both cursor tests: allowlist to `{users, organisations, feature_subscriptions}`; any
+  other `from`/`join` target or any write fails.
+
+## Round 3 — VERDICT: gamed
+
+Round-1/2 all red under mutation. 1 NEW: the SQL-text regex was bypassable by quoted
+identifiers (`SELECT * FROM "inventory_items"`), CTE reads
+(`WITH x AS (SELECT * FROM crm_tasks) SELECT * FROM x`), and CTE-prefixed writes
+(`WITH x AS (SELECT 1) DELETE FROM crm_tasks`).
+
+### Round 3 → 4 fix
+Extracted `tests/_sql_probe.py::sql_beyond_gate_infra`: dequote first, match write
+keywords anywhere (not just prefix), check every `from`/`join` target against the
+allowlist while treating CTE aliases as read-through. Self-tested against every named
+bypass case. Both cursor tests use it.
+
+## Round 4 (final) — VERDICT: valid
+
+Codex re-ran every historical mutation (AC18 ordering, AC13 non-finite guard, AC16
+per-step rendering, `META_KEYS` shrink) + the 3 round-3 SQL bypasses — all go RED. 23
+Python checks + the full Node renderer suite pass. "Remaining regex evasions require
+deliberately contrived raw SQL and are not realistic for a pure-math solver path."
+Worktree unchanged (Codex's temp mutations fully restored). **The test batch is a valid
+certification of the spec.**
+
+Round tally: gamed → gamed → gamed → valid.

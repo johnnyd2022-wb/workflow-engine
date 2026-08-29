@@ -1,5 +1,5 @@
 # SPEC: compliant_tools
-status: approved
+status: built
 name: Compliant — per-org subscription + NZ alcohol tools suite
 slug: compliant_tools
 blueprint: app/features/compliant/  (extended; no new top-level blueprint)
