@@ -473,7 +473,14 @@ def create_app():
             from app.core.db import db_session
             from app.core.security.entitlements import org_has_feature
 
-            compliant_subscribed = org_has_feature(db_session(), org_id, "compliant")
+            try:
+                compliant_subscribed = org_has_feature(db_session(), org_id, "compliant")
+            except Exception:
+                # This runs on *every* rendered page. A failed entitlement lookup (DB
+                # blip, table missing mid-migration) must degrade to "no Compliance nav",
+                # never 500 an unrelated page. The gate on /compliant* still enforces.
+                logger.warning("compliant_subscription_check_failed", org_id=str(org_id))
+                compliant_subscribed = False
         else:
             compliant_subscribed = False
 
