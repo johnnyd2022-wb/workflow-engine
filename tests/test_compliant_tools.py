@@ -18,6 +18,7 @@ from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
 from app.features.compliant.tools.errors import CalculatorValidationError
 from app.features.compliant.tools.registry import CALCULATORS, CATALOGUE
+from tests._sql_probe import sql_beyond_gate_infra as _sql_beyond_gate_infra
 from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -258,33 +259,6 @@ def test_ac14_solvers_do_no_io(monkeypatch):
         inp, _exp = FIXTURES[key][0]
         result = CALCULATORS[key](json.loads(json.dumps(inp)))
         assert isinstance(result, dict)
-
-
-# Tables a solve request is allowed to touch: the auth middleware's user+org load and the
-# blueprint gate's single feature_subscriptions lookup. Nothing else — no write, no read
-# of ANY other table (calculator, compliance, inventory, execution, crm, ...).
-_GATE_INFRA_TABLES = ("users", "organisations", "feature_subscriptions")
-
-
-def _sql_beyond_gate_infra(seen: list[str]) -> list[str]:
-    out = []
-    for s in seen:
-        if s.startswith(("insert", "update", "delete")):
-            out.append(f"WRITE: {s[:90]}")
-            continue
-        if not s.startswith("select"):
-            continue
-        # a plain read that names no table other than the gate-infra ones is fine
-        touches_other = any(tok not in _GATE_INFRA_TABLES for tok in _table_names(s))
-        if touches_other:
-            out.append(f"READ: {s[:90]}")
-    return out
-
-
-def _table_names(sql: str) -> set[str]:
-    import re
-
-    return {m.group(1) for m in re.finditer(r"\b(?:from|join)\s+([a-z_][a-z0-9_]*)", sql)}
 
 
 @pytest.mark.parametrize("key", ["dilution", "lal", "yield_loss", "tank_volume", "gravity_convert"])

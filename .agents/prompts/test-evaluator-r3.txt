@@ -1,0 +1,9 @@
+Read and follow the skill at: /home/johnny/.mission-control/worktrees/workflow-engine/nz-alc-tools/.claude/skills/test-evaluator/SKILL.md
+Scope: compliant_tools. Branch: nz-alc-tools. Grade `git diff main...HEAD -- 'tests/**'`.
+Round: 3. Round 1 (gamed): 3 blockers — all now genuinely guarded (you confirmed the mutations go red in round 2). Round 2 (gamed): 3 NEW permissiveness gaps IN the round-1 fixes, now fixed:
+- JS `renderResult` test: now asserts no meta key (solved_field/disclaimer/sources/per_step) renders as a `.ct-result-label` value row AND each renders in its own block. Re-run your "shrink META_KEYS to {solved_field}" mutation — confirm it now goes RED.
+- `test_ac14_solve_route_issues_no_query_beyond_the_gate` and `test_compliant_dilution.py`'s `test_ac7_endpoint_issues_no_write_and_no_query_beyond_the_gate`: now assert the ONLY SQL is against {users, organisations, feature_subscriptions}; a SELECT naming any other table (e.g. `inventory_items`, `crm_tasks`) or any write fails. Re-run your `SELECT * FROM inventory_items` / `SELECT * FROM crm_tasks` injections — confirm they now go RED.
+
+Task: Re-grade. Confirm every round-1 and round-2 finding is now closed by a test that goes red under the corresponding mutation. Hunt any NEW permissiveness from the round-2 fixes. You may run pytest (test DB localhost:8401, ENVIRONMENT unset). Read-only.
+
+End your reply with exactly one line: VERDICT: valid | weakened | gamed | inconclusive
