@@ -52,6 +52,8 @@ pagination, per-panel retry. First paint 5 calls / 34 KB, executions/inventory d
 to tab open. Plus fixes for the `ERR_TOO_MANY_RETRIES` static-serve bug and a noisy
 abort log.
 
+**Phase B shipped** (feat/live-sync-phase-b): the rest of the always-on SPA — `/core` hub, sourcemap, dashboard, execute-step page — each a `LiveSync.subscribe` + a targeted, debounced refetch, with a shared "Updated just now" toast.
+
 ## Work plan (tick as landed)
 
 ### Phase A — the backbone + flows2 + badge  `[x]`  (feat/live-sync)
@@ -111,11 +113,33 @@ event) instead of its own `htmx:afterOnLoad` blanket hook. Cuts redundant
 - e2e: two browser contexts, same org — B mutates, A's flows2 Batches list updates
   within one poll without a reload.
 
-### Phase B — wire the rest of the SPA  `[ ]`
+### Phase B — wire the rest of the SPA  `[x]`  (feat/live-sync-phase-b)
 
-`/core` hub (replace the my-mutation-only refresh), sourcemap, inventory list/view,
-dashboard, execute-step page (warn if the execution changed underneath). Each is a
-`LiveSync.subscribe` + a targeted refetch. Own MR.
+**Shipped.** Every remaining always-on surface now reflects a colleague's change without a
+reload. One shared toast (`window.liveSyncFlash`, added to `live-sync.js`) gives a subtle
+"Updated just now" pill so a silent re-render isn't disorienting. Each subscription is
+`key`-scoped so an hx-boost re-init replaces cleanly, and debounced so a multi-row
+mutation burst is one refetch.
+
+- **`/core` hub** (`core2.html`) — `initCore2HubLoad` subscribes on
+  process / execution / execution_step / step / inventory_item events → debounced
+  `loadCoreHubDashboardData()` (the existing "overview + whichever detail tab is open"
+  refresh) + flash. The local user's own mutation still refreshes instantly via the
+  `htmx:afterOnLoad` path; this just covers the *other* users. Covers `/core`,
+  `/core/inventory/live`, `/core/executions/live` (all render `core2.html`).
+- **sourcemap** (`sourcemap.js`) — `smBoot` subscribes on inventory_item / process /
+  execution / execution_step events. While browsing: refetch the compact inventory +
+  out-of-stock set, rebuild the search pool + browse grid, reload the secondary
+  (processes / executions / activity) set if the Activity tab is showing, refresh
+  Findings, flash. While a trace is open (`tracedItemId` set): refresh Findings + the
+  search pool only — never yank the trace view out from under the user.
+- **dashboard** (`dashboard.js`) — subscribes on process / execution / execution_step /
+  inventory_item events → debounced `loadDashboard(root)` (clearing the `dashboardLoaded`
+  guard first) + flash.
+- **execute-step page** (`execution-step-page.js`) — subscribes on events for *this*
+  `executionId`. On a hit it reveals a sticky warning strip ("This batch changed
+  elsewhere — reload to see the current state" + a Reload button). It never auto-reloads:
+  the user may have half-entered inputs / evidence. Torn down on `htmx:beforeSwap`.
 
 ### Phase C — bound the growing payloads  `[x]`  (feat/flows2-scale)
 

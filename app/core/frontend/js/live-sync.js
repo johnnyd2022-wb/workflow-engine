@@ -158,4 +158,26 @@
   } else {
     window.LiveSync.start();
   }
+
+  /**
+   * A subtle bottom-right "Updated just now" pill. Shared by every LiveSync subscriber
+   * that re-renders in place, so a silent swap of on-screen data isn't disorienting.
+   */
+  window.liveSyncFlash = function (message) {
+    var host = document.getElementById('live-sync-flash');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'live-sync-flash';
+      host.setAttribute('role', 'status');
+      host.style.cssText =
+        'position:fixed;bottom:16px;right:16px;background:var(--surface,#111);color:#fff;' +
+        'padding:8px 14px;border-radius:999px;font-size:12px;opacity:0;transition:opacity .2s;' +
+        'z-index:1200;pointer-events:none;box-shadow:0 2px 12px rgba(0,0,0,.18);';
+      document.body.appendChild(host);
+    }
+    host.textContent = message || 'Updated just now';
+    host.style.opacity = '1';
+    clearTimeout(host._t);
+    host._t = setTimeout(function () { host.style.opacity = '0'; }, 1800);
+  };
 })();
