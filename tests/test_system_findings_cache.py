@@ -425,3 +425,45 @@ def test_system_status_is_not_healthy_while_a_check_is_failing():
     signals = _signals_from_results([healthy, failed])
     assert any(s["type"] == "CHECK_FAILED" and s["has_issue"] for s in signals)
     assert derive_health_state(signals) == "degraded"
+
+
+# ---------------------------------------------------------------------------------------
+# Narrow accessor for the expiry-only endpoint (MR !201 P2).
+# GET /api/core/inventory/expired-materials rendered ONLY the expired_materials slice but
+# called get_check_results(), which also runs every cheap live check
+# (untracked_items / output_expiry / output_ready_date / enabled compliance) on each
+# request just to throw them away. get_expired_materials_result() returns only the cached
+# DAG slice.
+# ---------------------------------------------------------------------------------------
+
+
+def test_get_expired_materials_result_does_not_run_live_checks(db, authed, monkeypatch):
+    org, _client = authed
+    live_calls = {"n": 0}
+    real_live = sfc._run_live
+    monkeypatch.setattr(
+        sfc, "_run_live", lambda o, s: (live_calls.__setitem__("n", live_calls["n"] + 1) or real_live(o, s))
+    )
+
+    r = sfc.get_expired_materials_result(org.id, db)
+    assert live_calls["n"] == 0, "the narrow accessor must not run the live checks"
+
+    # It returns the same expired_materials result the full merge would.
+    full = next((x for x in sfc.get_check_results(org.id, db) if x.check_id == "expired_materials"), None)
+    assert live_calls["n"] == 1, "get_check_results DOES run the live checks (contrast)"
+    assert (r is None) == (full is None)
+    if r is not None:
+        assert r.check_id == "expired_materials"
+
+
+def test_expired_materials_endpoint_skips_the_live_checks(db, authed, monkeypatch):
+    org, client = authed
+
+    def _boom(_o, _s):
+        raise AssertionError("live checks ran for the expiry-only endpoint")
+
+    monkeypatch.setattr(sfc, "_run_live", _boom)
+
+    resp = client.get("/api/core/inventory/expired-materials")
+    assert resp.status_code == 200
+    assert set(resp.get_json()) >= {"expired_raw_materials", "impacted_items"}
