@@ -2,14 +2,19 @@
 
 The security contract (traversal 400, bad-extension 400, 404, the /static/inventory and
 /static/img filename allowlists, the /ui/shared auth gate) is covered end-to-end by
-tests/e2e/test_static_asset_security.py -- those still pass because WhiteNoise falls
-through to the Flask routes for any path it has no file for. This file pins the two
-things that make the change worth doing:
+tests/e2e/test_static_asset_security.py. This file pins the two things that make the
+change worth doing:
 
   1. an existing asset is served by WhiteNoise with a validator header (ETag /
      Last-Modified) so a CDN edge can cache it and reloads become 304s;
   2. the exact Cache-Control the Flask routes emit is preserved, and nosniff is still
      set even though WhiteNoise bypasses Flask's after_request hook.
+
+WhiteNoise.add_files() recursively publishes *everything* under the dir it is given and
+does NOT honour the Flask route's filename allowlist, so the source dir must hold public
+assets only. js/, css/, img/ and inventory_static/ do; the server-rendered inventory/
+templates are deliberately NOT handed to WhiteNoise. test_inventory_templates_not_exposed
+below is the regression guard for that.
 """
 
 from pathlib import Path
@@ -83,6 +88,34 @@ def test_fallthrough_preserves_flask_guards(client):
     assert client.get("/static/js/..secret.js").status_code == 400
     assert client.get("/static/css/app.js").status_code == 400
     assert client.get("/static/js/does-not-exist-xyz.js").status_code == 404
-    # allowlisted prefixes are NOT fronted by WhiteNoise -> Flask route unchanged
+    # /static/inventory/: WhiteNoise serves the two public assets from inventory_static/;
+    # anything it has no file for falls through to the Flask route's two-file allowlist.
     assert client.get("/static/inventory/other-icon.svg").status_code == 400
     assert client.get("/static/inventory/inventory-icon.svg").status_code == 200
+    assert client.get("/static/inventory/inventory-spa-header.css").status_code == 200
+
+
+def test_inventory_templates_not_exposed(client):
+    """Regression: !197 handed the whole inventory/ dir (public assets + server-rendered
+    Jinja) to WhiteNoise, so GET /static/inventory/add.html returned 200 with raw
+    template source, bypassing the Flask allowlist. Every non-allowlisted inventory
+    filename must stay non-200; the two public assets keep their content type and the
+    pinned Cache-Control."""
+    repo_inventory = REPO_ROOT / "app" / "core" / "frontend" / "inventory"
+    template_names = sorted(p.name for p in repo_inventory.glob("*.html"))
+    assert template_names, "expected server-rendered templates in app/core/frontend/inventory/"
+    for name in template_names:
+        resp = client.get(f"/static/inventory/{name}")
+        assert resp.status_code != 200, (
+            f"/static/inventory/{name} is a server template and must not be served statically "
+            f"(got {resp.status_code})"
+        )
+
+    svg = client.get("/static/inventory/inventory-icon.svg")
+    assert svg.status_code == 200
+    assert svg.headers.get("Content-Type", "").startswith("image/svg+xml")
+    assert svg.headers.get("Cache-Control") == _EXPECTED_CC
+    css = client.get("/static/inventory/inventory-spa-header.css")
+    assert css.status_code == 200
+    assert css.headers.get("Content-Type", "").startswith("text/css")
+    assert css.headers.get("Cache-Control") == _EXPECTED_CC
