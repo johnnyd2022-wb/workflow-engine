@@ -169,6 +169,28 @@ def _signals_from_results(results: list[CheckResult]) -> list[dict[str, Any]]:
                 }
             )
 
+    # A check that raised is surfaced by the runner (and the cache paths) as a flagged
+    # result with no data. It carries no findings we can categorise, but the system is NOT
+    # healthy: we simply don't know what that check would have reported. Emit a degraded
+    # signal so system_status never says "healthy" while a check is failing. Not
+    # `in_active_use` -> degraded, not critical: a transient check error shouldn't cry
+    # wolf, but it must not be silent either.
+    failed = [r for r in results if r.flagged and not r.data and (r.message or "").startswith("Check failed")]
+    if failed:
+        signals.append(
+            {
+                "type": "CHECK_FAILED",
+                "category": "system",
+                "breach_type": "CHECK_ERROR",
+                "has_issue": True,
+                "in_active_use": False,
+                "count": len(failed),
+                "message": (
+                    f"{len(failed)} system check{'s' if len(failed) != 1 else ''} failed to run"
+                ),
+            }
+        )
+
     return signals
 
 

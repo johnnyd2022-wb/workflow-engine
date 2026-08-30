@@ -87,25 +87,57 @@ def _dict_to_result(d: dict):
     )
 
 
-def _compute_expensive(org_id: UUID, session) -> list[dict]:
-    """Run only the cached (DAG-heavy) checks; return their results as plain-JSON dicts."""
+def _check_failed_dict(check_id: str, exc: Exception) -> dict:
+    """A cached check that raised, rendered as a flagged 'Check failed' result dict.
+
+    Mirrors ``CoreChecksRunner.run_all_checks()``'s contract exactly: a check that throws
+    becomes a *visible, flagged* finding, never a silently dropped one. Swallowing it lets
+    the /core banner and ``system_status`` report a healthier state than the checks
+    actually support -- for a compliance product that is the worst failure mode here.
+    """
+    return {"check_id": check_id, "flagged": True, "message": f"Check failed: {exc}", "data": None}
+
+
+def _check_failed_result(check_id: str, exc: Exception):
+    """[CheckResult] form of :func:`_check_failed_dict`, for the live path."""
+    return _dict_to_result(_check_failed_dict(check_id, exc))
+
+
+def _compute_expensive(org_id: UUID, session) -> tuple[list[dict], bool]:
+    """Run only the cached (DAG-heavy) checks; return ``(results as plain-JSON dicts, ok)``.
+
+    ``ok`` is False when any cached check raised: the caller must then NOT persist the
+    result (a transient failure otherwise sticks in the cache as "fresh" until the next
+    NZ midnight), but must still return it so the failure stays visible this request.
+    """
     from flask import json as flask_json
 
     from app.core.backend.corechecks import CoreChecksRunner
 
     runner = CoreChecksRunner(org_id=org_id, session=session)
     out = []
+    ok = True
     for cid in _CACHED_CHECK_IDS:
-        r = runner.run_check(cid)
+        try:
+            r = runner.run_check(cid)
+        except Exception as exc:
+            logger.exception("cached system check %s failed for org %s", cid, org_id)
+            out.append(_check_failed_dict(cid, exc))
+            ok = False
+            continue
         if r is not None:
             out.append(_result_to_dict(r))
     # Normalise Decimal/UUID/datetime out now so _upsert's json.dumps is safe and the
     # cached bytes match what jsonify would produce.
-    return flask_json.loads(flask_json.dumps(out))
+    return flask_json.loads(flask_json.dumps(out)), ok
 
 
 def _run_live(org_id: UUID, session) -> list:
-    """Run every registered check that is NOT cached, fresh. Returns [CheckResult]."""
+    """Run every registered check that is NOT cached, fresh. Returns [CheckResult].
+
+    A check that raises is appended as a flagged 'Check failed' result (same as
+    ``CoreChecksRunner.run_all_checks()``), never dropped.
+    """
     from app.core.backend.corechecks import CoreChecksRunner
 
     runner = CoreChecksRunner(org_id=org_id, session=session)
@@ -115,8 +147,9 @@ def _run_live(org_id: UUID, session) -> list:
             continue
         try:
             r = runner.run_check(cid)
-        except Exception:
+        except Exception as exc:
             logger.exception("live system check %s failed for org %s", cid, org_id)
+            results.append(_check_failed_result(cid, exc))
             continue
         if r is not None:
             results.append(r)
@@ -160,7 +193,13 @@ def _cached_expensive(org_id: UUID, session) -> list[dict]:
     if _fresh(row, now):
         return row.payload.get("results", [])
 
-    results = _compute_expensive(org_id, session)
+    results, ok = _compute_expensive(org_id, session)
+    if not ok:
+        # A cached check raised. Do NOT persist (would freeze the failure into the cache
+        # until the next NZ midnight); roll back to clear any aborted DB txn and release
+        # the xact advisory lock, then return the flagged failure so it stays visible.
+        session.rollback()
+        return results
     try:
         _upsert(session, org_id, results, now)
         session.commit()  # persist AND release the xact advisory lock
@@ -251,7 +290,13 @@ def prewarm(org_id: UUID, session) -> None:
     key = _lock_key(org_id)
     if not session.execute(sa.text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": key}).scalar():
         return  # someone is already computing it
-    results = _compute_expensive(org_id, session)
+    results, ok = _compute_expensive(org_id, session)
+    if not ok:
+        # A cached check raised -- don't warm the cache with a failure; let the first real
+        # request retry it. rollback clears any aborted txn and releases the xact lock.
+        session.rollback()
+        logger.warning("prewarm skipped cache write for org %s: a cached check failed", org_id)
+        return
     try:
         _upsert(session, org_id, results, now)
         session.commit()
