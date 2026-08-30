@@ -44,7 +44,7 @@ from app.core.db.models.step import Step
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
-from app.core.db.repositories.process_repo import ProcessRepository
+from app.core.db.repositories.process_repo import STALE_WRITE, ProcessRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_dates, assert_expiry_after_ready_duration
 from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
@@ -1517,23 +1517,25 @@ def _serialize_process(process, *, with_steps: bool = False) -> dict:
     return out
 
 
-def _if_match_conflict(current_updated_at, current_entity: dict):
-    """Optimistic-concurrency gate for edit endpoints.
+def _if_match_token() -> str | None:
+    """The request's If-Match token, normalised (trimmed, optional surrounding quotes
+    removed), or ``None`` when the header is absent/empty.
 
-    Opt-in: a request with no ``If-Match`` header keeps the old last-write-wins
-    behaviour, so nothing that doesn't send the header changes. When the header IS
-    present and doesn't equal the row's current ``updated_at`` (ISO 8601, optional
-    surrounding quotes), someone else has saved since this client last read the entity;
-    return a 409 whose body carries the *current* server state for the client to show.
-    Returns ``None`` when the write may proceed.
+    Opt-in optimistic concurrency: no header -> ``None`` -> the repo keeps the old
+    last-write-wins behaviour. When present, the token is handed to the repo write
+    method, which locks the row and re-compares it to ``updated_at`` *in the same
+    transaction as the write* -- so two concurrent writers can't both pass the check.
+    (The previous helper compared here, before any lock, then the route wrote later.)
     """
     want = request.headers.get("If-Match")
     if not want:
         return None
-    want = want.strip().strip('"')
-    have = current_updated_at.isoformat() if current_updated_at else ""
-    if want == have:
-        return None
+    return want.strip().strip('"')
+
+
+def _stale_write_response(current_entity: dict):
+    """The 409 body the client shows when its If-Match token was stale: the error marker
+    plus the *current* server state to re-render."""
     return jsonify(
         {
             "error": "stale_write",
@@ -1568,13 +1570,6 @@ def update_process(process_id: str):
 
     repo = ProcessRepository(db_session)
     try:
-        current = repo.get_process_by_id(process_uuid, org_id)
-        if not current:
-            return jsonify({"error": "Process not found"}), 404
-        conflict = _if_match_conflict(current.updated_at, _serialize_process(current))
-        if conflict:
-            return conflict
-
         process = repo.update_process(
             process_id=process_uuid,
             org_id=org_id,
@@ -1582,7 +1577,15 @@ def update_process(process_id: str):
             description=description,
             category=category,
             is_draft=is_draft,  # Pass is_draft to repository
+            if_match=_if_match_token(),
         )
+
+        if process == STALE_WRITE:
+            db_session.rollback()  # release the FOR UPDATE lock the failed check took
+            current = repo.get_process_by_id(process_uuid, org_id)
+            if not current:
+                return jsonify({"error": "Process not found"}), 404
+            return _stale_write_response(_serialize_process(current))
 
         if not process:
             return jsonify({"error": "Process not found"}), 404
@@ -1735,15 +1738,6 @@ def update_step(process_id: str, step_id: str):
 
     repo = ProcessRepository(db_session)
 
-    if request.headers.get("If-Match"):
-        owning = repo.get_process_with_steps(process_uuid, org_id)
-        current_step = next((s for s in owning.steps if s.id == step_uuid), None) if owning else None
-        if not current_step:
-            return jsonify({"error": "Step or process not found"}), 404
-        conflict = _if_match_conflict(current_step.updated_at, _serialize_step(current_step))
-        if conflict:
-            return conflict
-
     try:
         step = repo.update_step(
             step_id=step_uuid,
@@ -1756,10 +1750,19 @@ def update_step(process_id: str, step_id: str):
             inputs=data.get("inputs"),
             outputs=data.get("outputs"),
             execution_prompts=data.get("execution_prompts"),
+            if_match=_if_match_token(),
         )
     except IntegrityError:
         db_session.rollback()
         return jsonify({"error": "Could not update step"}), 409
+
+    if step == STALE_WRITE:
+        db_session.rollback()  # release the FOR UPDATE lock the failed check took
+        owning = repo.get_process_with_steps(process_uuid, org_id)
+        current_step = next((s for s in owning.steps if s.id == step_uuid), None) if owning else None
+        if not current_step:
+            return jsonify({"error": "Step or process not found"}), 404
+        return _stale_write_response(_serialize_step(current_step))
 
     if not step:
         return jsonify({"error": "Step or process not found"}), 404
@@ -1819,15 +1822,11 @@ def reorder_steps(process_id: str):
     # Optimistic concurrency: a reorder bumps each moved step's updated_at, so the newest
     # step updated_at across the process is the structural-version token -- it advances on
     # any reorder or step edit, which is exactly the staleness a reordering client cares
-    # about. Opt-in via If-Match; absent header = unchanged behaviour.
-    if request.headers.get("If-Match"):
-        current = ProcessRepository(db_session).get_process_with_steps(process_uuid, org_id)
-        if not current:
-            return jsonify({"error": "Process not found"}), 404
-        token = max((s.updated_at for s in current.steps if s.updated_at), default=current.updated_at)
-        conflict = _if_match_conflict(token, _serialize_process(current, with_steps=True))
-        if conflict:
-            return conflict
+    # about. Opt-in via If-Match; absent header = unchanged behaviour. The token is
+    # compared inside reorder_steps() *after* it takes the FOR UPDATE lock, in the same
+    # write transaction -- not here on the request session before the write, which let two
+    # racing reorders both pass and the last commit silently win.
+    if_match = _if_match_token()
 
     # Use an isolated session for this write endpoint.
     # The app's before_request tenant middleware uses the scoped_session for reads and can leave
@@ -1837,11 +1836,16 @@ def reorder_steps(process_id: str):
     try:
         with sess.begin():
             repo = ProcessRepository(sess)
-            error_code = repo.reorder_steps(process_uuid, org_id, updates)
+            error_code = repo.reorder_steps(process_uuid, org_id, updates, if_match=if_match)
 
         if error_code == "process_not_found":
             _log_process_access_denied(org_id, process_uuid)
             return jsonify({"error": "Process not found"}), 404
+        if error_code == STALE_WRITE:
+            current = ProcessRepository(db_session).get_process_with_steps(process_uuid, org_id)
+            if not current:
+                return jsonify({"error": "Process not found"}), 404
+            return _stale_write_response(_serialize_process(current, with_steps=True))
         if error_code == "no_steps":
             return jsonify({"error": "No steps to reorder"}), 400
         if error_code == "step_not_found":

@@ -827,3 +827,134 @@ def _reorder_with_if_match(client, process_id, orders, if_match):
         json={"orders": orders},
         headers={"If-Match": if_match},
     )
+
+
+# --------------------------------------------------------------------------------------
+# Optimistic concurrency -- the RACE the feature exists to stop (MR !201 P1).
+#
+# The old code read updated_at, compared it in Python, then called the write later (for
+# reorder, on a *different* session). Two requests carrying the same token could both pass
+# the compare and both commit -- last write wins, silently. These tests run two writers
+# with the same initial token against the real Postgres and assert exactly one 200 and one
+# stale_write; the guard is now an `UPDATE ... WHERE updated_at = :expected` equivalent
+# (row locked FOR UPDATE + re-checked) inside the write transaction.
+# --------------------------------------------------------------------------------------
+
+import threading  # noqa: E402
+
+from sqlalchemy import text  # noqa: E402
+
+from app.core.db import SessionLocal  # noqa: E402
+from app.core.db.repositories.process_repo import STALE_WRITE  # noqa: E402
+
+
+def _run_two_writers(target):
+    """Run `target(tag)` on two threads released from a common barrier; return the dict of
+    outcomes. Each thread owns its own SessionLocal (own connection)."""
+    outcomes: dict[str, str] = {}
+    barrier = threading.Barrier(2)
+
+    def runner(tag: str):
+        session = SessionLocal()
+        try:
+            session.execute(text("SET lock_timeout = '15s'"))
+            barrier.wait(timeout=10)
+            outcomes[tag] = target(tag, session)
+        except Exception as exc:  # pragma: no cover - surfaced via the assertion below
+            outcomes[tag] = f"exc:{type(exc).__name__}:{exc}"
+        finally:
+            session.close()
+
+    threads = [threading.Thread(target=runner, args=(t,)) for t in ("A", "B")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    return outcomes
+
+
+def _new_org(db):
+    org = OrganisationFactory()
+    db.commit()
+    return org.id
+
+
+def _drop_org(db, org_id):
+    db.rollback()
+    pids = [p.id for p in db.query(Process.id).filter(Process.org_id == org_id).all()]
+    if pids:
+        db.query(Step).filter(Step.process_id.in_(pids)).delete(synchronize_session=False)
+        db.query(ProcessVersion).filter(ProcessVersion.process_id.in_(pids)).delete(synchronize_session=False)
+        db.query(Process).filter(Process.id.in_(pids)).delete(synchronize_session=False)
+    db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
+    db.commit()
+
+
+def test_update_process_concurrent_if_match_writes_exactly_one_wins(db):
+    org_id = _new_org(db)
+    try:
+        proc = ProcessRepository(db).create_process(org_id, "Race")
+        pid = proc.id
+        db.commit()
+        token = proc.updated_at.isoformat()
+
+        def writer(tag, session):
+            r = ProcessRepository(session).update_process(pid, org_id, name=f"name-{tag}", if_match=token)
+            return "stale" if r == STALE_WRITE else "ok"
+
+        outcomes = _run_two_writers(writer)
+        assert sorted(outcomes.values()) == ["ok", "stale"], outcomes
+
+        db.expire_all()
+        assert ProcessRepository(db).get_process_by_id(pid, org_id).name in ("name-A", "name-B")
+    finally:
+        _drop_org(db, org_id)
+
+
+def test_update_step_concurrent_if_match_writes_exactly_one_wins(db):
+    org_id = _new_org(db)
+    try:
+        repo = ProcessRepository(db)
+        proc = repo.create_process(org_id, "Race")
+        step = repo.add_step(proc.id, org_id, 1, "S1", position=Decimal(1000))
+        db.commit()
+        pid, sid = proc.id, step.id
+        token = step.updated_at.isoformat()
+
+        def writer(tag, session):
+            r = ProcessRepository(session).update_step(sid, pid, org_id, description=f"d-{tag}", if_match=token)
+            return "stale" if r == STALE_WRITE else "ok"
+
+        outcomes = _run_two_writers(writer)
+        assert sorted(outcomes.values()) == ["ok", "stale"], outcomes
+    finally:
+        _drop_org(db, org_id)
+
+
+def test_reorder_steps_concurrent_if_match_writes_exactly_one_wins(db):
+    org_id = _new_org(db)
+    try:
+        repo = ProcessRepository(db)
+        proc = repo.create_process(org_id, "Race")
+        s1 = repo.add_step(proc.id, org_id, 1, "S1", position=Decimal(1000))
+        s2 = repo.add_step(proc.id, org_id, 2, "S2", position=Decimal(2000))
+        db.commit()
+        pid, id1, id2 = proc.id, s1.id, s2.id
+        token = max(s1.updated_at, s2.updated_at).isoformat()
+
+        def writer(tag, session):
+            # tag A puts s1 first; tag B puts s2 first -- both carry the same stale token.
+            if tag == "A":
+                order = [(id1, Decimal(1000)), (id2, Decimal(2000))]
+            else:
+                order = [(id2, Decimal(1000)), (id1, Decimal(2000))]
+            # reorder_steps() doesn't commit (the caller owns the txn, as the route does);
+            # the FOR UPDATE lock it takes is held until this commit.
+            code = ProcessRepository(session).reorder_steps(pid, org_id, order, if_match=token)
+            session.commit()
+            return "stale" if code == STALE_WRITE else ("ok" if code is None else f"code:{code}")
+
+        outcomes = _run_two_writers(writer)
+        assert sorted(outcomes.values()) == ["ok", "stale"], outcomes
+    finally:
+        _drop_org(db, org_id)
