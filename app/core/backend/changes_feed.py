@@ -5,9 +5,17 @@ mutations in near real time without a reload. `entity_events` is already the
 event-sourcing spine (EventWriter.emit writes one row per mutation, in the mutation's
 transaction); this endpoint exposes it as a cursor feed.
 
-Cursor = entity_events.seq (monotonic BIGINT IDENTITY, migration entity_events_seq_001).
-A 1-second settle window hides events whose transaction may have been assigned an earlier
-seq but committed after a reader passed that point (the classic sequence-gap race).
+Cursor = entity_events.seq. EventWriter now allocates it per-org under an advisory lock
+held to commit (see event_writer._next_feed_seq), so once every writer is on this release
+seq order == commit order per org, gap-free -- a reader that has seen seq N is guaranteed
+every seq <= N is committed.
+
+The 1-second `created_at` settle window below is RETAINED as a transitional belt: during a
+rolling deploy a worker still on the previous release allocates seq from the bare global
+IDENTITY without taking that lock, so it can still commit out of order against a new
+worker. Once the release is fully rolled out the window is dead weight and a follow-up
+should remove it (together with dropping the IDENTITY default). Removing it here would
+reopen the skip race for the duration of every deploy.
 
 Register with: changes_feed.register_routes(core_bp)
 """

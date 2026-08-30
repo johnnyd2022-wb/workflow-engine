@@ -14,6 +14,7 @@ Key rules:
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -31,6 +32,33 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _QUANTITY_HISTORY_CAP = 50
+
+
+def _feed_cursor_lock_key(org_id: UUID) -> int:
+    """Deterministic signed int64 for ``pg_advisory_xact_lock``, namespaced to the
+    entity_events feed-cursor allocator (distinct from the system-findings-cache lock)."""
+    digest = hashlib.blake2b(f"{org_id}:entity_event_feed_cursor".encode(), digest_size=8).digest()
+    return int.from_bytes(digest, "big", signed=True)
+
+
+def _next_feed_seq(session: Session, org_id: UUID) -> int:
+    """Allocate this org's next ``entity_events.seq`` while holding a per-org advisory lock
+    to COMMIT of the caller's transaction.
+
+    A bare sequence (the column's IDENTITY default) is allocation-ordered, not
+    commit-ordered: a transaction can take seq=N, stay open, and a later transaction can
+    take seq=N+1 and commit first. A poller past the 1s settle window then advances its
+    cursor past N and never returns N once it finally commits -- a permanently skipped
+    event (MR !201 P1). Holding this advisory lock until commit makes seq order == commit
+    order per org, so the feed needs no settle window and has no gaps.
+    """
+    session.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _feed_cursor_lock_key(org_id)})
+    return int(
+        session.execute(
+            text("SELECT COALESCE(MAX(seq), 0) + 1 FROM entity_events WHERE org_id = :org"),
+            {"org": str(org_id)},
+        ).scalar_one()
+    )
 
 
 def _get_g_attr(name: str, default=None):
@@ -128,6 +156,11 @@ class EventWriter:
             event_type=event_type,
             entity_type=entity_type,
             entity_id=entity_id,
+            # Commit-ordered per-org feed cursor, allocated under an advisory lock held to
+            # this transaction's commit -- see _next_feed_seq. The column keeps its IDENTITY
+            # default as a backstop for any non-EventWriter insert, but every event written
+            # here sets seq explicitly.
+            seq=_next_feed_seq(self.session, self.org_id),
             actor_id=resolved_actor_id,
             actor_type=actor_type,
             actor_label=resolved_actor_label,
