@@ -860,10 +860,11 @@
         const items = inventoryData.inventory_items || [];
         flows2SetInventoryFromApi(items, requestedPid);
         flows2RerenderInventory();
+        flows2ClearPanelError('inventory-container');
       } catch (error) {
         if (error && error.name === 'AbortError') return;
         console.error('Failed to load inventory:', error);
-        showNotification('error', 'Failed to Load Inventory', error.message || 'Failed to load inventory');
+        flows2ShowPanelError('inventory-container', 'Couldn’t load this workflow’s inventory.', loadInventory);
       }
     }
 

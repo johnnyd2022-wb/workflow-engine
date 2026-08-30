@@ -71,6 +71,10 @@ window.CoreAPI = window.CoreAPI || {
             try {
                 data = await response.json();
             } catch (parseErr) {
+                // The response headers arrived but the body read was aborted by a
+                // navigation (SPA nav cancels in-flight fetches). Not an error worth
+                // logging -- surface it like any other abort.
+                if (parseErr && parseErr.name === 'AbortError') throw parseErr;
                 console.error(`API request failed: ${endpoint} - invalid JSON`, parseErr);
                 throw new Error(response.ok ? 'Invalid response from server.' : `Server error (${response.status}). Please try again.`);
             }
@@ -168,10 +172,13 @@ window.CoreAPI = window.CoreAPI || {
     },
     
     // Executions
-    async getExecutions(processId = null, status = null) {
+    async getExecutions(processId = null, status = null, options = {}) {
         const params = new URLSearchParams();
         if (processId) params.append('process_id', processId);
         if (status) params.append('status', status);
+        if (options.count) params.append('count', '1');           // -> { count }
+        if (options.limit != null) params.append('limit', String(options.limit));
+        if (options.cursor) params.append('cursor', options.cursor);
         const query = params.toString() ? `?${params.toString()}` : '';
         return this.request(`/executions${query}`);
     },

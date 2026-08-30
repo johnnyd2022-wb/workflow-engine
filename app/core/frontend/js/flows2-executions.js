@@ -1,36 +1,98 @@
     // RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
+
+    var COMPLETED_PAGE = 25;
+    var flows2CompletedCursor = null;   // keyset cursor for the next completed page
+    var flows2CompletedShown = 0;       // completed rows currently rendered
+
+    function _isActive(e) { return e.status === 'in_progress' || e.status === 'IN_PROGRESS'; }
+    function _isCompleted(e) { return e.status === 'completed' || e.status === 'COMPLETED'; }
+
+    /** Load the Batches panel: all active batches (bounded -- few run at once), the most
+     *  recent page of completed batches, and the total count for the badge. Older
+     *  completed batches page in via loadMoreCompleted(). This keeps the payload flat as
+     *  a process accumulates hundreds of runs. */
     async function loadExecutions() {
       if (!processId) return;
-      
+      var pid = processId;
       try {
-        const executionsData = await CoreAPI.getExecutions(processId);
-        const executions = executionsData.executions || [];
+        var [activeRes, completedRes, countRes] = await Promise.all([
+          CoreAPI.getExecutions(pid, 'in_progress'),
+          CoreAPI.getExecutions(pid, 'completed', { limit: COMPLETED_PAGE }),
+          CoreAPI.getExecutions(pid, null, { count: true }),
+        ]);
+        if (pid !== processId) return;   // navigated away mid-load
 
-        // Track this process's execution ids so LiveSync can route execution.step_completed
-        // and inventory_item.* events (which don't carry process_id) back to this page.
-        window.flows2ExecutionIds = new Set(executions.map(e => String(e.id)));
+        var active = (activeRes.executions || []).filter(_isActive);
+        var completed = (completedRes.executions || []).filter(_isCompleted);
+        flows2CompletedCursor = completedRes.next_cursor || null;
+        flows2CompletedShown = completed.length;
+        var total = (typeof countRes.count === 'number') ? countRes.count : (active.length + completed.length);
 
-        // Update badge
-        document.getElementById('executions-badge').textContent = executions.length;
-        
-        // Separate active and completed
-        const active = executions.filter(e => e.status === 'in_progress' || e.status === 'IN_PROGRESS');
-        const completed = executions.filter(e => e.status === 'completed' || e.status === 'COMPLETED');
-        
-        // Update stats
-        document.getElementById('process-active-count').textContent = active.length;
-        document.getElementById('process-completed-count').textContent = completed.length;
-        
-        // Render executions
+        // LiveSync routes execution.step_completed / inventory_item.* (no process_id in
+        // their payload) via this set. Include what we know now; refreshed each load.
+        window.flows2ExecutionIds = new Set(active.concat(completed).map(e => String(e.id)));
+
+        document.getElementById('executions-badge').textContent = total;
+        var pa = document.getElementById('process-active-count'); if (pa) pa.textContent = active.length;
+        var pc = document.getElementById('process-completed-count'); if (pc) pc.textContent = Math.max(total - active.length, completed.length);
+
         await renderExecutions(active, completed);
-
-        // Restore collapse/expand state after first render (so counts are already updated).
+        flows2SyncLoadMore(total - active.length);
         restoreBatchesPanelCollapseState();
-        
+        flows2ClearPanelError('active-executions-container');
       } catch (error) {
+        if (error && error.name === 'AbortError') return;
         console.error('Failed to load executions:', error);
-        showNotification('error', 'Failed to Load Executions', error.message || 'Failed to load executions');
+        flows2ShowPanelError('active-executions-container', 'Couldn’t load batches.', loadExecutions);
       }
+    }
+
+    async function loadMoreCompleted() {
+      if (!processId || !flows2CompletedCursor) return;
+      var pid = processId, cursor = flows2CompletedCursor;
+      var btn = document.getElementById('flows2-completed-load-more');
+      if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+      try {
+        var res = await CoreAPI.getExecutions(pid, 'completed', { limit: COMPLETED_PAGE, cursor: cursor });
+        if (pid !== processId) return;
+        var more = (res.executions || []).filter(_isCompleted);
+        flows2CompletedCursor = res.next_cursor || null;
+        flows2CompletedShown += more.length;
+        more.forEach(e => window.flows2ExecutionIds.add(String(e.id)));
+        var container = document.getElementById('completed-executions-container');
+        if (container) {
+          var cards = await Promise.all(more.map(e => createExecutionCard(e, 'completed')));
+          cards.forEach(c => container.appendChild(c));
+        }
+        var totalCompleted = parseInt((document.getElementById('process-completed-count') || {}).textContent || '0', 10);
+        flows2SyncLoadMore(totalCompleted);
+      } catch (error) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+      }
+    }
+    window.flows2LoadMoreCompleted = loadMoreCompleted;
+
+    /** Keep a "Load more (N older)" button just below the completed list in sync. */
+    function flows2SyncLoadMore(totalCompleted) {
+      var container = document.getElementById('completed-executions-container');
+      if (!container || !container.parentNode) return;
+      var btn = document.getElementById('flows2-completed-load-more');
+      var remaining = Math.max((totalCompleted || 0) - flows2CompletedShown, 0);
+      if (!flows2CompletedCursor || remaining <= 0) {
+        if (btn) btn.remove();
+        return;
+      }
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'flows2-completed-load-more';
+        btn.type = 'button';
+        btn.className = 'btn btn-secondary btn-sm';
+        btn.style.cssText = 'display:block;margin:12px auto 4px;';
+        btn.addEventListener('click', loadMoreCompleted);
+        container.parentNode.insertBefore(btn, container.nextSibling);
+      }
+      btn.disabled = false;
+      btn.textContent = 'Load ' + Math.min(remaining, COMPLETED_PAGE) + ' more (' + remaining + ' older)';
     }
 
     function restoreBatchesPanelCollapseState() {

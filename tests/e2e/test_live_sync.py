@@ -55,7 +55,9 @@ def test_a_batch_started_by_one_user_appears_on_another_users_flows2(two_users_o
 
     # B creates a process with a step (via API, the shape the wizard produces).
     hdrs = {"X-CSRFToken": _csrf(page_b), "Content-Type": "application/json", "Referer": page_b.url}
-    proc = page_b.request.post("/api/core/processes", headers=hdrs, data='{"name": "LiveSync Line", "category": "manufacturing"}')
+    proc = page_b.request.post(
+        "/api/core/processes", headers=hdrs, data='{"name": "LiveSync Line", "category": "manufacturing"}'
+    )
     assert proc.status == 201, proc.text()
     pid = proc.json()["id"]
     step = page_b.request.post(
@@ -78,7 +80,9 @@ def test_a_batch_started_by_one_user_appears_on_another_users_flows2(two_users_o
     expect(page_a.locator("#executions-badge")).to_have_text("0")
 
     # B starts a batch. A never touches the page.
-    started = page_b.request.post("/api/core/executions", headers={**hdrs, "Referer": page_b.url}, data=f'{{"process_id": "{pid}"}}')
+    started = page_b.request.post(
+        "/api/core/executions", headers={**hdrs, "Referer": page_b.url}, data=f'{{"process_id": "{pid}"}}'
+    )
     assert started.status == 201, started.text()
 
     # Within a couple of poll intervals A's flows2 refetches and the badge ticks to 1.
@@ -94,3 +98,86 @@ def test_live_sync_starts_and_tracks_a_cursor(logged_in_page):
     assert status is not None, "LiveSync did not load"
     assert status["started"] is True
     assert isinstance(status["cursor"], int) and status["cursor"] >= 0
+
+
+def _make_process_with_step(page):
+    hdrs = {"X-CSRFToken": _csrf(page), "Content-Type": "application/json", "Referer": page.url}
+    proc = page.request.post(
+        "/api/core/processes", headers=hdrs, data='{"name": "PhaseB Line", "category": "manufacturing"}'
+    )
+    assert proc.status == 201, proc.text()
+    pid = proc.json()["id"]
+    step = page.request.post(f"/api/core/processes/{pid}/steps", headers=hdrs, data='{"step_number": 1, "name": "Mix"}')
+    assert step.status == 201, step.text()
+    return pid, hdrs
+
+
+def test_core_hub_reflects_a_colleague_batch_without_reload(two_users_one_org):
+    """Phase B: the /core hub's active-batches KPI updates when another user starts a
+    batch, no reload -- the hub used to only re-fetch after the current user's own
+    mutation."""
+    _org, page_a, page_b = two_users_one_org
+    pid, hdrs = _make_process_with_step(page_b)
+
+    page_a.goto("/core")
+    page_a.wait_for_load_state("networkidle")
+    page_a.wait_for_selector("#metric-active-executions")
+    expect(page_a.locator("#metric-active-executions")).to_have_text("0")
+
+    started = page_b.request.post(
+        "/api/core/executions", headers={**hdrs, "Referer": page_b.url}, data=f'{{"process_id": "{pid}"}}'
+    )
+    assert started.status == 201, started.text()
+
+    expect(page_a.locator("#metric-active-executions")).to_have_text("1", timeout=15_000)
+
+
+def test_dashboard_reflects_a_colleague_batch_without_reload(two_users_one_org):
+    """Phase B: /core/dashboard's active-batches KPI ticks when a colleague starts a
+    batch, no reload."""
+    _org, page_a, page_b = two_users_one_org
+    pid, hdrs = _make_process_with_step(page_b)
+
+    page_a.goto("/core/dashboard")
+    page_a.wait_for_selector("[data-dashboard-root]")
+    page_a.wait_for_load_state("networkidle")
+
+    started = page_b.request.post(
+        "/api/core/executions", headers={**hdrs, "Referer": page_b.url}, data=f'{{"process_id": "{pid}"}}'
+    )
+    assert started.status == 201, started.text()
+
+    expect(page_a.locator("[data-kpi-active-batches]")).to_have_text("1", timeout=15_000)
+
+
+def test_execute_step_page_warns_when_the_batch_changes_elsewhere(two_users_one_org):
+    """Phase B: a user recording a step sees a sticky warning (not an auto-reload) when
+    someone else completes that step or changes the batch underneath them."""
+    _org, page_a, page_b = two_users_one_org
+    pid, hdrs = _make_process_with_step(page_b)
+
+    started = page_b.request.post(
+        "/api/core/executions", headers={**hdrs, "Referer": page_b.url}, data=f'{{"process_id": "{pid}"}}'
+    )
+    assert started.status == 201, started.text()
+    eid = started.json()["id"]
+
+    detail = page_b.request.get(f"/api/core/executions/{eid}")
+    assert detail.status == 200, detail.text()
+    steps = detail.json().get("execution_steps", [])
+    ready = next(s for s in steps if str(s.get("status", "")).lower() == "ready")
+    esid = ready["id"]
+
+    page_a.goto(f"/core/flows/batches/start?execution_id={eid}&id={pid}")
+    page_a.wait_for_load_state("networkidle")
+    page_a.wait_for_selector("#execute-step-modal")
+    assert page_a.locator("#exec-step-stale-warning").count() == 0
+
+    done = page_b.request.post(
+        f"/api/core/executions/{eid}/steps/{esid}/complete",
+        headers={**hdrs, "Referer": page_b.url},
+        data="{}",
+    )
+    assert done.status in (200, 201), done.text()
+
+    expect(page_a.locator("#exec-step-stale-warning")).to_be_visible(timeout=15_000)

@@ -44,7 +44,15 @@ This design just exposes it as a feed.
 
 ## Status
 
-**Phase A shipped** (feat/live-sync): the change feed + `LiveSync` + flows2 + the badge. Measured: a batch started by user B appears on user A's open flows2 in ~1.9 s, no reload. Feed query is an index scan, ~0.3 ms.
+**Phase A shipped** (feat/live-sync, MR !196): change feed + `LiveSync` + flows2 + the
+badge. A batch started by user B appears on user A's open flows2 in ~1.9 s, no reload.
+
+**Phase C shipped** (feat/flows2-scale): flows2 payloads bounded — lazy panels, executions
+pagination, per-panel retry. First paint 5 calls / 34 KB, executions/inventory deferred
+to tab open. Plus fixes for the `ERR_TOO_MANY_RETRIES` static-serve bug and a noisy
+abort log.
+
+**Phase B shipped** (feat/live-sync-phase-b): the rest of the always-on SPA — `/core` hub, sourcemap, dashboard, execute-step page — each a `LiveSync.subscribe` + a targeted, debounced refetch, with a shared "Updated just now" toast.
 
 ## Work plan (tick as landed)
 
@@ -105,13 +113,68 @@ event) instead of its own `htmx:afterOnLoad` blanket hook. Cuts redundant
 - e2e: two browser contexts, same org — B mutates, A's flows2 Batches list updates
   within one poll without a reload.
 
-### Phase B — wire the rest of the SPA  `[ ]`
+### Phase B — wire the rest of the SPA  `[x]`  (feat/live-sync-phase-b)
 
-`/core` hub (replace the my-mutation-only refresh), sourcemap, inventory list/view,
-dashboard, execute-step page (warn if the execution changed underneath). Each is a
-`LiveSync.subscribe` + a targeted refetch. Own MR.
+**Shipped.** Every remaining always-on surface now reflects a colleague's change without a
+reload. One shared toast (`window.liveSyncFlash`, added to `live-sync.js`) gives a subtle
+"Updated just now" pill so a silent re-render isn't disorienting. Each subscription is
+`key`-scoped so an hx-boost re-init replaces cleanly, and debounced so a multi-row
+mutation burst is one refetch.
 
-### Phase C — bound the growing payloads  `[ ]`
+- **`/core` hub** (`core2.html`) — `initCore2HubLoad` subscribes on
+  process / execution / execution_step / step / inventory_item events → debounced
+  `loadCoreHubDashboardData()` (the existing "overview + whichever detail tab is open"
+  refresh) + flash. The local user's own mutation still refreshes instantly via the
+  `htmx:afterOnLoad` path; this just covers the *other* users. Covers `/core`,
+  `/core/inventory/live`, `/core/executions/live` (all render `core2.html`).
+- **sourcemap** (`sourcemap.js`) — `smBoot` subscribes on inventory_item / process /
+  execution / execution_step events. While browsing: refetch the compact inventory +
+  out-of-stock set, rebuild the search pool + browse grid, reload the secondary
+  (processes / executions / activity) set if the Activity tab is showing, refresh
+  Findings, flash. While a trace is open (`tracedItemId` set): refresh Findings + the
+  search pool only — never yank the trace view out from under the user.
+- **dashboard** (`dashboard.js`) — subscribes on process / execution / execution_step /
+  inventory_item events → debounced `loadDashboard(root)` (clearing the `dashboardLoaded`
+  guard first) + flash.
+- **execute-step page** (`execution-step-page.js`) — subscribes on events for *this*
+  `executionId`. On a hit it reveals a sticky warning strip ("This batch changed
+  elsewhere — reload to see the current state" + a Reload button). It never auto-reloads:
+  the user may have half-entered inputs / evidence. Torn down on `htmx:beforeSwap`.
+
+### Phase C — bound the growing payloads  `[x]`  (feat/flows2-scale)
+
+**Shipped.** flows2 first paint is now flat regardless of how many runs a process has:
+- `list_executions` gained `?count=1` (just the total; `ExecutionRepository.count_executions`)
+  on top of the `?limit`+keyset already there.
+- flows2 Batches tab: **all active** batches (bounded -- few run at once) + the **most
+  recent 25 completed** + a total count for the badge; older completed page in via a
+  "Load N more (M older)" button (`loadMoreCompleted`, keyset cursor).
+- flows2 **lazy panels**: Structure renders on load; Batches / Inventory load the first
+  time their tab is shown (`window.flows2EnsurePanel`); re-opening a tab is 0 fetches.
+  LiveSync's `onChange` only refetches panels the user has opened, and always refreshes
+  the cheap badge count.
+- **Per-panel retry**: a transient load failure renders an inline "Couldn't load -- Retry"
+  in that panel (`flows2ShowPanelError` / `flows2ClearPanelError`), not a dead panel +
+  a toast the user can't act on.
+- flows2 inventory stays on the full (enriched) representation -- it's process-scoped and
+  small, and needs `system_findings` / `producing_step_name` / ready-date fields the
+  compact view omits. (The pre-!191 767 ms was a query problem, fixed there, not payload.)
+
+Measured (`whistlebird_test`): flows2 initial load **5 calls / 34 KB** (was `inventory`
+4 KB + `executions` 3 KB + more), with **no executions list and no inventory** until a
+tab is opened. Badge is correct from a 17-byte `count` call.
+
+**Also fixed two pre-existing bugs surfaced here:**
+- `/static/inventory/*` and `/static/img/*` served an **empty 200** for
+  `inventory-spa-header.css` under the threaded test server → the browser retried it to
+  `ERR_TOO_MANY_RETRIES` (broke `/core/executions/live` and anything loading that CSS).
+  Routed both through WhiteNoise like `/static/js|css` -- robust serving, allowlist
+  guards intact via fall-through.
+- `core-api.js` logged a scary `API request failed ... invalid JSON` when a fetch's
+  **body read** (not the fetch itself) was aborted by a navigation. Now silent, like
+  every other abort.
+
+<details><summary>original plan</summary>
 
 - `list_executions` `?process_id=` path gains `?limit` + keyset cursor (reuse the !183
   `_encode_list_cursor` helpers). flows2 Batches tab: first page + "Load more" / infinite
@@ -121,6 +184,8 @@ dashboard, execute-step page (warn if the execution changed underneath). Each is
   tab is first opened (keeps "instant after first open"), then keep them warm.
 - flows2 panel load errors → inline "couldn't load — retry" per panel, not a dead panel.
 - A manual refresh control on each volatile panel.
+
+</details>
 
 ### Phase D — optimistic concurrency  `[ ]`
 
