@@ -243,7 +243,8 @@ def test_banner_payload_is_slimmed(db, authed):
 
     real = sfc._compute_expensive
 
-    # a check result carrying the full shape the DAG check produces
+    # a check result carrying the full shape the DAG check produces.
+    # _compute_expensive returns (results, ok) -- ok=True means "safe to cache".
     def fake_expensive(org_id, session):
         return [
             {
@@ -260,7 +261,7 @@ def test_banner_payload_is_slimmed(db, authed):
                     "connections": [{"from_id": "r1", "to_id": "w1", "execution_id": "e1"}] * 50,
                 },
             }
-        ]
+        ], True
 
     org, client = authed
     import pytest as _pytest  # noqa
@@ -334,3 +335,93 @@ def test_prewarm_populates_a_fresh_row_without_a_request(db, authed):
     assert row is not None and row.stale is False
     assert sfc._fresh(row, datetime.now(UTC))
     assert "expired_materials" in {r["check_id"] for r in row.payload["results"]}
+
+
+# ---------------------------------------------------------------------------------------
+# Failure semantics: a check that raises must stay VISIBLE (flagged "Check failed"
+# result), exactly as CoreChecksRunner.run_all_checks() has always done. The cache
+# rewrite's _run_live() previously logged-and-dropped it, and a cached-check exception
+# escaped as a 500 instead of a failure result -- either way letting the /core banner and
+# system_status report a healthier state than the checks actually support.
+# Finding: .agents/reports/perf/2026-08-29-mr-187-200-review.md (P1, MR !201).
+# ---------------------------------------------------------------------------------------
+
+
+def _raise_for(check_id_to_fail, message="check exploded"):
+    from app.core.backend.corechecks import CoreChecksRunner
+
+    real = CoreChecksRunner.run_check
+
+    def patched(self, check_id):
+        if check_id == check_id_to_fail:
+            raise RuntimeError(message)
+        return real(self, check_id)
+
+    return patched
+
+
+def test_live_check_failure_is_a_flagged_result_not_dropped(db, authed, monkeypatch):
+    org, _client = authed
+    from app.core.backend.corechecks import CoreChecksRunner
+
+    monkeypatch.setattr(CoreChecksRunner, "run_check", _raise_for("untracked_items", "db exploded"))
+
+    results = sfc._run_live(org.id, db)
+    failed = [r for r in results if r.check_id == "untracked_items"]
+    assert len(failed) == 1, "the failed live check was dropped instead of flagged"
+    assert failed[0].flagged is True
+    assert failed[0].message.startswith("Check failed:") and "db exploded" in failed[0].message
+    assert failed[0].data is None
+
+
+def test_cached_check_failure_is_returned_visible_and_not_frozen_into_cache(db, authed, monkeypatch):
+    org, _client = authed
+    from app.core.backend.corechecks import CoreChecksRunner
+
+    monkeypatch.setattr(CoreChecksRunner, "run_check", _raise_for("expired_materials", "dag exploded"))
+
+    # No 500: the compute failure comes back as a flagged result...
+    results = sfc._cached_expensive(org.id, db)
+    em = [r for r in results if r["check_id"] == "expired_materials"]
+    assert len(em) == 1 and em[0]["flagged"] is True
+    assert em[0]["message"].startswith("Check failed:") and "dag exploded" in em[0]["message"]
+
+    # ...and it is NOT persisted -- otherwise a transient failure sticks as "fresh" until
+    # the next NZ midnight and every later request serves the stale failure.
+    db.expire_all()
+    assert _cache_row(db, org.id) is None, "a failed cached check must not be written to the cache row"
+
+    # The banner/findings list still shows it (get_or_compute path).
+    payload = sfc.get_or_compute(org.id, db)
+    assert any(
+        f["check_id"] == "expired_materials" and f["text"].startswith("Check failed")
+        for f in payload["findings"]
+    ), "the failed cached check disappeared from the banner findings"
+
+
+def test_prewarm_does_not_cache_a_failed_slice(db, authed, monkeypatch):
+    org, _client = authed
+    from app.core.backend.corechecks import CoreChecksRunner
+
+    monkeypatch.setattr(CoreChecksRunner, "run_check", _raise_for("expired_materials"))
+    sfc.prewarm(org.id, db)
+    db.expire_all()
+    assert _cache_row(db, org.id) is None
+
+
+def test_system_status_is_not_healthy_while_a_check_is_failing():
+    """Pure-function proof that the failure result changes system_status severity: a
+    flagged 'Check failed' result (data=None) yields a CHECK_FAILED signal and drops the
+    state off 'healthy'. Without this, _signals_from_results ignored data-less results and
+    a failing check left the banner green."""
+    from app.core.backend.corechecks import CheckResult
+    from app.core.backend.system_status import _signals_from_results, derive_health_state
+
+    healthy = CheckResult(check_id="untracked_items", flagged=False, message=None, data={"untracked_items": []})
+    failed = CheckResult(check_id="output_expiry", flagged=True, message="Check failed: boom", data=None)
+
+    assert derive_health_state(_signals_from_results([healthy])) == "healthy"
+
+    signals = _signals_from_results([healthy, failed])
+    assert any(s["type"] == "CHECK_FAILED" and s["has_issue"] for s in signals)
+    assert derive_health_state(signals) == "degraded"
