@@ -72,6 +72,14 @@ falsify them rather than inherit them as assumptions.
   so `"nan"` passes. `set_inventory_item_quantity` then evaluates `target < 0` on
   `Decimal("NaN")`, which raises `InvalidOperation` — not `ValueError`, so the route's
   handler misses it. Verified locally: `Decimal('NaN') < 0` raises. Contradicts AC5.
+  Already fixed: `InventoryRepository.set_inventory_item_quantity` now checks
+  `not target.is_finite()` *before* any ordering comparison and raises `ValueError`, and
+  `coerce_stored_quantity` (`app/core/utils/inventory_quantity.py`) raises `ValueError` on
+  non-finite Decimals — both caught by the route's `except ValueError` → 400 JSON.
+  Regression test `tests/test_inventory.py::test_adjust_rejects_non_finite_quantity_with_400`
+  (parametrised `nan`/`NaN`/`-nan`, asserts 400 + JSON + quantity unchanged), added in
+  `9657d35`; the rule was also encoded as a semgrep check in `ac49b2c`.
+  (verified 2026-08-31 by findings-sweep)
 - **C — missing org filter on a join.** `list_inventory_items` (inventory_repo.py:334)
   outer-joins `Execution` with no `Execution.org_id == org_id` predicate, unlike
   `get_untracked_items` (inventory_repo.py:314-317) which has it. Defense-in-depth gap
@@ -82,3 +90,7 @@ falsify them rather than inherit them as assumptions.
 - **D — wrong entity in error path.** `create_inventory_item` logs
   `"Error creating process"` and returns `"Failed to create process"` (backend.py:3677-3678).
   Cosmetic, but it misdirects triage from the observability stack.
+  Already fixed by commit `8d1f6b8` (`Findings-Index: 02b6bdd9`): the generic handler now
+  logs `"Error creating inventory item"` and returns `{"error": "Failed to create inventory item"}`.
+  Regression test `tests/test_inventory.py::test_create_item_failure_returns_inventory_error_not_process_error`.
+  (verified 2026-08-31 by findings-sweep)
