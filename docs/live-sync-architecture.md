@@ -54,6 +54,8 @@ abort log.
 
 **Phase B shipped** (feat/live-sync-phase-b): the rest of the always-on SPA — `/core` hub, sourcemap, dashboard, execute-step page — each a `LiveSync.subscribe` + a targeted, debounced refetch, with a shared "Updated just now" toast.
 
+**Phase D shipped** (feat/live-sync-phase-d): opt-in `If-Match` optimistic concurrency on `updateProcess` / `updateStep` / reorder — stale write → `409 { current }`, flows2 step editor wired to show "changed elsewhere" + reload.
+
 ## Work plan (tick as landed)
 
 ### Phase A — the backbone + flows2 + badge  `[x]`  (feat/live-sync)
@@ -187,12 +189,39 @@ tab is opened. Badge is correct from a 17-byte `count` call.
 
 </details>
 
-### Phase D — optimistic concurrency  `[ ]`
+### Phase D — optimistic concurrency  `[x]`  (feat/live-sync-phase-d)
 
-`updateProcess` / `updateStep` / reorder accept `If-Match: <updated_at>` (surfaced in the
-GET, echoed by the client). Mismatch → `409` with the current entity. Client: "Someone
-else changed this — showing the latest", reload the panel. Own MR; needs the version
-surfaced end to end.
+**Shipped.** `GET /api/core/processes/<id>` now carries `updated_at` on the process and
+on every step (via `_serialize_process` / `_serialize_step`). The three edit endpoints
+take an **opt-in** `If-Match` header:
+
+- `PUT /processes/<id>` — token is the process `updated_at`.
+- `PUT /processes/<id>/steps/<sid>` — token is that step's `updated_at`.
+- `POST /processes/<id>/steps/reorder` — token is `max(step.updated_at)` across the
+  process's steps (advances on any reorder *or* step edit — exactly the staleness a
+  reordering client cares about).
+
+No header → unchanged last-write-wins, so nothing that doesn't send it changes. Header
+present and stale → **`409 { "error": "stale_write", "message": ..., "current": <server
+state> }`**; the rejected write does not land.
+
+Client: `CoreAPI.updateProcess/updateStep/reorderSteps` take an optional
+`expectedUpdatedAt`; `_doRequest` now attaches `err.status` / `err.body` and
+`CoreAPI.isStaleWrite(err)` recognises the 409. Wired end-to-end, each stashing the
+`updated_at` it rendered from and showing "changed elsewhere" + a re-pull on a 409:
+
+- **flows2 step editor** (`flows2-steps.js`) — the step card carries `data-step-updated-at`.
+- **flows2 "Mark as draft / ready"** menu action (`flows2-init.js`) — uses
+  `currentProcess.updated_at`.
+- **create-process designer** (`create-process-modal.js`) — `createdSteps` entries carry
+  `updated_at`; the step-save and the drag-reorder both send `If-Match`, reorder using
+  `max(step.updated_at)`.
+
+**Deliberately headerless:** the two `is_draft` writes inside the *create wizard*
+(`create-process-modal.js` — `is_draft:true` before a wizard save, `is_draft:false` on
+finish). The wizard owns a fresh draft no one else is editing; a 409 there would abort
+the user's own save for no real conflict, and neither site holds a render-time
+`updated_at` to send anyway.
 
 ---
 

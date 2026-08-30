@@ -172,10 +172,19 @@
           if (!processId) return;
           try {
             var nextIsDraft = !(typeof currentProcess !== 'undefined' && currentProcess && currentProcess.is_draft);
-            await CoreAPI.updateProcess(processId, { is_draft: nextIsDraft });
+            var expected = (typeof currentProcess !== 'undefined' && currentProcess) ? currentProcess.updated_at : undefined;
+            await CoreAPI.updateProcess(processId, { is_draft: nextIsDraft }, expected);
             if (typeof loadProcessData === 'function') await loadProcessData();
             syncDraftMenuLabel();
           } catch (err) {
+            if (typeof CoreAPI !== 'undefined' && CoreAPI.isStaleWrite && CoreAPI.isStaleWrite(err)) {
+              if (typeof showNotification === 'function') {
+                showNotification('warning', 'Changed elsewhere', 'Someone else updated this process. Showing the latest.');
+              }
+              if (typeof loadProcessData === 'function') await loadProcessData();
+              syncDraftMenuLabel();
+              return;
+            }
             console.error(err);
           }
         });
