@@ -12,6 +12,17 @@ from app.core.db.models.process_version import ProcessVersion
 from app.core.db.models.step import Step
 from app.observability import start_span
 
+# Returned by the write methods below when an ``if_match`` token no longer matches the
+# row's (locked) ``updated_at`` -- the caller maps it to HTTP 409 with the current state.
+STALE_WRITE = "stale_write"
+
+
+def _updated_at_iso(dt) -> str:
+    """The exact string form the API serialises ``updated_at`` as (``_iso`` in backend.py),
+    but "" rather than None so it is always safely comparable to a client's If-Match token.
+    """
+    return dt.isoformat() if dt else ""
+
 
 def _step_snapshot(step: Step) -> dict:
     return {
@@ -152,8 +163,16 @@ class ProcessRepository:
         description: str | None = None,
         category: ProcessCategory | None = None,
         is_draft: bool | None = None,
-    ) -> Process | None:
-        """Update process (must belong to org)"""
+        if_match: str | None = None,
+    ) -> Process | str | None:
+        """Update process (must belong to org).
+
+        ``if_match``: opt-in optimistic concurrency. When given, the row is locked
+        ``FOR UPDATE`` and its current ``updated_at`` is compared to the token *inside the
+        same transaction as the write* -- so two concurrent writers cannot both pass the
+        check and both commit (the previous read-compare-then-write left that race open).
+        Returns :data:`STALE_WRITE` on a token mismatch; ``None`` if the process is gone.
+        """
         with start_span(
             "process.update",
             attributes={"org_id": str(org_id), "process_id": str(process_id)},
@@ -161,6 +180,19 @@ class ProcessRepository:
             process = self.get_process_by_id(process_id, org_id)
             if not process:
                 return None
+
+            if if_match is not None:
+                locked = (
+                    self.db.query(Process)
+                    .filter(Process.id == process_id, Process.org_id == org_id)
+                    .with_for_update()
+                    .one_or_none()
+                )
+                if locked is None:
+                    return None
+                self.db.refresh(locked, ["updated_at"])
+                if _updated_at_iso(locked.updated_at) != if_match:
+                    return STALE_WRITE
 
             diff: dict = {}
             if name is not None and name != process.name:
@@ -180,6 +212,8 @@ class ProcessRepository:
                 process.is_draft = is_draft
 
             if not diff:
+                if if_match is not None:
+                    self.db.rollback()  # nothing to persist -- release the FOR UPDATE lock now
                 return process
 
             steps = _current_steps(self.db, process_id)
@@ -291,8 +325,14 @@ class ProcessRepository:
         inputs: list | None = None,
         outputs: list | None = None,
         execution_prompts: list | None = None,
-    ) -> Step | None:
-        """Update a step"""
+        if_match: str | None = None,
+    ) -> Step | str | None:
+        """Update a step.
+
+        ``if_match``: see :meth:`update_process`. The step row is locked ``FOR UPDATE``
+        and its ``updated_at`` re-checked in the write transaction; returns
+        :data:`STALE_WRITE` on a token mismatch.
+        """
         with start_span(
             "process.step_update",
             attributes={"org_id": str(org_id), "process_id": str(process_id), "step_id": str(step_id)},
@@ -304,6 +344,19 @@ class ProcessRepository:
             step = self.db.query(Step).filter(Step.id == step_id, Step.process_id == process_id).first()
             if not step:
                 return None
+
+            if if_match is not None:
+                locked_step = (
+                    self.db.query(Step)
+                    .filter(Step.id == step_id, Step.process_id == process_id)
+                    .with_for_update()
+                    .one_or_none()
+                )
+                if locked_step is None:
+                    return None
+                self.db.refresh(locked_step, ["updated_at"])
+                if _updated_at_iso(locked_step.updated_at) != if_match:
+                    return STALE_WRITE
 
             # Capture before state for diff
             before = _step_snapshot(step)
@@ -327,6 +380,8 @@ class ProcessRepository:
             diff = {k: {"before": before[k], "after": after[k]} for k in before if before[k] != after[k]}
 
             if not diff:
+                if if_match is not None:
+                    self.db.rollback()  # nothing to persist -- release the FOR UPDATE lock now
                 return step
 
             all_steps = _current_steps(self.db, process_id)
@@ -395,6 +450,7 @@ class ProcessRepository:
         process_id: UUID,
         org_id: UUID,
         updates: list[tuple[UUID, Decimal]],
+        if_match: str | None = None,
     ) -> str | None:
         """Batch-update step positions atomically, with the same ProcessVersion/event
         audit trail every other step mutation gets. Caller holds the transaction
@@ -408,8 +464,15 @@ class ProcessRepository:
         `with sess.begin():` block exits normally and commits rather than rolling back).
 
         Returns None on success, or one of 'process_not_found' | 'no_steps' |
-        'step_not_found' identifying which validation failed — the route maps that to
-        the matching HTTP status/message.
+        'step_not_found' | STALE_WRITE identifying which validation failed — the route
+        maps that to the matching HTTP status/message.
+
+        ``if_match``: opt-in optimistic concurrency. The structural-version token is the
+        newest ``updated_at`` across the process's steps. It is compared here, *after*
+        the ``FOR UPDATE`` lock is held and against the locked rows — so a second reorder
+        racing the first blocks on the lock and then sees the bumped token, rather than
+        both reorders passing a pre-lock check on the request session (as before) and the
+        last commit silently winning.
         """
         with start_span(
             "process.step_reorder",
@@ -420,10 +483,20 @@ class ProcessRepository:
                 return "process_not_found"
 
             # Lock all steps for this process to prevent concurrent reorder collisions.
-            locked = self.db.query(Step.id).filter(Step.process_id == process_id).with_for_update().all()
-            locked_ids = {sid for (sid,) in locked}
+            locked = (
+                self.db.query(Step.id, Step.updated_at)
+                .filter(Step.process_id == process_id)
+                .with_for_update()
+                .all()
+            )
+            locked_ids = {row.id for row in locked}
             if not locked_ids:
                 return "no_steps"
+
+            if if_match is not None:
+                token = max((row.updated_at for row in locked if row.updated_at), default=None)
+                if _updated_at_iso(token) != if_match:
+                    return STALE_WRITE
 
             for step_uuid, _position in updates:
                 if step_uuid not in locked_ids:
