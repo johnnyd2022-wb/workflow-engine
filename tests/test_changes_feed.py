@@ -54,6 +54,9 @@ def two_orgs(db, flask_app):
 
 
 def _emit(db, org_id, event_type, entity_type, entity_id, payload=None, *, created_at=None):
+    # Raw insert -- seq is filled by the column's IDENTITY default here. (EventWriter
+    # allocates it explicitly under a per-org advisory lock; that path is covered by
+    # test_open_writer_transaction_never_causes_a_skipped_event.)
     db.execute(
         text(
             """
@@ -135,11 +138,132 @@ def test_non_synced_entity_types_are_hidden(db, two_orgs):
 
 
 def test_settle_window_withholds_events_from_the_last_second(db, two_orgs):
+    """The 1s settle window is retained as a rolling-deploy belt (an old worker still
+    allocates seq from the bare IDENTITY without the advisory lock). An event created
+    "just now" is withheld until it clears the window."""
     (org, client), _b = two_orgs
     start = client.get(ENDPOINT).get_json()["cursor"]
     _emit(db, org.id, "process.created", "process", uuid4(), created_at=datetime.now(UTC))  # "just now"
 
     assert client.get(f"{ENDPOINT}?since={start}").get_json()["events"] == []
+
+
+def test_open_writer_transaction_never_causes_a_skipped_event(db, two_orgs):
+    """The race MR !201 P1 is about: a bare sequence lets txn A take seq=N, stay open, and
+    txn B take seq=N+1 and commit first -- a poller past the settle window advances past N
+    and A's event is skipped forever.
+
+    With the per-org advisory lock, B cannot allocate a seq until A commits. This test
+    holds A's transaction open, starts B (which must block), proves B is blocked, polls
+    (sees nothing), then releases A -- and asserts BOTH events are then delivered exactly
+    once, in order, with contiguous seqs.
+    """
+    import threading
+    import time
+
+    from app.core.backend.event_writer import EventWriter, _feed_cursor_lock_key
+    from app.core.db import SessionLocal
+
+    (org, client), _b = two_orgs
+    start = client.get(ENDPOINT).get_json()["cursor"]
+
+    # pg_advisory_xact_lock(bigint) shows in pg_locks with the key split across
+    # (classid, objid) as unsigned int32 halves and objsubid = 1.
+    _key = _feed_cursor_lock_key(org.id) & 0xFFFFFFFFFFFFFFFF
+    _key_hi, _key_lo = (_key >> 32) & 0xFFFFFFFF, _key & 0xFFFFFFFF
+
+    a_has_seq = threading.Event()
+    a_may_commit = threading.Event()
+    b_pid: dict[str, int] = {}
+    outcomes: dict[str, str] = {}
+
+    def txn_a():
+        s = SessionLocal()
+        try:
+            EventWriter(s, org.id).emit("process.created", "process", uuid4(), {})
+            a_has_seq.set()
+            a_may_commit.wait(timeout=15)
+            s.commit()
+            outcomes["a"] = "committed"
+        except Exception as exc:  # pragma: no cover
+            outcomes["a"] = f"exc:{exc}"
+        finally:
+            s.close()
+
+    def txn_b():
+        s = SessionLocal()
+        try:
+            b_pid["pid"] = s.execute(text("SELECT pg_backend_pid()")).scalar()
+            EventWriter(s, org.id).emit("execution.created", "execution", uuid4(), {"execution_id": str(uuid4())})
+            s.commit()
+            outcomes["b"] = "committed"
+        except Exception as exc:  # pragma: no cover
+            outcomes["b"] = f"exc:{exc}"
+        finally:
+            s.close()
+
+    def _b_is_waiting_on_this_feed_lock() -> bool:
+        # Proof it is *this B* backend waiting on *this org's feed allocator lock* --
+        # not merely an unscheduled thread or unrelated advisory-lock contention.
+        # rollback() after so this probe never leaves `db` holding a transaction whose
+        # frozen now() would then hide freshly-committed rows from the feed's settle window.
+        if "pid" not in b_pid:
+            return False
+        try:
+            return bool(
+                db.execute(
+                    text(
+                        "SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted "
+                        "AND pid = :pid AND classid = :hi AND objid = :lo AND objsubid = 1"
+                    ),
+                    {"pid": b_pid["pid"], "hi": _key_hi, "lo": _key_lo},
+                ).scalar()
+            )
+        finally:
+            db.rollback()
+
+    ta = threading.Thread(target=txn_a)
+    tb = threading.Thread(target=txn_b)
+    try:
+        ta.start()
+        assert a_has_seq.wait(timeout=10), "txn A never allocated its seq"
+
+        tb.start()
+        # Wait until B is provably blocked on THIS advisory lock (not just "still alive").
+        deadline = time.monotonic() + 10
+        while not _b_is_waiting_on_this_feed_lock():
+            assert time.monotonic() < deadline, "txn B never blocked on the feed advisory lock"
+            assert outcomes.get("b") is None, f"txn B allocated a seq while A was open: {outcomes}"
+            time.sleep(0.05)
+
+        # Poll while A is open and B is blocked -> the feed shows neither.
+        assert client.get(f"{ENDPOINT}?since={start}").get_json()["events"] == []
+    finally:
+        a_may_commit.set()  # never leave A (and thus B) hanging, even on assertion failure
+        ta.join(timeout=15)
+        tb.join(timeout=15)
+
+    assert outcomes == {"a": "committed", "b": "committed"}, outcomes
+
+    # Both events now exist and are committed. The retained 1s settle window delays their
+    # visibility, so poll until they clear it (the point of this test is the SEQ ordering
+    # once they do, not the window). db.rollback() each iteration: the test thread's scoped
+    # session (shared by the Flask test client under the single app_context) otherwise
+    # keeps one transaction open, and Postgres pins now() to a transaction's start, so the
+    # settle predicate would never see the fresh rows clear.
+    deadline = time.monotonic() + 5
+    while True:
+        db.rollback()
+        body = client.get(f"{ENDPOINT}?since={start}").get_json()
+        if len(body["events"]) == 2:
+            break
+        assert time.monotonic() < deadline, f"events never cleared the settle window: {body}"
+        time.sleep(0.1)
+
+    assert [e["event_type"] for e in body["events"]] == ["process.created", "execution.created"]
+    seqs = [e["seq"] for e in body["events"]]
+    assert seqs == sorted(seqs) and seqs[1] == seqs[0] + 1, f"seqs not contiguous/ordered: {seqs}"
+    assert body["cursor"] == seqs[-1]
 
 
 def test_conditional_get_304_when_caught_up(db, two_orgs):

@@ -23,9 +23,19 @@ class EntityEvent(TenantScoped, Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    # Monotonic per-insert cursor for the /api/core/changes feed. The UUID PK is not
-    # ordered and created_at is not unique, so neither gives a total order. Postgres
-    # assigns this from a sequence; the ORM never sets it.
+    # Commit-ordered cursor for the /api/core/changes feed. The UUID PK is not ordered and
+    # created_at is not unique, so neither gives a total order. EventWriter.emit() sets this
+    # explicitly per-org: COALESCE(MAX(seq),0)+1 under a per-org advisory lock held to
+    # commit (event_writer._next_feed_seq), so seq order == commit order per org with no
+    # gaps.
+    #
+    # The IDENTITY default is retained only as a transitional fallback so a worker still
+    # running the previous release keeps inserting during a rolling deploy. It is NOT a
+    # real backstop: its internal sequence stops advancing once emit() supplies seq
+    # explicitly, so a later bypass insert could take a stale value. Once this release has
+    # fully rolled out, a follow-up migration should DROP the IDENTITY (a bypass insert
+    # then fails loudly on NOT NULL) and add UNIQUE (org_id, seq). Tracked in the MR !201
+    # follow-up notes.
     seq = Column(BigInteger, Identity(always=False), nullable=False)
 
     event_type = Column(String(100), nullable=False)
