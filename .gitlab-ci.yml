@@ -318,7 +318,12 @@ migration_reversibility:
     - chmod +x ci/*.sh
     - ./ci/setup_database.sh
   script:
-    - ENVIRONMENT=test uv run alembic downgrade -1
+    # `downgrade -1` is an "Ambiguous walk" when head is a mergepoint (two parents), so
+    # target the merge revision's first parent explicitly. This still proves the newest
+    # revision reverses and re-applies; the full-graph reversibility check is the
+    # `downgrade base` / `upgrade head` pair below. Revert to `-1` once head is a plain
+    # single-parent revision again.
+    - ENVIRONMENT=test uv run alembic downgrade feature_subscriptions_001
     - ENVIRONMENT=test uv run alembic upgrade head
     - ENVIRONMENT=test uv run alembic downgrade base
     - ENVIRONMENT=test uv run alembic upgrade head
