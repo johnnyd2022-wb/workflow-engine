@@ -54,14 +54,19 @@ def two_orgs(db, flask_app):
 
 
 def _emit(db, org_id, event_type, entity_type, entity_id, payload=None, *, created_at=None):
-    # Raw insert -- seq is filled by the column's IDENTITY default here. (EventWriter
-    # allocates it explicitly under a per-org advisory lock; that path is covered by
-    # test_open_writer_transaction_never_causes_a_skipped_event.)
+    # seq has no DB default (migration entity_events_seq_noident_001) -- a single-threaded
+    # test shortcut allocates it the way EventWriter does: COALESCE(MAX(seq),0)+1 per org
+    # (no advisory lock needed here). The locked-allocator path is covered by
+    # test_open_writer_transaction_never_causes_a_skipped_event.
     db.execute(
         text(
             """
-            INSERT INTO entity_events (id, org_id, event_type, entity_type, entity_id, actor_type, payload, created_at)
-            VALUES (gen_random_uuid(), :o, :et, :ent, :eid, 'system', CAST(:p AS jsonb), :ts)
+            INSERT INTO entity_events (id, org_id, seq, event_type, entity_type, entity_id, actor_type, payload, created_at)
+            VALUES (
+                gen_random_uuid(), :o,
+                (SELECT COALESCE(MAX(seq), 0) + 1 FROM entity_events WHERE org_id = :o),
+                :et, :ent, :eid, 'system', CAST(:p AS jsonb), :ts
+            )
             """
         ),
         {
@@ -137,15 +142,48 @@ def test_non_synced_entity_types_are_hidden(db, two_orgs):
     assert client.get(f"{ENDPOINT}?since={start}").get_json()["events"] == []
 
 
-def test_settle_window_withholds_events_from_the_last_second(db, two_orgs):
-    """The 1s settle window is retained as a rolling-deploy belt (an old worker still
-    allocates seq from the bare IDENTITY without the advisory lock). An event created
-    "just now" is withheld until it clears the window."""
+def test_freshly_committed_events_are_returned_immediately(db, two_orgs):
+    """No settle window: seq is commit-ordered (allocated per-org under an advisory lock
+    held to commit), so a committed event is visible on the very next poll -- there is
+    nothing to wait out."""
     (org, client), _b = two_orgs
     start = client.get(ENDPOINT).get_json()["cursor"]
     _emit(db, org.id, "process.created", "process", uuid4(), created_at=datetime.now(UTC))  # "just now"
 
-    assert client.get(f"{ENDPOINT}?since={start}").get_json()["events"] == []
+    body = client.get(f"{ENDPOINT}?since={start}").get_json()
+    assert [e["event_type"] for e in body["events"]] == ["process.created"]
+
+
+def test_seq_has_no_db_default_and_is_unique_per_org(db, two_orgs):
+    """The IDENTITY default is gone (migration entity_events_seq_noident_001): a write that
+    bypasses EventWriter's allocator fails loudly instead of silently taking a stale
+    value, and (org_id, seq) is UNIQUE so a double-allocation cannot corrupt feed order."""
+    from sqlalchemy.exc import IntegrityError
+
+    (org, _client), _b = two_orgs
+
+    # seq omitted -> NOT NULL violation (no DB default to fall back on)
+    with pytest.raises(IntegrityError):
+        db.execute(
+            text(
+                "INSERT INTO entity_events (id, org_id, event_type, entity_type, entity_id, actor_type, payload) "
+                "VALUES (gen_random_uuid(), :o, 'process.created', 'process', gen_random_uuid(), 'system', '{}'::jsonb)"
+            ),
+            {"o": str(org.id)},
+        )
+    db.rollback()
+
+    _emit(db, org.id, "process.created", "process", uuid4())
+    used = db.execute(text("SELECT MAX(seq) FROM entity_events WHERE org_id = :o"), {"o": str(org.id)}).scalar()
+    with pytest.raises(IntegrityError):
+        db.execute(
+            text(
+                "INSERT INTO entity_events (id, org_id, seq, event_type, entity_type, entity_id, actor_type, payload) "
+                "VALUES (gen_random_uuid(), :o, :s, 'process.created', 'process', gen_random_uuid(), 'system', '{}'::jsonb)"
+            ),
+            {"o": str(org.id), "s": used},
+        )
+    db.rollback()
 
 
 def test_open_writer_transaction_never_causes_a_skipped_event(db, two_orgs):
@@ -205,8 +243,8 @@ def test_open_writer_transaction_never_causes_a_skipped_event(db, two_orgs):
     def _b_is_waiting_on_this_feed_lock() -> bool:
         # Proof it is *this B* backend waiting on *this org's feed allocator lock* --
         # not merely an unscheduled thread or unrelated advisory-lock contention.
-        # rollback() after so this probe never leaves `db` holding a transaction whose
-        # frozen now() would then hide freshly-committed rows from the feed's settle window.
+        # rollback() after so this probe never leaves `db` holding a stale-snapshot
+        # transaction across the later polls.
         if "pid" not in b_pid:
             return False
         try:
@@ -245,21 +283,10 @@ def test_open_writer_transaction_never_causes_a_skipped_event(db, two_orgs):
 
     assert outcomes == {"a": "committed", "b": "committed"}, outcomes
 
-    # Both events now exist and are committed. The retained 1s settle window delays their
-    # visibility, so poll until they clear it (the point of this test is the SEQ ordering
-    # once they do, not the window). db.rollback() each iteration: the test thread's scoped
-    # session (shared by the Flask test client under the single app_context) otherwise
-    # keeps one transaction open, and Postgres pins now() to a transaction's start, so the
-    # settle predicate would never see the fresh rows clear.
-    deadline = time.monotonic() + 5
-    while True:
-        db.rollback()
-        body = client.get(f"{ENDPOINT}?since={start}").get_json()
-        if len(body["events"]) == 2:
-            break
-        assert time.monotonic() < deadline, f"events never cleared the settle window: {body}"
-        time.sleep(0.1)
-
+    # No settle window: both events are visible on the next poll. (rollback() so the
+    # shared scoped session used by the test client doesn't serve a stale snapshot.)
+    db.rollback()
+    body = client.get(f"{ENDPOINT}?since={start}").get_json()
     assert [e["event_type"] for e in body["events"]] == ["process.created", "execution.created"]
     seqs = [e["seq"] for e in body["events"]]
     assert seqs == sorted(seqs) and seqs[1] == seqs[0] + 1, f"seqs not contiguous/ordered: {seqs}"

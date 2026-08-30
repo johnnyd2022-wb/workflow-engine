@@ -5,17 +5,13 @@ mutations in near real time without a reload. `entity_events` is already the
 event-sourcing spine (EventWriter.emit writes one row per mutation, in the mutation's
 transaction); this endpoint exposes it as a cursor feed.
 
-Cursor = entity_events.seq. EventWriter now allocates it per-org under an advisory lock
-held to commit (see event_writer._next_feed_seq), so once every writer is on this release
-seq order == commit order per org, gap-free -- a reader that has seen seq N is guaranteed
-every seq <= N is committed.
-
-The 1-second `created_at` settle window below is RETAINED as a transitional belt: during a
-rolling deploy a worker still on the previous release allocates seq from the bare global
-IDENTITY without taking that lock, so it can still commit out of order against a new
-worker. Once the release is fully rolled out the window is dead weight and a follow-up
-should remove it (together with dropping the IDENTITY default). Removing it here would
-reopen the skip race for the duration of every deploy.
+Cursor = entity_events.seq, allocated per-org by EventWriter under an advisory lock held
+to commit (see event_writer._next_feed_seq). seq order == commit order per org and seqs
+are gap-free per org: a reader that has seen seq N is guaranteed every seq <= N is
+committed. There is no settle window -- the seq column has no DB default (migration
+entity_events_seq_noident_001 dropped the old IDENTITY), so every insert goes through
+that allocator, and (org_id, seq) is UNIQUE so a double-allocation fails loudly rather
+than silently corrupting the feed order.
 
 Register with: changes_feed.register_routes(core_bp)
 """
@@ -123,7 +119,6 @@ def register_routes(bp):
                 WHERE org_id = :org
                   AND seq > :since
                   AND entity_type IN :types
-                  AND created_at <= now() - interval '1 second'
                 ORDER BY seq
                 LIMIT :lim
                 """

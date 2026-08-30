@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.organisation import Organisation
@@ -241,6 +242,16 @@ class TestSourcemapTraceDepthParsing:
         assert resp.status_code == 400, resp.data
 
 
+def _next_event_seq(db, org_id) -> int:
+    """entity_events.seq has no DB default (migration entity_events_seq_noident_001); tests
+    that build the row directly allocate it like EventWriter does (per-org MAX+1)."""
+    return int(
+        db.execute(
+            text("SELECT COALESCE(MAX(seq), 0) + 1 FROM entity_events WHERE org_id = :o"), {"o": str(org_id)}
+        ).scalar()
+    )
+
+
 def _plant_step_completed_event(db, org_id, *, execution_id, item_id, role, quantity="2", unit="kg", when=None):
     """Directly write an execution.step_completed EntityEvent -- this is test setup for
     TemporalDAGTracer, which reads entity_events, not a stand-in for EventWriter (platform
@@ -249,6 +260,7 @@ def _plant_step_completed_event(db, org_id, *, execution_id, item_id, role, quan
     key = "items_consumed" if role == "consumed" else "items_produced"
     ev = EntityEvent(
         org_id=org_id,
+        seq=_next_event_seq(db, org_id),
         event_type="execution.step_completed",
         entity_type="execution",
         entity_id=execution_id,
@@ -332,10 +344,12 @@ class TestTemporalDAGTracerUnit:
         raw_id, exec_id = uuid4(), uuid4()
         now = datetime.now(UTC)
         _plant_step_completed_event(db, org.id, execution_id=exec_id, item_id=raw_id, role="consumed", when=now)
+        base_seq = _next_event_seq(db, org.id)
         for i in range(5):
             db.add(
                 EntityEvent(
                     org_id=org.id,
+                    seq=base_seq + i,
                     event_type="inventory_item.quantity_adjusted",
                     entity_type="inventory_item",
                     entity_id=raw_id,

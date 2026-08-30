@@ -26,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.entity_event_summary import EntityEventSummary
@@ -125,8 +126,14 @@ def other_app_client(other_user):
 
 
 def _plant_event(db, org_id, *, entity_type, entity_id, event_type, payload=None, diff=None, when=None):
+    # entity_events.seq has no DB default (migration entity_events_seq_noident_001); a test
+    # that builds the row directly allocates it like EventWriter does (per-org MAX+1).
+    next_seq = db.execute(
+        text("SELECT COALESCE(MAX(seq), 0) + 1 FROM entity_events WHERE org_id = :o"), {"o": str(org_id)}
+    ).scalar()
     ev = EntityEvent(
         org_id=org_id,
+        seq=next_seq,
         event_type=event_type,
         entity_type=entity_type,
         entity_id=entity_id,
