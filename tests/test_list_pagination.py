@@ -88,12 +88,53 @@ def test_executions_without_limit_returns_full_list_and_no_page_keys(db, client_
     assert "has_more" not in body and "next_cursor" not in body
 
 
+def test_executions_count_returns_just_the_total(db, client_org):
+    """flows2's Batches badge is always visible; it reads a bare count so the number is
+    right without pulling any execution rows (which grow with a process's history)."""
+    org, client = client_org
+    _seed_executions(db, org, 9)
+    body = client.get("/api/core/executions?count=1").get_json()
+    assert body == {"count": 9}
+    assert "executions" not in body
+
+
 def test_inventory_without_limit_returns_full_list_and_no_page_keys(db, client_org):
     org, client = client_org
     _seed_items(db, org, 7)
     body = client.get("/api/core/inventory").get_json()
     assert len(body["inventory_items"]) == 7
     assert "has_more" not in body and "next_cursor" not in body
+
+
+def test_inventory_compact_view_returns_core_fields_only(db, client_org):
+    """view=compact drops the per-item enrichment (system_findings, producing-step
+    hydration, audit history) the sourcemap browse grid never reads -- same rows, far
+    smaller payload, and it still paginates."""
+    org, client = client_org
+    _seed_items(db, org, 7)
+
+    full = client.get("/api/core/inventory").get_json()["inventory_items"]
+    compact = client.get("/api/core/inventory?view=compact").get_json()["inventory_items"]
+
+    assert len(compact) == len(full) == 7
+    assert {i["id"] for i in compact} == {i["id"] for i in full}
+    expected = {
+        "id",
+        "name",
+        "display_label",
+        "inventory_type",
+        "quantity",
+        "unit",
+        "supplier",
+        "supplier_batch_number",
+        "expiry_date",
+    }
+    assert all(set(i) == expected for i in compact), compact[0].keys()
+    assert "system_findings" not in compact[0]
+
+    paged = client.get("/api/core/inventory?view=compact&limit=3").get_json()
+    assert len(paged["inventory_items"]) == 3
+    assert paged["has_more"] is True and paged["next_cursor"]
 
 
 # --- paginated path -----------------------------------------------------------------

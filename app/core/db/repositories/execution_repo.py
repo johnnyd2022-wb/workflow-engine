@@ -222,6 +222,31 @@ class ExecutionRepository:
         )
         return {status.value: count for status, count in rows}
 
+    def count_executions(self, org_id: UUID, process_id: UUID | None = None, status=None) -> int:
+        """Total executions matching the filters -- no object graph. For a paginated
+        caller that still wants an "N batches" header."""
+        q = self.db.query(func.count(Execution.id)).filter(Execution.org_id == org_id)
+        if process_id is not None:
+            q = q.filter(Execution.process_id == process_id)
+        if status is not None:
+            q = q.filter(Execution.status == status)
+        return int(q.scalar() or 0)
+
+    def count_by_process_and_status(self, org_id: UUID) -> dict[UUID, dict[str, int]]:
+        """`{process_id: {status_value: count}}` in one grouped query. For the process list,
+        which only needs active/completed counts per process -- loading every org execution
+        (with joined steps) into Python to tally them scales with execution history."""
+        rows = (
+            self.db.query(Execution.process_id, Execution.status, func.count(Execution.id))
+            .filter(Execution.org_id == org_id)
+            .group_by(Execution.process_id, Execution.status)
+            .all()
+        )
+        out: dict[UUID, dict[str, int]] = {}
+        for process_id, status, count in rows:
+            out.setdefault(process_id, {})[status.value] = count
+        return out
+
     # Active statuses shown on the /core hub "Active Batches" panel and workflow insights.
     _ACTIVE_STATUSES = (ExecutionStatus.IN_PROGRESS, ExecutionStatus.PENDING)
 

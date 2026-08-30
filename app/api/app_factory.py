@@ -130,13 +130,6 @@ def create_app():
 
     app.register_blueprint(core_bp)
 
-    # Register dilution calculator blueprint (always on — no data model, no rollout risk)
-    from app.features.dilution_calculator.dilution_calculator_bp import (
-        create_dilution_calculator_blueprint,
-    )
-
-    app.register_blueprint(create_dilution_calculator_blueprint())
-
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
     # see .agents/specs/process_templates.md's "no new feature flag" ASSUMPTION).
@@ -407,13 +400,18 @@ def create_app():
                 "connect-src 'self' blob:"
             )
         else:
+            # static.cloudflareinsights.com is Cloudflare's RUM beacon, auto-injected by
+            # the CF proxy on the deployed environments (it POSTs back to
+            # cloudflareinsights.com/cdn-cgi/rum). Allowed here so it doesn't spam a CSP
+            # violation on every page; disable "Web Analytics / Browser Insights" in the
+            # Cloudflare dashboard instead if the same-origin /telemetry RUM is enough.
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "font-src 'self' https://fonts.gstatic.com; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://static.cloudflareinsights.com; "
                 "img-src 'self' data:; "
-                "connect-src 'self'; "
+                "connect-src 'self' https://cloudflareinsights.com; "
                 # PostHog's vendored session-recording bundle spins up its rrweb
                 # compression worker from a data: URI rather than a same-origin
                 # script file; without this, browsers silently refuse to create
@@ -462,9 +460,34 @@ def create_app():
 
     @app.context_processor
     def _inject_feature_flags():
+        # Per-org Compliant entitlement for the sidebar. Reuse the value the compliant
+        # blueprint's before_request cached on g for /compliant* requests — but ONLY when
+        # it was cached for THIS request's org (g.compliant_subscribed_org), since a
+        # reused Flask app context can carry a prior request's g attributes. On any other
+        # page, compute it once when there is a tenant context. The nav item shows iff the
+        # deployment flag AND the org's subscription are both on.
+        org_id = getattr(g, "current_org_id", None)
+        if getattr(g, "compliant_subscribed_org", None) == org_id and org_id is not None:
+            compliant_subscribed = bool(getattr(g, "compliant_subscribed", False))
+        elif org_id and config.compliant_enabled:
+            from app.core.db import db_session
+            from app.core.security.entitlements import org_has_feature
+
+            try:
+                compliant_subscribed = org_has_feature(db_session(), org_id, "compliant")
+            except Exception:
+                # This runs on *every* rendered page. A failed entitlement lookup (DB
+                # blip, table missing mid-migration) must degrade to "no Compliance nav",
+                # never 500 an unrelated page. The gate on /compliant* still enforces.
+                logger.warning("compliant_subscription_check_failed", org_id=str(org_id))
+                compliant_subscribed = False
+        else:
+            compliant_subscribed = False
+
         return dict(
             crm_enabled=config.crm_enabled,
             compliant_enabled=config.compliant_enabled,
+            compliant_subscribed=bool(compliant_subscribed),
             rum_enabled=config.rum_enabled,
             grafana_data_enabled=config.grafana_data_enabled,
             posthog_data_enabled=config.posthog_data_enabled,
@@ -487,12 +510,15 @@ def create_app():
     # so the CDN edge-caches them after the first hit and the origin stops being in the
     # asset path.
     #
-    # Scope: ONLY /static/js and /static/css (+ /crm/static/* when CRM is on) -- the
-    # "serve any file in this dir" prefixes. /static/inventory and /static/img (hardcoded
-    # filename allowlist) and /ui/shared (per-file auth gate) stay on their Flask routes.
+    # Scope: /static/js, /static/css, /static/inventory, /static/img (+ /crm/static/*
+    # when CRM is on). /ui/shared (per-file auth gate) stays on its Flask route.
     # WhiteNoise falls through to the wrapped app for any path it has no file for, so the
-    # traversal (400) / bad-extension (400) / 404 / allowlist guards on every route are
-    # untouched -- only the happy path (an existing, valid asset) is short-circuited.
+    # traversal (400) / bad-extension (400) / 404 / filename-allowlist guards on every
+    # route are untouched -- only the happy path (an existing, valid asset) is
+    # short-circuited. inventory/ and img/ moved here after the Flask route was seen
+    # returning an empty 200 for inventory-spa-header.css under the threaded test server
+    # -> the browser retried it to ERR_TOO_MANY_RETRIES. WhiteNoise serves it the same
+    # robust way it serves js/css.
     from whitenoise import WhiteNoise
 
     def _static_asset_headers(headers, path, url):
@@ -512,6 +538,8 @@ def create_app():
     _core_frontend = os.path.join(app_dir, "core", "frontend")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "js"), prefix="static/js/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "css"), prefix="static/css/")
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory"), prefix="static/inventory/")
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
     if config.crm_enabled:
         _crm_frontend = os.path.join(app_dir, "features", "crm", "frontend")
         app.wsgi_app.add_files(os.path.join(_crm_frontend, "js"), prefix="crm/static/js/")

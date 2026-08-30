@@ -27,6 +27,31 @@ def test_ac21_sourcemap_page_loads(logged_in_page: Page):
     assert_clean_page(page)
 
 
+def test_sourcemap_first_paint_uses_compact_inventory_and_drops_dead_calls(traced_chain):
+    """The browse grid renders off a compact inventory call (no per-item enrichment).
+    The full inventory representation and the (unused) execution-metadata call are gone
+    entirely; the trace flow still works once the deferred data lands."""
+    page, _dag, _user = traced_chain
+    calls: list[str] = []
+    page.on(
+        "request",
+        lambda r: calls.append(r.url.split("/api/core/", 1)[1]) if r.method == "GET" and "/api/core/" in r.url else None,
+    )
+
+    page.goto("/core/sourcemap")
+    page.wait_for_selector(".sm-browse-card")
+    page.wait_for_load_state("networkidle")
+
+    assert any(c.startswith("inventory?") and "view=compact" in c for c in calls), calls
+    assert not any(c == "inventory" for c in calls), f"full (non-compact) inventory still fetched: {calls}"
+    assert not any("execution-metadata" in c for c in calls), f"dead execution-metadata call still fired: {calls}"
+
+    card = page.locator(".sm-browse-card", has_text="R1").first
+    card.click()
+    expect(page.locator(".sm-impact-header__item-name")).to_have_text("R1")
+    assert_clean_page(page)
+
+
 def test_ac3_forward_trace_from_browse_grid_renders_timeline(traced_chain):
     page, _dag, _user = traced_chain
     page.goto("/core/sourcemap")

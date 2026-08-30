@@ -1,34 +1,22 @@
 {
-  "generated": "2026-08-27T09:56:41+00:00",
+  "generated": "2026-08-29T06:02:08+00:00",
   "budgets_file": ".agents/perf/budgets.json",
   "results": [
-    {
-      "route": "/api/compliant/overview",
-      "kind": "api",
-      "metrics": {
-        "backend_ms": 6.5,
-        "queries": 4
-      },
-      "over_budget": [],
-      "over_ceiling": []
-    },
     {
       "route": "/api/core/dashboard/summary",
       "kind": "api",
       "metrics": {
-        "backend_ms": 41.7,
+        "backend_ms": 38.8,
         "queries": 39
       },
-      "over_budget": [
-        "queries=39 > budget 38"
-      ],
+      "over_budget": [],
       "over_ceiling": []
     },
     {
       "route": "/api/core/entities/activity",
       "kind": "api",
       "metrics": {
-        "backend_ms": 11.0,
+        "backend_ms": 9.3,
         "queries": 4
       },
       "over_budget": [],
@@ -38,8 +26,18 @@
       "route": "/api/core/executions",
       "kind": "api",
       "metrics": {
-        "backend_ms": 8.7,
+        "backend_ms": 7.8,
         "queries": 5
+      },
+      "over_budget": [],
+      "over_ceiling": []
+    },
+    {
+      "route": "/api/core/hub/overview",
+      "kind": "api",
+      "metrics": {
+        "backend_ms": 13.9,
+        "queries": 11
       },
       "over_budget": [],
       "over_ceiling": []
@@ -48,7 +46,7 @@
       "route": "/api/core/inventory",
       "kind": "api",
       "metrics": {
-        "backend_ms": 20.8,
+        "backend_ms": 20.0,
         "queries": 14
       },
       "over_budget": [],
@@ -58,7 +56,7 @@
       "route": "/api/core/inventory/wastage",
       "kind": "api",
       "metrics": {
-        "backend_ms": 6.9,
+        "backend_ms": 5.1,
         "queries": 4
       },
       "over_budget": [],
@@ -68,7 +66,7 @@
       "route": "/api/core/metrics",
       "kind": "api",
       "metrics": {
-        "backend_ms": 7.1,
+        "backend_ms": 5.9,
         "queries": 5
       },
       "over_budget": [],
@@ -78,7 +76,7 @@
       "route": "/api/core/process-templates",
       "kind": "api",
       "metrics": {
-        "backend_ms": 9.7,
+        "backend_ms": 9.1,
         "queries": 4
       },
       "over_budget": [],
@@ -88,7 +86,7 @@
       "route": "/api/core/processes",
       "kind": "api",
       "metrics": {
-        "backend_ms": 13.5,
+        "backend_ms": 10.5,
         "queries": 6
       },
       "over_budget": [],
@@ -98,7 +96,7 @@
       "route": "/api/core/sourcemap/objects",
       "kind": "api",
       "metrics": {
-        "backend_ms": 10.7,
+        "backend_ms": 9.6,
         "queries": 8
       },
       "over_budget": [],
@@ -108,7 +106,7 @@
       "route": "/api/core/system-findings",
       "kind": "api",
       "metrics": {
-        "backend_ms": 14.5,
+        "backend_ms": 16.7,
         "queries": 11
       },
       "over_budget": [],
@@ -118,18 +116,8 @@
       "route": "/api/crm/overview",
       "kind": "api",
       "metrics": {
-        "backend_ms": 14.4,
+        "backend_ms": 11.7,
         "queries": 11
-      },
-      "over_budget": [],
-      "over_ceiling": []
-    },
-    {
-      "route": "/api/dilution-calculator/solve",
-      "kind": "api",
-      "metrics": {
-        "backend_ms": 4.7,
-        "queries": 2
       },
       "over_budget": [],
       "over_ceiling": []
@@ -138,19 +126,8 @@
       "route": "/auth/me",
       "kind": "api",
       "metrics": {
-        "backend_ms": 4.1,
+        "backend_ms": 3.9,
         "queries": 2
-      },
-      "over_budget": [],
-      "over_ceiling": []
-    },
-    {
-      "route": "/compliant",
-      "kind": "page",
-      "metrics": {
-        "backend_ms": 5.4,
-        "queries": 2,
-        "lcp_ms": 80
       },
       "over_budget": [],
       "over_ceiling": []
@@ -159,9 +136,9 @@
       "route": "/core",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.8,
-        "queries": 2,
-        "lcp_ms": 68
+        "backend_ms": 5.3,
+        "queries": 3,
+        "lcp_ms": 72
       },
       "over_budget": [],
       "over_ceiling": []
@@ -170,9 +147,9 @@
       "route": "/core/dashboard",
       "kind": "page",
       "metrics": {
-        "backend_ms": 5.0,
-        "queries": 2,
-        "lcp_ms": 100
+        "backend_ms": 5.2,
+        "queries": 3,
+        "lcp_ms": 104
       },
       "over_budget": [],
       "over_ceiling": []
@@ -181,9 +158,9 @@
       "route": "/core/executions/live",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.4,
-        "queries": 2,
-        "lcp_ms": 72
+        "backend_ms": 5.5,
+        "queries": 3,
+        "lcp_ms": 80
       },
       "over_budget": [],
       "over_ceiling": []
@@ -192,9 +169,9 @@
       "route": "/core/flows",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.7,
-        "queries": 2,
-        "lcp_ms": 64
+        "backend_ms": 5.4,
+        "queries": 3,
+        "lcp_ms": 72
       },
       "over_budget": [],
       "over_ceiling": []
@@ -203,9 +180,9 @@
       "route": "/core/flows/create/template-catalog",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.1,
-        "queries": 2,
-        "lcp_ms": 64
+        "backend_ms": 4.6,
+        "queries": 3,
+        "lcp_ms": 72
       },
       "over_budget": [],
       "over_ceiling": []
@@ -214,9 +191,9 @@
       "route": "/core/inventory/dispose",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.2,
-        "queries": 2,
-        "lcp_ms": 68
+        "backend_ms": 5.3,
+        "queries": 3,
+        "lcp_ms": 64
       },
       "over_budget": [],
       "over_ceiling": []
@@ -225,9 +202,9 @@
       "route": "/core/inventory/dispose/confirm",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.6,
-        "queries": 2,
-        "lcp_ms": 64
+        "backend_ms": 4.8,
+        "queries": 3,
+        "lcp_ms": 56
       },
       "over_budget": [],
       "over_ceiling": []
@@ -236,9 +213,9 @@
       "route": "/core/inventory/view",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.7,
-        "queries": 2,
-        "lcp_ms": 80
+        "backend_ms": 5.3,
+        "queries": 3,
+        "lcp_ms": 68
       },
       "over_budget": [],
       "over_ceiling": []
@@ -247,9 +224,9 @@
       "route": "/core/processes",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.7,
-        "queries": 2,
-        "lcp_ms": 60
+        "backend_ms": 5.1,
+        "queries": 3,
+        "lcp_ms": 56
       },
       "over_budget": [],
       "over_ceiling": []
@@ -258,9 +235,9 @@
       "route": "/core/settings",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.7,
-        "queries": 2,
-        "lcp_ms": 68
+        "backend_ms": 4.9,
+        "queries": 3,
+        "lcp_ms": 60
       },
       "over_budget": [],
       "over_ceiling": []
@@ -269,9 +246,9 @@
       "route": "/core/sourcemap",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.7,
-        "queries": 2,
-        "lcp_ms": 76
+        "backend_ms": 4.8,
+        "queries": 3,
+        "lcp_ms": 60
       },
       "over_budget": [],
       "over_ceiling": []
@@ -280,20 +257,9 @@
       "route": "/crm",
       "kind": "page",
       "metrics": {
-        "backend_ms": 4.5,
-        "queries": 2,
-        "lcp_ms": 72
-      },
-      "over_budget": [],
-      "over_ceiling": []
-    },
-    {
-      "route": "/dilution-calculator",
-      "kind": "page",
-      "metrics": {
-        "backend_ms": 4.4,
-        "queries": 2,
-        "lcp_ms": 64
+        "backend_ms": 5.1,
+        "queries": 3,
+        "lcp_ms": 60
       },
       "over_budget": [],
       "over_ceiling": []
@@ -302,7 +268,7 @@
       "route": "/org",
       "kind": "api",
       "metrics": {
-        "backend_ms": 4.0,
+        "backend_ms": 3.9,
         "queries": 2
       },
       "over_budget": [],
@@ -312,7 +278,7 @@
       "route": "/org/users",
       "kind": "api",
       "metrics": {
-        "backend_ms": 6.1,
+        "backend_ms": 4.1,
         "queries": 3
       },
       "over_budget": [],

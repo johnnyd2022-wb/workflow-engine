@@ -228,3 +228,33 @@ def test_ac13_redirect_drops_unlisted_query_params(logged_in_page: Page):
     assert "evil" not in location, f"unlisted query param leaked into the redirect: {location}"
     assert f"id={pid}" in location
     assert "fresh=1" in location
+
+
+# --------------------------------------------------------------------------------------
+# Perf: the Inputs step is an inventory picker -- it must not pull the fat list.
+# --------------------------------------------------------------------------------------
+
+
+def test_inputs_step_loads_inventory_compact_not_the_full_list(logged_in_page: Page):
+    """create-process-modal.js::loadInventoryItems used to fetch /api/core/inventory
+    three times (process-scoped, ?type=raw_material, and unfiltered ~1 MB) then dedupe by
+    name. It needs only name/unit/type, so it uses ?view=compact and drops the redundant
+    raw-material call."""
+    page = logged_in_page
+    pid, _sid = _create_process_with_step(page, f"E2E InputsPerf {uuid.uuid4().hex[:8]}")
+
+    inv_calls: list[str] = []
+    page.on(
+        "request",
+        lambda r: inv_calls.append(r.url.split("/api/core/", 1)[1])
+        if r.method == "GET" and "/api/core/inventory" in r.url
+        else None,
+    )
+
+    page.goto(f"/core/flows/create/inputs?id={pid}")
+    page.wait_for_load_state("networkidle")
+
+    plain = [c for c in inv_calls if c.split("?")[0] == "inventory"]
+    assert plain, f"no /api/core/inventory call on the Inputs step: {inv_calls}"
+    assert all("view=compact" in c for c in plain), f"Inputs step fetched the fat inventory list: {inv_calls}"
+    assert not any("type=raw_material" in c for c in inv_calls), f"redundant raw-material call still fires: {inv_calls}"

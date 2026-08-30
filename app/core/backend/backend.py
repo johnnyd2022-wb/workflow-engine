@@ -1,6 +1,7 @@
 """Core backend API routes for process execution platform"""
 
 import base64
+import functools
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
 from pydantic import ValidationError
@@ -15,7 +17,7 @@ from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
-from app.core.backend import corechecks, inventory_upload_routes, reconciliation_routes
+from app.core.backend import changes_feed, corechecks, inventory_upload_routes, reconciliation_routes
 from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.complete_step_payload import (
     MAX_COMPLETE_STEP_CONTENT_LENGTH,
@@ -181,6 +183,46 @@ core_bp = Blueprint(
     static_folder="../frontend",
     static_url_path="/static",
 )
+
+
+@functools.lru_cache(maxsize=1)
+def _asset_version() -> str:
+    """Short digest of the bundled JS/CSS files (name + mtime + size), computed once per
+    process. Appended as ``?v=`` to serve_core_js / serve_core_css URLs so a deploy that
+    ships changed assets busts the browser and CDN cache -- these routes send
+    ``Cache-Control: public, max-age=3600`` on otherwise-stable paths, so without this a
+    freshly rendered page can run hour-old JS that predates the endpoints it calls."""
+    h = hashlib.blake2b(digest_size=8)
+    frontend = os.path.join(os.path.dirname(__file__), "..", "frontend")
+    for sub in ("js", "css", "inventory", "img"):
+        directory = os.path.join(frontend, sub)
+        try:
+            names = sorted(os.listdir(directory))
+        except OSError:
+            continue
+        for name in names:
+            try:
+                st = os.stat(os.path.join(directory, name))
+            except OSError:
+                continue
+            h.update(f"{name}:{int(st.st_mtime)}:{st.st_size}\n".encode())
+    return h.hexdigest()
+
+
+_VERSIONED_STATIC_ENDPOINTS = frozenset(
+    {
+        "core.serve_core_js",
+        "core.serve_core_css",
+        "core.serve_core_inventory_static",
+        "core.serve_core_img",
+    }
+)
+
+
+@core_bp.url_defaults
+def _core_static_asset_version(endpoint: str, values: dict) -> None:
+    if endpoint in _VERSIONED_STATIC_ENDPOINTS and "v" not in values:
+        values["v"] = _asset_version()
 
 
 # --- Flow wizard safety helpers (query filtering + step integrity) ---
@@ -1323,15 +1365,12 @@ def list_processes():
     repo = ProcessRepository(db_session)
     processes = repo.list_processes(org_id)
 
-    # Batch-fetch all executions for the org once, then group by process_id in Python.
-    # Avoids N queries (one per process) when calculating active/completed counts.
-    execution_repo = ExecutionRepository(db_session)
-    all_executions = execution_repo.list_executions(org_id)
+    # Active/completed counts per process from one GROUP BY -- not by loading every org
+    # execution (with joined steps) into Python, which scales with execution history.
     from collections import defaultdict
 
-    execs_by_process: dict = defaultdict(list)
-    for e in all_executions:
-        execs_by_process[e.process_id].append(e)
+    execution_repo = ExecutionRepository(db_session)
+    counts_by_process = execution_repo.count_by_process_and_status(org_id)
 
     # Batch-load process event summaries
     from app.core.db.models.entity_event_summary import EntityEventSummary
@@ -1358,9 +1397,9 @@ def list_processes():
 
     result = []
     for process in processes:
-        proc_execs = execs_by_process.get(process.id, [])
-        active_count = sum(1 for e in proc_execs if e.status == ExecutionStatus.IN_PROGRESS)
-        completed_count = sum(1 for e in proc_execs if e.status == ExecutionStatus.COMPLETED)
+        proc_counts = counts_by_process.get(process.id, {})
+        active_count = proc_counts.get(ExecutionStatus.IN_PROGRESS.value, 0)
+        completed_count = proc_counts.get(ExecutionStatus.COMPLETED.value, 0)
         step_list = steps_by_process.get(process.id, [])
         step_count = len(step_list)
 
@@ -1445,6 +1484,65 @@ def create_process():
         return jsonify({"error": "Failed to create process"}), 500
 
 
+def _iso(dt):
+    return dt.isoformat() if dt else None
+
+
+def _serialize_step(step) -> dict:
+    return {
+        "id": str(step.id),
+        "step_number": step.step_number,
+        "position": str(step.position) if getattr(step, "position", None) is not None else None,
+        "name": step.name,
+        "description": step.description,
+        "inputs": step.inputs or [],
+        "outputs": step.outputs or [],
+        "execution_prompts": step.execution_prompts or [],
+        "updated_at": _iso(getattr(step, "updated_at", None)),
+    }
+
+
+def _serialize_process(process, *, with_steps: bool = False) -> dict:
+    out = {
+        "id": str(process.id),
+        "name": process.name,
+        "description": process.description,
+        "category": process.category.value if process.category else None,
+        "is_draft": process.is_draft,
+        "created_at": _iso(getattr(process, "created_at", None)),
+        "updated_at": _iso(getattr(process, "updated_at", None)),
+    }
+    if with_steps:
+        out["steps"] = [_serialize_step(s) for s in process.steps]
+    return out
+
+
+def _if_match_conflict(current_updated_at, current_entity: dict):
+    """Optimistic-concurrency gate for edit endpoints.
+
+    Opt-in: a request with no ``If-Match`` header keeps the old last-write-wins
+    behaviour, so nothing that doesn't send the header changes. When the header IS
+    present and doesn't equal the row's current ``updated_at`` (ISO 8601, optional
+    surrounding quotes), someone else has saved since this client last read the entity;
+    return a 409 whose body carries the *current* server state for the client to show.
+    Returns ``None`` when the write may proceed.
+    """
+    want = request.headers.get("If-Match")
+    if not want:
+        return None
+    want = want.strip().strip('"')
+    have = current_updated_at.isoformat() if current_updated_at else ""
+    if want == have:
+        return None
+    return jsonify(
+        {
+            "error": "stale_write",
+            "message": "This was changed by someone else. Showing the latest.",
+            "current": current_entity,
+        }
+    ), 409
+
+
 @core_bp.route("/api/core/processes/<process_id>", methods=["PUT"])
 @requires_auth
 def update_process(process_id: str):
@@ -1470,6 +1568,13 @@ def update_process(process_id: str):
 
     repo = ProcessRepository(db_session)
     try:
+        current = repo.get_process_by_id(process_uuid, org_id)
+        if not current:
+            return jsonify({"error": "Process not found"}), 404
+        conflict = _if_match_conflict(current.updated_at, _serialize_process(current))
+        if conflict:
+            return conflict
+
         process = repo.update_process(
             process_id=process_uuid,
             org_id=org_id,
@@ -1482,19 +1587,7 @@ def update_process(process_id: str):
         if not process:
             return jsonify({"error": "Process not found"}), 404
 
-        return (
-            jsonify(
-                {
-                    "id": str(process.id),
-                    "name": process.name,
-                    "description": process.description,
-                    "category": process.category.value if process.category else None,
-                    "is_draft": process.is_draft,
-                    "created_at": process.created_at.isoformat() if process.created_at else None,
-                }
-            ),
-            200,
-        )
+        return jsonify(_serialize_process(process)), 200
     except Exception:
         # Log the full error for debugging but return generic message to client
         logger.exception("Error updating process")
@@ -1548,35 +1641,7 @@ def get_process(process_id: str):
     if not process:
         return jsonify({"error": "Process not found"}), 404
 
-    steps = []
-    for step in process.steps:
-        steps.append(
-            {
-                "id": str(step.id),
-                "step_number": step.step_number,
-                "position": str(step.position) if getattr(step, "position", None) is not None else None,
-                "name": step.name,
-                "description": step.description,
-                "inputs": step.inputs or [],
-                "outputs": step.outputs or [],
-                "execution_prompts": step.execution_prompts or [],
-            }
-        )
-
-    return (
-        jsonify(
-            {
-                "id": str(process.id),
-                "name": process.name,
-                "description": process.description,
-                "category": process.category.value if process.category else None,
-                "is_draft": process.is_draft,
-                "steps": steps,
-                "created_at": process.created_at.isoformat() if process.created_at else None,
-            }
-        ),
-        200,
-    )
+    return jsonify(_serialize_process(process, with_steps=True)), 200
 
 
 @core_bp.route("/api/core/processes/<process_id>/steps", methods=["POST"])
@@ -1669,6 +1734,16 @@ def update_step(process_id: str, step_id: str):
             return jsonify({"error": expiry_ready_errors[0]}), 400
 
     repo = ProcessRepository(db_session)
+
+    if request.headers.get("If-Match"):
+        owning = repo.get_process_with_steps(process_uuid, org_id)
+        current_step = next((s for s in owning.steps if s.id == step_uuid), None) if owning else None
+        if not current_step:
+            return jsonify({"error": "Step or process not found"}), 404
+        conflict = _if_match_conflict(current_step.updated_at, _serialize_step(current_step))
+        if conflict:
+            return conflict
+
     try:
         step = repo.update_step(
             step_id=step_uuid,
@@ -1690,18 +1765,7 @@ def update_step(process_id: str, step_id: str):
         return jsonify({"error": "Step or process not found"}), 404
 
     return (
-        jsonify(
-            {
-                "id": str(step.id),
-                "step_number": step.step_number,
-                "position": str(step.position) if getattr(step, "position", None) is not None else None,
-                "name": step.name,
-                "description": step.description,
-                "inputs": step.inputs or [],
-                "outputs": step.outputs or [],
-                "execution_prompts": step.execution_prompts or [],
-            }
-        ),
+        jsonify(_serialize_step(step)),
         200,
     )
 
@@ -1751,6 +1815,19 @@ def reorder_steps(process_id: str):
                 {"error": f"Invalid position: must be a positive, finite multiple of 1000 (got {pos!r})"}
             ), 400
         updates.append((step_uuid, position))
+
+    # Optimistic concurrency: a reorder bumps each moved step's updated_at, so the newest
+    # step updated_at across the process is the structural-version token -- it advances on
+    # any reorder or step edit, which is exactly the staleness a reordering client cares
+    # about. Opt-in via If-Match; absent header = unchanged behaviour.
+    if request.headers.get("If-Match"):
+        current = ProcessRepository(db_session).get_process_with_steps(process_uuid, org_id)
+        if not current:
+            return jsonify({"error": "Process not found"}), 404
+        token = max((s.updated_at for s in current.steps if s.updated_at), default=current.updated_at)
+        conflict = _if_match_conflict(token, _serialize_process(current, with_steps=True))
+        if conflict:
+            return conflict
 
     # Use an isolated session for this write endpoint.
     # The app's before_request tenant middleware uses the scoped_session for reads and can leave
@@ -1877,12 +1954,17 @@ def list_executions():
         except ValueError:
             return jsonify({"error": f"Invalid status: {status_str}"}), 400
 
+    repo = ExecutionRepository(db_session)
+
+    # count=1 -> just the total (for a paginated caller's "N batches" header). No object
+    # graph, no growth with history.
+    if request.args.get("count") in ("1", "true"):
+        return jsonify({"count": repo.count_executions(org_id=org_id, process_id=process_id, status=status)}), 200
+
     try:
         page_limit, cursor = _parse_page_params(request.args)
     except ValueError:
         return jsonify({"error": "Invalid limit or cursor parameter"}), 400
-
-    repo = ExecutionRepository(db_session)
     executions = repo.list_executions(
         org_id=org_id,
         process_id=process_id,
@@ -2798,6 +2880,32 @@ def list_inventory():
         items = items[:page_limit]
     next_cursor = _encode_list_cursor(items[-1].created_at, items[-1].id) if has_more and items else None
 
+    # Compact view: just the core item fields, no per-item enrichment (system findings,
+    # producing-step hydration, ready-date lookups, audit history). The sourcemap browse
+    # grid groups the whole list by name / batch / supplier and needs none of that; the
+    # full representation is ~20x larger.
+    if request.args.get("view") == "compact":
+        return jsonify(
+            {
+                "inventory_items": [
+                    {
+                        "id": str(i.id),
+                        "name": i.name,
+                        "display_label": i.display_label,
+                        "inventory_type": i.inventory_type,
+                        "quantity": str(i.quantity),
+                        "unit": i.unit,
+                        "supplier": i.supplier,
+                        "supplier_batch_number": i.supplier_batch_number,
+                        "expiry_date": i.expiry_date.isoformat() if i.expiry_date else None,
+                    }
+                    for i in items
+                ],
+                "has_more": has_more,
+                "next_cursor": next_cursor,
+            }
+        ), 200
+
     # System findings per item (all checks) for UI: red border + reasons in dropdown
     findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
 
@@ -3685,6 +3793,7 @@ def list_out_of_stock_raw_materials():
     return jsonify({"inventory_items": result}), 200
 
 
+changes_feed.register_routes(core_bp)
 corechecks.register_routes(core_bp)
 reconciliation_routes.register_routes(core_bp)
 inventory_upload_routes.register_routes(core_bp)
@@ -4487,6 +4596,27 @@ def _dashboard_build_compliance_summary(results: list[Any], system_status: dict[
     }
 
 
+# The app runs in NZ local time (container TZ = Pacific/Auckland) but Postgres sessions
+# are UTC, so a naive local-midnight datetime bound into a query is read as UTC midnight --
+# which hid the current NZ day's rows from the "today"/"this week" dashboard widgets until
+# noon NZ. Boundaries are built tz-aware in this zone so SQLAlchemy binds timestamptz and
+# the comparison is correct. Matches system_findings_cache._LOCAL_TZ.
+_APP_TZ = ZoneInfo("Pacific/Auckland")
+
+
+def _local_midnight(day: date) -> datetime:
+    """Tz-aware start-of-day for ``day`` in the app's local zone (DST-correct: the offset
+    is resolved for that specific date)."""
+    return datetime.combine(day, datetime.min.time(), tzinfo=_APP_TZ)
+
+
+def _local_date_expr(col):
+    """SQL: the local calendar date of a timestamptz column, for day-bucket GROUP BYs.
+    ``date(col)`` alone truncates in the session TZ (UTC) and buckets rows near local
+    midnight into the wrong day."""
+    return func.date(func.timezone("Pacific/Auckland", col))
+
+
 def _dashboard_event_log_period(
     org_id: UUID, session, period_start: datetime, period_end: datetime, limit: int = 10
 ) -> dict[str, Any]:
@@ -4545,9 +4675,10 @@ def _dashboard_operations_summary(
 
 def _dashboard_week_boundaries(today: date) -> tuple[datetime, datetime, datetime]:
     week_start_date = today - timedelta(days=today.weekday())
-    week_start = datetime.combine(week_start_date, datetime.min.time())
-    next_week_start = week_start + timedelta(days=7)
-    prev_week_start = week_start - timedelta(days=7)
+    # each boundary built from its own date so a DST change inside the window can't skew it
+    week_start = _local_midnight(week_start_date)
+    next_week_start = _local_midnight(week_start_date + timedelta(days=7))
+    prev_week_start = _local_midnight(week_start_date - timedelta(days=7))
     return week_start, next_week_start, prev_week_start
 
 
@@ -4612,13 +4743,13 @@ def _dashboard_event_counts_by_day(
     org_id: UUID, session, start_dt: datetime, end_dt: datetime, actor_type: str | None = None
 ) -> dict[date, int]:
     q = (
-        session.query(func.date(EntityEvent.created_at).label("event_day"), func.count(EntityEvent.id).label("total"))
+        session.query(_local_date_expr(EntityEvent.created_at).label("event_day"), func.count(EntityEvent.id).label("total"))
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= start_dt, EntityEvent.created_at < end_dt)
     )
     if actor_type:
         q = q.filter(EntityEvent.actor_type == actor_type)
-    rows = q.group_by(func.date(EntityEvent.created_at)).all()
+    rows = q.group_by(_local_date_expr(EntityEvent.created_at)).all()
     out: dict[date, int] = {}
     for row in rows:
         day = _dashboard_parse_date_like(getattr(row, "event_day", None))
@@ -4634,7 +4765,7 @@ def _dashboard_execution_counts_by_day(
     if column == "completed":
         day_col = Execution.completed_at
         q = (
-            session.query(func.date(day_col).label("event_day"), func.count(Execution.id).label("total"))
+            session.query(_local_date_expr(day_col).label("event_day"), func.count(Execution.id).label("total"))
             .filter(Execution.org_id == org_id)
             .filter(Execution.status == ExecutionStatus.COMPLETED)
             .filter(day_col.isnot(None))
@@ -4643,12 +4774,12 @@ def _dashboard_execution_counts_by_day(
     else:
         day_col = Execution.started_at
         q = (
-            session.query(func.date(day_col).label("event_day"), func.count(Execution.id).label("total"))
+            session.query(_local_date_expr(day_col).label("event_day"), func.count(Execution.id).label("total"))
             .filter(Execution.org_id == org_id)
             .filter(day_col.isnot(None))
             .filter(day_col >= start_dt, day_col < end_dt)
         )
-    rows = q.group_by(func.date(day_col)).all()
+    rows = q.group_by(_local_date_expr(day_col)).all()
     out: dict[date, int] = {}
     for row in rows:
         day = _dashboard_parse_date_like(getattr(row, "event_day", None))
@@ -4830,13 +4961,19 @@ def get_dashboard_summary():
         return jsonify({"error": "window_days must be between 7 and 180"}), 400
 
     today = date.today()
-    now_dt = datetime.now()
-    day_start = datetime.combine(today, datetime.min.time())
-    next_day_start = day_start + timedelta(days=1)
+    now_dt = datetime.now(_APP_TZ)
+    day_start = _local_midnight(today)
+    next_day_start = _local_midnight(today + timedelta(days=1))
     week_start, next_week_start, _prev_week_start = _dashboard_week_boundaries(today)
 
-    runner = corechecks.CoreChecksRunner(org_id=org_id, session=db_session)
-    check_results = runner.run_all_checks()
+    # The DAG-heavy expired_materials check is served from the per-org system-findings
+    # cache (fresh until NZ midnight, invalidated on inventory/execution/process
+    # mutations, pre-warmed by the warm-system-findings job); the cheap checks run live.
+    # Same result set as CoreChecksRunner.run_all_checks() without the ~640ms DAG cost on
+    # every landing-page load.
+    from app.core.backend.system_findings_cache import get_check_results
+
+    check_results = get_check_results(org_id, db_session)
 
     from app.core.backend.system_status import build_system_status_payload
 
@@ -6172,10 +6309,11 @@ def sourcemap_trace():
         return jsonify({"error": "Item not found"}), 404
 
     try:
-        from app.core.backend.dagtraversal import trace_backward, trace_forward
+        from app.core.backend.dagtraversal import trace_bidirectional
 
-        result_fwd = trace_forward(org_id, db, root_id, include_quantity_filter=False, root_item_id=root_id)
-        result_bwd = trace_backward(org_id, db, root_id, include_quantity_filter=False, traced_item_id=root_id)
+        both = trace_bidirectional(org_id, db, root_id, include_quantity_filter=False, root_item_id=root_id)
+        result_fwd = both["forward"]
+        result_bwd = both["backward"]
 
         all_nodes = {n["id"]: n for n in (result_fwd["items"] + result_bwd["items"])}
         all_edges = {(e["from_id"], e["to_id"]): e for e in (result_fwd["connections"] + result_bwd["connections"])}

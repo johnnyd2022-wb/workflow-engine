@@ -71,6 +71,10 @@ window.CoreAPI = window.CoreAPI || {
             try {
                 data = await response.json();
             } catch (parseErr) {
+                // The response headers arrived but the body read was aborted by a
+                // navigation (SPA nav cancels in-flight fetches). Not an error worth
+                // logging -- surface it like any other abort.
+                if (parseErr && parseErr.name === 'AbortError') throw parseErr;
                 console.error(`API request failed: ${endpoint} - invalid JSON`, parseErr);
                 throw new Error(response.ok ? 'Invalid response from server.' : `Server error (${response.status}). Please try again.`);
             }
@@ -78,7 +82,10 @@ window.CoreAPI = window.CoreAPI || {
                 const msg = data.message || data.error || `HTTP error! status: ${response.status}`;
                 const details = data.details ? ` ${data.details}` : '';
                 const errList = Array.isArray(data.errors) && data.errors.length ? ` ${data.errors.join('; ')}` : '';
-                throw new Error(msg + details + errList);
+                const err = new Error(msg + details + errList);
+                err.status = response.status;
+                err.body = data;   // e.g. a 409 stale_write carries { current: <server state> }
+                throw err;
             }
             return data;
         } catch (error) {
@@ -101,6 +108,12 @@ window.CoreAPI = window.CoreAPI || {
         }
     },
     
+    // True when a write was rejected because someone else saved first (409 stale_write
+    // from an If-Match request). `err.body.current` holds the current server state.
+    isStaleWrite(err) {
+        return !!(err && err.status === 409 && err.body && err.body.error === 'stale_write');
+    },
+
     // Processes
     async getProcesses(includeSteps = false) {
         const query = includeSteps ? '?include_steps=true' : '';
@@ -118,10 +131,13 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
     
-    async updateProcess(processId, data) {
+    // `expectedUpdatedAt` (optional): the `updated_at` this client last read. When given,
+    // sends `If-Match`; the server replies 409 { current } if someone else saved since.
+    async updateProcess(processId, data, expectedUpdatedAt) {
         return this.request(`/processes/${processId}`, {
             method: 'PUT',
             body: data,
+            headers: expectedUpdatedAt ? { 'If-Match': expectedUpdatedAt } : undefined,
         });
     },
     
@@ -138,10 +154,11 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
     
-    async updateStep(processId, stepId, stepData) {
+    async updateStep(processId, stepId, stepData, expectedUpdatedAt) {
         return this.request(`/processes/${processId}/steps/${stepId}`, {
             method: 'PUT',
             body: stepData,
+            headers: expectedUpdatedAt ? { 'If-Match': expectedUpdatedAt } : undefined,
         });
     },
     
@@ -151,7 +168,9 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
 
-    async reorderSteps(processId, orders) {
+    // `expectedUpdatedAt` (optional): the newest step `updated_at` this client last read
+    // (max across the process's steps) -- the reorder's structural-version token.
+    async reorderSteps(processId, orders, expectedUpdatedAt) {
         // `orders` can be either an array of step ids (preferred) or an array of {id,...}.
         const stepIds = Array.isArray(orders)
             ? orders.map(o => (o && typeof o === 'object') ? (o.id || o.step_id) : o).filter(Boolean)
@@ -159,6 +178,7 @@ window.CoreAPI = window.CoreAPI || {
         return this.request(`/processes/${processId}/steps/reorder`, {
             method: 'POST',
             body: { step_ids: stepIds },
+            headers: expectedUpdatedAt ? { 'If-Match': expectedUpdatedAt } : undefined,
         });
     },
     
@@ -168,10 +188,13 @@ window.CoreAPI = window.CoreAPI || {
     },
     
     // Executions
-    async getExecutions(processId = null, status = null) {
+    async getExecutions(processId = null, status = null, options = {}) {
         const params = new URLSearchParams();
         if (processId) params.append('process_id', processId);
         if (status) params.append('status', status);
+        if (options.count) params.append('count', '1');           // -> { count }
+        if (options.limit != null) params.append('limit', String(options.limit));
+        if (options.cursor) params.append('cursor', options.cursor);
         const query = params.toString() ? `?${params.toString()}` : '';
         return this.request(`/executions${query}`);
     },
@@ -204,6 +227,10 @@ window.CoreAPI = window.CoreAPI || {
         const params = new URLSearchParams();
         if (type) params.append('type', type);
         if (processId) params.append('process_id', processId);
+        // view=compact drops per-item enrichment (system findings, producing-step
+        // hydration, audit history) -- ~20x smaller, for callers that only need the
+        // core item fields (e.g. the sourcemap browse grid).
+        if (options.compact) params.append('view', 'compact');
         const query = params.toString() ? `?${params.toString()}` : '';
         const signal = options.signal;
         return this.request(`/inventory${query}`, signal ? { signal } : {});
@@ -286,6 +313,31 @@ window.CoreAPI = window.CoreAPI || {
     /** Drop the system-findings settle-window cache (call after an action that changes findings). */
     invalidateSystemFindings() {
         this._systemFindingsCache = null;
+    },
+
+    // GET /auth/me, shared for a short window so the page-load user/name widgets (sidebar
+    // account info + flows2's getCurrentUser, at least) don't each fetch it. Identity is
+    // stable within a session; the window is short enough that a role/2FA change picked up
+    // on the next navigation. Callers needing a guaranteed-fresh read (audit fields, the
+    // 2FA status toggle) fetch /auth/me directly and are intentionally not routed here.
+    _meCache: null,
+    ME_TTL_MS: 30000,
+    async getMe(force) {
+        if (force) this._meCache = null;
+        const c = this._meCache;
+        if (c && (Date.now() - c.ts) < this.ME_TTL_MS) {
+            return c.promise;
+        }
+        const promise = fetch('/auth/me', { method: 'GET', credentials: 'include' }).then((r) => {
+            if (r.status === 401) return { _status: 401 };
+            if (!r.ok) throw new Error('auth/me ' + r.status);
+            return r.json();
+        });
+        this._meCache = { ts: Date.now(), promise };
+        promise.catch(() => {
+            if (this._meCache && this._meCache.promise === promise) this._meCache = null;
+        });
+        return promise;
     },
 
     /** @deprecated Use getExpiredMaterials() */
@@ -387,10 +439,12 @@ window.CoreAPI = window.CoreAPI || {
         return this.request('/hub/overview');
     },
 
-    // Dashboard aggregate summary
-    async getDashboardSummary(windowDays = 30) {
+    // Dashboard aggregate summary. Accepts an AbortSignal so the landing page can cancel
+    // the request cleanly when the user navigates away mid-load (a bare navigation-abort
+    // otherwise surfaces as a "Failed to fetch" error).
+    async getDashboardSummary(windowDays = 30, options = {}) {
         const days = Number(windowDays) || 30;
-        return this.request(`/dashboard/summary?window_days=${encodeURIComponent(days)}`);
+        return this.request(`/dashboard/summary?window_days=${encodeURIComponent(days)}`, options);
     },
 
     // Reset demo DB (test environment only)

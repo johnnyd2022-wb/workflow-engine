@@ -25,6 +25,7 @@ from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
 
 PASSWORD = DEFAULT_TEST_PASSWORD
 ENDPOINT = "/api/core/system-findings"
+DASHBOARD_ENDPOINT = "/api/core/dashboard/summary?window_days=30"
 
 
 @pytest.fixture
@@ -232,6 +233,93 @@ def test_cache_is_per_org(db, flask_app):
             db.query(SystemFindingsCache).filter_by(org_id=oid).delete(synchronize_session=False)
             db.query(Organisation).filter_by(id=oid).delete(synchronize_session=False)
         db.commit()
+
+
+def test_banner_payload_is_slimmed(db, authed):
+    """The /api/core/system-findings response feeds only the banner / badge /
+    Notifications page. `_banner_finding_data` drops the expired_materials DAG edge list
+    and the wide item objects (~400 KB on a real org) -- keep only the fields those three
+    consumers read."""
+
+    real = sfc._compute_expensive
+
+    # a check result carrying the full shape the DAG check produces
+    def fake_expensive(org_id, session):
+        return [
+            {
+                "check_id": "expired_materials",
+                "flagged": True,
+                "message": "1 expired raw material with stock",
+                "data": {
+                    "expired_raw_materials": [
+                        {"id": "r1", "name": "juniper", "expiry_date": "2025-01-01", "supplier": "ACME", "quantity": "3.0"}
+                    ],
+                    "impacted_items": [
+                        {"id": "w1", "name": "batch", "expired_raw_material_id": "r1", "extra_data": {"big": "x" * 500}}
+                    ],
+                    "connections": [{"from_id": "r1", "to_id": "w1", "execution_id": "e1"}] * 50,
+                },
+            }
+        ]
+
+    org, client = authed
+    import pytest as _pytest  # noqa
+
+    sfc._compute_expensive = fake_expensive
+    try:
+        body = client.get(ENDPOINT).get_json()
+    finally:
+        sfc._compute_expensive = real
+
+    finding = next(f for f in body["findings"] if f["check_id"] == "expired_materials")
+    data = finding["data"]
+    assert "connections" not in data, "the DAG edge list must be dropped"
+    assert set(data["expired_raw_materials"][0]) <= set(sfc._EXPIRED_RAW_KEEP)
+    assert "supplier" not in data["expired_raw_materials"][0] and "quantity" not in data["expired_raw_materials"][0]
+    assert set(data["impacted_items"][0]) <= set(sfc._IMPACTED_KEEP)
+    assert data["impacted_items"][0]["expired_raw_material_id"] == "r1"  # kept -- Notifications groups on it
+    assert "extra_data" not in data["impacted_items"][0]
+
+
+def test_get_check_results_is_the_full_merged_set(db, authed):
+    """get_check_results() returns the same check ids CoreChecksRunner.run_all_checks()
+    does -- the expensive slice from cache, the cheap ones live."""
+    from app.core.backend.corechecks import CoreChecksRunner
+
+    org, _client = authed
+    merged = sfc.get_check_results(org.id, db)
+    live_ref = CoreChecksRunner(org_id=org.id, session=db).run_all_checks()
+
+    assert {r.check_id for r in merged} == {r.check_id for r in live_ref}
+    assert "expired_materials" in {r.check_id for r in merged}
+
+
+def test_dashboard_summary_shares_the_cached_dag_slice(db, authed, monkeypatch):
+    """The landing-page /api/core/dashboard/summary no longer runs the expired_materials
+    DAG traversal on every load -- it reads the same per-org cached slice /core does, so a
+    burst of dashboard loads computes it once, and a mutation still forces a recompute."""
+    org, client = authed
+    calls = {"n": 0}
+    real = sfc._compute_expensive
+    monkeypatch.setattr(sfc, "_compute_expensive", lambda o, s: (calls.__setitem__("n", calls["n"] + 1) or real(o, s)))
+
+    first = client.get(DASHBOARD_ENDPOINT)
+    assert first.status_code == 200
+    # the dashboard shape, not the banner shape
+    assert {"compliance", "action_board", "audit_log", "operations"} <= set(first.get_json())
+    assert calls["n"] == 1
+
+    for _ in range(3):
+        assert client.get(DASHBOARD_ENDPOINT).status_code == 200
+    assert calls["n"] == 1, "dashboard summary recomputed the DAG slice despite a fresh cache"
+
+    from app.core.backend.event_writer import EventWriter
+
+    EventWriter(db, org.id).emit("inventory_item.updated", "inventory_item", uuid4(), {"x": 1})
+    db.commit()
+
+    assert client.get(DASHBOARD_ENDPOINT).status_code == 200
+    assert calls["n"] == 2, "an inventory mutation did not invalidate the slice for the dashboard"
 
 
 def test_prewarm_populates_a_fresh_row_without_a_request(db, authed):

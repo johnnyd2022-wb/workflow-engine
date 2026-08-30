@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import Column, ForeignKey, String
+from sqlalchemy import BigInteger, Column, ForeignKey, Identity, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -22,6 +22,11 @@ class EntityEvent(TenantScoped, Base):
     __tablename__ = "entity_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # Monotonic per-insert cursor for the /api/core/changes feed. The UUID PK is not
+    # ordered and created_at is not unique, so neither gives a total order. Postgres
+    # assigns this from a sequence; the ORM never sets it.
+    seq = Column(BigInteger, Identity(always=False), nullable=False)
 
     event_type = Column(String(100), nullable=False)
     entity_type = Column(String(100), nullable=False)

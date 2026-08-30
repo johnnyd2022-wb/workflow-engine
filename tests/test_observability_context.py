@@ -54,53 +54,73 @@ def test_feature_mapping_for_blueprints_and_platform_routes():
         assert client.get("/feature").get_json()["feature"] == "platform"
 
 
-def _build_nested_dilution_calculator_app():
-    """Mirrors the real nesting in
-    app/features/dilution_calculator/dilution_calculator_bp.py:
-    create_dilution_calculator_blueprint() registers api_bp/page_bp as
-    sub-blueprints of a parent "dilution_calculator" blueprint. Flask's
-    request.blueprint returns the full dotted parent.child path for a route
-    reached through a nested blueprint, not just the child's own name — this
-    reproduces that shape instead of the flat single-blueprint shape the other
-    test in this file uses (which would pass even if the dotted-path mapping
-    were missing).
+def _build_nested_compliant_app():
+    """Mirrors the real nesting in app/features/compliant/compliant_bp.py:
+    create_compliant_blueprint() registers compliant_api/compliant_pages/
+    compliant_tools as sub-blueprints of a parent "compliant" blueprint, so
+    request.blueprint for a real request is the dotted "compliant.compliant_api"
+    / "...compliant_pages" / "...compliant_tools" (or bare "compliant" for the
+    parent's own /compliant/static route). The relocated dilution calculator now
+    lives under compliant_tools, so it must attribute to feature "compliant".
     """
     from flask import Flask
 
     app = Flask(__name__)
 
-    api_bp = Blueprint("dilution_calculator_api", __name__)
-    page_bp = Blueprint("dilution_calculator_pages", __name__)
+    api_bp = Blueprint("compliant_api", __name__)
+    page_bp = Blueprint("compliant_pages", __name__)
+    tools_bp = Blueprint("compliant_tools", __name__)
 
-    @api_bp.route("/api/dilution-calculator/solve", methods=["POST"])
-    def solve():
+    @api_bp.route("/api/compliant/overview", methods=["GET"])
+    def overview():
         return jsonify({"feature": feature_for_request()})
 
-    @page_bp.route("/dilution-calculator", methods=["GET"])
-    def index():
+    @page_bp.route("/compliant", methods=["GET"])
+    def dashboard():
         return jsonify({"feature": feature_for_request()})
 
-    parent_bp = Blueprint("dilution_calculator", __name__)
+    @tools_bp.route("/compliant/tools", methods=["GET"])
+    def tools_page():
+        return jsonify({"feature": feature_for_request()})
+
+    @tools_bp.route("/api/compliant/tools/<key>/solve", methods=["POST"])
+    def tools_solve(key):
+        return jsonify({"feature": feature_for_request()})
+
+    parent_bp = Blueprint("compliant", __name__)
     parent_bp.register_blueprint(api_bp)
     parent_bp.register_blueprint(page_bp)
+    parent_bp.register_blueprint(tools_bp)
     app.register_blueprint(parent_bp)
 
     return app
 
 
-def test_feature_mapping_for_nested_dilution_calculator_blueprints():
-    """Regression test: without the dotted-path entries in BLUEPRINT_FEATURE,
-    both routes below resolve request.blueprint to
-    "dilution_calculator.dilution_calculator_api" /
-    "...dilution_calculator_pages", which isn't in the map, so they'd silently
-    fall through to "platform" instead of "dilution_calculator" — breaking
-    feature-scoped triage/dashboards for this feature.
+def test_feature_mapping_for_nested_compliant_blueprints():
+    """Regression test: without the dotted-path entries in BLUEPRINT_FEATURE the
+    nested compliant routes resolve request.blueprint to
+    "compliant.compliant_api" / "...compliant_tools", which would fall through to
+    "platform" instead of "compliant" — breaking feature-scoped triage for the
+    whole Compliant product area, including the relocated dilution calculator.
     """
-    app = _build_nested_dilution_calculator_app()
+    app = _build_nested_compliant_app()
 
     with app.test_client() as client:
-        assert client.post("/api/dilution-calculator/solve").get_json()["feature"] == "dilution_calculator"
-        assert client.get("/dilution-calculator").get_json()["feature"] == "dilution_calculator"
+        assert client.get("/api/compliant/overview").get_json()["feature"] == "compliant"
+        assert client.get("/compliant").get_json()["feature"] == "compliant"
+        assert client.get("/compliant/tools").get_json()["feature"] == "compliant"
+        assert client.post("/api/compliant/tools/dilution/solve").get_json()["feature"] == "compliant"
+
+
+def test_dilution_calculator_feature_mappings_are_gone():
+    """The standalone dilution_calculator blueprint was removed — its dotted-path
+    BLUEPRINT_FEATURE entries must not linger (a map key for a nonexistent blueprint is
+    dead config that hides a real mapping bug)."""
+    from app.observability.context import BLUEPRINT_FEATURE
+
+    assert not any("dilution_calculator" in k for k in BLUEPRINT_FEATURE)
+    assert BLUEPRINT_FEATURE.get("compliant") == "compliant"
+    assert BLUEPRINT_FEATURE.get("compliant.compliant_pages") == "compliant"
 
 
 def _build_nested_crm_app():

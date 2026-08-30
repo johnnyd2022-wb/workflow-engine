@@ -13,7 +13,6 @@
   let _smAllActivity = [];
   let _smActivityEntityType = ''; // '' = all, or 'inventory_item' | 'process' | 'execution'
   let _smActivityOperator = '';   // '' = all operators
-  let allExecutionMetadata = [];
   let allOutOfStockRawMaterials = [];
   let checkNeededData = { expired_raw_materials: [], impacted_items: [], connections: [], untracked_items: [] };
   let findingsData = { expired: [], untracked: [], expiry: [], ready: [] };
@@ -40,40 +39,68 @@
     smInitSearch();
     smBindModal();
     smLoadAllData();
+    smSubscribeLive();
+  }
+
+  /* ── Live sync ─────────────────────────────────────────────
+     A colleague's mutation (batch run, item added/consumed/disposed) changes what the
+     browse grid and Findings show. Refetch and re-render in place. If a trace is open,
+     only refresh Findings + the search pool -- never yank the trace view away. */
+  let _smLiveTimer = null;
+  function smSubscribeLive() {
+    if (!window.LiveSync) return;
+    window.LiveSync.subscribe({
+      key: 'sourcemap',
+      match: function (evt) {
+        const t = evt.entity_type;
+        return t === 'inventory_item' || t === 'process' || t === 'execution' || t === 'execution_step';
+      },
+      onChange: function () {
+        if (_smLiveTimer) return;
+        _smLiveTimer = setTimeout(smLiveRefresh, 500);
+      },
+    });
+  }
+
+  async function smLiveRefresh() {
+    _smLiveTimer = null;
+    try {
+      const [invData, oosData] = await Promise.all([
+        CoreAPI.getInventory(null, null, { compact: true }).catch(() => null),
+        CoreAPI.getOutOfStockRawMaterials().catch(() => null),
+      ]);
+      if (invData) allInventory = invData.inventory_items || [];
+      if (oosData) allOutOfStockRawMaterials = oosData.inventory_items || [];
+      smUpdateSearchPool();
+
+      if (!tracedItemId && !showWastage) {
+        _smSecondaryLoaded = false;
+        smLoadSecondaryData();     // processes / executions / activity, for the Activity tab
+        smRenderBrowseGrid();
+      }
+      smLoadFindings();
+      if (typeof window.liveSyncFlash === 'function') window.liveSyncFlash('Updated just now');
+    } catch (e) {
+      /* non-fatal: the page keeps its current data */
+    }
   }
 
   /* ── Data loading ──────────────────────────────────────── */
   async function smLoadAllData() {
     smShowAreaLoading();
     try {
-      const [
-        processesData,
-        inventoryData,
-        executionsData,
-        metadataData,
-        outOfStockData,
-        expiredResult,
-        untrackedResult,
-        activityData,
-      ] = await Promise.all([
-        CoreAPI.getProcesses(true).catch(() => ({ processes: [] })),
-        CoreAPI.getInventory().catch(() => ({ inventory_items: [] })),
-        CoreAPI.getExecutions().catch(() => ({ executions: [] })),
-        CoreAPI.getExecutionMetadata().catch(() => ({ metadata: [] })),
+      // First paint only needs the inventory dataset the browse grid groups over
+      // (by name / supplier batch / supplier). Everything else is for interactions
+      // that come later -- trace views (processes + executions), the Findings section
+      // (DAG-backed checks), the Activity tab (event feed) -- so it loads off the
+      // critical path below.
+      const [inventoryData, outOfStockData] = await Promise.all([
+        CoreAPI.getInventory(null, null, { compact: true }).catch(() => ({ inventory_items: [] })),
         CoreAPI.getOutOfStockRawMaterials().catch(() => ({ inventory_items: [] })),
-        CoreAPI.getExpiredMaterials().catch(() => ({ expired_raw_materials: [], impacted_items: [], connections: [] })),
-        CoreAPI.getUntrackedItems().catch(() => ({ untracked_items: [], connections: [] })),
-        fetch('/api/core/entities/activity?limit=200', { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ events: [] })),
       ]);
 
-      allProcesses = processesData.processes || [];
       allInventory = inventoryData.inventory_items || [];
-      allExecutions = (executionsData.executions || []).filter(e => e && e.id);
-      allExecutionMetadata = metadataData.metadata || [];
       allOutOfStockRawMaterials = outOfStockData.inventory_items || [];
-      checkNeededData = expiredResult || { expired_raw_materials: [], impacted_items: [], connections: [] };
-      checkNeededData.untracked_items = (untrackedResult && untrackedResult.untracked_items) ? untrackedResult.untracked_items : [];
-      _smAllActivity = activityData.events || [];
 
       smUpdateSearchPool();
       const params = new URLSearchParams(window.location.search);
@@ -82,6 +109,8 @@
         currentBrowseTab = tabParam;
       }
       smRenderBrowseGrid();
+
+      smLoadSecondaryData();
       smLoadFindings();
 
       if (params.get('show') === 'check-needed') smSwitchFindingsTab('expired');
@@ -89,6 +118,29 @@
       console.error('[sourcemap] load failed', err);
       const area = document.getElementById('sm-trace-area');
       if (area) area.innerHTML = smEmptyState('Failed to load data. Please refresh the page.');
+    }
+  }
+
+  let _smSecondaryLoaded = false;
+
+  /** Processes + executions + activity feed: needed for trace views and the Activity
+   *  tab, not for first paint. Fetched once, after the browse grid has rendered. */
+  async function smLoadSecondaryData() {
+    if (_smSecondaryLoaded) return;
+    _smSecondaryLoaded = true;
+    const [processesData, executionsData, activityData] = await Promise.all([
+      CoreAPI.getProcesses(true).catch(() => ({ processes: [] })),
+      CoreAPI.getExecutions().catch(() => ({ executions: [] })),
+      fetch('/api/core/entities/activity?limit=200', { credentials: 'same-origin' })
+        .then(r => r.json()).catch(() => ({ events: [] })),
+    ]);
+    allProcesses = processesData.processes || [];
+    allExecutions = (executionsData.executions || []).filter(e => e && e.id);
+    _smAllActivity = activityData.events || [];
+    // the Activity tab may have rendered empty before this landed
+    if (currentBrowseTab === 'activity') {
+      const grid = document.querySelector('.sm-browse-grid');
+      if (grid) smRefreshBrowseCards(grid);
     }
   }
 
@@ -1589,6 +1641,20 @@
       findingsData.untracked = untrackedRes.untracked_items || [];
       findingsData.expiry = expiryRes.output_expiry_items || [];
       findingsData.ready = readyRes.output_ready_date_items || readyRes.ready_date_items || [];
+
+      // The browse-grid "check needed" badge (smIsCheckNeeded / smCheckReason) reads
+      // checkNeededData; this is now the only place the expired/untracked sets are
+      // fetched, so keep it in sync and repaint the grid so the badges appear.
+      checkNeededData = {
+        expired_raw_materials: expiredRes.expired_raw_materials || [],
+        impacted_items: expiredRes.impacted_items || [],
+        connections: expiredRes.connections || [],
+        untracked_items: untrackedRes.untracked_items || [],
+      };
+      if (!tracedItemId && !showWastage) {
+        const grid = document.querySelector('.sm-browse-grid');
+        if (grid) smRefreshBrowseCards(grid);
+      }
     } catch (err) {
       console.error('[sourcemap] findings load failed', err);
     }

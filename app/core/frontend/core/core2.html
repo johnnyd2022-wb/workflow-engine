@@ -572,7 +572,18 @@
       document.body.classList.add('core2-sheet-open');
     }
 
+    let _core2EscBound = false;
     function initCore2HealthSheet() {
+      // document-level Escape handler: bind once for the life of the tab, not per
+      // overlay node -- a boosted return to /core swaps in a fresh overlay and would
+      // otherwise stack another listener each time.
+      if (!_core2EscBound) {
+        document.addEventListener('keydown', function(event) {
+          if (event.key === 'Escape') closeCore2HealthSheet();
+        });
+        _core2EscBound = true;
+      }
+
       const overlay = document.getElementById('core2-health-sheet-overlay');
       if (!overlay || overlay.dataset.boundCore2HealthSheet) return;
 
@@ -582,10 +593,6 @@
 
       overlay.querySelectorAll('[data-core2-health-close]').forEach((el) => {
         el.addEventListener('click', closeCore2HealthSheet);
-      });
-
-      document.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape') closeCore2HealthSheet();
       });
 
       overlay.dataset.boundCore2HealthSheet = '1';
@@ -662,20 +669,24 @@
     // Initialize account info component and Reset DB button (test env only)
     function initCore2Page() {
       closeCore2HealthSheet();
+      // clear any body state a modal/sheet left set before a navigation away
+      document.body.classList.remove('core2-sheet-open', 'core2-active-detail-open');
+      document.body.style.overflow = '';
       initCore2MainTabs();
       initCore2HealthSheet();
       if (window.initAccountInfo) {
         window.initAccountInfo('account-info-container');
       }
       const btnResetDb = document.getElementById('btn-reset-db');
-      if (btnResetDb) {
+      if (btnResetDb && !btnResetDb.dataset.boundCore2ResetDb) {
         btnResetDb.addEventListener('click', function() {
           const modal = document.getElementById('reset-db-modal');
           if (modal) modal.style.display = 'flex';
         });
+        btnResetDb.dataset.boundCore2ResetDb = '1';
       }
     }
-    
+
     window.closeResetDbModal = function() {
       const modal = document.getElementById('reset-db-modal');
       if (modal) modal.style.display = 'none';
@@ -2523,6 +2534,33 @@
       var tab = core2CurrentMainTab();
       if (tab === 'inventory') loadCore2InventoryTab();
       else if (tab === 'workflows') loadCore2WorkflowsTab();
+      core2SubscribeLive();
+    }
+
+    // Live: when a colleague (or another tab) changes a process / batch / inventory item,
+    // rebuild the hub the same way a boosted return does. The local user's own mutations
+    // still refresh instantly via base_spa's htmx:afterOnLoad hook -- this only covers the
+    // changes that never produce an HTMX request in *this* browser. Debounced so a
+    // multi-row batch completion is one refetch; key-scoped so the afterSettle re-init
+    // replaces it cleanly rather than stacking.
+    var _core2LiveTimer = null;
+    function core2SubscribeLive() {
+      if (!window.LiveSync) return;
+      window.LiveSync.subscribe({
+        key: 'core2-hub',
+        match: function (evt) {
+          var t = evt.entity_type;
+          return t === 'process' || t === 'execution' || t === 'execution_step' || t === 'step' || t === 'inventory_item';
+        },
+        onChange: function () {
+          if (_core2LiveTimer) return;
+          _core2LiveTimer = setTimeout(function () {
+            _core2LiveTimer = null;
+            loadCoreHubDashboardData();
+            if (typeof window.liveSyncFlash === 'function') window.liveSyncFlash('Updated just now');
+          }, 400);
+        },
+      });
     }
 
     if (document.readyState === 'loading') {
@@ -2696,18 +2734,21 @@
     }
 
     // Attach the Create Process Form Handler Once + help tooltips
-    document.addEventListener('DOMContentLoaded', () => {
+    let _core2HelpDocClickBound = false;
+    function initCore2CreateProcessForm() {
       const form = document.querySelector('#create-process-modal form') || document.getElementById('create-process-guided-form');
-      if (form) {
+      if (form && !form.dataset.boundCore2CreateProcess) {
         form.addEventListener('submit', function (e) {
           e.preventDefault();
           e.stopPropagation();
           window.createNewProcess(this);
           return false;
         });
+        form.dataset.boundCore2CreateProcess = '1';
       }
       // Help icon click/hover for guided create process modal
       document.querySelectorAll('.help-trigger').forEach(btn => {
+        if (btn.dataset.boundCore2Help) return;
         const tooltip = btn.parentElement && btn.parentElement.querySelector('.help-tooltip');
         if (!tooltip) return;
         btn.addEventListener('click', function (e) {
@@ -2717,12 +2758,16 @@
         });
         btn.addEventListener('mouseenter', function () { tooltip.classList.add('visible'); });
         btn.addEventListener('mouseleave', function () { tooltip.classList.remove('visible'); });
+        btn.dataset.boundCore2Help = '1';
       });
-      document.addEventListener('click', function (e) {
-        if (!e.target.closest('.help-wrapper')) {
-          document.querySelectorAll('.help-tooltip.visible').forEach(t => t.classList.remove('visible'));
-        }
-      });
+      if (!_core2HelpDocClickBound) {
+        document.addEventListener('click', function (e) {
+          if (!e.target.closest('.help-wrapper')) {
+            document.querySelectorAll('.help-tooltip.visible').forEach(t => t.classList.remove('visible'));
+          }
+        });
+        _core2HelpDocClickBound = true;
+      }
 
       // Dispose moved to dedicated page; keep this helper for expired-item callsites.
       window.openRecordWastageModalForExpired = function(itemIds) {
@@ -2730,7 +2775,12 @@
         const query = ids.length ? ('?item_ids=' + encodeURIComponent(ids.join(','))) : '';
         window.location.href = '/core/inventory/dispose' + query;
       };
-    });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCore2CreateProcessForm);
+    } else {
+      initCore2CreateProcessForm();
+    }
     
     // Create process handler
     window.createNewProcess = function (form) {
@@ -3042,6 +3092,22 @@
     // ============================================================
     // openExecutionModal and submitExecution are now loaded from js/execution-modal.js
     // Configuration is set above in ExecutionModalConfig
+
+    // This whole block lives in the template's scripts block, which base_spa renders
+    // OUTSIDE #page-content -- so an hx-boost navigation back to /core swaps in fresh
+    // markup that these DOMContentLoaded/immediate bootstraps never touch again: tab buttons,
+    // the health sheet and the create-process form end up with no handlers (the page
+    // looks fine but every click is dead until a full refresh), and the Overview shows
+    // stale/zero metrics. Re-run the bootstraps on settle. Each init is idempotent
+    // (per-node dataset guards / module-level flags), so repeated calls are safe.
+    document.body.addEventListener('htmx:afterSettle', function (evt) {
+      var tgt = evt && evt.detail && evt.detail.target;
+      if (!tgt || tgt.id !== 'page-content') return;
+      if (!document.getElementById('core2-hub-title')) return;  // not the /core hub
+      initCore2Page();
+      initCore2CreateProcessForm();
+      initCore2HubLoad();
+    });
   </script>
   
   <!-- Create Process Modal - Guided flow (like flows2) -->

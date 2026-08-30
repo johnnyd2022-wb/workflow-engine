@@ -76,6 +76,10 @@ rules:
           @app.route("/healthcheck")
           def $FUNC(...):
             ...
+      - pattern-not: |
+          @app.route("/favicon.ico")
+          def $FUNC(...):
+            ...
 
   # ── SQL INJECTION ────────────────────────────────────────────────────────────
 

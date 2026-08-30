@@ -124,9 +124,13 @@ def get_system_findings_by_item(org_id: UUID, session: Session) -> dict[str, lis
     New checks: add an extractor below for the check's result.data shape; no change to check implementations.
     """
     from app.core.backend.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
+    from app.core.backend.system_findings_cache import get_check_results
 
-    runner = CoreChecksRunner(org_id=org_id, session=session)
-    results = runner.run_all_checks()
+    # Same read-through cache the /core banner and dashboard use: the DAG-heavy
+    # expired_materials slice (incl. its impacted_items list, which this enrichment needs)
+    # comes from the per-org row; the cheap checks run live. Keeps /api/core/inventory off
+    # the per-expired-material DAG traversal on the warm path.
+    results = get_check_results(org_id, session)
     out: dict[str, list[dict[str, Any]]] = {}
 
     def add(item_id: str, check_id: str, reason: str) -> None:
@@ -184,12 +188,19 @@ def register_routes(bp):
     def list_expired_materials():
         """List expired raw materials and products made with expired ingredients.
 
-        Uses CoreChecksRunner (expired_materials check) which delegates to DAG traversal
-        for impacted items. Returns same shape for sourcemap and flows2.
+        The expired_materials check runs a DAG traversal per expired-with-stock raw
+        material (~700ms / hundreds of queries on a real org). This endpoint feeds the
+        sourcemap Findings tab and flows2 on page load, so it reads the slice from the
+        shared per-org system-findings cache (fresh until NZ midnight, invalidated on
+        inventory/execution/process mutations) rather than recomputing every request.
         """
+        from app.core.backend.system_findings_cache import get_check_results
+
         org_id = UUID(g.org_id)
-        runner = CoreChecksRunner(org_id=org_id, session=db_session())
-        result = runner.run_check("expired_materials")
+        result = next(
+            (r for r in get_check_results(org_id, db_session()) if r.check_id == "expired_materials"),
+            None,
+        )
         if result is None or result.data is None:
             return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
         return jsonify(result.data), 200

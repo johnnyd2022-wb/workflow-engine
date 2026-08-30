@@ -170,16 +170,66 @@ def _cached_expensive(org_id: UUID, session) -> list[dict]:
     return results
 
 
+def get_check_results(org_id: UUID, session) -> list:
+    """The merged check-result list: the DAG-heavy checks from the per-org cache, the
+    cheap checks recomputed live. Same set `CoreChecksRunner.run_all_checks()` returns,
+    but the expensive slice is read-through cached. Returns `[CheckResult]`.
+
+    Consumers that want findings + system_status should call `get_or_compute`; consumers
+    that need the raw results (the dashboard summary) call this."""
+    cached_results = [_dict_to_result(d) for d in _cached_expensive(org_id, session)]
+    live_results = _run_live(org_id, session)
+    return cached_results + live_results
+
+
+# Fields the /core banner, the sidebar badge and the Notifications page read off an
+# `expired_materials` finding. Everything else on those item objects (supplier, quantity,
+# unit, source_execution_id, extra_data, ...) and the whole `connections` edge list is
+# dropped -- that DAG tree is ~400 KB on a real org and none of the three consumers touch
+# it. The full shape is still served by /api/core/inventory/expired-materials (sourcemap).
+_EXPIRED_RAW_KEEP = (
+    "id",
+    "name",
+    "expiry_date",
+    "created_at",
+    "purchase_date",
+    "notification_triggered_at",
+    "triggered_at",
+    "detected_at",
+    "evaluated_at",
+    "metadata",
+)
+_IMPACTED_KEEP = ("id", "name", "expired_raw_material_id")
+
+
+def _banner_finding_data(check_id: str, data):
+    """Trim an `expired_materials` finding's `data` to the fields the banner / badge /
+    Notifications page actually read. Other checks are small and pass through unchanged."""
+    if check_id != "expired_materials" or not isinstance(data, dict):
+        return data
+
+    def _slim(rows, keys):
+        return [{k: row.get(k) for k in keys if k in row} for row in (rows or []) if isinstance(row, dict)]
+
+    expired = _slim(data.get("expired_raw_materials"), _EXPIRED_RAW_KEEP)
+    impacted = _slim(data.get("impacted_items"), _IMPACTED_KEEP)
+    return {
+        "expired_raw_materials": expired,
+        "impacted_items": impacted,
+        "expired_count": len(expired),
+        "impacted_count": len(impacted),
+    }
+
+
 def get_or_compute(org_id: UUID, session) -> dict:
-    """The full `{findings, system_status}` payload: the DAG-heavy checks from the per-org
-    cache, the cheap checks recomputed live, merged."""
+    """The `{findings, system_status}` payload for the /core banner: DAG-heavy checks from
+    the per-org cache, cheap checks recomputed live, merged, with each finding's `data`
+    trimmed to what the banner renders."""
     from flask import json as flask_json
 
     from app.core.backend.system_status import build_system_status_payload
 
-    cached_results = [_dict_to_result(d) for d in _cached_expensive(org_id, session)]
-    live_results = _run_live(org_id, session)
-    results = cached_results + live_results
+    results = get_check_results(org_id, session)
 
     findings = []
     for r in results:
@@ -187,7 +237,7 @@ def get_or_compute(org_id: UUID, session) -> dict:
             continue
         finding = {"text": r.message, "check_id": r.check_id}
         if r.data is not None:
-            finding["data"] = r.data
+            finding["data"] = _banner_finding_data(r.check_id, r.data)
         findings.append(finding)
 
     system_status = build_system_status_payload(org_id, session, results)

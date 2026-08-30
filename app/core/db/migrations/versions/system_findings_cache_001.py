@@ -1,9 +1,14 @@
 """Per-org cache of the /api/core/system-findings payload.
 
 Revision ID: system_findings_cache_001
-Revises: core_hub_perf_indexes_001
+Revises: org_time_indexes_001
 
 New table, no change to existing data. Reversible (downgrade drops the table).
+
+Originally branched off core_hub_perf_indexes_001 alongside org_time_indexes_001 (both
+merged to main independently, leaving two alembic heads). Re-parented onto
+org_time_indexes_001 on 2026-08-29 to linearise the chain -- neither migration touches
+the other's objects, so ordering is free.
 """
 
 from collections.abc import Sequence
@@ -13,7 +18,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "system_findings_cache_001"
-down_revision: str | None = "core_hub_perf_indexes_001"
+down_revision: str | None = "org_time_indexes_001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | None = None
 

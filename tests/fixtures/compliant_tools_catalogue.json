@@ -1,0 +1,383 @@
+{
+  "calculators": [
+    {
+      "key": "dilution",
+      "title": "Dilution / proofing down",
+      "category": "general",
+      "sources": [
+        "Dilution calculator spec (.agents/specs/dilution_calculator.md), Calculation model"
+      ],
+      "solve": {
+        "field": "solve_for",
+        "enum": [
+          "starting_abv",
+          "starting_volume_ml",
+          "final_abv",
+          "final_volume_ml"
+        ],
+        "default": "final_volume_ml"
+      },
+      "inputs": {
+        "starting_abv": {
+          "type": "number",
+          "unit": "%",
+          "required": false
+        },
+        "starting_volume_ml": {
+          "type": "number",
+          "unit": "mL",
+          "required": false
+        },
+        "final_abv": {
+          "type": "number",
+          "unit": "%",
+          "required": false
+        },
+        "final_volume_ml": {
+          "type": "number",
+          "unit": "mL",
+          "required": false
+        }
+      }
+    },
+    {
+      "key": "lal",
+      "title": "Litres of absolute alcohol (LAL)",
+      "category": "general",
+      "sources": [
+        "NZ Customs — litres-of-alcohol basis for excise duty"
+      ],
+      "solve": {
+        "one_omitted_of": [
+          "volume_l",
+          "abv_pct",
+          "lal"
+        ]
+      },
+      "inputs": {
+        "volume_l": {
+          "type": "number",
+          "unit": "L",
+          "required": false,
+          "exclusive_min": 0,
+          "help": "Batch volume"
+        },
+        "abv_pct": {
+          "type": "number",
+          "unit": "%",
+          "required": false,
+          "min": 0,
+          "max": 100
+        },
+        "lal": {
+          "type": "number",
+          "unit": "L alcohol",
+          "required": false,
+          "min": 0
+        }
+      }
+    },
+    {
+      "key": "standard_drinks",
+      "title": "Standard drinks",
+      "category": "general",
+      "sources": [
+        "FSANZ Standard 2.7.1",
+        "Health New Zealand — standard drink = 10 g ethanol"
+      ],
+      "solve": {
+        "field": "solve_for",
+        "enum": [
+          "standard_drinks",
+          "volume_ml"
+        ],
+        "default": "standard_drinks"
+      },
+      "inputs": {
+        "volume_ml": {
+          "type": "number",
+          "unit": "mL",
+          "required": false,
+          "exclusive_min": 0
+        },
+        "abv_pct": {
+          "type": "number",
+          "unit": "%",
+          "required": true,
+          "min": 0,
+          "max": 100
+        },
+        "standard_drinks": {
+          "type": "number",
+          "unit": "drinks",
+          "required": false,
+          "min": 0
+        }
+      }
+    },
+    {
+      "key": "abv_abw",
+      "title": "ABV ↔ ABW",
+      "category": "general",
+      "sources": [
+        "Standard alcoholometry (mass/volume fraction; OIML R22 density basis)"
+      ],
+      "solve": {
+        "field": "solve_for",
+        "enum": [
+          "abw_pct",
+          "abv_pct"
+        ],
+        "default": "abw_pct"
+      },
+      "inputs": {
+        "abv_pct": {
+          "type": "number",
+          "unit": "%",
+          "required": false,
+          "min": 0,
+          "max": 100
+        },
+        "abw_pct": {
+          "type": "number",
+          "unit": "%",
+          "required": false,
+          "min": 0,
+          "max": 100
+        },
+        "solution_sg": {
+          "type": "number",
+          "unit": "SG",
+          "required": true,
+          "exclusive_min": 0.7,
+          "exclusive_max": 1.1
+        }
+      }
+    },
+    {
+      "key": "gravity_convert",
+      "title": "Gravity unit converter",
+      "category": "beer",
+      "sources": [
+        "ASBC Methods of Analysis (SG↔°Plato cubic)",
+        "Standard hydrometry (Baumé, modulus 145)"
+      ],
+      "solve": {
+        "one_provided_of": [
+          "sg",
+          "plato",
+          "brix",
+          "baume"
+        ]
+      },
+      "inputs": {
+        "sg": {
+          "type": "number",
+          "unit": "SG",
+          "required": false,
+          "min": 1.0,
+          "max": 1.15,
+          "help": "Provide exactly one unit"
+        },
+        "plato": {
+          "type": "number",
+          "unit": "°P",
+          "required": false,
+          "min": 0,
+          "max": 33,
+          "help": "Provide exactly one unit"
+        },
+        "brix": {
+          "type": "number",
+          "unit": "°Bx",
+          "required": false,
+          "min": 0,
+          "max": 33,
+          "help": "Provide exactly one unit"
+        },
+        "baume": {
+          "type": "number",
+          "unit": "°Bé",
+          "required": false,
+          "min": 0,
+          "max": 18,
+          "help": "Provide exactly one unit"
+        }
+      }
+    },
+    {
+      "key": "abv_from_og_fg",
+      "title": "ABV from OG & FG",
+      "category": "beer",
+      "sources": [
+        "Standard craft-brewing reference (Palmer, \"How to Brew\") — the ×131.25 approximation"
+      ],
+      "solve": null,
+      "inputs": {
+        "og_sg": {
+          "type": "number",
+          "unit": "SG",
+          "required": true,
+          "exclusive_min": 1.0,
+          "max": 1.2
+        },
+        "fg_sg": {
+          "type": "number",
+          "unit": "SG",
+          "required": true,
+          "min": 0.98,
+          "max": 1.1
+        }
+      }
+    },
+    {
+      "key": "tank_volume",
+      "title": "Tank volume",
+      "category": "vessel",
+      "sources": [
+        "Solid geometry (cylinder + right circular cone)"
+      ],
+      "solve": null,
+      "inputs": {
+        "diameter_m": {
+          "type": "number",
+          "unit": "m",
+          "required": true,
+          "exclusive_min": 0
+        },
+        "cyl_height_m": {
+          "type": "number",
+          "unit": "m",
+          "required": true,
+          "exclusive_min": 0
+        },
+        "cone_height_m": {
+          "type": "number",
+          "unit": "m",
+          "required": false,
+          "default": 0,
+          "min": 0
+        },
+        "fill_height_m": {
+          "type": "number",
+          "unit": "m",
+          "required": true,
+          "min": 0
+        }
+      }
+    },
+    {
+      "key": "yield_loss",
+      "title": "Production yield & loss",
+      "category": "vessel",
+      "sources": [
+        "Arithmetic (sequential proportional / absolute loss)"
+      ],
+      "solve": null,
+      "inputs": {
+        "start_volume_l": {
+          "type": "number",
+          "unit": "L",
+          "required": true,
+          "exclusive_min": 0
+        },
+        "steps": {
+          "type": "array",
+          "required": true,
+          "min_items": 1,
+          "max_items": 50,
+          "item_fields": {
+            "name": {
+              "type": "text",
+              "unit": null,
+              "required": true
+            },
+            "loss_pct": {
+              "type": "number",
+              "unit": "%",
+              "required": false,
+              "min": 0,
+              "exclusive_max": 100
+            },
+            "loss_l": {
+              "type": "number",
+              "unit": "L",
+              "required": false,
+              "min": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "key": "yeast_pitch",
+      "title": "Yeast pitch rate",
+      "category": "beer",
+      "sources": [
+        "White & Zainasheff, \"Yeast\" (pitching-rate model)"
+      ],
+      "solve": null,
+      "inputs": {
+        "volume_l": {
+          "type": "number",
+          "unit": "L",
+          "required": true,
+          "exclusive_min": 0
+        },
+        "gravity_plato": {
+          "type": "number",
+          "unit": "°P",
+          "required": true,
+          "exclusive_min": 0,
+          "max": 40
+        },
+        "pitch_rate_m_per_ml_per_p": {
+          "type": "number",
+          "unit": "M/mL/°P",
+          "required": true,
+          "exclusive_min": 0,
+          "max": 5,
+          "help": "≈0.75 ale, ≈1.5 lager"
+        },
+        "pack_billion": {
+          "type": "number",
+          "unit": "B cells",
+          "required": false,
+          "default": 100,
+          "exclusive_min": 0
+        }
+      }
+    },
+    {
+      "key": "keg_fill",
+      "title": "Keg fill",
+      "category": "vessel",
+      "sources": [
+        "Arithmetic (integer packaging with proportional fill loss)"
+      ],
+      "solve": null,
+      "inputs": {
+        "available_l": {
+          "type": "number",
+          "unit": "L",
+          "required": true,
+          "exclusive_min": 0
+        },
+        "keg_size_l": {
+          "type": "number",
+          "unit": "L",
+          "required": true,
+          "exclusive_min": 0
+        },
+        "fill_loss_pct": {
+          "type": "number",
+          "unit": "%",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "max": 50
+        }
+      }
+    }
+  ]
+}

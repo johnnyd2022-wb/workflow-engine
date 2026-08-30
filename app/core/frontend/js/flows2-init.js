@@ -1,5 +1,20 @@
     // RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
     (function () {
+      // Structure renders on page load; Batches / Inventory load the first time their tab
+      // is shown (keeps first paint flat as a process accumulates runs, and the "instant
+      // after first open" feel). window.__flows2PanelLoaded tracks which have loaded so
+      // LiveSync only refetches panels the user has actually opened.
+      window.__flows2PanelLoaded = window.__flows2PanelLoaded || {};
+      window.flows2EnsurePanel = function (name) {
+        if (name === 'batches' && !window.__flows2PanelLoaded.batches) {
+          window.__flows2PanelLoaded.batches = true;
+          if (typeof loadExecutions === 'function') loadExecutions();
+        } else if (name === 'inventory' && !window.__flows2PanelLoaded.inventory) {
+          window.__flows2PanelLoaded.inventory = true;
+          if (typeof loadInventory === 'function') loadInventory();
+        }
+      };
+
       function setActive(target) {
         var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-flows2-target]'));
         var ids = ['structure', 'batches', 'inventory'];
@@ -13,6 +28,7 @@
           b.classList.toggle('flow-mode-segment--active', isActive);
           b.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
+        if (window.flows2EnsurePanel) window.flows2EnsurePanel(target);
       }
 
       function onClick(e) {
@@ -156,10 +172,19 @@
           if (!processId) return;
           try {
             var nextIsDraft = !(typeof currentProcess !== 'undefined' && currentProcess && currentProcess.is_draft);
-            await CoreAPI.updateProcess(processId, { is_draft: nextIsDraft });
+            var expected = (typeof currentProcess !== 'undefined' && currentProcess) ? currentProcess.updated_at : undefined;
+            await CoreAPI.updateProcess(processId, { is_draft: nextIsDraft }, expected);
             if (typeof loadProcessData === 'function') await loadProcessData();
             syncDraftMenuLabel();
           } catch (err) {
+            if (typeof CoreAPI !== 'undefined' && CoreAPI.isStaleWrite && CoreAPI.isStaleWrite(err)) {
+              if (typeof showNotification === 'function') {
+                showNotification('warning', 'Changed elsewhere', 'Someone else updated this process. Showing the latest.');
+              }
+              if (typeof loadProcessData === 'function') await loadProcessData();
+              syncDraftMenuLabel();
+              return;
+            }
             console.error(err);
           }
         });
@@ -404,19 +429,15 @@
       if (!window.currentUserPromise) {
         window.currentUserPromise = (async () => {
           try {
-            const response = await fetch('/auth/me', {
-              method: 'GET',
-              credentials: 'include'
-            });
-            if (response.ok) {
-              const data = await response.json();
-              if (data.user) {
-                currentUser = {
-                  email: data.user.email || 'Unknown',
-                  username: data.user.email || 'Unknown'
-                };
-                return currentUser;
-              }
+            const data = (window.CoreAPI && typeof window.CoreAPI.getMe === 'function')
+              ? await window.CoreAPI.getMe()
+              : await (await fetch('/auth/me', { method: 'GET', credentials: 'include' })).json();
+            if (data && !data._status && data.user) {
+              currentUser = {
+                email: data.user.email || 'Unknown',
+                username: data.user.email || 'Unknown'
+              };
+              return currentUser;
             }
           } catch (error) {
             console.error('Failed to get current user:', error);
@@ -469,15 +490,17 @@
           }
         }
         
-        // Render steps
+        // Render steps -- the Structure panel, shown on load.
         renderSteps(processData.steps || []);
-        
-        // Load executions
-        await loadExecutions();
-        
-        // Load inventory
-        await loadInventory();
-        
+
+        // Batches / Inventory load lazily on first tab open. Keep the always-visible
+        // Batches badge current with a cheap count, and refresh any panel already open.
+        window.__flows2PanelLoaded = {};
+        flows2RefreshBadgeCount();
+        var activePanel = document.querySelector('.flows2-panel[data-active="true"]');
+        var activeName = activePanel ? (activePanel.id || '').replace('flows2-panel-', '') : 'structure';
+        if (activeName === 'batches' || activeName === 'inventory') window.flows2EnsurePanel(activeName);
+
       } catch (error) {
         console.error('Failed to load process data:', error);
         document.getElementById('process-name').textContent = 'Error loading process';
@@ -569,8 +592,72 @@
 
     // startExecutionSpa removed: startExecution() routes to the dedicated execution-step screen.
 
+    // --- LiveSync: keep this process's batches + inventory current when a colleague
+    //     (or another tab) mutates them, without a page reload. ------------------------
+    var _flows2LiveOff = null;
+    var _flows2LiveRefreshTimer = null;
+
+    async function flows2RefreshBadgeCount() {
+      if (!window.processId || !window.CoreAPI) return;
+      try {
+        var r = await CoreAPI.getExecutions(window.processId, null, { count: true });
+        var badge = document.getElementById('executions-badge');
+        if (badge && typeof r.count === 'number') badge.textContent = r.count;
+      } catch (e) { /* non-fatal */ }
+    }
+    window.flows2RefreshBadgeCount = flows2RefreshBadgeCount;
+
+    function flows2LiveRefresh() {
+      // Debounce a burst of events (a multi-step batch completion emits several) into one
+      // refresh. Always keep the always-visible badge current; only refetch panels the
+      // user has actually opened.
+      if (_flows2LiveRefreshTimer) return;
+      _flows2LiveRefreshTimer = setTimeout(function () {
+        _flows2LiveRefreshTimer = null;
+        flows2RefreshBadgeCount();
+        var loaded = window.__flows2PanelLoaded || {};
+        if (loaded.batches && typeof loadExecutions === 'function') loadExecutions();
+        if (loaded.inventory && typeof loadInventory === 'function') loadInventory();
+        flows2FlashUpdated();
+      }, 250);
+    }
+
+    function flows2FlashUpdated() {
+      var host = document.getElementById('flows2-live-updated');
+      if (!host) {
+        host = document.createElement('div');
+        host.id = 'flows2-live-updated';
+        host.setAttribute('role', 'status');
+        host.style.cssText = 'position:fixed;bottom:16px;right:16px;background:var(--surface,#111);color:#fff;' +
+          'padding:8px 14px;border-radius:999px;font-size:12px;opacity:0;transition:opacity .2s;z-index:1200;pointer-events:none;';
+        host.textContent = 'Updated just now';
+        document.body.appendChild(host);
+      }
+      host.style.opacity = '1';
+      clearTimeout(host._t);
+      host._t = setTimeout(function () { host.style.opacity = '0'; }, 1800);
+    }
+
+    function flows2SubscribeLive() {
+      if (_flows2LiveOff) { _flows2LiveOff(); _flows2LiveOff = null; }
+      var pid = window.processId ? String(window.processId) : null;
+      if (!pid || !window.LiveSync) return;
+      _flows2LiveOff = window.LiveSync.subscribe({
+        key: 'flows2:' + pid,
+        match: function (evt) {
+          var k = evt.keys || {};
+          if (k.process_id === pid || evt.entity_id === pid) return true;
+          var ids = window.flows2ExecutionIds;
+          if (ids && (ids.has(k.execution_id) || ids.has(k.source_execution_id))) return true;
+          return false;
+        },
+        onChange: function () { flows2LiveRefresh(); },
+      });
+    }
+
     // Works on both initial page load (DOMContentLoaded not yet fired) and HTMX swap (DOM already ready)
     function flows2InitPage() {
+      flows2SubscribeLive();
       if (window.processId) {
         loadProcessData();
       } else {
@@ -587,6 +674,18 @@
     } else {
       flows2InitPage();
     }
+
+    // flows2's scripts live in the template scripts block (outside #page-content), so an
+    // hx-boost return to /core/flows swaps in fresh markup they never re-touch -- the
+    // panels would be inert and the LiveSync subscription would point at a detached DOM.
+    // Re-run the page bootstrap on settle. loadProcessData re-fetches+re-renders and
+    // flows2SubscribeLive is key-guarded, so repeated calls are safe.
+    document.body.addEventListener('htmx:afterSettle', function (evt) {
+      var tgt = evt && evt.detail && evt.detail.target;
+      if (!tgt || tgt.id !== 'page-content') return;
+      if (!document.getElementById('flows2-panel-structure')) return;  // not the flows2 page
+      flows2InitPage();
+    });
 
     // After an inline quantity adjustment, reload the inventory tab so the new
     // quantity is reflected without a full page refresh.

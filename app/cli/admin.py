@@ -8,6 +8,7 @@ from app.core.db import db_session
 from app.core.db.models.organisation import OrganisationStatus
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.backup_code_repo import BackupCodeRepository
+from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
@@ -222,5 +223,97 @@ def get_backup_codes(user_id):
     except Exception as e:
         click.echo(f"❌ Failed to retrieve backup codes: {e}", err=True)
         db.rollback()
+    finally:
+        db.close()
+
+
+def _resolve_org(db, org_id: str):
+    """Return an Organisation for a --org-id value, or None (after echoing an error)."""
+    try:
+        org_uuid = UUID(org_id)
+    except ValueError:
+        click.echo(f"❌ Invalid organisation ID: {org_id}", err=True)
+        return None
+    org = OrganisationRepository(db).get_org_by_id(org_uuid)
+    if org is None:
+        click.echo(f"❌ Organisation not found: {org_id}", err=True)
+        return None
+    return org
+
+
+@click.command(name="grant-feature")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--feature", required=True, help="Feature key, e.g. 'compliant'")
+@click.option("--note", default=None, help="Optional note recorded on the grant")
+def grant_feature(org_id, feature, note):
+    """Grant (or re-activate) a per-org feature subscription. Idempotent."""
+    db = db_session()
+    try:
+        with unscoped():
+            org = _resolve_org(db, org_id)
+            if org is None:
+                raise SystemExit(1)
+            row = FeatureSubscriptionRepository(db).grant(org.id, feature, notes=note)
+        click.echo(f"✅ {org.name}: feature '{row.feature_key}' active (granted {row.granted_at:%Y-%m-%d %H:%M})")
+    except SystemExit:
+        raise
+    except Exception as e:
+        click.echo(f"❌ Failed to grant feature: {e}", err=True)
+        db.rollback()
+        raise SystemExit(1) from e
+    finally:
+        db.close()
+
+
+@click.command(name="revoke-feature")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--feature", required=True, help="Feature key, e.g. 'compliant'")
+def revoke_feature(org_id, feature):
+    """Deactivate a per-org feature subscription."""
+    db = db_session()
+    try:
+        with unscoped():
+            org = _resolve_org(db, org_id)
+            if org is None:
+                raise SystemExit(1)
+            changed = FeatureSubscriptionRepository(db).revoke(org.id, feature)
+        if changed:
+            click.echo(f"✅ {org.name}: feature '{feature}' revoked")
+        else:
+            click.echo(f"ℹ️  {org.name}: no '{feature}' subscription to revoke")
+    except SystemExit:
+        raise
+    except Exception as e:
+        click.echo(f"❌ Failed to revoke feature: {e}", err=True)
+        db.rollback()
+        raise SystemExit(1) from e
+    finally:
+        db.close()
+
+
+@click.command(name="list-features")
+@click.option("--org-id", required=True, help="Organisation ID")
+def list_features(org_id):
+    """List a single organisation's feature subscriptions."""
+    db = db_session()
+    try:
+        with unscoped():
+            org = _resolve_org(db, org_id)
+            if org is None:
+                raise SystemExit(1)
+            rows = FeatureSubscriptionRepository(db).list_for_org(org.id)
+        if not rows:
+            click.echo(f"{org.name}: no feature subscriptions")
+            return
+        click.echo(f"\n{org.name} feature subscriptions:\n")
+        for row in rows:
+            state = "✅ active" if row.active else "❌ inactive"
+            click.echo(f"  {row.feature_key:<20} {state:<12} granted {row.granted_at:%Y-%m-%d %H:%M}")
+        click.echo()
+    except SystemExit:
+        raise
+    except Exception as e:
+        click.echo(f"❌ Failed to list features: {e}", err=True)
+        raise SystemExit(1) from e
     finally:
         db.close()
