@@ -515,10 +515,21 @@ def create_app():
     # WhiteNoise falls through to the wrapped app for any path it has no file for, so the
     # traversal (400) / bad-extension (400) / 404 / filename-allowlist guards on every
     # route are untouched -- only the happy path (an existing, valid asset) is
-    # short-circuited. inventory/ and img/ moved here after the Flask route was seen
-    # returning an empty 200 for inventory-spa-header.css under the threaded test server
-    # -> the browser retried it to ERR_TOO_MANY_RETRIES. WhiteNoise serves it the same
-    # robust way it serves js/css.
+    # short-circuited.
+    #
+    # IMPORTANT: WhiteNoise.add_files() recursively publishes *every* file beneath the
+    # directory it is given -- it does not honour the Flask route's filename allowlist. So
+    # the source dir handed to it must contain public assets only. `img/` qualifies (its
+    # sole file is the allowlisted hero image). `inventory/` does NOT: it holds
+    # server-rendered Jinja (add.html, dispose.html, view.html, ...) alongside the two
+    # public assets. Those two live in the sibling `inventory_static/` dir, which holds
+    # nothing else, and only that dir is exposed here -- still at the /static/inventory/
+    # URL prefix, so no template or url_for() reference changes. The Flask
+    # `serve_core_inventory_static` route stays as the fall-through with its hard-coded
+    # two-file allowlist (defence in depth). inventory_static/ and img/ are served this
+    # way (not via the Flask route) because the threaded test server was seen returning an
+    # empty 200 for inventory-spa-header.css -> the browser retried to
+    # ERR_TOO_MANY_RETRIES; WhiteNoise serves them the same robust way it serves js/css.
     from whitenoise import WhiteNoise
 
     def _static_asset_headers(headers, path, url):
@@ -538,7 +549,7 @@ def create_app():
     _core_frontend = os.path.join(app_dir, "core", "frontend")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "js"), prefix="static/js/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "css"), prefix="static/css/")
-    app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory"), prefix="static/inventory/")
+    app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory_static"), prefix="static/inventory/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
     if config.crm_enabled:
         _crm_frontend = os.path.join(app_dir, "features", "crm", "frontend")

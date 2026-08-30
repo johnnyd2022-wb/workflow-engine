@@ -194,7 +194,7 @@ def _asset_version() -> str:
     freshly rendered page can run hour-old JS that predates the endpoints it calls."""
     h = hashlib.blake2b(digest_size=8)
     frontend = os.path.join(os.path.dirname(__file__), "..", "frontend")
-    for sub in ("js", "css", "inventory", "img"):
+    for sub in ("js", "css", "inventory_static", "img"):
         directory = os.path.join(frontend, sub)
         try:
             names = sorted(os.listdir(directory))
@@ -1280,7 +1280,10 @@ _IMG_STATIC_ALLOWLIST = frozenset({"hero-wave.jpg"})
 @core_bp.route("/static/inventory/<filename>")
 @limiter.exempt
 def serve_core_inventory_static(filename):
-    """Serve SVG/CSS from core frontend inventory/ (used by inventory SPA header partial)."""
+    """Serve the two public SVG/CSS assets from core frontend inventory_static/ (used by
+    the inventory SPA header partial). That directory holds public assets only -- the
+    server-rendered inventory templates live in the sibling inventory/ dir and are never
+    reachable through this route or the WhiteNoise layer that fronts it."""
     from flask import abort
     from werkzeug.security import safe_join
 
@@ -1293,7 +1296,7 @@ def serve_core_inventory_static(filename):
     if ext not in (".svg", ".css"):
         abort(400, "Invalid file type")
 
-    inventory_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "inventory")
+    inventory_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "inventory_static")
     safe_path = safe_join(inventory_dir, filename)
     if safe_path is None:
         abort(400, "Invalid filename")

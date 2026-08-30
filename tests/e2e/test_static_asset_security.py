@@ -98,13 +98,23 @@ def test_ac5_static_asset_404s_on_missing_file(page, route):
 def test_ac6_inventory_static_serves_allowlisted_file(page):
     response = page.request.get("/static/inventory/inventory-icon.svg")
     assert response.status == 200
-    assert response.body() == _real_bytes("app", "core", "frontend", "inventory", "inventory-icon.svg")
+    # Public assets live in inventory_static/ (not inventory/, which holds server templates).
+    assert response.body() == _real_bytes("app", "core", "frontend", "inventory_static", "inventory-icon.svg")
 
 
 def test_ac6_inventory_static_rejects_non_allowlisted_filename_with_valid_extension(page):
     """A .svg extension is not sufficient on its own -- only the two hardcoded names serve."""
     response = page.request.get("/static/inventory/other-icon.svg")
     assert response.status == 400
+
+
+def test_ac6_inventory_static_does_not_expose_server_templates(page):
+    """The inventory/ dir holds server-rendered Jinja (add.html, dispose.html, view.html,
+    ...). None of it may be reachable as a static file -- regression guard for !197
+    routing the whole directory through WhiteNoise."""
+    for name in ("add.html", "add_manual.html", "dispose.html", "view.html", "inventory_hub_banner.html"):
+        response = page.request.get(f"/static/inventory/{name}")
+        assert response.status != 200, f"/static/inventory/{name} must not be served statically"
 
 
 def test_ac6_img_static_serves_allowlisted_file(page):
