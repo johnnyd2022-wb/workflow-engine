@@ -1,5 +1,20 @@
     // RULE: Never use innerHTML with API data. Use textContent or DOM APIs.
     (function () {
+      // Structure renders on page load; Batches / Inventory load the first time their tab
+      // is shown (keeps first paint flat as a process accumulates runs, and the "instant
+      // after first open" feel). window.__flows2PanelLoaded tracks which have loaded so
+      // LiveSync only refetches panels the user has actually opened.
+      window.__flows2PanelLoaded = window.__flows2PanelLoaded || {};
+      window.flows2EnsurePanel = function (name) {
+        if (name === 'batches' && !window.__flows2PanelLoaded.batches) {
+          window.__flows2PanelLoaded.batches = true;
+          if (typeof loadExecutions === 'function') loadExecutions();
+        } else if (name === 'inventory' && !window.__flows2PanelLoaded.inventory) {
+          window.__flows2PanelLoaded.inventory = true;
+          if (typeof loadInventory === 'function') loadInventory();
+        }
+      };
+
       function setActive(target) {
         var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-flows2-target]'));
         var ids = ['structure', 'batches', 'inventory'];
@@ -13,6 +28,7 @@
           b.classList.toggle('flow-mode-segment--active', isActive);
           b.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
+        if (window.flows2EnsurePanel) window.flows2EnsurePanel(target);
       }
 
       function onClick(e) {
@@ -465,15 +481,17 @@
           }
         }
         
-        // Render steps
+        // Render steps -- the Structure panel, shown on load.
         renderSteps(processData.steps || []);
-        
-        // Load executions
-        await loadExecutions();
-        
-        // Load inventory
-        await loadInventory();
-        
+
+        // Batches / Inventory load lazily on first tab open. Keep the always-visible
+        // Batches badge current with a cheap count, and refresh any panel already open.
+        window.__flows2PanelLoaded = {};
+        flows2RefreshBadgeCount();
+        var activePanel = document.querySelector('.flows2-panel[data-active="true"]');
+        var activeName = activePanel ? (activePanel.id || '').replace('flows2-panel-', '') : 'structure';
+        if (activeName === 'batches' || activeName === 'inventory') window.flows2EnsurePanel(activeName);
+
       } catch (error) {
         console.error('Failed to load process data:', error);
         document.getElementById('process-name').textContent = 'Error loading process';
@@ -570,14 +588,27 @@
     var _flows2LiveOff = null;
     var _flows2LiveRefreshTimer = null;
 
+    async function flows2RefreshBadgeCount() {
+      if (!window.processId || !window.CoreAPI) return;
+      try {
+        var r = await CoreAPI.getExecutions(window.processId, null, { count: true });
+        var badge = document.getElementById('executions-badge');
+        if (badge && typeof r.count === 'number') badge.textContent = r.count;
+      } catch (e) { /* non-fatal */ }
+    }
+    window.flows2RefreshBadgeCount = flows2RefreshBadgeCount;
+
     function flows2LiveRefresh() {
       // Debounce a burst of events (a multi-step batch completion emits several) into one
-      // refetch of the volatile panels.
+      // refresh. Always keep the always-visible badge current; only refetch panels the
+      // user has actually opened.
       if (_flows2LiveRefreshTimer) return;
       _flows2LiveRefreshTimer = setTimeout(function () {
         _flows2LiveRefreshTimer = null;
-        if (typeof loadExecutions === 'function') loadExecutions();
-        if (typeof loadInventory === 'function') loadInventory();
+        flows2RefreshBadgeCount();
+        var loaded = window.__flows2PanelLoaded || {};
+        if (loaded.batches && typeof loadExecutions === 'function') loadExecutions();
+        if (loaded.inventory && typeof loadInventory === 'function') loadInventory();
         flows2FlashUpdated();
       }, 250);
     }

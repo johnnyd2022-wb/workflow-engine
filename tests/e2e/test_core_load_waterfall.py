@@ -144,3 +144,47 @@ def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page
         page.locator('a.nav-link[href="/core/dashboard"]').click()
         page.wait_for_selector("[data-dashboard-root]")
         _wait(page)
+
+
+def test_flows2_defers_batches_and_inventory_until_their_tab_is_opened(logged_in_page):
+    """flows2 first paint renders Structure only; Batches (execution list) and Inventory
+    load the first time their tab is shown, and re-opening a tab is 0 fetches."""
+    page = logged_in_page
+    page.goto("/core")
+    _wait(page)
+    hdrs = {"X-CSRFToken": _csrf(page), "Content-Type": "application/json", "Referer": page.url}
+    proc = page.request.post(
+        "/api/core/processes", headers=hdrs, data='{"name": "Flows2 Lazy", "category": "manufacturing"}'
+    )
+    assert proc.status == 201, proc.text()
+    pid = proc.json()["id"]
+    page.request.post(f"/api/core/processes/{pid}/steps", headers=hdrs, data='{"step_number": 1, "name": "Mix"}')
+
+    calls = _core_api_calls(page)
+    page.goto(f"/core/flows?id={pid}")
+    page.wait_for_selector('[data-flows2-target="batches"]')
+    _wait(page)
+
+    # first paint: a count for the badge, no execution list, no inventory list
+    assert any(c.startswith("executions?") and "count=1" in c for c in calls), calls
+    assert not any(c.startswith("executions?") and "count" not in c for c in calls), calls
+    assert not any(c == "inventory" or c.startswith("inventory?") for c in calls), calls
+
+    page.click('[data-flows2-target="batches"]')
+    _wait(page)
+    assert any(c.startswith("executions?") and "status=completed" in c for c in calls), calls
+
+    page.click('[data-flows2-target="inventory"]')
+    _wait(page)
+    assert any(c.startswith("inventory?") and "process_id" in c for c in calls), calls
+
+    # re-opening Batches: no new list fetch
+    n_exec = sum(1 for c in calls if c.startswith("executions?") and "status=completed" in c)
+    page.click('[data-flows2-target="overview"]') if page.locator('[data-flows2-target="overview"]').count() else None
+    page.click('[data-flows2-target="batches"]')
+    _wait(page)
+    assert sum(1 for c in calls if c.startswith("executions?") and "status=completed" in c) == n_exec, calls
+
+
+def _csrf(page):
+    return page.evaluate("() => document.querySelector('meta[name=csrf-token]').content")

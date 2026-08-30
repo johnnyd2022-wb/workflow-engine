@@ -1916,12 +1916,17 @@ def list_executions():
         except ValueError:
             return jsonify({"error": f"Invalid status: {status_str}"}), 400
 
+    repo = ExecutionRepository(db_session)
+
+    # count=1 -> just the total (for a paginated caller's "N batches" header). No object
+    # graph, no growth with history.
+    if request.args.get("count") in ("1", "true"):
+        return jsonify({"count": repo.count_executions(org_id=org_id, process_id=process_id, status=status)}), 200
+
     try:
         page_limit, cursor = _parse_page_params(request.args)
     except ValueError:
         return jsonify({"error": "Invalid limit or cursor parameter"}), 400
-
-    repo = ExecutionRepository(db_session)
     executions = repo.list_executions(
         org_id=org_id,
         process_id=process_id,
