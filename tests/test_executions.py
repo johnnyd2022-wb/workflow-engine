@@ -1696,3 +1696,50 @@ class TestFlowProcessAccessObservability:
         db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Composite index for the process-scoped completed-execution page query
+# (MR !201 P2, migration exec_completed_page_idx_001).
+# ---------------------------------------------------------------------------
+
+
+class TestCompletedExecutionPageIndex:
+    _INDEX = "ix_executions_org_process_status_created_id"
+
+    def test_index_exists_with_the_expected_shape(self, db):
+        from sqlalchemy import text
+
+        indexdef = db.execute(
+            text("SELECT indexdef FROM pg_indexes WHERE indexname = :n"), {"n": self._INDEX}
+        ).scalar()
+        assert indexdef, f"{self._INDEX} is missing -- migration exec_completed_page_idx_001 not applied"
+        # Column order + per-column direction: equality on (org_id, process_id, status)
+        # then ORDER BY created_at DESC, id DESC -- exactly what execution_repo.
+        # list_executions issues for a process's completed-run page. (Asserting the
+        # *planner* picks it is left out on purpose: on tiny CI data it won't, and forcing
+        # it is data-volume dependent and flaky -- core_hub_perf_indexes_001 makes the same
+        # call. Reversibility is proven by the migration_reversibility job.)
+        assert "(org_id, process_id, status, created_at DESC, id DESC)" in indexdef, indexdef
+
+    def test_repo_paged_completed_query_still_returns_rows(self, db, synthetic_org_and_process_clean):
+        """The composite index doesn't change results -- the repo call the route uses still
+        returns the process's completed executions, newest first."""
+        from sqlalchemy import text
+
+        from app.core.db.models.execution import ExecutionStatus
+        from app.core.db.repositories.execution_repo import ExecutionRepository
+
+        org_id = synthetic_org_and_process_clean["org_id"]
+        process_id = synthetic_org_and_process_clean["process_id"]
+        for _ in range(5):
+            ex = ExecutionRepository(db).create_execution(org_id=org_id, process_id=process_id)
+            db.execute(text("UPDATE executions SET status = 'COMPLETED' WHERE id = :i"), {"i": str(ex.id)})
+        db.commit()
+
+        rows = ExecutionRepository(db).list_executions(
+            org_id=org_id, process_id=process_id, status=ExecutionStatus.COMPLETED, limit=26
+        )
+        assert len(rows) == 5
+        created = [r.created_at for r in rows]
+        assert created == sorted(created, reverse=True)

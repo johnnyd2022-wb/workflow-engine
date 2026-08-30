@@ -193,14 +193,15 @@ def register_routes(bp):
         sourcemap Findings tab and flows2 on page load, so it reads the slice from the
         shared per-org system-findings cache (fresh until NZ midnight, invalidated on
         inventory/execution/process mutations) rather than recomputing every request.
+
+        Uses the narrow `get_expired_materials_result` accessor, not `get_check_results`:
+        the latter also runs every cheap live check on each request only to discard them
+        here.
         """
-        from app.core.backend.system_findings_cache import get_check_results
+        from app.core.backend.system_findings_cache import get_expired_materials_result
 
         org_id = UUID(g.org_id)
-        result = next(
-            (r for r in get_check_results(org_id, db_session()) if r.check_id == "expired_materials"),
-            None,
-        )
+        result = get_expired_materials_result(org_id, db_session())
         if result is None or result.data is None:
             return jsonify({"expired_raw_materials": [], "impacted_items": [], "connections": []}), 200
         return jsonify(result.data), 200

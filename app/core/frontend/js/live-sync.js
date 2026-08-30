@@ -33,6 +33,7 @@
   var timer = null;
   var backoff = BACKOFF_MIN_MS;
   var lastError = null;
+  var lastEtag = null;           // ETag of the most recent /api/core/changes response
 
   function now() { return Date.now(); }
 
@@ -46,7 +47,14 @@
 
   async function fetchChanges(since) {
     var url = '/api/core/changes' + (since == null ? '' : '?since=' + encodeURIComponent(since));
-    var res = await fetch(url, { method: 'GET', credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+    var headers = { 'Accept': 'application/json' };
+    // Conditional GET: when nothing has changed since the last response's ETag the server
+    // returns 304 and skips the events query entirely. Never sent on the bootstrap
+    // (since == null) — that must always fetch the current head.
+    if (since != null && lastEtag) headers['If-None-Match'] = lastEtag;
+    var res = await fetch(url, { method: 'GET', credentials: 'same-origin', headers: headers });
+    var etag = res.headers.get('ETag');
+    if (etag) lastEtag = etag;
     if (res.status === 304) return { notModified: true };
     if (!res.ok) throw new Error('changes ' + res.status);
     return res.json();

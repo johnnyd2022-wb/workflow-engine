@@ -221,6 +221,21 @@ def get_check_results(org_id: UUID, session) -> list:
     return cached_results + live_results
 
 
+def get_expired_materials_result(org_id: UUID, session):
+    """Just the cached `expired_materials` CheckResult (or None) -- the DAG-heavy slice
+    only, no live checks.
+
+    For consumers that render only the expiry data (e.g. GET
+    /api/core/inventory/expired-materials). `get_check_results()` would additionally run
+    every cheap live check (untracked_items, output_expiry, output_ready_date, enabled
+    compliance modules) on each request just to discard them here.
+    """
+    for d in _cached_expensive(org_id, session):
+        if d.get("check_id") == "expired_materials":
+            return _dict_to_result(d)
+    return None
+
+
 # Fields the /core banner, the sidebar badge and the Notifications page read off an
 # `expired_materials` finding. Everything else on those item objects (supplier, quantity,
 # unit, source_execution_id, extra_data, ...) and the whole `connections` edge list is
