@@ -52,10 +52,10 @@ def test_production_db_password_requires_env_secret(environment, monkeypatch):
 
 @pytest.mark.parametrize("environment", ["production", "prod"])
 def test_production_db_password_reads_env_secret(environment, monkeypatch):
-    monkeypatch.setenv("POSTGRES_PASSWORD", "s3cret-from-vault")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "env-test")
     cfg = _config(environment, ini_password="value-from-tracked-file")
 
-    assert cfg.db_password == "s3cret-from-vault"
+    assert cfg.db_password == "env-test"
     # And never the value sitting in the ini section.
     assert cfg.db_password != "value-from-tracked-file"
 
