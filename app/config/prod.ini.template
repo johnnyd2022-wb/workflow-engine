@@ -9,7 +9,9 @@ host = host.docker.internal
 port = 8432
 name = workflow-engine
 user = postgres
-password = YOUR_PASSWORD_HERE
+# The database password comes from the deployment environment, NOT this file:
+# set POSTGRES_PASSWORD from the secret store. App startup fails if unset.
+password =
 # Optional connection-pool tuning (defaults shown; SQLAlchemy defaults are 5/10).
 # Keep  workers * (pool_size + max_overflow)  under Postgres max_connections.
 # pool_size = 5
