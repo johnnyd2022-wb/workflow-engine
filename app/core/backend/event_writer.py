@@ -45,12 +45,13 @@ def _next_feed_seq(session: Session, org_id: UUID) -> int:
     """Allocate this org's next ``entity_events.seq`` while holding a per-org advisory lock
     to COMMIT of the caller's transaction.
 
-    A bare sequence (the column's IDENTITY default) is allocation-ordered, not
-    commit-ordered: a transaction can take seq=N, stay open, and a later transaction can
-    take seq=N+1 and commit first. A poller past the 1s settle window then advances its
-    cursor past N and never returns N once it finally commits -- a permanently skipped
-    event (MR !201 P1). Holding this advisory lock until commit makes seq order == commit
-    order per org, so the feed needs no settle window and has no gaps.
+    A bare sequence is allocation-ordered, not commit-ordered: a transaction can take
+    seq=N, stay open, and a later transaction can take seq=N+1 and commit first. A poller
+    would then advance its cursor past N and never return N once it finally commits -- a
+    permanently skipped event (MR !201 P1). Holding this advisory lock until commit makes
+    seq order == commit order per org, so the feed needs no settle window and has no gaps.
+    entity_events.seq has no DB default (the IDENTITY was dropped once every writer used
+    this allocator), so this is the only path that assigns it.
     """
     session.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _feed_cursor_lock_key(org_id)})
     return int(
@@ -157,9 +158,8 @@ class EventWriter:
             entity_type=entity_type,
             entity_id=entity_id,
             # Commit-ordered per-org feed cursor, allocated under an advisory lock held to
-            # this transaction's commit -- see _next_feed_seq. The column keeps its IDENTITY
-            # default as a backstop for any non-EventWriter insert, but every event written
-            # here sets seq explicitly.
+            # this transaction's commit -- see _next_feed_seq. The column has no DB default,
+            # so this is the sole assignment path; a bypass insert fails on NOT NULL.
             seq=_next_feed_seq(self.session, self.org_id),
             actor_id=resolved_actor_id,
             actor_type=actor_type,
