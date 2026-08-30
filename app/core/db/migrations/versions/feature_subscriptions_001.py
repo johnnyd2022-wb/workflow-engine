@@ -1,7 +1,7 @@
 """Add feature_subscriptions: generic per-org product entitlement grants.
 
 Revision ID: feature_subscriptions_001
-Revises: entity_events_seq_001
+Revises: system_findings_cache_001
 
 New table. DESTRUCTIVE ON DOWNGRADE: `downgrade()` drops the table, which permanently
 loses every entitlement grant once it is populated. There is no in-migration data
@@ -23,13 +23,13 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "feature_subscriptions_001"
-# Re-parented onto entity_events_seq_001 (was system_findings_cache_001): feat/live-sync
-# (!196) and nz-alc-tools both branched a migration off system_findings_cache_001 and both
-# merged, leaving `main` with two alembic heads ("Multiple head revisions for 'head'").
-# Linearising here (rather than a merge revision) keeps `alembic downgrade -1` unambiguous
-# for the migration_reversibility CI job. The two migrations are independent (different
-# tables), so order between them does not matter.
-down_revision: str | None = "entity_events_seq_001"
+# Historical parent, restored. This revision and entity_events_seq_001 both branch off
+# system_findings_cache_001 (feat/live-sync !196 and nz-alc-tools merged independently,
+# leaving `main` with two alembic heads). They are reunited by the empty merge revision
+# feat_subs_seq_merge_001 -- NOT by rewriting this already-shipped down_revision, which
+# would make upgrade/downgrade of a deployed version table depend on which source tree is
+# present. See that migration's docstring.
+down_revision: str | None = "system_findings_cache_001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | None = None
 
