@@ -507,6 +507,82 @@ def test_no_gap_found_heading_variants_do_not_open_a_section(tmp_path, monkeypat
     assert fi.parse_doc(path) == []
 
 
+def test_no_further_findings_heading_does_not_open_a_section(tmp_path, monkeypatch):
+    """'## No further findings' (verbatim in .agents/plans/perf-review-recent-10.md) is
+    the same checked-and-clean convention as '## Not findings' -- a review's way of
+    listing the MRs it looked at and cleared. The bare `\\bfindings?\\b` in
+    FINDING_HEADINGS opened it, and every 'not a regression' / 'startup-only' no-action
+    note under it (5 in that one doc) was indexed as an open finding. A 'nothing left'
+    adjective -- further/additional/other/remaining -- between 'no' and the noun must
+    close the heading instead.
+
+    Each no-action bullet below sits under a heading that the OLD regex would have
+    OPENED: `## No further findings` and `## No additional findings` both hit the bare
+    `\\bfindings?\\b` opener, and `### No further issues` inherits the still-open ancestor
+    `## Findings` section (bare 'issues' is not itself an opener). Reverting `_NOTHING_LEFT`
+    reddens all three negative assertions."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "plans/x.md",
+        """## Findings
+- F1: the changes feed has no index for the entity_type filter -- add one, verify with EXPLAIN.
+
+### No further issues
+- !204 If-Match SELECT ... FOR UPDATE is one extra round-trip on a write -- not a regression.
+
+## No further findings
+
+- !202 static-asset serving is WSGI-layer, already optimal.
+- !189/!207/!209 are startup/migration only.
+
+## No additional findings
+- the reconcile endpoint was already covered by AC7's cross-org 404 test.
+""",
+    )
+    details = [i.detail for i in fi.parse_doc(path)]
+    assert any("changes feed has no index" in d for d in details)
+    assert not any("not a regression" in d for d in details)
+    assert not any("static-asset serving" in d for d in details)
+    assert not any("startup/migration only" in d for d in details)
+    assert not any("cross-org 404 test" in d for d in details)
+
+
+def test_no_new_findings_heading_with_a_carry_over_caveat_stays_open(tmp_path, monkeypatch):
+    """The adjacent trap the widened branch must NOT fall into: 'new' and 'more' are
+    deliberately excluded from `_NOTHING_LEFT` because '## No new findings (3 carried
+    over)' is a section that still holds real items, and NEGATED_CLOSURE_RE (which only
+    guards 'not fixed/closed/resolved') would not protect it."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "plans/x.md",
+        """## No new findings since last pass (3 carried over)
+- C2: the export endpoint still streams another org's rows when the filter is absent
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "another org's rows" in items[0].detail
+
+
+def test_findings_not_yet_reviewed_heading_still_opens_a_section(tmp_path, monkeypatch):
+    """Contrast for the widened branch: the adjective slot only fires when it sits
+    *between* 'no'/'not' and 'findings'. 'Findings not yet reviewed' keeps 'not' after
+    the noun and is reporting real open work, so it must still open a section."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "plans/x.md",
+        """## Findings not yet reviewed (more coming next pass)
+- F9: the bulk-import endpoint trusts the client-supplied org_id on one code path
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "client-supplied org_id" in items[0].detail
+
+
 def test_bullet_syntax_inside_a_fenced_code_block_is_not_a_finding(tmp_path, monkeypatch):
     """A YAML/code snippet quoted as evidence inside a finding often contains lines that
     look exactly like markdown bullets (`- "**/app.py"`). This is exactly what
