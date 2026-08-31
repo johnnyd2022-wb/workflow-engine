@@ -21,7 +21,9 @@
 
   if (window.LiveSync) return;
 
-  var POLL_VISIBLE_MS = 3000;
+  var POLL_VISIBLE_MS = 3000;    // cadence right after an event / user action
+  var POLL_IDLE_MAX_MS = 15000;  // cadence ceiling once the feed has gone quiet
+  var IDLE_GROWTH_AFTER = 3;     // consecutive no-change polls before the interval grows
   var BACKOFF_MIN_MS = 5000;
   var BACKOFF_MAX_MS = 60000;
 
@@ -34,8 +36,19 @@
   var backoff = BACKOFF_MIN_MS;
   var lastError = null;
   var lastEtag = null;           // ETag of the most recent /api/core/changes response
+  var idleStreak = 0;            // consecutive polls that delivered nothing
 
   function now() { return Date.now(); }
+
+  // 3s while things are happening; after IDLE_GROWTH_AFTER empty polls, ramp 6s, 9s, 12s,
+  // 15s and hold. A delivered event, poke(), focus or `online` resets idleStreak -> 3s.
+  // Cuts steady-state request volume on a quiet org ~5x with no added latency for the
+  // cases a user notices (their own mutations already poke()).
+  function nextInterval() {
+    if (idleStreak <= IDLE_GROWTH_AFTER) return POLL_VISIBLE_MS;
+    var grown = POLL_VISIBLE_MS * (idleStreak - IDLE_GROWTH_AFTER + 1);
+    return grown < POLL_IDLE_MAX_MS ? grown : POLL_IDLE_MAX_MS;
+  }
 
   function schedule(ms) {
     if (timer) { clearTimeout(timer); timer = null; }
@@ -86,13 +99,16 @@
     if (document.visibilityState === 'hidden') return;
     polling = true;
     try {
-      if (cursor == null) { await bootstrap(); }
+      if (cursor == null) { await bootstrap(); idleStreak = 0; }
       else {
         var data = await fetchChanges(cursor);
-        if (!data.notModified) {
+        if (data.notModified) {
+          idleStreak++;
+        } else {
           var events = (data && Array.isArray(data.events)) ? data.events : [];
           if (typeof data.cursor === 'number') cursor = data.cursor;
-          if (events.length) dispatch(events);
+          if (events.length) { dispatch(events); idleStreak = 0; }
+          else idleStreak++;
           // drain a backlog in the same wake-up rather than waiting a full interval
           if (data.has_more) { polling = false; return runPoll(); }
         }
@@ -102,7 +118,7 @@
       try {
         document.dispatchEvent(new CustomEvent('live-sync:tick', { detail: { cursor: cursor } }));
       } catch (e) { /* no-op */ }
-      schedule(POLL_VISIBLE_MS);
+      schedule(nextInterval());
     } catch (err) {
       lastError = err;
       if (window.console) console.warn('[LiveSync] poll failed, backing off', err && err.message);
@@ -116,6 +132,7 @@
   function pokeNow() {
     if (!started) return;
     backoff = BACKOFF_MIN_MS;
+    idleStreak = 0;              // snap back to the fast cadence
     schedule(0);
   }
 
@@ -124,7 +141,7 @@
     else if (timer) { clearTimeout(timer); timer = null; }
   });
   window.addEventListener('online', pokeNow);
-  window.addEventListener('focus', function () { if (started) schedule(POLL_VISIBLE_MS); });
+  window.addEventListener('focus', function () { if (started) { idleStreak = 0; schedule(POLL_VISIBLE_MS); } });
 
   window.LiveSync = {
     start: function () {
