@@ -199,6 +199,17 @@ RESOLVED_MARKERS = re.compile(
 # matters: "Findings not actioned" puts "not" *after* "Findings" and must stay open --
 # see NEGATED_CLOSURE_RE and the contrast test in test_findings_index.py.
 #
+# The "no <adjective> findings" branch also allows one "nothing left" adjective between
+# "no" and the noun -- "## No further findings" (verbatim in
+# .agents/plans/perf-review-recent-10.md), "no additional issues", "no other findings".
+# Without it, `\bfindings?\b` opened that section and every "not a regression" /
+# "startup-only" no-action note under it was indexed as an open finding (5 such items
+# from one review doc in a real sweep). The list is deliberately just the adjectives that
+# mean "nothing beyond what's already listed" -- "new" and "more" are left out because
+# "no new findings (3 carried over)" / "no more issues, 2 still open" are natural report
+# phrasings where the section still holds real items and NEGATED_CLOSURE_RE would not save
+# them.
+#
 # Same convention, spelled with "gap(s)" instead of "finding(s)"/"issue(s)" --
 # "## Assumptions judged reasonable (not gaps)" and "## Other checks performed, no gap
 # found" (both verbatim in .agents/reports/process_templates/spec-critic.md) matched
@@ -206,10 +217,12 @@ RESOLVED_MARKERS = re.compile(
 # bullets -- including one literally ending "... No gap." -- were indexed as 11 open
 # P0/P1 items in one real sweep. `\bnot a gap\b` widens to plural/no-article; `no gap(s)
 # found` is a separate branch since "found" trails the noun instead of "not"/"no" leading it.
+_NOTHING_LEFT = r"(?:a|an|further|additional|other|remaining)\s+"
 CLOSED_HEADING_RE = re.compile(
     r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
     r"|\balready (?:done|fixed|handled)\b"
-    r"|\b(?:not|no)\s+(?:a\s+|an\s+)?findings?\b|\bno issues?\b",
+    r"|\b(?:not|no)\s+(?:" + _NOTHING_LEFT + r")?findings?\b"
+    r"|\bno\s+(?:" + _NOTHING_LEFT + r")?issues?\b",
     re.I,
 )
 # Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
