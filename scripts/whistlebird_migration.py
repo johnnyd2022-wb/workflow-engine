@@ -16,6 +16,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Iterator
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
@@ -198,6 +199,29 @@ def _identifier(value: str) -> str:
     if not IDENTIFIER.fullmatch(value):
         raise ValueError(f"Unsafe SQL identifier: {value!r}")
     return f'"{value}"'
+
+
+def _enter_target_tenant_scope(stack: ExitStack, session: Any, requested_org_name: str) -> Any:
+    """Activate the exact target tenant for standalone ORM migration work.
+
+    The migration has no Flask request, so it must establish the same ContextVar-backed
+    scope that request middleware normally provides. The organisation lookup intentionally
+    runs under the explicit ``unscoped`` escape hatch: it is the one pre-scope lookup needed
+    to discover the scope, and the requested name has already been approved by the caller's
+    safety policy. Every subsequent ORM statement runs under that exact org id, keeping the
+    global tenant filter active instead of generating no-context noise.
+    The helper deliberately accepts the requested organisation rather than a test-tenant
+    constant, so the same safe pattern applies to every tenant-aware standalone operation.
+    """
+    from app.core.db.models.organisation import Organisation
+    from app.core.security.tenant_scope import tenant_scope, unscoped
+
+    with unscoped():
+        org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
+    if org is None:
+        raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
+    stack.enter_context(tenant_scope(org.id))
+    return org
 
 
 def _json_value(value: Any) -> Any:
@@ -991,7 +1015,6 @@ def apply_core_receipts_and_lodgements(legacy_url: str, target_url: str, request
     from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
     from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401 - resolves ORM relationship
-    from app.core.db.models.organisation import Organisation
     from app.core.db.models.process import Process
     from app.core.db.models.step import Step
     from app.core.db.repositories.execution_repo import ExecutionRepository
@@ -1014,18 +1037,15 @@ def apply_core_receipts_and_lodgements(legacy_url: str, target_url: str, request
 
     engine = create_engine(target_url)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
+    scope = ExitStack()
     imported_receipts = 0
     skipped_receipts = 0
     imported_lodgements = 0
     skipped_lodgements = 0
     try:
-        org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
-        if org is None:
-            raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
-        # This standalone, explicitly scoped script has its own SQLAlchemy engine rather than
-        # the application engine that registers the per-statement guard synchroniser.  The Core
-        # repository still supplies its normal Python-side write authorisation; this transaction-
-        # local GUC supplies the matching PostgreSQL trigger authorisation for receipt creation.
+        org = _enter_target_tenant_scope(scope, session, requested_org_name)
+        # Repository calls retain their normal Python-side write authorisation; this
+        # transaction-local GUC supplies the matching PostgreSQL trigger authorisation.
         session.execute(text("SELECT set_config('app.inventory_qty_guard', '1', true)"))
         processes = {
             process.name: process
@@ -1175,6 +1195,7 @@ def apply_core_receipts_and_lodgements(legacy_url: str, target_url: str, request
         session.rollback()
         raise
     finally:
+        scope.close()
         session.close()
         engine.dispose()
 
@@ -1188,7 +1209,6 @@ def apply_evidenced_production(legacy_url: str, target_url: str, requested_org_n
     from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
     from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401 - resolves ORM relationship
-    from app.core.db.models.organisation import Organisation
     from app.core.db.models.process import Process
     from app.core.db.models.step import Step
     from app.core.db.repositories.execution_repo import ExecutionRepository
@@ -1199,13 +1219,12 @@ def apply_evidenced_production(legacy_url: str, target_url: str, requested_org_n
 
     engine = create_engine(target_url)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
+    scope = ExitStack()
     imported = 0
     skipped = 0
     linked_inputs = 0
     try:
-        org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
-        if org is None:
-            raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
+        org = _enter_target_tenant_scope(scope, session, requested_org_name)
         session.execute(text("SELECT set_config('app.inventory_qty_guard', '1', true)"))
         processes = {
             process.name: process
@@ -1397,6 +1416,7 @@ def apply_evidenced_production(legacy_url: str, target_url: str, requested_org_n
         session.rollback()
         raise
     finally:
+        scope.close()
         session.close()
         engine.dispose()
 
@@ -1409,7 +1429,6 @@ def apply_sample_history(legacy_url: str, target_url: str, requested_org_name: s
     from app.core.db.models.execution import Execution
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
-    from app.core.db.models.organisation import Organisation
     from app.core.db.models.process import Process
     from app.core.db.repositories.execution_repo import ExecutionRepository
 
@@ -1417,14 +1436,13 @@ def apply_sample_history(legacy_url: str, target_url: str, requested_org_name: s
         samples = list(_sample_source_records(legacy_connection))
     engine = create_engine(target_url)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
+    scope = ExitStack()
     imported = 0
     skipped = 0
     linked_inputs = 0
     source_only = 0
     try:
-        org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
-        if org is None:
-            raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
+        org = _enter_target_tenant_scope(scope, session, requested_org_name)
         process = (
             session.query(Process).filter(Process.org_id == org.id, Process.name == "Legacy samples").one_or_none()
         )
@@ -1516,6 +1534,7 @@ def apply_sample_history(legacy_url: str, target_url: str, requested_org_name: s
         session.rollback()
         raise
     finally:
+        scope.close()
         session.close()
         engine.dispose()
 
@@ -1555,7 +1574,6 @@ def apply_production_sheet(manifest_path: Path, target_url: str, requested_org_n
     from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
     from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401 - resolves ORM relationship
-    from app.core.db.models.organisation import Organisation
     from app.core.db.models.process import Process
     from app.core.db.models.step import Step
     from app.core.db.repositories.execution_repo import ExecutionRepository
@@ -1565,13 +1583,12 @@ def apply_production_sheet(manifest_path: Path, target_url: str, requested_org_n
 
     engine = create_engine(target_url)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
+    scope = ExitStack()
     imported = 0
     skipped = 0
     linked_inputs = 0
     try:
-        org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
-        if org is None:
-            raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
+        org = _enter_target_tenant_scope(scope, session, requested_org_name)
         session.execute(text("SELECT set_config('app.inventory_qty_guard', '1', true)"))
 
         processes = {
@@ -1706,6 +1723,7 @@ def apply_production_sheet(manifest_path: Path, target_url: str, requested_org_n
         session.rollback()
         raise
     finally:
+        scope.close()
         session.close()
         engine.dispose()
 
@@ -1769,15 +1787,21 @@ def ensure_target_org_admin(
     from app.core.db.models.organisation import Organisation, OrganisationStatus
     from app.core.db.models.user import User, UserRole
     from app.core.security.auth_service import AuthService
+    from app.core.security.tenant_scope import tenant_scope, unscoped
 
     engine = create_engine(target_url)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
+    scope = ExitStack()
     org_created = False
     admin_created = False
     try:
-        org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
+        # This is the one legitimate cross-tenant lookup: discover whether the exact
+        # disposable target exists before its org id is available for tenant_scope().
+        with unscoped():
+            org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
         if org is None:
-            existing_email_owner = session.query(User).filter(User.email == normalized_email).one_or_none()
+            with unscoped():
+                existing_email_owner = session.query(User).filter(User.email == normalized_email).one_or_none()
             if existing_email_owner is not None:
                 raise ValueError("The requested test-admin email is already assigned to another user")
             org = Organisation(name=requested_org_name, status=OrganisationStatus.ACTIVE)
@@ -1785,9 +1809,13 @@ def ensure_target_org_admin(
             session.flush()
             org_created = True
 
+        scope.enter_context(tenant_scope(org.id))
         admin = session.query(User).filter(User.org_id == org.id, User.email == normalized_email).one_or_none()
         if admin is None:
-            existing_email_owner = session.query(User).filter(User.email == normalized_email).one_or_none()
+            # E-mail uniqueness crosses tenants, so the duplicate-owner check is explicit
+            # rather than silently relying on the current tenant context.
+            with unscoped():
+                existing_email_owner = session.query(User).filter(User.email == normalized_email).one_or_none()
             if existing_email_owner is not None:
                 raise ValueError("The requested test-admin email is already assigned to another user")
             session.add(
@@ -1809,6 +1837,7 @@ def ensure_target_org_admin(
         session.rollback()
         raise
     finally:
+        scope.close()
         session.close()
         engine.dispose()
 
@@ -1886,20 +1915,18 @@ def setup_historical_process_templates(target_url: str, requested_org_name: str)
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Historical templates are only permitted for {RESET_ORG_NAME!r}")
 
-    from app.core.db.models.organisation import Organisation
     from app.core.db.models.process import Process, ProcessCategory
     from app.core.db.models.step import Step
     from app.core.db.repositories.process_repo import ProcessRepository
 
     engine = create_engine(target_url)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
+    scope = ExitStack()
     created: list[str] = []
     existing: list[str] = []
     repaired: list[str] = []
     try:
-        org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
-        if org is None:
-            raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
+        org = _enter_target_tenant_scope(scope, session, requested_org_name)
 
         repository = ProcessRepository(session)
         for name, description, output_name, unit in HISTORICAL_PROCESS_TEMPLATES:
@@ -1947,6 +1974,7 @@ def setup_historical_process_templates(target_url: str, requested_org_name: str)
             raise RuntimeError("Historical template setup left a process without a step")
         return {"created": created, "existing": existing, "repaired": repaired}
     finally:
+        scope.close()
         session.close()
         engine.dispose()
 
