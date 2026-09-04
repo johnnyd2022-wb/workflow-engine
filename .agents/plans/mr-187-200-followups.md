@@ -65,6 +65,11 @@ adversarially reviewed by Codex (Breaker) in Herdr before push.
 ### F — perf follow-ups (bundle)
 - `live-sync.js:49` never sends `If-None-Match` ⇒ server 304 path dead ⇒ 2 queries/tab/3s.
   Fix: persist response ETag, send on next request for same cursor.
+  Already fixed by commit `2d2b83c` (F bundle, merged `fc78bd9`): `app/core/frontend/js/live-sync.js`
+  now stores `lastEtag` from the response `ETag` header (`:36`, `:56-57`) and sends it as
+  `If-None-Match` on every non-bootstrap poll (`:54`); a 304 leaves the cursor untouched.
+  Regression test `tests/js/live-sync-etag.test.js` (`node --test`), mutation-checked —
+  dropping the header reddens all three cases. (verified 2026-08-31 by findings-sweep)
 - `list_expired_materials` (`corechecks.py:201`) calls `get_check_results()` which runs every live check.
   Fix: narrow public cache accessor for just the `expired_materials` slice.
 - `list_executions` process+status+keyset (`execution_repo.py:200`) has no matching composite index.
