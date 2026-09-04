@@ -82,6 +82,23 @@ def test_password_policy_accepts_strong_password(account):
     assert body["warnings"] == []
 
 
+def test_stale_session_is_cleared_and_returns_unauthorized(account):
+    """A deleted account's old browser cookie must not turn into a middleware 500."""
+    client = account["make_client"]()
+    with client.session_transaction() as browser_session:
+        browser_session["user_id"] = str(uuid4())
+
+    response = client.get("/org")
+
+    assert response.status_code == 401
+    assert response.get_json() == {
+        "error": "Authentication required",
+        "message": "Session expired or not authenticated",
+    }
+    with client.session_transaction() as browser_session:
+        assert "user_id" not in browser_session
+
+
 # --- change password ------------------------------------------------------------------
 
 

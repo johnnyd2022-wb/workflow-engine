@@ -11,11 +11,12 @@ Rules:
 from uuid import UUID, uuid4
 
 from flask import abort, g, request, session
+from werkzeug.exceptions import HTTPException
 
 from app.core.db import db_session
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
-from app.core.security.tenant_scope import activate_request_org_id, clear_request_org_id
+from app.core.security.tenant_scope import activate_request_org_id, clear_request_org_id, unscoped
 from app.observability import get_logger
 
 LOGGER = get_logger(__name__)
@@ -88,10 +89,20 @@ def setup_tenant_context(app):
         try:
             # Load user
             user_repo = UserRepository(db)
-            user = user_repo.get_user_by_id(user_uuid)
+            # Resolving a session's user is the one query that must happen before an
+            # organisation can be known. Mark it explicitly unscoped rather than
+            # relying on the filter's fail-open fallback (and its warning log).
+            with unscoped():
+                user = user_repo.get_user_by_id(user_uuid)
             if not user or not getattr(user, "is_active", False):
                 LOGGER.warning("unknown_or_inactive_user_attempt", user_id=str(user_uuid))
-                abort(403, "Access denied")
+                # A deleted/deactivated account leaves a valid-but-stale cookie in
+                # the browser. End that session so the next request is anonymous,
+                # then use the existing 401 handler to return the normal re-login
+                # response instead of converting this expected state into a 500.
+                session.clear()  # nosemgrep: bize-session-clear-without-rotate
+                session.modified = True
+                abort(401, "Session expired or account is unavailable")
 
             # Load organisation
             org_repo = OrganisationRepository(db)
@@ -135,6 +146,11 @@ def setup_tenant_context(app):
                 "org_status": g.org_status,
             }
 
+        except HTTPException:
+            # abort() raises an HTTPException. It is an intentional response, not a
+            # middleware failure, so it must not be logged as an error or rewritten
+            # to a 500 by the broad exception handler below.
+            raise
         except Exception:
             LOGGER.exception("failed_to_load_tenant_context")
             abort(500, "Failed to load tenant context")
