@@ -246,9 +246,13 @@ edit/delete/reconcile (removed — `loadCore2Overview()` already refreshes metri
 - **Index necessity is unproven at scale.** Local/CI data is tiny; the reversibility
   check proves the indexes build/drop cleanly and `EXPLAIN` shows they're *used*, not
   that the planner *needs* them yet. Recalibrate with production-shaped volume.
-- **`budgets.json` override for `/api/core/hub/overview` is a placeholder** (queries
-  budget 15 / ceiling 25) pending a measured E2E-fixture run per the perf-guardrails
-  SKILL.md procedure.
+- **`budgets.json` override for `/api/core/hub/overview` — calibrated** (2026-09-03,
+  findings-sweep): three runs on the empty-org E2E fixture per the perf-guardrails
+  SKILL.md procedure measured queries 11/11/11 and backend_ms run medians 11.9–13.0.
+  The override now pins `queries.budget` at the observed 11 as a ratchet and sets
+  `backend_ms.budget` to 60 (~4x worst median, matched to the sibling
+  `/api/core/system-findings` override); the tight `queries.ceiling` of 25 is
+  unchanged. No longer a stub.
 - **Security findings in "requiring owner action" above:** the `prod.ini` application-side
   clause is now handled (see that section). Credential rotation + Git-history purge, and
   the tracked `app/tls/app_cert.key`, still need the credential owner and deployment
