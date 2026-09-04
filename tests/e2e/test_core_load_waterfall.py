@@ -10,7 +10,6 @@ data call (`/api/core/hub/overview`), and the Inventory / Workflows tab data mus
 until its tab is actually opened -- and must not reload on a second visit.
 """
 
-
 import pytest
 
 pytestmark = [pytest.mark.e2e]
@@ -84,6 +83,44 @@ def test_workflows_tab_defers_execution_history_until_opened(logged_in_page):
 
     page.click('[data-core2-tab-target="workflows"]')
     _wait(page)
+    assert sum(1 for c in calls if c == "executions" or c.startswith("executions?")) == 1, calls
+
+
+def test_core_tabs_follow_browser_back_and_forward_without_reloading_data(logged_in_page):
+    """A tab is a navigable Core view, not a state change the browser loses.
+
+    The initial load remains compact; moving Back/Forward between already-opened tabs
+    only switches panels and must reuse their cached data.
+    """
+    page = logged_in_page
+    calls = _core_api_calls(page)
+
+    page.goto("/core")
+    _wait(page)
+    page.click('[data-core2-tab-target="inventory"]')
+    page.wait_for_function(
+        "() => { const e = document.querySelector('[data-core2-tab-panel=\"inventory\"]'); return e && !e.hidden; }"
+    )
+    assert "tab=inventory" in page.url
+
+    page.click('[data-core2-tab-target="workflows"]')
+    page.wait_for_function(
+        "() => { const e = document.querySelector('[data-core2-tab-panel=\"workflows\"]'); return e && !e.hidden; }"
+    )
+    assert "tab=workflows" in page.url
+
+    page.go_back()
+    page.wait_for_function(
+        "() => { const e = document.querySelector('[data-core2-tab-panel=\"inventory\"]'); return e && !e.hidden; }"
+    )
+    assert "tab=inventory" in page.url
+
+    page.go_forward()
+    page.wait_for_function(
+        "() => { const e = document.querySelector('[data-core2-tab-panel=\"workflows\"]'); return e && !e.hidden; }"
+    )
+    assert "tab=workflows" in page.url
+    assert sum(1 for c in calls if c == "inventory" or c.startswith("inventory?")) == 1, calls
     assert sum(1 for c in calls if c == "executions" or c.startswith("executions?")) == 1, calls
 
 
