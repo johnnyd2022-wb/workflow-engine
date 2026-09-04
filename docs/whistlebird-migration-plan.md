@@ -37,7 +37,18 @@ It will also identify records needed for NP3 that were never represented in v1, 
    - Create `whistlebird_test`, never reusing `whistlebird-test` or the existing Whistlebird organisation.
    - Configure Compliant for spirits (including gin liqueur), require Core source references, and exclude the trade-waste framework. The council/verifier audit is NP3-related; Google Sheet evidence is a later import stage.
 
-    _Completed 2026-08-21:_ `whistlebird_test` was created as an active, isolated test tenant. The historical Core and Customs import was replayed and verified there; Xero and Google Sheet evidence remain separate stages.
+   The reproducible setup command is `--rebuild-whistlebird-test`. It first runs every
+   read-only preflight, then creates only this exact tenant and its deterministic test admin
+   if absent, resets only this tenant's imported data, replays both migration stages, and
+   fails if either verification report differs from its source counts. The password is required
+   from `WHISTLEBIRD_TEST_ADMIN_PASSWORD`; it is never committed or printed. The default login
+   email is `whistlebird_test_admin@whistlebird.test` and can be changed with `--admin-email`
+   before the tenant is first created.
+
+   ```bash
+   export WHISTLEBIRD_TEST_ADMIN_PASSWORD='store-this-in-your-password-manager'
+   uv run python scripts/whistlebird_migration.py --rebuild-whistlebird-test
+   ```
 
 4. **Import core history in dependency order**
    - Suppliers and purchases → tenant-scoped raw-material inventory items, supplier batches, expiry dates, and opening/addition movements.
