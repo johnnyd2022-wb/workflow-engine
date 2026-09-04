@@ -74,3 +74,12 @@ adversarially reviewed by Codex (Breaker) in Herdr before push.
   Fix: narrow public cache accessor for just the `expired_materials` slice.
 - `list_executions` process+status+keyset (`execution_repo.py:200`) has no matching composite index.
   Fix: add `(org_id, process_id, status, created_at DESC, id DESC)`, verify with `EXPLAIN (ANALYZE, BUFFERS)`.
+  Already fixed by migration `exec_completed_page_idx_001` ("Composite index for the process-scoped
+  completed-execution page query", in the current head lineage via `merge_noident_execpage_001`):
+  it creates `ix_executions_org_process_status_created_id` on
+  `(org_id, process_id, status, created_at DESC, id DESC)` — exactly this shape —
+  `CONCURRENTLY` in an autocommit block, `downgrade()` drops it. Confirmed present on the
+  migrated test DB (`pg_indexes`). `list_executions` (`app/core/db/repositories/execution_repo.py:197-205`)
+  filters `org_id`/`process_id`/`status` then `ORDER BY created_at DESC, id DESC`, which the
+  index covers. `EXPLAIN` on local/CI data is tiny so the planner may still seq-scan — the
+  same caveat `exec_completed_page_idx_001`'s own docstring records. (verified 2026-09-01 by findings-sweep)

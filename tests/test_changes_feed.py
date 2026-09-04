@@ -305,3 +305,46 @@ def test_bad_params_are_400(db, two_orgs):
     assert client.get(f"{ENDPOINT}?since=abc").status_code == 400
     assert client.get(f"{ENDPOINT}?since=-1").status_code == 400
     assert client.get(f"{ENDPOINT}?since=0&limit=0").status_code == 400
+
+
+def test_synced_types_match_the_partial_index(db, two_orgs):
+    """The head query's `entity_type IN (...)` filter is served by the partial index
+    ix_entity_events_org_seq_synced (migration ee_synced_seq_idx_001). Its predicate must
+    list exactly changes_feed._SYNCED_ENTITY_TYPES -- otherwise the head query silently
+    falls back to a full backward index scan + filter."""
+    from app.core.backend.changes_feed import _SYNCED_ENTITY_TYPES
+
+    indexdef = db.execute(
+        text("SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_entity_events_org_seq_synced'")
+    ).scalar()
+    assert indexdef, "ix_entity_events_org_seq_synced missing -- migration ee_synced_seq_idx_001 not applied"
+    for t in _SYNCED_ENTITY_TYPES:
+        assert f"'{t}'" in indexdef, f"{t} is a synced type but not in the partial-index predicate: {indexdef}"
+    # and nothing extra: count the quoted literals in the predicate's IN/ANY list
+    import re
+
+    listed = set(re.findall(r"'([a-z_]+)'::", indexdef))
+    assert listed == set(_SYNCED_ENTITY_TYPES), f"partial index predicate {listed} != _SYNCED_ENTITY_TYPES"
+
+
+def test_head_query_uses_the_partial_index(db, two_orgs):
+    """EXPLAIN proves the head query is served by ix_entity_events_org_seq_synced (an
+    index-only scan), not a filter over ix_entity_events_org_seq."""
+    (org, _client), _b = two_orgs
+    _emit(db, org.id, "user.login", "user", uuid4())
+    _emit(db, org.id, "process.created", "process", uuid4())
+    _emit(db, org.id, "user.login", "user", uuid4())
+
+    plan = "\n".join(
+        r[0]
+        for r in db.execute(
+            text(
+                "EXPLAIN SELECT COALESCE(MAX(seq),0) FROM entity_events "
+                "WHERE org_id = :o AND entity_type IN "
+                "('process','execution','execution_step','step','inventory_item')"
+            ),
+            {"o": str(org.id)},
+        )
+    )
+    assert "ix_entity_events_org_seq_synced" in plan, plan
+    assert "Rows Removed by Filter" not in plan, plan
