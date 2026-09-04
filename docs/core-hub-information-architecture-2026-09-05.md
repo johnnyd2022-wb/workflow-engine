@@ -1,0 +1,71 @@
+# Core hub information architecture — 5 September 2026
+
+## Decision
+
+Keep `/core` as the operational landing page with three views: **Overview**,
+**Inventory**, and **Product workflows**. Keep detailed stock work and active-batch work
+on their existing dedicated routes. Do not turn the three hub views into separate page
+navigations.
+
+The initial Core request is intentionally compact (`/api/core/hub/overview`), while the
+Inventory and Product-workflows tabs fetch their full, potentially unbounded lists only on
+first use. That is the right performance boundary for an organisation with real production
+history. Separate routes remain appropriate for a task that needs a dense working surface:
+live inventory (`/core/inventory/live`) and active batches (`/core/executions/live`).
+
+## Evidence reviewed
+
+- The rebuilt `whistlebird_test` tenant has 12 imported workflows, 138 historical
+  executions, 948 production links, 67 receipt records, and 38 curated sheet records.
+- The initial hub is already protected by Playwright request-waterfall tests: it makes one
+  compact overview call and defers inventory and execution history until a tab is selected.
+- The Playwright fixture creates a new organisation for each run, so the Core behaviour is
+  exercised without relying on the Whistlebird fixture or a particular organisation name.
+- The initial view currently gives three analytical cards the same visual priority. Batch
+  dwell and inventory alerts can require an operator response now; traceability coverage is
+  valuable, but is primarily explanatory when the health strip has not raised an issue.
+- A plain `/core` navigation can reopen the last local-storage tab. That means two people
+  opening the same URL can see different first content, and a user returning from a detailed
+  task may not receive the operational overview they expected.
+
+## Changes selected
+
+1. Make `/core` deterministic: Overview is the default. An explicitly shared or bookmarked
+   `?tab=inventory` or `?tab=workflows` still opens that view, as do Back/Forward events.
+2. Preserve Overview's immediate signals (batch dwell and inventory alerts) above the fold.
+   Move traceability coverage into a collapsed disclosure with a concise coverage summary.
+   The existing health strip remains the prominent route for actual traceability problems.
+3. Complete the tab interaction contract: IDs, `aria-controls`, roving `tabindex`, and
+   Arrow/Home/End keyboard navigation. Tab selection remains URL-addressable and does not
+   trigger duplicate heavy-list requests.
+4. Scope every standalone tenant-aware migration ORM operation to the organisation supplied
+   to it explicitly. The pre-scope target lookup is an auditable `unscoped()` exception;
+   all tenant work runs in `tenant_scope(org.id)`. This preserves the global tenant filter
+   and removes misleading `tenant_filter.no_context` warnings. `whistlebird_test` is the
+   disposable real-data validation fixture, not a product-specific frontend behaviour.
+5. Resolve the Dashboard mobile follow-up without concealing a signal. Biz-E currently
+   distinguishes only `ADMIN` and `MEMBER`, not named operating roles, and both roles need
+   to see urgent system findings. Keep Dashboard metrics shared until a tenant-configured
+   role/view model exists; use the Core landing page as the action-first workspace for
+   production operators. This delivery makes that operational hierarchy clearer rather
+   than applying a brittle mobile-only hide rule.
+
+## Explicit non-changes
+
+- Do not hide or remove compliance/traceability signals. A problem remains prominent in the
+  Core health strip and Notifications.
+- Do not add a fourth page or duplicate the existing live inventory/active-batch screens.
+- Do not make the default overview fetch full inventory or execution history.
+- Do not make dashboard or Core content tenant-specific: the information architecture and
+  accessibility contract apply uniformly to every Biz-E organisation. The Whistlebird
+  fixture is used only to exercise a realistically populated organisation.
+- Keep the Whistlebird importer locked to its explicitly named disposable target. Its legacy
+  source data must never be replayed into another customer organisation; its reusable
+  tenant-scope helper still establishes the correct target context for any approved caller.
+
+## Verification
+
+- Extend Core Playwright coverage for deterministic `/core`, keyboard tabs, disclosure
+  behaviour, Back/Forward, and the original lazy-load request contract.
+- Add migration scope regression coverage and run the deterministic bootstrap against the
+  disposable `whistlebird_test` tenant before hand-off.
