@@ -124,6 +124,51 @@ def test_core_tabs_follow_browser_back_and_forward_without_reloading_data(logged
     assert sum(1 for c in calls if c == "executions" or c.startswith("executions?")) == 1, calls
 
 
+def test_core_overview_is_deterministic_and_traceability_is_progressively_disclosed(logged_in_page):
+    """A plain /core is an operational landing page, not the last browser's tab state."""
+    page = logged_in_page
+    page.goto("/core?tab=inventory")
+    _wait(page)
+    page.evaluate("localStorage.setItem('core2.mainTab', 'workflows')")
+
+    page.goto("/core")
+    _wait(page)
+    assert page.url.endswith("/core")
+    assert page.locator('[data-core2-tab-target="overview"]').get_attribute("aria-selected") == "true"
+    assert page.locator('[data-core2-tab-panel="overview"]').is_visible()
+    assert page.locator('[data-core2-tab-panel="inventory"]').is_hidden()
+
+    traceability = page.locator(".core2-overview-secondary__details")
+    assert traceability.is_visible()
+    assert traceability.evaluate("node => node.open") is False
+    assert "covered" in page.locator("#core2-overview-traceability-summary").inner_text()
+    traceability.locator("summary").click()
+    assert traceability.evaluate("node => node.open") is True
+    assert page.locator("#core2-overview-traceability").is_visible()
+
+
+def test_core_tabs_are_keyboard_navigable(logged_in_page):
+    """Tabs use the standard roving-tabindex keyboard contract."""
+    page = logged_in_page
+    page.goto("/core")
+    _wait(page)
+
+    overview = page.locator("#core2-tab-overview")
+    overview.focus()
+    overview.press("ArrowRight")
+    page.wait_for_function(
+        "() => { const e = document.querySelector('[data-core2-tab-panel=\"inventory\"]'); return e && !e.hidden; }"
+    )
+    assert page.locator("#core2-tab-inventory").evaluate("node => document.activeElement === node")
+    assert page.locator("#core2-tab-inventory").get_attribute("tabindex") == "0"
+
+    page.locator("#core2-tab-inventory").press("End")
+    page.wait_for_function(
+        "() => { const e = document.querySelector('[data-core2-tab-panel=\"workflows\"]'); return e && !e.hidden; }"
+    )
+    assert page.locator("#core2-tab-workflows").evaluate("node => document.activeElement === node")
+
+
 def test_auth_me_is_fetched_once_per_page(logged_in_page):
     """The profile mascot (base_spa), the sidebar account widget and flows2 each used to
     fetch /auth/me; they now share CoreAPI.getMe."""

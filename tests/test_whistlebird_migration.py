@@ -5,6 +5,8 @@ import json
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -39,6 +41,33 @@ def test_tenant_setup_rejects_any_tenant_except_whistlebird_test(migration_modul
         migration_module.ensure_target_org_admin(
             "postgresql://unused", "another_tenant", "admin@example.test", "not-used"
         )
+
+
+def test_target_tenant_scope_is_active_only_for_target_orm_work(migration_module):
+    """Standalone migration ORM work must not fall through to tenant_filter.no_context."""
+    from contextlib import ExitStack
+
+    from app.core.security.tenant_scope import get_current_org_id
+
+    org = SimpleNamespace(id=uuid4())
+
+    class Query:
+        def filter(self, *_args):
+            return self
+
+        def one_or_none(self):
+            return org
+
+    class Session:
+        def query(self, *_args):
+            return Query()
+
+    scope = ExitStack()
+    assert get_current_org_id() is None
+    assert migration_module._enter_target_tenant_scope(scope, Session(), "another_bize_org") is org
+    assert get_current_org_id() == org.id
+    scope.close()
+    assert get_current_org_id() is None
 
 
 def test_bootstrap_rejects_any_tenant_except_whistlebird_test(migration_module, tmp_path):
