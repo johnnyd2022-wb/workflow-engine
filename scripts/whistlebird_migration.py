@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Safe preflight tooling for the one-off Whistlebird v1 → Biz-E migration.
+"""Guarded, reproducible tooling for the Whistlebird v1 → Biz-E migration.
 
-This initial command is deliberately read-only.  It produces aggregate-only reports:
+The default/profile and dry-run actions are read-only and produce aggregate-only reports:
 no contacts, email addresses, free-text notes, product names, or credentials are emitted.
-Future reset/import commands must keep the same explicit tenant guardrails.
+Every write action is restricted to the exact disposable ``whistlebird_test`` tenant. The
+rebuild action preflights, replays, and verifies the complete reviewed import in one command.
 """
 
 from __future__ import annotations
@@ -87,6 +88,8 @@ RESET_TABLES = (
     "entity_events",
 )
 RESET_ORG_NAME = "whistlebird_test"
+DEFAULT_TEST_ADMIN_EMAIL = "whistlebird_test_admin@whistlebird.test"
+DEFAULT_PRODUCTION_SHEET_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
 DERIVED_TIMEZONE = ZoneInfo("Pacific/Auckland")
 DERIVED_TIME = time(hour=12)
 HISTORICAL_PROCESS_TEMPLATES = (
@@ -308,11 +311,7 @@ def _legacy_list(value: Any) -> tuple[str, ...]:
     raw = _optional_text(value)
     if raw is None:
         return ()
-    return tuple(
-        entry
-        for entry in (part.strip().strip('"') for part in raw.strip("{}").split(","))
-        if entry
-    )
+    return tuple(entry for entry in (part.strip().strip('"') for part in raw.strip("{}").split(",")) if entry)
 
 
 def _receipt_source_records(connection: Connection) -> Iterator[ReceiptSourceRecord]:
@@ -565,9 +564,7 @@ def _operation_source_records(connection: Connection) -> Iterator[HistoricalOper
             process_name="Legacy ex-stock storage",
             item_name=_optional_text(row["product_name"])
             or f"Whistlebird ex-stock product ({_decimal_label(bottle_size)} mL, {_decimal_label(abv)}% ABV)",
-            quantity=_decimal(
-                row["bottles_stored"], "bottles_stored", "product_actions_ex_stock_storage", legacy_id
-            ),
+            quantity=_decimal(row["bottles_stored"], "bottles_stored", "product_actions_ex_stock_storage", legacy_id),
             unit="units",
             inventory_type="final_product",
             batch_label=_optional_text(row["storage_id"]),
@@ -621,9 +618,7 @@ def _operation_source_records(connection: Connection) -> Iterator[HistoricalOper
             legacy_id=legacy_id,
             legacy_date=legacy_date,
             process_name="Legacy bottling",
-            item_name=(
-                f"Whistlebird bottled product ({_decimal_label(bottle_size)} mL, {_decimal_label(abv)}% ABV)"
-            ),
+            item_name=(f"Whistlebird bottled product ({_decimal_label(bottle_size)} mL, {_decimal_label(abv)}% ABV)"),
             quantity=_decimal(row["bottles_stored"], "bottles_stored", "product_actions_bottling", legacy_id),
             unit="units",
             inventory_type="final_product",
@@ -636,7 +631,12 @@ def _operation_source_records(connection: Connection) -> Iterator[HistoricalOper
                 "legacy_vat_batch": _optional_text(row["vat_batch"]),
                 "legacy_bottle_size_ml": str(bottle_size),
                 "legacy_abv_percent": str(abv),
-                "legacy_total_volume_ml": str((bottle_size * _decimal(row["bottles_stored"], "bottles_stored", "product_actions_bottling", legacy_id)).quantize(Decimal("0.0001"))),
+                "legacy_total_volume_ml": str(
+                    (
+                        bottle_size
+                        * _decimal(row["bottles_stored"], "bottles_stored", "product_actions_bottling", legacy_id)
+                    ).quantize(Decimal("0.0001"))
+                ),
             },
         )
 
@@ -1155,12 +1155,8 @@ def apply_core_receipts_and_lodgements(legacy_url: str, target_url: str, request
                     "lodged_abv_percent": str(
                         _decimal(row["lodged_abv"], "lodged_abv", "customs_lodgements", legacy_id)
                     ),
-                    "lodged_litres_of_alcohol": str(
-                        _decimal(row["lal"], "lal", "customs_lodgements", legacy_id)
-                    ),
-                    "legacy_bottle_count": str(
-                        _decimal(row["bottles"], "bottles", "customs_lodgements", legacy_id)
-                    ),
+                    "lodged_litres_of_alcohol": str(_decimal(row["lal"], "lal", "customs_lodgements", legacy_id)),
+                    "legacy_bottle_count": str(_decimal(row["bottles"], "bottles", "customs_lodgements", legacy_id)),
                 },
                 created_at=_derived_timestamp(legacy_date),
                 updated_at=_derived_timestamp(legacy_date),
@@ -1235,9 +1231,8 @@ def apply_evidenced_production(legacy_url: str, target_url: str, requested_org_n
                     ingredient_by_code[str(code)].append(item)
             if legacy_source.get("table") == "product_actions_flavors" and extra_data.get("legacy_flavor_batch"):
                 flavour_by_batch[str(extra_data["legacy_flavor_batch"])].append(item)
-            if (
-                legacy_source.get("table") == "product_actions_flavor_experiments"
-                and extra_data.get("legacy_flavor_code")
+            if legacy_source.get("table") == "product_actions_flavor_experiments" and extra_data.get(
+                "legacy_flavor_code"
             ):
                 flavour_by_code[str(extra_data["legacy_flavor_code"])].append(item)
             if legacy_source.get("table") == "product_actions_flavor_vat" and extra_data.get("legacy_vat_batch"):
@@ -1389,9 +1384,8 @@ def apply_evidenced_production(legacy_url: str, target_url: str, requested_org_n
             legacy_source = extra_data.get("legacy_source") or {}
             if legacy_source.get("table") == "product_actions_flavors" and extra_data.get("legacy_flavor_batch"):
                 flavour_by_batch[str(extra_data["legacy_flavor_batch"])].append(item)
-            if (
-                legacy_source.get("table") == "product_actions_flavor_experiments"
-                and extra_data.get("legacy_flavor_code")
+            if legacy_source.get("table") == "product_actions_flavor_experiments" and extra_data.get(
+                "legacy_flavor_code"
             ):
                 flavour_by_code[str(extra_data["legacy_flavor_code"])].append(item)
             if legacy_source.get("table") == "product_actions_flavor_vat" and extra_data.get("legacy_vat_batch"):
@@ -1432,9 +1426,7 @@ def apply_sample_history(legacy_url: str, target_url: str, requested_org_name: s
         if org is None:
             raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
         process = (
-            session.query(Process)
-            .filter(Process.org_id == org.id, Process.name == "Legacy samples")
-            .one_or_none()
+            session.query(Process).filter(Process.org_id == org.id, Process.name == "Legacy samples").one_or_none()
         )
         if process is None:
             raise RuntimeError("Missing historical process template: Legacy samples")
@@ -1443,9 +1435,8 @@ def apply_sample_history(legacy_url: str, target_url: str, requested_org_name: s
         for item in session.query(InventoryItem).filter(InventoryItem.org_id == org.id).all():
             extra_data = item.extra_data or {}
             legacy_source = extra_data.get("legacy_source") or {}
-            if (
-                legacy_source.get("table") == "product_actions_flavor_experiments"
-                and extra_data.get("legacy_flavor_code")
+            if legacy_source.get("table") == "product_actions_flavor_experiments" and extra_data.get(
+                "legacy_flavor_code"
             ):
                 flavour_by_code[str(extra_data["legacy_flavor_code"])].append(item)
 
@@ -1756,6 +1747,140 @@ def reset_target_org(target_url: str, requested_org_name: str) -> dict[str, Any]
     }
 
 
+def ensure_target_org_admin(
+    target_url: str, requested_org_name: str, admin_email: str, admin_password: str
+) -> dict[str, bool]:
+    """Create the one permitted test tenant and its deterministic admin if absent.
+
+    This deliberately does not reset an existing password or alter an existing user. The
+    supplied password is used only for a newly-created account, and is never included in
+    the report. Supplying it through an environment variable avoids both source control and
+    shell-history credential exposure.
+    """
+    if requested_org_name != RESET_ORG_NAME:
+        raise ValueError(f"Tenant setup is only permitted for {RESET_ORG_NAME!r}")
+
+    normalized_email = admin_email.lower().strip()
+    if not normalized_email or "@" not in normalized_email:
+        raise ValueError("A valid test-admin email address is required")
+    if not admin_password:
+        raise ValueError("A non-empty test-admin password is required")
+
+    from app.core.db.models.organisation import Organisation, OrganisationStatus
+    from app.core.db.models.user import User, UserRole
+    from app.core.security.auth_service import AuthService
+
+    engine = create_engine(target_url)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    org_created = False
+    admin_created = False
+    try:
+        org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
+        if org is None:
+            existing_email_owner = session.query(User).filter(User.email == normalized_email).one_or_none()
+            if existing_email_owner is not None:
+                raise ValueError("The requested test-admin email is already assigned to another user")
+            org = Organisation(name=requested_org_name, status=OrganisationStatus.ACTIVE)
+            session.add(org)
+            session.flush()
+            org_created = True
+
+        admin = session.query(User).filter(User.org_id == org.id, User.email == normalized_email).one_or_none()
+        if admin is None:
+            existing_email_owner = session.query(User).filter(User.email == normalized_email).one_or_none()
+            if existing_email_owner is not None:
+                raise ValueError("The requested test-admin email is already assigned to another user")
+            session.add(
+                User(
+                    org_id=org.id,
+                    email=normalized_email,
+                    password_hash=AuthService.hash_password(admin_password),
+                    role=UserRole.ADMIN,
+                    is_active=True,
+                )
+            )
+            admin_created = True
+        elif not admin.is_active or admin.role != UserRole.ADMIN:
+            raise ValueError("The deterministic test-admin account is not an active administrator")
+
+        session.commit()
+        return {"org_created": org_created, "admin_created": admin_created}
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _require_matching_import(report: dict[str, Any], report_name: str) -> None:
+    """Refuse a bootstrap that completed writes but did not reproduce expected counts."""
+    mismatches: list[str] = []
+    for group_name, group in report.items():
+        if group_name == "date_mismatches":
+            if isinstance(group, dict):
+                for label, count in group.items():
+                    if count:
+                        mismatches.append(f"{label} date mismatches: {count}")
+            elif group:
+                mismatches.append(f"date mismatches: {group}")
+            continue
+        if not isinstance(group, dict):
+            continue
+        for label, counts in group.items():
+            if isinstance(counts, dict) and counts.get("expected") != counts.get("actual"):
+                mismatches.append(f"{label}: expected {counts.get('expected')}, got {counts.get('actual')}")
+    if mismatches:
+        raise RuntimeError(f"{report_name} verification failed: {'; '.join(mismatches)}")
+
+
+def bootstrap_whistlebird_test(
+    legacy_url: str,
+    target_url: str,
+    requested_org_name: str,
+    admin_email: str,
+    admin_password: str,
+    sheet_manifest: Path,
+) -> dict[str, Any]:
+    """Rebuild the disposable Whistlebird tenant from reviewed, deterministic sources.
+
+    Every read-only validation happens before the first target write. The only destructive
+    operation is the existing exact-name reset, which preserves tenant users and rejects every
+    other organisation name.
+    """
+    if requested_org_name != RESET_ORG_NAME:
+        raise ValueError(f"Bootstrap is only permitted for {RESET_ORG_NAME!r}")
+
+    preflight = {
+        "core": build_core_dry_run(legacy_url),
+        "production": build_production_dry_run(legacy_url),
+        "traceability": build_traceability_dry_run(legacy_url),
+        "production_sheet": build_production_sheet_dry_run(sheet_manifest),
+    }
+    setup = ensure_target_org_admin(target_url, requested_org_name, admin_email, admin_password)
+    reset = reset_target_org(target_url, requested_org_name)
+    templates = setup_historical_process_templates(target_url, requested_org_name)
+    core = apply_core_receipts_and_lodgements(legacy_url, target_url, requested_org_name)
+    production = apply_evidenced_production(legacy_url, target_url, requested_org_name)
+    samples = apply_sample_history(legacy_url, target_url, requested_org_name)
+    production_sheet = apply_production_sheet(sheet_manifest, target_url, requested_org_name)
+    import_verification = build_import_verification(legacy_url, target_url, requested_org_name)
+    sheet_verification = build_production_sheet_verification(sheet_manifest, target_url, requested_org_name)
+    _require_matching_import(import_verification, "Legacy import")
+    _require_matching_import(sheet_verification, "Production-sheet import")
+    return {
+        "preflight": preflight,
+        "tenant_setup": setup,
+        "reset": reset,
+        "templates": templates,
+        "core": core,
+        "production": production,
+        "samples": samples,
+        "production_sheet": production_sheet,
+        "verification": {"legacy": import_verification, "production_sheet": sheet_verification},
+    }
+
+
 def setup_historical_process_templates(target_url: str, requested_org_name: str) -> dict[str, list[str]]:
     """Create only the approved historical templates in the existing Biz-E process model."""
     if requested_org_name != RESET_ORG_NAME:
@@ -1949,7 +2074,9 @@ def build_import_verification(legacy_url: str, target_url: str, requested_org_na
     }
 
 
-def build_production_sheet_verification(manifest_path: Path, target_url: str, requested_org_name: str) -> dict[str, Any]:
+def build_production_sheet_verification(
+    manifest_path: Path, target_url: str, requested_org_name: str
+) -> dict[str, Any]:
     """Compare the curated manifest's expected counts against imported stage-2 rows."""
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Verification is only permitted for {RESET_ORG_NAME!r}")
@@ -2013,6 +2140,29 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument("--org-name", default="whistlebird_test", help="Requested migration tenant name.")
     parser.add_argument("--output", type=Path, help="Optional JSON report path; stdout is always written.")
+    parser.add_argument(
+        "--admin-email",
+        default=DEFAULT_TEST_ADMIN_EMAIL,
+        help="Test-admin email used only by --ensure-test-tenant / --rebuild-whistlebird-test.",
+    )
+    parser.add_argument(
+        "--admin-password-env",
+        default="WHISTLEBIRD_TEST_ADMIN_PASSWORD",
+        help="Environment-variable name containing the test-admin password (never printed).",
+    )
+    parser.add_argument(
+        "--ensure-test-tenant",
+        action="store_true",
+        help="Create only whistlebird_test and its deterministic test-admin account if absent.",
+    )
+    parser.add_argument(
+        "--rebuild-whistlebird-test",
+        action="store_true",
+        help=(
+            "Preflight, create whistlebird_test if needed, reset its data, replay both migration stages, "
+            "and require matching verification counts."
+        ),
+    )
     parser.add_argument(
         "--confirm-reset-whistlebird-test",
         action="store_true",
@@ -2082,19 +2232,53 @@ def _arguments() -> argparse.Namespace:
     arguments = parser.parse_args()
     if not arguments.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
+    actions = (
+        arguments.ensure_test_tenant,
+        arguments.rebuild_whistlebird_test,
+        arguments.confirm_reset_whistlebird_test,
+        arguments.dry_run_core,
+        arguments.dry_run_traceability,
+        arguments.dry_run_production,
+        arguments.setup_historical_templates,
+        arguments.apply_core_receipts_and_lodgements,
+        arguments.apply_evidenced_production,
+        arguments.apply_sample_history,
+        arguments.verify_import,
+        arguments.dry_run_production_sheet,
+        arguments.apply_production_sheet,
+        arguments.verify_production_sheet,
+    )
+    if sum(actions) > 1:
+        parser.error("Specify only one migration action per invocation")
+    target_scoped_actions = (
+        arguments.ensure_test_tenant,
+        arguments.rebuild_whistlebird_test,
+        arguments.confirm_reset_whistlebird_test,
+        arguments.setup_historical_templates,
+        arguments.apply_core_receipts_and_lodgements,
+        arguments.apply_evidenced_production,
+        arguments.apply_sample_history,
+        arguments.verify_import,
+        arguments.apply_production_sheet,
+        arguments.verify_production_sheet,
+    )
+    if any(target_scoped_actions) and arguments.org_name != RESET_ORG_NAME:
+        parser.error(f"--org-name must be exactly {RESET_ORG_NAME!r} for this action")
+    if arguments.ensure_test_tenant or arguments.rebuild_whistlebird_test:
+        if not os.environ.get(arguments.admin_password_env):
+            parser.error(f"{arguments.admin_password_env} must contain the test-admin password")
     sheet_actions = (
         arguments.dry_run_production_sheet or arguments.apply_production_sheet or arguments.verify_production_sheet
     )
+    if arguments.rebuild_whistlebird_test and not arguments.sheet_manifest:
+        arguments.sheet_manifest = DEFAULT_PRODUCTION_SHEET_MANIFEST
     if sheet_actions and not arguments.sheet_manifest:
         parser.error("--sheet-manifest is required for the production-sheet actions")
     if (
         not (
             arguments.confirm_reset_whistlebird_test
             or arguments.setup_historical_templates
-            or arguments.apply_core_receipts_and_lodgements
-            or arguments.apply_evidenced_production
-            or arguments.apply_sample_history
-            or arguments.verify_import
+            or arguments.ensure_test_tenant
             or sheet_actions
         )
         and not arguments.legacy_url
@@ -2105,7 +2289,23 @@ def _arguments() -> argparse.Namespace:
 
 def main() -> int:
     arguments = _arguments()
-    if arguments.confirm_reset_whistlebird_test:
+    if arguments.rebuild_whistlebird_test:
+        report = bootstrap_whistlebird_test(
+            arguments.legacy_url,
+            arguments.target_url,
+            arguments.org_name,
+            arguments.admin_email,
+            os.environ[arguments.admin_password_env],
+            arguments.sheet_manifest,
+        )
+    elif arguments.ensure_test_tenant:
+        report = ensure_target_org_admin(
+            arguments.target_url,
+            arguments.org_name,
+            arguments.admin_email,
+            os.environ[arguments.admin_password_env],
+        )
+    elif arguments.confirm_reset_whistlebird_test:
         report = reset_target_org(arguments.target_url, arguments.org_name)
     elif arguments.setup_historical_templates:
         report = setup_historical_process_templates(arguments.target_url, arguments.org_name)
