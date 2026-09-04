@@ -598,7 +598,9 @@
       overlay.dataset.boundCore2HealthSheet = '1';
     }
     
-    function setCore2MainTab(tab) {
+    function setCore2MainTab(tab, options) {
+      options = options || {};
+      var historyMode = options.historyMode || 'replace';
       const safeTab = (tab === 'inventory' || tab === 'workflows') ? tab : 'overview';
       const tabButtons = document.querySelectorAll('[data-core2-tab-target]');
       const tabPanels = document.querySelectorAll('[data-core2-tab-panel]');
@@ -627,12 +629,15 @@
         window.localStorage.setItem('core2.mainTab', safeTab);
       } catch (e) {}
 
-      try {
-        const url = new URL(window.location.href);
-        if (safeTab === 'overview') url.searchParams.delete('tab');
-        else url.searchParams.set('tab', safeTab);
-        window.history.replaceState({}, '', url.toString());
-      } catch (e) {}
+      if (historyMode !== 'none') {
+        try {
+          const url = new URL(window.location.href);
+          if (safeTab === 'overview') url.searchParams.delete('tab');
+          else url.searchParams.set('tab', safeTab);
+          if (historyMode === 'push') window.history.pushState({ core2MainTab: safeTab }, '', url.toString());
+          else window.history.replaceState({ core2MainTab: safeTab }, '', url.toString());
+        } catch (e) {}
+      }
 
       // Lazy-load the detail data the first time each tab is shown.
       if (safeTab === 'inventory' && typeof loadCore2InventoryTab === 'function') loadCore2InventoryTab();
@@ -646,7 +651,7 @@
       buttons.forEach((btn) => {
         if (btn.dataset.boundCore2MainTab) return;
         btn.addEventListener('click', () => {
-          setCore2MainTab(btn.getAttribute('data-core2-tab-target'));
+          setCore2MainTab(btn.getAttribute('data-core2-tab-target'), { historyMode: 'push' });
         });
         btn.dataset.boundCore2MainTab = '1';
       });
@@ -663,7 +668,19 @@
           stored = window.localStorage.getItem('core2.mainTab') || 'overview';
         } catch (e) {}
       }
-      setCore2MainTab(stored);
+      setCore2MainTab(stored, { historyMode: 'replace' });
+
+      if (!window.__core2MainTabPopstateBound) {
+        window.addEventListener('popstate', function () {
+          var tab = 'overview';
+          try {
+            var fromUrl = (new URL(window.location.href)).searchParams.get('tab');
+            if (fromUrl === 'inventory' || fromUrl === 'workflows') tab = fromUrl;
+          } catch (e) {}
+          setCore2MainTab(tab, { historyMode: 'none' });
+        });
+        window.__core2MainTabPopstateBound = true;
+      }
     }
 
     // Initialize account info component and Reset DB button (test env only)

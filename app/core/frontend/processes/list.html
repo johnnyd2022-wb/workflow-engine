@@ -1,9 +1,9 @@
 {% extends "shared/base_spa.html" %}
 
-{% block title %}Products{% endblock %}
+{% block title %}Product workflows{% endblock %}
 
 {% block head_extras %}
-  <meta name="description" content="View products, steps, and live inventory for each manufacturing process.">
+  <meta name="description" content="Define, start, and review product workflows and their production runs.">
 {% endblock %}
 
 {% block content %}
@@ -14,8 +14,8 @@
 
     <section class="card spa-primary-flat processes-list-hero spa-form-section spa-page-hero">
       <div class="card-header processes-list-hero__header">
-        <h2 class="card-title">Products</h2>
-        <p class="processes-list-hero__tagline">View and record product steps with live product inventory</p>
+        <h2 class="card-title">Product workflows</h2>
+        <p class="processes-list-hero__tagline">Define repeatable production work, then start and review its batches in one place.</p>
       </div>
       <div class="card-content">
         <a href="/core/flows/create/start" hx-boost="false" class="processes-list-create-card" aria-labelledby="processes-list-create-title">
@@ -31,13 +31,27 @@
             </svg>
           </span>
           <span class="processes-list-create-card__text">
-            <h3 id="processes-list-create-title" class="spa-form-section-title">Create new product</h3>
+            <h3 id="processes-list-create-title" class="spa-form-section-title">Create product workflow</h3>
             <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Define process steps, inputs, outputs and custom data to record</p>
           </span>
         </a>
+        <div class="processes-list-toolbar">
+          <label class="processes-list-search" for="processes-list-search">
+            <span>Find a workflow</span>
+            <input
+              id="processes-list-search"
+              class="spa-inp"
+              type="search"
+              placeholder="Search by workflow name"
+              autocomplete="off"
+              aria-controls="processes-list-stack"
+            >
+          </label>
+          <p id="processes-list-count" class="processes-list-count" role="status" aria-live="polite">Loading product workflows…</p>
+        </div>
         <div class="spa-card-form" style="gap: 0;">
-          <div id="processes-list-loading" class="processes-list-loading">Loading products…</div>
-          <div id="processes-list-empty" class="processes-list-empty" style="display: none;">No products yet. Create one from the Process Hub.</div>
+          <div id="processes-list-loading" class="processes-list-loading">Loading product workflows…</div>
+          <div id="processes-list-empty" class="processes-list-empty" style="display: none;"></div>
           <div id="processes-list-stack" class="processes-list-stack" style="display: none;"></div>
         </div>
       </div>
@@ -61,13 +75,51 @@
         catch (e) { return iso.slice(0, 10); }
       }
 
-      function render(processes) {
+      var allProcesses = [];
+
+      function workflowSearchText(process) {
+        return [process.name, process.description, process.category]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase();
+      }
+
+      function filteredProcesses() {
+        var input = document.getElementById('processes-list-search');
+        var query = input ? input.value.trim().toLocaleLowerCase() : '';
+        if (!query) return allProcesses;
+        return allProcesses.filter(function (process) {
+          return workflowSearchText(process).indexOf(query) !== -1;
+        });
+      }
+
+      function setResultCount(visibleCount) {
+        var count = document.getElementById('processes-list-count');
+        if (!count) return;
+        var input = document.getElementById('processes-list-search');
+        var hasQuery = input && input.value.trim() !== '';
+        if (hasQuery) {
+          count.textContent = 'Showing ' + visibleCount + ' of ' + allProcesses.length + ' workflow' + (allProcesses.length === 1 ? '' : 's');
+        } else {
+          count.textContent = allProcesses.length + ' product workflow' + (allProcesses.length === 1 ? '' : 's');
+        }
+      }
+
+      function render() {
         var loading = document.getElementById('processes-list-loading');
         var empty = document.getElementById('processes-list-empty');
         var stack = document.getElementById('processes-list-stack');
         if (loading) loading.style.display = 'none';
+        var processes = filteredProcesses();
+        setResultCount(processes.length);
         if (!processes || !processes.length) {
-          if (empty) empty.style.display = 'block';
+          if (empty) {
+            var input = document.getElementById('processes-list-search');
+            empty.textContent = input && input.value.trim()
+              ? 'No workflows match that search.'
+              : 'No product workflows yet. Create one to define your production work.';
+            empty.style.display = 'block';
+          }
           if (stack) { stack.style.display = 'none'; stack.innerHTML = ''; }
           return;
         }
@@ -106,21 +158,23 @@
               if (parts.length) auditLine = '<p class="processes-list-item__audit">' + esc(parts.join(' · ')) + '</p>';
             }
             return (
-              '<a href="' + esc(href) + '" class="processes-list-item">' +
+              '<article class="processes-list-item">' +
+                '<a href="' + esc(href) + '" class="processes-list-item__open" aria-label="Open workflow: ' + esc(p.name || 'Untitled') + '">' +
                 '<div class="processes-list-item__main">' +
                   '<p class="processes-list-item__name">' + esc(p.name || 'Untitled') + '</p>' +
                   '<p class="processes-list-item__meta">' + esc(meta) + '</p>' +
                   auditLine +
                 '</div>' +
+                '</a>' +
                 '<div class="processes-list-item__actions">' +
-                  '<button class="processes-list-item__history-btn" type="button" data-process-id="' + esc(id) + '" data-process-name="' + esc(p.name || 'Untitled') + '">History</button>' +
-                  '<span class="processes-list-item__arrow" aria-hidden="true">' +
+                  '<button class="processes-list-item__history-btn" type="button" data-process-id="' + esc(id) + '" data-process-name="' + esc(p.name || 'Untitled') + '" aria-label="View history for ' + esc(p.name || 'Untitled') + '">History</button>' +
+                  '<a href="' + esc(href) + '" class="processes-list-item__arrow" aria-label="Open workflow: ' + esc(p.name || 'Untitled') + '">' +
                     '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                       '<polyline points="9 18 15 12 9 6"/>' +
                     '</svg>' +
-                  '</span>' +
+                  '</a>' +
                 '</div>' +
-              '</a>'
+              '</article>'
             );
           }).join('');
         }
@@ -134,13 +188,21 @@
         }
         window.CoreAPI.getProcesses()
           .then(function (res) {
-            render(res.processes || []);
+            allProcesses = Array.isArray(res.processes) ? res.processes : [];
+            render();
           })
           .catch(function (e) {
             console.error(e);
             var loading = document.getElementById('processes-list-loading');
             if (loading) loading.textContent = 'Failed to load products.';
           });
+      }
+
+      function initSearch() {
+        var input = document.getElementById('processes-list-search');
+        if (!input || input.dataset.boundProcessesListSearch) return;
+        input.addEventListener('input', render);
+        input.dataset.boundProcessesListSearch = '1';
       }
 
       // Wire history buttons (delegated — cards re-render on load)
@@ -249,8 +311,12 @@
       }
 
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', load);
+        document.addEventListener('DOMContentLoaded', function () {
+          initSearch();
+          load();
+        });
       } else {
+        initSearch();
         load();
       }
     })();

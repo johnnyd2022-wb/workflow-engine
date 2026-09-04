@@ -52,6 +52,43 @@ def test_create_process_then_it_lists(logged_in_page: Page):
     assert_clean_page(page)
 
 
+def test_workflow_directory_filters_and_keeps_history_as_a_separate_action(logged_in_page: Page):
+    """The operational directory stays usable with a long imported workflow list.
+
+    A workflow row is deliberately two independent controls: opening its workspace and
+    opening its audit history. Browsers handle a button inside a link inconsistently, so
+    assert the DOM contract as well as both user-facing actions.
+    """
+    page = logged_in_page
+    name = f"E2E Directory Needle {uuid.uuid4().hex[:8]}"
+    pid = _create_process(page, name)
+    _create_process(page, f"E2E Directory Other {uuid.uuid4().hex[:8]}")
+
+    # Follow the dashboard's operational CTA through the SPA, rather than only proving
+    # a hard navigation. The directory search must bind to the freshly swapped markup.
+    page.goto("/core/dashboard")
+    page.locator('a[href="/core/processes"]').click()
+    page.wait_for_url("**/core/processes")
+    page.wait_for_selector(".processes-list-item")
+    search = page.locator("#processes-list-search")
+    search.fill(name)
+
+    matching_row = page.locator(".processes-list-item").filter(has_text=name)
+    assert matching_row.count() == 1
+    assert "Showing 1 of" in page.locator("#processes-list-count").inner_text()
+    assert page.locator("a.processes-list-item__open button").count() == 0
+
+    history = page.locator(f'.processes-list-item__history-btn[data-process-id="{pid}"]')
+    history.click()
+    page.wait_for_selector("#pl-story-panel.pl-story-panel--open")
+    assert page.locator("#pl-story-title").inner_text() == name
+    assert page.url.endswith("/core/processes")
+
+    page.locator("#pl-story-close").click()
+    matching_row.locator(".processes-list-item__open").click()
+    page.wait_for_url(f"**/core/flows?id={pid}")
+
+
 def test_rename_process_persists(logged_in_page: Page):
     page = logged_in_page
     pid = _create_process(page, f"E2E Rename Me {uuid.uuid4().hex[:8]}")

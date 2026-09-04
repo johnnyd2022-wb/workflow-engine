@@ -63,6 +63,32 @@
       font-weight: 600;
       color: var(--text-primary, #111827);
     }
+    .processes-list-toolbar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 0 14px;
+      border-top: 1px solid var(--border-default, #e5e7eb);
+    }
+    .processes-list-search {
+      display: grid;
+      gap: 5px;
+      flex: 1;
+      max-width: 420px;
+      color: var(--text-secondary, #6b7280);
+      font-size: 0.8125rem;
+      font-weight: 600;
+    }
+    .processes-list-search .spa-inp {
+      min-height: 40px;
+    }
+    .processes-list-count {
+      margin: 0 0 10px;
+      color: var(--text-secondary, #6b7280);
+      font-size: 0.8125rem;
+      text-align: right;
+    }
     .processes-list-stack {
       display: flex;
       flex-direction: column;
@@ -78,22 +104,29 @@
       margin: 0;
       border: none;
       border-radius: 0;
-      text-decoration: none;
       color: inherit;
       background: transparent;
       transition: background 0.2s ease;
       text-align: left;
-      cursor: pointer;
       box-sizing: border-box;
       width: 100%;
     }
     .processes-list-item:not(:first-child) {
       border-top: 1px solid var(--border-default, #e5e7eb);
     }
-    .processes-list-item:hover {
+    .processes-list-item:hover,
+    .processes-list-item:focus-within {
       background: rgba(59, 130, 246, 0.06);
     }
-    .processes-list-item:focus-visible {
+    .processes-list-item__open {
+      flex: 1;
+      min-width: 0;
+      color: inherit;
+      text-decoration: none;
+    }
+    .processes-list-item__open:focus-visible,
+    .processes-list-item__arrow:focus-visible,
+    .processes-list-item__history-btn:focus-visible {
       outline: 2px solid var(--primary, #3b82f6);
       outline-offset: 2px;
     }
@@ -135,9 +168,14 @@
     }
     .processes-list-item__history-btn:hover { background: var(--bg-page, #f3f4f6); color: var(--text-primary, #111827); }
     .processes-list-item__arrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      min-height: 36px;
       flex-shrink: 0;
       color: var(--text-tertiary, #9ca3af);
-      margin-top: 2px;
+      text-decoration: none;
     }
     .processes-list-item:hover .processes-list-item__arrow {
       color: var(--primary, #3b82f6);
@@ -158,6 +196,19 @@
       padding: 16px 0;
       text-align: center;
       color: var(--text-secondary, #6b7280);
+    }
+
+    @media (max-width: 540px) {
+      .processes-list-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .processes-list-search { max-width: none; }
+      .processes-list-count { margin: 0; text-align: left; }
+      .processes-list-item { gap: 8px; }
+      .processes-list-item__actions { gap: 2px; }
+      .processes-list-item__history-btn { padding: 6px 8px; }
     }
 
 /* ── Process list story panel ─────────────────────────────── */
