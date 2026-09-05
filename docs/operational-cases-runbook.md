@@ -81,8 +81,9 @@ Produces:
 1. Run the export against a **disposable** org (never production) that has representative
    case data — e.g. a test-DB org seeded by `tests/factories.py`'s case factory.
 2. Record the manifest's row counts and checksums.
-3. Point a local environment at a second, empty database named `oc_verify_<suffix>`,
-   then run `uv run workflow operational-cases-rehearse --export-dir <EXPORT_DIR>`.
+3. Point a local environment, or the disposable CI test environment, at a second, empty
+   database named `oc_verify_<suffix>`, then run
+   `uv run workflow operational-cases-rehearse --export-dir <EXPORT_DIR>`.
    It verifies every exported checksum, exercises the schema constraints, compares the
    restored rows to the original export, and rolls all writes back.
 4. There is no general production restore API by design (spec: "no general production

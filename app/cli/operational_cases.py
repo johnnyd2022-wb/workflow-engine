@@ -81,12 +81,10 @@ def rehearse_restore(directory: Path):
     """Restore exported IDs within a rolled-back transaction on an explicitly disposable DB."""
     from app.utils.config_loader import config
 
-    if (
-        config.environment != "local"
-        or config.db_host not in {"localhost", "127.0.0.1"}
-        or not config.db_name.startswith("oc_verify_")
-    ):
-        raise ValueError("restore rehearsal requires a local oc_verify_ disposable database")
+    local_verification_db = config.environment == "local" and config.db_host in {"localhost", "127.0.0.1"}
+    ci_verification_db = config.environment == "test"
+    if not (local_verification_db or ci_verification_db) or not config.db_name.startswith("oc_verify_"):
+        raise ValueError("restore rehearsal requires an oc_verify_ disposable database in local or test")
     manifest = json.loads((directory / "manifest.json").read_text())
     if manifest.get("schema_version") != 1:
         raise ValueError("unsupported export schema")
@@ -158,7 +156,7 @@ def rehearse_restore(directory: Path):
 @click.command(name="rehearse")
 @click.option("--export-dir", required=True, type=click.Path(exists=True, path_type=Path))
 def rehearse_operational_cases(export_dir):
-    """Rehearse restoration on local oc_verify_* only; all database writes are rolled back."""
+    """Rehearse restoration on local/test oc_verify_* only; all writes are rolled back."""
     try:
         rehearse_restore(export_dir)
     except Exception as exc:
