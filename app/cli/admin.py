@@ -85,6 +85,50 @@ def create_user(org_id, email, password, role):
         db.close()
 
 
+@click.command(name="reset-password")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--email", required=True, help="User email")
+@click.option("--password", required=True, help="New password")
+def reset_password(org_id, email, password):
+    """Reset an existing user's password.
+
+    There is no self-service "forgot password" email flow in this app, and create-user
+    refuses to touch an email that already exists -- this is the only way to recover an
+    admin account whose password is lost. Also clears any lockout, same as the
+    `password_reset` login flag's unlock behaviour, so a lost password and a locked
+    account don't require two separate recovery steps.
+    """
+    try:
+        org_uuid = UUID(org_id)
+    except ValueError:
+        click.echo(f"❌ Invalid organisation ID: {org_id}", err=True)
+        return
+
+    db = db_session()
+    try:
+        # Admin command targets an arbitrary org via --org-id, same reasoning as create_user.
+        with unscoped():
+            user_repo = UserRepository(db)
+            auth_service = AuthService(db)
+
+            user = user_repo.get_user_by_email(email, org_id=org_uuid)
+            if not user:
+                click.echo(f"❌ No user with email '{email}' in organisation {org_id}", err=True)
+                return
+
+            password_hash = auth_service.hash_password(password)
+            user = user_repo.update_user(user.id, org_id=org_uuid, password_hash=password_hash)
+            user_repo.reset_failed_login_attempts(user.id)
+            user_repo.unlock_account(user.id)
+
+        click.echo(f"✅ Password reset for {user.email} (ID: {user.id})")
+    except Exception as e:
+        click.echo(f"❌ Failed to reset password: {e}", err=True)
+        db.rollback()
+    finally:
+        db.close()
+
+
 @click.command()
 @click.option("--status", type=click.Choice(["active", "suspended", "all"]), default="all", help="Filter by status")
 def list_orgs(status):
