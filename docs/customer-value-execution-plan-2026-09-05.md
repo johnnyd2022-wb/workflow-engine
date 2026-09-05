@@ -16,6 +16,31 @@ impact, and prove that it was resolved.
 Customer self-service is deliberately excluded. It remains an appropriate higher-tier
 offer, but is not a dependency of this programme.
 
+## Product thesis, customer and proof of value
+
+Biz-E wins when a small regulated manufacturer can run one real workflow with less
+spreadsheet coordination, less audit anxiety and less founder-only knowledge than before.
+These investments are therefore designed for the people who must make a decision now, not
+for a hypothetical executive-analytics persona:
+
+| Customer moment | Primary user | Product response | Evidence of value |
+| --- | --- | --- | --- |
+| A batch, stock item, record or customer commitment becomes risky. | Founder/operator or operations manager | A case makes the risk, owner, due action and closure evidence unmistakable. | Fewer unowned/overdue risks; a faster, verifiable resolution. |
+| A customer order or planned demand could exceed available materials or time. | Founder/operator or production planner | A dated, confidence-labelled scenario reveals the first shortage and required decision. | Shortfalls are identified before their due date; fewer expedites/stockouts. |
+| The same risk is noticed and chased repeatedly. | Operations manager or compliance/quality staff | A narrow, auditable rule creates the same work once and tells the responsible person. | Less manual chasing without alert fatigue or duplicate work. |
+| A founder needs to decide where to intervene this week. | Founder/operator | The Dashboard names the material change, its data quality and the owning workspace. | Faster drill-through to a decision, not more time reading charts. |
+
+The first target cohort is small regulated manufacturers with a live Core workflow and a
+named operating owner. Distilleries, breweries and wineries are the initial validation
+cohort; the data model and UX must remain industry-neutral for every Biz-E organisation.
+Whistlebird data is a realistic test fixture and discovery reference, never a tenant-only
+product behaviour or an implied default configuration.
+
+The commercial claim for this programme is deliberately modest and provable: **make a real
+operational decision easier to see, assign and evidence.** Do not market savings, margin
+improvement, forecasting accuracy or compliance assurance until pilots establish a
+repeatable baseline and outcome measurement.
+
 ## Review basis and constraints
 
 The plan was reviewed against the current documentation and merged implementation:
@@ -53,6 +78,31 @@ The following decisions are therefore locked for every delivery:
 
 Each release should be independently shippable behind a tenant capability flag. Do not wait
 for all four before customers receive value.
+
+## Delivery operating model: discovery to general availability
+
+Every release follows the same small-customer-safe path. It keeps the product's
+low-implementation promise while stopping one unusually complete test tenant from setting
+the standard for everyone else.
+
+| Stage | Required output | Exit decision |
+| --- | --- | --- |
+| 0. Qualify | A named pilot owner, one real operating decision, consent to use a safe copy of their data where needed, and a readiness report. | Do not enable the feature if the source facts or ownership are absent. Show setup/readiness instead. |
+| 1. Discover | Five structured sessions across the target role(s), a current-state workflow, baseline measure, and a clickable/walkthrough prototype for the decision moment. | Build only the smallest workflow that changes the observed decision or removes a repeated chase. |
+| 2. Instrument and dark-launch | Feature flag, audit events, performance dashboard, support runbook, and a reversible migration/disable path. Background calculation/rules may be observed without user-visible action first. | Enable for internal/disposable data and verify result correctness, latency and no cross-tenant leakage. |
+| 3. Pilot | Two to five opted-in organisations, onboarding checklist, weekly review of correctness/noise and a clear escalation owner. | Expand only when the activation journey works, users trust the results, and no critical data/audit/performance issue remains open. |
+| 4. General availability | In-product readiness guidance, help content, support playbook, metric dictionary where applicable, and release notes with limitations. | Default-on only for tenants whose prerequisites are met; otherwise retain an explicit opt-in/setup state. |
+
+Use a per-release scorecard rather than choosing success after results are visible. Baseline
+measures are captured in Stage 1; target thresholds are set with pilot customers before
+Stage 3 because current evidence does not justify invented universal numbers.
+
+| Release | Activation event | 30-day customer outcome | Expansion guardrail |
+| --- | --- | --- | --- |
+| A. Resolution | A pilot owner takes a real case through its next action. | Critical work has an owner/due date and verified resolution time is improving against baseline. | Do not expand if sources create duplicates or operators bypass the lifecycle. |
+| B. Planning | A pilot publishes one dated, mapped demand scenario. | A material shortfall is found early enough to change a production/material decision. | Do not expand if mapping/data coverage makes projections routinely misleading. |
+| C. Automation | A pilot enables one template and reviews its first actions. | The template removes a repeated chase with an acceptable false-positive/noise rate. | Do not expand if a retry can duplicate work or operators disable rules for noise. |
+| D. Cockpit | A decision-maker drills from one dashboard signal to its source. | The weekly review reaches a material decision faster than the baseline process. | Do not expand if users treat unavailable data as healthy or cannot explain a metric. |
 
 ## A. Exception-to-resolution workflow
 
@@ -105,7 +155,9 @@ recorded policy decision.
 
 1. Add additive `operational_cases`, `operational_case_links`, and append-only
    `operational_case_events` tables. Add indexes for `(org_id, status, due_at)`,
-   `(org_id, severity, updated_at DESC)`, and a unique active-source dedupe key.
+   `(org_id, severity, updated_at DESC)`, and a unique active-source dedupe key. The
+   dedupe policy must state its source identity and active-state boundary before migration;
+   it must not use an ambiguous title/date heuristic.
 2. Add service/repository APIs with tenant isolation, state-transition validation and
    optimistic concurrency. Emit `operational_case.*` through `EventWriter` in the same
    transaction.
@@ -126,6 +178,8 @@ recorded policy decision.
   visible audit reason.
 - Another user sees a targeted queue/count refresh through LiveSync without a full page
   reload.
+- A pilot can complete the first case without an administrator doing hidden setup beyond
+  assigning the named owner and due-date policy.
 - Track: open critical cases, overdue-case rate, median acknowledge time, median verified
   resolution time, recurrence within 30 days, and cases with no owner.
 
@@ -161,6 +215,13 @@ The feasibility read model calculates, per product and time bucket:
 - required production quantity using editable process/output assumptions; and
 - confidence/data-coverage labels, never a fabricated zero or a hidden assumption.
 
+Before calculation, a tenant readiness report must show which required ingredients are
+missing or unsuitable: product mapping, comparable units/conversions, stock status,
+execution/output assumptions, demand date/quantity, and (for capacity) process profile and
+calendar. A partial plan is useful only when its affected lines carry an explicit
+`insufficient_data`/`not_configured` state and the specific next setup action. A total is
+never silently calculated from unknown inputs.
+
 An at-risk line can create or link an Operational case, preserving the distinction between
 a forecast and an actual stock fact.
 
@@ -193,7 +254,9 @@ inventory change does not make a prior plan unexplainable.
 ### Technical delivery slices
 
 1. Define units, product-mapping eligibility and planning confidence rules; add a data
-   readiness report before enabling a tenant.
+   readiness report before enabling a tenant. Publish the calculation contract, including
+   allocation precedence, expiry treatment, expected-output eligibility, time-bucket/time
+   zone, rounding and how a stale source invalidates a result.
 2. Add demand plan/version/line persistence, draft/publish controls and audit events.
 3. Build a bounded server-side feasibility projection using inventory, allocations,
    active executions and explicit plan assumptions. Add `EXPLAIN (ANALYZE, BUFFERS)` at
@@ -252,6 +315,9 @@ consent, retry and audit guarantees are specified.
   cases, tasks or notifications.
 - Every outcome records trigger event, evaluated inputs, rule version, chosen action and
   recipient. A disabled rule stops future actions without deleting historical evidence.
+- Configuration changes require the same tenant-authorised change trail as the action they
+  cause: who enabled/changed a rule, its old/new version, effective time and the intended
+  dedupe scope. Provide a dry-run/last-evaluated explanation before a rule is enabled.
 - LiveSync delivers only the compact changed counts/records to active screens; it does not
   cause each browser to re-evaluate rules.
 
@@ -272,6 +338,8 @@ consent, retry and audit guarantees are specified.
 - A rule run is explainable from the UI and auditable without reading logs.
 - Rule processing is resilient to a worker retry and cannot mutate inventory, execution,
   invoice or compliance facts directly.
+- A tenant can disable a noisy rule immediately, see its pending/recent outcomes, and know
+  that disabling it does not close or erase work already created.
 - Track: avoided duplicate alerts, actions created automatically, acknowledge time by
   template, notification delivery failures and rules disabled due to noise.
 
@@ -299,6 +367,13 @@ Its initial view has four bounded sections:
 Every metric carries a definition, comparison period, freshness timestamp, source/workspace
 link and availability state (`available`, `insufficient_data`, `not_enabled`). Never show
 missing data as a healthy zero.
+
+The initial metric dictionary is intentionally no more than one decision-ready measure per
+section plus Attention. Each metric specification names: business question; unit and
+formula; eligible statuses; source tables/read model; time zone and comparison window;
+freshness service-level objective; data exclusions; destination route; and accountable
+workspace. A metric cannot appear on Dashboard until this specification and its
+`insufficient_data` behaviour are reviewed with a pilot.
 
 ### Explanation before prediction
 
@@ -332,6 +407,8 @@ tenant data controls and user-verifiable source links are in place.
 - Each non-trivial metric links to its owning data/workspace and declares data availability.
 - A user can move from a negative trend to the contributing case, execution, finding or
   CRM record in one navigation.
+- A weekly pilot review can explain every displayed material movement from its recorded
+  inputs without an engineer reconstructing the result from logs.
 - Track: weekly active decision-makers, drill-through rate, time-to-identify a material
   change, percentage of metrics with sufficient data, and customer-reported usefulness of
   the explanation layer.
@@ -349,6 +426,42 @@ Every implementation MR in this programme must include:
 - EventWriter/LiveSync coverage for cross-user refresh where a user-visible state changes;
 - structured audit events with entity IDs, rule/plan/case versions and no sensitive payloads;
 - `ruff`, relevant Python/JS tests, `git diff --check`, Semgrep and the MR pipeline.
+
+### Performance, availability and operability contract
+
+The existing Dashboard and Core contracts are product requirements, not implementation
+preferences. For each release, establish production-shaped fixtures for a small active
+tenant and a long-lived tenant; record baseline query count, p50/p95/p99 latency and
+response bytes before adding the feature. Set an explicit budget in the implementation
+ADR/MR and fail the relevant API/Playwright regression when it is exceeded. A cache may
+only cache tenant-scoped, versioned aggregate data and must have a documented invalidation
+event; it is not a substitute for a bounded query shape.
+
+Feature flags default safe and are evaluated server-side for every read and write. A flag
+disable must leave prior facts auditable and the rest of the application usable. Any worker
+or scheduled evaluator needs: single-run/concurrency protection, idempotency, bounded
+batching, retry/dead-letter visibility, health metrics and an operator runbook. No release
+may depend on a browser being open to produce a correct outcome.
+
+Instrument feature-use and outcome events with tenant-safe identifiers and no business
+values/free text. Reuse the repository's privacy posture: telemetry is for reliability and
+product improvement, with masking and customer notice/consent requirements honoured before
+production collection. Product analytics must never become a second unbounded operational
+data store.
+
+### Decisions deliberately deferred
+
+These are not holes to fill opportunistically within the four releases:
+
+- Customer self-service, external customer portals and tier/package changes.
+- Arbitrary workflow builders, scripts, webhooks and email/Slack delivery before the
+  underlying action audit and delivery reliability are proven.
+- AI-generated recommendations, causal claims, autonomous inventory/production/financial
+  changes, or a generic business-intelligence warehouse.
+- Tenant-configured role-based dashboard variants until a permission/configuration model
+  exists beyond the current ADMIN/MEMBER distinction.
+- Industry-specific default thresholds. Begin with visible, editable pilot configuration
+  and promote a default only after cross-tenant evidence supports it.
 
 ## Discovery checkpoints before each release
 
