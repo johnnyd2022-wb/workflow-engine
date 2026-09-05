@@ -69,3 +69,29 @@ live inventory (`/core/inventory/live`) and active batches (`/core/executions/li
   behaviour, Back/Forward, and the original lazy-load request contract.
 - Add migration scope regression coverage and run the deterministic bootstrap against the
   disposable `whistlebird_test` tenant before hand-off.
+
+## Dashboard control-tower implementation
+
+The follow-up role decision is now embodied in the Dashboard rather than left as a
+copy-only distinction. It starts with a single **Needs attention** queue tagged by its
+destination workspace (Core, Compliant, or CRM), followed by a three-workspace map and
+then trend cards as supporting context. This makes Dashboard the place to understand the
+business across products, while Core, Compliant, and CRM remain the places to complete
+production/inventory, evidence, and customer work respectively.
+
+The Dashboard response includes a deliberately lightweight Compliant workspace state:
+subscription availability, setup state, and open/failed evidence-record count. It does
+not call Compliant's full evidence-plan calculation or its Core movement scan, preserving
+the single dashboard request and leaving detailed compliance evaluation to Compliant.
+
+### Performance contract check
+
+- The Dashboard browser still makes one `GET /api/core/dashboard/summary` request at
+  landing and makes no `GET /api/compliant/*` request. The workspace cards render from
+  that existing response.
+- The added Compliant summary has a bounded server-side query shape: one entitlement
+  lookup, one profile lookup, and one grouped count of open/failed records. It never
+  walks records or relationships in Python, so it cannot introduce an N+1 query.
+- The earlier Core change remains separate: `/core` first paints from its compact hub
+  overview and only fetches Inventory or Product-workflow lists when their tabs are
+  opened. Dashboard does not invoke that hub data on its landing path.

@@ -4750,7 +4750,9 @@ def _dashboard_event_counts_by_day(
     org_id: UUID, session, start_dt: datetime, end_dt: datetime, actor_type: str | None = None
 ) -> dict[date, int]:
     q = (
-        session.query(_local_date_expr(EntityEvent.created_at).label("event_day"), func.count(EntityEvent.id).label("total"))
+        session.query(
+            _local_date_expr(EntityEvent.created_at).label("event_day"), func.count(EntityEvent.id).label("total")
+        )
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= start_dt, EntityEvent.created_at < end_dt)
     )
@@ -4902,7 +4904,72 @@ def _dashboard_operations_weekly_summary(org_id: UUID, session, now_dt: datetime
     }
 
 
-def _dashboard_build_action_board(tasks_summary: dict[str, Any], compliance: dict[str, Any]) -> dict[str, Any]:
+def _dashboard_compliant_workspace_summary(org_id: UUID, session) -> dict[str, Any]:
+    """Return the small, dashboard-safe summary of the optional Compliant workspace.
+
+    This deliberately avoids ``ComplianceService.overview()``: that view calculates the
+    full evidence plan and scans Core movements, which belongs on the Compliant workbench.
+    Dashboard needs only enough information to tell a user whether to go there and why.
+    """
+    unavailable = {
+        "available": False,
+        "state": "unavailable",
+        "label": "Compliant is not enabled for this organisation.",
+        "attention_count": 0,
+    }
+    if not config.compliant_enabled:
+        return unavailable
+
+    try:
+        from app.core.security.entitlements import org_has_feature
+
+        if not org_has_feature(session, org_id, "compliant"):
+            return unavailable
+
+        from app.features.compliant.models import ComplianceProfile, ComplianceRecord
+
+        profile = session.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+        if profile is None or not profile.enabled:
+            return {
+                "available": True,
+                "state": "setup",
+                "label": "Set up the evidence plan for your operation.",
+                "attention_count": 0,
+            }
+
+        status_counts = dict(
+            session.query(ComplianceRecord.status, func.count(ComplianceRecord.id))
+            .filter(ComplianceRecord.org_id == org_id)
+            .filter(ComplianceRecord.status.in_(["open", "failed"]))
+            .group_by(ComplianceRecord.status)
+            .all()
+        )
+        open_count = int(status_counts.get("open") or 0)
+        failed_count = int(status_counts.get("failed") or 0)
+        attention_count = open_count + failed_count
+        if attention_count:
+            return {
+                "available": True,
+                "state": "attention",
+                "label": f"{attention_count} evidence record{'s' if attention_count != 1 else ''} need attention.",
+                "attention_count": attention_count,
+            }
+        return {
+            "available": True,
+            "state": "ready",
+            "label": "No open or failed evidence records.",
+            "attention_count": 0,
+        }
+    except Exception:
+        # Compliant is an optional workspace. A failed summary must not take the shared
+        # dashboard down, and the Compliant workspace remains its source of truth.
+        logger.exception("Failed to assemble Compliant dashboard summary for org_id=%s", org_id)
+        return unavailable
+
+
+def _dashboard_build_action_board(
+    tasks_summary: dict[str, Any], compliance: dict[str, Any], compliant_workspace: dict[str, Any] | None = None
+) -> dict[str, Any]:
     findings = (compliance or {}).get("findings") or {}
     output_expiry = findings.get("output_expiry") or {}
     output_ready = findings.get("output_ready_date") or {}
@@ -4914,6 +4981,7 @@ def _dashboard_build_action_board(tasks_summary: dict[str, Any], compliance: dic
             "count": (findings.get("expired_materials") or {}).get("count") or 0,
             "severity": "critical",
             "href": "/core/inventory/view",
+            "workspace": "Core",
         },
         {
             "key": "untracked_items",
@@ -4921,6 +4989,7 @@ def _dashboard_build_action_board(tasks_summary: dict[str, Any], compliance: dic
             "count": (findings.get("untracked_items") or {}).get("count") or 0,
             "severity": "high",
             "href": "/core/notifications",
+            "workspace": "Core",
         },
         {
             "key": "output_expired",
@@ -4928,6 +4997,7 @@ def _dashboard_build_action_board(tasks_summary: dict[str, Any], compliance: dic
             "count": output_expiry.get("red_count") or 0,
             "severity": "critical",
             "href": "/core/notifications",
+            "workspace": "Core",
         },
         {
             "key": "output_not_ready",
@@ -4935,6 +5005,7 @@ def _dashboard_build_action_board(tasks_summary: dict[str, Any], compliance: dic
             "count": output_ready.get("red_count") or 0,
             "severity": "informational",
             "href": "/core/notifications",
+            "workspace": "Core",
         },
         {
             "key": "overdue_tasks",
@@ -4942,6 +5013,15 @@ def _dashboard_build_action_board(tasks_summary: dict[str, Any], compliance: dic
             "count": (tasks_summary or {}).get("overdue_count") or 0,
             "severity": "high",
             "href": "/crm/tasks",
+            "workspace": "CRM",
+        },
+        {
+            "key": "compliant_evidence",
+            "label": "Compliance evidence records needing attention",
+            "count": (compliant_workspace or {}).get("attention_count") or 0,
+            "severity": "high",
+            "href": "/compliant",
+            "workspace": "Compliant",
         },
     ]
 
@@ -5063,7 +5143,8 @@ def get_dashboard_summary():
         except Exception:
             logger.exception("Failed to assemble CRM summary for org_id=%s", org_id)
 
-    action_board = _dashboard_build_action_board(tasks_summary, compliance)
+    compliant_workspace = _dashboard_compliant_workspace_summary(org_id, db_session)
+    action_board = _dashboard_build_action_board(tasks_summary, compliance, compliant_workspace)
 
     operator_series = _dashboard_series_from_date_counts(
         _dashboard_event_counts_by_day(org_id, db_session, week_start, next_week_start, actor_type="user"),
@@ -5138,6 +5219,7 @@ def get_dashboard_summary():
                 "window_days": window_days,
                 "tasks": tasks_summary,
                 "compliance": compliance,
+                "compliant_workspace": compliant_workspace,
                 "action_board": action_board,
                 "operator_actions": {"week_to_date": operator_actions_this_week},
                 "audit_log": audit_log,
