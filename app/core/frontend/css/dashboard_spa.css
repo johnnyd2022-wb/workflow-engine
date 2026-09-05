@@ -82,6 +82,113 @@ html[data-spa-theme="dark"] #page-content .workflow-dashboard.dashboard-v3 {
   margin: 6px 0 0;
   color: var(--dash-text-soft);
   font-size: 0.9rem;
+  max-width: 760px;
+}
+
+.dashboard-v3 .dash-eyebrow {
+  margin: 0 0 5px;
+  color: var(--dash-accent);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+}
+
+.dashboard-v3 .dash-refresh {
+  margin: 8px 0 0;
+  color: var(--dash-text-soft);
+  font-size: 0.78rem;
+}
+
+.dashboard-v3 .dash-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dashboard-v3 .dash-section-heading h2 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.dashboard-v3 .dash-section-heading > p {
+  max-width: 510px;
+  margin: 0;
+  color: var(--dash-text-soft);
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.dashboard-v3 .dash-workspace-section,
+.dashboard-v3 .dash-signals-section {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-v3 .dash-workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-v3 .dash-workspace-card {
+  display: flex;
+  min-height: 170px;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid var(--dash-border);
+  border-radius: var(--dash-radius);
+  padding: 16px;
+  color: var(--dash-text);
+  background: var(--dash-card-strong);
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(17, 42, 71, 0.05);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.dashboard-v3 a.dash-workspace-card:hover,
+.dashboard-v3 a.dash-workspace-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--dash-accent-2);
+  box-shadow: var(--dash-shadow);
+  text-decoration: none;
+}
+
+.dashboard-v3 .dash-workspace-card--unavailable {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+html[data-spa-theme="dark"] .dashboard-v3 .dash-workspace-card--unavailable {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.dashboard-v3 .dash-workspace-card__eyebrow {
+  color: var(--dash-accent);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.dashboard-v3 .dash-workspace-card h3 {
+  margin: 8px 0 0;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.dashboard-v3 .dash-workspace-card p {
+  margin: 9px 0 0;
+  color: var(--dash-text-soft);
+  font-size: 0.83rem;
+  line-height: 1.4;
+}
+
+.dashboard-v3 .dash-workspace-card__link {
+  margin-top: auto;
+  padding-top: 14px;
+  color: var(--dash-accent-2);
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .dashboard-v3 .dash-hero-actions {
@@ -233,6 +340,11 @@ html[data-spa-theme="dark"] #page-content .workflow-dashboard.dashboard-v3 {
   min-height: 220px;
 }
 
+.dashboard-v3 .dash-attention-card {
+  min-height: 0;
+  border-color: rgba(0, 127, 109, 0.28);
+}
+
 .dashboard-v3 .dash-card-header {
   display: flex;
   align-items: baseline;
@@ -300,6 +412,19 @@ html[data-spa-theme="dark"] .dashboard-v3 .dash-list-item {
   margin: 0;
   font-size: 0.9rem;
   font-weight: 700;
+}
+
+.dashboard-v3 .dash-action-workspace {
+  display: inline-flex;
+  margin-right: 6px;
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--dash-accent);
+  background: rgba(0, 127, 109, 0.1);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
 }
 
 .dashboard-v3 .dash-action-meta {
@@ -473,9 +598,19 @@ html[data-spa-theme="dark"] .dashboard-v3 .dash-stat-row {
   .dashboard-v3 .dash-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .dashboard-v3 .dash-workspace-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 540px) {
+  .dashboard-v3 .dash-section-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
   .dashboard-v3 .dash-kpi-grid {
     grid-template-columns: 1fr;
   }

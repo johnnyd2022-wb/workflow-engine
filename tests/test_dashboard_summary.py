@@ -141,6 +141,19 @@ def test_dashboard_action_board_excludes_stalled_batches():
     assert board["critical_actions_total"] == 10
 
 
+def test_dashboard_action_board_routes_compliant_evidence_to_its_own_workspace():
+    board = _dashboard_build_action_board(
+        {},
+        {"findings": {}},
+        {"available": True, "state": "attention", "attention_count": 2},
+    )
+
+    item = next(item for item in board["items"] if item["key"] == "compliant_evidence")
+    assert item["href"] == "/compliant"
+    assert item["workspace"] == "Compliant"
+    assert item["count"] == 2
+
+
 def test_dashboard_operations_summary_org_isolated(db):
     org_repo = OrganisationRepository(db)
     process_repo = ProcessRepository(db)

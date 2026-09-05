@@ -64,11 +64,85 @@
       </div>
 
       <section class="spa-form-section spa-page-hero dash-page-hero" aria-labelledby="dashboard-page-title">
-        <h1 class="page-title" id="dashboard-page-title">Operational insights</h1>
-        <p class="page-subtitle">Last refresh: <span data-dashboard-date>now</span></p>
+        <p class="dash-eyebrow">BUSINESS CONTROL TOWER</p>
+        <h1 class="page-title" id="dashboard-page-title">See the whole business. Act in the right workspace.</h1>
+        <p class="page-subtitle">Dashboard brings together Core operations, Compliant evidence, and CRM commitments. Resolve the work in its specialist workspace.</p>
+        <p class="dash-refresh">Last refresh: <span data-dashboard-date>now</span></p>
       </section>
 
-      <section class="dash-kpi-grid" aria-label="Operational highlights">
+      <section class="dash-card dash-attention-card" aria-labelledby="dashboard-attention-title">
+        <div class="dash-card-header">
+          <div>
+            <p class="dash-eyebrow">CROSS-BUSINESS QUEUE</p>
+            <h2 id="dashboard-attention-title">Needs attention</h2>
+          </div>
+          <a href="/core/notifications">Review findings</a>
+        </div>
+        <p class="dash-caption">Prioritised signals from Core, Compliant, and CRM. Open an item to resolve it where the work lives.</p>
+        <ul class="dash-list" data-action-list>
+          <li class="dash-empty">Loading cross-business priorities...</li>
+        </ul>
+      </section>
+
+      <section class="dash-workspace-section" aria-labelledby="dashboard-workspaces-title">
+        <div class="dash-section-heading">
+          <div>
+            <p class="dash-eyebrow">DO THE WORK</p>
+            <h2 id="dashboard-workspaces-title">Choose a workspace</h2>
+          </div>
+          <p>Dashboard gives you the signal. These workspaces hold the detailed tools and records.</p>
+        </div>
+        <div class="dash-workspace-grid">
+          <a class="dash-workspace-card" href="/core" aria-label="Open Core operations workspace">
+            <span class="dash-workspace-card__eyebrow">CORE</span>
+            <h3>Run production and inventory</h3>
+            <p data-dashboard-core-summary>Loading operations summary...</p>
+            <span class="dash-workspace-card__link">Open Core <span aria-hidden="true">→</span></span>
+          </a>
+
+          {% if compliant_subscribed %}
+          <a class="dash-workspace-card" href="/compliant" aria-label="Open Compliant evidence workspace">
+            <span class="dash-workspace-card__eyebrow">COMPLIANT</span>
+            <h3>Prove compliance with evidence</h3>
+            <p data-dashboard-compliant-summary>Loading evidence summary...</p>
+            <span class="dash-workspace-card__link">Open Compliant <span aria-hidden="true">→</span></span>
+          </a>
+          {% else %}
+          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Compliant workspace availability">
+            <span class="dash-workspace-card__eyebrow">COMPLIANT</span>
+            <h3>Prove compliance with evidence</h3>
+            <p data-dashboard-compliant-summary>Compliant is not enabled for this organisation.</p>
+            <span class="dash-workspace-card__link">Not enabled</span>
+          </article>
+          {% endif %}
+
+          {% if crm_enabled %}
+          <a class="dash-workspace-card" href="/crm" aria-label="Open CRM workspace">
+            <span class="dash-workspace-card__eyebrow">CRM</span>
+            <h3>Manage customers and commitments</h3>
+            <p data-dashboard-crm-summary>Loading customer commitments...</p>
+            <span class="dash-workspace-card__link">Open CRM <span aria-hidden="true">→</span></span>
+          </a>
+          {% else %}
+          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="CRM workspace availability">
+            <span class="dash-workspace-card__eyebrow">CRM</span>
+            <h3>Manage customers and commitments</h3>
+            <p data-dashboard-crm-summary>CRM is not enabled for this organisation.</p>
+            <span class="dash-workspace-card__link">Not enabled</span>
+          </article>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="dash-signals-section" aria-labelledby="dashboard-signals-title">
+        <div class="dash-section-heading">
+          <div>
+            <p class="dash-eyebrow">CONTEXT, NOT A TO-DO LIST</p>
+            <h2 id="dashboard-signals-title">Business signals</h2>
+          </div>
+          <p>Use trends to understand the picture; use the attention queue and workspaces to take action.</p>
+        </div>
+      <div class="dash-kpi-grid" aria-label="Business signals">
         <article class="dash-kpi-card">
           <p class="dash-kpi-label">Operator actions this week</p>
           <p class="dash-kpi-value" data-kpi-operator-actions>0</p>
@@ -118,17 +192,6 @@
       </section>
 
       <div class="dash-grid">
-        <section class="dash-card" aria-label="System findings">
-          <div class="dash-card-header">
-            <h2>System findings</h2>
-            <a href="/core/notifications">Review all findings</a>
-          </div>
-          <p class="dash-caption">Cross-system priorities from compliance, inventory, and commitments.</p>
-          <ul class="dash-list" data-action-list>
-            <li class="dash-empty">No critical actions right now.</li>
-          </ul>
-        </section>
-
         <section class="dash-card" aria-label="Logged events">
           <div class="dash-card-header">
             <h2>Logged events</h2>

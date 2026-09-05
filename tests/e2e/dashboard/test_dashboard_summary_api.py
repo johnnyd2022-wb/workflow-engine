@@ -133,6 +133,19 @@ def test_ac7_ac8_compliance_summary_is_well_formed(logged_in_page):
     assert active_use_risk_count >= 0
 
 
+def test_dashboard_summary_includes_a_lightweight_compliant_workspace_state(logged_in_page):
+    """Dashboard directs to Compliant without paying for its full evidence-plan scan."""
+    response = logged_in_page.request.get(SUMMARY_URL)
+    assert response.status == 200, response.text()
+    workspace = response.json()["compliant_workspace"]
+
+    assert workspace["state"] in {"unavailable", "setup", "attention", "ready"}
+    assert isinstance(workspace["available"], bool)
+    assert isinstance(workspace["label"], str) and workspace["label"]
+    assert isinstance(workspace["attention_count"], int)
+    assert workspace["attention_count"] >= 0
+
+
 def test_ac7_ac8_compliance_score_reflects_real_untracked_item_finding(fresh_page):
     """The well-formed check above only proves shape -- a hard-coded score=100/state=
     'unknown'/top_drivers=[] response would pass it too. This proves the score is actually

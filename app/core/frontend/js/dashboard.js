@@ -86,11 +86,12 @@
             var sev = severityLabel(item.severity);
             var sevLower = String(item.severity || '').toLowerCase();
             var priorityText = sevLower === 'informational' ? (sev + ' only') : (sev + ' priority');
+            var workspace = item.workspace || 'Workspace';
             return (
                 '<li class="dash-list-item">' +
                 '<div class="dash-action-row">' +
                 '<div class="dash-action-main">' +
-                '<p class="dash-action-title">' + escapeHtml(label) + '</p>' +
+                '<p class="dash-action-title"><span class="dash-action-workspace">' + escapeHtml(workspace) + '</span>' + escapeHtml(label) + '</p>' +
                 '<p class="dash-action-meta">' + escapeHtml(priorityText) + ' · <a class="dash-action-link" href="' + escapeHtml(href) + '">Open</a></p>' +
                 '</div>' +
                 '<div class="dash-action-count">' + escapeHtml(String(count)) + '</div>' +
@@ -98,6 +99,39 @@
                 '</li>'
             );
         }).join('');
+    }
+
+    function pluralize(count, singular, plural) {
+        return String(count) + ' ' + (count === 1 ? singular : (plural || singular + 's'));
+    }
+
+    function renderWorkspaceSummaries(root, operations, compliantWorkspace, tasks, sales) {
+        var activeBatches = Number((operations || {}).active_executions || 0);
+        setText(
+            root,
+            '[data-dashboard-core-summary]',
+            activeBatches ? pluralize(activeBatches, 'active batch') + ' in progress.' : 'No active batches right now.'
+        );
+
+        var compliant = compliantWorkspace || {};
+        setText(
+            root,
+            '[data-dashboard-compliant-summary]',
+            compliant.label || 'Compliant is not enabled for this organisation.'
+        );
+
+        var safeTasks = tasks || {};
+        var safeSales = sales || {};
+        var taskCount = Number(safeTasks.due_this_week_count || 0);
+        if (safeTasks.enabled === false) {
+            setText(root, '[data-dashboard-crm-summary]', 'CRM is not enabled for this organisation.');
+        } else if (taskCount) {
+            setText(root, '[data-dashboard-crm-summary]', pluralize(taskCount, 'customer task') + ' due this week.');
+        } else if (safeSales.baseline_target_mtd != null) {
+            setText(root, '[data-dashboard-crm-summary]', 'Revenue is tracking ' + formatGoalPct(safeSales.baseline_attainment_pct) + ' of the monthly baseline.');
+        } else {
+            setText(root, '[data-dashboard-crm-summary]', 'No customer tasks due this week.');
+        }
     }
 
     function renderAuditList(root, auditLog, selectedPeriod) {
@@ -240,6 +274,7 @@
         var tasks = data.tasks || {};
         var operations = data.operations || {};
         var sales = data.sales || {};
+        var compliantWorkspace = data.compliant_workspace || {};
         var actionBoard = data.action_board || {};
         var operatorActions = data.operator_actions || {};
         var auditLog = data.audit_log || {};
@@ -265,6 +300,7 @@
         renderSparkLine(root, 'throughput_vs_week', insightSeries.batch_completion_week);
 
         renderActionList(root, actionBoard);
+        renderWorkspaceSummaries(root, operations, compliantWorkspace, tasks, sales);
         wireAuditPeriodToggle(root, auditLog);
 
         setText(root, '[data-ops-active]', operations.active_executions || 0);
