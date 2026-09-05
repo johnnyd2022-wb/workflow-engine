@@ -112,6 +112,24 @@ def _needs_reconciliation(item: InventoryItem) -> bool:
     return remaining > 0
 
 
+def find_producing_step(process: Any, item_name: str | None, item_unit: str | None) -> tuple[Any, str | None]:
+    """Public alias of ``_find_producing_step`` for reuse by operational_cases' source
+    snapshot builder (best-effort presentation field, see needs_reconciliation's
+    docstring for why this is exposed rather than duplicated)."""
+    return _find_producing_step(process, item_name, item_unit)
+
+
+def needs_reconciliation(item: InventoryItem) -> bool:
+    """Public alias of the untracked-item reconciliation-required rule.
+
+    Exists so operational_cases' source adapter can reuse this exact eligibility/
+    verification logic without invoking the full check/DAG suite (see
+    .agents/specs/operational_cases.md: "Reuse/extract the check's eligibility logic; do
+    not invoke the full DAG check suite in a case command.").
+    """
+    return _needs_reconciliation(item)
+
+
 def run_untracked_items_check(org_id: UUID, session: Session) -> CheckResult:
     """
     Find inventory items flagged as untracked that still need reconciliation (same criteria as

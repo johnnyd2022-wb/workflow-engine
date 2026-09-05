@@ -1,16 +1,17 @@
 # Customer-value programme delivery slices
 
-status: planned; A1 specification in progress
+status: planned; A1 implemented and awaiting normal review/pilot rollout
 source: [Customer-value execution plan, 5 September 2026](../../docs/customer-value-execution-plan-2026-09-05.md)
 registry: [Feature index](../feature-index.md#customer-value-programme--planned-slices)
 
 This is the delivery ledger for all four features in the source plan. Item 1 means
-Release A (exception-to-resolution), not just its first database migration. The current
-work order produces its working spec; it does not mark any implementation complete.
+Release A (exception-to-resolution), not just its first database migration. The A1 work
+order now has an approved specification and implementation; remaining slices stay
+planned until their separate discovery and delivery work begins.
 
 | ID | Owner | Deliverable and exit condition | Dependency / status |
 |---|---|---|---|
-| A1 | operational-cases | First vertical slice: critical Core finding → owned, dated case → resolution/verification; queue/detail, Notifications entry, Dashboard count, audit and LiveSync. Includes additive models, tenant isolation, dedupe and concurrency. [Working spec](../specs/operational_cases.md). | **Specification in progress**; pilot/discovery decisions recorded in spec |
+| A1 | operational-cases | First vertical slice: critical Core finding → owned, dated case → resolution/verification; queue/detail, Notifications entry, Dashboard count, audit and LiveSync. Includes additive models, tenant isolation, dedupe and concurrency. [Specification](../specs/operational_cases.md). | **Implemented**; deployment remains off by default pending normal review/pilot decisions |
 | A2 | operational-cases + compliance-checks | Extend adapters from A1's untracked-stock source to expired inputs, output expiry/ready dates; define stable item identities and per-item severity before enabling each. Stalled execution needs an explicit detector contract. | After A1; planned |
 | A3 | operational-cases + compliant-platform | Manual cases and Compliant open/failed records, immutable evidence links and source transitions/recurrence; independently feature-gated. | After A1; planned |
 | A4 | operational-cases + crm | Link customer commitments/tasks; create a CRM task from a case when communication is needed, with idempotency and provenance. | Follow-up, not A1 blocker; planned |

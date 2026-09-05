@@ -315,6 +315,54 @@ window.CoreAPI = window.CoreAPI || {
         this._systemFindingsCache = null;
     },
 
+    // -- operational_cases (A1) --------------------------------------------------------
+    _newIdempotencyKey() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+        return 'oc-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    },
+
+    _caseCommandKeys: new Map(),
+    async _caseCommand(endpoint, payload, method = 'POST') {
+        const signature = method + endpoint + JSON.stringify(payload);
+        let key = this._caseCommandKeys.get(signature);
+        if (!key) { key = this._newIdempotencyKey(); this._caseCommandKeys.set(signature, key); }
+        try {
+            const result = await this.request(endpoint, {method, body: payload, headers: {'Idempotency-Key': key}});
+            this._caseCommandKeys.delete(signature);
+            return result;
+        } catch (err) {
+            if (err.status && err.status < 500) this._caseCommandKeys.delete(signature);
+            throw err;
+        }
+    },
+
+    async listCases(params) {
+        const qs = new URLSearchParams(params || {}).toString();
+        return this.request('/cases' + (qs ? '?' + qs : ''));
+    },
+
+    async getCase(caseId) {
+        return this.request('/cases/' + encodeURIComponent(caseId));
+    },
+
+    async getCaseEvents(caseId, params) {
+        const qs = new URLSearchParams(params || {}).toString();
+        return this.request('/cases/' + encodeURIComponent(caseId) + '/events' + (qs ? '?' + qs : ''));
+    },
+
+    async createCaseFromFinding(payload) { return this._caseCommand('/cases/from-finding', payload); },
+    async patchCase(caseId, payload) { return this._caseCommand('/cases/' + encodeURIComponent(caseId), payload, 'PATCH'); },
+    async transitionCase(caseId, payload) { return this._caseCommand('/cases/' + encodeURIComponent(caseId) + '/transitions', payload); },
+    async refreshCaseSource(caseId, expectedVersion) { return this._caseCommand('/cases/' + encodeURIComponent(caseId) + '/refresh-source', {expected_version: expectedVersion}); },
+
+    async getCaseSourceStatus(sourceEntityIds) {
+        if (!sourceEntityIds || !sourceEntityIds.length) return { cases: {} };
+        return this.request('/cases/source-status', {
+            method: 'POST',
+            body: { source_entity_ids: sourceEntityIds },
+        });
+    },
+
     // GET /auth/me, shared for a short window so the page-load user/name widgets (sidebar
     // account info + flows2's getCurrentUser, at least) don't each fetch it. Identity is
     // stable within a session; the window is short enough that a role/2FA change picked up

@@ -152,6 +152,11 @@ def create_app():
 
         app.register_blueprint(create_compliant_blueprint())
 
+    # Always mount history/recovery routes; ordinary feature access is gated per request.
+    from app.features.operational_cases.operational_cases_bp import create_operational_cases_blueprint
+
+    app.register_blueprint(create_operational_cases_blueprint())
+
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
     @limiter.exempt
@@ -484,7 +489,14 @@ def create_app():
         else:
             compliant_subscribed = False
 
+        cases_available = False
+        if org_id and config.operational_cases_enabled:
+            from app.core.db import db_session
+            from app.core.security.entitlements import org_has_feature
+            cases_available = org_has_feature(db_session(), org_id, "operational_cases")
+
         return dict(
+            operational_cases_available=cases_available,
             crm_enabled=config.crm_enabled,
             compliant_enabled=config.compliant_enabled,
             compliant_subscribed=bool(compliant_subscribed),

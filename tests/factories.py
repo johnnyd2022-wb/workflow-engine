@@ -9,6 +9,7 @@ moment a second test needs the same kind of row.
 """
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import factory
@@ -28,6 +29,8 @@ from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.db.repositories.wastage_repo import WastageRepository
+from app.features.operational_cases.models.operational_case import OperationalCase
+from app.features.operational_cases.repositories.operational_case_repo import OperationalCaseRepository
 
 # Low bcrypt cost in tests only — bcrypt encodes its own cost factor in the hash, so a
 # password hashed here still verifies correctly through the real login flow; this only
@@ -182,3 +185,71 @@ class FeatureSubscriptionFactory(factory.Factory):
                 "FeatureSubscriptionFactory requires org_id, e.g. FeatureSubscriptionFactory(org_id=org.id)"
             )
         return FeatureSubscriptionRepository(db_session()).grant(org_id, feature_key, **kwargs)
+
+
+def _default_case_snapshot():
+    return {
+        "schema_version": 1,
+        "check_id": "untracked_items",
+        "source_entity_type": "inventory_item",
+        "source_entity_id": str(uuid.uuid4()),
+        "item_name": "Test Untracked Item",
+        "unit": "kg",
+        "quantity": "5",
+        "remaining_balance_to_reconcile": None,
+        "source_execution_id": None,
+        "source_execution_step_id": None,
+        "producing_step_id": None,
+        "observed_at": datetime.now(UTC).isoformat(),
+        "adapter_version": "untracked_items_v1",
+        "critical_reason": "positive_untracked_stock",
+        "truncated_fields": [],
+    }
+
+
+class OperationalCaseFactory(factory.Factory):
+    """A case created through the repository's direct row constructor -- bypasses the
+    service's eligibility pipeline on purpose, since that pipeline is business logic
+    under test elsewhere, not fixture setup (see operational_case_repo.create_case)."""
+
+    class Meta:
+        model = OperationalCase
+
+    org_id = None
+    owner_id = None
+    created_by = None
+    source_entity_id = factory.LazyFunction(uuid.uuid4)
+    title = factory.Sequence(lambda n: f"Untracked stock: Test Item {n}")
+    next_action = "Check batch output and reconcile the remaining quantity"
+    due_at = factory.LazyFunction(lambda: datetime.now(UTC) + timedelta(days=1))
+    source_snapshot = factory.LazyFunction(_default_case_snapshot)
+
+    @classmethod
+    def _create(
+        cls,
+        model_class,
+        org_id,
+        owner_id,
+        created_by,
+        source_entity_id,
+        title,
+        next_action,
+        due_at,
+        source_snapshot,
+        **kwargs,
+    ):
+        if org_id is None or owner_id is None or created_by is None:
+            raise ValueError("OperationalCaseFactory requires org_id, owner_id and created_by")
+        snapshot = dict(source_snapshot)
+        snapshot["source_entity_id"] = str(source_entity_id)
+        return OperationalCaseRepository(db_session()).create_case(
+            org_id=org_id,
+            title=title,
+            source_entity_id=source_entity_id,
+            source_snapshot=snapshot,
+            owner_id=owner_id,
+            due_at=due_at,
+            next_action=next_action,
+            created_by=created_by,
+            **kwargs,
+        )

@@ -16,7 +16,7 @@ production actions continue through their existing confirmed workflows.
 
 Source: [execution plan, Release A](../../docs/customer-value-execution-plan-2026-09-05.md#a-exception-to-resolution-workflow).
 Programme: [delivery slices](../plans/customer-value-slices.md).
-Approved by the user's “excellent, get to work!” on 2026-09-05. Implementation is in progress.
+Approved by the user's “excellent, get to work!” on 2026-09-05. A1 implementation is complete and awaiting normal review/pilot rollout.
 The existing `/core/*` URL convention takes precedence over a new slug URL prefix.
 
 ## Approved scope decisions

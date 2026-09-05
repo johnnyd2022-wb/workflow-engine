@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import BigInteger, Column, ForeignKey, String
+from sqlalchemy import BigInteger, Column, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -20,6 +20,7 @@ class EntityEvent(TenantScoped, Base):
     """
 
     __tablename__ = "entity_events"
+    __table_args__ = (UniqueConstraint("org_id", "id", name="uq_oc_events_org_id_id"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
