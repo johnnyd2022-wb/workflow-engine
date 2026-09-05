@@ -734,6 +734,12 @@ class TestEvidenceStorageHelpers:
         filename = f"{uuid4()}.png"
         # tmp_path/org1/../../outside resolves to tmp_path.parent/outside — a real file
         # planted there so is_file() is True and the relative_to() guard is what's tested.
+        # tmp_path/org1 must exist as a real directory or the kernel can't resolve the
+        # `org1/..` segment: candidate.is_file() would return False and read_file_path
+        # would short-circuit *before* the containment check, passing this test for the
+        # wrong reason (confirmed by mutation: deleting the relative_to() guard still
+        # leaves it green without this mkdir).
+        (tmp_path / "org1").mkdir(parents=True, exist_ok=True)
         outside_dir = tmp_path.parent / "outside"
         outside_dir.mkdir(exist_ok=True)
         outside_file = outside_dir / filename

@@ -1014,6 +1014,29 @@ def test_rg_distinguishes_no_matches_from_cannot_run(monkeypatch):
     assert fi._rg(["--files"]) is None
 
 
+def test_product_roadmap_plan_is_excluded_but_review_docs_are_not():
+    """The customer-value execution plan's "Decisions deliberately deferred" section
+    lists product capabilities that are explicitly NOT being built. `\\bdeferred\\b`
+    matched that heading and indexed five roadmap non-goals as a worklist (two P0 on a
+    "tenant" keyword hit). EXCLUDE_GLOBS drops that planning doc; the guard here is that
+    a real review/design doc with genuine follow-up headings is still scanned."""
+    import shutil
+
+    if not shutil.which("rg"):
+        pytest.skip("ripgrep not installed")
+
+    docs = fi.find_candidate_docs()
+    assert docs is not None, "find_candidate_docs could not run"
+    rel = {p.relative_to(fi.REPO_ROOT).as_posix() for p in docs}
+
+    assert not any(p.startswith("docs/customer-value-execution-plan-") for p in rel), (
+        f"roadmap plan should be excluded from the sweep, got: {sorted(rel)}"
+    )
+    # Narrowness guard: an ordinary design doc with a real "Deliberately deferred"
+    # call-out section must still be swept.
+    assert "docs/core-load-performance-design.md" in rel
+
+
 # --- ranking ---------------------------------------------------------------------------
 
 

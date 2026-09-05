@@ -121,6 +121,15 @@ EXCLUDE_GLOBS = (
     "!.agents/ci-gate-setup.md",
     "!.agents/history/README.md",
     "!**/TEST_DOCUMENTATION.md",
+    # Product/roadmap planning docs. A "customer-value execution plan" states delivery
+    # strategy and, under "Decisions deliberately deferred", the product capabilities
+    # that are explicitly NOT being built ("These are not holes to fill
+    # opportunistically") -- roadmap boundaries, not owed engineering work. The
+    # `\bdeferred\b` finding-heading matched that section and indexed five product
+    # non-goals as a worklist, two of them P0/security on a keyword hit ("tenant",
+    # "cross-tenant"). A deferred *bug fix* in a review report is still swept; a
+    # deferred product *decision* in a roadmap is not.
+    "!docs/customer-value-execution-plan-*.md",
 )
 
 # ---------------------------------------------------------------------------
