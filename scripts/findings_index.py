@@ -854,6 +854,14 @@ def scan_open_mrs() -> list[Item] | None:
         iid, desc = mr.get("iid"), mr.get("description") or ""
         if not iid or not desc:
             continue
+        # An MR carrying a `Findings-Index:` trailer is a findings-sweep closure MR. Its
+        # description is a per-finding writeup ("what was owed / what changed / what
+        # proves it") of items *already tracked here* -- the ones it closes on merge,
+        # per merged_mr_closures(). Parsing it re-indexes that writeup as a pile of fresh
+        # findings that only clear once the MR merges; on a daily timer that is six junk
+        # P0/P2 rows in the worklist every run. The trailer is still read on merge.
+        if TRAILER_RE.search(desc):
+            continue
         ref = f"!{iid}"
         pseudo_path = f"gitlab:{ref}"
         title = (mr.get("title") or "").strip()
