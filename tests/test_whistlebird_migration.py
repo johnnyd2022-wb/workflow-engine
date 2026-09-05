@@ -82,6 +82,83 @@ def test_bootstrap_rejects_any_tenant_except_whistlebird_test(migration_module, 
         )
 
 
+def test_compliant_nz_alcohol_setup_rejects_any_tenant_except_whistlebird_test(migration_module):
+    with pytest.raises(ValueError, match="only permitted"):
+        migration_module.ensure_compliant_nz_alcohol_setup("postgresql://unused", "another_tenant")
+
+
+def test_compliant_nz_alcohol_setup_grants_and_configures_documented_tenant(migration_module, monkeypatch):
+    from app.core.db.repositories import feature_subscription_repo
+    from app.features.compliant import service as compliant_service
+
+    calls = {}
+    org = SimpleNamespace(id=uuid4())
+
+    class Session:
+        def rollback(self):
+            calls["rollback"] = True
+
+        def close(self):
+            calls["session_closed"] = True
+
+    class Engine:
+        def dispose(self):
+            calls["engine_disposed"] = True
+
+    class FakeComplianceService:
+        def __init__(self, session):
+            assert isinstance(session, Session)
+
+        def upsert_profile(self, org_id, data):
+            calls["profile"] = (org_id, data)
+            return SimpleNamespace(enabled=data["enabled"], industry_module=data["industry_module"])
+
+    class FakeFeatureSubscriptionRepository:
+        def __init__(self, session):
+            assert isinstance(session, Session)
+
+        def grant(self, org_id, feature_key, **kwargs):
+            calls["grant"] = (org_id, feature_key, kwargs)
+            return SimpleNamespace(feature_key=feature_key, active=True)
+
+    session = Session()
+    monkeypatch.setattr(migration_module, "create_engine", lambda _url: Engine())
+    monkeypatch.setattr(migration_module, "sessionmaker", lambda **_kwargs: lambda: session)
+    monkeypatch.setattr(migration_module, "_enter_target_tenant_scope", lambda *_args: org)
+    monkeypatch.setattr(compliant_service, "ComplianceService", FakeComplianceService)
+    monkeypatch.setattr(feature_subscription_repo, "FeatureSubscriptionRepository", FakeFeatureSubscriptionRepository)
+
+    result = migration_module.ensure_compliant_nz_alcohol_setup("target-url", "whistlebird_test")
+
+    assert calls["profile"] == (
+        org.id,
+        {
+            "enabled": True,
+            "industry_module": "nz_alcohol",
+            "council_name": None,
+            "trade_waste_consent_reference": None,
+            "settings": {
+                "alcohol_product_types": ["spirits"],
+                "require_core_source_refs": True,
+                "trade_waste_required": False,
+            },
+        },
+    )
+    assert calls["grant"] == (
+        org.id,
+        "compliant",
+        {"notes": "Whistlebird test bootstrap: NZ alcohol Compliant tier"},
+    )
+    assert result == {
+        "feature_key": "compliant",
+        "active": True,
+        "profile_enabled": True,
+        "industry_module": "nz_alcohol",
+    }
+    assert calls["session_closed"] is True
+    assert calls["engine_disposed"] is True
+
+
 def test_bootstrap_runs_preflight_before_scoped_replay(migration_module, monkeypatch, tmp_path):
     calls = []
 
@@ -117,6 +194,14 @@ def test_bootstrap_runs_preflight_before_scoped_replay(migration_module, monkeyp
     }
     monkeypatch.setattr(migration_module, "build_import_verification", record("verify_import", matching_import))
     monkeypatch.setattr(migration_module, "build_production_sheet_verification", record("verify_sheet", matching_sheet))
+    monkeypatch.setattr(
+        migration_module,
+        "ensure_compliant_nz_alcohol_setup",
+        record(
+            "compliant_nz_alcohol_setup",
+            {"feature_key": "compliant", "active": True, "profile_enabled": True, "industry_module": "nz_alcohol"},
+        ),
+    )
 
     migration_module.bootstrap_whistlebird_test(
         "legacy-url",
@@ -141,6 +226,7 @@ def test_bootstrap_runs_preflight_before_scoped_replay(migration_module, monkeyp
         "sheet",
         "verify_import",
         "verify_sheet",
+        "compliant_nz_alcohol_setup",
     ]
 
 

@@ -45,6 +45,10 @@ It will also identify records needed for NP3 that were never represented in v1, 
    email is `whistlebird_test_admin@whistlebird.test` and can be changed with `--admin-email`
    before the tenant is first created.
 
+   After the verified import, the bootstrap grants `compliant` and creates the documented
+   NZ-alcohol profile: enabled, `spirits`, Core source references required, and trade waste
+   excluded unless a later explicit consent is added.
+
    ```bash
    export WHISTLEBIRD_TEST_ADMIN_PASSWORD='store-this-in-your-password-manager'
    uv run python scripts/whistlebird_migration.py --rebuild-whistlebird-test
