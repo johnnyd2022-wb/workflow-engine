@@ -16,6 +16,12 @@ impact, and prove that it was resolved.
 Customer self-service is deliberately excluded. It remains an appropriate higher-tier
 offer, but is not a dependency of this programme.
 
+Delivery tracking: [feature slice registry](../.agents/feature-index.md#customer-value-programme--planned-slices)
+and [programme delivery slices](../.agents/plans/customer-value-slices.md). Item 1 is now
+in specification: [Operational cases working draft](../.agents/specs/operational_cases.md),
+including the banner/Notifications UX recommendation and the proposed first vertical
+slice. These are planning artifacts; implementation and pilot validation are pending.
+
 ## Product thesis, customer and proof of value
 
 Biz-E wins when a small regulated manufacturer can run one real workflow with less
