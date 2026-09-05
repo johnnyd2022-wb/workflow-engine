@@ -18,6 +18,8 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from flask.sessions import SecureCookieSessionInterface
+from itsdangerous import BadSignature
 
 from app.core.db import db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
@@ -167,11 +169,40 @@ def flask_app():
     independent of which app instance issued the request -- so one app, many independent
     test-client cookiejars, is both safe and far cheaper.
     """
+    return _make_test_app()
+
+
+class _ClockTolerantTestSessionInterface(SecureCookieSessionInterface):
+    """Keep signed test cookies valid across the host clock's backwards jumps.
+
+    The test host can move wall-clock time backwards by several seconds. Flask's normal
+    session loader rejects an otherwise valid cookie with a negative signature age,
+    creating intermittent 401s unrelated to a case command. This test-only interface
+    still verifies the signature, but omits expiry validation.
+    """
+
+    def open_session(self, app, request):
+        serializer = self.get_signing_serializer(app)
+        if serializer is None:
+            return None
+        value = request.cookies.get(self.get_cookie_name(app))
+        if not value:
+            return self.session_class()
+        try:
+            return self.session_class(serializer.loads(value))
+        except BadSignature:
+            return self.session_class()
+
+
+def _make_test_app():
     from app.api.app_factory import create_app
 
     app = create_app()
+    # nosemgrep: python.flask.security.audit.hardcoded-config.avoid_hardcoded_config_TESTING -- isolated Flask test app
     app.config["TESTING"] = True
+    # nosemgrep: python.flask.security.audit.wtf-csrf-disabled.flask-wtf-csrf-disabled -- request authentication is the subject of these API tests
     app.config["WTF_CSRF_ENABLED"] = False
+    app.session_interface = _ClockTolerantTestSessionInterface()
     return app
 
 
@@ -430,11 +461,7 @@ def test_ac1_concurrent_create_same_source_returns_same_case(db, owner_user, unt
 
     monkeypatch.setattr(svc_module, "_pg_advisory_lock", delayed_lock)
 
-    from app.api.app_factory import create_app
-
-    private_app = create_app()
-    private_app.config["TESTING"] = True
-    private_app.config["WTF_CSRF_ENABLED"] = False
+    private_app = _make_test_app()
     client_a = _login(private_app, owner_user)
     client_b = _login(private_app, owner_user)
 

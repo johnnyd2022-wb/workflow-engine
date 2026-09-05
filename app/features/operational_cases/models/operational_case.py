@@ -83,7 +83,7 @@ class OperationalCase(TenantScoped, Base):
             "source_entity_type",
             "source_entity_id",
             unique=True,
-            postgresql_where=sa.text(f"status IN {CaseStatus.ACTIVE}"),
+            postgresql_where=sa.column("status").in_(CaseStatus.ACTIVE),
         ),
     )
 

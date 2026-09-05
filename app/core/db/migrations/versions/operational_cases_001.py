@@ -73,7 +73,7 @@ def upgrade() -> None:
         "operational_cases",
         ["org_id", "source_type", "check_id", "source_entity_type", "source_entity_id"],
         unique=True,
-        postgresql_where=sa.text(f"status IN {_ACTIVE_STATUS_VALUES}"),
+        postgresql_where=sa.column("status").in_(_ACTIVE_STATUS_VALUES),
     )
 
     op.create_table(
