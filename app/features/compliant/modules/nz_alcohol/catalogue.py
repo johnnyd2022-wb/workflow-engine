@@ -30,7 +30,7 @@ NZ_ALCOHOL_FRAMEWORKS = (
         "version": "2025-v2",
         "source_title": "Ministry for Primary Industries — National Programme 3 Guidance (December 2025, version 2)",
         "source_url": "https://www.mpi.govt.nz/dmsdocument/21853/direct",
-        "applies_to": ("beer", "spirits", "cider", "mead", "rtd", "other"),
+        "applies_to": ("national-programme-3", "beer", "spirits", "cider", "mead", "rtd", "other"),
         "controls": (
             ("registration-scope", "Keep the registered business scope, verifier and material changes current."),
             ("operational-verification", "Record the required operational and verification checks."),
@@ -41,6 +41,110 @@ NZ_ALCOHOL_FRAMEWORKS = (
             ),
             ("trace-and-recall", "Prove traceability and retain mock-recall or recall evidence."),
             ("corrective-actions", "Close food-safety incidents and corrective actions with evidence."),
+            (
+                "documentation-record-keeping",
+                "Make the current National Programme guidance and the last 12 months of relevant records available.",
+            ),
+            (
+                "delegation",
+                "Record who is delegated to carry out food-safety responsibilities and how they are supported.",
+            ),
+            (
+                "operator-verification",
+                "Retain previous verification outcomes and evidence that required follow-up has been completed.",
+            ),
+            ("personal-hygiene", "Show the team follows the hygiene and behaviour controls relevant to the operation."),
+            ("health-and-sickness", "Keep staff illness and exclusion decisions where they affect food safety."),
+            ("food-standards-composition", "Keep ingredient, composition and applicable Food Standards Code evidence."),
+            ("food-standards-microbiological", "Keep microbiological controls or test results where they apply."),
+            (
+                "time-temperature-processing",
+                "Keep time and temperature records for cooking or processing where they apply.",
+            ),
+            ("cross-contamination", "Show controls that prevent cross contamination."),
+            ("equipment-design", "Show food-contact equipment is suitable, maintained and used appropriately."),
+            ("suppliers-and-purchasing", "Keep approved supplier and purchasing evidence."),
+            ("receiving-food", "Keep receiving checks for ingredients and other food inputs."),
+            ("allergen-management", "Keep allergen identification, segregation and labelling controls."),
+            ("storage-stock-rotation", "Keep storage conditions and stock-rotation evidence."),
+            ("cooling-freezing", "Keep cooling and freezing controls where they apply."),
+            ("display-temperature", "Keep time and temperature controls for food on display where they apply."),
+            ("calibration", "Keep calibration records for measuring equipment used for food safety."),
+            ("transporting-food", "Keep controls for safe transport where it applies."),
+            ("food-labelling-advertising", "Keep current retail label and advertising examples for verification."),
+            ("biological-hazards", "Show process controls for biological hazards where they apply."),
+            ("chemical-hazards", "Show process controls for chemical hazards where they apply."),
+            ("physical-hazards", "Show process controls for physical hazards where they apply."),
+            ("importing-food", "Keep food-importing records where it applies."),
+            ("pest-animal-control", "Keep pest and animal-control checks and contractor records."),
+            ("waste-management", "Keep waste-management controls relevant to the premises."),
+            (
+                "premises-services",
+                "Show the premises, facilities, essential services and water supply support safe food production.",
+            ),
+            ("maintenance", "Keep maintenance evidence for food-safety-critical areas and equipment."),
+            ("unsafe-unsuitable-food", "Show how unsafe or unsuitable food is identified, isolated and managed."),
+        ),
+    },
+    {
+        "slug": "np2-food-control",
+        "name": "National Programme 2 food control",
+        "version": "2025 guidance",
+        "source_title": "Ministry for Primary Industries — National Programme 2 guidance",
+        "source_url": "https://www.mpi.govt.nz/food-business/running-a-food-business/national-programmes",
+        "applies_to": ("national-programme-2", "beer", "spirits", "cider", "mead", "rtd", "other"),
+        "controls": (
+            ("registration-scope", "Keep the registered business scope, verifier and material changes current."),
+            (
+                "operational-verification",
+                "Record the operating checks and verification evidence required for your selected programme.",
+            ),
+            ("staff-competency", "Keep current staff training and competency evidence."),
+            ("cleaning-and-hygiene", "Record cleaning, maintenance and hygiene checks relevant to the operation."),
+            ("trace-and-recall", "Prove traceability and retain mock-recall or recall evidence."),
+            ("corrective-actions", "Close food-safety incidents and corrective actions with evidence."),
+        ),
+    },
+    {
+        "slug": "np1-food-control",
+        "name": "National Programme 1 food control",
+        "version": "2025 guidance",
+        "source_title": "Ministry for Primary Industries — National Programme 1 guidance",
+        "source_url": "https://www.mpi.govt.nz/food-business/running-a-food-business/national-programmes",
+        "applies_to": ("national-programme-1", "beer", "spirits", "cider", "mead", "rtd", "other"),
+        "controls": (
+            ("registration-scope", "Keep the registered business scope, verifier and material changes current."),
+            (
+                "operational-verification",
+                "Record the operating checks and verification evidence required for your selected programme.",
+            ),
+            ("staff-competency", "Keep current staff training and competency evidence."),
+            ("trace-and-recall", "Prove traceability and retain mock-recall or recall evidence."),
+            ("corrective-actions", "Close food-safety incidents and corrective actions with evidence."),
+        ),
+    },
+    {
+        "slug": "liquor-licence",
+        "name": "Alcohol licence obligations",
+        "version": "Sale and Supply of Alcohol Act 2012 — local conditions apply",
+        "source_title": "Alcohol.org.nz — alcohol licensing guidance",
+        "source_url": "https://resources.alcohol.org.nz/alcohol-management-laws/licensing-local-policies/alcohol-licensing",
+        "applies_to": "liquor-licence-required",
+        "controls": (
+            (
+                "licence-scope",
+                "Record the licence type, premises or event scope, District Licensing Committee and licence reference.",
+            ),
+            (
+                "licence-conditions",
+                "Keep the current licence conditions and the operating arrangements that meet them.",
+            ),
+            ("certified-manager", "Keep evidence that the required certified manager arrangements are in place."),
+            ("licence-renewal", "Track the licence renewal date or, for a special licence, the event date and scope."),
+            (
+                "service-practices",
+                "Keep training and incident evidence for age, intoxication and responsible-service controls.",
+            ),
         ),
     },
     {
@@ -98,6 +202,13 @@ CONTROL_REQUIREMENTS = {
         "fields": ("measured_value", "limit_value"),
     },
     ("trade-waste", "pre-treatment"): {"evidence": True},
+    ("np2-food-control", "staff-competency"): {"record_types": ("competency",), "evidence": True, "due_date": True},
+    ("np1-food-control", "staff-competency"): {"record_types": ("competency",), "evidence": True, "due_date": True},
+    ("liquor-licence", "licence-scope"): {"evidence": True},
+    ("liquor-licence", "licence-conditions"): {"evidence": True},
+    ("liquor-licence", "certified-manager"): {"record_types": ("competency",), "evidence": True, "due_date": True},
+    ("liquor-licence", "licence-renewal"): {"evidence": True, "due_date": True},
+    ("liquor-licence", "service-practices"): {"evidence": True},
 }
 
 
@@ -123,6 +234,16 @@ def framework_applies(
     """
     if applies_to == "consent_required":
         return bool(trade_waste_consent_reference or (profile_settings or {}).get("trade_waste_required"))
+    if isinstance(applies_to, tuple) and applies_to[0].startswith("national-programme-"):
+        # Existing organisations predate this setting and were built around NP3, so the
+        # absent value deliberately preserves that plan until an administrator chooses.
+        selected = (profile_settings or {}).get("food_control_programme", "np3")
+        product_types = set((profile_settings or {}).get("alcohol_product_types") or [])
+        return selected == f"np{applies_to[0].removeprefix('national-programme-')}" and (
+            not product_types or bool(product_types.intersection(applies_to[1:]))
+        )
+    if applies_to == "liquor-licence-required":
+        return bool((profile_settings or {}).get("liquor_licence_types"))
     if isinstance(applies_to, tuple):
         product_types = set((profile_settings or {}).get("alcohol_product_types") or [])
         return not product_types or bool(product_types.intersection(applies_to))

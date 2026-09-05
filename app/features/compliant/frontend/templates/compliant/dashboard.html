@@ -4,6 +4,8 @@
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
 {% block content %}
 <main class="compliant-shell" data-compliant-root>
+  <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant">Compliant</a><span aria-hidden="true">/</span><strong>NZ Alcohol</strong></nav>
+  {% set active_compliant_tab = "overview" %}{% include "compliant/_nz_alcohol_tabs.html" %}
   <header class="compliant-hero">
     <div>
       <p class="compliant-eyebrow">COMPLIANT / NZ ALCOHOL</p>
@@ -21,17 +23,8 @@
   </section>
 
   <section class="compliant-setup" data-compliant-setup>
-    <div><p class="compliant-eyebrow">ONE-MINUTE SETUP</p><h2>Tell us what you make.</h2><p>We remove irrelevant frameworks first. You can add the council details later if trade waste applies.</p></div>
-    <form data-profile-form data-profile-target>
-      <fieldset><legend>What leaves your site?</legend>
-        <label><input type="checkbox" name="product_type" value="spirits"> Spirits</label><label><input type="checkbox" name="product_type" value="beer"> Beer</label><label><input type="checkbox" name="product_type" value="wine"> Wine / vineyard</label><label><input type="checkbox" name="product_type" value="cider"> Cider</label><label><input type="checkbox" name="product_type" value="mead"> Mead</label><label><input type="checkbox" name="product_type" value="rtd"> RTDs</label>
-      </fieldset>
-      <label>Council catalogue <select name="trade_waste_council" data-trade-waste-council><option value="">Choose if trade waste applies</option></select></label>
-      <label>Council or water provider name <input name="council_name" maxlength="255" placeholder="Required when your authority is not listed"></label>
-      <label>Trade-waste consent reference <input name="consent" maxlength="255" placeholder="Optional until applicable"></label>
-      <label><input type="checkbox" name="require_core_source_refs"> Enforce a linked Core source for every evidence record</label>
-      <button type="submit">Show my live plan</button>
-    </form>
+    <div><p class="compliant-eyebrow">MODULE SETTINGS</p><h2>Tell us what applies.</h2><p>Choose your food programme and licence activity, then we show only the duties you need to manage. You can add council trade-waste details later.</p></div>
+    <div data-profile-target><p>Configuration is deliberately separate from your evidence work, so the audit plan stays focused.</p><a class="np3-download" href="/compliant/nz-alcohol/configuration">Configure NZ Alcohol</a></div>
   </section>
 
   <section class="compliant-frameworks" aria-label="Applicable frameworks" data-frameworks></section>

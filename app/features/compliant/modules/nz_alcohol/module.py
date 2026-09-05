@@ -17,9 +17,20 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
     if not frameworks:
         return CheckResult(check_id=CHECK_ID, flagged=False, data={"frameworks": []})
     message = None
-    if attention:
+    attention_controls = [
+        control for framework in attention for control in framework["controls"] if control["state"] == "attention"
+    ]
+    training_controls = {"staff-competency", "certified-manager"}
+    if any(control["control_id"] in training_controls for control in attention_controls):
+        message = "NZ Alcohol staff training or competency evidence needs attention"
+    elif attention:
         message = f"{len(attention)} NZ Alcohol compliance framework(s) need attention"
-    return CheckResult(check_id=CHECK_ID, flagged=bool(attention), message=message, data={"frameworks": frameworks})
+    return CheckResult(
+        check_id=CHECK_ID,
+        flagged=bool(attention),
+        message=message,
+        data={"frameworks": frameworks, "attention_controls": attention_controls},
+    )
 
 
 def register_checks(runner) -> None:

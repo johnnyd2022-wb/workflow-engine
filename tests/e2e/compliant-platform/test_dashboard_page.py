@@ -1,5 +1,4 @@
-"""AC: `GET /compliant` -- requires auth, renders compliant/dashboard.html
-(.agents/specs/compliant-platform.md, "Dashboard page")."""
+"""Compliant index and the dedicated NZ Alcohol module page."""
 
 from __future__ import annotations
 
@@ -23,17 +22,19 @@ def test_dashboard_page_requires_auth(page, app_url):
 
 
 def test_dashboard_page_renders_for_logged_in_user(admin_page):
-    """Logged-in GET /compliant renders the real template: hero copy, the one-minute
-    setup form, and the record form are all present, and the page is not silently broken
-    (no console errors, no failed requests, no 5xx)."""
+    """The index leads to a module-specific working surface without client errors."""
     page = admin_page
     response = page.goto("/compliant")
     assert response is not None and response.status == 200
+    expect(page.get_by_role("heading", name="Know the rules that apply to the work you actually do.")).to_be_visible()
+    expect(page.get_by_role("link", name="Open NZ Alcohol")).to_be_visible()
 
+    response = page.goto("/compliant/nz-alcohol")
+    assert response is not None and response.status == 200
     expect(page.locator("[data-compliant-root]")).to_be_visible()
     expect(page.get_by_role("heading", name="Run your business. Know what needs proving.")).to_be_visible()
-    expect(page.locator("[data-profile-form]")).to_be_visible()
     expect(page.locator("[data-record-form]")).to_be_visible()
     expect(page.locator("[data-product-form]")).to_be_visible()
+    expect(page.get_by_role("link", name="Configure NZ Alcohol")).to_be_visible()
 
     assert_clean_page(page)
