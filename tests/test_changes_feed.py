@@ -328,20 +328,42 @@ def test_synced_types_match_the_partial_index(db, two_orgs):
 
 
 def test_head_query_uses_the_partial_index(db, two_orgs):
-    """EXPLAIN proves the head query is served by ix_entity_events_org_seq_synced (an
-    index-only scan), not a filter over ix_entity_events_org_seq."""
+    """The real login-heavy case uses the synced-type partial index for the head seek.
+
+    A three-row table is correctly cheaper for PostgreSQL to scan than to enter an index,
+    so it cannot prove the index protects a real tenant. Model the case this index was
+    added for instead: a few synced events followed by many non-synced login events.
+    """
     (org, _client), _b = two_orgs
-    _emit(db, org.id, "user.login", "user", uuid4())
     _emit(db, org.id, "process.created", "process", uuid4())
-    _emit(db, org.id, "user.login", "user", uuid4())
+    _emit(db, org.id, "execution.created", "execution", uuid4())
+    db.execute(
+        text(
+            """
+            INSERT INTO entity_events
+                (id, org_id, seq, event_type, entity_type, entity_id, actor_type, payload, created_at)
+            SELECT
+                gen_random_uuid(), :org,
+                (SELECT COALESCE(MAX(seq), 0) FROM entity_events WHERE org_id = :org) + series.n,
+                'user.login', 'user', gen_random_uuid(), 'system', '{}'::jsonb, NOW()
+            FROM generate_series(1, 256) AS series(n)
+            """
+        ),
+        {"org": str(org.id)},
+    )
+    db.execute(text("ANALYZE entity_events"))
+    db.commit()
 
     plan = "\n".join(
         r[0]
         for r in db.execute(
             text(
-                "EXPLAIN SELECT COALESCE(MAX(seq),0) FROM entity_events "
+                "EXPLAIN SELECT COALESCE(("
+                "SELECT seq FROM entity_events "
                 "WHERE org_id = :o AND entity_type IN "
-                "('process','execution','execution_step','step','inventory_item')"
+                "('process','execution','execution_step','step','inventory_item') "
+                "ORDER BY seq DESC LIMIT 1"
+                "), 0)"
             ),
             {"o": str(org.id)},
         )

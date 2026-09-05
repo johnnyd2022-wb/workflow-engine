@@ -94,8 +94,11 @@ def register_routes(bp):
 
         head = db.execute(
             text(
-                "SELECT COALESCE(MAX(seq), 0) FROM entity_events "
-                "WHERE org_id = :org AND entity_type IN :types"
+                "SELECT COALESCE(("
+                "SELECT seq FROM entity_events "
+                "WHERE org_id = :org AND entity_type IN :types "
+                "ORDER BY seq DESC LIMIT 1"
+                "), 0)"
             ).bindparams(sa_bindparam("types", expanding=True)),
             {"org": str(org_id), "types": list(_SYNCED_ENTITY_TYPES)},
         ).scalar()
