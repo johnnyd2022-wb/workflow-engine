@@ -24,6 +24,25 @@ def test_compliant_dashboard_documents_the_honest_product_boundary():
     assert "without pretending to be legal certification" in dashboard
 
 
+def test_compliant_dashboard_hydrates_live_views_in_parallel_without_hiding_partial_failures():
+    script = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.js"
+    ).read_text(encoding="utf-8")
+
+    assert "Promise.allSettled" in script
+    assert "some supporting lists could not load" in script
+    assert "setSubmitting(form, true)" in script
+
+
+def test_np3_dynamic_evidence_actions_force_a_full_document_navigation():
+    script = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js"
+    ).read_text(encoding="utf-8")
+
+    assert "add.setAttribute('hx-boost', 'false')" in script
+    assert "rowsByCategory" in script
+
+
 def test_audit_pack_does_not_overclaim_tamper_evidence():
     """The stored checksum is self-computed and never re-verified on read, so the pack
     must not tell an auditor it is tamper-evident — see docs/compliant-nz-alcohol-spec.md

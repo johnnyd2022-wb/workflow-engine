@@ -52,6 +52,22 @@ prompt and verifies the operational fact, but has no knowledge of the NZ Alcohol
 NP3, Customs, or any other framework. A future food or chemical module adds a provider in
 Compliant's composition root; it does not add industry logic to Core.
 
+### Performance and operator experience
+
+The audit screen must make a useful decision quickly, even if a secondary list is slow.
+The dashboard therefore hydrates its independent overview, record, and product views in
+parallel, rendering the authoritative readiness view as soon as it succeeds while making
+any secondary failure explicit and retryable with a refresh. This reduces the initial
+critical path from three sequential round trips to the slowest individual request, without
+hiding a partial-data condition.
+
+All evidence-creation controls disable while saving. This is especially important for
+immutable records: a slow connection must never encourage an operator to submit the same
+audit proof twice. Loading state is announced to assistive technology, wide evidence
+registers scroll rather than losing columns on a phone, and dynamic NP3 “Add evidence”
+links explicitly bypass HTMX so their page-specific JS and CSS always load as a full
+document.
+
 ## Architecture guardrails
 
 1. **DAG first.** Module evaluators use Core's `DAGTracer` and source entities; they do
