@@ -1,4 +1,4 @@
-"""Focused tests for the safe, reusable Whistlebird migration primitives."""
+"""Focused tests for the Whistlebird production-history load primitives."""
 
 import importlib.util
 import json
@@ -22,18 +22,233 @@ def migration_module():
     return module
 
 
+# --- deterministic helpers -----------------------------------------------------
+
+
 def test_derived_timestamp_uses_agreed_nz_noon(migration_module):
+    # June is NZST (+12), so noon Pacific/Auckland is midnight UTC.
     assert migration_module._derived_timestamp(date(2025, 6, 15)) == datetime(2025, 6, 15, 0, 0, tzinfo=UTC)
 
 
-def test_decimal_rejects_negative_legacy_quantities(migration_module):
+def test_decimal_rejects_negative_quantities(migration_module):
     with pytest.raises(ValueError, match="invalid quantity"):
-        migration_module._decimal(-1, "quantity", "legacy_table", 42)
+        migration_module._decimal(-1, "quantity", "source_table", 42)
 
 
-def test_reset_rejects_any_tenant_except_whistlebird_test(migration_module):
+def test_monotonic_step_dates_fills_gaps_and_never_goes_backwards(migration_module):
+    resolved, adjusted = migration_module._monotonic_step_dates(
+        [date(2025, 1, 1), None, date(2024, 12, 1), date(2025, 3, 1), None]
+    )
+    assert resolved == [
+        date(2025, 1, 1),
+        date(2025, 1, 1),  # inherited from previous
+        date(2025, 1, 1),  # pulled forward -- was earlier than previous
+        date(2025, 3, 1),
+        date(2025, 3, 1),  # inherited from previous
+    ]
+    assert adjusted == [False, True, True, False, True]
+
+
+def test_monotonic_step_dates_backfills_a_leading_gap(migration_module):
+    resolved, adjusted = migration_module._monotonic_step_dates([None, None, date(2026, 3, 26), None])
+    assert resolved == [date(2026, 3, 26)] * 4
+    assert adjusted == [True, True, False, True]
+
+
+def test_monotonic_step_dates_requires_at_least_one_real_date(migration_module):
+    with pytest.raises(ValueError, match="at least one real source date"):
+        migration_module._monotonic_step_dates([None, None])
+
+
+def test_import_marker_carries_no_legacy_wording(migration_module):
+    marker = migration_module._import_marker("wildflower-vat7", "production_sheet", 7, step="bottling")
+    assert marker[migration_module.IMPORT_MARKER_KEY] == "wildflower-vat7:bottling"
+    assert marker[migration_module.BATCH_MARKER_KEY] == "wildflower-vat7"
+    assert marker["step"] == "bottling"
+    blob = json.dumps(marker).lower()
+    assert "legacy" not in blob
+    assert "historical" not in blob
+
+
+def test_product_workflows_have_the_agreed_step_shape(migration_module):
+    counts = {name: len(steps) for name, (_shape, steps) in migration_module.PRODUCT_WORKFLOWS.items()}
+    assert counts == {
+        "Wildflower gin": 5,
+        "Solstice gin": 5,
+        "Rosella gin": 4,
+        "GG gin trials": 2,
+        "WB recipe trials": 2,
+        "SGS spirit trials": 2,
+    }
+    wildflower_steps = [s[0] for s in migration_module.PRODUCT_WORKFLOWS["Wildflower gin"][1]]
+    assert wildflower_steps == ["Maceration", "Distilling", "Aging", "Bottling", "Labelling & packaging"]
+    rosella_steps = [s[0] for s in migration_module.PRODUCT_WORKFLOWS["Rosella gin"][1]]
+    assert rosella_steps[0] == "Rhubarb maceration" and "Distilling" not in rosella_steps
+
+
+# --- raw-material disambiguation ---------------------------------------------
+
+
+def test_reused_supplier_batches_are_disambiguated_without_losing_source_code(migration_module):
+    first = migration_module.RawMaterialRecord(
+        source_table="purchases_ingredients",
+        source_id=1,
+        source_date=date(2024, 1, 1),
+        name="Juniper",
+        quantity=migration_module.Decimal("100"),
+        unit="g",
+        supplier="Supplier",
+        supplier_batch_number="JB001",
+        expiry_date=None,
+        extra_data={},
+    )
+    second = migration_module.RawMaterialRecord(**{**first.__dict__, "source_id": 2, "source_date": date(2024, 2, 1)})
+
+    result = migration_module._disambiguate_reused_supplier_batches([first, second])
+
+    assert result[0].supplier_batch_number != result[1].supplier_batch_number
+    assert "legacy" not in result[1].supplier_batch_number.lower()
+    assert result[0].extra_data["recorded_supplier_batch_number"] == "JB001"
+    assert result[1].extra_data["recorded_supplier_batch_number"] == "JB001"
+
+
+# --- manifest ----------------------------------------------------------------
+
+
+def _write_manifest(tmp_path: Path, records: list[dict], excluded: list[dict] | None = None) -> Path:
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps({"records": records, "excluded": excluded or []}), encoding="utf-8")
+    return manifest_path
+
+
+def _solstice_batch(**overrides) -> dict:
+    record = {
+        "global_vat": 28,
+        "batch_label": "VAT28",
+        "product": "solstice",
+        "steps": {
+            "maceration": {"date": None, "confidence": "derived"},
+            "distilling": {"date": None, "confidence": "derived"},
+            "aging": {"date": "2025-06-25", "confidence": "clean"},
+            "bottling": {"date": "2025-07-23", "confidence": "resolved_by_context"},
+            "labelling": {"date": None, "confidence": "derived"},
+        },
+        "bottlings": [{"date": "2025-07-23", "bottles": "56.5", "sheet_row": 1206}],
+        "vat_volume_l": "40",
+    }
+    record.update(overrides)
+    return record
+
+
+def test_load_manifest_parses_the_per_batch_shape(migration_module, tmp_path):
+    manifest_path = _write_manifest(tmp_path, [_solstice_batch()])
+    batches, excluded = migration_module._load_manifest(manifest_path)
+    assert not excluded
+    (batch,) = batches
+    assert batch.global_vat == 28
+    assert batch.product_line == "solstice"
+    assert batch.workflow_name == "Solstice gin"
+    assert batch.steps["aging"].step_date == date(2025, 6, 25)
+    assert batch.steps["maceration"].step_date is None
+    assert batch.bottlings[0]["bottles"] == "56.5000"
+
+
+def test_load_manifest_excludes_unresolved_step_confidence(migration_module, tmp_path):
+    bad = _solstice_batch()
+    bad["steps"]["bottling"] = {"date": "2025-07-23", "confidence": "unresolved"}
+    manifest_path = _write_manifest(tmp_path, [bad])
+    batches, excluded = migration_module._load_manifest(manifest_path)
+    assert batches == []
+    assert "unresolved step dates" in excluded[0]["reason"]
+
+
+def test_load_manifest_honours_an_explicit_exclude_flag(migration_module, tmp_path):
+    manifest_path = _write_manifest(tmp_path, [_solstice_batch(exclude=True, notes="founder investigating")])
+    batches, excluded = migration_module._load_manifest(manifest_path)
+    assert batches == []
+    assert excluded[0]["reason"] == "founder investigating"
+
+
+def test_merge_batches_only_fills_missing_steps_on_a_prior_database_batch(migration_module, tmp_path):
+    batch_step = migration_module.BatchStep
+    production_batch = migration_module.ProductionBatch
+    legacy = {
+        24: production_batch(
+            global_vat=24,
+            product_line="wildflower",
+            batch_label="WBWF24",
+            steps={
+                "maceration": batch_step("maceration", date(2025, 4, 23), "clean"),
+                "distilling": batch_step("distilling", date(2025, 4, 23), "clean"),
+                "aging": batch_step("aging", date(2025, 4, 23), "clean"),
+                "bottling": batch_step("bottling", None, "derived"),
+                "labelling": batch_step("labelling", None, "derived"),
+            },
+            vat_volume_l=migration_module.Decimal("54.6"),
+            vat_abv=migration_module.Decimal("44"),
+            bottlings=(),
+            ingredient_codes=(),
+            base_vat=None,
+            extra_data={},
+        )
+    }
+    manifest_path = _write_manifest(
+        tmp_path,
+        [
+            {
+                "global_vat": 24,
+                "batch_label": "VAT24",
+                "product": "wildflower",
+                "steps": {
+                    "maceration": {"date": "2000-01-01", "confidence": "clean"},  # must NOT override
+                    "bottling": {"date": "2025-05-22", "confidence": "clean"},
+                    "labelling": {"date": None, "confidence": "derived"},
+                },
+                "bottlings": [{"date": "2025-05-22", "bottles": "77", "sheet_row": 1080}],
+            }
+        ],
+    )
+    manifest_batches, _ = migration_module._load_manifest(manifest_path)
+    (merged,) = migration_module._merge_batches(legacy, manifest_batches)
+    assert merged.steps["maceration"].step_date == date(2025, 4, 23)  # kept from prior database
+    assert merged.steps["bottling"].step_date == date(2025, 5, 22)  # filled from manifest
+    assert merged.bottlings[0]["bottles"] == "77.0000"
+
+
+def test_merge_batches_adds_a_wholly_new_vat(migration_module, tmp_path):
+    manifest_path = _write_manifest(tmp_path, [_solstice_batch()])
+    manifest_batches, _ = migration_module._load_manifest(manifest_path)
+    merged = migration_module._merge_batches({}, manifest_batches)
+    assert [b.global_vat for b in merged] == [28]
+
+
+def test_curated_manifest_in_docs_loads_and_every_step_is_resolved(migration_module):
+    manifest_path = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
+    batches, _excluded = migration_module._load_manifest(manifest_path)
+    assert len(batches) >= 20
+    for batch in batches:
+        for step in batch.steps.values():
+            assert step.confidence in migration_module.STEP_DATE_CONFIDENCE
+
+
+# --- tenant guards ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda m: m.reset_target_org("postgresql://unused", "another_tenant"),
+        lambda m: m.setup_product_workflows("postgresql://unused", "another_tenant"),
+        lambda m: m.apply_raw_material_inventory("postgresql://u", "postgresql://u", "another_tenant"),
+        lambda m: m.apply_production_batches("postgresql://u", "postgresql://u", "another_tenant", None),
+        lambda m: m.apply_trial_batches("postgresql://u", "postgresql://u", "another_tenant"),
+        lambda m: m.apply_customs_lodgements("postgresql://u", "postgresql://u", "another_tenant"),
+        lambda m: m.ensure_compliant_nz_alcohol_setup("postgresql://unused", "another_tenant"),
+    ],
+)
+def test_write_actions_reject_any_tenant_except_whistlebird_test(migration_module, call):
     with pytest.raises(ValueError, match="only permitted"):
-        migration_module.reset_target_org("postgresql://unused", "another_tenant")
+        call(migration_module)
 
 
 def test_tenant_setup_rejects_any_tenant_except_whistlebird_test(migration_module):
@@ -43,8 +258,19 @@ def test_tenant_setup_rejects_any_tenant_except_whistlebird_test(migration_modul
         )
 
 
+def test_bootstrap_rejects_any_tenant_except_whistlebird_test(migration_module, tmp_path):
+    with pytest.raises(ValueError, match="only permitted"):
+        migration_module.bootstrap_whistlebird_test(
+            "postgresql://unused",
+            "postgresql://unused",
+            "another_tenant",
+            "admin@example.test",
+            "not-used",
+            tmp_path / "manifest.json",
+        )
+
+
 def test_target_tenant_scope_is_active_only_for_target_orm_work(migration_module):
-    """Standalone migration ORM work must not fall through to tenant_filter.no_context."""
     from contextlib import ExitStack
 
     from app.core.security.tenant_scope import get_current_org_id
@@ -70,171 +296,81 @@ def test_target_tenant_scope_is_active_only_for_target_orm_work(migration_module
     assert get_current_org_id() is None
 
 
-def test_bootstrap_rejects_any_tenant_except_whistlebird_test(migration_module, tmp_path):
-    with pytest.raises(ValueError, match="only permitted"):
-        migration_module.bootstrap_whistlebird_test(
-            "postgresql://unused",
-            "postgresql://unused",
-            "another_tenant",
-            "admin@example.test",
-            "not-used",
-            tmp_path / "manifest.json",
-        )
+# --- bootstrap orchestration ---------------------------------------------------
 
 
-def test_compliant_nz_alcohol_setup_rejects_any_tenant_except_whistlebird_test(migration_module):
-    with pytest.raises(ValueError, match="only permitted"):
-        migration_module.ensure_compliant_nz_alcohol_setup("postgresql://unused", "another_tenant")
-
-
-def test_compliant_nz_alcohol_setup_grants_and_configures_documented_tenant(migration_module, monkeypatch):
-    from app.core.db.repositories import feature_subscription_repo
-    from app.features.compliant import service as compliant_service
-
-    calls = {}
-    org = SimpleNamespace(id=uuid4())
-
-    class Session:
-        def rollback(self):
-            calls["rollback"] = True
-
-        def close(self):
-            calls["session_closed"] = True
-
-    class Engine:
-        def dispose(self):
-            calls["engine_disposed"] = True
-
-    class FakeComplianceService:
-        def __init__(self, session):
-            assert isinstance(session, Session)
-
-        def upsert_profile(self, org_id, data):
-            calls["profile"] = (org_id, data)
-            return SimpleNamespace(enabled=data["enabled"], industry_module=data["industry_module"])
-
-    class FakeFeatureSubscriptionRepository:
-        def __init__(self, session):
-            assert isinstance(session, Session)
-
-        def grant(self, org_id, feature_key, **kwargs):
-            calls["grant"] = (org_id, feature_key, kwargs)
-            return SimpleNamespace(feature_key=feature_key, active=True)
-
-    session = Session()
-    monkeypatch.setattr(migration_module, "create_engine", lambda _url: Engine())
-    monkeypatch.setattr(migration_module, "sessionmaker", lambda **_kwargs: lambda: session)
-    monkeypatch.setattr(migration_module, "_enter_target_tenant_scope", lambda *_args: org)
-    monkeypatch.setattr(compliant_service, "ComplianceService", FakeComplianceService)
-    monkeypatch.setattr(feature_subscription_repo, "FeatureSubscriptionRepository", FakeFeatureSubscriptionRepository)
-
-    result = migration_module.ensure_compliant_nz_alcohol_setup("target-url", "whistlebird_test")
-
-    assert calls["profile"] == (
-        org.id,
-        {
-            "enabled": True,
-            "industry_module": "nz_alcohol",
-            "council_name": None,
-            "trade_waste_consent_reference": None,
-            "settings": {
-                "alcohol_product_types": ["spirits"],
-                "require_core_source_refs": True,
-                "trade_waste_required": False,
-            },
-        },
-    )
-    assert calls["grant"] == (
-        org.id,
-        "compliant",
-        {"notes": "Whistlebird test bootstrap: NZ alcohol Compliant tier"},
-    )
-    assert result == {
-        "feature_key": "compliant",
-        "active": True,
-        "profile_enabled": True,
-        "industry_module": "nz_alcohol",
-    }
-    assert calls["session_closed"] is True
-    assert calls["engine_disposed"] is True
-
-
-def test_bootstrap_runs_preflight_before_scoped_replay(migration_module, monkeypatch, tmp_path):
+def test_bootstrap_runs_preflight_then_scoped_replay_then_verify(migration_module, monkeypatch, tmp_path):
     calls = []
 
     def record(name, result):
-        def operation(*_args):
+        def operation(*_args, **_kwargs):
             calls.append(name)
             return result
 
         return operation
 
+    matching_verification = {
+        "raw_material_items": {"expected": 1, "actual": 1},
+        "batch_executions": {"Wildflower gin": {"expected": 1, "actual": 1}},
+        "customs_lodgements": {"expected": 1, "actual": 1},
+        "incomplete_batch_steps": {"expected": 0, "actual": 0},
+        "date_mismatches": {"step_dates": 0, "steps_stamped_on_run_date": 0},
+        "wording_leaks": {"process_names": 0, "step_names": 0},
+    }
     monkeypatch.setattr(migration_module, "build_core_dry_run", record("dry_core", {"dry_run": True}))
     monkeypatch.setattr(migration_module, "build_production_dry_run", record("dry_production", {"dry_run": True}))
-    monkeypatch.setattr(migration_module, "build_traceability_dry_run", record("dry_traceability", {"dry_run": True}))
-    monkeypatch.setattr(migration_module, "build_production_sheet_dry_run", record("dry_sheet", {"dry_run": True}))
+    monkeypatch.setattr(migration_module, "build_manifest_dry_run", record("dry_manifest", {"dry_run": True}))
     monkeypatch.setattr(
         migration_module, "ensure_target_org_admin", record("ensure", {"org_created": True, "admin_created": True})
     )
     monkeypatch.setattr(migration_module, "reset_target_org", record("reset", {"deleted_rows": {}}))
-    monkeypatch.setattr(migration_module, "setup_historical_process_templates", record("templates", {}))
-    monkeypatch.setattr(migration_module, "apply_core_receipts_and_lodgements", record("core", {}))
-    monkeypatch.setattr(migration_module, "apply_evidenced_production", record("production", {}))
-    monkeypatch.setattr(migration_module, "apply_sample_history", record("samples", {}))
-    monkeypatch.setattr(migration_module, "apply_production_sheet", record("sheet", {}))
-    matching_import = {
-        "inventory": {"purchases_gns": {"expected": 1, "actual": 1}},
-        "samples": {},
-        "customs_lodgements": {"expected": 1, "actual": 1},
-        "date_mismatches": {"inventory": 0, "execution_steps": 0},
-    }
-    matching_sheet = {
-        "by_record_type": {"bottling": {"expected": 1, "actual": 1}},
-        "date_mismatches": 0,
-    }
-    monkeypatch.setattr(migration_module, "build_import_verification", record("verify_import", matching_import))
-    monkeypatch.setattr(migration_module, "build_production_sheet_verification", record("verify_sheet", matching_sheet))
+    monkeypatch.setattr(migration_module, "setup_product_workflows", record("workflows", {}))
+    monkeypatch.setattr(migration_module, "apply_raw_material_inventory", record("raw_materials", {}))
+    monkeypatch.setattr(migration_module, "apply_production_batches", record("batches", {}))
+    monkeypatch.setattr(migration_module, "apply_trial_batches", record("trials", {}))
+    monkeypatch.setattr(migration_module, "apply_customs_lodgements", record("customs", {}))
+    monkeypatch.setattr(migration_module, "build_import_verification", record("verify_load", matching_verification))
+    monkeypatch.setattr(migration_module, "build_manifest_verification", record("verify_manifest", {}))
     monkeypatch.setattr(
         migration_module,
         "ensure_compliant_nz_alcohol_setup",
-        record(
-            "compliant_nz_alcohol_setup",
-            {"feature_key": "compliant", "active": True, "profile_enabled": True, "industry_module": "nz_alcohol"},
-        ),
+        record("compliant", {"feature_key": "compliant", "active": True}),
     )
 
     migration_module.bootstrap_whistlebird_test(
-        "legacy-url",
-        "target-url",
-        "whistlebird_test",
-        "admin@example.test",
-        "safe-password",
-        tmp_path / "manifest.json",
+        "legacy-url", "target-url", "whistlebird_test", "admin@example.test", "safe-password", tmp_path / "m.json"
     )
 
     assert calls == [
         "dry_core",
         "dry_production",
-        "dry_traceability",
-        "dry_sheet",
+        "dry_manifest",
         "ensure",
         "reset",
-        "templates",
-        "core",
-        "production",
-        "samples",
-        "sheet",
-        "verify_import",
-        "verify_sheet",
-        "compliant_nz_alcohol_setup",
+        "workflows",
+        "raw_materials",
+        "batches",
+        "trials",
+        "customs",
+        "verify_load",
+        "verify_manifest",
+        "compliant",
     ]
 
 
 def test_bootstrap_rejects_mismatched_verification(migration_module):
     with pytest.raises(RuntimeError, match="verification failed"):
         migration_module._require_matching_import(
-            {"inventory": {"purchases_gns": {"expected": 1, "actual": 0}}}, "Legacy import"
+            {"raw_material_items": {"expected": 71, "actual": 0}}, "Production history load"
         )
+
+
+def test_bootstrap_rejects_a_wording_leak(migration_module):
+    with pytest.raises(RuntimeError, match="verification failed"):
+        migration_module._require_matching_import({"wording_leaks": {"process_names": 1}}, "Production history load")
+
+
+# --- argument parsing ----------------------------------------------------------
 
 
 def test_arguments_reject_ambiguous_actions(migration_module, monkeypatch):
@@ -251,7 +387,6 @@ def test_arguments_reject_ambiguous_actions(migration_module, monkeypatch):
             "--dry-run-production",
         ],
     )
-
     with pytest.raises(SystemExit):
         migration_module._arguments()
 
@@ -270,120 +405,5 @@ def test_arguments_reject_wrong_tenant_before_any_database_work(migration_module
             "another_tenant",
         ],
     )
-
     with pytest.raises(SystemExit):
         migration_module._arguments()
-
-
-def test_reused_supplier_batches_are_disambiguated_without_losing_source_code(migration_module):
-    first = migration_module.ReceiptSourceRecord(
-        legacy_table="purchases_ingredients",
-        legacy_id=1,
-        legacy_date=date(2024, 1, 1),
-        name="Juniper",
-        quantity=migration_module.Decimal("100"),
-        unit="g",
-        supplier="Supplier",
-        supplier_batch_number="JB001",
-        expiry_date=None,
-        process_name="Legacy ingredient receipt",
-        extra_data={},
-    )
-    second = migration_module.ReceiptSourceRecord(**{**first.__dict__, "legacy_id": 2, "legacy_date": date(2024, 2, 1)})
-
-    result = migration_module._disambiguate_reused_supplier_batches([first, second])
-
-    assert result[0].supplier_batch_number != result[1].supplier_batch_number
-    assert result[0].extra_data["legacy_supplier_batch_number"] == "JB001"
-    assert result[1].extra_data["legacy_supplier_batch_number"] == "JB001"
-
-
-def _write_manifest(tmp_path: Path, records: list[dict], excluded: list[dict] | None = None) -> Path:
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps({"records": records, "excluded": excluded or []}), encoding="utf-8")
-    return manifest_path
-
-
-def _sample_record(**overrides) -> dict:
-    record = {
-        "id": 1936,
-        "record_type": "bottling",
-        "process_name": "Sheet: bottling",
-        "product_line": "wildflower",
-        "batch_label": "VAT47",
-        "legacy_date": "2026-05-07",
-        "date_confidence": "resolved_by_context",
-        "quantity": "78.5",
-        "unit": "units",
-        "input_references": [],
-        "linked_legacy_source": None,
-        "notes": "test record",
-    }
-    record.update(overrides)
-    return record
-
-
-def test_production_sheet_records_parses_a_valid_manifest(migration_module, tmp_path):
-    manifest_path = _write_manifest(tmp_path, [_sample_record()])
-
-    records = migration_module._production_sheet_records(manifest_path)
-
-    assert len(records) == 1
-    assert records[0].manifest_id == 1936
-    assert records[0].batch_label == "VAT47"
-    assert records[0].legacy_date == date(2026, 5, 7)
-    assert records[0].quantity == migration_module.Decimal("78.5000")
-
-
-def test_production_sheet_records_rejects_unresolved_date_confidence(migration_module, tmp_path):
-    manifest_path = _write_manifest(tmp_path, [_sample_record(date_confidence="unresolved")])
-
-    with pytest.raises(ValueError, match="unresolved date_confidence"):
-        migration_module._production_sheet_records(manifest_path)
-
-
-def test_production_sheet_records_parses_input_references(migration_module, tmp_path):
-    manifest_path = _write_manifest(tmp_path, [_sample_record(id=1786, input_references=[["vat_batch", "VAT48"]])])
-
-    records = migration_module._production_sheet_records(manifest_path)
-
-    assert records[0].input_references == (("vat_batch", "VAT48"),)
-
-
-def test_production_sheet_provenance_uses_distinct_source_system(migration_module):
-    record = migration_module.ProductionSheetRecord(
-        manifest_id=1936,
-        record_type="bottling",
-        process_name="Sheet: bottling",
-        product_line="wildflower",
-        batch_label="VAT47",
-        legacy_date=date(2026, 5, 7),
-        date_confidence="resolved_by_context",
-        quantity=migration_module.Decimal("78.5"),
-        unit="units",
-        input_references=(),
-        linked_legacy_source=None,
-        notes="",
-    )
-
-    provenance = migration_module._production_sheet_provenance(record)
-
-    assert provenance["source_system"] == "whistlebird_production_sheet"
-    assert provenance["legacy_source"] == {"table": "production_sheet", "id": 1936}
-    assert provenance["date_confidence"] == "resolved_by_context"
-
-
-def test_apply_production_sheet_rejects_any_tenant_except_whistlebird_test(migration_module, tmp_path):
-    manifest_path = _write_manifest(tmp_path, [_sample_record()])
-
-    with pytest.raises(ValueError, match="only permitted"):
-        migration_module.apply_production_sheet(manifest_path, "postgresql://unused", "another_tenant")
-
-
-def test_curated_production_sheet_manifest_loads_without_error(migration_module):
-    manifest_path = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
-
-    records = migration_module._production_sheet_records(manifest_path)
-
-    assert len(records) >= 1
-    assert all(record.date_confidence in migration_module.PRODUCTION_SHEET_DATE_CONFIDENCE for record in records)

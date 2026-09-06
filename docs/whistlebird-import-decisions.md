@@ -1,6 +1,29 @@
-# Whistlebird v1 → Biz-E findings
+# Whistlebird production-history import — decisions log
+
+Internal engineering audit trail for `scripts/whistlebird_migration.py`: how each
+ambiguous source record was resolved during curation. Not loaded data — the tool itself
+carries no "legacy"/"historical" wording (see `docs/whistlebird-production-import.md`).
+"Prior database" / "v1" below refers to the old inventory database read at
+`WB_LEGACY_DATABASE_URL`; "the sheet" is the founder's "Production!!" Google-Sheet tab,
+curated into `docs/whistlebird-production-sheet-source.json`.
 
 Status values: `open`, `resolved`, `accepted limitation`, `blocked`.
+
+## Still open after the per-product-workflow rebuild (2026-09-07)
+
+- **Per-batch maceration/distillation dates for VAT28+** load as `derived` (inherited
+  from the recorded VAT-fill/bottling date). The sheet records these events but with
+  mixed date formats and self-contradictions; curating them into the manifest `steps`
+  map is the outstanding review item. VAT27 and all prior-DB batches have real per-step
+  dates.
+- **Six batches excluded** pending founder confirmation (unchanged): WB-028 (row 1846
+  date), WB-029 (two unknown VAT numbers), VAT49 (no bottle count), WB-030 (VAT23's
+  possibly-duplicate 77-bottle bottling), WB-031 (VAT51/VAT52 product-identity conflict).
+- **Rosella VAT26 (prior DB)** predates Solstice, so its rhubarb-maceration step has no
+  Solstice base-VAT input — its `RS01`/`RS02` flavour rows are treated as the maceration.
+  Confirm this early-Rosella method is correct.
+
+## Findings register
 
 | ID | Status | Finding | Required decision or next action |
 | --- | --- | --- | --- |
