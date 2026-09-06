@@ -31,6 +31,11 @@ from app.features.compliant.modules.nz_alcohol.catalogue import (
     framework_for_profile,
 )
 from app.features.compliant.modules.nz_alcohol.councils import TRADE_WASTE_CATALOGUES, council_catalogue
+from app.features.compliant.modules.nz_alcohol.np3_audit import (
+    NP3_AUDIT_CATEGORIES,
+    PREPARATION_ITEMS,
+    build_np3_audit_rows,
+)
 from app.features.crm.models.product_mapping import ProductMapping
 
 
@@ -622,6 +627,32 @@ class ComplianceService:
             else None,
             "disclaimer": "Operational evidence status only. Review requirements with the relevant regulator or adviser.",
         }
+
+    def np3_audit(self, org_id: UUID) -> dict[str, Any]:
+        """Return the upcoming-verification checklist and only its linked evidence."""
+        profile = self.get_profile(org_id)
+        settings = profile.settings or {} if profile else {}
+        if profile is not None and profile.enabled and settings.get("food_control_programme", "np3") != "np3":
+            raise ValueError("Select National Programme 3 in Configuration to use the NP3 audit plan")
+        records = self.records(org_id, "np3-food-control") if profile and profile.enabled else []
+        rows = build_np3_audit_rows(records)
+        counts = {state: sum(1 for row in rows if row["state"] == state) for state in ("ready", "attention", "missing")}
+        return _iso(
+            {
+                "verification": {
+                    "date": settings.get("np3_verification_date"),
+                    "verifier": settings.get("np3_verifier_name"),
+                    "location": settings.get("np3_verification_location"),
+                },
+                "preparation_items": PREPARATION_ITEMS,
+                "categories": [category for category, _topics in NP3_AUDIT_CATEGORIES],
+                "rows": rows,
+                "counts": counts,
+                "configuration_required": not bool(profile and profile.enabled),
+                "core_evidence": self.data_coverage(org_id, records=records) if profile and profile.enabled else {},
+                "disclaimer": "This checklist reflects the verification-confirmation topics. Keep the current National Programme guidance available; the verifier determines the final scope.",
+            }
+        )
 
     def build_audit_pack(
         self,

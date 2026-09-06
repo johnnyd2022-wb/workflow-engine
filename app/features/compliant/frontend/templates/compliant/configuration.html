@@ -1,0 +1,24 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Configuration · NZ Alcohol · Compliant{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block content %}
+<main class="compliant-shell" data-compliant-configuration-root>
+  <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant" hx-boost="false">Compliant</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol" hx-boost="false">NZ Alcohol</a><span aria-hidden="true">/</span><strong>Configuration</strong></nav>
+  {% set active_compliant_tab = "configuration" %}{% include "compliant/_nz_alcohol_tabs.html" %}
+  <header class="compliant-hero"><div><p class="compliant-eyebrow">NZ ALCOHOL / CONFIGURATION</p><h1>Switch on only the obligations that belong to your operation.</h1><p>These settings control the frameworks and audit pages your team sees. They do not determine legal obligations.</p></div></header>
+  <p class="compliant-error" data-configuration-error hidden></p>
+  <section class="compliant-record-panel configuration-panel"><form data-configuration-form>
+    <label class="span-2 config-toggle"><input name="enabled" type="checkbox"> Enable NZ Alcohol compliance workspace</label>
+    <fieldset><legend>What leaves your site?</legend><label><input type="checkbox" name="product_type" value="spirits"> Spirits</label><label><input type="checkbox" name="product_type" value="beer"> Beer</label><label><input type="checkbox" name="product_type" value="wine"> Wine / vineyard</label><label><input type="checkbox" name="product_type" value="cider"> Cider</label><label><input type="checkbox" name="product_type" value="mead"> Mead</label><label><input type="checkbox" name="product_type" value="rtd"> RTDs</label></fieldset>
+    <label>Food safety programme <select name="food_control_programme"><option value="np1">National Programme 1</option><option value="np2">National Programme 2</option><option value="np3">National Programme 3</option><option value="none">No National Programme selected</option></select></label>
+    <fieldset><legend>Alcohol licence activity</legend><label><input type="checkbox" name="liquor_licence_type" value="on"> On-licence</label><label><input type="checkbox" name="liquor_licence_type" value="off"> Off-licence</label><label><input type="checkbox" name="liquor_licence_type" value="club"> Club licence</label><label><input type="checkbox" name="liquor_licence_type" value="special"> Special licence</label></fieldset>
+    <label>Liquor licence / application reference <input name="liquor_licence_reference" maxlength="255"></label><label>Licence renewal or event date <input name="liquor_licence_due_date" type="date"></label>
+    <label>NP3 verification date <input name="np3_verification_date" type="date"></label><label>Verifier name <input name="np3_verifier_name" maxlength="255"></label><label class="span-2">Verification location <input name="np3_verification_location" maxlength="255"></label>
+    <label>Council catalogue <select name="trade_waste_council" data-trade-waste-council><option value="">No trade-waste catalogue selected</option></select></label><label>Council / water provider name <input name="council_name" maxlength="255"></label><label>Trade-waste consent reference <input name="consent" maxlength="255"></label>
+    <label class="span-2 config-toggle"><input type="checkbox" name="require_core_source_refs"> Require a linked Core source for every evidence record</label>
+    <button type="submit">Save configuration</button>
+  </form></section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/configuration.js"></script>{% endblock %}

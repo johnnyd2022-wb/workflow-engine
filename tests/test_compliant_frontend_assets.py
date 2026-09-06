@@ -5,15 +5,15 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_compliant_dashboard_has_one_complete_profile_form():
-    """Nested forms make browser parsing and the one-minute setup flow unreliable."""
+def test_compliant_dashboard_links_to_a_separate_configuration_surface():
+    """Configuration must not be embedded in the evidence dashboard."""
     dashboard = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "dashboard.html"
     ).read_text(encoding="utf-8")
 
-    assert dashboard.count("<form data-profile-form") == 1
-    assert dashboard.count("</form>") == dashboard.count("<form ")
+    assert "<form data-profile-form" not in dashboard
     assert "data-profile-target" in dashboard
+    assert "/compliant/nz-alcohol/configuration" in dashboard
 
 
 def test_compliant_dashboard_documents_the_honest_product_boundary():

@@ -1,0 +1,20 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}NP3 audit · NZ Alcohol · Compliant{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block content %}
+<main class="compliant-shell" data-np3-audit-root>
+  <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant" hx-boost="false">Compliant</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol" hx-boost="false">NZ Alcohol</a><span aria-hidden="true">/</span><strong>NP3 audit</strong></nav>
+  {% set active_compliant_tab = "np3-audit" %}{% include "compliant/_nz_alcohol_tabs.html" %}
+  <header class="compliant-hero np3-audit-hero">
+    <div><p class="compliant-eyebrow">NATIONAL PROGRAMME 3 / VERIFICATION READY</p><h1>Put every requested record in one calm, clear view.</h1><p>Built from your verifier's confirmation: the mandatory five food-safety factors, preparation items, and every topic they may sample on site.</p></div>
+    <div class="compliant-summary"><strong data-np3-summary>Loading audit evidence…</strong><span data-np3-date>Set the verification date in Configuration.</span></div>
+  </header>
+  <p class="compliant-error" data-np3-error hidden></p>
+  <section class="np3-core-evidence" data-np3-core-evidence hidden><div><p class="compliant-eyebrow">LIVE FROM CORE</p><h2>Traceability evidence already connected to your operations.</h2><p>These are live counts from Core. They support the audit register; they do not replace the required records.</p></div><div class="np3-core-evidence__stats" data-np3-core-stats></div></section>
+  <section class="np3-prep-panel"><div><p class="compliant-eyebrow">BEFORE THE VISIT</p><h2>Bring the things that cannot be reconstructed later.</h2></div><ul data-np3-preparation></ul></section>
+  <section class="np3-actions"><div><p class="compliant-eyebrow">EVIDENCE REGISTER</p><h2>Every verification topic, its current proof, and the next gap.</h2><p data-np3-disclaimer></p></div><a class="np3-download" href="/api/compliant/np3-audit?format=csv" hx-boost="false">Download evidence register (.csv)</a></section>
+  <div data-np3-categories class="np3-categories"></div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/np3-audit.js"></script>{% endblock %}

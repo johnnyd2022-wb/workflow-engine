@@ -24,6 +24,8 @@ api_bp = Blueprint("compliant_api", __name__)
 _RECORD_TYPES = {"attestation", "reading", "lodgement", "competency", "incident"}
 _RECORD_STATUSES = {"complete", "failed", "open", "superseded"}
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+_FOOD_CONTROL_PROGRAMMES = {"np1", "np2", "np3", "none"}
+_LIQUOR_LICENCE_TYPES = {"on", "off", "club", "special"}
 
 
 def _csv_safe(value):
@@ -72,6 +74,39 @@ def overview():
     return jsonify(_service().overview(_org_id())), 200
 
 
+@api_bp.route("/api/compliant/np3-audit", methods=["GET"])
+@requires_auth
+def np3_audit():
+    try:
+        audit = _service().np3_audit(_org_id())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 409
+    if request.args.get("format") != "csv":
+        return jsonify(audit), 200
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        ["Category", "Verification topic", "Status", "Evidence records", "Evidence references", "Last recorded"]
+    )
+    for row in audit["rows"]:
+        writer.writerow(
+            [
+                _csv_safe(row["category"]),
+                _csv_safe(row["topic"]),
+                _csv_safe(row["state"]),
+                _csv_safe("; ".join(row["evidence_titles"])),
+                _csv_safe("; ".join(row["evidence_references"])),
+                _csv_safe(row["latest_recorded_at"] or ""),
+            ]
+        )
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=np3-verification-evidence.csv"},
+    )
+
+
 @api_bp.route("/api/compliant/capture-context", methods=["GET"])
 @requires_auth
 def capture_context():
@@ -101,6 +136,17 @@ def update_profile():
         return jsonify({"error": "enabled must be boolean"}), 400
     if "settings" in data and not isinstance(data["settings"], dict):
         return jsonify({"error": "settings must be an object"}), 400
+    settings = data.get("settings")
+    if settings is not None:
+        programme = settings.get("food_control_programme")
+        if programme is not None and programme not in _FOOD_CONTROL_PROGRAMMES:
+            return jsonify({"error": "food_control_programme must be np1, np2, np3, or none"}), 400
+        licence_types = settings.get("liquor_licence_types")
+        if licence_types is not None and (
+            not isinstance(licence_types, list)
+            or not all(isinstance(item, str) and item in _LIQUOR_LICENCE_TYPES for item in licence_types)
+        ):
+            return jsonify({"error": "liquor_licence_types must contain only on, off, club, or special"}), 400
     profile = _service().upsert_profile(_org_id(), data)
     log_action("update", "compliance_profile", profile.id, {"enabled": profile.enabled})
     return jsonify({"profile": _service().overview(_org_id())["profile"]}), 200

@@ -1,0 +1,28 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Compliant{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block content %}
+<main class="compliant-shell compliant-home">
+  <header class="compliant-hero">
+    <div>
+      <p class="compliant-eyebrow">COMPLIANT / YOUR WORKSPACES</p>
+      <h1>Know the rules that apply to the work you actually do.</h1>
+      <p>Each module keeps its own regulators, settings and evidence plan together. Choose an industry workspace to see the obligations your team has selected.</p>
+    </div>
+    <div class="compliant-summary"><strong>One clear outcome</strong><span>Every applicable obligation has an owner, a current proof record, or an explicit next step.</span></div>
+  </header>
+
+  <section class="module-grid" aria-label="Compliance modules">
+    <a class="module-card" href="/compliant/nz-alcohol" hx-boost="false">
+      <span class="module-card__mark" aria-hidden="true">NZ</span>
+      <div>
+        <p class="compliant-eyebrow">NEW ZEALAND</p>
+        <h2>Alcohol</h2>
+        <p>Customs alcohol, your chosen National Programme, liquor licensing, Wine Standards and council trade waste.</p>
+        <span class="module-card__link">Open NZ Alcohol <span aria-hidden="true">→</span></span>
+      </div>
+    </a>
+  </section>
+</main>
+{% endblock %}

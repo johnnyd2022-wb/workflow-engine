@@ -90,7 +90,7 @@
     var button = document.createElement('button'); button.type = 'button';
     button.textContent = action.kind === 'record' ? (action.state === 'attention' ? 'Rectify this' : 'Add proof') : action.kind === 'product' ? 'Map from Core' : 'Set this up';
     button.addEventListener('click', function () {
-      if (action.kind === 'profile') { scrollTo(root.querySelector('[data-profile-target]')); return; }
+      if (action.kind === 'profile') { window.location.href = '/compliant/nz-alcohol/configuration'; return; }
       if (action.kind === 'product') {
         var productForm = root.querySelector('[data-product-form]');
         if (action.suggestions && action.suggestions.length) productForm.inventory_name.value = action.suggestions[0];
@@ -166,27 +166,12 @@
     renderPriorityActions(overview.priority_actions || []);
     renderProductSuggestions(reconciliation);
     renderExistingEvidence(overview.core_proof_candidates || []);
-    var catalogueSelect = root.querySelector('[data-trade-waste-council]');
-    clear(catalogueSelect); catalogueSelect.appendChild(option('', 'Choose if trade waste applies'));
-    (overview.trade_waste_catalogues || []).forEach(function (catalogue) { catalogueSelect.appendChild(option(catalogue.slug, catalogue.name)); });
-    if (overview.profile && overview.profile.settings) {
-      catalogueSelect.value = overview.profile.settings.trade_waste_council || '';
-      root.querySelector('[data-profile-form]').council_name.value = overview.profile.council_name || '';
-      root.querySelector('[data-profile-form]').consent.value = overview.profile.trade_waste_consent_reference || '';
-      root.querySelector('[data-profile-form]').require_core_source_refs.checked = Boolean(overview.profile.settings.require_core_source_refs);
-      Array.prototype.forEach.call(root.querySelectorAll('[data-profile-form] input[name="product_type"]'), function (input) { input.checked = (overview.profile.settings.alcohol_product_types || []).includes(input.value); });
-    }
     populateControls();
   }
   async function load() {
     try { showError(''); state.overview = await api('/api/compliant/overview'); render(); var records = await api('/api/compliant/records'); renderRecords(records.records || []); var products = await api('/api/compliant/alcohol-products'); renderProducts(products.products || []); }
     catch (err) { showError(err.message); summaryEl.textContent = 'Unable to load'; }
   }
-  root.querySelector('[data-profile-form]').addEventListener('submit', async function (event) {
-    event.preventDefault(); var form = event.currentTarget; var types = Array.prototype.map.call(form.querySelectorAll('input[name="product_type"]:checked'), function (input) { return input.value; });
-    try { showError(''); await api('/api/compliant/profile', { method: 'PUT', headers: csrfHeaders(), body: JSON.stringify({ enabled: true, council_name: form.council_name.value || null, trade_waste_consent_reference: form.consent.value || null, settings: { alcohol_product_types: types, trade_waste_required: Boolean(form.consent.value || form.trade_waste_council.value), trade_waste_council: form.trade_waste_council.value || null, require_core_source_refs: form.require_core_source_refs.checked } }) }); await load(); }
-    catch (err) { showError(err.message); }
-  });
   root.querySelector('[data-record-form]').addEventListener('submit', async function (event) {
     event.preventDefault(); var form = event.currentTarget; var refs = form.source_refs.value.split(',').map(function (value) { return value.trim(); }).filter(Boolean);
     var data = { framework_slug: form.framework_slug.value, control_id: form.control_id.value, record_type: form.record_type.value, status: form.status.value, title: form.title.value, period_start: form.period_start.value || null, period_end: form.period_end.value || null, due_date: form.due_date.value || null, measured_value: form.measured_value.value || null, limit_value: form.limit_value.value || null, declared_litres_of_alcohol: form.declared_litres_of_alcohol.value || null, evidence_reference: form.evidence_reference.value || null, source_refs: refs, details: {} };
