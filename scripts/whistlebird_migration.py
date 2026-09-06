@@ -91,6 +91,11 @@ RESET_TABLES = (
 RESET_ORG_NAME = "whistlebird_test"
 DEFAULT_TEST_ADMIN_EMAIL = "whistlebird_test_admin@whistlebird.test"
 DEFAULT_PRODUCTION_SHEET_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
+WHISTLEBIRD_NZ_ALCOHOL_SETTINGS = {
+    "alcohol_product_types": ["spirits"],
+    "require_core_source_refs": True,
+    "trade_waste_required": False,
+}
 DERIVED_TIMEZONE = ZoneInfo("Pacific/Auckland")
 DERIVED_TIME = time(hour=12)
 HISTORICAL_PROCESS_TEMPLATES = (
@@ -1897,6 +1902,7 @@ def bootstrap_whistlebird_test(
     sheet_verification = build_production_sheet_verification(sheet_manifest, target_url, requested_org_name)
     _require_matching_import(import_verification, "Legacy import")
     _require_matching_import(sheet_verification, "Production-sheet import")
+    compliant_nz_alcohol_setup = ensure_compliant_nz_alcohol_setup(target_url, requested_org_name)
     return {
         "preflight": preflight,
         "tenant_setup": setup,
@@ -1907,7 +1913,58 @@ def bootstrap_whistlebird_test(
         "samples": samples,
         "production_sheet": production_sheet,
         "verification": {"legacy": import_verification, "production_sheet": sheet_verification},
+        "compliant_nz_alcohol_setup": compliant_nz_alcohol_setup,
     }
+
+
+def ensure_compliant_nz_alcohol_setup(target_url: str, requested_org_name: str) -> dict[str, bool | str]:
+    """Set up the documented Compliant NZ-alcohol tier for the Whistlebird test tenant.
+
+    ``compliant`` is the single per-org entitlement for the Compliant product area,
+    including its NZ alcohol tools.  The approved migration plan configures
+    ``whistlebird_test`` as a spirits producer, requires trusted Core evidence links,
+    and excludes trade waste until a consent applies.  This is deterministic bootstrap
+    data, not an inference from the legacy source.
+    """
+    if requested_org_name != RESET_ORG_NAME:
+        raise ValueError(f"Compliant NZ-alcohol setup is only permitted for {RESET_ORG_NAME!r}")
+
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+    from app.features.compliant.service import ComplianceService
+
+    engine = create_engine(target_url)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    scope = ExitStack()
+    try:
+        org = _enter_target_tenant_scope(scope, session, requested_org_name)
+        profile = ComplianceService(session).upsert_profile(
+            org.id,
+            {
+                "enabled": True,
+                "industry_module": "nz_alcohol",
+                "council_name": None,
+                "trade_waste_consent_reference": None,
+                "settings": WHISTLEBIRD_NZ_ALCOHOL_SETTINGS,
+            },
+        )
+        row = FeatureSubscriptionRepository(session).grant(
+            org.id,
+            "compliant",
+            notes="Whistlebird test bootstrap: NZ alcohol Compliant tier",
+        )
+        return {
+            "feature_key": row.feature_key,
+            "active": row.active,
+            "profile_enabled": profile.enabled,
+            "industry_module": profile.industry_module,
+        }
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        scope.close()
+        session.close()
+        engine.dispose()
 
 
 def setup_historical_process_templates(target_url: str, requested_org_name: str) -> dict[str, list[str]]:
