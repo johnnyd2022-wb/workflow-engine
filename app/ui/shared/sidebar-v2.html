@@ -70,7 +70,7 @@
       </li>
       {% if compliant_subscribed %}
       <li class="nav-item">
-        <a href="/compliant" class="nav-link{% if active_page == 'compliant' %} active{% endif %}">
+        <a href="/compliant" hx-boost="false" class="nav-link{% if active_page == 'compliant' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>

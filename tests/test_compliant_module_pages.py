@@ -30,6 +30,20 @@ def test_complaint_spelling_redirects_to_the_compliant_workspace():
     assert 'redirect("/compliant", code=302)' in routes
 
 
+def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
+    """Compliant CSS/JS are subscription-protected and only enter <head> on a full load."""
+    tabs = (
+        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_nz_alcohol_tabs.html"
+    ).read_text(encoding="utf-8")
+    audit = (
+        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_audit.html"
+    ).read_text(encoding="utf-8")
+    sidebar = (ROOT / "app" / "ui" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")
+    assert tabs.count('hx-boost="false"') == 3
+    assert 'href="/compliant" hx-boost="false"' in sidebar
+    assert 'href="/api/compliant/np3-audit?format=csv" hx-boost="false"' in audit
+
+
 def test_selected_national_programme_is_the_only_programme_in_the_plan():
     settings = {"alcohol_product_types": ["beer"], "food_control_programme": "np2"}
     assert framework_applies(("national-programme-2", "beer"), settings, None)

@@ -1,7 +1,7 @@
 <nav class="compliant-section-tabs" aria-label="NZ Alcohol sections">
   <div class="flow-mode-segmented" role="tablist" aria-label="NZ Alcohol pages">
-    <a href="/compliant/nz-alcohol" role="tab" aria-selected="{{ 'true' if active_compliant_tab == 'overview' else 'false' }}" class="flow-mode-segment{% if active_compliant_tab == 'overview' %} flow-mode-segment--active{% endif %}">Overview</a>
-    <a href="/compliant/nz-alcohol/np3-audit" role="tab" aria-selected="{{ 'true' if active_compliant_tab == 'np3-audit' else 'false' }}" class="flow-mode-segment{% if active_compliant_tab == 'np3-audit' %} flow-mode-segment--active{% endif %}">NP3 audit</a>
-    <a href="/compliant/nz-alcohol/configuration" role="tab" aria-selected="{{ 'true' if active_compliant_tab == 'configuration' else 'false' }}" class="flow-mode-segment{% if active_compliant_tab == 'configuration' %} flow-mode-segment--active{% endif %}">Configuration</a>
+    <a href="/compliant/nz-alcohol" hx-boost="false" role="tab" aria-selected="{{ 'true' if active_compliant_tab == 'overview' else 'false' }}" class="flow-mode-segment{% if active_compliant_tab == 'overview' %} flow-mode-segment--active{% endif %}">Overview</a>
+    <a href="/compliant/nz-alcohol/np3-audit" hx-boost="false" role="tab" aria-selected="{{ 'true' if active_compliant_tab == 'np3-audit' else 'false' }}" class="flow-mode-segment{% if active_compliant_tab == 'np3-audit' %} flow-mode-segment--active{% endif %}">NP3 audit</a>
+    <a href="/compliant/nz-alcohol/configuration" hx-boost="false" role="tab" aria-selected="{{ 'true' if active_compliant_tab == 'configuration' else 'false' }}" class="flow-mode-segment{% if active_compliant_tab == 'configuration' %} flow-mode-segment--active{% endif %}">Configuration</a>
   </div>
 </nav>

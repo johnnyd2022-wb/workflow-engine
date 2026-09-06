@@ -4,7 +4,7 @@
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
 {% block content %}
 <main class="compliant-shell" data-compliant-root>
-  <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant">Compliant</a><span aria-hidden="true">/</span><strong>NZ Alcohol</strong></nav>
+  <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant" hx-boost="false">Compliant</a><span aria-hidden="true">/</span><strong>NZ Alcohol</strong></nav>
   {% set active_compliant_tab = "overview" %}{% include "compliant/_nz_alcohol_tabs.html" %}
   <header class="compliant-hero">
     <div>
@@ -24,7 +24,7 @@
 
   <section class="compliant-setup" data-compliant-setup>
     <div><p class="compliant-eyebrow">MODULE SETTINGS</p><h2>Tell us what applies.</h2><p>Choose your food programme and licence activity, then we show only the duties you need to manage. You can add council trade-waste details later.</p></div>
-    <div data-profile-target><p>Configuration is deliberately separate from your evidence work, so the audit plan stays focused.</p><a class="np3-download" href="/compliant/nz-alcohol/configuration">Configure NZ Alcohol</a></div>
+    <div data-profile-target><p>Configuration is deliberately separate from your evidence work, so the audit plan stays focused.</p><a class="np3-download" href="/compliant/nz-alcohol/configuration" hx-boost="false">Configure NZ Alcohol</a></div>
   </section>
 
   <section class="compliant-frameworks" aria-label="Applicable frameworks" data-frameworks></section>
@@ -41,7 +41,7 @@
     <div data-alcohol-products></div>
   </section>
 
-  <section class="compliant-record-panel" data-record-target>
+  <section id="evidence" class="compliant-record-panel" data-record-target>
     <div><p class="compliant-eyebrow">PROVE IT ONCE</p><h2>Add evidence without a compliance spreadsheet.</h2><p>Choose a control and Compliant asks only for its essential proof. Use an existing Core file when it is already the evidence—no duplicate upload.</p><p data-capture-guidance></p><div data-existing-evidence class="existing-evidence"></div></div>
     <form data-record-form>
       <label>Framework <select name="framework_slug" required data-framework-select></select></label>
