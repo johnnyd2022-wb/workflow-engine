@@ -48,6 +48,7 @@ def export_cases(org_id: UUID, out_dir: Path) -> dict:
                 checksum = hashlib.sha256()
                 count = 0
                 with (out_dir / (name + ".jsonl")).open("xb") as f:
+                    # nosemgrep: sqlalchemy-query-in-for-loop — _TABLES is the fixed four-table export schema.
                     rows = conn.execution_options(stream_results=True).execute(_query(model, org_id).order_by(model.id))
                     for batch in rows.mappings().partitions(500):
                         for row in batch:
@@ -110,6 +111,7 @@ def rehearse_restore(directory: Path):
                 q = model.__table__.delete().where(model.org_id == org_id)
                 if model is EntityEvent:
                     q = q.where(model.entity_type == "operational_case")
+                # nosemgrep: sqlalchemy-query-in-for-loop — deletes run once for each fixed restore table.
                 conn.execute(q)
             for model in (EntityEvent, OperationalCase, OperationalCaseLink, OperationalCaseEvent):
                 table = model.__table__
@@ -126,11 +128,13 @@ def rehearse_restore(directory: Path):
                                 row[column.name] = datetime.fromisoformat(value)
                         if model is OperationalCase:
                             row["previous_case_id"] = None
+                        # nosemgrep: sqlalchemy-query-in-for-loop — ordered row inserts preserve FK dependencies and pinpoint corrupt exports.
                         conn.execute(table.insert().values(**row))
             with (directory / "operational_cases.jsonl").open() as f:
                 for line in f:
                     row = json.loads(line)
                     if row["previous_case_id"]:
+                        # nosemgrep: sqlalchemy-query-in-for-loop — each predecessor reference is restored after all case rows exist.
                         conn.execute(
                             OperationalCase.__table__.update()
                             .where(OperationalCase.org_id == org_id, OperationalCase.id == UUID(row["id"]))
@@ -140,6 +144,7 @@ def rehearse_restore(directory: Path):
             for model in _TABLES:
                 checksum = hashlib.sha256()
                 count = 0
+                # nosemgrep: sqlalchemy-query-in-for-loop — _TABLES is the fixed four-table restore schema.
                 for row in conn.execute(_query(model, org_id).order_by(model.id)).mappings():
                     checksum.update(
                         (json.dumps(dict(row), default=str, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
