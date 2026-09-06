@@ -26,7 +26,8 @@
     var executionPrompts = ((stepDefinition && stepDefinition.execution_prompts) || []).slice();
     var currentStepId = stepDefinition && stepDefinition.id ? String(stepDefinition.id) : null;
     // Compliant adds a policy-driven evidence shelf without mutating saved workflows.
-    // An administrator may explicitly choose a server-enforced NP3 requirement.
+    // The recommended shelf must never stop production; only an administrator's explicit
+    // NP3 policy may choose the separate, server-enforced required mode.
     if (CoreAPI && typeof CoreAPI.getCompliantCaptureContext === 'function') {
       try {
         var compliantContext = await CoreAPI.getCompliantCaptureContext({ signal: signal });
