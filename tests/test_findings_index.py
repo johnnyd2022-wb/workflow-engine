@@ -1014,6 +1014,29 @@ def test_rg_distinguishes_no_matches_from_cannot_run(monkeypatch):
     assert fi._rg(["--files"]) is None
 
 
+def test_product_roadmap_plan_is_excluded_but_review_docs_are_not():
+    """The customer-value execution plan's "Decisions deliberately deferred" section
+    lists product capabilities that are explicitly NOT being built. `\\bdeferred\\b`
+    matched that heading and indexed five roadmap non-goals as a worklist (two P0 on a
+    "tenant" keyword hit). EXCLUDE_GLOBS drops that planning doc; the guard here is that
+    a real review/design doc with genuine follow-up headings is still scanned."""
+    import shutil
+
+    if not shutil.which("rg"):
+        pytest.skip("ripgrep not installed")
+
+    docs = fi.find_candidate_docs()
+    assert docs is not None, "find_candidate_docs could not run"
+    rel = {p.relative_to(fi.REPO_ROOT).as_posix() for p in docs}
+
+    assert not any(p.startswith("docs/customer-value-execution-plan-") for p in rel), (
+        f"roadmap plan should be excluded from the sweep, got: {sorted(rel)}"
+    )
+    # Narrowness guard: an ordinary design doc with a real "Deliberately deferred"
+    # call-out section must still be swept.
+    assert "docs/core-load-performance-design.md" in rel
+
+
 # --- ranking ---------------------------------------------------------------------------
 
 
@@ -1324,3 +1347,33 @@ def test_mr_description_fenced_task_box_is_not_indexed():
     description, unguarded by section, so it needs its own fence check."""
     items = fi._parse_mr_description("```bash\n# example only\n- [ ] not a real task\n```\n", "gitlab:!1")
     assert items == []
+
+
+def test_findings_sweep_closure_mr_is_not_re_indexed_from_its_own_writeup(monkeypatch):
+    """findings-sweep MRs describe each item they close in a "what was owed / what
+    changed / what proves it" writeup under a `## Per finding` heading. That shape is a
+    findings section, so without a guard `scan_open_mrs` re-indexes the writeup as a
+    pile of fresh findings that only clear once the MR merges. An MR carrying the
+    `Findings-Index:` trailer is skipped; a normal MR's follow-ups are still read."""
+    closure_mr = {
+        "iid": 225,
+        "title": "chore(findings-sweep): reconcile stale findings",
+        "description": (
+            "## Per finding\n"
+            "- **Owed:** nothing; these are roadmap non-goals mis-swept as a worklist\n"
+            "- **Changed:** EXCLUDE_GLOBS now drops the planning doc\n\n"
+            "Findings-Index: 48c6f6c4, 3855dc9c\n"
+        ),
+    }
+    normal_mr = {
+        "iid": 226,
+        "title": "feat: add export endpoint",
+        "description": "## Follow-ups\n- the export endpoint has no rate limit and could be abused for a DoS\n",
+    }
+    monkeypatch.setattr(fi, "_glab_json", lambda args, timeout=45: [closure_mr, normal_mr])
+
+    items = fi.scan_open_mrs()
+
+    assert [i.source_ref for i in items] == ["!226"], (
+        f"only the non-closure MR should contribute items, got {[(i.source_ref, i.title) for i in items]}"
+    )

@@ -27,10 +27,22 @@ the orchestrator wrote independently.
 
 Blocking findings:
 
-- `tests/test_evidence.py:666` — traversal test never reaches the containment guard
-  because the outside file does not exist.
+- `tests/test_evidence.py:666` — traversal test never reaches the containment guard.
+  The 2026-08-02 fix planted a real file at the traversal target, but that was still
+  insufficient: `read_file_path` joins `root/"org1"/"../../outside"/<file>` and the
+  kernel cannot resolve the `org1/..` segment unless `root/"org1"` exists, so
+  `candidate.is_file()` stayed False and the function still short-circuited *before*
+  `relative_to()`. Fixed 2026-09-06 by findings-sweep:
+  `test_read_file_path_rejects_traversal_outside_storage_root` now also `mkdir`s
+  `tmp_path/"org1"`, so `is_file()` is True and the containment check is what returns
+  `None`. Falsifiability re-confirmed by mutation — with the `relative_to()` guard
+  commented out in `evidence_storage.py`, the test now fails (it passed before this
+  change) (verified 2026-09-06 by findings-sweep).
 - `tests/test_evidence.py:555` — finalize-failure test never checks whether the
-  temporary upload file is removed.
+  temporary upload file is removed. Already fixed:
+  `test_finalize_from_temp_failure_leaves_no_orphan_record` now captures the temp path
+  via the `_boom` mock and asserts `not captured_temp_path["path"].exists()` with an
+  explicit message (verified 2026-09-06 by findings-sweep).
 - `tests/test_evidence.py:403` — idempotency test uses two different UUIDs instead of
   retrying the same deletion. Already fixed:
   `test_delete_is_idempotent_on_missing` now reuses the same `missing_id` for both

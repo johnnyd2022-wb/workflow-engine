@@ -121,6 +121,15 @@ EXCLUDE_GLOBS = (
     "!.agents/ci-gate-setup.md",
     "!.agents/history/README.md",
     "!**/TEST_DOCUMENTATION.md",
+    # Product/roadmap planning docs. A "customer-value execution plan" states delivery
+    # strategy and, under "Decisions deliberately deferred", the product capabilities
+    # that are explicitly NOT being built ("These are not holes to fill
+    # opportunistically") -- roadmap boundaries, not owed engineering work. The
+    # `\bdeferred\b` finding-heading matched that section and indexed five product
+    # non-goals as a worklist, two of them P0/security on a keyword hit ("tenant",
+    # "cross-tenant"). A deferred *bug fix* in a review report is still swept; a
+    # deferred product *decision* in a roadmap is not.
+    "!docs/customer-value-execution-plan-*.md",
 )
 
 # ---------------------------------------------------------------------------
@@ -844,6 +853,14 @@ def scan_open_mrs() -> list[Item] | None:
     for mr in data:
         iid, desc = mr.get("iid"), mr.get("description") or ""
         if not iid or not desc:
+            continue
+        # An MR carrying a `Findings-Index:` trailer is a findings-sweep closure MR. Its
+        # description is a per-finding writeup ("what was owed / what changed / what
+        # proves it") of items *already tracked here* -- the ones it closes on merge,
+        # per merged_mr_closures(). Parsing it re-indexes that writeup as a pile of fresh
+        # findings that only clear once the MR merges; on a daily timer that is six junk
+        # P0/P2 rows in the worklist every run. The trailer is still read on merge.
+        if TRAILER_RE.search(desc):
             continue
         ref = f"!{iid}"
         pseudo_path = f"gitlab:{ref}"

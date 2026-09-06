@@ -118,13 +118,30 @@ deployment:
    **Still owed, and needs the credential owner + deployment access:** rotate the
    superseded credential and remove its value from Git history using the team's incident
    procedure.
-2. `app/tls/app_cert.key` is tracked. Treat it as compromised: replace the certificate/key
-   pair, remove the private key from version control/history, and generate development/test
-   certificates at setup or image-build time. Production TLS belongs in the deployment
-   secret manager or TLS terminator.
+2. `app/tls/app_cert.key` is tracked — this is the worked example in
+   `.claude/skills/security-audit/SKILL.md` and the escalation in
+   `.agents/reports/security-audit/2026-07-17-committed-origin-key.md`: a CloudFlare
+   Origin Certificate for `*.whistlebird.co.nz` (valid to 2028-01-14) whose key matches
+   `app_cert.pem`. The owner reviewed this on 2026-07-17 and **accepted the risk,
+   declining rotation**, on facts the audit had not weighed — the repo is private,
+   unforked and single-member, so the key has never left it and rotation would protect
+   against nothing (`finding_history.py` sig `32cc4eaa0301`, verdict `accepted-risk`).
+   That verdict is re-open only if any of its premises change: the repo goes public /
+   forked / gains a second member, or the cert nears expiry 2028-01-14. Independent of
+   it, dev and test already generate their own certificates at setup / image-build time
+   (`ci/setup_server.sh`) rather than depending on this pair. No engineering-worktree
+   action is owed against this item as it stands. (verified 2026-09-06 by findings-sweep)
 3. The CSP permits both `'unsafe-inline'` and `'unsafe-eval'`. This predates !181 but
    weakens XSS containment. Move large inline `/core` scripts into versioned static modules,
-   then use nonces/hashes before tightening the policy.
+   then use nonces/hashes before tightening the policy. Scope note, findings-sweep
+   2026-09-06: `'unsafe-eval'` is not separable from that work — Alpine.js
+   (`app/core/frontend/js/alpinejs.min.js`, loaded in `base_spa.html`, backing every
+   `x-data` component across core inventory/processes and all of CRM) compiles its
+   directive expressions through the `Function` / `AsyncFunction` constructor, and
+   HTMX's `hx-on:` / `js:` features do the same, so dropping `'unsafe-eval'` from the
+   header alone breaks those components. It needs the CSP-safe Alpine build
+   (`@alpinejs/csp`) plus each `x-data` expression rewritten to its object form — the
+   same "inline code to versioned modules" migration this item already calls for.
 
 Credential/certificate rotation needs the credential owner and deployment access; do not
 attempt it from an engineering worktree. Pair the code change with verification of HTTPS,
@@ -254,7 +271,11 @@ edit/delete/reconcile (removed — `loadCore2Overview()` already refreshes metri
   `queries.budget` at the observed 11 (ratchet) and sets `backend_ms.budget` to 60 (~4x
   the worst median), ceilings unchanged. See that override's `_why` for the data.
   (verified 2026-09-04 by findings-sweep)
-- **Security findings in "requiring owner action" above:** the `prod.ini` application-side
-  clause is now handled (see that section). Credential rotation + Git-history purge, and
-  the tracked `app/tls/app_cert.key`, still need the credential owner and deployment
-  access, not an engineering worktree.
+- **Security findings in "requiring owner action" above:** each clause now has a home.
+  `prod.ini` application-side is handled (see that section); the tracked
+  `app/tls/app_cert.key` has a recorded owner verdict — **accepted-risk, rotation
+  declined** 2026-07-17 (finding 2 above, `finding_history.py` sig `32cc4eaa0301`); and
+  the one genuinely still-owed item — rotate the superseded `prod.ini` database
+  credential and purge its value from Git history, which needs the credential owner +
+  deployment access — is tracked by finding 1 in "Security findings requiring owner
+  action". Nothing outstanding *here*. (verified 2026-09-06 by findings-sweep)
