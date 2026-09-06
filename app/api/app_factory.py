@@ -88,6 +88,13 @@ def create_app():
     app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 3600  # 30 days (max session lifetime)
     app.config.setdefault("ENFORCE_HTTPS", True)
 
+    # Shared CI runners can step their wall clock backwards by a few seconds. Keep this
+    # bounded workaround test-only so deployed session expiry remains strictly enforced.
+    if config.environment == "test":
+        from app.api.session_interface import ClockSkewTolerantTestSessionInterface
+
+        app.session_interface = ClockSkewTolerantTestSessionInterface()
+
     # Initialize rate limiter (IP-based)
     # Import limiter from auth_routes and initialize it with the app
     from app.api.routes.auth_routes import limiter
@@ -151,6 +158,11 @@ def create_app():
         from app.features.compliant.compliant_bp import create_compliant_blueprint
 
         app.register_blueprint(create_compliant_blueprint())
+
+    # Always mount history/recovery routes; ordinary feature access is gated per request.
+    from app.features.operational_cases.operational_cases_bp import create_operational_cases_blueprint
+
+    app.register_blueprint(create_operational_cases_blueprint())
 
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
@@ -484,7 +496,15 @@ def create_app():
         else:
             compliant_subscribed = False
 
+        cases_available = False
+        if org_id and config.operational_cases_enabled:
+            from app.core.db import db_session
+            from app.core.security.entitlements import org_has_feature
+
+            cases_available = org_has_feature(db_session(), org_id, "operational_cases")
+
         return dict(
+            operational_cases_available=cases_available,
             crm_enabled=config.crm_enabled,
             compliant_enabled=config.compliant_enabled,
             compliant_subscribed=bool(compliant_subscribed),

@@ -16,7 +16,8 @@ longest-stale first, most-recently-reviewed at the bottom, in-progress ones excl
 entirely — offering one back would start a second review colliding with the first). Don't
 hand-edit this field: `scripts/feature_index_sweep.py` derives and writes it every run.
 
-**This describes the code as it is today, not the target.** The carve
+**The existing slice blocks describe code as it is today.** The explicitly labelled
+customer-value programme below records planned work, not shipped capabilities. The carve
 (`.agents/plans/feature-slicing-plan.md`) is in progress: Phase 1 has moved demo-data.
 Line ranges into `app/core/backend/backend.py` are load-bearing and shift every time a slice
 leaves that file — treat a miss as a signal to re-locate and update this file, not as licence
@@ -70,6 +71,31 @@ how they get carved.
 | demo data, reset db, seeding | demo-data |
 | compliance evidence, audit packs, framework modules | compliant-platform |
 | New Zealand beer, spirits, wine, Customs, NP3 or trade waste | compliant-nz-alcohol |
+| exception ownership, cases, resolution, verification | operational-cases (planned; specification in progress) |
+| entered demand, material feasibility, capacity, stock risk | planning (planned) |
+| rule templates, automated alerts, overdue chases, automation worker | automations (planned) |
+| performance cockpit, metric definitions, business trends | dashboard (planned extension) |
+
+## Customer-value programme — planned slices
+
+Source: [execution plan](../docs/customer-value-execution-plan-2026-09-05.md).
+Delivery breakdown: [programme slices](plans/customer-value-slices.md).
+These entries do not change the existing implemented-slice count or imply a feature audit.
+Subscription/package decisions remain unchanged; the flags below are proposed tenant
+capabilities, default off, not new paid tiers.
+
+| Order | Owning slice / proposed location | State | Dependencies and consumers |
+|---|---|---|---|
+| 1 / A | **operational-cases**, domain coordination, `app/features/operational_cases/` | **Specification in progress** — [draft](specs/operational_cases.md); `operational_cases_enabled` | Depends on platform/identity; adapters consume compliance-checks and later Compliant/CRM. Consumed by dashboard, planning and automations. Owns case state, never source facts. |
+| 2 / B | **planning**, derived, `app/features/planning/` | Planned — B1 material feasibility before B2 capacity; `planning_enabled` | Reads inventory, execution and process-design; optional CRM mappings; hands risk to operational-cases. Consumed by dashboard and automations. |
+| 3 / C | **automations**, integration/orchestration, `app/features/automations/` | Planned; `automations_enabled` | Consumes platform events and explicit source adapters; invokes case/CRM services. Owns rules, durable outbox, runs and action receipts. Domain slices must not import the automation evaluator. |
+| 4 / D | **dashboard**, existing derived composition slice | Planned cockpit extension; `business_cockpit_enabled` | Consumes compact services from A–C, CRM, Compliant and existing Core slices. Owns metric definitions/snapshots; retains one summary request. No second dashboard slice. |
+
+Boundary additions to the existing map: compliance-checks supplies canonical finding
+identities; shell owns Cases navigation; activity-log/platform supplies EventWriter and
+LiveSync integration; inventory, reconciliation and wastage retain all corrective writes.
+The named owning slice coordinates each change across those boundaries. Planned consumers
+do not introduce reverse imports into existing domain code.
 
 ---
 

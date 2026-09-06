@@ -242,6 +242,13 @@ Splits I considered and rejected for now, with the trigger that would change my 
 **Total: 15 slices + platform.** Core stops being one 5784-line feature and becomes nine.
 Two slices (crm, dilution-calculator) already have the target layout and need no work.
 
+**Programme addition, 2026-09-05:** the historical carve/count above is unchanged.
+[Customer-value delivery slices](customer-value-slices.md) add planned operational-cases,
+planning and automations ownership, plus a cockpit extension to the existing dashboard
+slice. [Feature index](../feature-index.md#customer-value-programme--planned-slices)
+distinguishes these planned capabilities from implemented slices. Operational cases is
+the first specification in progress; none of these additions is claimed built.
+
 ---
 
 ## 3. The frontend problem

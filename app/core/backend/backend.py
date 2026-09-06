@@ -5035,6 +5035,31 @@ def _dashboard_build_action_board(
     return {"critical_actions_total": critical_actions_total, "items": items[:6]}
 
 
+def _dashboard_operational_cases_summary(org_id: UUID, session) -> dict[str, Any]:
+    """Dashboard's `operational_cases` section. Delegates entirely to the feature's own
+    summary service (spec: "Dashboard consumes a case summary service; its route must
+    not query new tables directly.") -- this wrapper only isolates a failure so one
+    feature's outage can't 500 the whole dashboard summary.
+    """
+    unavailable = {
+        "availability": "unavailable",
+        "as_of": None,
+        "active_count": None,
+        "critical_count": None,
+        "overdue_count": None,
+        "needs_owner_count": None,
+        "awaiting_verification_count": None,
+        "href": "/core/cases",
+    }
+    try:
+        from app.features.operational_cases.services.operational_case_service import dashboard_summary
+
+        return dashboard_summary(session, org_id)
+    except Exception:
+        logger.exception("Failed to assemble operational_cases dashboard summary for org_id=%s", org_id)
+        return unavailable
+
+
 @core_bp.route("/api/core/dashboard/summary", methods=["GET"])
 @requires_auth
 def get_dashboard_summary():
@@ -5145,6 +5170,7 @@ def get_dashboard_summary():
 
     compliant_workspace = _dashboard_compliant_workspace_summary(org_id, db_session)
     action_board = _dashboard_build_action_board(tasks_summary, compliance, compliant_workspace)
+    operational_cases_summary = _dashboard_operational_cases_summary(org_id, db_session)
 
     operator_series = _dashboard_series_from_date_counts(
         _dashboard_event_counts_by_day(org_id, db_session, week_start, next_week_start, actor_type="user"),
@@ -5226,6 +5252,7 @@ def get_dashboard_summary():
                 "operations": operations_week_summary,
                 "operations_today": operations_day_summary,
                 "sales": sales_summary,
+                "operational_cases": operational_cases_summary,
                 "insight_series": {
                     "operator_actions_week": operator_series,
                     "open_action_items": open_action_series,

@@ -35,7 +35,7 @@ _MAX_LIMIT = 500
 
 # Only the entity types the SPA re-syncs on are exposed. Keeps `user.*` (login times of
 # colleagues, etc.) and any other internal events out of a feed every browser polls.
-_SYNCED_ENTITY_TYPES = ("process", "execution", "execution_step", "step", "inventory_item")
+_SYNCED_ENTITY_TYPES = ("process", "execution", "execution_step", "step", "inventory_item", "operational_case")
 # Only routing ids -- never entity state or PII -- are lifted out of the payload so the
 # client can decide which events touch the view it is showing.
 _KEY_FIELDS = (
@@ -44,6 +44,7 @@ _KEY_FIELDS = (
     "execution_step_id",
     "step_id",
     "source_execution_id",
+    "source_entity_id",
 )
 
 
@@ -60,6 +61,8 @@ def _keys_from_row(row, entity_type: str, entity_id) -> dict:
             keys[f] = v
     if entity_type == "inventory_item":
         keys["inventory_item_id"] = getattr(row, "k_id", None) or str(entity_id)
+    if entity_type == "operational_case":
+        keys["case_id"] = str(entity_id)
     return keys
 
 

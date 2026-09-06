@@ -131,7 +131,14 @@ unit_tests:
     # absent dependency is a skip, never a failure) -- so silently omitting this line
     # would not turn the pipeline red, it would just make every e2e test in this job a
     # no-op forever. Same command already used by the cd_e2e job below.
-    - uv run playwright install --with-deps chromium
+    - |
+      # Playwright retries individual CDN mirrors, but a transient runner network drop can
+      # still exhaust that inner retry. Retry the complete installation before failing CI.
+      for attempt in 1 2 3; do
+        uv run playwright install --with-deps chromium && break
+        if [ "$attempt" -eq 3 ]; then exit 1; fi
+        sleep "$((attempt * 15))"
+      done
     # Make CI scripts executable
     - chmod +x ci/*.sh
     # Setup database (wait for postgres, update config, run migrations)

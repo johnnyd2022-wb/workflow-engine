@@ -1,0 +1,38 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Create case — Workflow Engine{% endblock %}
+{% block body_class %}operational-case-new-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/core/cases/static/cases.css">{% endblock %}
+{% block content %}
+<main class="oc-shell" data-oc-new-root>
+  <header class="oc-header">
+    <p class="oc-eyebrow">CASES</p>
+    <h1 data-oc-new-title>Create case</h1>
+    <p data-oc-new-subtitle>Give this exception an owner, a due date and a next action.</p>
+  </header>
+
+  <p class="oc-status oc-status--error" data-oc-new-error hidden></p>
+  <div class="oc-conflict-banner" data-oc-new-recurrence hidden></div>
+
+  <form class="oc-form" data-oc-new-form>
+    <label for="oc-new-owner">Owner</label>
+    <select id="oc-new-owner" name="owner_id" required></select>
+
+    <label for="oc-new-due-date">Due date (UTC)</label>
+    <input type="date" id="oc-new-due-date" name="due_date" required>
+    <label for="oc-new-due-time">Due time (UTC)</label>
+    <input type="time" id="oc-new-due-time" name="due_time" required>
+    <p class="oc-freshness" data-oc-new-local-preview></p>
+
+    <label for="oc-new-next-action">Next action</label>
+    <textarea id="oc-new-next-action" name="next_action" maxlength="2000" required rows="3" placeholder="e.g. Check batch output and reconcile the remaining quantity"></textarea>
+
+    <div class="oc-form-actions">
+      <button type="submit" class="oc-btn--primary">Create case</button>
+      <a href="/core/notifications">Cancel</a>
+    </div>
+  </form>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="/core/cases/static/new.js"></script>
+{% endblock %}

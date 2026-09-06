@@ -312,6 +312,17 @@ class Config:
         return self.getboolean("features", "workflow_engine_enabled", True)
 
     @property
+    def operational_cases_enabled(self) -> bool:
+        """Deployment-wide kill switch for the operational_cases capability (A1).
+
+        Default off in every environment until discovery/pilot readiness gates pass (see
+        .agents/specs/operational_cases.md rollout plan). Per-org access additionally
+        requires an active FeatureSubscription(feature_key='operational_cases') row --
+        both are required for normal reads/writes.
+        """
+        return self.getboolean("features", "operational_cases_enabled", False)
+
+    @property
     def log_level(self) -> str:
         return self.get("observability", "log_level", "INFO")
 

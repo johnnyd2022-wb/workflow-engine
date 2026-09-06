@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  var currentTab = 'active';
+  var currentTab = 'active'; var casePage = 0;
 
   var CATEGORY_LABELS = {
     expired_materials: 'Expired raw materials',
@@ -84,12 +84,22 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  /** org/user scoping so a shared browser profile can't leak one login's hidden
+   * notifications into another org/user's view of the same session (spec: "Scope new
+   * hide keys by org/user/source"). Falls back to unscoped if the meta tags are absent
+   * (e.g. an older cached page) rather than throwing. */
+  function currentScopeTag() {
+    var org = document.querySelector('meta[name="current-org-id"]');
+    var user = document.querySelector('meta[name="current-user-id"]');
+    return (org && org.getAttribute('content') || '') + '_' + (user && user.getAttribute('content') || '');
+  }
+
   function ignoreKey(checkId, itemKey) {
-    return 'corechecks_finding_ignore_date_' + String(checkId) + '_' + String(itemKey);
+    return 'corechecks_finding_ignore_date_' + currentScopeTag() + '_' + String(checkId) + '_' + String(itemKey);
   }
 
   function dismissedKey(checkId, itemKey) {
-    return 'corechecks_finding_dismissed_' + String(checkId) + '_' + String(itemKey);
+    return 'corechecks_finding_dismissed_' + currentScopeTag() + '_' + String(checkId) + '_' + String(itemKey);
   }
 
   function isIgnoredToday(checkId, itemKey, todayKey) {
@@ -196,6 +206,64 @@
 
   function itemKeyUntracked(u) {
     return u && u.id != null ? 'ut_' + String(u.id) : '';
+  }
+
+  function sourceEntityIdFromUntrackedItemKey(itemKey) {
+    if (!itemKey || itemKey.indexOf('ut_') !== 0) return null;
+    return itemKey.slice(3);
+  }
+
+  /** Batch-fetch case status for the untracked_items cards about to render (spec: "at
+   * most 100 source identities", "Render at most 25 Notifications cards per page before
+   * requesting their case status" -- one bounded call per render, never per card). */
+  function casesEnabled() { var meta = document.querySelector('meta[name="operational-cases-enabled"]'); return meta && meta.content === 'true'; }
+  async function fetchCaseStatusForRecords(records) {
+    if (!casesEnabled()) return {};
+    var api = window.CoreAPI;
+    if (!api || typeof api.getCaseSourceStatus !== 'function') return {};
+    var ids = [];
+    for (var i = 0; i < records.length && ids.length < 25; i += 1) {
+      var r = records[i];
+      if (r.checkId !== 'untracked_items') continue;
+      var sid = sourceEntityIdFromUntrackedItemKey(r.itemKey);
+      if (sid) ids.push(sid);
+    }
+    ids = safeUnique(ids);
+    if (!ids.length) return {};
+    try {
+      var data = await api.getCaseSourceStatus(ids);
+      return (data && data.cases) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /** Prepends a Create case / Open case / Review previous case action ahead of each
+   * untracked_items record's existing (reconcile/Sourcemap) actions. */
+  function applyCaseActions(records, caseStatusMap) {
+    if (!casesEnabled()) return;
+    records.forEach(function (r) {
+      if (r.checkId !== 'untracked_items') return;
+      var sid = sourceEntityIdFromUntrackedItemKey(r.itemKey);
+      if (!sid) return;
+      var info = Object.prototype.hasOwnProperty.call(caseStatusMap, sid) ? caseStatusMap[sid] : undefined;
+      var action;
+      if (info === undefined) return;
+      if (!info) {
+        action = {
+          type: 'link',
+          href: '/core/cases/new?source_entity_id=' + encodeURIComponent(sid) + '&item_name=' + encodeURIComponent(r.itemName || ''),
+          label: 'Create case',
+          boost: false
+        };
+      } else if (info.is_terminal) {
+        r.actions.unshift({type: 'link', href: '/core/cases/new?source_entity_id=' + encodeURIComponent(sid), label: 'Create new occurrence', boost: false});
+        action = { type: 'link', href: info.href, label: 'Review previous case', boost: false };
+      } else {
+        action = { type: 'link', href: info.href, label: 'Open case', boost: false };
+      }
+      r.actions = [action].concat(r.actions || []);
+    });
   }
 
   async function fetchFindings() {
@@ -383,21 +451,26 @@
       restoreItem.setAttribute('role', 'menuitem');
       menu.appendChild(restoreItem);
     } else {
-      var snoozeItem = createOverflowMenuItem('Snooze for today', function (ev) {
+      // Renamed from "Snooze for today" / "Hide" per the operational_cases spec: these
+      // only affect this browser's presentation, never shared case state -- the copy
+      // says so explicitly so a user doesn't mistake hiding a card for closing the work.
+      var snoozeItem = createOverflowMenuItem('Hide until tomorrow', function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
         sessionStorage.setItem(ignoreKey(checkId, itemKey), todayKey);
         onChange();
       });
       snoozeItem.setAttribute('role', 'menuitem');
+      snoozeItem.title = 'Hides this card from your view only, until tomorrow. The underlying work remains open.';
 
-      var hideItem = createOverflowMenuItem('Hide', function (ev) {
+      var hideItem = createOverflowMenuItem('Hide for this session', function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
         sessionStorage.setItem(dismissedKey(checkId, itemKey), '1');
         onChange();
       });
       hideItem.setAttribute('role', 'menuitem');
+      hideItem.title = 'Hides this card from your view only, for this browser session. The underlying work remains open.';
 
       menu.appendChild(snoozeItem);
       menu.appendChild(hideItem);
@@ -947,6 +1020,20 @@
     }
     ensureCategoryFilterStrip(categoryFilter);
 
+    var totalRecords = records.length;
+    casePage = Math.min(casePage, Math.max(0, Math.ceil(totalRecords / 25) - 1));
+    records = records.slice(casePage * 25, (casePage + 1) * 25);
+    var pager = document.getElementById('oc-findings-pager');
+    if (!pager) { pager = document.createElement('nav'); pager.id = 'oc-findings-pager'; listEl.after(pager); }
+    pager.replaceChildren();
+    if (totalRecords > 25) ['Previous findings', 'Next findings'].forEach(function (label, i) {
+      var button = document.createElement('button'); button.textContent = label; button.type = 'button';
+      button.disabled = i === 0 ? casePage === 0 : (casePage + 1) * 25 >= totalRecords;
+      button.addEventListener('click', function () { casePage += i === 0 ? -1 : 1; renderCards(); }); pager.appendChild(button);
+    });
+    var caseStatusMap = await fetchCaseStatusForRecords(records);
+    applyCaseActions(records, caseStatusMap);
+
     listEl.innerHTML = '';
 
     var onChange = function () {
@@ -970,6 +1057,7 @@
   function init() {
     bindOverflowMenuHandlers();
     bindTabHandlers();
+    if (window.LiveSync) window.LiveSync.subscribe({key: 'notifications-cases', match: function (evt) { return evt.entity_type === 'operational_case'; }, onChange: function () { if (!document.hidden && document.getElementById('notifications-page-marker')) renderCards(); }});
     renderCards();
   }
 

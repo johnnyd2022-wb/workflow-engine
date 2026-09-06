@@ -11,6 +11,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="operational-cases-enabled" content="{{ 'true' if operational_cases_available else 'false' }}">
+  <meta name="current-org-id" content="{{ g.current_org_id or '' }}">
+  <meta name="current-user-id" content="{{ g.current_user.id if g.current_user else '' }}">
   <title>{% block title %}Flume Workflow Engine{% endblock %}</title>
   {# Inline SVG favicon — avoids a /favicon.ico 404 without shipping a binary asset. #}
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232DD4BF'/%3E%3Ctext x='16' y='23' font-size='19' text-anchor='middle' fill='%23fff' font-family='system-ui,sans-serif' font-weight='700'%3EF%3C/text%3E%3C/svg%3E">
@@ -93,6 +96,7 @@
           </div>
 
           <div class="topbar-account">
+            {% if operational_cases_available %}<a href="/core/cases" hx-boost="false" aria-label="Cases">Cases</a>{% endif %}
             <a
               href="/core/notifications"
               class="topbar-notifications"
@@ -871,12 +875,20 @@
         return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
       }
 
+      function currentScopeTag() {
+        var org = document.querySelector('meta[name="current-org-id"]');
+        var user = document.querySelector('meta[name="current-user-id"]');
+        return (org && org.getAttribute('content') || '') + '_' + (user && user.getAttribute('content') || '');
+      }
+
+      // Must match system-findings-notifications.js's key shape exactly -- both read/write
+      // the same sessionStorage keys so the badge count and the Notifications page agree.
       function ignoreKey(checkId, itemKey) {
-        return 'corechecks_finding_ignore_date_' + String(checkId) + '_' + String(itemKey);
+        return 'corechecks_finding_ignore_date_' + currentScopeTag() + '_' + String(checkId) + '_' + String(itemKey);
       }
 
       function dismissedKey(checkId, itemKey) {
-        return 'corechecks_finding_dismissed_' + String(checkId) + '_' + String(itemKey);
+        return 'corechecks_finding_dismissed_' + currentScopeTag() + '_' + String(checkId) + '_' + String(itemKey);
       }
 
       function updateBadge(count) {
