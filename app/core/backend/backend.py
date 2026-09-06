@@ -2288,14 +2288,16 @@ def complete_step(execution_id: str, execution_step_id: str):
 
     repo = ExecutionRepository(db_session)
     try:
-        # Compliant normally augments a step with a non-blocking Core evidence shelf.
-        # For an administrator's explicit NP3 "required" policy, enforce the same
-        # condition here so a direct API call cannot bypass the execution UI.  Evidence
-        # remains Core-owned and linked to this exact execution + step definition.
+        # Installed Compliant modules contribute normalized workflow rules through their
+        # own platform registry. Core knows only how to verify its own operational facts
+        # (such as an active evidence file), never which industry or framework requested
+        # the constraint.
         if config.compliant_enabled:
-            from app.features.compliant.service import ComplianceService
+            from app.features.compliant.platform.workflow_rules import completion_constraints
 
-            if ComplianceService(db_session).requires_execution_evidence(org_id):
+            constraints = completion_constraints(db_session, org_id)
+            evidence_constraints = [item for item in constraints if item.requirement == "active_evidence"]
+            if evidence_constraints:
                 policy_step = (
                     db_session.query(ExecutionStep)
                     .filter(
@@ -2318,11 +2320,12 @@ def complete_step(execution_id: str, execution_step_id: str):
                         is not None
                     )
                     if not has_evidence:
+                        constraint = evidence_constraints[0]
                         return jsonify(
                             {
-                                "error": "NP3 evidence is required before completing this Core step",
-                                "code": "np3_evidence_required",
-                                "action": "Upload a photo or PDF in the NP3 operational evidence section.",
+                                "error": constraint.message,
+                                "code": constraint.code,
+                                "action": constraint.action,
                             }
                         ), 409
 

@@ -15,3 +15,32 @@ rules:
     paths:
       exclude:
         - "**/app/core/utils/time.py"
+
+  # Compliant modules may augment Core workflows, but Core must consume only the
+  # generic platform contract. Industry/framework names here are a boundary leak: the
+  # next module would require editing Core instead of registering its own rule provider.
+  - id: core-no-industry-specific-compliance-python
+    languages: [python]
+    severity: ERROR
+    message: >
+      Core must not contain industry- or framework-specific Compliant logic. Put the
+      policy in app/features/compliant/modules/<module>/workflow_rules.py and expose it
+      through the generic Compliant platform workflow-rule contract.
+    paths:
+      include:
+        - "/app/core/**/*.py"
+      exclude:
+        # Migrations are immutable historical schema snapshots, not runtime Core policy.
+        - "/app/core/db/migrations/**"
+    pattern-regex: '(?i)\bnp3\b|\bnz[_ -]?alcohol\b|app\.features\.compliant\.modules\.'
+
+  - id: core-no-industry-specific-compliance-javascript
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      Core frontend code must render generic Compliant workflow extensions, not
+      industry-specific module or framework behaviour.
+    paths:
+      include:
+        - "/app/core/**/*.js"
+    pattern-regex: '(?i)\bnp3\b|\bnz[_ -]?alcohol\b'

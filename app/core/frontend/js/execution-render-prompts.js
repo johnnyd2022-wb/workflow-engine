@@ -25,22 +25,33 @@
     var showNotification = root.showNotification;
     var executionPrompts = ((stepDefinition && stepDefinition.execution_prompts) || []).slice();
     var currentStepId = stepDefinition && stepDefinition.id ? String(stepDefinition.id) : null;
-    // Compliant adds a policy-driven evidence shelf without mutating saved workflows.
-    // The recommended shelf must never stop production; only an administrator's explicit
-    // NP3 policy may choose the separate, server-enforced required mode.
-    if (CoreAPI && typeof CoreAPI.getCompliantCaptureContext === 'function') {
+    // Installed Compliant modules contribute generic prompts without mutating saved
+    // workflows. The recommended shelf must never stop production; only a module's
+    // explicit server-enforced rule may make its own extension required.
+    if (CoreAPI && typeof CoreAPI.getCompliantWorkflowExtensions === 'function') {
       try {
-        var compliantContext = await CoreAPI.getCompliantCaptureContext({ signal: signal });
-        var hasEvidencePrompt = executionPrompts.some(function (prompt) { return prompt && prompt.type === 'evidence'; });
-        if (compliantContext && compliantContext.enabled && !hasEvidencePrompt) {
-          executionPrompts.push({
-            label: compliantContext.label || 'Compliance evidence',
-            type: 'evidence',
-            required: Boolean(compliantContext.required),
-            compliant_auto: true,
-            help: compliantContext.help || '',
+        var workflowContext = await CoreAPI.getCompliantWorkflowExtensions({ signal: signal });
+        var extensions = (workflowContext && Array.isArray(workflowContext.extensions)) ? workflowContext.extensions : [];
+        extensions.forEach(function(extension) {
+          var extensionPrompt = extension && extension.prompt;
+          if (!extensionPrompt || !extensionPrompt.type) return;
+          var matchingPrompt = executionPrompts.find(function(prompt) {
+            return prompt && prompt.type === extensionPrompt.type;
           });
-        }
+          if (matchingPrompt) {
+            // A saved workflow prompt remains the canonical field, but an applicable
+            // module rule may elevate its requiredness for this execution.
+            matchingPrompt.required = Boolean(matchingPrompt.required) || Boolean(extensionPrompt.required);
+            return;
+          }
+          executionPrompts.push({
+            label: extensionPrompt.label || 'Compliance evidence',
+            type: extensionPrompt.type,
+            required: Boolean(extensionPrompt.required),
+            compliant_auto: true,
+            help: extensionPrompt.help || '',
+          });
+        });
       } catch (e) {
         if (e && e.name === 'AbortError') throw e;
         // Compliant must be an additive layer; a missing module never breaks an execution.

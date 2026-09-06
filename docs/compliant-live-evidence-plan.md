@@ -43,6 +43,15 @@ NP3 supports three per-organisation capture modes:
 in the UI. It does not mutate saved process definitions. The evidence still belongs to
 Core and is attached to the execution/step, so it is naturally connected to the DAG.
 
+### Pluggable workflow rules
+
+Compliant modules register workflow rules through the platform rule registry. A rule can
+contribute a generic prompt and generic Core-owned requirement (for example,
+`active_evidence`) with module-owned copy and remediation. Core renders the normalized
+prompt and verifies the operational fact, but has no knowledge of the NZ Alcohol module,
+NP3, Customs, or any other framework. A future food or chemical module adds a provider in
+Compliant's composition root; it does not add industry logic to Core.
+
 ## Architecture guardrails
 
 1. **DAG first.** Module evaluators use Core's `DAGTracer` and source entities; they do

@@ -120,7 +120,7 @@ function openModal(modalId) {
         success.style.display = 'block';
         
         // Show toast notification
-        showToast('Your NP3 Export is Ready 🎉', 'Compliance report generated successfully');
+        showToast('Your compliance export is ready 🎉', 'Compliance report generated successfully');
       }, 2000);
     }
   }

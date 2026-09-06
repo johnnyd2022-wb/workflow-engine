@@ -2,11 +2,10 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 from app.features.compliant.modules.nz_alcohol.catalogue import framework_applies
 from app.features.compliant.modules.nz_alcohol.np3_audit import NP3_AUDIT_CATEGORIES, build_np3_audit_rows
-from app.features.compliant.service import ComplianceService
+from app.features.compliant.modules.nz_alcohol.workflow_rules import rules_for_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -109,25 +108,20 @@ def test_np3_audit_register_labels_live_core_evidence_and_does_not_hide_a_failur
     assert traceability["state"] == "attention"
 
 
-def test_execution_capture_context_only_enforces_an_explicit_np3_policy():
-    service = ComplianceService(None)
-    org_id = object()
-    with patch.object(service, "get_profile", return_value=None):
-        assert service.execution_capture_context(org_id)["enabled"] is False
-
+def test_nz_alcohol_workflow_rules_only_enforce_an_explicit_np3_policy():
+    assert rules_for_profile(None) == ()
     generic_profile = SimpleNamespace(enabled=True, settings={"food_control_programme": "np2"})
-    with patch.object(service, "get_profile", return_value=generic_profile):
-        context = service.execution_capture_context(org_id)
-    assert context["enabled"] is True
-    assert context["required"] is False
-    assert context["label"] == "Compliance evidence"
+    generic_rule = rules_for_profile(generic_profile)[0]
+    assert generic_rule.prompt["required"] is False
+    assert generic_rule.prompt["label"] == "Compliance evidence"
+    assert generic_rule.constraints == ()
 
     np3_profile = SimpleNamespace(
         enabled=True,
         settings={"food_control_programme": "np3", "np3_execution_evidence_mode": "required"},
     )
-    with patch.object(service, "get_profile", return_value=np3_profile):
-        context = service.execution_capture_context(org_id)
-    assert context["enabled"] is True
-    assert context["required"] is True
-    assert context["label"] == "NP3 operational evidence"
+    np3_rule = rules_for_profile(np3_profile)[0]
+    assert np3_rule.prompt["required"] is True
+    assert np3_rule.prompt["label"] == "NP3 operational evidence"
+    assert np3_rule.constraints[0].requirement == "active_evidence"
+    assert np3_rule.constraints[0].code == "compliance_requirement_not_met"

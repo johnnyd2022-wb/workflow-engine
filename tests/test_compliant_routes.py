@@ -655,7 +655,7 @@ def test_np3_required_capture_policy_blocks_direct_core_step_completion(db, flas
             json={"actual_inputs": [], "actual_outputs": [], "execution_data": {}},
         )
         assert completion.status_code == 409
-        assert completion.get_json()["code"] == "np3_evidence_required"
+        assert completion.get_json()["code"] == "compliance_requirement_not_met"
         db.refresh(execution_step)
         assert execution_step.status.value != "completed"
     finally:

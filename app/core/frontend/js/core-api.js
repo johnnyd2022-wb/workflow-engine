@@ -505,14 +505,14 @@ window.CoreAPI = window.CoreAPI || {
         return this.request('/evidence/config', signal ? { signal } : {});
     },
 
-    /** Compliant augments executions; Core still owns evidence storage and upload. */
-    async getCompliantCaptureContext(options = {}) {
+    /** Installed Compliant modules contribute generic execution extensions. */
+    async getCompliantWorkflowExtensions(options = {}) {
         const response = await fetch('/api/compliant/capture-context', {
             credentials: 'same-origin',
             signal: options.signal,
         });
-        if (response.status === 404) return { enabled: false };
-        if (!response.ok) throw new Error(`Could not load compliance capture context (${response.status})`);
+        if (response.status === 404) return { enabled: false, extensions: [] };
+        if (!response.ok) throw new Error(`Could not load compliance workflow extensions (${response.status})`);
         return response.json();
     },
 
