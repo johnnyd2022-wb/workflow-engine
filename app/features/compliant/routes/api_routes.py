@@ -26,6 +26,7 @@ _RECORD_STATUSES = {"complete", "failed", "open", "superseded"}
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 _FOOD_CONTROL_PROGRAMMES = {"np1", "np2", "np3", "none"}
 _LIQUOR_LICENCE_TYPES = {"on", "off", "club", "special"}
+_NP3_EXECUTION_EVIDENCE_MODES = {"off", "recommended", "required"}
 
 
 def _csv_safe(value):
@@ -87,7 +88,15 @@ def np3_audit():
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(
-        ["Category", "Verification topic", "Status", "Evidence records", "Evidence references", "Last recorded"]
+        [
+            "Category",
+            "Verification topic",
+            "Status",
+            "Evidence records",
+            "Evidence references",
+            "Core source IDs",
+            "Last recorded",
+        ]
     )
     for row in audit["rows"]:
         writer.writerow(
@@ -97,6 +106,7 @@ def np3_audit():
                 _csv_safe(row["state"]),
                 _csv_safe("; ".join(row["evidence_titles"])),
                 _csv_safe("; ".join(row["evidence_references"])),
+                _csv_safe("; ".join(ref for item in row["derived_evidence"] for ref in item["source_refs"])),
                 _csv_safe(row["latest_recorded_at"] or ""),
             ]
         )
@@ -115,14 +125,7 @@ def capture_context():
     Core owns uploads and execution data. Compliant only asks it to surface a non-blocking
     capture shelf for enrolled organisations, so operators keep working in one workflow.
     """
-    profile = _service().get_profile(_org_id())
-    return jsonify(
-        {
-            "enabled": bool(profile and profile.enabled),
-            "label": "Compliance evidence",
-            "help": "Optional photo or PDF saved against this production step and ready to reuse in Compliant. It never blocks production.",
-        }
-    ), 200
+    return jsonify(_service().execution_capture_context(_org_id())), 200
 
 
 @api_bp.route("/api/compliant/profile", methods=["PUT"])
@@ -147,6 +150,9 @@ def update_profile():
             or not all(isinstance(item, str) and item in _LIQUOR_LICENCE_TYPES for item in licence_types)
         ):
             return jsonify({"error": "liquor_licence_types must contain only on, off, club, or special"}), 400
+        capture_mode = settings.get("np3_execution_evidence_mode")
+        if capture_mode is not None and capture_mode not in _NP3_EXECUTION_EVIDENCE_MODES:
+            return jsonify({"error": "np3_execution_evidence_mode must be off, recommended, or required"}), 400
     profile = _service().upsert_profile(_org_id(), data)
     log_action("update", "compliance_profile", profile.id, {"enabled": profile.enabled})
     return jsonify({"profile": _service().overview(_org_id())["profile"]}), 200

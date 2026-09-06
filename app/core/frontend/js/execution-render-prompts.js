@@ -25,8 +25,8 @@
     var showNotification = root.showNotification;
     var executionPrompts = ((stepDefinition && stepDefinition.execution_prompts) || []).slice();
     var currentStepId = stepDefinition && stepDefinition.id ? String(stepDefinition.id) : null;
-    // Organisations enrolled in Compliant get an evidence shelf in every existing workflow.
-    // It is deliberately optional: Compliant is advisory and must never stop production.
+    // Compliant adds a policy-driven evidence shelf without mutating saved workflows.
+    // An administrator may explicitly choose a server-enforced NP3 requirement.
     if (CoreAPI && typeof CoreAPI.getCompliantCaptureContext === 'function') {
       try {
         var compliantContext = await CoreAPI.getCompliantCaptureContext({ signal: signal });
@@ -35,7 +35,7 @@
           executionPrompts.push({
             label: compliantContext.label || 'Compliance evidence',
             type: 'evidence',
-            required: false,
+            required: Boolean(compliantContext.required),
             compliant_auto: true,
             help: compliantContext.help || '',
           });

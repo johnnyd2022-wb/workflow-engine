@@ -31,6 +31,7 @@ from app.features.compliant.modules.nz_alcohol.catalogue import (
     framework_for_profile,
 )
 from app.features.compliant.modules.nz_alcohol.councils import TRADE_WASTE_CATALOGUES, council_catalogue
+from app.features.compliant.modules.nz_alcohol.live_evidence import derive_np3_core_evidence
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
     NP3_AUDIT_CATEGORIES,
     PREPARATION_ITEMS,
@@ -203,6 +204,38 @@ class ComplianceService:
     def get_profile(self, org_id: UUID) -> ComplianceProfile | None:
         return self.session.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
 
+    def execution_capture_context(self, org_id: UUID) -> dict[str, Any]:
+        """Return the module's execution-time evidence policy without exposing module internals to Core."""
+        profile = self.get_profile(org_id)
+        settings = profile.settings or {} if profile else {}
+        enrolled = bool(profile and profile.enabled)
+        is_np3 = enrolled and settings.get("food_control_programme", "np3") == "np3"
+        # Keep the established recommended capture shelf for every enrolled Compliant
+        # organisation. NP3 is the first module allowed to raise it to a server-enforced
+        # constraint; other modules remain additive until they define their own policy.
+        mode = settings.get("np3_execution_evidence_mode", "recommended") if is_np3 else "recommended"
+        # Settings are validated at the write boundary; keep the read boundary fail-safe
+        # for old/imported JSON rows.
+        if mode not in {"off", "recommended", "required"}:
+            mode = "recommended"
+        if is_np3 and mode == "required":
+            help_text = "An active photo or PDF is required before this Core step can be completed under your NP3 policy."
+        elif is_np3:
+            help_text = "Upload a photo or PDF against this Core step. It will be linked to the NP3 evidence register."
+        else:
+            help_text = "Upload a photo or PDF against this Core step to retain it with your operational evidence."
+        return {
+            "enabled": enrolled and mode != "off",
+            "required": is_np3 and mode == "required",
+            "mode": mode,
+            "label": "NP3 operational evidence" if is_np3 else "Compliance evidence",
+            "help": help_text,
+        }
+
+    def requires_execution_evidence(self, org_id: UUID) -> bool:
+        """True only for an administrator's explicit NP3 blocking-policy choice."""
+        return bool(self.execution_capture_context(org_id)["required"])
+
     def upsert_profile(self, org_id: UUID, data: dict[str, Any]) -> ComplianceProfile:
         profile = self.get_profile(org_id)
         if profile is None:
@@ -278,6 +311,9 @@ class ComplianceService:
                 .all(),
                 self.session.query(InventoryMovement.id)
                 .filter(InventoryMovement.org_id == org_id, InventoryMovement.id.in_(parsed_source_ids))
+                .all(),
+                self.session.query(InventoryItem.id)
+                .filter(InventoryItem.org_id == org_id, InventoryItem.id.in_(parsed_source_ids))
                 .all(),
             )
             for (source_id,) in rows
@@ -635,7 +671,10 @@ class ComplianceService:
         if profile is not None and profile.enabled and settings.get("food_control_programme", "np3") != "np3":
             raise ValueError("Select National Programme 3 in Configuration to use the NP3 audit plan")
         records = self.records(org_id, "np3-food-control") if profile and profile.enabled else []
-        rows = build_np3_audit_rows(records)
+        derived_evidence, live_summary = (
+            derive_np3_core_evidence(self.session, org_id) if profile and profile.enabled else ([], {})
+        )
+        rows = build_np3_audit_rows(records, derived_evidence)
         counts = {state: sum(1 for row in rows if row["state"] == state) for state in ("ready", "attention", "missing")}
         return _iso(
             {
@@ -649,7 +688,13 @@ class ComplianceService:
                 "rows": rows,
                 "counts": counts,
                 "configuration_required": not bool(profile and profile.enabled),
-                "core_evidence": self.data_coverage(org_id, records=records) if profile and profile.enabled else {},
+                "core_evidence": (
+                    self.data_coverage(org_id, records=records)
+                    | {"live_np3_evidence": live_summary}
+                    if profile and profile.enabled
+                    else {}
+                ),
+                "capture_policy": self.execution_capture_context(org_id),
                 "disclaimer": "This checklist reflects the verification-confirmation topics. Keep the current National Programme guidance available; the verifier determines the final scope.",
             }
         )

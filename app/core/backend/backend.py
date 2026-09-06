@@ -36,6 +36,8 @@ from app.core.db import SessionLocal, db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.execution import Execution, ExecutionStatus
+from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
+from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.inventory_wastage import InventoryWastage
@@ -2286,6 +2288,44 @@ def complete_step(execution_id: str, execution_step_id: str):
 
     repo = ExecutionRepository(db_session)
     try:
+        # Compliant normally augments a step with a non-blocking Core evidence shelf.
+        # For an administrator's explicit NP3 "required" policy, enforce the same
+        # condition here so a direct API call cannot bypass the execution UI.  Evidence
+        # remains Core-owned and linked to this exact execution + step definition.
+        if config.compliant_enabled:
+            from app.features.compliant.service import ComplianceService
+
+            if ComplianceService(db_session).requires_execution_evidence(org_id):
+                policy_step = (
+                    db_session.query(ExecutionStep)
+                    .filter(
+                        ExecutionStep.id == execution_step_uuid,
+                        ExecutionStep.execution_id == execution_uuid,
+                        ExecutionStep.org_id == org_id,
+                    )
+                    .one_or_none()
+                )
+                if policy_step is not None:
+                    has_evidence = (
+                        db_session.query(ExecutionEvidence.id)
+                        .filter(
+                            ExecutionEvidence.org_id == org_id,
+                            ExecutionEvidence.execution_id == execution_uuid,
+                            ExecutionEvidence.step_id == policy_step.step_id,
+                            ExecutionEvidence.evidence_status == EVIDENCE_STATUS_ACTIVE,
+                        )
+                        .first()
+                        is not None
+                    )
+                    if not has_evidence:
+                        return jsonify(
+                            {
+                                "error": "NP3 evidence is required before completing this Core step",
+                                "code": "np3_evidence_required",
+                                "action": "Upload a photo or PDF in the NP3 operational evidence section.",
+                            }
+                        ), 409
+
         # Single transaction: mark step complete + inventory + outputs commit together.
         # If validation fails after marking COMPLETED in-session, rollback so the step stays READY
         # and the client can retry (avoids "not in a state that can be completed" on the next attempt).
