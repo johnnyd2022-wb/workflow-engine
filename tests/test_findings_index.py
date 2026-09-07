@@ -158,6 +158,53 @@ VERDICT: patched
     assert fi.parse_doc(path) == []
 
 
+def test_corrected_verdict_is_treated_as_closed(tmp_path, monkeypatch):
+    """build-review reports hand back a numbered list of findings, the batch is fixed, and
+    the file closes with a `## Resolution verification` section and `VERDICT: corrected`.
+    The numbered list must not be rescanned as open work once that verdict is present."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/build-review.md",
+        """# Independent build review
+
+## Findings handed back for correction
+1. P1: ID-only FKs lack tenant-consistent composite parent/child integrity that would
+   let one org reference another org's row.
+2. P2: source-status loads all historical cases for source IDs; unbounded result count.
+
+## Resolution verification
+
+Each finding above was corrected: composite tenant reference constraints were added and
+the source-status query is now bounded.
+
+VERDICT: corrected; normal code review and pilot rollout remain required.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_findings_open_verdict_still_wins_over_a_later_corrected_footer(tmp_path, monkeypatch):
+    """`corrected` closes a file only when it is the authoritative (first) verdict. A
+    header that says findings are open is not overridden by a `corrected` line further
+    down -- otherwise a review that fixed *some* of its list could bury the rest."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/partial.md",
+        """# Independent build review
+verdict: findings-open
+
+## Findings handed back for correction
+1. P1: tenant isolation gap on org_id in the report export path that still needs a fix.
+
+## Resolution verification
+Two of three landed. VERDICT: corrected for those; item 1 remains open.
+""",
+    )
+    assert len(fi.parse_doc(path)) == 1
+
+
 def test_file_level_accepted_risk_verdict_is_treated_as_closed(tmp_path, monkeypatch):
     """A human already signed off accepted-risk in the report's own header -- that is a
     human verdict already on record, not a suppression this script is minting itself."""
