@@ -315,10 +315,8 @@ class Config:
     def operational_cases_enabled(self) -> bool:
         """Deployment-wide kill switch for the operational_cases capability (A1).
 
-        Default off in every environment until discovery/pilot readiness gates pass (see
-        .agents/specs/operational_cases.md rollout plan). Per-org access additionally
-        requires an active FeatureSubscription(feature_key='operational_cases') row --
-        both are required for normal reads/writes.
+        When enabled, the capability is available to every organisation. Compliant is the
+        only product area with a per-organisation subscription gate.
         """
         return self.getboolean("features", "operational_cases_enabled", False)
 

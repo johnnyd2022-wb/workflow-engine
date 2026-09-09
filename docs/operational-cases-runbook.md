@@ -5,34 +5,20 @@ Scope: A1 only (`untracked_items` source, single-tenant flag). See
 
 ## Enabling the capability
 
-Two independent gates, both required for normal reads/writes:
+One deployment-wide switch enables the capability for every organisation:
 
-1. **Deployment kill switch** — `operational_cases_enabled` under `[features]` in
-   `app/config/<environment>.ini`. It is off by default in every environment; focused
-   tests opt in explicitly. Flipping this in production requires
-   a deploy (it's read once at process start via `config_loader.py`).
-2. **Per-org entitlement** — a `FeatureSubscription(feature_key='operational_cases')`
-   row, granted/revoked with the existing generic CLI:
-
-   ```bash
-   uv run workflow grant-feature --org-id <ORG_ID> --feature operational_cases --note "pilot cohort 1"
-   uv run workflow revoke-feature --org-id <ORG_ID> --feature operational_cases
-   uv run workflow list-features --org-id <ORG_ID>
-   ```
-
-Missing either gate means disabled for that org: normal `/api/core/cases/*` and
-`/core/cases*` routes return 404 (or don't exist at all, if the deployment switch is
-off). The read-only history routes (`/api/core/cases/history/<id>[/events]`) are the one
-exception — see "Recovery after a server-side disable" below.
+**Deployment kill switch** — `operational_cases_enabled` under `[features]` in
+`app/config/<environment>.ini`. Flipping it requires a deploy because configuration is
+read at process start. When it is off, normal `/api/core/cases/*` and `/core/cases*`
+routes return 404. The read-only history routes (`/api/core/cases/history/<id>[/events]`)
+remain available to same-org ADMINs for recovery.
 
 ## Disabling after a defect (rollback while retaining data)
 
-1. Revoke the org's subscription: `uv run workflow revoke-feature --org-id <ORG_ID> --feature operational_cases`.
-   This is enforced at the transactional write boundary inside the blueprint's
-   `before_request` gate (`operational_cases_bp.py`), not just at request entry — an
-   in-flight command still fails closed if the gate re-checks mid-transaction restart.
-   Already-committed cases/links/events are untouched; no table is dropped.
-2. Confirm normal routes now 404 for that org (`GET /api/core/cases` → 404) while Core
+1. Set `operational_cases_enabled = false` for the affected environment and redeploy.
+   The blueprint's request gate and transactional command boundary fail closed, while
+   already-committed cases, links, and events remain untouched.
+2. Confirm normal routes now return 404 (`GET /api/core/cases` → 404) while Core
    generally keeps working.
 3. Same-org ADMIN can still read case history:
 
@@ -41,8 +27,8 @@ exception — see "Recovery after a server-side disable" below.
    curl -H "Cookie: <session>" https://<host>/api/core/cases/history/<CASE_ID>/events
    ```
 
-   These routes check `@requires_role(ADMIN)` only — no subscription check — precisely so
-   a revoked org isn't also locked out of its own audit trail.
+   These routes check `@requires_role(ADMIN)` only, so a deployment-wide disable does not
+   lock an organisation out of its own audit trail.
 4. For a full tenant snapshot instead of one case at a time, use the export CLI (below).
 
 ## Application rollback with additive schema retained

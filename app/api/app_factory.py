@@ -496,12 +496,7 @@ def create_app():
         else:
             compliant_subscribed = False
 
-        cases_available = False
-        if org_id and config.operational_cases_enabled:
-            from app.core.db import db_session
-            from app.core.security.entitlements import org_has_feature
-
-            cases_available = org_has_feature(db_session(), org_id, "operational_cases")
+        cases_available = bool(org_id and config.operational_cases_enabled)
 
         return dict(
             operational_cases_available=cases_available,
