@@ -36,6 +36,8 @@ from app.core.db import SessionLocal, db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.execution import Execution, ExecutionStatus
+from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
+from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.inventory_wastage import InventoryWastage
@@ -2286,6 +2288,47 @@ def complete_step(execution_id: str, execution_step_id: str):
 
     repo = ExecutionRepository(db_session)
     try:
+        # Installed Compliant modules contribute normalized workflow rules through their
+        # own platform registry. Core knows only how to verify its own operational facts
+        # (such as an active evidence file), never which industry or framework requested
+        # the constraint.
+        if config.compliant_enabled:
+            from app.features.compliant.platform.workflow_rules import completion_constraints
+
+            constraints = completion_constraints(db_session, org_id)
+            evidence_constraints = [item for item in constraints if item.requirement == "active_evidence"]
+            if evidence_constraints:
+                policy_step = (
+                    db_session.query(ExecutionStep)
+                    .filter(
+                        ExecutionStep.id == execution_step_uuid,
+                        ExecutionStep.execution_id == execution_uuid,
+                        ExecutionStep.org_id == org_id,
+                    )
+                    .one_or_none()
+                )
+                if policy_step is not None:
+                    has_evidence = (
+                        db_session.query(ExecutionEvidence.id)
+                        .filter(
+                            ExecutionEvidence.org_id == org_id,
+                            ExecutionEvidence.execution_id == execution_uuid,
+                            ExecutionEvidence.step_id == policy_step.step_id,
+                            ExecutionEvidence.evidence_status == EVIDENCE_STATUS_ACTIVE,
+                        )
+                        .first()
+                        is not None
+                    )
+                    if not has_evidence:
+                        constraint = evidence_constraints[0]
+                        return jsonify(
+                            {
+                                "error": constraint.message,
+                                "code": constraint.code,
+                                "action": constraint.action,
+                            }
+                        ), 409
+
         # Single transaction: mark step complete + inventory + outputs commit together.
         # If validation fails after marking COMPLETED in-session, rollback so the step stays READY
         # and the client can retry (avoids "not in a state that can be completed" on the next attempt).

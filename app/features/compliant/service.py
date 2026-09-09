@@ -31,6 +31,7 @@ from app.features.compliant.modules.nz_alcohol.catalogue import (
     framework_for_profile,
 )
 from app.features.compliant.modules.nz_alcohol.councils import TRADE_WASTE_CATALOGUES, council_catalogue
+from app.features.compliant.modules.nz_alcohol.live_evidence import derive_np3_core_evidence
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
     NP3_AUDIT_CATEGORIES,
     PREPARATION_ITEMS,
@@ -278,6 +279,9 @@ class ComplianceService:
                 .all(),
                 self.session.query(InventoryMovement.id)
                 .filter(InventoryMovement.org_id == org_id, InventoryMovement.id.in_(parsed_source_ids))
+                .all(),
+                self.session.query(InventoryItem.id)
+                .filter(InventoryItem.org_id == org_id, InventoryItem.id.in_(parsed_source_ids))
                 .all(),
             )
             for (source_id,) in rows
@@ -635,7 +639,10 @@ class ComplianceService:
         if profile is not None and profile.enabled and settings.get("food_control_programme", "np3") != "np3":
             raise ValueError("Select National Programme 3 in Configuration to use the NP3 audit plan")
         records = self.records(org_id, "np3-food-control") if profile and profile.enabled else []
-        rows = build_np3_audit_rows(records)
+        derived_evidence, live_summary = (
+            derive_np3_core_evidence(self.session, org_id) if profile and profile.enabled else ([], {})
+        )
+        rows = build_np3_audit_rows(records, derived_evidence)
         counts = {state: sum(1 for row in rows if row["state"] == state) for state in ("ready", "attention", "missing")}
         return _iso(
             {
@@ -649,7 +656,12 @@ class ComplianceService:
                 "rows": rows,
                 "counts": counts,
                 "configuration_required": not bool(profile and profile.enabled),
-                "core_evidence": self.data_coverage(org_id, records=records) if profile and profile.enabled else {},
+                "core_evidence": (
+                    self.data_coverage(org_id, records=records)
+                    | {"live_np3_evidence": live_summary}
+                    if profile and profile.enabled
+                    else {}
+                ),
                 "disclaimer": "This checklist reflects the verification-confirmation topics. Keep the current National Programme guidance available; the verifier determines the final scope.",
             }
         )
