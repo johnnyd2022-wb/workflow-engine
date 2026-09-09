@@ -15,6 +15,8 @@ from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
 from app.features.compliant.models import ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
+from app.features.compliant.modules.nz_alcohol.workflow_rules import validate_workflow_settings
+from app.features.compliant.platform.workflow_rules import workflow_context
 from app.features.compliant.service import ComplianceService, serialise_record
 from app.observability import get_logger
 
@@ -87,7 +89,15 @@ def np3_audit():
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(
-        ["Category", "Verification topic", "Status", "Evidence records", "Evidence references", "Last recorded"]
+        [
+            "Category",
+            "Verification topic",
+            "Status",
+            "Evidence records",
+            "Evidence references",
+            "Core source IDs",
+            "Last recorded",
+        ]
     )
     for row in audit["rows"]:
         writer.writerow(
@@ -97,6 +107,7 @@ def np3_audit():
                 _csv_safe(row["state"]),
                 _csv_safe("; ".join(row["evidence_titles"])),
                 _csv_safe("; ".join(row["evidence_references"])),
+                _csv_safe("; ".join(ref for item in row["derived_evidence"] for ref in item["source_refs"])),
                 _csv_safe(row["latest_recorded_at"] or ""),
             ]
         )
@@ -110,19 +121,8 @@ def np3_audit():
 @api_bp.route("/api/compliant/capture-context", methods=["GET"])
 @requires_auth
 def capture_context():
-    """Small, Core-safe context for the execution UI.
-
-    Core owns uploads and execution data. Compliant only asks it to surface a non-blocking
-    capture shelf for enrolled organisations, so operators keep working in one workflow.
-    """
-    profile = _service().get_profile(_org_id())
-    return jsonify(
-        {
-            "enabled": bool(profile and profile.enabled),
-            "label": "Compliance evidence",
-            "help": "Optional photo or PDF saved against this production step and ready to reuse in Compliant. It never blocks production.",
-        }
-    ), 200
+    """Return module-contributed workflow extensions in Core's generic contract."""
+    return jsonify(workflow_context(db_session(), _org_id())), 200
 
 
 @api_bp.route("/api/compliant/profile", methods=["PUT"])
@@ -147,6 +147,9 @@ def update_profile():
             or not all(isinstance(item, str) and item in _LIQUOR_LICENCE_TYPES for item in licence_types)
         ):
             return jsonify({"error": "liquor_licence_types must contain only on, off, club, or special"}), 400
+        workflow_settings_error = validate_workflow_settings(settings)
+        if workflow_settings_error:
+            return jsonify({"error": workflow_settings_error}), 400
     profile = _service().upsert_profile(_org_id(), data)
     log_action("update", "compliance_profile", profile.id, {"enabled": profile.enabled})
     return jsonify({"profile": _service().overview(_org_id())["profile"]}), 200

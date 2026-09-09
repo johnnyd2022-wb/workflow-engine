@@ -34,6 +34,13 @@
   function statusClass(status) { return 'state state-' + (status || 'setup'); }
   function option(value, label) { var el = document.createElement('option'); el.value = value; el.textContent = label; return el; }
   function scrollTo(target) { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  function setSubmitting(form, submitting) {
+    var submit = form.querySelector('button[type="submit"]');
+    if (!submit) return;
+    if (!submit.dataset.defaultLabel) submit.dataset.defaultLabel = submit.textContent;
+    submit.disabled = submitting;
+    submit.textContent = submitting ? 'Saving…' : submit.dataset.defaultLabel;
+  }
 
   function populateControls() {
     clear(frameworkSelect); clear(controlSelect);
@@ -169,19 +176,46 @@
     populateControls();
   }
   async function load() {
-    try { showError(''); state.overview = await api('/api/compliant/overview'); render(); var records = await api('/api/compliant/records'); renderRecords(records.records || []); var products = await api('/api/compliant/alcohol-products'); renderProducts(products.products || []); }
-    catch (err) { showError(err.message); summaryEl.textContent = 'Unable to load'; }
+    root.setAttribute('aria-busy', 'true');
+    try {
+      showError('');
+      // These views are independent: run them together so the audit picture is limited
+      // by the slowest request instead of the sum of three request round trips.
+      var overviewRequest = api('/api/compliant/overview');
+      var supportingRequests = Promise.allSettled([
+        api('/api/compliant/records'),
+        api('/api/compliant/alcohol-products'),
+      ]);
+      state.overview = await overviewRequest;
+      render();
+      var results = await supportingRequests;
+      if (results[0].status === 'fulfilled') renderRecords(results[0].value.records || []);
+      else renderRecords([]);
+      if (results[1].status === 'fulfilled') renderProducts(results[1].value.products || []);
+      else renderProducts([]);
+      var secondaryFailures = results.filter(function (result) { return result.status === 'rejected'; });
+      if (secondaryFailures.length) showError('Your readiness view is current, but some supporting lists could not load. Refresh to retry.');
+    } catch (err) {
+      showError(err.message);
+      summaryEl.textContent = 'Unable to load';
+    } finally {
+      root.setAttribute('aria-busy', 'false');
+    }
   }
   root.querySelector('[data-record-form]').addEventListener('submit', async function (event) {
     event.preventDefault(); var form = event.currentTarget; var refs = form.source_refs.value.split(',').map(function (value) { return value.trim(); }).filter(Boolean);
     var data = { framework_slug: form.framework_slug.value, control_id: form.control_id.value, record_type: form.record_type.value, status: form.status.value, title: form.title.value, period_start: form.period_start.value || null, period_end: form.period_end.value || null, due_date: form.due_date.value || null, measured_value: form.measured_value.value || null, limit_value: form.limit_value.value || null, declared_litres_of_alcohol: form.declared_litres_of_alcohol.value || null, evidence_reference: form.evidence_reference.value || null, source_refs: refs, details: {} };
+    setSubmitting(form, true);
     try { showError(''); await api('/api/compliant/records', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(data) }); form.reset(); await load(); }
     catch (err) { showError(err.message); }
+    finally { setSubmitting(form, false); }
   });
   root.querySelector('[data-product-form]').addEventListener('submit', async function (event) {
     event.preventDefault(); var form = event.currentTarget;
+    setSubmitting(form, true);
     try { showError(''); await api('/api/compliant/alcohol-products', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ inventory_name: form.inventory_name.value, product_type: form.product_type.value, abv_percent: form.abv_percent.value, customs_product_code: form.customs_product_code.value || null }) }); form.reset(); await load(); }
     catch (err) { showError(err.message); }
+    finally { setSubmitting(form, false); }
   });
   load();
 })();

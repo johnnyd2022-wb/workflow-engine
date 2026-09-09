@@ -152,14 +152,23 @@ def test_select_prompts_render_configured_choices_with_legacy_fallback():
     assert 'placeholder="Enter value"' in prompt_renderer
 
 
-def test_compliant_evidence_shelf_is_additive_to_every_execution_prompt_surface():
+def test_compliant_workflow_extensions_are_additive_to_every_execution_prompt_surface():
     api_body = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "core-api.js").read_text(encoding="utf-8")
     prompts_body = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-prompts.js").read_text(
         encoding="utf-8"
     )
-    assert "getCompliantCaptureContext" in api_body
+    assert "getCompliantWorkflowExtensions" in api_body
     assert "compliant_auto" in prompts_body
     assert "must never stop production" in prompts_body
+    assert "NP3" not in prompts_body
+
+
+def test_core_enforces_generic_compliance_requirements_without_module_knowledge():
+    backend = (_REPO_ROOT / "app" / "core" / "backend" / "backend.py").read_text(encoding="utf-8")
+    assert "completion_constraints" in backend
+    assert 'requirement == "active_evidence"' in backend
+    assert "NP3" not in backend
+    assert "nz_alcohol" not in backend
 
 
 def test_execution_modal_calls_render_prompts_api():

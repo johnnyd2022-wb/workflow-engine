@@ -85,9 +85,12 @@ PREPARATION_ITEMS = (
 )
 
 
-def build_np3_audit_rows(records: list[Any]) -> list[dict[str, Any]]:
-    """Join the email's audit topics to the organisation's evidence ledger."""
+def build_np3_audit_rows(
+    records: list[Any], derived_evidence: list[dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
+    """Join NP3 topics to manual evidence and provenance-rich Core observations."""
     today = date.today()
+    derived_evidence = derived_evidence or []
     rows: list[dict[str, Any]] = []
     for category, topics in NP3_AUDIT_CATEGORIES:
         for control_id, topic in topics:
@@ -102,19 +105,28 @@ def build_np3_audit_rows(records: list[Any]) -> list[dict[str, Any]]:
                 for record in matched
                 if record.status in {"open", "failed"} or (record.due_date and record.due_date < today)
             ]
-            state = "ready" if current else "attention" if failed else "missing"
+            derived = [item for item in derived_evidence if item.get("control_id") == control_id]
+            state = "ready" if current or derived else "attention" if failed else "missing"
+            # A recorded failure remains an attention item even when another Core fact is
+            # available: a trace cannot silently close an overdue corrective action.
+            if failed:
+                state = "attention"
             rows.append(
                 {
                     "category": category,
                     "control_id": control_id,
                     "topic": topic,
                     "state": state,
-                    "evidence_count": len(current),
-                    "evidence_titles": [record.title for record in current],
+                    "evidence_count": len(current) + len(derived),
+                    "manual_evidence_count": len(current),
+                    "derived_evidence_count": len(derived),
+                    "evidence_titles": [record.title for record in current]
+                    + [item["title"] for item in derived],
                     "evidence_references": [
                         record.evidence_reference for record in current if record.evidence_reference
                     ],
                     "latest_recorded_at": max((record.created_at for record in current), default=None),
+                    "derived_evidence": derived,
                 }
             )
     return rows

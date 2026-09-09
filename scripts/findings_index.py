@@ -272,21 +272,24 @@ VERDICT_RE = re.compile(r"^\s*(?:##\s*)?verdict:\s*\**(?P<verdict>[a-z-]+)", re.
 # `accepted-risk` at the file level is a human verdict already written into the report
 # itself (`.agents/autonomy.md` requires a human, not this script, to grant it) -- trusting
 # it here is reading that signature, not writing a new suppression.
-# `corrected` is the build-review reports' spelling: an independent reviewer hands a
-# numbered list of findings back, the batch is fixed, and the report closes with a
-# `## Resolution verification` section and `VERDICT: corrected`. Without this the numbered
-# list is rescanned as open work forever, even though the same file says every item landed
-# (`.agents/reports/operational_cases/build-review.md` is the case that prompted this).
+# `corrected` is `build-review`'s post-fix verdict word: verification-chain §5 stage
+# reports end `VERDICT: clean | patched | findings-open`, but a `build-review.md` whose
+# every finding the orchestrator then fixed is closed out as `VERDICT: corrected` above a
+# `## Resolution verification` walk-through -- the same "report closed its own findings"
+# semantics as `patched`. Found in the first sweep of
+# `.agents/reports/operational_cases/build-review.md`, which re-indexed 15 already-corrected
+# findings (composite tenant FKs shipped in migration `operational_cases_002`, blueprint
+# now mounted unconditionally, deploy flag `false` in every config -- all verified in tree).
 VERDICT_CLOSED = {
     "clean",
     "patched",
+    "corrected",
     "no-findings",
     "pass",
     "valid",
     "sound",
     "within-budget",
     "accepted-risk",
-    "corrected",
 }
 
 # The per-finding disposition this repo tags: `F1 [fix]`, `F2 [false-positive]`,

@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""Guarded, reproducible tooling for the Whistlebird v1 → Biz-E migration.
+"""Guarded, reproducible tooling that loads Whistlebird's production history into Biz-E.
 
 The default/profile and dry-run actions are read-only and produce aggregate-only reports:
 no contacts, email addresses, free-text notes, product names, or credentials are emitted.
 Every write action is restricted to the exact disposable ``whistlebird_test`` tenant. The
-rebuild action preflights, replays, and verifies the complete reviewed import in one command.
+rebuild action preflights, replays, and verifies the complete reviewed load in one command.
+
+The load models production the way it actually happens: one workflow per product
+(Wildflower gin, Solstice gin, Rosella gin) plus recipe-trial workflows, and one
+execution per VAT batch that walks the real steps -- maceration, distilling, aging in
+the VAT, bottling, labelling & packaging -- with every step stamped with its own real
+date drawn from the source records. Raw-material purchases become dated inventory,
+Customs lodgements become NZ-alcohol compliance records, and a small machine-only
+``import_ref`` marker on each written row keeps a scoped reset-and-replay exact.
 """
 
 from __future__ import annotations
@@ -17,7 +25,7 @@ import sys
 from collections import Counter, defaultdict
 from collections.abc import Iterator
 from contextlib import ExitStack
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -90,7 +98,7 @@ RESET_TABLES = (
 )
 RESET_ORG_NAME = "whistlebird_test"
 DEFAULT_TEST_ADMIN_EMAIL = "whistlebird_test_admin@whistlebird.test"
-DEFAULT_PRODUCTION_SHEET_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
+DEFAULT_PRODUCTION_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
 WHISTLEBIRD_NZ_ALCOHOL_SETTINGS = {
     "alcohol_product_types": ["spirits"],
     "require_core_source_refs": True,
@@ -98,37 +106,65 @@ WHISTLEBIRD_NZ_ALCOHOL_SETTINGS = {
 }
 DERIVED_TIMEZONE = ZoneInfo("Pacific/Auckland")
 DERIVED_TIME = time(hour=12)
-HISTORICAL_PROCESS_TEMPLATES = (
-    ("Legacy ingredient receipt", "Receive a historical botanical/ingredient lot", "Ingredient lot", "g"),
-    ("Legacy neutral spirit receipt", "Receive a historical neutral-grain-spirit lot", "GNS lot", "L"),
-    ("Legacy packaging receipt", "Receive historical empty-bottle packaging", "Empty bottles", "units"),
-    ("Legacy flavour preparation", "Prepare a historical flavour intermediate", "Flavour batch", "mL"),
-    ("Legacy flavour vat", "Combine historical flavour into a vat", "Vat batch", "L"),
-    ("Legacy distillation", "Run a historical distillation experiment", "Distillate", "L"),
-    ("Legacy bottling", "Bottle a historical finished-product batch", "Bottle batch", "units"),
-    ("Legacy samples", "Record historical sample creation or consumption", "Sample record", "units"),
-    ("Legacy ex-stock storage", "Record historical off-site finished stock", "Stored bottle batch", "units"),
-    ("Sheet: flavour vat", "Combine a production-sheet-recorded flavour into a vat", "Vat batch", "L"),
-    ("Sheet: bottling", "Bottle a production-sheet-recorded finished-product batch", "Bottle batch", "units"),
-    (
-        "Sheet: fruit maceration",
-        "Post-macerate a vat batch (e.g. Solstice + rhubarb) into a distinct finished product",
-        "Macerated batch",
-        "units",
-    ),
+
+# One workflow per product. Each production batch (one VAT) is a single execution that
+# walks these steps in order, every step stamped with its own real date. Steps are
+# (name, description, output_name, output_unit); an empty output_name means the step
+# records what happened but creates no inventory item of its own.
+_BOTANICAL_GIN_STEPS = (
+    ("Maceration", "Prep and steep the botanical charge", "", ""),
+    ("Distilling", "Distil the macerated charge to flavour spirit", "", ""),
+    ("Aging", "Fill the VAT and let the batch rest to strength", "VAT batch", "L"),
+    ("Bottling", "Bottle the rested VAT batch", "Bottled product", "units"),
+    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", ""),
 )
-PRODUCTION_SHEET_SOURCE_TABLE = "production_sheet"
-PRODUCTION_SHEET_SOURCE_SYSTEM = "whistlebird_production_sheet"
-PRODUCTION_SHEET_DATE_CONFIDENCE = ("clean", "resolved_by_context")
+_RHUBARB_GIN_STEPS = (
+    ("Rhubarb maceration", "Steep an aged base VAT batch on rhubarb", "VAT batch", "L"),
+    ("Aging", "Let the rhubarb batch rest before bottling", "", ""),
+    ("Bottling", "Bottle the rested batch", "Bottled product", "units"),
+    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", ""),
+)
+_TRIAL_STEPS = (
+    ("Distilling", "Distil a trial recipe", "", ""),
+    ("Library stock", "Store the trial spirit as library stock", "Library stock", "mL"),
+)
+WILDFLOWER_WORKFLOW = "Wildflower gin"
+SOLSTICE_WORKFLOW = "Solstice gin"
+ROSELLA_WORKFLOW = "Rosella gin"
+GG_TRIAL_WORKFLOW = "GG gin trials"
+WB_TRIAL_WORKFLOW = "WB recipe trials"
+SGS_TRIAL_WORKFLOW = "SGS spirit trials"
+PRODUCT_WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str, str, str], ...]]] = {
+    WILDFLOWER_WORKFLOW: ("botanical_gin", _BOTANICAL_GIN_STEPS),
+    SOLSTICE_WORKFLOW: ("botanical_gin", _BOTANICAL_GIN_STEPS),
+    ROSELLA_WORKFLOW: ("rhubarb_gin", _RHUBARB_GIN_STEPS),
+    GG_TRIAL_WORKFLOW: ("trial", _TRIAL_STEPS),
+    WB_TRIAL_WORKFLOW: ("trial", _TRIAL_STEPS),
+    SGS_TRIAL_WORKFLOW: ("trial", _TRIAL_STEPS),
+}
+PRODUCT_LINE_WORKFLOW = {
+    "wildflower": WILDFLOWER_WORKFLOW,
+    "solstice": SOLSTICE_WORKFLOW,
+    "rosella": ROSELLA_WORKFLOW,
+}
+# Ordered step keys per workflow shape, used to line manifest/legacy dates up with steps.
+BOTANICAL_GIN_STEP_KEYS = ("maceration", "distilling", "aging", "bottling", "labelling")
+RHUBARB_GIN_STEP_KEYS = ("rhubarb_maceration", "aging", "bottling", "labelling")
+TRIAL_STEP_KEYS = ("distilling", "library_stock")
+
+IMPORT_MARKER_KEY = "import_ref"
+BATCH_MARKER_KEY = "batch_ref"
+PRODUCTION_SOURCE_TABLE = "production_sheet"
+STEP_DATE_CONFIDENCE = ("clean", "resolved_by_context", "derived")
 
 
 @dataclass(frozen=True)
 class ProposedCoreRecord:
-    """Validated migration record; never rendered with source business data."""
+    """Validated candidate row for a dry run; never rendered with source business data."""
 
-    legacy_table: str
-    legacy_id: int
-    legacy_date: date
+    source_table: str
+    source_id: int
+    source_date: date
     target_kind: str
     quantity: Decimal | None
     unit: str | None
@@ -136,68 +172,72 @@ class ProposedCoreRecord:
 
 
 @dataclass(frozen=True)
-class ReceiptSourceRecord:
-    """A source purchase row that can become one historically dated Core receipt."""
+class RawMaterialRecord:
+    """A source purchase row that becomes one dated raw-material inventory item."""
 
-    legacy_table: str
-    legacy_id: int
-    legacy_date: date
+    source_table: str
+    source_id: int
+    source_date: date
     name: str
     quantity: Decimal
     unit: str
     supplier: str | None
     supplier_batch_number: str | None
     expiry_date: date | None
-    process_name: str
     extra_data: dict[str, Any]
 
 
 @dataclass(frozen=True)
-class HistoricalOperationRecord:
-    """One v1 production operation represented by a completed Core execution/output."""
+class BatchStep:
+    """One step of a production batch with its resolved real date and how sure we are."""
 
-    legacy_table: str
-    legacy_id: int
-    legacy_date: date
-    process_name: str
-    item_name: str
-    quantity: Decimal
-    unit: str
-    inventory_type: str
-    batch_label: str | None
-    input_references: tuple[tuple[str, str], ...]
-    extra_data: dict[str, Any]
+    key: str
+    step_date: date | None
+    confidence: str
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
-class HistoricalSampleRecord:
-    legacy_table: str
-    legacy_id: int
-    legacy_date: date
-    flavor_code: str | None
-    details: dict[str, Any]
+class ProductionBatch:
+    """One VAT batch -- a single multi-step execution of its product workflow."""
 
-
-@dataclass(frozen=True)
-class ProductionSheetRecord:
-    """One curated production-sheet event, validated from the stage-2 manifest file.
-
-    Never read directly from the live Google Sheet -- the manifest is a frozen,
-    human-reviewed snapshot so reset-and-replay stays deterministic.
-    """
-
-    manifest_id: int
-    record_type: str
-    process_name: str
+    global_vat: int
     product_line: str
     batch_label: str
-    legacy_date: date
-    date_confidence: str
-    quantity: Decimal
-    unit: str
-    input_references: tuple[tuple[str, str], ...]
-    linked_legacy_source: dict[str, Any] | None
-    notes: str
+    steps: dict[str, BatchStep]
+    vat_volume_l: Decimal | None
+    vat_abv: Decimal | None
+    bottlings: tuple[dict[str, Any], ...]
+    ingredient_codes: tuple[str, ...]
+    base_vat: int | None
+    extra_data: dict[str, Any]
+
+    @property
+    def workflow_name(self) -> str:
+        return PRODUCT_LINE_WORKFLOW[self.product_line]
+
+    @property
+    def marker(self) -> str:
+        return f"{self.product_line}-vat{self.global_vat}"
+
+
+@dataclass(frozen=True)
+class TrialRecord:
+    """One recipe/distillation trial -- a distilling step feeding library stock."""
+
+    workflow_name: str
+    source_table: str
+    source_id: int
+    source_date: date
+    label: str
+    distillate_ml: Decimal | None
+    library_ml: Decimal | None
+    consumed: tuple[dict[str, Any], ...]
+    extra_data: dict[str, Any]
+
+    @property
+    def marker(self) -> str:
+        return f"trial-{self.source_table}-{self.source_id}"
 
 
 def _identifier(value: str) -> str:
@@ -207,16 +247,13 @@ def _identifier(value: str) -> str:
 
 
 def _enter_target_tenant_scope(stack: ExitStack, session: Any, requested_org_name: str) -> Any:
-    """Activate the exact target tenant for standalone ORM migration work.
+    """Activate the exact target tenant for standalone ORM work.
 
-    The migration has no Flask request, so it must establish the same ContextVar-backed
-    scope that request middleware normally provides. The organisation lookup intentionally
-    runs under the explicit ``unscoped`` escape hatch: it is the one pre-scope lookup needed
-    to discover the scope, and the requested name has already been approved by the caller's
-    safety policy. Every subsequent ORM statement runs under that exact org id, keeping the
-    global tenant filter active instead of generating no-context noise.
-    The helper deliberately accepts the requested organisation rather than a test-tenant
-    constant, so the same safe pattern applies to every tenant-aware standalone operation.
+    The load has no Flask request, so it must establish the same ContextVar-backed scope
+    that request middleware normally provides. The organisation lookup intentionally runs
+    under the explicit ``unscoped`` escape hatch: it is the one pre-scope lookup needed to
+    discover the scope, and the requested name has already been approved by the caller's
+    safety policy. Every subsequent ORM statement runs under that exact org id.
     """
     from app.core.db.models.organisation import Organisation
     from app.core.security.tenant_scope import tenant_scope, unscoped
@@ -240,19 +277,25 @@ def _derived_timestamp(source_date: date) -> datetime:
     return datetime.combine(source_date, DERIVED_TIME, tzinfo=DERIVED_TIMEZONE).astimezone(UTC)
 
 
-def _decimal(value: Any, field: str, legacy_table: str, legacy_id: int) -> Decimal:
+def _decimal(value: Any, field_name: str, source_table: str, source_id: int) -> Decimal:
     try:
         parsed = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError) as exc:
-        raise ValueError(f"{legacy_table}#{legacy_id} has invalid {field}") from exc
+        raise ValueError(f"{source_table}#{source_id} has invalid {field_name}") from exc
     if not parsed.is_finite() or parsed < 0:
-        raise ValueError(f"{legacy_table}#{legacy_id} has invalid {field}")
+        raise ValueError(f"{source_table}#{source_id} has invalid {field_name}")
     return parsed.quantize(Decimal("0.0001"))
 
 
-def _required_date(value: Any, legacy_table: str, legacy_id: int) -> date:
+def _optional_decimal(value: Any, field_name: str, source_table: str, source_id: int) -> Decimal | None:
+    if value is None or str(value).strip() in ("", "None"):
+        return None
+    return _decimal(value, field_name, source_table, source_id)
+
+
+def _required_date(value: Any, source_table: str, source_id: int) -> date:
     if not isinstance(value, date):
-        raise ValueError(f"{legacy_table}#{legacy_id} has no valid source date")
+        raise ValueError(f"{source_table}#{source_id} has no valid source date")
     return value
 
 
@@ -261,128 +304,109 @@ def _optional_text(value: Any) -> str | None:
     return normalized or None
 
 
-def _legacy_provenance(legacy_table: str, legacy_id: int, legacy_date: date) -> dict[str, Any]:
-    return {
-        "source_system": "whistlebird_v1",
-        "legacy_source": {"table": legacy_table, "id": legacy_id},
-        "legacy_date": legacy_date.isoformat(),
-        "timestamp_policy": "derived_noon_pacific_auckland",
-    }
-
-
 def _decimal_label(value: Decimal) -> str:
     rendered = format(value.normalize(), "f")
     return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
 
 
-def _production_sheet_records(manifest_path: Path) -> list[ProductionSheetRecord]:
-    """Load and validate the curated production-sheet manifest.
-
-    This never reads the live Google Sheet: the manifest at ``manifest_path`` is a
-    frozen, human-reviewed JSON file (see docs/whistlebird-production-sheet-source.json)
-    that a founder edits directly to correct a date, quantity, or link before rerunning.
-    A record whose ``date_confidence`` is not in PRODUCTION_SHEET_DATE_CONFIDENCE must
-    not appear here at all -- exclude it from the manifest's "records" list instead.
-    """
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    records: list[ProductionSheetRecord] = []
-    for entry in payload.get("records", []):
-        manifest_id = int(entry["id"])
-        date_confidence = entry.get("date_confidence")
-        if date_confidence not in PRODUCTION_SHEET_DATE_CONFIDENCE:
-            raise ValueError(
-                f"production_sheet#{manifest_id} has unresolved date_confidence {date_confidence!r}; "
-                "move it to the manifest's 'excluded' list instead of 'records'"
-            )
-        try:
-            legacy_date = date.fromisoformat(entry["legacy_date"])
-        except (KeyError, ValueError) as exc:
-            raise ValueError(f"production_sheet#{manifest_id} has no valid legacy_date") from exc
-        quantity = _decimal(entry["quantity"], "quantity", PRODUCTION_SHEET_SOURCE_TABLE, manifest_id)
-        input_references = tuple((kind, reference) for kind, reference in entry.get("input_references", []))
-        records.append(
-            ProductionSheetRecord(
-                manifest_id=manifest_id,
-                record_type=entry["record_type"],
-                process_name=entry["process_name"],
-                product_line=entry["product_line"],
-                batch_label=entry["batch_label"],
-                legacy_date=legacy_date,
-                date_confidence=date_confidence,
-                quantity=quantity,
-                unit=entry["unit"],
-                input_references=input_references,
-                linked_legacy_source=entry.get("linked_legacy_source"),
-                notes=_optional_text(entry.get("notes")) or "",
-            )
-        )
-    return records
-
-
-def _production_sheet_provenance(record: ProductionSheetRecord) -> dict[str, Any]:
-    provenance: dict[str, Any] = {
-        "source_system": PRODUCTION_SHEET_SOURCE_SYSTEM,
-        "legacy_source": {"table": PRODUCTION_SHEET_SOURCE_TABLE, "id": record.manifest_id},
-        "legacy_date": record.legacy_date.isoformat(),
-        "timestamp_policy": "derived_noon_pacific_auckland",
-        "date_confidence": record.date_confidence,
-        "sheet_batch_label": record.batch_label,
-        "sheet_product_line": record.product_line,
-        "record_type": record.record_type,
-    }
-    if record.linked_legacy_source:
-        provenance["linked_legacy_source"] = record.linked_legacy_source
-    return provenance
-
-
 def _legacy_list(value: Any) -> tuple[str, ...]:
-    """Parse v1's brace-wrapped text lists without inferring their contents."""
+    """Parse the source system's brace-wrapped text lists without inferring their contents."""
     raw = _optional_text(value)
     if raw is None:
         return ()
     return tuple(entry for entry in (part.strip().strip('"') for part in raw.strip("{}").split(",")) if entry)
 
 
-def _receipt_source_records(connection: Connection) -> Iterator[ReceiptSourceRecord]:
+def _import_marker(marker: str, source_table: str, source_id: Any, *, step: str | None = None) -> dict[str, Any]:
+    """The machine-only marker written into every produced row for idempotent replay.
+
+    Deliberately carries no "legacy"/"historical" wording: the loaded data is treated as
+    live production history. ``import_ref`` is unique per row; ``batch_ref`` groups a
+    batch's steps so a scoped reset-and-replay can find and skip what already exists.
+    """
+    payload: dict[str, Any] = {
+        IMPORT_MARKER_KEY: f"{marker}:{step}" if step else marker,
+        BATCH_MARKER_KEY: marker,
+        "source_ref": {"table": source_table, "id": source_id},
+        "timestamp_policy": "derived_noon_pacific_auckland",
+    }
+    if step:
+        payload["step"] = step
+    return payload
+
+
+def _monotonic_step_dates(raw_dates: list[date | None]) -> tuple[list[date], list[bool]]:
+    """Fill gaps and clamp a step-date sequence so it never goes backwards.
+
+    ``complete_step`` refuses to close a step while an earlier one is open, so the step
+    timestamps must be non-decreasing. A ``None`` (no source event) inherits the nearest
+    recorded step's date -- the previous step's, or, for leading gaps, the first recorded
+    step ahead of it; a date earlier than the previous step is pulled forward. Every
+    inherited or pulled-forward value is flagged so the execution data records that the
+    date was derived, not recorded.
+    """
+    if not raw_dates or all(d is None for d in raw_dates):
+        raise ValueError("a batch must have at least one real source date")
+    first_real = next(d for d in raw_dates if d is not None)
+    resolved: list[date] = []
+    adjusted: list[bool] = []
+    for raw in raw_dates:
+        if raw is None:
+            resolved.append(resolved[-1] if resolved else first_real)
+            adjusted.append(True)
+            continue
+        if resolved and raw < resolved[-1]:
+            resolved.append(resolved[-1])
+            adjusted.append(True)
+            continue
+        resolved.append(raw)
+        adjusted.append(False)
+    return resolved, adjusted
+
+
+# --------------------------------------------------------------------------------------
+# Source readers (prior inventory database)
+# --------------------------------------------------------------------------------------
+
+
+def _raw_material_records(connection: Connection) -> Iterator[RawMaterialRecord]:
     for row in connection.execute(
         text("SELECT id, date, supplier, gns_purchased_l, abv FROM purchases_gns ORDER BY id")
     ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "purchases_gns", legacy_id)
-        yield ReceiptSourceRecord(
-            legacy_table="purchases_gns",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
+        source_id = row["id"]
+        source_date = _required_date(row["date"], "purchases_gns", source_id)
+        yield RawMaterialRecord(
+            source_table="purchases_gns",
+            source_id=source_id,
+            source_date=source_date,
             name="Neutral grain spirit",
-            quantity=_decimal(row["gns_purchased_l"], "gns_purchased_l", "purchases_gns", legacy_id),
+            quantity=_decimal(row["gns_purchased_l"], "gns_purchased_l", "purchases_gns", source_id),
             unit="L",
             supplier=_optional_text(row["supplier"]),
-            supplier_batch_number=f"legacy-purchases_gns-{legacy_id}",
+            supplier_batch_number=f"GNS-{source_date.isoformat()}-{source_id}",
             expiry_date=None,
-            process_name="Legacy neutral spirit receipt",
-            extra_data={"legacy_gns_abv_percent": str(row["abv"] or "")},
+            extra_data={"gns_abv_percent": str(row["abv"] or "")},
         )
 
     for row in connection.execute(
         text("SELECT id, date, supplier, bottle_size_ml, empty_bottles_stored FROM purchases_empty_bottles ORDER BY id")
     ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "purchases_empty_bottles", legacy_id)
-        bottle_size = _decimal(row["bottle_size_ml"], "bottle_size_ml", "purchases_empty_bottles", legacy_id)
-        yield ReceiptSourceRecord(
-            legacy_table="purchases_empty_bottles",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
+        source_id = row["id"]
+        source_date = _required_date(row["date"], "purchases_empty_bottles", source_id)
+        bottle_size = _decimal(row["bottle_size_ml"], "bottle_size_ml", "purchases_empty_bottles", source_id)
+        yield RawMaterialRecord(
+            source_table="purchases_empty_bottles",
+            source_id=source_id,
+            source_date=source_date,
             name=f"Empty bottles ({_decimal_label(bottle_size)} mL)",
             quantity=_decimal(
-                row["empty_bottles_stored"], "empty_bottles_stored", "purchases_empty_bottles", legacy_id
+                row["empty_bottles_stored"], "empty_bottles_stored", "purchases_empty_bottles", source_id
             ),
             unit="units",
             supplier=_optional_text(row["supplier"]),
-            supplier_batch_number=f"legacy-purchases_empty_bottles-{legacy_id}",
+            supplier_batch_number=f"BOTTLES-{source_date.isoformat()}-{source_id}",
             expiry_date=None,
-            process_name="Legacy packaging receipt",
-            extra_data={"legacy_bottle_size_ml": str(bottle_size)},
+            extra_data={"bottle_size_ml": str(bottle_size)},
         )
 
     for row in connection.execute(
@@ -394,48 +418,72 @@ def _receipt_source_records(connection: Connection) -> Iterator[ReceiptSourceRec
             """
         )
     ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "purchases_ingredients", legacy_id)
+        source_id = row["id"]
+        source_date = _required_date(row["date"], "purchases_ingredients", source_id)
         ingredient_name = _optional_text(row["ingredients"])
         if ingredient_name is None:
-            raise ValueError(f"purchases_ingredients#{legacy_id} has no ingredient name")
+            raise ValueError(f"purchases_ingredients#{source_id} has no ingredient name")
         expiry_date = row["ingredients_expiry"]
         if expiry_date is not None and not isinstance(expiry_date, date):
-            raise ValueError(f"purchases_ingredients#{legacy_id} has invalid ingredients_expiry")
-        yield ReceiptSourceRecord(
-            legacy_table="purchases_ingredients",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
+            raise ValueError(f"purchases_ingredients#{source_id} has invalid ingredients_expiry")
+        yield RawMaterialRecord(
+            source_table="purchases_ingredients",
+            source_id=source_id,
+            source_date=source_date,
             name=ingredient_name,
-            quantity=_decimal(row["ingredients_amount"], "ingredients_amount", "purchases_ingredients", legacy_id),
+            quantity=_decimal(row["ingredients_amount"], "ingredients_amount", "purchases_ingredients", source_id),
             unit="g",
             supplier=_optional_text(row["supplier"]),
             supplier_batch_number=_optional_text(row["ingredients_code"])
-            or f"legacy-purchases_ingredients-{legacy_id}",
+            or f"ING-{source_date.isoformat()}-{source_id}",
             expiry_date=expiry_date,
-            process_name="Legacy ingredient receipt",
-            extra_data={},
+            extra_data={"ingredient_code": _optional_text(row["ingredients_code"]) or ""},
+        )
+
+    for row in connection.execute(
+        text(
+            "SELECT id, date, notes, alcohol_volume, alcohol_abv, lal, container_id "
+            "FROM product_actions_create_premix ORDER BY id"
+        )
+    ).mappings():
+        source_id = row["id"]
+        source_date = _required_date(row["date"], "product_actions_create_premix", source_id)
+        yield RawMaterialRecord(
+            source_table="product_actions_create_premix",
+            source_id=source_id,
+            source_date=source_date,
+            name="Premix dilution solution",
+            quantity=_decimal(row["alcohol_volume"], "alcohol_volume", "product_actions_create_premix", source_id),
+            unit="L",
+            supplier=None,
+            supplier_batch_number=f"PREMIX-{_optional_text(row['container_id']) or source_id}",
+            expiry_date=None,
+            extra_data={
+                "container_id": _optional_text(row["container_id"]) or "",
+                "abv_percent": str(row["alcohol_abv"] or ""),
+                "litres_of_alcohol": str(row["lal"] or ""),
+            },
         )
 
 
-def _disambiguate_reused_supplier_batches(records: list[ReceiptSourceRecord]) -> list[ReceiptSourceRecord]:
-    """Respect Biz-E's name/batch uniqueness while retaining every legacy receipt row."""
+def _disambiguate_reused_supplier_batches(records: list[RawMaterialRecord]) -> list[RawMaterialRecord]:
+    """Respect Biz-E's name/batch uniqueness while retaining every purchase row."""
     batch_keys = Counter((record.name, record.supplier_batch_number) for record in records)
-    disambiguated: list[ReceiptSourceRecord] = []
+    disambiguated: list[RawMaterialRecord] = []
     for record in records:
         key = (record.name, record.supplier_batch_number)
         if record.supplier_batch_number is None or batch_keys[key] == 1:
             disambiguated.append(record)
             continue
         original_batch = record.supplier_batch_number
-        suffix = f" [legacy-{record.legacy_table}-{record.legacy_id}]"
+        suffix = f" (lot {record.source_id})"
         disambiguated.append(
             replace(
                 record,
                 supplier_batch_number=f"{original_batch[: 255 - len(suffix)]}{suffix}",
                 extra_data={
                     **record.extra_data,
-                    "legacy_supplier_batch_number": original_batch,
+                    "recorded_supplier_batch_number": original_batch,
                     "supplier_batch_number_disambiguated": True,
                 },
             )
@@ -443,259 +491,319 @@ def _disambiguate_reused_supplier_batches(records: list[ReceiptSourceRecord]) ->
     return disambiguated
 
 
-def _operation_source_records(connection: Connection) -> Iterator[HistoricalOperationRecord]:
-    for row in connection.execute(
-        text(
-            """
-            SELECT id, date, flavor_stored_ml, clearing_amount, clearing_abv, flavor_code, flavor_batch,
-                   ingredient_codes
-            FROM product_actions_flavors
-            ORDER BY id
-            """
-        )
-    ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "product_actions_flavors", legacy_id)
-        yield HistoricalOperationRecord(
-            legacy_table="product_actions_flavors",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
-            process_name="Legacy flavour preparation",
-            item_name="Historical flavour intermediate",
-            quantity=_decimal(row["flavor_stored_ml"], "flavor_stored_ml", "product_actions_flavors", legacy_id),
-            unit="mL",
-            inventory_type="work_in_progress",
-            batch_label=_optional_text(row["flavor_batch"]) or _optional_text(row["flavor_code"]),
-            input_references=tuple(("ingredient_code", code) for code in _legacy_list(row["ingredient_codes"])),
-            extra_data={
-                "legacy_flavor_code": _optional_text(row["flavor_code"]),
-                "legacy_flavor_batch": _optional_text(row["flavor_batch"]),
-                "legacy_clearing_amount": str(row["clearing_amount"] or ""),
-                "legacy_clearing_abv_percent": str(row["clearing_abv"] or ""),
-            },
-        )
-    for row in connection.execute(
-        text(
-            """
-            SELECT id, date, flavor_stored_ml, clearing_amount, clearing_abv, flavor_code
-            FROM product_actions_flavor_experiments
-            ORDER BY id
-            """
-        )
-    ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "product_actions_flavor_experiments", legacy_id)
-        flavor_code = _optional_text(row["flavor_code"])
-        yield HistoricalOperationRecord(
-            legacy_table="product_actions_flavor_experiments",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
-            process_name="Legacy flavour preparation",
-            item_name="Historical flavour experiment",
-            quantity=_decimal(
-                row["flavor_stored_ml"], "flavor_stored_ml", "product_actions_flavor_experiments", legacy_id
-            ),
-            unit="mL",
-            inventory_type="work_in_progress",
-            batch_label=flavor_code,
-            input_references=(),
-            extra_data={
-                "legacy_flavor_code": flavor_code,
-                "legacy_clearing_amount": str(row["clearing_amount"] or ""),
-                "legacy_clearing_abv_percent": str(row["clearing_abv"] or ""),
-            },
-        )
+def _customs_lodgement_rows(connection: Connection) -> list[dict[str, Any]]:
+    return list(
+        connection.execute(
+            text(
+                """
+                SELECT id, date, date_period, lodged_volume, lodged_abv, lal, bottles
+                FROM customs_lodgements
+                ORDER BY id
+                """
+            )
+        ).mappings()
+    )
 
-    for row in connection.execute(
-        text(
-            """
-            SELECT id, date, alcohol_used_l, alcohol_used_abv, alcohol_yield_l, alcohol_yield_abv,
-                   experiment_id, flavor_codes, lal
-            FROM product_actions_distillation_experiments
-            ORDER BY id
-            """
-        )
-    ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "product_actions_distillation_experiments", legacy_id)
-        yield_abv = _decimal(
-            row["alcohol_yield_abv"], "alcohol_yield_abv", "product_actions_distillation_experiments", legacy_id
-        )
-        yield HistoricalOperationRecord(
-            legacy_table="product_actions_distillation_experiments",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
-            process_name="Legacy distillation",
-            item_name=f"Historical distillate ({_decimal_label(yield_abv)}% ABV)",
-            quantity=_decimal(
-                row["alcohol_yield_l"], "alcohol_yield_l", "product_actions_distillation_experiments", legacy_id
-            ),
-            unit="L",
-            inventory_type="work_in_progress",
-            batch_label=_optional_text(row["experiment_id"]),
-            input_references=tuple(("flavor_code", code) for code in (row["flavor_codes"] or [])),
-            extra_data={
-                "legacy_experiment_id": _optional_text(row["experiment_id"]),
-                "legacy_alcohol_used_l": str(row["alcohol_used_l"] or ""),
-                "legacy_alcohol_used_abv_percent": str(row["alcohol_used_abv"] or ""),
-                "legacy_yield_abv_percent": str(yield_abv),
-                "legacy_litres_of_alcohol": str(row["lal"] or ""),
-            },
-        )
 
+def _legacy_batches(connection: Connection) -> dict[int, ProductionBatch]:
+    """Assemble one ProductionBatch per VAT from the prior database's flavour/vat/bottling rows."""
+    flavour_dates: dict[str, list[date]] = defaultdict(list)
+    flavour_codes_seen: dict[str, str] = {}
+    flavour_ingredients: dict[str, list[str]] = defaultdict(list)
     for row in connection.execute(
-        text(
-            """
-            SELECT id, date, notes, alcohol_volume, alcohol_abv, lal, container_id
-            FROM product_actions_create_premix
-            ORDER BY id
-            """
-        )
+        text("SELECT id, date, flavor_code, flavor_batch, ingredient_codes FROM product_actions_flavors ORDER BY id")
     ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "product_actions_create_premix", legacy_id)
-        yield HistoricalOperationRecord(
-            legacy_table="product_actions_create_premix",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
-            process_name="Legacy flavour preparation",
-            item_name="Historical premix",
-            quantity=_decimal(row["alcohol_volume"], "alcohol_volume", "product_actions_create_premix", legacy_id),
-            unit="L",
-            inventory_type="work_in_progress",
-            batch_label=_optional_text(row["container_id"]),
-            input_references=(),
-            extra_data={
-                "legacy_container_id": _optional_text(row["container_id"]),
-                "legacy_alcohol_abv_percent": str(row["alcohol_abv"] or ""),
-                "legacy_litres_of_alcohol": str(row["lal"] or ""),
-                "legacy_notes_present": bool(_optional_text(row["notes"])),
-            },
-        )
+        fb = _optional_text(row["flavor_batch"])
+        if not fb:
+            continue
+        flavour_dates[fb].append(_required_date(row["date"], "product_actions_flavors", row["id"]))
+        code = _optional_text(row["flavor_code"])
+        if code:
+            flavour_codes_seen[fb] = code
+        flavour_ingredients[fb].extend(_legacy_list(row["ingredient_codes"]))
 
-    for row in connection.execute(
-        text(
-            """
-            SELECT id, date, product_name, storage_id, bottle_size_ml, abv, bottles_stored, lal
-            FROM product_actions_ex_stock_storage
-            ORDER BY id
-            """
-        )
-    ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "product_actions_ex_stock_storage", legacy_id)
-        bottle_size = _decimal(row["bottle_size_ml"], "bottle_size_ml", "product_actions_ex_stock_storage", legacy_id)
-        abv = _decimal(row["abv"], "abv", "product_actions_ex_stock_storage", legacy_id)
-        yield HistoricalOperationRecord(
-            legacy_table="product_actions_ex_stock_storage",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
-            process_name="Legacy ex-stock storage",
-            item_name=_optional_text(row["product_name"])
-            or f"Whistlebird ex-stock product ({_decimal_label(bottle_size)} mL, {_decimal_label(abv)}% ABV)",
-            quantity=_decimal(row["bottles_stored"], "bottles_stored", "product_actions_ex_stock_storage", legacy_id),
-            unit="units",
-            inventory_type="final_product",
-            batch_label=_optional_text(row["storage_id"]),
-            input_references=(),
-            extra_data={
-                "legacy_storage_id": _optional_text(row["storage_id"]),
-                "legacy_bottle_size_ml": str(bottle_size),
-                "legacy_abv_percent": str(abv),
-                "legacy_litres_of_alcohol": str(row["lal"] or ""),
-            },
-        )
-
-    for row in connection.execute(
-        text("SELECT id, date, abv, vat_batch, volume_amount, flavor_batch FROM product_actions_flavor_vat ORDER BY id")
-    ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "product_actions_flavor_vat", legacy_id)
-        yield HistoricalOperationRecord(
-            legacy_table="product_actions_flavor_vat",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
-            process_name="Legacy flavour vat",
-            item_name="Historical flavour vat",
-            quantity=_decimal(row["volume_amount"], "volume_amount", "product_actions_flavor_vat", legacy_id),
-            unit="L",
-            inventory_type="work_in_progress",
-            batch_label=_optional_text(row["vat_batch"]),
-            input_references=tuple(("flavor_batch", batch) for batch in _legacy_list(row["flavor_batch"])),
-            extra_data={
-                "legacy_vat_batch": _optional_text(row["vat_batch"]),
-                "legacy_vat_abv_percent": str(row["abv"] or ""),
-                "legacy_flavor_batches": list(_legacy_list(row["flavor_batch"])),
-            },
-        )
-
+    bottlings: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in connection.execute(
         text(
             """
             SELECT id, date, bottles_stored, abv, bottle_size_ml, vat_batch, bottle_batch
             FROM product_actions_bottling
-            ORDER BY id
+            ORDER BY date, id
             """
         )
     ).mappings():
-        legacy_id = row["id"]
-        legacy_date = _required_date(row["date"], "product_actions_bottling", legacy_id)
-        bottle_size = _decimal(row["bottle_size_ml"], "bottle_size_ml", "product_actions_bottling", legacy_id)
-        abv = _decimal(row["abv"], "abv", "product_actions_bottling", legacy_id)
-        yield HistoricalOperationRecord(
-            legacy_table="product_actions_bottling",
-            legacy_id=legacy_id,
-            legacy_date=legacy_date,
-            process_name="Legacy bottling",
-            item_name=(f"Whistlebird bottled product ({_decimal_label(bottle_size)} mL, {_decimal_label(abv)}% ABV)"),
-            quantity=_decimal(row["bottles_stored"], "bottles_stored", "product_actions_bottling", legacy_id),
-            unit="units",
-            inventory_type="final_product",
-            batch_label=_optional_text(row["bottle_batch"]),
-            input_references=(
-                (("vat_batch", _optional_text(row["vat_batch"])),) if _optional_text(row["vat_batch"]) else ()
-            ),
-            extra_data={
-                "legacy_bottle_batch": _optional_text(row["bottle_batch"]),
-                "legacy_vat_batch": _optional_text(row["vat_batch"]),
-                "legacy_bottle_size_ml": str(bottle_size),
-                "legacy_abv_percent": str(abv),
-                "legacy_total_volume_ml": str(
-                    (
-                        bottle_size
-                        * _decimal(row["bottles_stored"], "bottles_stored", "product_actions_bottling", legacy_id)
-                    ).quantize(Decimal("0.0001"))
+        vb = _optional_text(row["vat_batch"])
+        if not vb:
+            continue
+        bottlings[vb].append(
+            {
+                "date": _required_date(row["date"], "product_actions_bottling", row["id"]).isoformat(),
+                "bottles": str(
+                    _decimal(row["bottles_stored"], "bottles_stored", "product_actions_bottling", row["id"])
                 ),
+                "bottle_size_ml": str(
+                    _decimal(row["bottle_size_ml"], "bottle_size_ml", "product_actions_bottling", row["id"])
+                ),
+                "abv_percent": str(_decimal(row["abv"], "abv", "product_actions_bottling", row["id"])),
+                "bottle_batch": _optional_text(row["bottle_batch"]),
+                "source_ref": {"table": "product_actions_bottling", "id": row["id"]},
+            }
+        )
+
+    batches: dict[int, ProductionBatch] = {}
+    for row in connection.execute(
+        text("SELECT id, date, abv, vat_batch, volume_amount, flavor_batch FROM product_actions_flavor_vat ORDER BY id")
+    ).mappings():
+        vat_id = row["id"]
+        vat_batch = _optional_text(row["vat_batch"]) or f"VAT{vat_id}"
+        fill_date = _required_date(row["date"], "product_actions_flavor_vat", vat_id)
+        flavour_batches = _legacy_list(row["flavor_batch"])
+        mac_dates = [d for fb in flavour_batches for d in flavour_dates.get(fb, [])]
+        maceration = min(mac_dates) if mac_dates else fill_date
+        distilling = max(mac_dates) if mac_dates else fill_date
+        codes = sorted({c for fb in flavour_batches for c in flavour_ingredients.get(fb, [])})
+        product_line = "rosella" if vat_batch.upper().startswith("WBRS") else "wildflower"
+        bots = bottlings.get(vat_batch, [])
+        first_bottle = date.fromisoformat(bots[0]["date"]) if bots else None
+        last_bottle = date.fromisoformat(bots[-1]["date"]) if bots else None
+        if product_line == "rosella":
+            step_dates = {
+                "rhubarb_maceration": BatchStep("rhubarb_maceration", maceration, "resolved_by_context"),
+                "aging": BatchStep("aging", fill_date, "clean"),
+                "bottling": BatchStep("bottling", first_bottle, "clean" if first_bottle else "derived"),
+                "labelling": BatchStep("labelling", last_bottle, "derived"),
+            }
+        else:
+            step_dates = {
+                "maceration": BatchStep("maceration", maceration, "clean" if mac_dates else "derived"),
+                "distilling": BatchStep("distilling", distilling, "clean" if mac_dates else "derived"),
+                "aging": BatchStep("aging", fill_date, "clean"),
+                "bottling": BatchStep("bottling", first_bottle, "clean" if first_bottle else "derived"),
+                "labelling": BatchStep("labelling", last_bottle, "derived"),
+            }
+        batches[vat_id] = ProductionBatch(
+            global_vat=vat_id,
+            product_line=product_line,
+            batch_label=vat_batch,
+            steps=step_dates,
+            vat_volume_l=_optional_decimal(row["volume_amount"], "volume_amount", "product_actions_flavor_vat", vat_id),
+            vat_abv=_optional_decimal(row["abv"], "abv", "product_actions_flavor_vat", vat_id),
+            bottlings=tuple(bots),
+            ingredient_codes=tuple(codes),
+            base_vat=None,
+            extra_data={
+                "flavour_batches": list(flavour_batches),
+                "recipe_code": flavour_codes_seen.get(flavour_batches[0]) if flavour_batches else None,
+            },
+        )
+    return batches
+
+
+def _trial_records(connection: Connection) -> Iterator[TrialRecord]:
+    consumed_by_code: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in connection.execute(
+        text(
+            "SELECT id, date, flavor_code, number_of_bottles, abv, bottle_size_ml "
+            "FROM product_actions_samples_consumed ORDER BY id"
+        )
+    ).mappings():
+        code = _optional_text(row["flavor_code"]) or ""
+        consumed_by_code[code].append(
+            {
+                "date": _required_date(row["date"], "product_actions_samples_consumed", row["id"]).isoformat(),
+                "bottles": str(row["number_of_bottles"] or ""),
+                "abv_percent": str(row["abv"] or ""),
+                "bottle_size_ml": str(row["bottle_size_ml"] or ""),
+                "source_ref": {"table": "product_actions_samples_consumed", "id": row["id"]},
+            }
+        )
+
+    for row in connection.execute(
+        text(
+            "SELECT id, date, flavor_code, flavor_stored_ml, clearing_amount, clearing_abv "
+            "FROM product_actions_flavor_experiments ORDER BY id"
+        )
+    ).mappings():
+        source_id = row["id"]
+        code = _optional_text(row["flavor_code"]) or f"experiment-{source_id}"
+        workflow = GG_TRIAL_WORKFLOW if code.upper().startswith("GG") else WB_TRIAL_WORKFLOW
+        yield TrialRecord(
+            workflow_name=workflow,
+            source_table="product_actions_flavor_experiments",
+            source_id=source_id,
+            source_date=_required_date(row["date"], "product_actions_flavor_experiments", source_id),
+            label=code,
+            distillate_ml=_optional_decimal(
+                row["clearing_amount"], "clearing_amount", "product_actions_flavor_experiments", source_id
+            ),
+            library_ml=_optional_decimal(
+                row["flavor_stored_ml"], "flavor_stored_ml", "product_actions_flavor_experiments", source_id
+            ),
+            consumed=tuple(consumed_by_code.get(code, [])),
+            extra_data={"recipe_code": code, "clearing_abv_percent": str(row["clearing_abv"] or "")},
+        )
+
+    for row in connection.execute(
+        text(
+            "SELECT id, date, experiment_id, alcohol_yield_l, alcohol_yield_abv, alcohol_used_l, lal, notes "
+            "FROM product_actions_distillation_experiments ORDER BY id"
+        )
+    ).mappings():
+        source_id = row["id"]
+        label = _optional_text(row["experiment_id"]) or f"X{source_id}"
+        yield_l = _optional_decimal(
+            row["alcohol_yield_l"], "alcohol_yield_l", "product_actions_distillation_experiments", source_id
+        )
+        library_ml = (yield_l * Decimal(1000)) if yield_l is not None else None
+        yield TrialRecord(
+            workflow_name=SGS_TRIAL_WORKFLOW,
+            source_table="product_actions_distillation_experiments",
+            source_id=source_id,
+            source_date=_required_date(row["date"], "product_actions_distillation_experiments", source_id),
+            label=label,
+            distillate_ml=library_ml,
+            library_ml=library_ml,
+            consumed=(),
+            extra_data={
+                "experiment_id": label,
+                "yield_abv_percent": str(row["alcohol_yield_abv"] or ""),
+                "alcohol_used_l": str(row["alcohol_used_l"] or ""),
+                "litres_of_alcohol": str(row["lal"] or ""),
             },
         )
 
+    for row in connection.execute(
+        text(
+            "SELECT id, date, flavor_code, number_of_bottles, abv, bottle_size_ml "
+            "FROM product_actions_samples_created ORDER BY id"
+        )
+    ).mappings():
+        source_id = row["id"]
+        code = _optional_text(row["flavor_code"]) or f"sample-{source_id}"
+        bottles = _optional_decimal(
+            row["number_of_bottles"], "number_of_bottles", "product_actions_samples_created", source_id
+        )
+        size = _optional_decimal(row["bottle_size_ml"], "bottle_size_ml", "product_actions_samples_created", source_id)
+        library_ml = (bottles * size) if (bottles is not None and size is not None) else None
+        yield TrialRecord(
+            workflow_name=WB_TRIAL_WORKFLOW,
+            source_table="product_actions_samples_created",
+            source_id=source_id,
+            source_date=_required_date(row["date"], "product_actions_samples_created", source_id),
+            label=code,
+            distillate_ml=library_ml,
+            library_ml=library_ml,
+            consumed=tuple(consumed_by_code.get(code, [])),
+            extra_data={"recipe_code": code, "abv_percent": str(row["abv"] or ""), "sample_batch": True},
+        )
 
-def _sample_source_records(connection: Connection) -> Iterator[HistoricalSampleRecord]:
-    for table in ("product_actions_samples_created", "product_actions_samples_consumed"):
-        for row in connection.execute(
-            text(
-                f"""
-                SELECT id, date, flavor_code, number_of_bottles, abv, bottle_size_ml, lal
-                FROM {_identifier(table)}
-                ORDER BY id
-                """
-            )
-        ).mappings():
-            legacy_id = row["id"]
-            legacy_date = _required_date(row["date"], table, legacy_id)
-            yield HistoricalSampleRecord(
-                legacy_table=table,
-                legacy_id=legacy_id,
-                legacy_date=legacy_date,
-                flavor_code=_optional_text(row["flavor_code"]),
-                details={
-                    "sample_action": "created" if table.endswith("created") else "consumed",
-                    "legacy_number_of_bottles": str(row["number_of_bottles"] or ""),
-                    "legacy_abv_percent": str(row["abv"] or ""),
-                    "legacy_bottle_size_ml": str(row["bottle_size_ml"] or ""),
-                    "legacy_litres_of_alcohol": str(row["lal"] or ""),
+
+# --------------------------------------------------------------------------------------
+# Curated manifest (post-cutoff batches recorded only in the production sheet)
+# --------------------------------------------------------------------------------------
+
+
+def _load_manifest(manifest_path: Path) -> tuple[list[ProductionBatch], list[dict[str, Any]]]:
+    """Load and validate the curated per-batch production manifest.
+
+    This never reads the live Google Sheet: the manifest at ``manifest_path`` is a frozen,
+    human-reviewed JSON file that a founder edits directly to correct a date, quantity, or
+    link before rerunning. A step whose ``confidence`` is not in STEP_DATE_CONFIDENCE, or a
+    batch flagged ``exclude``, is skipped by the apply action and reported by the dry run.
+    """
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    batches: list[ProductionBatch] = []
+    excluded: list[dict[str, Any]] = list(payload.get("excluded", []))
+    for entry in payload.get("records", []):
+        label = str(entry.get("batch_label") or entry.get("global_vat"))
+        if entry.get("exclude"):
+            excluded.append({"batch_label": label, "reason": entry.get("notes", "excluded in manifest")})
+            continue
+        global_vat = int(entry["global_vat"])
+        product_line = entry["product"]
+        if product_line not in PRODUCT_LINE_WORKFLOW:
+            raise ValueError(f"manifest batch {label} has unknown product {product_line!r}")
+        step_keys = RHUBARB_GIN_STEP_KEYS if product_line == "rosella" else BOTANICAL_GIN_STEP_KEYS
+        raw_steps = entry.get("steps", {})
+        steps: dict[str, BatchStep] = {}
+        unresolved: list[str] = []
+        for key in step_keys:
+            spec = raw_steps.get(key) or {}
+            confidence = spec.get("confidence", "derived")
+            iso = spec.get("date")
+            step_date = date.fromisoformat(iso) if iso else None
+            if confidence not in STEP_DATE_CONFIDENCE:
+                unresolved.append(key)
+            steps[key] = BatchStep(key, step_date, confidence, dict(spec.get("data") or {}))
+        if unresolved:
+            excluded.append({"batch_label": label, "reason": f"unresolved step dates: {', '.join(unresolved)}"})
+            continue
+        bottlings = tuple(
+            {
+                "date": b["date"],
+                "bottles": str(_decimal(b["bottles"], "bottles", PRODUCTION_SOURCE_TABLE, global_vat)),
+                "estimated": bool(b.get("estimated")),
+                "source_ref": {"table": PRODUCTION_SOURCE_TABLE, "id": b.get("sheet_row", global_vat)},
+            }
+            for b in entry.get("bottlings", [])
+        )
+        batches.append(
+            ProductionBatch(
+                global_vat=global_vat,
+                product_line=product_line,
+                batch_label=label,
+                steps=steps,
+                vat_volume_l=_optional_decimal(
+                    entry.get("vat_volume_l"), "vat_volume_l", PRODUCTION_SOURCE_TABLE, global_vat
+                ),
+                vat_abv=_optional_decimal(entry.get("vat_abv"), "vat_abv", PRODUCTION_SOURCE_TABLE, global_vat),
+                bottlings=bottlings,
+                ingredient_codes=(),
+                base_vat=entry.get("rosella_base_vat"),
+                extra_data={
+                    "sheet_rows": entry.get("sheet_rows"),
+                    "notes": entry.get("notes"),
+                    "from_manifest": True,
                 },
             )
+        )
+    return batches, excluded
+
+
+def _merge_batches(legacy: dict[int, ProductionBatch], manifest: list[ProductionBatch]) -> list[ProductionBatch]:
+    """Overlay manifest batches onto the prior-database batches, keyed by global VAT number.
+
+    A manifest batch for a VAT the prior database already has (e.g. VAT23/24/26, distilled
+    in the old system but bottled after the cutoff) fills in only the steps the old data is
+    missing -- it never rewrites a step the prior database recorded. A manifest batch for a
+    VAT the old system never had (Solstice, VAT27+) is created whole.
+    """
+    merged: dict[int, ProductionBatch] = dict(legacy)
+    for batch in manifest:
+        base = merged.get(batch.global_vat)
+        if base is None:
+            merged[batch.global_vat] = batch
+            continue
+        steps = dict(base.steps)
+        for key, step in batch.steps.items():
+            existing = steps.get(key)
+            if existing is None or existing.step_date is None:
+                steps[key] = step
+        merged[batch.global_vat] = replace(
+            base,
+            steps=steps,
+            bottlings=base.bottlings or batch.bottlings,
+            vat_volume_l=base.vat_volume_l or batch.vat_volume_l,
+            vat_abv=base.vat_abv or batch.vat_abv,
+            base_vat=base.base_vat or batch.base_vat,
+            extra_data={**base.extra_data, "manifest_continuation": True},
+        )
+    return [merged[key] for key in sorted(merged)]
+
+
+# --------------------------------------------------------------------------------------
+# Profile / dry-run (read-only)
+# --------------------------------------------------------------------------------------
 
 
 def _date_columns(connection: Connection) -> Iterator[tuple[str, str]]:
@@ -717,7 +825,6 @@ def _legacy_profile(connection: Connection) -> dict[str, Any]:
         table: connection.execute(text(f"SELECT count(*) FROM {_identifier(table)}")).scalar_one()
         for table in LEGACY_TABLES
     }
-
     date_ranges: dict[str, dict[str, Any]] = {}
     for table, column in _date_columns(connection):
         if table not in LEGACY_TABLES:
@@ -733,58 +840,8 @@ def _legacy_profile(connection: Connection) -> dict[str, Any]:
             "min": _json_value(result[1]),
             "max": _json_value(result[2]),
         }
-
-    link_metrics = connection.execute(
-        text(
-            """
-            SELECT 'bottling_vat_batches' AS metric,
-                   count(DISTINCT nullif(trim(vat_batch), '')) AS value
-            FROM product_actions_bottling
-            UNION ALL
-            SELECT 'bottling_bottle_batches', count(DISTINCT nullif(trim(bottle_batch), ''))
-            FROM product_actions_bottling
-            UNION ALL
-            SELECT 'sales_bottle_batches', count(DISTINCT nullif(trim(bottle_batch), ''))
-            FROM sales_product
-            UNION ALL
-            SELECT 'bottling_to_sales_batch_matches', count(*)
-            FROM product_actions_bottling b
-            JOIN sales_product s
-              ON nullif(trim(b.bottle_batch), '') = nullif(trim(s.bottle_batch), '')
-            UNION ALL
-            SELECT 'bottling_to_flavour_vat_matches', count(*)
-            FROM product_actions_bottling b
-            JOIN product_actions_flavor_vat f
-              ON nullif(trim(b.vat_batch), '') = nullif(trim(f.vat_batch), '')
-            UNION ALL
-            SELECT 'sales_json_product_payloads', count(*) FILTER (WHERE products IS NOT NULL)
-            FROM sales_product
-            UNION ALL
-            SELECT 'sales_json_product_entries', count(*)
-            FROM sales_product
-            CROSS JOIN LATERAL jsonb_each(coalesce(products -> 'products', '{}'::jsonb))
-            """
-        )
-    ).tuples()
-
     source_timezone = connection.execute(text("SHOW TimeZone")).scalar_one()
-    source_timestamp_column_count = connection.execute(
-        text(
-            """
-            SELECT count(*)
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND data_type IN ('timestamp with time zone', 'timestamp without time zone')
-            """
-        )
-    ).scalar_one()
-    return {
-        "source_timezone": source_timezone,
-        "source_timestamp_column_count": source_timestamp_column_count,
-        "table_counts": table_counts,
-        "date_ranges": date_ranges,
-        "link_metrics": dict(link_metrics.all()),
-    }
+    return {"source_timezone": source_timezone, "table_counts": table_counts, "date_ranges": date_ranges}
 
 
 def _target_profile(connection: Connection, requested_org_name: str) -> dict[str, Any]:
@@ -802,289 +859,217 @@ def _target_profile(connection: Connection, requested_org_name: str) -> dict[str
     }
 
 
+def build_profile(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, Any]:
+    with create_engine(legacy_url).connect() as legacy_connection:
+        legacy = _legacy_profile(legacy_connection)
+    with create_engine(target_url).connect() as target_connection:
+        target = _target_profile(target_connection, requested_org_name)
+    return {"legacy": legacy, "target": target}
+
+
 def build_core_dry_run(legacy_url: str) -> dict[str, Any]:
-    """Validate the first import tranche without writing source or target data."""
+    """Validate the deterministic raw-material and Customs tranche without writing."""
     proposed: list[ProposedCoreRecord] = []
     customs_lodgements = 0
-
     with create_engine(legacy_url).connect() as connection:
-        gns_rows = connection.execute(
-            text("SELECT id, date, gns_purchased_l FROM purchases_gns ORDER BY id")
-        ).mappings()
-        for row in gns_rows:
-            legacy_id = row["id"]
-            legacy_date = _required_date(row["date"], "purchases_gns", legacy_id)
+        for record in _disambiguate_reused_supplier_batches(list(_raw_material_records(connection))):
             proposed.append(
                 ProposedCoreRecord(
-                    legacy_table="purchases_gns",
-                    legacy_id=legacy_id,
-                    legacy_date=legacy_date,
-                    target_kind="raw_material_addition",
-                    quantity=_decimal(row["gns_purchased_l"], "gns_purchased_l", "purchases_gns", legacy_id),
-                    unit="L",
-                    derived_at=_derived_timestamp(legacy_date),
+                    source_table=record.source_table,
+                    source_id=record.source_id,
+                    source_date=record.source_date,
+                    target_kind="raw_material_inventory",
+                    quantity=record.quantity,
+                    unit=record.unit,
+                    derived_at=_derived_timestamp(record.source_date),
                 )
             )
-
-        bottle_rows = connection.execute(
-            text("SELECT id, date, empty_bottles_stored FROM purchases_empty_bottles ORDER BY id")
-        ).mappings()
-        for row in bottle_rows:
-            legacy_id = row["id"]
-            legacy_date = _required_date(row["date"], "purchases_empty_bottles", legacy_id)
-            proposed.append(
-                ProposedCoreRecord(
-                    legacy_table="purchases_empty_bottles",
-                    legacy_id=legacy_id,
-                    legacy_date=legacy_date,
-                    target_kind="raw_material_addition",
-                    quantity=_decimal(
-                        row["empty_bottles_stored"], "empty_bottles_stored", "purchases_empty_bottles", legacy_id
-                    ),
-                    unit="units",
-                    derived_at=_derived_timestamp(legacy_date),
-                )
-            )
-
-        ingredient_rows = connection.execute(
-            text("SELECT id, date, ingredients_amount FROM purchases_ingredients ORDER BY id")
-        ).mappings()
-        for row in ingredient_rows:
-            legacy_id = row["id"]
-            legacy_date = _required_date(row["date"], "purchases_ingredients", legacy_id)
-            proposed.append(
-                ProposedCoreRecord(
-                    legacy_table="purchases_ingredients",
-                    legacy_id=legacy_id,
-                    legacy_date=legacy_date,
-                    target_kind="raw_material_addition",
-                    quantity=_decimal(
-                        row["ingredients_amount"], "ingredients_amount", "purchases_ingredients", legacy_id
-                    ),
-                    unit="g",
-                    derived_at=_derived_timestamp(legacy_date),
-                )
-            )
-
-        lodgement_rows = connection.execute(
-            text("SELECT id, date, lodged_volume, lodged_abv, lal FROM customs_lodgements ORDER BY id")
-        ).mappings()
-        for row in lodgement_rows:
-            legacy_id = row["id"]
-            legacy_date = _required_date(row["date"], "customs_lodgements", legacy_id)
-            _decimal(row["lodged_volume"], "lodged_volume", "customs_lodgements", legacy_id)
-            _decimal(row["lodged_abv"], "lodged_abv", "customs_lodgements", legacy_id)
-            _decimal(row["lal"], "lal", "customs_lodgements", legacy_id)
+        for row in _customs_lodgement_rows(connection):
+            _decimal(row["lal"], "lal", "customs_lodgements", row["id"])
             customs_lodgements += 1
-
-    by_kind: dict[str, int] = {}
     by_source: dict[str, int] = {}
     for record in proposed:
-        by_kind[record.target_kind] = by_kind.get(record.target_kind, 0) + 1
-        by_source[record.legacy_table] = by_source.get(record.legacy_table, 0) + 1
+        by_source[record.source_table] = by_source.get(record.source_table, 0) + 1
     return {
         "dry_run": True,
         "timestamp_policy": "derived_noon_pacific_auckland",
-        "proposed_records": by_kind,
-        "proposed_records_by_source": by_source,
+        "proposed_raw_material_items": len(proposed),
+        "proposed_raw_material_items_by_source": by_source,
         "validated_compliance_records": {"customs_lodgements": customs_lodgements},
         "notes": [
             "No target rows were written.",
-            "Ingredient quantities are grams, confirmed from the deployed Whistlebird v1 form.",
-            "Batch-linked production and sales rows are intentionally excluded from this tranche.",
+            "Ingredient quantities are grams, confirmed from the deployed Whistlebird form.",
+            "Raw materials load as dated inventory only -- no workflow or execution.",
+        ],
+    }
+
+
+def build_production_dry_run(legacy_url: str, manifest_path: Path | None) -> dict[str, Any]:
+    """Report the batch executions the load would build, by product and step, without writing."""
+    with create_engine(legacy_url).connect() as connection:
+        legacy = _legacy_batches(connection)
+        trials = list(_trial_records(connection))
+    manifest_batches: list[ProductionBatch] = []
+    excluded: list[dict[str, Any]] = []
+    if manifest_path and manifest_path.exists():
+        manifest_batches, excluded = _load_manifest(manifest_path)
+    batches = _merge_batches(legacy, manifest_batches)
+    by_workflow = Counter(batch.workflow_name for batch in batches)
+    derived_steps = Counter(
+        step.key
+        for batch in batches
+        for step in batch.steps.values()
+        if step.confidence == "derived" or step.step_date is None
+    )
+    return {
+        "dry_run": True,
+        "proposed_batch_executions": dict(sorted(by_workflow.items())),
+        "proposed_trial_executions": dict(sorted(Counter(t.workflow_name for t in trials).items())),
+        "steps_with_derived_dates": dict(sorted(derived_steps.items())),
+        "excluded_batches": len(excluded),
+        "notes": [
+            "No target rows were written.",
+            "One execution per VAT batch; every step carries its own resolved date.",
+            "Steps with a derived date inherit the neighbouring recorded step's date and say so.",
+        ],
+    }
+
+
+def build_manifest_dry_run(manifest_path: Path) -> dict[str, Any]:
+    batches, excluded = _load_manifest(manifest_path)
+    return {
+        "dry_run": True,
+        "manifest_batches": len(batches),
+        "manifest_batches_by_product": dict(sorted(Counter(b.product_line for b in batches).items())),
+        "excluded_batches": len(excluded),
+        "excluded_reasons": [row.get("reason") for row in excluded],
+        "notes": [
+            "Aggregate-only report: no batch labels, ingredient names, or quantities are emitted.",
+            "Excluded entries need founder confirmation before they can load; see the decisions log.",
         ],
     }
 
 
 def build_traceability_dry_run(legacy_url: str) -> dict[str, Any]:
-    """Measure legacy production/sales linkage without inferring missing batch edges."""
+    """Measure database-evidenced production/sales linkage without inferring missing edges."""
     with create_engine(legacy_url).connect() as connection:
         metrics = connection.execute(
             text(
                 """
-                SELECT 'flavour_actions' AS metric, count(*) AS value
-                FROM product_actions_flavors
-                UNION ALL
-                SELECT 'flavour_vat_actions', count(*)
-                FROM product_actions_flavor_vat
-                UNION ALL
-                SELECT 'premix_actions', count(*)
-                FROM product_actions_create_premix
-                UNION ALL
-                SELECT 'distillation_actions', count(*)
-                FROM product_actions_distillation_experiments
-                UNION ALL
-                SELECT 'bottling_actions', count(*)
-                FROM product_actions_bottling
-                UNION ALL
-                SELECT 'bottling_rows_with_flavour_vat_match', count(*)
+                SELECT 'flavour_actions' AS metric, count(*) AS value FROM product_actions_flavors
+                UNION ALL SELECT 'flavour_vat_actions', count(*) FROM product_actions_flavor_vat
+                UNION ALL SELECT 'bottling_actions', count(*) FROM product_actions_bottling
+                UNION ALL SELECT 'bottling_rows_with_flavour_vat_match', count(*)
                 FROM product_actions_bottling b
                 WHERE EXISTS (
-                    SELECT 1
-                    FROM product_actions_flavor_vat f
+                    SELECT 1 FROM product_actions_flavor_vat f
                     WHERE nullif(trim(b.vat_batch), '') = nullif(trim(f.vat_batch), '')
                 )
-                UNION ALL
-                SELECT 'flavour_vat_rows_with_flavour_match', count(*)
-                FROM product_actions_flavor_vat v
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM product_actions_flavors f
-                    CROSS JOIN LATERAL unnest(string_to_array(trim(both '{}' FROM v.flavor_batch), ',')) ref(flavor_batch)
-                    WHERE f.flavor_batch = trim(both '"' FROM ref.flavor_batch)
-                )
-                UNION ALL
-                SELECT 'bottling_rows_with_manual_sales_batch_match', count(*)
-                FROM product_actions_bottling b
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM sales_product s
-                    CROSS JOIN LATERAL unnest(string_to_array(trim(both '{}' FROM s.bottle_batch), ',')) ref(bottle_batch)
-                    WHERE b.bottle_batch = trim(both '"' FROM ref.bottle_batch)
-                )
-                UNION ALL
-                SELECT 'sales_rows', count(*)
-                FROM sales_product
-                UNION ALL
-                SELECT 'manual_sales_rows_with_bottling_match', count(DISTINCT s.id)
-                FROM sales_product s
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM product_actions_bottling b
-                    CROSS JOIN LATERAL unnest(string_to_array(trim(both '{}' FROM s.bottle_batch), ',')) ref(bottle_batch)
-                    WHERE b.bottle_batch = trim(both '"' FROM ref.bottle_batch)
-                )
-                UNION ALL
-                SELECT 'sales_product_entries', count(*)
-                FROM sales_product
-                CROSS JOIN LATERAL jsonb_each(coalesce(products -> 'products', '{}'::jsonb))
-                UNION ALL
-                SELECT 'sales_product_entries_with_batch', count(*)
-                FROM sales_product
-                CROSS JOIN LATERAL jsonb_each(coalesce(products -> 'products', '{}'::jsonb)) item
-                WHERE nullif(trim(item.value ->> 'bottle_batch'), '') IS NOT NULL
+                UNION ALL SELECT 'sales_rows', count(*) FROM sales_product
                 """
             )
         ).all()
-    values = dict(metrics)
-    return {
-        "dry_run": True,
-        "metrics": values,
-        "ready_edges": {
-            "flavour_to_flavour_vat": values["flavour_vat_rows_with_flavour_match"],
-            "bottling_to_flavour_vat": values["bottling_rows_with_flavour_vat_match"],
-            "bottling_to_manual_sales": values["manual_sales_rows_with_bottling_match"],
-        },
-        "held_edges": {
-            "invoice_derived_sales_needing_reconciliation": values["sales_rows"]
-            - values["manual_sales_rows_with_bottling_match"],
-        },
-        "notes": [
-            "Only database-evidenced batch matches are eligible for automatic traceability edges.",
-            "No production, inventory, process, execution or sales rows were written.",
-            "Sales product payloads remain available for Xero reconciliation after connection.",
-        ],
-    }
+    return {"dry_run": True, "metrics": dict(metrics), "notes": ["No rows were written."]}
 
 
-def build_production_dry_run(legacy_url: str) -> dict[str, Any]:
-    """Validate the directly evidenced flavour/vat/bottling production tranche without writes."""
-    with create_engine(legacy_url).connect() as connection:
-        operations = list(_operation_source_records(connection))
-    by_source = Counter(operation.legacy_table for operation in operations)
-    references = Counter(kind for operation in operations for kind, _ in operation.input_references)
-    return {
-        "dry_run": True,
-        "proposed_completed_executions": dict(sorted(by_source.items())),
-        "proposed_input_references": dict(sorted(references.items())),
-        "operations_without_direct_input_reference": sum(not operation.input_references for operation in operations),
-        "notes": [
-            "No target rows were written.",
-            "Only exact legacy ingredient-code, flavour-code, flavour-batch and vat-batch references are eligible for Core inputs.",
-            "Input quantities are not inferred where the v1 operation omitted them.",
-        ],
-    }
+# --------------------------------------------------------------------------------------
+# Writers (scoped to whistlebird_test)
+# --------------------------------------------------------------------------------------
 
 
-def apply_core_receipts_and_lodgements(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, int]:
-    """Import the deterministic v1 purchase and Customs rows into existing Core/Compliant tables.
-
-    The target guard deliberately permits only the disposable Whistlebird test tenant.  Reruns
-    identify rows by their v1 table/id provenance stored in existing JSONB metadata; no migration
-    ledger or schema extension is introduced.
-    """
+def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[str, list[str]]:
+    """Create one workflow per product plus the recipe-trial workflows, each with its steps."""
     if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Core import is only permitted for {RESET_ORG_NAME!r}")
+        raise ValueError(f"Workflow setup is only permitted for {RESET_ORG_NAME!r}")
 
-    from app.core.db.models.execution_step import ExecutionStep
-    from app.core.db.models.inventory_item import InventoryItem
-    from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
-    from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401 - resolves ORM relationship
-    from app.core.db.models.process import Process
+    from app.core.db.models.process import Process, ProcessCategory
     from app.core.db.models.step import Step
-    from app.core.db.repositories.execution_repo import ExecutionRepository
-    from app.core.db.repositories.inventory_repo import InventoryRepository
-    from app.features.compliant.models.compliance_record import ComplianceRecord
-
-    with create_engine(legacy_url).connect() as legacy_connection:
-        receipts = _disambiguate_reused_supplier_batches(list(_receipt_source_records(legacy_connection)))
-        lodgements = list(
-            legacy_connection.execute(
-                text(
-                    """
-                    SELECT id, date, date_period, lodged_volume, lodged_abv, lal, bottles
-                    FROM customs_lodgements
-                    ORDER BY id
-                    """
-                )
-            ).mappings()
-        )
+    from app.core.db.repositories.process_repo import ProcessRepository
 
     engine = create_engine(target_url)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
     scope = ExitStack()
-    imported_receipts = 0
-    skipped_receipts = 0
-    imported_lodgements = 0
-    skipped_lodgements = 0
+    created: list[str] = []
+    existing: list[str] = []
+    repaired: list[str] = []
     try:
         org = _enter_target_tenant_scope(scope, session, requested_org_name)
-        # Repository calls retain their normal Python-side write authorisation; this
-        # transaction-local GUC supplies the matching PostgreSQL trigger authorisation.
-        session.execute(text("SELECT set_config('app.inventory_qty_guard', '1', true)"))
-        processes = {
-            process.name: process
-            for process in session.query(Process)
-            .filter(Process.org_id == org.id, Process.name.in_([record.process_name for record in receipts]))
-            .all()
-        }
-        missing_processes = sorted({record.process_name for record in receipts} - set(processes))
-        if missing_processes:
-            raise RuntimeError(f"Missing historical process templates: {', '.join(missing_processes)}")
+        repository = ProcessRepository(session)
+        for name, (_shape, steps) in PRODUCT_WORKFLOWS.items():
+            process = session.query(Process).filter(Process.org_id == org.id, Process.name == name).one_or_none()
+            step_count = 0
+            if process is not None:
+                step_count = session.query(Step).filter(Step.process_id == process.id).count()
+                if step_count == len(steps):
+                    existing.append(name)
+                    continue
+                repaired.append(name)
+            else:
+                process = repository.create_process(
+                    org_id=org.id,
+                    name=name,
+                    description=f"{name}: maceration through packaging, one execution per batch.",
+                    category=ProcessCategory.MANUFACTURING,
+                    is_draft=False,
+                )
+                created.append(name)
+            for index, (step_name, description, output_name, unit) in enumerate(steps, start=1):
+                if step_count and index <= step_count:
+                    continue
+                outputs = [{"id": str(uuid4()), "name": output_name, "unit": unit}] if output_name else []
+                repository.add_step(
+                    process_id=process.id,
+                    org_id=org.id,
+                    step_number=index,
+                    position=index * 1000,
+                    name=step_name,
+                    description=description,
+                    outputs=outputs,
+                    execution_prompts=[],
+                )
+        return {"created": created, "existing": existing, "repaired": repaired}
+    finally:
+        scope.close()
+        session.close()
+        engine.dispose()
 
-        execution_repository = ExecutionRepository(session)
+
+def apply_raw_material_inventory(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, int]:
+    """Load purchase rows as dated raw-material inventory items and additions -- no workflow."""
+    if requested_org_name != RESET_ORG_NAME:
+        raise ValueError(f"Raw-material load is only permitted for {RESET_ORG_NAME!r}")
+
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
+    from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401 - resolves ORM relationship
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    with create_engine(legacy_url).connect() as legacy_connection:
+        records = _disambiguate_reused_supplier_batches(list(_raw_material_records(legacy_connection)))
+
+    engine = create_engine(target_url)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    scope = ExitStack()
+    imported = 0
+    skipped = 0
+    try:
+        org = _enter_target_tenant_scope(scope, session, requested_org_name)
+        session.execute(text("SELECT set_config('app.inventory_qty_guard', '1', true)"))
         inventory_repository = InventoryRepository(session)
-        for record in receipts:
-            source = {"table": record.legacy_table, "id": record.legacy_id}
+        for record in records:
+            marker = f"raw-{record.source_table}-{record.source_id}"
             existing = (
                 session.query(InventoryItem.id)
-                .filter(InventoryItem.org_id == org.id, InventoryItem.extra_data.contains({"legacy_source": source}))
+                .filter(
+                    InventoryItem.org_id == org.id,
+                    InventoryItem.extra_data[IMPORT_MARKER_KEY].astext == marker,
+                )
                 .first()
             )
             if existing:
-                skipped_receipts += 1
+                skipped += 1
                 continue
-
-            process = processes[record.process_name]
-            execution = execution_repository.create_execution(org.id, process.id, commit=False)
-            execution_step = (
-                session.query(ExecutionStep)
-                .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.org_id == org.id)
-                .one()
-            )
-            step = session.query(Step).filter(Step.id == execution_step.step_id).one()
-            output_id = step.outputs[0]["id"]
-            provenance = _legacy_provenance(record.legacy_table, record.legacy_id, record.legacy_date)
+            provenance = _import_marker(marker, record.source_table, record.source_id)
             item = inventory_repository.create_inventory_item(
                 org_id=org.id,
                 name=record.name,
@@ -1092,40 +1077,13 @@ def apply_core_receipts_and_lodgements(legacy_url: str, target_url: str, request
                 unit=record.unit,
                 inventory_type="raw_material",
                 supplier=record.supplier,
-                purchase_date=record.legacy_date,
+                purchase_date=record.source_date,
                 supplier_batch_number=record.supplier_batch_number,
                 expiry_date=record.expiry_date,
-                source_execution_id=execution.id,
-                source_execution_step_id=execution_step.id,
-                source_output_id=output_id,
-                source_step_name=step.name,
-                extra_data={**provenance, **record.extra_data, "historical_import": True},
+                extra_data={**provenance, **record.extra_data},
                 commit=False,
             )
-            execution_repository.complete_step(
-                execution_step.id,
-                org.id,
-                actual_outputs=[
-                    {
-                        "inventory_item_id": str(item.id),
-                        "name": item.name,
-                        "quantity": str(record.quantity),
-                        "unit": record.unit,
-                    }
-                ],
-                execution_data={**provenance, "historical_import": True},
-                completed_at_override=_derived_timestamp(record.legacy_date),
-                commit=False,
-            )
-            business_at = _derived_timestamp(record.legacy_date)
-            execution.started_at = business_at
-            execution.completed_at = business_at
-            execution.created_at = business_at
-            execution.updated_at = business_at
-            execution_step.started_at = business_at
-            execution_step.completed_at = business_at
-            execution_step.created_at = business_at
-            execution_step.updated_at = business_at
+            business_at = _derived_timestamp(record.source_date)
             item.created_at = business_at
             item.updated_at = business_at
             session.add(
@@ -1136,66 +1094,87 @@ def apply_core_receipts_and_lodgements(legacy_url: str, target_url: str, request
                     quantity=record.quantity,
                     unit=record.unit,
                     created_at=business_at,
-                    movement_metadata={**provenance, "historical_import": True},
+                    movement_metadata=provenance,
                 )
             )
-            imported_receipts += 1
+            imported += 1
+        session.commit()
+        return {"imported_items": imported, "skipped_items": skipped}
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        scope.close()
+        session.close()
+        engine.dispose()
 
+
+def apply_customs_lodgements(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, int]:
+    """Load Customs lodgement rows as NZ-alcohol compliance records with their real periods."""
+    if requested_org_name != RESET_ORG_NAME:
+        raise ValueError(f"Customs load is only permitted for {RESET_ORG_NAME!r}")
+
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+
+    with create_engine(legacy_url).connect() as legacy_connection:
+        lodgements = _customs_lodgement_rows(legacy_connection)
+
+    engine = create_engine(target_url)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    scope = ExitStack()
+    imported = 0
+    skipped = 0
+    try:
+        org = _enter_target_tenant_scope(scope, session, requested_org_name)
         for row in lodgements:
-            legacy_id = row["id"]
-            legacy_date = _required_date(row["date"], "customs_lodgements", legacy_id)
-            source = {"table": "customs_lodgements", "id": legacy_id}
+            source_id = row["id"]
+            source_date = _required_date(row["date"], "customs_lodgements", source_id)
+            marker = f"customs-{source_id}"
             existing = (
                 session.query(ComplianceRecord.id)
-                .filter(ComplianceRecord.org_id == org.id, ComplianceRecord.details.contains({"legacy_source": source}))
+                .filter(
+                    ComplianceRecord.org_id == org.id,
+                    ComplianceRecord.details[IMPORT_MARKER_KEY].astext == marker,
+                )
                 .first()
             )
             if existing:
-                skipped_lodgements += 1
+                skipped += 1
                 continue
-            provenance = _legacy_provenance("customs_lodgements", legacy_id, legacy_date)
-            period = _optional_text(row["date_period"]) or legacy_date.isoformat()
-            lodgement = ComplianceRecord(
-                org_id=org.id,
-                framework_slug="customs-alcohol",
-                control_id="period-lodgement",
-                record_type="lodgement",
-                status="complete",
-                title=f"Historical Customs lodgement: {period}",
-                period_start=legacy_date,
-                period_end=legacy_date,
-                measured_value=_decimal(row["lal"], "lal", "customs_lodgements", legacy_id),
-                evidence_reference=(
-                    f"Imported from Whistlebird v1 customs_lodgements#{legacy_id}; "
-                    "the filed source document is not present in the legacy database."
-                ),
-                source_refs=[],
-                details={
-                    **provenance,
-                    "historical_import": True,
-                    "legacy_period_label": period,
-                    "lodged_volume_l": str(
-                        _decimal(row["lodged_volume"], "lodged_volume", "customs_lodgements", legacy_id)
-                    ),
-                    "lodged_abv_percent": str(
-                        _decimal(row["lodged_abv"], "lodged_abv", "customs_lodgements", legacy_id)
-                    ),
-                    "lodged_litres_of_alcohol": str(_decimal(row["lal"], "lal", "customs_lodgements", legacy_id)),
-                    "legacy_bottle_count": str(_decimal(row["bottles"], "bottles", "customs_lodgements", legacy_id)),
-                },
-                created_at=_derived_timestamp(legacy_date),
-                updated_at=_derived_timestamp(legacy_date),
+            period = _optional_text(row["date_period"]) or source_date.isoformat()
+            provenance = _import_marker(marker, "customs_lodgements", source_id)
+            session.add(
+                ComplianceRecord(
+                    org_id=org.id,
+                    framework_slug="customs-alcohol",
+                    control_id="period-lodgement",
+                    record_type="lodgement",
+                    status="complete",
+                    title=f"Customs lodgement — {period}",
+                    period_start=source_date,
+                    period_end=source_date,
+                    measured_value=_decimal(row["lal"], "lal", "customs_lodgements", source_id),
+                    evidence_reference=f"Customs alcohol reconciliation lodgement for period {period}.",
+                    source_refs=[],
+                    details={
+                        **provenance,
+                        "period_label": period,
+                        "lodged_volume_l": str(
+                            _decimal(row["lodged_volume"], "lodged_volume", "customs_lodgements", source_id)
+                        ),
+                        "lodged_abv_percent": str(
+                            _decimal(row["lodged_abv"], "lodged_abv", "customs_lodgements", source_id)
+                        ),
+                        "litres_of_alcohol": str(_decimal(row["lal"], "lal", "customs_lodgements", source_id)),
+                        "bottle_count": str(_decimal(row["bottles"], "bottles", "customs_lodgements", source_id)),
+                    },
+                    created_at=_derived_timestamp(source_date),
+                    updated_at=_derived_timestamp(source_date),
+                )
             )
-            session.add(lodgement)
-            imported_lodgements += 1
-
+            imported += 1
         session.commit()
-        return {
-            "imported_receipts": imported_receipts,
-            "skipped_receipts": skipped_receipts,
-            "imported_lodgements": imported_lodgements,
-            "skipped_lodgements": skipped_lodgements,
-        }
+        return {"imported_lodgements": imported, "skipped_lodgements": skipped}
     except Exception:
         session.rollback()
         raise
@@ -1205,336 +1184,287 @@ def apply_core_receipts_and_lodgements(legacy_url: str, target_url: str, request
         engine.dispose()
 
 
-def apply_evidenced_production(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, int]:
-    """Import only v1 flavour/vat/bottling rows whose lineage references are source-evidenced."""
+def _load_process_steps(session: Any, org_id: Any) -> dict[str, list[Any]]:
+    from app.core.db.models.process import Process
+    from app.core.db.models.step import Step
+
+    result: dict[str, list[Any]] = {}
+    processes = {
+        p.name: p
+        for p in session.query(Process).filter(Process.org_id == org_id, Process.name.in_(PRODUCT_WORKFLOWS)).all()
+    }
+    missing = sorted(set(PRODUCT_WORKFLOWS) - set(processes))
+    if missing:
+        raise RuntimeError(f"Missing product workflows: {', '.join(missing)}")
+    for name, process in processes.items():
+        steps = session.query(Step).filter(Step.process_id == process.id).order_by(Step.position).all()
+        result[name] = [process, steps]
+    return result
+
+
+def apply_production_batches(
+    legacy_url: str, target_url: str, requested_org_name: str, manifest_path: Path | None
+) -> dict[str, int]:
+    """Build one multi-step execution per VAT batch, every step stamped with its real date."""
     if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Production import is only permitted for {RESET_ORG_NAME!r}")
+        raise ValueError(f"Batch load is only permitted for {RESET_ORG_NAME!r}")
 
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
     from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401 - resolves ORM relationship
-    from app.core.db.models.process import Process
-    from app.core.db.models.step import Step
     from app.core.db.repositories.execution_repo import ExecutionRepository
     from app.core.db.repositories.inventory_repo import InventoryRepository
 
     with create_engine(legacy_url).connect() as legacy_connection:
-        operations = list(_operation_source_records(legacy_connection))
+        legacy = _legacy_batches(legacy_connection)
+    manifest_batches: list[ProductionBatch] = []
+    if manifest_path and manifest_path.exists():
+        manifest_batches, _ = _load_manifest(manifest_path)
+    batches = _merge_batches(legacy, manifest_batches)
 
     engine = create_engine(target_url)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
     scope = ExitStack()
     imported = 0
     skipped = 0
-    linked_inputs = 0
+    steps_completed = 0
     try:
         org = _enter_target_tenant_scope(scope, session, requested_org_name)
         session.execute(text("SELECT set_config('app.inventory_qty_guard', '1', true)"))
-        processes = {
-            process.name: process
-            for process in session.query(Process)
-            .filter(Process.org_id == org.id, Process.name.in_([operation.process_name for operation in operations]))
-            .all()
-        }
-        missing_processes = sorted({operation.process_name for operation in operations} - set(processes))
-        if missing_processes:
-            raise RuntimeError(f"Missing historical process templates: {', '.join(missing_processes)}")
-
-        items = session.query(InventoryItem).filter(InventoryItem.org_id == org.id).all()
-        ingredient_by_code: dict[str, list[InventoryItem]] = defaultdict(list)
-        flavour_by_batch: dict[str, list[InventoryItem]] = defaultdict(list)
-        flavour_by_code: dict[str, list[InventoryItem]] = defaultdict(list)
-        vat_by_batch: dict[str, list[InventoryItem]] = defaultdict(list)
-        for item in items:
-            extra_data = item.extra_data or {}
-            legacy_source = extra_data.get("legacy_source") or {}
-            if legacy_source.get("table") == "purchases_ingredients":
-                code = extra_data.get("legacy_supplier_batch_number") or item.supplier_batch_number
-                if code:
-                    ingredient_by_code[str(code)].append(item)
-            if legacy_source.get("table") == "product_actions_flavors" and extra_data.get("legacy_flavor_batch"):
-                flavour_by_batch[str(extra_data["legacy_flavor_batch"])].append(item)
-            if legacy_source.get("table") == "product_actions_flavor_experiments" and extra_data.get(
-                "legacy_flavor_code"
-            ):
-                flavour_by_code[str(extra_data["legacy_flavor_code"])].append(item)
-            if legacy_source.get("table") == "product_actions_flavor_vat" and extra_data.get("legacy_vat_batch"):
-                vat_by_batch[str(extra_data["legacy_vat_batch"])].append(item)
-
-        available_flavour_batches = {
-            operation.batch_label
-            for operation in operations
-            if operation.legacy_table == "product_actions_flavors" and operation.batch_label
-        }
-        available_vat_batches = {
-            operation.batch_label
-            for operation in operations
-            if operation.legacy_table == "product_actions_flavor_vat" and operation.batch_label
-        }
-        available_flavour_codes = {
-            str(operation.extra_data["legacy_flavor_code"])
-            for operation in operations
-            if operation.legacy_table == "product_actions_flavor_experiments"
-            and operation.extra_data.get("legacy_flavor_code")
-        }
-        unresolved_source_references = [
-            (operation.legacy_table, operation.legacy_id, kind, reference)
-            for operation in operations
-            for kind, reference in operation.input_references
-            if (kind == "ingredient_code" and reference not in ingredient_by_code)
-            or (kind == "flavor_batch" and reference not in available_flavour_batches)
-            or (kind == "flavor_code" and reference not in available_flavour_codes)
-            or (kind == "vat_batch" and reference not in available_vat_batches)
-        ]
-        if unresolved_source_references:
-            raise RuntimeError("Production import has unresolved source-evidenced references")
-
+        workflows = _load_process_steps(session, org.id)
         execution_repository = ExecutionRepository(session)
         inventory_repository = InventoryRepository(session)
-        for operation in operations:
-            source = {"table": operation.legacy_table, "id": operation.legacy_id}
-            existing = (
-                session.query(InventoryItem)
-                .filter(InventoryItem.org_id == org.id, InventoryItem.extra_data.contains({"legacy_source": source}))
-                .one_or_none()
-            )
-            if existing is not None:
-                skipped += 1
-                item = existing
-            else:
-                resolved_inputs: list[dict[str, Any]] = []
-                for kind, reference in operation.input_references:
-                    if kind == "ingredient_code":
-                        candidates = ingredient_by_code[reference]
-                    elif kind == "flavor_batch":
-                        candidates = flavour_by_batch[reference]
-                    elif kind == "flavor_code":
-                        candidates = flavour_by_code[reference]
-                    elif kind == "vat_batch":
-                        candidates = vat_by_batch[reference]
-                    else:  # Defensive: source builders above are the only permitted reference vocabulary.
-                        raise RuntimeError(f"Unsupported production reference kind: {kind}")
-                    resolved_inputs.extend(
-                        {
-                            "inventory_item_id": str(candidate.id),
-                            "name": candidate.name,
-                            "quantity": None,
-                            "unit": candidate.unit,
-                            "legacy_link_kind": kind,
-                            "legacy_reference": reference,
-                            "legacy_quantity_recorded": False,
-                        }
-                        for candidate in candidates
-                    )
 
-                process = processes[operation.process_name]
-                execution = execution_repository.create_execution(org.id, process.id, commit=False)
-                execution_step = (
-                    session.query(ExecutionStep)
-                    .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.org_id == org.id)
-                    .one()
-                )
-                step = session.query(Step).filter(Step.id == execution_step.step_id).one()
-                provenance = _legacy_provenance(operation.legacy_table, operation.legacy_id, operation.legacy_date)
-                original_batch = operation.batch_label or f"legacy-{operation.legacy_table}-{operation.legacy_id}"
-                suffix = f" [legacy-{operation.legacy_table}-{operation.legacy_id}]"
-                item = inventory_repository.create_inventory_item(
-                    org_id=org.id,
-                    name=operation.item_name,
-                    quantity=operation.quantity,
-                    unit=operation.unit,
-                    inventory_type=operation.inventory_type,
-                    supplier_batch_number=f"{original_batch[: 255 - len(suffix)]}{suffix}",
-                    source_execution_id=execution.id,
-                    source_execution_step_id=execution_step.id,
-                    source_output_id=step.outputs[0]["id"],
-                    source_step_name=step.name,
-                    extra_data={
-                        **provenance,
-                        **operation.extra_data,
-                        "legacy_batch_label": operation.batch_label,
-                        "historical_import": True,
-                    },
-                    commit=False,
-                )
-                execution_repository.complete_step(
-                    execution_step.id,
-                    org.id,
-                    actual_inputs=resolved_inputs,
-                    actual_outputs=[
-                        {
-                            "inventory_item_id": str(item.id),
-                            "name": item.name,
-                            "quantity": str(operation.quantity),
-                            "unit": operation.unit,
-                        }
-                    ],
-                    execution_data={
-                        **provenance,
-                        **operation.extra_data,
-                        "historical_import": True,
-                        "legacy_input_quantities_unavailable": True,
-                    },
-                    completed_at_override=_derived_timestamp(operation.legacy_date),
-                    commit=False,
-                )
-                business_at = _derived_timestamp(operation.legacy_date)
-                execution.started_at = business_at
-                execution.completed_at = business_at
-                execution.created_at = business_at
-                execution.updated_at = business_at
-                execution_step.started_at = business_at
-                execution_step.completed_at = business_at
-                execution_step.created_at = business_at
-                execution_step.updated_at = business_at
-                item.created_at = business_at
-                item.updated_at = business_at
-                session.add(
-                    InventoryMovement(
-                        org_id=org.id,
-                        inventory_item_id=item.id,
-                        movement_type=InventoryMovementType.PRODUCTION.value,
-                        quantity=operation.quantity,
-                        unit=operation.unit,
-                        created_at=business_at,
-                        movement_metadata={**provenance, "historical_import": True},
-                    )
-                )
-                linked_inputs += len(resolved_inputs)
-                imported += 1
-
-            extra_data = item.extra_data or {}
-            legacy_source = extra_data.get("legacy_source") or {}
-            if legacy_source.get("table") == "product_actions_flavors" and extra_data.get("legacy_flavor_batch"):
-                flavour_by_batch[str(extra_data["legacy_flavor_batch"])].append(item)
-            if legacy_source.get("table") == "product_actions_flavor_experiments" and extra_data.get(
-                "legacy_flavor_code"
-            ):
-                flavour_by_code[str(extra_data["legacy_flavor_code"])].append(item)
-            if legacy_source.get("table") == "product_actions_flavor_vat" and extra_data.get("legacy_vat_batch"):
-                vat_by_batch[str(extra_data["legacy_vat_batch"])].append(item)
-
-        session.commit()
-        return {"imported_executions": imported, "skipped_executions": skipped, "linked_inputs": linked_inputs}
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        scope.close()
-        session.close()
-        engine.dispose()
-
-
-def apply_sample_history(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, int]:
-    """Import historical sample events without fabricating inventory output or consumption quantities."""
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Sample import is only permitted for {RESET_ORG_NAME!r}")
-
-    from app.core.db.models.execution import Execution
-    from app.core.db.models.execution_step import ExecutionStep
-    from app.core.db.models.inventory_item import InventoryItem
-    from app.core.db.models.process import Process
-    from app.core.db.repositories.execution_repo import ExecutionRepository
-
-    with create_engine(legacy_url).connect() as legacy_connection:
-        samples = list(_sample_source_records(legacy_connection))
-    engine = create_engine(target_url)
-    session = sessionmaker(bind=engine, expire_on_commit=False)()
-    scope = ExitStack()
-    imported = 0
-    skipped = 0
-    linked_inputs = 0
-    source_only = 0
-    try:
-        org = _enter_target_tenant_scope(scope, session, requested_org_name)
-        process = (
-            session.query(Process).filter(Process.org_id == org.id, Process.name == "Legacy samples").one_or_none()
-        )
-        if process is None:
-            raise RuntimeError("Missing historical process template: Legacy samples")
-
-        flavour_by_code: dict[str, list[InventoryItem]] = defaultdict(list)
+        ingredient_by_code: dict[str, list[Any]] = defaultdict(list)
         for item in session.query(InventoryItem).filter(InventoryItem.org_id == org.id).all():
-            extra_data = item.extra_data or {}
-            legacy_source = extra_data.get("legacy_source") or {}
-            if legacy_source.get("table") == "product_actions_flavor_experiments" and extra_data.get(
-                "legacy_flavor_code"
-            ):
-                flavour_by_code[str(extra_data["legacy_flavor_code"])].append(item)
+            extra = item.extra_data or {}
+            code = extra.get("ingredient_code") or extra.get("recorded_supplier_batch_number")
+            if code:
+                ingredient_by_code[str(code)].append(item)
+        vat_item_by_global: dict[int, Any] = {}
 
-        execution_repository = ExecutionRepository(session)
-        for sample in samples:
-            source = {"table": sample.legacy_table, "id": sample.legacy_id}
-            exists = (
+        for batch in batches:
+            already = (
                 session.query(ExecutionStep.id)
-                .join(Execution, ExecutionStep.execution_id == Execution.id)
                 .filter(
-                    Execution.org_id == org.id,
-                    ExecutionStep.execution_data.contains({"legacy_source": source}),
+                    ExecutionStep.org_id == org.id,
+                    ExecutionStep.execution_data[BATCH_MARKER_KEY].astext == batch.marker,
                 )
                 .first()
             )
-            if exists:
+            if already:
                 skipped += 1
                 continue
 
-            candidates = flavour_by_code.get(sample.flavor_code or "", [])
-            actual_inputs = [
-                {
-                    "inventory_item_id": str(candidate.id),
-                    "name": candidate.name,
-                    "quantity": None,
-                    "unit": candidate.unit,
-                    "legacy_link_kind": "flavor_code",
-                    "legacy_reference": sample.flavor_code,
-                    "legacy_quantity_recorded": False,
-                }
-                for candidate in candidates
-            ]
-            provenance = _legacy_provenance(sample.legacy_table, sample.legacy_id, sample.legacy_date)
+            process, steps = workflows[batch.workflow_name]
+            step_keys = RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else BOTANICAL_GIN_STEP_KEYS
+            raw_dates = [batch.steps[key].step_date if key in batch.steps else None for key in step_keys]
+            resolved, adjusted = _monotonic_step_dates(raw_dates)
+
             execution = execution_repository.create_execution(org.id, process.id, commit=False)
-            execution_step = (
+            exec_steps = (
                 session.query(ExecutionStep)
                 .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.org_id == org.id)
-                .one()
+                .order_by(ExecutionStep.step_number)
+                .all()
             )
-            execution_repository.complete_step(
-                execution_step.id,
-                org.id,
-                actual_inputs=actual_inputs,
-                actual_outputs=[],
-                execution_data={
-                    **provenance,
-                    **sample.details,
-                    "historical_import": True,
-                    "legacy_flavor_code": sample.flavor_code,
-                    "legacy_flavor_code_resolved": bool(candidates),
-                    "no_inventory_output_created": True,
-                },
-                completed_at_override=_derived_timestamp(sample.legacy_date),
-                commit=False,
-            )
-            business_at = _derived_timestamp(sample.legacy_date)
-            execution.started_at = business_at
-            execution.completed_at = business_at
-            execution.created_at = business_at
-            execution.updated_at = business_at
-            execution_step.started_at = business_at
-            execution_step.completed_at = business_at
-            execution_step.created_at = business_at
-            execution_step.updated_at = business_at
+            vat_item = None
+            product_item = None
+            for index, (step_key, exec_step) in enumerate(zip(step_keys, exec_steps, strict=True)):
+                step = steps[index]
+                step_date = resolved[index]
+                business_at = _derived_timestamp(step_date)
+                recorded = batch.steps.get(step_key)
+                confidence = "derived" if adjusted[index] or recorded is None else recorded.confidence
+                marker = _import_marker(batch.marker, PRODUCTION_SOURCE_TABLE, batch.global_vat, step=step_key)
+                step_data: dict[str, Any] = {
+                    **marker,
+                    "date_confidence": confidence,
+                    "step_date": step_date.isoformat(),
+                    "batch_label": batch.batch_label,
+                    "global_vat": batch.global_vat,
+                }
+                actual_inputs: list[dict[str, Any]] = []
+                actual_outputs: list[dict[str, Any]] = []
+
+                if step_key in ("maceration", "rhubarb_maceration"):
+                    for code in batch.ingredient_codes:
+                        for candidate in ingredient_by_code.get(code, []):
+                            actual_inputs.append(
+                                {
+                                    "inventory_item_id": str(candidate.id),
+                                    "name": candidate.name,
+                                    "quantity": None,
+                                    "unit": candidate.unit,
+                                    "link": {"kind": "ingredient_code", "reference": code},
+                                }
+                            )
+                    if step_key == "rhubarb_maceration" and batch.base_vat is not None:
+                        base_item = vat_item_by_global.get(batch.base_vat)
+                        if base_item is None:
+                            raise RuntimeError(
+                                f"Rosella VAT{batch.global_vat} needs base VAT{batch.base_vat} loaded first"
+                            )
+                        actual_inputs.append(
+                            {
+                                "inventory_item_id": str(base_item.id),
+                                "name": base_item.name,
+                                "quantity": None,
+                                "unit": base_item.unit,
+                                "link": {"kind": "base_vat", "reference": batch.base_vat},
+                            }
+                        )
+
+                produces_vat = step_key in ("aging", "rhubarb_maceration") and bool(step.outputs)
+                produces_bottles = step_key == "bottling"
+
+                if produces_vat and vat_item is None:
+                    quantity = batch.vat_volume_l or Decimal("0")
+                    vat_item = inventory_repository.create_inventory_item(
+                        org_id=org.id,
+                        name=f"{batch.product_line.title()} {batch.batch_label} VAT batch",
+                        quantity=quantity,
+                        unit="L",
+                        inventory_type="work_in_progress",
+                        supplier_batch_number=batch.batch_label,
+                        source_execution_id=execution.id,
+                        source_execution_step_id=exec_step.id,
+                        source_output_id=step.outputs[0]["id"],
+                        source_step_name=step.name,
+                        extra_data={
+                            **marker,
+                            "batch_label": batch.batch_label,
+                            "global_vat": batch.global_vat,
+                            "abv_percent": str(batch.vat_abv) if batch.vat_abv is not None else "",
+                        },
+                        commit=False,
+                    )
+                    vat_item.created_at = business_at
+                    vat_item.updated_at = business_at
+                    vat_item_by_global[batch.global_vat] = vat_item
+                    actual_outputs = [
+                        {
+                            "inventory_item_id": str(vat_item.id),
+                            "name": vat_item.name,
+                            "quantity": str(quantity),
+                            "unit": "L",
+                        }
+                    ]
+                    session.add(
+                        InventoryMovement(
+                            org_id=org.id,
+                            inventory_item_id=vat_item.id,
+                            movement_type=InventoryMovementType.PRODUCTION.value,
+                            quantity=quantity,
+                            unit="L",
+                            created_at=business_at,
+                            movement_metadata=marker,
+                        )
+                    )
+
+                if produces_bottles and batch.bottlings:
+                    if vat_item is not None:
+                        actual_inputs.append(
+                            {
+                                "inventory_item_id": str(vat_item.id),
+                                "name": vat_item.name,
+                                "quantity": None,
+                                "unit": vat_item.unit,
+                                "link": {"kind": "vat_batch", "reference": batch.batch_label},
+                            }
+                        )
+                    total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
+                    size_ml = batch.bottlings[0].get("bottle_size_ml") if batch.bottlings else None
+                    abv = batch.vat_abv
+                    if abv is None and batch.bottlings and batch.bottlings[0].get("abv_percent"):
+                        abv = Decimal(str(batch.bottlings[0]["abv_percent"]))
+                    product_item = inventory_repository.create_inventory_item(
+                        org_id=org.id,
+                        name=f"{batch.product_line.title()} {batch.batch_label} bottled product",
+                        quantity=total_bottles,
+                        unit="units",
+                        inventory_type="final_product",
+                        supplier_batch_number=batch.batch_label,
+                        source_execution_id=execution.id,
+                        source_execution_step_id=exec_step.id,
+                        source_output_id=step.outputs[0]["id"],
+                        source_step_name=step.name,
+                        extra_data={
+                            **marker,
+                            "batch_label": batch.batch_label,
+                            "global_vat": batch.global_vat,
+                            "bottle_size_ml": str(size_ml or ""),
+                            "abv_percent": str(abv) if abv is not None else "",
+                            "bottlings": list(batch.bottlings),
+                        },
+                        commit=False,
+                    )
+                    product_item.created_at = business_at
+                    product_item.updated_at = business_at
+                    actual_outputs = [
+                        {
+                            "inventory_item_id": str(product_item.id),
+                            "name": product_item.name,
+                            "quantity": str(total_bottles),
+                            "unit": "units",
+                        }
+                    ]
+                    movements = batch.bottlings or ({"date": step_date.isoformat(), "bottles": str(total_bottles)},)
+                    for entry in movements:
+                        moved_at = _derived_timestamp(date.fromisoformat(entry["date"]))
+                        session.add(
+                            InventoryMovement(
+                                org_id=org.id,
+                                inventory_item_id=product_item.id,
+                                movement_type=InventoryMovementType.PRODUCTION.value,
+                                quantity=Decimal(str(entry["bottles"])),
+                                unit="units",
+                                created_at=moved_at,
+                                movement_metadata={
+                                    **marker,
+                                    "bottling_date": entry["date"],
+                                    "estimated": bool(entry.get("estimated")),
+                                },
+                            )
+                        )
+                    step_data["bottlings"] = list(batch.bottlings)
+
+                if step_key == "labelling" and product_item is not None:
+                    actual_inputs.append(
+                        {
+                            "inventory_item_id": str(product_item.id),
+                            "name": product_item.name,
+                            "quantity": None,
+                            "unit": "units",
+                            "link": {"kind": "bottled_product", "reference": batch.batch_label},
+                        }
+                    )
+
+                execution_repository.complete_step(
+                    exec_step.id,
+                    org.id,
+                    actual_inputs=actual_inputs,
+                    actual_outputs=actual_outputs,
+                    execution_data=step_data,
+                    completed_at_override=business_at,
+                    commit=False,
+                )
+                exec_step.started_at = business_at
+                exec_step.created_at = business_at
+                exec_step.updated_at = business_at
+                steps_completed += 1
+
+            first_at = _derived_timestamp(resolved[0])
+            last_at = _derived_timestamp(resolved[-1])
+            execution.started_at = first_at
+            execution.created_at = first_at
+            execution.completed_at = last_at
+            execution.updated_at = last_at
             imported += 1
-            linked_inputs += len(actual_inputs)
-            source_only += not bool(actual_inputs)
 
         session.commit()
-        return {
-            "imported_sample_executions": imported,
-            "skipped_sample_executions": skipped,
-            "linked_inputs": linked_inputs,
-            "source_only_executions": source_only,
-        }
+        return {"imported_batches": imported, "skipped_batches": skipped, "steps_completed": steps_completed}
     except Exception:
         session.rollback()
         raise
@@ -1544,186 +1474,143 @@ def apply_sample_history(legacy_url: str, target_url: str, requested_org_name: s
         engine.dispose()
 
 
-def build_production_sheet_dry_run(manifest_path: Path) -> dict[str, Any]:
-    """Validate the curated production-sheet manifest without writing to either database."""
-    records = _production_sheet_records(manifest_path)
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    excluded = payload.get("excluded", [])
-    return {
-        "dry_run": True,
-        "manifest_records": len(records),
-        "proposed_records_by_type": dict(Counter(record.record_type for record in records)),
-        "proposed_records_by_product_line": dict(Counter(record.product_line for record in records)),
-        "linked_to_legacy_import": sum(1 for record in records if record.linked_legacy_source),
-        "cross_referenced_inputs": sum(len(record.input_references) for record in records),
-        "excluded_pending_curation": len(excluded),
-        "notes": [
-            "Aggregate-only report: no batch labels, ingredient names, or quantities are emitted.",
-            "Excluded manifest entries require founder confirmation before they can become records; "
-            "see whistlebird-findings.md WB-020 onward.",
-        ],
-    }
-
-
-def apply_production_sheet(manifest_path: Path, target_url: str, requested_org_name: str) -> dict[str, int]:
-    """Import curated production-sheet records (stage 2) into the target tenant.
-
-    Mirrors apply_evidenced_production's create-or-skip idempotency pattern exactly, but
-    reads from the frozen manifest instead of the legacy database, and keys idempotency
-    on {"table": "production_sheet", "id": <manifest id>} instead of a legacy DB row id.
-    """
+def apply_trial_batches(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, int]:
+    """Load recipe/distillation trials as a distilling step feeding library stock."""
     if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Production-sheet import is only permitted for {RESET_ORG_NAME!r}")
+        raise ValueError(f"Trial load is only permitted for {RESET_ORG_NAME!r}")
 
     from app.core.db.models.execution_step import ExecutionStep
-    from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
     from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401 - resolves ORM relationship
-    from app.core.db.models.process import Process
-    from app.core.db.models.step import Step
     from app.core.db.repositories.execution_repo import ExecutionRepository
     from app.core.db.repositories.inventory_repo import InventoryRepository
 
-    records = _production_sheet_records(manifest_path)
+    with create_engine(legacy_url).connect() as legacy_connection:
+        trials = list(_trial_records(legacy_connection))
 
     engine = create_engine(target_url)
     session = sessionmaker(bind=engine, expire_on_commit=False)()
     scope = ExitStack()
     imported = 0
     skipped = 0
-    linked_inputs = 0
+    consumed_movements = 0
     try:
         org = _enter_target_tenant_scope(scope, session, requested_org_name)
         session.execute(text("SELECT set_config('app.inventory_qty_guard', '1', true)"))
-
-        processes = {
-            process.name: process
-            for process in session.query(Process)
-            .filter(Process.org_id == org.id, Process.name.in_([record.process_name for record in records]))
-            .all()
-        }
-        missing_processes = sorted({record.process_name for record in records} - set(processes))
-        if missing_processes:
-            raise RuntimeError(f"Missing production-sheet process templates: {', '.join(missing_processes)}")
-
-        # A vat_batch lookup spanning BOTH stage-1 (whistlebird_v1) and stage-2
-        # (production_sheet) items, keyed by their shared free-text batch label, so a
-        # sheet record (e.g. the Rosella maceration consuming Solstice VAT48) can link
-        # to either source without caring which stage created it.
-        vat_by_batch: dict[str, list[InventoryItem]] = defaultdict(list)
-        for item in session.query(InventoryItem).filter(InventoryItem.org_id == org.id).all():
-            extra_data = item.extra_data or {}
-            label = extra_data.get("sheet_batch_label") or extra_data.get("legacy_batch_label")
-            if label:
-                vat_by_batch[str(label)].append(item)
-
+        workflows = _load_process_steps(session, org.id)
         execution_repository = ExecutionRepository(session)
         inventory_repository = InventoryRepository(session)
-        for record in records:
-            source = {"table": PRODUCTION_SHEET_SOURCE_TABLE, "id": record.manifest_id}
-            existing = (
-                session.query(InventoryItem)
-                .filter(InventoryItem.org_id == org.id, InventoryItem.extra_data.contains({"legacy_source": source}))
-                .one_or_none()
-            )
-            if existing is not None:
-                skipped += 1
-                item = existing
-            else:
-                resolved_inputs: list[dict[str, Any]] = []
-                for kind, reference in record.input_references:
-                    if kind != "vat_batch":  # Defensive: this is the only reference kind stage 2 emits so far.
-                        raise RuntimeError(f"Unsupported production-sheet reference kind: {kind}")
-                    candidates = vat_by_batch.get(reference, [])
-                    if not candidates:
-                        raise RuntimeError(
-                            f"production_sheet#{record.manifest_id} references unresolved vat_batch {reference!r}"
-                        )
-                    resolved_inputs.extend(
-                        {
-                            "inventory_item_id": str(candidate.id),
-                            "name": candidate.name,
-                            "quantity": None,
-                            "unit": candidate.unit,
-                            "legacy_link_kind": kind,
-                            "legacy_reference": reference,
-                            "legacy_quantity_recorded": False,
-                        }
-                        for candidate in candidates
-                    )
 
-                process = processes[record.process_name]
-                execution = execution_repository.create_execution(org.id, process.id, commit=False)
-                execution_step = (
-                    session.query(ExecutionStep)
-                    .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.org_id == org.id)
-                    .one()
+        for trial in trials:
+            already = (
+                session.query(ExecutionStep.id)
+                .filter(
+                    ExecutionStep.org_id == org.id,
+                    ExecutionStep.execution_data[BATCH_MARKER_KEY].astext == trial.marker,
                 )
-                step = session.query(Step).filter(Step.id == execution_step.step_id).one()
-                provenance = _production_sheet_provenance(record)
-                inventory_type = "final_product" if record.record_type == "bottling" else "work_in_progress"
-                item = inventory_repository.create_inventory_item(
-                    org_id=org.id,
-                    name=f"{record.product_line.title()} {record.record_type.replace('_', ' ')} {record.batch_label}",
-                    quantity=record.quantity,
-                    unit=record.unit,
-                    inventory_type=inventory_type,
-                    supplier_batch_number=f"{record.batch_label} [sheet-{record.manifest_id}]",
-                    source_execution_id=execution.id,
-                    source_execution_step_id=execution_step.id,
-                    source_output_id=step.outputs[0]["id"],
-                    source_step_name=step.name,
-                    extra_data={**provenance, "historical_import": True},
-                    commit=False,
-                )
-                execution_repository.complete_step(
-                    execution_step.id,
-                    org.id,
-                    actual_inputs=resolved_inputs,
-                    actual_outputs=[
+                .first()
+            )
+            if already:
+                skipped += 1
+                continue
+            process, steps = workflows[trial.workflow_name]
+            business_at = _derived_timestamp(trial.source_date)
+            execution = execution_repository.create_execution(org.id, process.id, commit=False)
+            exec_steps = (
+                session.query(ExecutionStep)
+                .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.org_id == org.id)
+                .order_by(ExecutionStep.step_number)
+                .all()
+            )
+            for index, (step_key, exec_step) in enumerate(zip(TRIAL_STEP_KEYS, exec_steps, strict=True)):
+                step = steps[index]
+                marker = _import_marker(trial.marker, trial.source_table, trial.source_id, step=step_key)
+                outputs: list[dict[str, Any]] = []
+                if step_key == "library_stock" and step.outputs:
+                    quantity = trial.library_ml or Decimal("0")
+                    item = inventory_repository.create_inventory_item(
+                        org_id=org.id,
+                        name=f"Trial library stock {trial.label}",
+                        quantity=quantity,
+                        unit="mL",
+                        inventory_type="work_in_progress",
+                        supplier_batch_number=trial.label[:255],
+                        source_execution_id=execution.id,
+                        source_execution_step_id=exec_step.id,
+                        source_output_id=step.outputs[0]["id"],
+                        source_step_name=step.name,
+                        extra_data={**marker, **trial.extra_data},
+                        commit=False,
+                    )
+                    item.created_at = business_at
+                    item.updated_at = business_at
+                    outputs = [
                         {
                             "inventory_item_id": str(item.id),
                             "name": item.name,
-                            "quantity": str(record.quantity),
-                            "unit": record.unit,
+                            "quantity": str(quantity),
+                            "unit": "mL",
                         }
-                    ],
-                    execution_data={**provenance, "historical_import": True},
-                    completed_at_override=_derived_timestamp(record.legacy_date),
+                    ]
+                    session.add(
+                        InventoryMovement(
+                            org_id=org.id,
+                            inventory_item_id=item.id,
+                            movement_type=InventoryMovementType.PRODUCTION.value,
+                            quantity=quantity,
+                            unit="mL",
+                            created_at=business_at,
+                            movement_metadata=marker,
+                        )
+                    )
+                    for entry in trial.consumed:
+                        moved_at = _derived_timestamp(date.fromisoformat(entry["date"]))
+                        session.add(
+                            InventoryMovement(
+                                org_id=org.id,
+                                inventory_item_id=item.id,
+                                movement_type=InventoryMovementType.ADJUSTMENT.value,
+                                quantity=Decimal("0"),
+                                unit="mL",
+                                created_at=moved_at,
+                                movement_metadata={
+                                    **marker,
+                                    "consumed_as": "library_stock_sample",
+                                    "quantity_not_recorded": True,
+                                    "recorded": entry,
+                                },
+                            )
+                        )
+                        consumed_movements += 1
+                execution_repository.complete_step(
+                    exec_step.id,
+                    org.id,
+                    actual_inputs=[],
+                    actual_outputs=outputs,
+                    execution_data={
+                        **marker,
+                        "step_date": trial.source_date.isoformat(),
+                        "trial_label": trial.label,
+                        **trial.extra_data,
+                    },
+                    completed_at_override=business_at,
                     commit=False,
                 )
-                business_at = _derived_timestamp(record.legacy_date)
-                execution.started_at = business_at
-                execution.completed_at = business_at
-                execution.created_at = business_at
-                execution.updated_at = business_at
-                execution_step.started_at = business_at
-                execution_step.completed_at = business_at
-                execution_step.created_at = business_at
-                execution_step.updated_at = business_at
-                item.created_at = business_at
-                item.updated_at = business_at
-                session.add(
-                    InventoryMovement(
-                        org_id=org.id,
-                        inventory_item_id=item.id,
-                        movement_type=InventoryMovementType.PRODUCTION.value,
-                        quantity=record.quantity,
-                        unit=record.unit,
-                        created_at=business_at,
-                        movement_metadata={**provenance, "historical_import": True},
-                    )
-                )
-                linked_inputs += len(resolved_inputs)
-                imported += 1
-
-            extra_data = item.extra_data or {}
-            label = extra_data.get("sheet_batch_label") or extra_data.get("legacy_batch_label")
-            if label:
-                vat_by_batch[str(label)].append(item)
+                exec_step.started_at = business_at
+                exec_step.created_at = business_at
+                exec_step.updated_at = business_at
+            execution.started_at = business_at
+            execution.created_at = business_at
+            execution.completed_at = business_at
+            execution.updated_at = business_at
+            imported += 1
 
         session.commit()
-        return {"imported_executions": imported, "skipped_executions": skipped, "linked_inputs": linked_inputs}
+        return {
+            "imported_trials": imported,
+            "skipped_trials": skipped,
+            "consumption_movements": consumed_movements,
+        }
     except Exception:
         session.rollback()
         raise
@@ -1734,10 +1621,10 @@ def apply_production_sheet(manifest_path: Path, target_url: str, requested_org_n
 
 
 def reset_target_org(target_url: str, requested_org_name: str) -> dict[str, Any]:
-    """Delete imported tenant data while preserving the target organisation and its users.
+    """Delete loaded tenant data while preserving the target organisation and its users.
 
-    This is intentionally constrained to the single agreed test tenant.  Do not generalise the
-    confirmation flag or call this function for an arbitrary organisation.
+    This is intentionally constrained to the single agreed test tenant. Do not generalise
+    the confirmation flag or call this function for an arbitrary organisation.
     """
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Reset is only permitted for {RESET_ORG_NAME!r}")
@@ -1776,9 +1663,8 @@ def ensure_target_org_admin(
     """Create the one permitted test tenant and its deterministic admin if absent.
 
     This deliberately does not reset an existing password or alter an existing user. The
-    supplied password is used only for a newly-created account, and is never included in
-    the report. Supplying it through an environment variable avoids both source control and
-    shell-history credential exposure.
+    supplied password is used only for a newly-created account and is never included in
+    the report.
     """
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Tenant setup is only permitted for {RESET_ORG_NAME!r}")
@@ -1800,8 +1686,6 @@ def ensure_target_org_admin(
     org_created = False
     admin_created = False
     try:
-        # This is the one legitimate cross-tenant lookup: discover whether the exact
-        # disposable target exists before its org id is available for tenant_scope().
         with unscoped():
             org = session.query(Organisation).filter(Organisation.name == requested_org_name).one_or_none()
         if org is None:
@@ -1817,8 +1701,6 @@ def ensure_target_org_admin(
         scope.enter_context(tenant_scope(org.id))
         admin = session.query(User).filter(User.org_id == org.id, User.email == normalized_email).one_or_none()
         if admin is None:
-            # E-mail uniqueness crosses tenants, so the duplicate-owner check is explicit
-            # rather than silently relying on the current tenant context.
             with unscoped():
                 existing_email_owner = session.query(User).filter(User.email == normalized_email).one_or_none()
             if existing_email_owner is not None:
@@ -1847,85 +1729,8 @@ def ensure_target_org_admin(
         engine.dispose()
 
 
-def _require_matching_import(report: dict[str, Any], report_name: str) -> None:
-    """Refuse a bootstrap that completed writes but did not reproduce expected counts."""
-    mismatches: list[str] = []
-    for group_name, group in report.items():
-        if group_name == "date_mismatches":
-            if isinstance(group, dict):
-                for label, count in group.items():
-                    if count:
-                        mismatches.append(f"{label} date mismatches: {count}")
-            elif group:
-                mismatches.append(f"date mismatches: {group}")
-            continue
-        if not isinstance(group, dict):
-            continue
-        for label, counts in group.items():
-            if isinstance(counts, dict) and counts.get("expected") != counts.get("actual"):
-                mismatches.append(f"{label}: expected {counts.get('expected')}, got {counts.get('actual')}")
-    if mismatches:
-        raise RuntimeError(f"{report_name} verification failed: {'; '.join(mismatches)}")
-
-
-def bootstrap_whistlebird_test(
-    legacy_url: str,
-    target_url: str,
-    requested_org_name: str,
-    admin_email: str,
-    admin_password: str,
-    sheet_manifest: Path,
-) -> dict[str, Any]:
-    """Rebuild the disposable Whistlebird tenant from reviewed, deterministic sources.
-
-    Every read-only validation happens before the first target write. The only destructive
-    operation is the existing exact-name reset, which preserves tenant users and rejects every
-    other organisation name.
-    """
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Bootstrap is only permitted for {RESET_ORG_NAME!r}")
-
-    preflight = {
-        "core": build_core_dry_run(legacy_url),
-        "production": build_production_dry_run(legacy_url),
-        "traceability": build_traceability_dry_run(legacy_url),
-        "production_sheet": build_production_sheet_dry_run(sheet_manifest),
-    }
-    setup = ensure_target_org_admin(target_url, requested_org_name, admin_email, admin_password)
-    reset = reset_target_org(target_url, requested_org_name)
-    templates = setup_historical_process_templates(target_url, requested_org_name)
-    core = apply_core_receipts_and_lodgements(legacy_url, target_url, requested_org_name)
-    production = apply_evidenced_production(legacy_url, target_url, requested_org_name)
-    samples = apply_sample_history(legacy_url, target_url, requested_org_name)
-    production_sheet = apply_production_sheet(sheet_manifest, target_url, requested_org_name)
-    import_verification = build_import_verification(legacy_url, target_url, requested_org_name)
-    sheet_verification = build_production_sheet_verification(sheet_manifest, target_url, requested_org_name)
-    _require_matching_import(import_verification, "Legacy import")
-    _require_matching_import(sheet_verification, "Production-sheet import")
-    compliant_nz_alcohol_setup = ensure_compliant_nz_alcohol_setup(target_url, requested_org_name)
-    return {
-        "preflight": preflight,
-        "tenant_setup": setup,
-        "reset": reset,
-        "templates": templates,
-        "core": core,
-        "production": production,
-        "samples": samples,
-        "production_sheet": production_sheet,
-        "verification": {"legacy": import_verification, "production_sheet": sheet_verification},
-        "compliant_nz_alcohol_setup": compliant_nz_alcohol_setup,
-    }
-
-
 def ensure_compliant_nz_alcohol_setup(target_url: str, requested_org_name: str) -> dict[str, bool | str]:
-    """Set up the documented Compliant NZ-alcohol tier for the Whistlebird test tenant.
-
-    ``compliant`` is the single per-org entitlement for the Compliant product area,
-    including its NZ alcohol tools.  The approved migration plan configures
-    ``whistlebird_test`` as a spirits producer, requires trusted Core evidence links,
-    and excludes trade waste until a consent applies.  This is deterministic bootstrap
-    data, not an inference from the legacy source.
-    """
+    """Set up the documented Compliant NZ-alcohol tier for the Whistlebird test tenant."""
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Compliant NZ-alcohol setup is only permitted for {RESET_ORG_NAME!r}")
 
@@ -1967,247 +1772,246 @@ def ensure_compliant_nz_alcohol_setup(target_url: str, requested_org_name: str) 
         engine.dispose()
 
 
-def setup_historical_process_templates(target_url: str, requested_org_name: str) -> dict[str, list[str]]:
-    """Create only the approved historical templates in the existing Biz-E process model."""
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Historical templates are only permitted for {RESET_ORG_NAME!r}")
+def _require_matching_import(report: dict[str, Any], report_name: str) -> None:
+    """Refuse a bootstrap that completed writes but did not reproduce expected counts.
 
-    from app.core.db.models.process import Process, ProcessCategory
-    from app.core.db.models.step import Step
-    from app.core.db.repositories.process_repo import ProcessRepository
+    Handles both report shapes: a group that is itself an ``{expected, actual}`` pair, and
+    a group of named ``{expected, actual}`` pairs. ``date_mismatches`` and ``wording_leaks``
+    groups are simple ``{label: count}`` maps where any non-zero count is a failure.
+    """
+    mismatches: list[str] = []
 
-    engine = create_engine(target_url)
-    session = sessionmaker(bind=engine, expire_on_commit=False)()
-    scope = ExitStack()
-    created: list[str] = []
-    existing: list[str] = []
-    repaired: list[str] = []
-    try:
-        org = _enter_target_tenant_scope(scope, session, requested_org_name)
+    def _pair_mismatch(label: str, pair: dict[str, Any]) -> None:
+        if pair.get("expected") != pair.get("actual"):
+            mismatches.append(f"{label}: expected {pair.get('expected')}, got {pair.get('actual')}")
 
-        repository = ProcessRepository(session)
-        for name, description, output_name, unit in HISTORICAL_PROCESS_TEMPLATES:
-            process = session.query(Process).filter(Process.org_id == org.id, Process.name == name).one_or_none()
-            if process is not None:
-                step_count = session.query(Step).filter(Step.process_id == process.id).count()
-                if step_count:
-                    existing.append(name)
-                    continue
-                repaired.append(name)
-            else:
-                process = repository.create_process(
-                    org_id=org.id,
-                    name=name,
-                    description=f"Historical import template. {description}",
-                    category=ProcessCategory.MANUFACTURING,
-                    is_draft=False,
-                )
-                created.append(name)
-            repository.add_step(
-                process_id=process.id,
-                org_id=org.id,
-                step_number=1,
-                position=1000,
-                name="Record historical operation",
-                description="Completed historical operation imported from Whistlebird v1.",
-                outputs=[{"id": str(uuid4()), "name": output_name, "unit": unit}],
-                execution_prompts=[],
-            )
-        missing_steps = [
-            name
-            for (name,) in (
-                session.query(Process.name)
-                .outerjoin(Step, Step.process_id == Process.id)
-                .filter(
-                    Process.org_id == org.id,
-                    Process.name.in_([template[0] for template in HISTORICAL_PROCESS_TEMPLATES]),
-                )
-                .group_by(Process.name)
-                .having(text("count(steps.id) = 0"))
-                .all()
-            )
-        ]
-        if missing_steps:
-            raise RuntimeError("Historical template setup left a process without a step")
-        return {"created": created, "existing": existing, "repaired": repaired}
-    finally:
-        scope.close()
-        session.close()
-        engine.dispose()
+    for group_name, group in report.items():
+        if not isinstance(group, dict):
+            continue
+        if group_name in ("date_mismatches", "wording_leaks"):
+            mismatches.extend(f"{group_name}.{label}: {count}" for label, count in group.items() if count)
+        elif {"expected", "actual"} <= set(group):
+            _pair_mismatch(group_name, group)
+        else:
+            for label, pair in group.items():
+                if isinstance(pair, dict):
+                    _pair_mismatch(label, pair)
+    if mismatches:
+        raise RuntimeError(f"{report_name} verification failed: {'; '.join(mismatches)}")
 
 
-def build_profile(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, Any]:
-    """Read both databases and return an aggregate-only migration preflight report."""
-    with create_engine(legacy_url).connect() as legacy_connection:
-        legacy = _legacy_profile(legacy_connection)
-    with create_engine(target_url).connect() as target_connection:
-        target = _target_profile(target_connection, requested_org_name)
-    return {"legacy": legacy, "target": target}
+# --------------------------------------------------------------------------------------
+# Verification
+# --------------------------------------------------------------------------------------
 
 
-def build_import_verification(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, Any]:
-    """Compare imported source counts and business dates without exposing operational data."""
+def build_import_verification(
+    legacy_url: str, target_url: str, requested_org_name: str, manifest_path: Path | None
+) -> dict[str, Any]:
+    """Compare loaded counts against the sources and assert no legacy wording leaked."""
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Verification is only permitted for {RESET_ORG_NAME!r}")
-    inventory_tables = (
-        "purchases_gns",
-        "purchases_empty_bottles",
-        "purchases_ingredients",
-        "product_actions_flavors",
-        "product_actions_flavor_experiments",
-        "product_actions_flavor_vat",
-        "product_actions_distillation_experiments",
-        "product_actions_create_premix",
-        "product_actions_bottling",
-        "product_actions_ex_stock_storage",
-    )
-    sample_tables = ("product_actions_samples_created", "product_actions_samples_consumed")
+
     with create_engine(legacy_url).connect() as source:
-        expected_inventory = {
+        raw_material_sources = {
             table: source.execute(text(f"SELECT count(*) FROM {_identifier(table)}")).scalar_one()
-            for table in inventory_tables
-        }
-        expected_samples = {
-            table: source.execute(text(f"SELECT count(*) FROM {_identifier(table)}")).scalar_one()
-            for table in sample_tables
+            for table in (
+                "purchases_gns",
+                "purchases_empty_bottles",
+                "purchases_ingredients",
+                "product_actions_create_premix",
+            )
         }
         expected_lodgements = source.execute(text("SELECT count(*) FROM customs_lodgements")).scalar_one()
+        legacy = _legacy_batches(source)
+    manifest_batches: list[ProductionBatch] = []
+    if manifest_path and manifest_path.exists():
+        manifest_batches, _ = _load_manifest(manifest_path)
+    batches = _merge_batches(legacy, manifest_batches)
+    expected_by_workflow = Counter(batch.workflow_name for batch in batches)
+
     with create_engine(target_url).connect() as target:
         org_id = target.execute(
             text("SELECT id FROM organisations WHERE name = :name"), {"name": requested_org_name}
         ).scalar_one_or_none()
         if org_id is None:
             raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
-        actual_inventory = dict(
-            target.execute(
-                text(
-                    """
-                    SELECT extra_data -> 'legacy_source' ->> 'table' AS legacy_table, count(*)
-                    FROM inventory_items
-                    WHERE org_id = :org_id AND extra_data ->> 'source_system' = 'whistlebird_v1'
-                    GROUP BY legacy_table
-                    """
-                ),
-                {"org_id": org_id},
-            ).all()
-        )
-        actual_samples = dict(
-            target.execute(
-                text(
-                    """
-                    SELECT execution_data -> 'legacy_source' ->> 'table' AS legacy_table, count(*)
-                    FROM execution_steps es
-                    JOIN executions e ON e.id = es.execution_id
-                    WHERE e.org_id = :org_id AND execution_data ->> 'source_system' = 'whistlebird_v1'
-                    GROUP BY legacy_table
-                    """
-                ),
-                {"org_id": org_id},
-            ).all()
-        )
-        inventory_date_mismatches = target.execute(
+        params = {"org_id": org_id, "names": list(PRODUCT_WORKFLOWS), "key": IMPORT_MARKER_KEY}
+        actual_raw = target.execute(
             text(
                 """
-                SELECT count(*)
-                FROM inventory_items
-                WHERE org_id = :org_id
-                  AND extra_data ->> 'source_system' = 'whistlebird_v1'
-                  AND (created_at AT TIME ZONE 'Pacific/Auckland')::date
-                      <> (extra_data ->> 'legacy_date')::date
+                SELECT count(*) FROM inventory_items
+                WHERE org_id = :org_id AND inventory_type = 'raw_material'
+                  AND extra_data ->> :key LIKE 'raw-%'
                 """
             ),
-            {"org_id": org_id},
+            params,
         ).scalar_one()
-        execution_date_mismatches = target.execute(
+        actual_by_workflow = dict(
+            target.execute(
+                text(
+                    """
+                    SELECT p.name, count(*)
+                    FROM executions e JOIN processes p ON p.id = e.process_id
+                    WHERE e.org_id = :org_id AND p.name = ANY(:names)
+                    GROUP BY p.name
+                    """
+                ),
+                params,
+            ).all()
+        )
+        incomplete_steps = target.execute(
             text(
                 """
-                SELECT count(*)
-                FROM execution_steps es
+                SELECT count(*) FROM execution_steps es
+                JOIN executions e ON e.id = es.execution_id
+                JOIN processes p ON p.id = e.process_id
+                WHERE e.org_id = :org_id AND p.name = ANY(:names) AND es.status <> 'COMPLETED'
+                """
+            ),
+            params,
+        ).scalar_one()
+        step_date_mismatches = target.execute(
+            text(
+                """
+                SELECT count(*) FROM execution_steps es
                 JOIN executions e ON e.id = es.execution_id
                 WHERE e.org_id = :org_id
-                  AND execution_data ->> 'source_system' = 'whistlebird_v1'
+                  AND es.execution_data ? 'step_date'
                   AND (es.completed_at AT TIME ZONE 'Pacific/Auckland')::date
-                      <> (execution_data ->> 'legacy_date')::date
+                      <> (es.execution_data ->> 'step_date')::date
                 """
             ),
-            {"org_id": org_id},
+            params,
         ).scalar_one()
         actual_lodgements = target.execute(
             text(
                 """
-                SELECT count(*)
-                FROM compliance_records
-                WHERE org_id = :org_id
-                  AND framework_slug = 'customs-alcohol'
-                  AND control_id = 'period-lodgement'
-                  AND details ->> 'source_system' = 'whistlebird_v1'
+                SELECT count(*) FROM compliance_records
+                WHERE org_id = :org_id AND framework_slug = 'customs-alcohol'
+                  AND control_id = 'period-lodgement' AND details ->> :key LIKE 'customs-%'
                 """
             ),
-            {"org_id": org_id},
+            params,
         ).scalar_one()
+        stamped_today = target.execute(
+            text(
+                """
+                SELECT count(*) FROM execution_steps es JOIN executions e ON e.id = es.execution_id
+                WHERE e.org_id = :org_id
+                  AND (es.completed_at AT TIME ZONE 'Pacific/Auckland')::date
+                      = (now() AT TIME ZONE 'Pacific/Auckland')::date
+                """
+            ),
+            params,
+        ).scalar_one()
+        wording_leaks = {}
+        leak_sql = {
+            "process_names": "SELECT count(*) FROM processes WHERE org_id = :org_id "
+            "AND lower(name) ~ 'legacy|sheet:|historical'",
+            "step_names": "SELECT count(*) FROM steps WHERE org_id = :org_id "
+            "AND lower(name) ~ 'legacy|sheet:|historical'",
+            "inventory_names": "SELECT count(*) FROM inventory_items WHERE org_id = :org_id "
+            "AND lower(name) ~ 'legacy|sheet:|historical'",
+            "inventory_extra": "SELECT count(*) FROM inventory_items WHERE org_id = :org_id "
+            "AND lower(extra_data::text) ~ 'whistlebird_v1|legacy_source|historical_import'",
+            "step_extra": "SELECT count(*) FROM execution_steps es JOIN executions e ON e.id = es.execution_id "
+            "WHERE e.org_id = :org_id "
+            "AND lower(es.execution_data::text) ~ 'whistlebird_v1|legacy_source|historical_import'",
+        }
+        for label, sql in leak_sql.items():
+            wording_leaks[label] = target.execute(text(sql), params).scalar_one()
+
     return {
-        "inventory": {
-            table: {"expected": expected, "actual": actual_inventory.get(table, 0)}
-            for table, expected in expected_inventory.items()
-        },
-        "samples": {
-            table: {"expected": expected, "actual": actual_samples.get(table, 0)}
-            for table, expected in expected_samples.items()
+        "raw_material_items": {"expected": sum(raw_material_sources.values()), "actual": actual_raw},
+        "batch_executions": {
+            name: {"expected": expected_by_workflow.get(name, 0), "actual": actual_by_workflow.get(name, 0)}
+            for name in (WILDFLOWER_WORKFLOW, SOLSTICE_WORKFLOW, ROSELLA_WORKFLOW)
         },
         "customs_lodgements": {"expected": expected_lodgements, "actual": actual_lodgements},
-        "date_mismatches": {"inventory": inventory_date_mismatches, "execution_steps": execution_date_mismatches},
+        "incomplete_batch_steps": {"expected": 0, "actual": incomplete_steps},
+        "date_mismatches": {"step_dates": step_date_mismatches, "steps_stamped_on_run_date": stamped_today},
+        "wording_leaks": wording_leaks,
     }
 
 
-def build_production_sheet_verification(
-    manifest_path: Path, target_url: str, requested_org_name: str
-) -> dict[str, Any]:
-    """Compare the curated manifest's expected counts against imported stage-2 rows."""
+def build_manifest_verification(manifest_path: Path, target_url: str, requested_org_name: str) -> dict[str, Any]:
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Verification is only permitted for {RESET_ORG_NAME!r}")
-    records = _production_sheet_records(manifest_path)
-    expected_by_type = dict(Counter(record.record_type for record in records))
+    batches, excluded = _load_manifest(manifest_path)
+    expected = Counter(b.product_line for b in batches)
     with create_engine(target_url).connect() as target:
         org_id = target.execute(
             text("SELECT id FROM organisations WHERE name = :name"), {"name": requested_org_name}
         ).scalar_one_or_none()
         if org_id is None:
             raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
-        actual_by_type = dict(
-            target.execute(
-                text(
-                    """
-                    SELECT execution_data ->> 'record_type' AS record_type, count(*)
-                    FROM execution_steps es
-                    JOIN executions e ON e.id = es.execution_id
-                    WHERE e.org_id = :org_id
-                      AND execution_data ->> 'source_system' = :source_system
-                    GROUP BY record_type
-                    """
-                ),
-                {"org_id": org_id, "source_system": PRODUCTION_SHEET_SOURCE_SYSTEM},
-            ).all()
-        )
-        date_mismatches = target.execute(
+        loaded_labels = target.execute(
             text(
                 """
-                SELECT count(*)
-                FROM execution_steps es
-                JOIN executions e ON e.id = es.execution_id
-                WHERE e.org_id = :org_id
-                  AND execution_data ->> 'source_system' = :source_system
-                  AND (es.completed_at AT TIME ZONE 'Pacific/Auckland')::date
-                      <> (execution_data ->> 'legacy_date')::date
+                SELECT count(DISTINCT es.execution_data ->> 'batch_label')
+                FROM execution_steps es JOIN executions e ON e.id = es.execution_id
+                WHERE e.org_id = :org_id AND es.execution_data -> 'source_ref' ->> 'table' = :tbl
                 """
             ),
-            {"org_id": org_id, "source_system": PRODUCTION_SHEET_SOURCE_SYSTEM},
+            {"org_id": org_id, "tbl": PRODUCTION_SOURCE_TABLE},
         ).scalar_one()
     return {
-        "by_record_type": {
-            record_type: {"expected": expected, "actual": actual_by_type.get(record_type, 0)}
-            for record_type, expected in expected_by_type.items()
-        },
-        "date_mismatches": date_mismatches,
+        "manifest_batches_by_product": {k: expected.get(k, 0) for k in ("wildflower", "solstice", "rosella")},
+        "loaded_batch_labels_with_manifest_steps": loaded_labels,
+        "excluded_batches": len(excluded),
+    }
+
+
+# --------------------------------------------------------------------------------------
+# Bootstrap
+# --------------------------------------------------------------------------------------
+
+
+def bootstrap_whistlebird_test(
+    legacy_url: str,
+    target_url: str,
+    requested_org_name: str,
+    admin_email: str,
+    admin_password: str,
+    manifest_path: Path,
+) -> dict[str, Any]:
+    """Rebuild the disposable Whistlebird tenant from reviewed, deterministic sources.
+
+    Every read-only validation happens before the first target write. The only destructive
+    operation is the existing exact-name reset, which preserves tenant users and rejects
+    every other organisation name.
+    """
+    if requested_org_name != RESET_ORG_NAME:
+        raise ValueError(f"Bootstrap is only permitted for {RESET_ORG_NAME!r}")
+
+    preflight = {
+        "core": build_core_dry_run(legacy_url),
+        "production": build_production_dry_run(legacy_url, manifest_path),
+        "manifest": build_manifest_dry_run(manifest_path),
+    }
+    setup = ensure_target_org_admin(target_url, requested_org_name, admin_email, admin_password)
+    reset = reset_target_org(target_url, requested_org_name)
+    workflows = setup_product_workflows(target_url, requested_org_name)
+    raw_materials = apply_raw_material_inventory(legacy_url, target_url, requested_org_name)
+    batches = apply_production_batches(legacy_url, target_url, requested_org_name, manifest_path)
+    trials = apply_trial_batches(legacy_url, target_url, requested_org_name)
+    lodgements = apply_customs_lodgements(legacy_url, target_url, requested_org_name)
+    verification = build_import_verification(legacy_url, target_url, requested_org_name, manifest_path)
+    manifest_verification = build_manifest_verification(manifest_path, target_url, requested_org_name)
+    _require_matching_import(verification, "Production history load")
+    compliant_nz_alcohol_setup = ensure_compliant_nz_alcohol_setup(target_url, requested_org_name)
+    return {
+        "preflight": preflight,
+        "tenant_setup": setup,
+        "reset": reset,
+        "workflows": workflows,
+        "raw_materials": raw_materials,
+        "batches": batches,
+        "trials": trials,
+        "customs_lodgements": lodgements,
+        "verification": {"load": verification, "manifest": manifest_verification},
+        "compliant_nz_alcohol_setup": compliant_nz_alcohol_setup,
     }
 
 
@@ -2216,14 +2020,14 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--legacy-url",
         default=os.environ.get("WB_LEGACY_DATABASE_URL"),
-        help="Legacy SQLAlchemy URL (or set WB_LEGACY_DATABASE_URL).",
+        help="Prior-database SQLAlchemy URL (or set WB_LEGACY_DATABASE_URL).",
     )
     parser.add_argument(
         "--target-url",
         default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"),
         help="Target SQLAlchemy URL (or set BIZE_MIGRATION_DATABASE_URL).",
     )
-    parser.add_argument("--org-name", default="whistlebird_test", help="Requested migration tenant name.")
+    parser.add_argument("--org-name", default="whistlebird_test", help="Requested target tenant name.")
     parser.add_argument("--output", type=Path, help="Optional JSON report path; stdout is always written.")
     parser.add_argument(
         "--admin-email",
@@ -2233,7 +2037,12 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--admin-password-env",
         default="WHISTLEBIRD_TEST_ADMIN_PASSWORD",
-        help="Environment-variable name containing the test-admin password (never printed).",
+        help="Environment-variable name holding the test-admin password (never printed).",
+    )
+    parser.add_argument(
+        "--sheet-manifest",
+        type=Path,
+        help="Path to the curated per-batch production manifest JSON (docs/whistlebird-production-sheet-source.json).",
     )
     parser.add_argument(
         "--ensure-test-tenant",
@@ -2243,20 +2052,18 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--rebuild-whistlebird-test",
         action="store_true",
-        help=(
-            "Preflight, create whistlebird_test if needed, reset its data, replay both migration stages, "
-            "and require matching verification counts."
-        ),
+        help="Preflight, create whistlebird_test if needed, reset its data, replay the full load, "
+        "and require matching verification.",
     )
     parser.add_argument(
         "--confirm-reset-whistlebird-test",
         action="store_true",
-        help="Delete imported data only for the whistlebird_test tenant; preserves its users.",
+        help="Delete loaded data only for the whistlebird_test tenant; preserves its users.",
     )
     parser.add_argument(
         "--dry-run-core",
         action="store_true",
-        help="Validate the deterministic GNS, packaging, ingredient and Customs source tranche without writing.",
+        help="Validate the deterministic raw-material and Customs tranche without writing.",
     )
     parser.add_argument(
         "--dry-run-traceability",
@@ -2266,55 +2073,50 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run-production",
         action="store_true",
-        help="Validate the evidence-backed flavour, vat and bottling production tranche without writing.",
+        help="Report the per-batch executions the load would build, by product and step, without writing.",
     )
     parser.add_argument(
-        "--setup-historical-templates",
+        "--dry-run-manifest",
         action="store_true",
-        help="Create approved historical process templates only for whistlebird_test.",
+        help="Validate the curated per-batch production manifest without writing.",
     )
     parser.add_argument(
-        "--apply-core-receipts-and-lodgements",
+        "--setup-workflows",
         action="store_true",
-        help="Import deterministic v1 purchases and Customs rows only into whistlebird_test.",
+        help="Create the per-product and trial workflows only for whistlebird_test.",
     )
     parser.add_argument(
-        "--apply-evidenced-production",
+        "--apply-raw-materials",
         action="store_true",
-        help="Import only source-evidenced v1 flavour, vat and bottling executions into whistlebird_test.",
+        help="Load prior-database purchases as dated inventory only into whistlebird_test.",
     )
     parser.add_argument(
-        "--apply-sample-history",
+        "--apply-batches",
         action="store_true",
-        help="Import v1 sample records as historical executions only into whistlebird_test.",
+        help="Build one multi-step execution per VAT batch into whistlebird_test.",
+    )
+    parser.add_argument(
+        "--apply-trials",
+        action="store_true",
+        help="Load recipe/distillation trials into whistlebird_test.",
+    )
+    parser.add_argument(
+        "--apply-customs-lodgements",
+        action="store_true",
+        help="Load Customs lodgements as NZ-alcohol compliance records into whistlebird_test.",
     )
     parser.add_argument(
         "--verify-import",
         action="store_true",
-        help="Compare source and target Whistlebird import counts and dates without writing.",
+        help="Compare loaded counts against the sources and check for legacy wording, without writing.",
     )
     parser.add_argument(
-        "--sheet-manifest",
-        type=Path,
-        help="Path to the curated stage-2 production-sheet JSON manifest "
-        "(docs/whistlebird-production-sheet-source.json). Never the live Google Sheet.",
-    )
-    parser.add_argument(
-        "--dry-run-production-sheet",
+        "--verify-manifest",
         action="store_true",
-        help="Validate the curated production-sheet manifest without writing.",
-    )
-    parser.add_argument(
-        "--apply-production-sheet",
-        action="store_true",
-        help="Import curated production-sheet (stage 2) records only into whistlebird_test.",
-    )
-    parser.add_argument(
-        "--verify-production-sheet",
-        action="store_true",
-        help="Compare the curated manifest's expected counts against imported stage-2 rows without writing.",
+        help="Compare the curated manifest against loaded rows without writing.",
     )
     arguments = parser.parse_args()
+
     if not arguments.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
     actions = (
@@ -2324,56 +2126,59 @@ def _arguments() -> argparse.Namespace:
         arguments.dry_run_core,
         arguments.dry_run_traceability,
         arguments.dry_run_production,
-        arguments.setup_historical_templates,
-        arguments.apply_core_receipts_and_lodgements,
-        arguments.apply_evidenced_production,
-        arguments.apply_sample_history,
+        arguments.dry_run_manifest,
+        arguments.setup_workflows,
+        arguments.apply_raw_materials,
+        arguments.apply_batches,
+        arguments.apply_trials,
+        arguments.apply_customs_lodgements,
         arguments.verify_import,
-        arguments.dry_run_production_sheet,
-        arguments.apply_production_sheet,
-        arguments.verify_production_sheet,
+        arguments.verify_manifest,
     )
-    if sum(actions) > 1:
-        parser.error("Specify only one migration action per invocation")
-    target_scoped_actions = (
+    if sum(bool(a) for a in actions) > 1:
+        parser.error("Specify only one action per invocation")
+    target_scoped = (
         arguments.ensure_test_tenant,
         arguments.rebuild_whistlebird_test,
         arguments.confirm_reset_whistlebird_test,
-        arguments.setup_historical_templates,
-        arguments.apply_core_receipts_and_lodgements,
-        arguments.apply_evidenced_production,
-        arguments.apply_sample_history,
+        arguments.setup_workflows,
+        arguments.apply_raw_materials,
+        arguments.apply_batches,
+        arguments.apply_trials,
+        arguments.apply_customs_lodgements,
         arguments.verify_import,
-        arguments.apply_production_sheet,
-        arguments.verify_production_sheet,
+        arguments.verify_manifest,
     )
-    if any(target_scoped_actions) and arguments.org_name != RESET_ORG_NAME:
+    if any(target_scoped) and arguments.org_name != RESET_ORG_NAME:
         parser.error(f"--org-name must be exactly {RESET_ORG_NAME!r} for this action")
-    if arguments.ensure_test_tenant or arguments.rebuild_whistlebird_test:
-        if not os.environ.get(arguments.admin_password_env):
-            parser.error(f"{arguments.admin_password_env} must contain the test-admin password")
-    sheet_actions = (
-        arguments.dry_run_production_sheet or arguments.apply_production_sheet or arguments.verify_production_sheet
-    )
-    if arguments.rebuild_whistlebird_test and not arguments.sheet_manifest:
-        arguments.sheet_manifest = DEFAULT_PRODUCTION_SHEET_MANIFEST
-    if sheet_actions and not arguments.sheet_manifest:
-        parser.error("--sheet-manifest is required for the production-sheet actions")
-    if (
-        not (
-            arguments.confirm_reset_whistlebird_test
-            or arguments.setup_historical_templates
-            or arguments.ensure_test_tenant
-            or sheet_actions
-        )
-        and not arguments.legacy_url
+    if (arguments.ensure_test_tenant or arguments.rebuild_whistlebird_test) and not os.environ.get(
+        arguments.admin_password_env
     ):
-        parser.error("--legacy-url is required unless performing the scoped reset")
+        parser.error(f"{arguments.admin_password_env} must contain the test-admin password")
+    if not arguments.sheet_manifest and (
+        arguments.rebuild_whistlebird_test or arguments.dry_run_manifest or arguments.verify_manifest
+    ):
+        arguments.sheet_manifest = DEFAULT_PRODUCTION_MANIFEST
+    needs_legacy = (
+        arguments.rebuild_whistlebird_test
+        or arguments.dry_run_core
+        or arguments.dry_run_traceability
+        or arguments.dry_run_production
+        or arguments.apply_raw_materials
+        or arguments.apply_batches
+        or arguments.apply_trials
+        or arguments.apply_customs_lodgements
+        or arguments.verify_import
+        or not any(actions)
+    )
+    if needs_legacy and not arguments.legacy_url:
+        parser.error("--legacy-url is required for this action (or set WB_LEGACY_DATABASE_URL)")
     return arguments
 
 
 def main() -> int:
     arguments = _arguments()
+    manifest = arguments.sheet_manifest or DEFAULT_PRODUCTION_MANIFEST
     if arguments.rebuild_whistlebird_test:
         report = bootstrap_whistlebird_test(
             arguments.legacy_url,
@@ -2385,38 +2190,35 @@ def main() -> int:
         )
     elif arguments.ensure_test_tenant:
         report = ensure_target_org_admin(
-            arguments.target_url,
-            arguments.org_name,
-            arguments.admin_email,
-            os.environ[arguments.admin_password_env],
+            arguments.target_url, arguments.org_name, arguments.admin_email, os.environ[arguments.admin_password_env]
         )
     elif arguments.confirm_reset_whistlebird_test:
         report = reset_target_org(arguments.target_url, arguments.org_name)
-    elif arguments.setup_historical_templates:
-        report = setup_historical_process_templates(arguments.target_url, arguments.org_name)
-    elif arguments.apply_core_receipts_and_lodgements:
-        report = apply_core_receipts_and_lodgements(arguments.legacy_url, arguments.target_url, arguments.org_name)
-    elif arguments.apply_evidenced_production:
-        report = apply_evidenced_production(arguments.legacy_url, arguments.target_url, arguments.org_name)
-    elif arguments.apply_sample_history:
-        report = apply_sample_history(arguments.legacy_url, arguments.target_url, arguments.org_name)
+    elif arguments.setup_workflows:
+        report = setup_product_workflows(arguments.target_url, arguments.org_name)
+    elif arguments.apply_raw_materials:
+        report = apply_raw_material_inventory(arguments.legacy_url, arguments.target_url, arguments.org_name)
+    elif arguments.apply_batches:
+        report = apply_production_batches(arguments.legacy_url, arguments.target_url, arguments.org_name, manifest)
+    elif arguments.apply_trials:
+        report = apply_trial_batches(arguments.legacy_url, arguments.target_url, arguments.org_name)
+    elif arguments.apply_customs_lodgements:
+        report = apply_customs_lodgements(arguments.legacy_url, arguments.target_url, arguments.org_name)
     elif arguments.verify_import:
-        report = build_import_verification(arguments.legacy_url, arguments.target_url, arguments.org_name)
-    elif arguments.apply_production_sheet:
-        report = apply_production_sheet(arguments.sheet_manifest, arguments.target_url, arguments.org_name)
-    elif arguments.verify_production_sheet:
-        report = build_production_sheet_verification(arguments.sheet_manifest, arguments.target_url, arguments.org_name)
-    elif arguments.dry_run_production_sheet:
-        report = build_production_sheet_dry_run(arguments.sheet_manifest)
+        report = build_import_verification(arguments.legacy_url, arguments.target_url, arguments.org_name, manifest)
+    elif arguments.verify_manifest:
+        report = build_manifest_verification(manifest, arguments.target_url, arguments.org_name)
+    elif arguments.dry_run_manifest:
+        report = build_manifest_dry_run(manifest)
     elif arguments.dry_run_core:
         report = build_core_dry_run(arguments.legacy_url)
     elif arguments.dry_run_traceability:
         report = build_traceability_dry_run(arguments.legacy_url)
     elif arguments.dry_run_production:
-        report = build_production_dry_run(arguments.legacy_url)
+        report = build_production_dry_run(arguments.legacy_url, manifest)
     else:
         report = build_profile(arguments.legacy_url, arguments.target_url, arguments.org_name)
-    rendered = json.dumps(report, indent=2, sort_keys=True)
+    rendered = json.dumps(report, indent=2, sort_keys=True, default=str)
     if arguments.output:
         arguments.output.parent.mkdir(parents=True, exist_ok=True)
         arguments.output.write_text(f"{rendered}\n", encoding="utf-8")

@@ -2,6 +2,7 @@
 
 import csv
 import io
+from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -9,15 +10,18 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovementType
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
+from app.features.compliant.modules.nz_alcohol.live_evidence import derive_np3_core_evidence
 from app.features.compliant.modules.nz_alcohol.module import run_check
 from app.features.compliant.routes.api_routes import _csv_safe
 from app.features.compliant.service import ComplianceService, calculate_customs_reconciliation
+from tests.dag_traversal_helpers import build_linear_dag, clear_org_synthetic_data
 from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
 
 
@@ -569,5 +573,98 @@ def test_run_check_flags_and_counts_attention_frameworks(db, flask_app):
         attention_frameworks = [f for f in result.data["frameworks"] if f["state"] == "attention"]
         assert {f["slug"] for f in attention_frameworks} == {"customs-alcohol", "np3-food-control"}
     finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_np3_live_evidence_projects_real_core_dag_lineage(db, flask_app):
+    """NP3 proves a connected Core production slice, not just that executions were counted."""
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile",
+                json={"enabled": True, "settings": {"food_control_programme": "np3"}},
+            ).status_code
+            == 200
+        )
+        graph = build_linear_dag(db, org.id)
+        raw_material = db.get(InventoryItem, graph["r1_id"])
+        raw_material.supplier = "Traceable Malt Co"
+        raw_material.supplier_batch_number = "MALT-2026-09"
+        raw_material.purchase_date = date(2026, 9, 1)
+        db.commit()
+
+        observations, summary = derive_np3_core_evidence(db, org.id)
+        trace = next(item for item in observations if item["control_id"] == "trace-and-recall")
+        assert str(graph["f1_id"]) in trace["source_refs"]
+        assert str(graph["execution_id"]) in trace["source_refs"]
+        assert summary["dag_lineage_edges"] == 2
+        assert summary["dag_traced_final_products"] == 1
+        assert any(item["control_id"] == "receiving-food" for item in observations)
+
+        audit = client.get("/api/compliant/np3-audit")
+        assert audit.status_code == 200
+        row = next(row for row in audit.get_json()["rows"] if row["control_id"] == "trace-and-recall")
+        assert row["derived_evidence_count"] == 1
+        assert str(graph["f1_id"]) in row["derived_evidence"][0]["source_refs"]
+    finally:
+        clear_org_synthetic_data(db, org.id)
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_np3_required_capture_policy_blocks_direct_core_step_completion(db, flask_app):
+    """The UI shelf is not the security boundary: direct completion must not bypass NP3 policy."""
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.process import Process
+    from app.core.db.models.step import Step
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.core.db.repositories.process_repo import ProcessRepository
+
+    org, client = _admin_client(db, flask_app)
+    process = None
+    try:
+        response = client.put(
+            "/api/compliant/profile",
+            json={
+                "enabled": True,
+                "settings": {"food_control_programme": "np3", "np3_execution_evidence_mode": "required"},
+            },
+        )
+        assert response.status_code == 200
+        process_repo = ProcessRepository(db)
+        process = process_repo.create_process(org_id=org.id, name="NP3 capture test", description="", is_draft=False)
+        process_repo.add_step(
+            process_id=process.id,
+            org_id=org.id,
+            step_number=1,
+            position=1000,
+            name="Production",
+            inputs=[],
+            outputs=[],
+            execution_prompts=[],
+        )
+        execution = ExecutionRepository(db).create_execution(org_id=org.id, process_id=process.id)
+        db.commit()
+        execution_step = execution.execution_steps[0]
+
+        completion = client.post(
+            f"/api/core/executions/{execution.id}/steps/{execution_step.id}/complete",
+            json={"actual_inputs": [], "actual_outputs": [], "execution_data": {}},
+        )
+        assert completion.status_code == 409
+        assert completion.get_json()["code"] == "compliance_requirement_not_met"
+        db.refresh(execution_step)
+        assert execution_step.status.value != "completed"
+    finally:
+        if process is not None:
+            db.query(ExecutionStep).filter(ExecutionStep.execution_id.in_(
+                db.query(Execution.id).filter(Execution.process_id == process.id)
+            )).delete(synchronize_session=False)
+            db.query(Execution).filter(Execution.process_id == process.id).delete(synchronize_session=False)
+            db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
+            db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()
