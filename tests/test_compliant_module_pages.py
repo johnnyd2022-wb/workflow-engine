@@ -1,11 +1,13 @@
 """Module navigation and NZ Alcohol applicability contracts."""
 
+from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.features.compliant.modules.nz_alcohol.catalogue import framework_applies
+from app.features.compliant.modules.nz_alcohol.catalogue import control_reference, framework_applies
 from app.features.compliant.modules.nz_alcohol.np3_audit import NP3_AUDIT_CATEGORIES, build_np3_audit_rows
 from app.features.compliant.modules.nz_alcohol.workflow_rules import rules_for_profile
+from app.features.compliant.service import build_priority_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -108,6 +110,31 @@ def test_np3_audit_register_labels_live_core_evidence_and_does_not_hide_a_failur
     rows = build_np3_audit_rows([failed_record], derived)
     traceability = next(row for row in rows if row["control_id"] == "trace-and-recall")
     assert traceability["state"] == "attention"
+
+
+def test_np3_controls_carry_a_guidance_mapping_for_an_auditor_to_check():
+    """Plain-language evidence prompts must remain tied to an official NP3 topic."""
+    assert control_reference("np3-food-control", "trace-and-recall") == "Sourcing, receiving and tracing food; Recalling food"
+    assert control_reference("np3-food-control", "cleaning-and-hygiene") == "Cleaning and sanitising"
+    assert control_reference("customs-alcohol", "reconciliation") is None
+
+
+def test_upcoming_evidence_review_is_a_live_priority_action():
+    record = SimpleNamespace(
+        status="complete",
+        due_date=date.today() + timedelta(days=7),
+        title="Sanitisation protocol review",
+        framework_slug="np3-food-control",
+        control_id="cleaning-and-hygiene",
+    )
+    actions = build_priority_actions(
+        SimpleNamespace(enabled=True, settings={"alcohol_product_types": ["spirits"]}),
+        [],
+        {"profiled_product_count": 1},
+        records=[record],
+    )
+    assert actions[0]["state"] == "review"
+    assert actions[0]["control_id"] == "cleaning-and-hygiene"
 
 
 def test_nz_alcohol_workflow_rules_only_enforce_an_explicit_np3_policy():

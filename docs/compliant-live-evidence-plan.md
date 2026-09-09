@@ -31,6 +31,25 @@ The NP3 register shows derived items alongside manual records, labels their orig
 exports the same provenance in CSV. A failed/open/manual overdue item is never hidden by
 derived evidence.
 
+### Auditor-first evidence workspace
+
+The NP3 page links to the current MPI guidance and maps every displayed check to its
+guidance card. The product's evidence request remains plain language; the card reference
+lets an operator or auditor compare it with the official source rather than treating a
+product label as the rule itself.
+
+Each applicable framework exposes **current operational evidence coverage** (`n / n` and
+percentage). It is deliberately not a compliance or certification score. Fully evidenced
+frameworks and NP3 categories begin collapsed and have a reduced-motion-safe green pulse;
+gaps remain open. Selecting a topic opens its evidence detail with a direct, human-labelled
+Core destination (inventory, trace or live execution records), while UUID provenance remains
+in the exported register.
+
+Evidence is recorded from the selected check, not a detached generic form. An operator can
+set a next review date or choose a review interval; its generated due date enters the
+Compliant priority queue during the 30-day review window. This is an in-workspace reminder,
+not an external notification or a claim that an auditor has accepted the evidence.
+
 ### Workflow-time capture
 
 NP3 supports three per-organisation capture modes:

@@ -2,6 +2,54 @@
 
 from app.features.compliant.modules.nz_alcohol.councils import council_catalogue
 
+# The dashboard deliberately links each NP3 check to the guidance card a verifier will
+# recognise.  These are references, not invented regulatory wording: the description in
+# the catalogue remains the product's plain-language evidence request.
+NP3_CONTROL_REFERENCES = {
+    "registration-scope": "Getting started and registering your business",
+    "operational-verification": "Checking that your programme is working well",
+    "staff-competency": "Training staff",
+    "cleaning-and-hygiene": "Cleaning and sanitising",
+    "trace-and-recall": "Sourcing, receiving and tracing food; Recalling food",
+    "corrective-actions": "When something goes wrong",
+    "documentation-record-keeping": "Keeping records",
+    "delegation": "Training staff and management responsibilities",
+    "operator-verification": "Checking that your programme is working well",
+    "personal-hygiene": "Personal hygiene",
+    "health-and-sickness": "Managing sick staff",
+    "food-standards-composition": "Food composition and labelling requirements",
+    "food-standards-microbiological": "Food safety hazards and controls",
+    "time-temperature-processing": "Making and processing food safely",
+    "cross-contamination": "Preventing cross contamination",
+    "equipment-design": "Equipment, facilities and maintenance",
+    "suppliers-and-purchasing": "Sourcing, receiving and tracing food",
+    "receiving-food": "Sourcing, receiving and tracing food",
+    "allergen-management": "Allergen management and labelling",
+    "cooking-poultry": "Cooking food safely",
+    "defrosting-reheating": "Defrosting and reheating food safely",
+    "storage-stock-rotation": "Storing food safely",
+    "cooling-freezing": "Cooling and freezing food safely",
+    "display-temperature": "Keeping food at safe temperatures",
+    "calibration": "Checking measuring equipment",
+    "transporting-food": "Transporting food safely",
+    "food-labelling-advertising": "Food labelling and advertising",
+    "biological-hazards": "Managing biological hazards",
+    "chemical-hazards": "Managing chemical hazards",
+    "physical-hazards": "Managing physical hazards",
+    "importing-food": "Importing food",
+    "pest-animal-control": "Pest and animal control",
+    "waste-management": "Waste management",
+    "premises-services": "Premises, facilities and essential services",
+    "water-supply": "Suitable water",
+    "maintenance": "Maintenance",
+    "unsafe-unsuitable-food": "When something goes wrong",
+}
+
+
+def control_reference(framework_slug: str, control_id: str) -> str | None:
+    """Return the official guidance card that contextualises an NP3 check."""
+    return NP3_CONTROL_REFERENCES.get(control_id) if framework_slug == "np3-food-control" else None
+
 NZ_ALCOHOL_FRAMEWORKS = (
     {
         "slug": "customs-alcohol",

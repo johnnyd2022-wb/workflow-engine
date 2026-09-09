@@ -32,6 +32,13 @@ def _observation(
     observed_at: Any,
     detail: str,
 ) -> dict[str, Any]:
+    destinations = {
+        "core-dag": ("/core/inventory/view", "Open inventory trace"),
+        "core-execution": ("/core/executions/live", "Open live executions"),
+        "core-evidence-file": ("/core/executions/live", "Open execution evidence"),
+        "core-inventory": ("/core/inventory/view", "Open inventory records"),
+    }
+    workspace_url, workspace_label = destinations[source_kind]
     return {
         "control_id": control_id,
         "title": title,
@@ -39,6 +46,10 @@ def _observation(
         "source_refs": source_refs,
         "observed_at": observed_at,
         "detail": detail,
+        # Stable human destinations make the live dashboard useful to an auditor without
+        # requiring them to interpret internal UUIDs. IDs remain available as provenance.
+        "workspace_url": workspace_url,
+        "workspace_label": workspace_label,
     }
 
 

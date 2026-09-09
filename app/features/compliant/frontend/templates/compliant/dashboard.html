@@ -15,6 +15,8 @@
     <div class="compliant-summary" role="status" aria-live="polite"><strong data-compliant-summary>Loading status…</strong><span data-readiness>Finding your fastest path to audit readiness…</span></div>
   </header>
 
+  <section class="compliant-module-health" aria-label="Evidence coverage by applicable module" data-module-health></section>
+
   <p class="compliant-error" data-compliant-error hidden></p>
 
   <section class="compliant-action-plan" aria-label="Your highest value actions">
@@ -27,7 +29,10 @@
     <div data-profile-target><p>Configuration is deliberately separate from your evidence work, so the audit plan stays focused.</p><a class="np3-download" href="/compliant/nz-alcohol/configuration" hx-boost="false">Configure NZ Alcohol</a></div>
   </section>
 
-  <section class="compliant-frameworks" aria-label="Applicable frameworks" data-frameworks></section>
+  <section class="compliant-framework-section" aria-labelledby="framework-evidence-heading">
+    <div class="section-heading"><div><p class="compliant-eyebrow">YOUR APPLICABLE OBLIGATIONS</p><h2 id="framework-evidence-heading">Evidence, mapped to the framework.</h2></div><p>Coverage is a live evidence measure, not a legal compliance score. Open a module to see the specific control, its guidance reference and its proof.</p></div>
+    <section class="compliant-frameworks" aria-label="Applicable frameworks" data-frameworks></section>
+  </section>
 
   <section class="compliant-record-panel" data-product-target>
     <div><p class="compliant-eyebrow">LIVE VALUE FROM CORE</p><h2>Map alcohol products once.</h2><p>Compliant uses the ABV to calculate litres of alcohol from production and wastage movements as they happen.</p><p data-customs-reconciliation></p><div data-product-suggestions class="product-suggestions"></div></div>
@@ -42,7 +47,7 @@
   </section>
 
   <section id="evidence" class="compliant-record-panel" data-record-target>
-    <div><p class="compliant-eyebrow">PROVE IT ONCE</p><h2>Add evidence without a compliance spreadsheet.</h2><p>Choose a control and Compliant asks only for its essential proof. Use an existing Core file when it is already the evidence—no duplicate upload.</p><p data-capture-guidance></p><div data-existing-evidence class="existing-evidence"></div></div>
+    <div><p class="compliant-eyebrow">PROVE THIS CHECK</p><h2 data-evidence-control-heading>Add evidence without a compliance spreadsheet.</h2><p data-evidence-control-summary>Choose a control and Compliant asks only for its essential proof. Use an existing Core file when it is already the evidence—no duplicate upload.</p><p data-capture-guidance></p><div data-existing-evidence class="existing-evidence"></div></div>
     <form data-record-form>
       <label>Framework <select name="framework_slug" required data-framework-select></select></label>
       <label>Control <select name="control_id" required data-control-select></select></label>
@@ -52,6 +57,7 @@
       <label>Period start <input name="period_start" type="date"></label>
       <label>Period end <input name="period_end" type="date"></label>
       <label>Due date <input name="due_date" type="date"></label>
+      <label>Review again <select name="review_interval_months"><option value="">No recurring review</option><option value="1">Every month</option><option value="3">Every 3 months</option><option value="6">Every 6 months</option><option value="12">Every year</option></select></label>
       <label>Measured value <input name="measured_value" type="number" step="0.0001"></label>
       <label>Limit <input name="limit_value" type="number" step="0.0001"></label>
       <label data-declared-lal-field hidden>Declared LAL <input name="declared_litres_of_alcohol" type="number" min="0" step="0.0001" placeholder="Filed litres of alcohol"></label>

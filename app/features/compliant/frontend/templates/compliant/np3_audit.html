@@ -7,7 +7,7 @@
   <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant" hx-boost="false">Compliant</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol" hx-boost="false">NZ Alcohol</a><span aria-hidden="true">/</span><strong>NP3 audit</strong></nav>
   {% set active_compliant_tab = "np3-audit" %}{% include "compliant/_nz_alcohol_tabs.html" %}
   <header class="compliant-hero np3-audit-hero">
-    <div><p class="compliant-eyebrow">NATIONAL PROGRAMME 3 / VERIFICATION READY</p><h1>Put every requested record in one calm, clear view.</h1><p>Built from your verifier's confirmation: the mandatory five food-safety factors, preparation items, and every topic they may sample on site.</p></div>
+    <div><p class="compliant-eyebrow">NATIONAL PROGRAMME 3 / VERIFICATION READY</p><h1>Put every requested record in one calm, clear view.</h1><p>Built from your verifier's confirmation: the mandatory five food-safety factors, preparation items, and every topic they may sample on site.</p><p><a class="np3-guidance-link" href="https://www.mpi.govt.nz/dmsdocument/21853/direct" target="_blank" rel="noopener noreferrer">Open the latest MPI National Programme 3 guidance ↗</a></p></div>
     <div class="compliant-summary" role="status" aria-live="polite"><strong data-np3-summary>Loading audit evidence…</strong><span data-np3-date>Set the verification date in Configuration.</span></div>
   </header>
   <p class="compliant-error" data-np3-error hidden></p>
@@ -15,6 +15,7 @@
   <section class="np3-prep-panel"><div><p class="compliant-eyebrow">BEFORE THE VISIT</p><h2>Bring the things that cannot be reconstructed later.</h2></div><ul data-np3-preparation></ul></section>
   <section class="np3-actions"><div><p class="compliant-eyebrow">EVIDENCE REGISTER</p><h2>Every verification topic, its current proof, and the next gap.</h2><p data-np3-disclaimer></p></div><a class="np3-download" href="/api/compliant/np3-audit?format=csv" hx-boost="false">Download evidence register (.csv)</a></section>
   <div data-np3-categories class="np3-categories" aria-live="polite"></div>
+  <dialog class="np3-control-detail" data-np3-control-detail aria-labelledby="np3-control-detail-title"></dialog>
 </main>
 {% endblock %}
 {% block scripts %}<script src="/compliant/static/np3-audit.js"></script>{% endblock %}
