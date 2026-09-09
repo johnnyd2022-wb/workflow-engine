@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -26,6 +26,7 @@ from app.features.compliant.models import AlcoholProductProfile, ComplianceProfi
 from app.features.compliant.modules.nz_alcohol.catalogue import (
     NZ_ALCOHOL_FRAMEWORKS,
     capture_requirements,
+    control_reference,
     framework_applies,
     framework_by_slug,
     framework_for_profile,
@@ -123,7 +124,10 @@ def calculate_customs_reconciliation(profiles: dict[str, Any], movements: list[t
 
 
 def build_priority_actions(
-    profile: ComplianceProfile | None, frameworks: list[dict[str, Any]], reconciliation: dict[str, Any]
+    profile: ComplianceProfile | None,
+    frameworks: list[dict[str, Any]],
+    reconciliation: dict[str, Any],
+    records: list[ComplianceRecord] | None = None,
 ) -> list[dict[str, Any]]:
     """Return the fewest high-value actions needed to improve evidence readiness.
 
@@ -168,6 +172,31 @@ def build_priority_actions(
                 "title": "Map your first alcohol product",
                 "description": "Set its ABV and Compliant will start deriving LAL from Core movements.",
                 "value": "Start the live Customs view.",
+            }
+        )
+
+    # A due date is an operator-visible reminder, rather than a passive field buried
+    # in a historic record. This makes recurring self-reviews reliably return to the
+    # live work queue before they become overdue.
+    today = date.today()
+    due_soon = sorted(
+        (
+            record
+            for record in (records or [])
+            if record.status == "complete" and record.due_date and today <= record.due_date <= today + timedelta(days=30)
+        ),
+        key=lambda record: record.due_date,
+    )
+    for record in due_soon:
+        actions.append(
+            {
+                "kind": "record",
+                "state": "review",
+                "title": f"Review due {record.due_date.isoformat()}: {record.title}",
+                "description": "A scheduled evidence review is coming up. Confirm the proof is still accurate or add a replacement record.",
+                "value": "Open the exact control and review its current proof.",
+                "framework_slug": record.framework_slug,
+                "control_id": record.control_id,
             }
         )
 
@@ -557,9 +586,11 @@ class ComplianceService:
                 control = self._control_state(profile, framework, control_id, records, reconciliation)
                 control["description"] = description
                 control["capture"] = capture_requirements(framework["slug"], control_id, profile.settings or {})
+                control["source_reference"] = control_reference(framework["slug"], control_id)
                 controls.append(control)
             states = {control["state"] for control in controls}
             state = "attention" if "attention" in states else "setup" if "setup" in states else "compliant"
+            current_controls = sum(control["state"] == "compliant" for control in controls)
             frameworks.append(
                 {
                     "slug": framework["slug"],
@@ -570,6 +601,15 @@ class ComplianceService:
                     "applicable_product_types": list(applies_to) if isinstance(applies_to, tuple) else applies_to,
                     "state": state,
                     "controls": controls,
+                    # This is evidence coverage, not a regulatory compliance score.
+                    # It tells an operator how much of this selected module presently
+                    # has a current proof record or a bounded Core observation.
+                    "evidence_coverage": {
+                        "current_controls": current_controls,
+                        "total_controls": len(controls),
+                        "percent": round((current_controls / len(controls)) * 100) if controls else 0,
+                        "label": "Current operational evidence coverage",
+                    },
                 }
             )
         return frameworks
@@ -610,7 +650,7 @@ class ComplianceService:
             "data_coverage": self.data_coverage(org_id, reconciliation=reconciliation, records=records)
             if frameworks
             else {},
-            "priority_actions": build_priority_actions(profile, frameworks, reconciliation),
+            "priority_actions": build_priority_actions(profile, frameworks, reconciliation, records=records),
             "evidence_readiness": {
                 "current_controls": sum(
                     1

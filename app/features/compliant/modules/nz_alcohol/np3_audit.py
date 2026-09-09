@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from app.features.compliant.modules.nz_alcohol.catalogue import control_reference
+
 NP3_AUDIT_CATEGORIES = (
     (
         "Confidence in management",
@@ -115,6 +117,7 @@ def build_np3_audit_rows(
                 {
                     "category": category,
                     "control_id": control_id,
+                    "source_reference": control_reference("np3-food-control", control_id),
                     "topic": topic,
                     "state": state,
                     "evidence_count": len(current) + len(derived),

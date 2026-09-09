@@ -43,6 +43,25 @@ def test_np3_dynamic_evidence_actions_force_a_full_document_navigation():
     assert "rowsByCategory" in script
 
 
+def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quiet():
+    dashboard = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "dashboard.html"
+    ).read_text(encoding="utf-8")
+    dashboard_script = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.js"
+    ).read_text(encoding="utf-8")
+    audit_script = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js"
+    ).read_text(encoding="utf-8")
+
+    assert "data-evidence-control-heading" in dashboard
+    assert "review_interval_months" in dashboard
+    assert "evidence_coverage" in dashboard_script
+    assert "card.open = !allPassing" in dashboard_script
+    assert "section.open = !allReady" in audit_script
+    assert "openControlDetail" in audit_script
+
+
 def test_audit_pack_does_not_overclaim_tamper_evidence():
     """The stored checksum is self-computed and never re-verified on read, so the pack
     must not tell an auditor it is tamper-evident — see docs/compliant-nz-alcohol-spec.md

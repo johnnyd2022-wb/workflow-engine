@@ -15,6 +15,8 @@
   var controlSelect = root.querySelector('[data-control-select]');
   var captureGuidance = root.querySelector('[data-capture-guidance]');
   var declaredLalField = root.querySelector('[data-declared-lal-field]');
+  var evidenceHeading = root.querySelector('[data-evidence-control-heading]');
+  var evidenceSummary = root.querySelector('[data-evidence-control-summary]');
 
   function showError(message) {
     errorEl.textContent = message || '';
@@ -68,24 +70,58 @@
     if (capture.source_refs) needs.push('linked Core source');
     if (capture.due_date) needs.push('review or expiry date');
     (capture.fields || []).forEach(function (field) { needs.push(field.replace(/_/g, ' ')); });
-    captureGuidance.textContent = control.description + (needs.length ? ' Required: ' + needs.join(', ') + '.' : '');
+    evidenceHeading.textContent = 'Evidence for: ' + control.control_id.replace(/-/g, ' ');
+    evidenceSummary.textContent = control.description;
+    captureGuidance.textContent = (control.source_reference ? 'NP3 guidance card: ' + control.source_reference + '. ' : '') + (needs.length ? 'To record this: ' + needs.join(', ') + '.' : 'Add a clear record, attachment reference, or reasoned attestation.');
     declaredLalField.hidden = !(capture.fields || []).includes('declared_litres_of_alcohol');
   }
+  function coverageLabel(framework) {
+    var coverage = framework.evidence_coverage || {};
+    return (coverage.current_controls || 0) + ' / ' + (coverage.total_controls || 0) + ' current';
+  }
+  function renderModuleHealth(frameworks) {
+    var target = root.querySelector('[data-module-health]'); clear(target);
+    if (!frameworks.length) return;
+    var label = document.createElement('p'); label.className = 'compliant-eyebrow'; label.textContent = 'EVIDENCE COVERAGE BY MODULE'; target.appendChild(label);
+    var cards = document.createElement('div'); cards.className = 'module-health-grid';
+    frameworks.forEach(function (framework) {
+      var coverage = framework.evidence_coverage || {};
+      var card = document.createElement('article'); card.className = 'module-health-card state-' + framework.state;
+      card.appendChild(textElement('strong', framework.name));
+      card.appendChild(textElement('span', String(coverage.percent || 0) + '%', 'module-health-percent'));
+      card.appendChild(textElement('small', coverageLabel(framework) + ' evidence controls', 'module-health-count'));
+      cards.appendChild(card);
+    });
+    target.appendChild(cards);
+  }
+  function textElement(tag, value, className) { var el = document.createElement(tag); el.textContent = value; if (className) el.className = className; return el; }
   function frameworkCard(framework) {
-    var card = document.createElement('article'); card.className = 'compliant-framework';
+    var allPassing = framework.state === 'compliant';
+    var card = document.createElement('details'); card.className = 'compliant-framework' + (allPassing ? ' compliant-framework--passing' : ''); card.open = !allPassing;
+    var summary = document.createElement('summary');
     var stateBadge = document.createElement('span'); stateBadge.className = statusClass(framework.state); stateBadge.textContent = framework.state;
     var h2 = document.createElement('h2'); h2.textContent = framework.name;
+    var score = textElement('span', coverageLabel(framework), 'framework-score');
+    summary.appendChild(stateBadge); summary.appendChild(h2); summary.appendChild(score); card.appendChild(summary);
     var source = document.createElement('p');
     if (framework.source_url) { var link = document.createElement('a'); link.href = framework.source_url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = framework.source_title + ' ↗'; source.appendChild(link); }
     else source.textContent = framework.source_title + ' — configure your council source.';
     var list = document.createElement('ul');
-    framework.controls.forEach(function (control) { var item = document.createElement('li'); var strong = document.createElement('strong'); strong.textContent = control.control_id.replace(/-/g, ' ') + ': '; item.appendChild(strong); item.appendChild(document.createTextNode(control.reason)); list.appendChild(item); });
+    framework.controls.forEach(function (control) {
+      var item = document.createElement('li'); item.className = 'framework-control framework-control--' + control.state;
+      var copy = document.createElement('div'); var strong = document.createElement('strong'); strong.textContent = control.control_id.replace(/-/g, ' '); copy.appendChild(strong);
+      copy.appendChild(textElement('span', control.description, 'framework-control-description'));
+      copy.appendChild(textElement('small', control.source_reference ? 'Guidance: ' + control.source_reference : control.reason, 'framework-control-reference'));
+      var add = document.createElement('button'); add.type = 'button'; add.className = 'framework-control-action'; add.textContent = control.state === 'compliant' ? 'Review proof' : 'Add proof';
+      add.addEventListener('click', function () { selectControl(framework.slug, control.control_id); scrollTo(root.querySelector('[data-record-target]')); root.querySelector('[data-record-form]').title.focus(); });
+      item.appendChild(copy); item.appendChild(textElement('span', control.state, statusClass(control.state))); item.appendChild(add); list.appendChild(item);
+    });
     var pack = document.createElement('button'); pack.type = 'button'; pack.textContent = 'Generate audit pack';
     pack.addEventListener('click', async function () {
       try { showError(''); var result = await api('/api/compliant/reports/' + encodeURIComponent(framework.slug), { method: 'POST', headers: csrfHeaders(), body: '{}' }); window.open(result.view_url, '_blank', 'noopener'); }
       catch (err) { showError(err.message); }
     });
-    card.appendChild(stateBadge); card.appendChild(h2); card.appendChild(source); card.appendChild(list); card.appendChild(pack); return card;
+    card.appendChild(source); card.appendChild(list); card.appendChild(pack); return card;
   }
   function selectControl(frameworkSlug, controlId) {
     frameworkSelect.value = frameworkSlug;
@@ -95,7 +131,7 @@
   }
   function actionButton(action) {
     var button = document.createElement('button'); button.type = 'button';
-    button.textContent = action.kind === 'record' ? (action.state === 'attention' ? 'Rectify this' : 'Add proof') : action.kind === 'product' ? 'Map from Core' : 'Set this up';
+    button.textContent = action.kind === 'record' ? (action.state === 'attention' ? 'Rectify this' : action.state === 'review' ? 'Review proof' : 'Add proof') : action.kind === 'product' ? 'Map from Core' : 'Set this up';
     button.addEventListener('click', function () {
       if (action.kind === 'profile') { window.location.href = '/compliant/nz-alcohol/configuration'; return; }
       if (action.kind === 'product') {
@@ -170,10 +206,13 @@
     clear(frameworkRoot);
     if (!overview.frameworks.length) { var empty = document.createElement('p'); empty.textContent = 'Enable Compliant to see your applicable framework packs.'; frameworkRoot.appendChild(empty); }
     overview.frameworks.forEach(function (framework) { frameworkRoot.appendChild(frameworkCard(framework)); });
+    renderModuleHealth(overview.frameworks || []);
     renderPriorityActions(overview.priority_actions || []);
     renderProductSuggestions(reconciliation);
     renderExistingEvidence(overview.core_proof_candidates || []);
     populateControls();
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('framework') && params.get('control')) selectControl(params.get('framework'), params.get('control'));
   }
   async function load() {
     root.setAttribute('aria-busy', 'true');
@@ -204,7 +243,10 @@
   }
   root.querySelector('[data-record-form]').addEventListener('submit', async function (event) {
     event.preventDefault(); var form = event.currentTarget; var refs = form.source_refs.value.split(',').map(function (value) { return value.trim(); }).filter(Boolean);
-    var data = { framework_slug: form.framework_slug.value, control_id: form.control_id.value, record_type: form.record_type.value, status: form.status.value, title: form.title.value, period_start: form.period_start.value || null, period_end: form.period_end.value || null, due_date: form.due_date.value || null, measured_value: form.measured_value.value || null, limit_value: form.limit_value.value || null, declared_litres_of_alcohol: form.declared_litres_of_alcohol.value || null, evidence_reference: form.evidence_reference.value || null, source_refs: refs, details: {} };
+    var reviewMonths = Number(form.review_interval_months.value || 0);
+    var dueDate = form.due_date.value || null;
+    if (!dueDate && reviewMonths) { var next = new Date(); next.setMonth(next.getMonth() + reviewMonths); dueDate = next.toISOString().slice(0, 10); }
+    var data = { framework_slug: form.framework_slug.value, control_id: form.control_id.value, record_type: form.record_type.value, status: form.status.value, title: form.title.value, period_start: form.period_start.value || null, period_end: form.period_end.value || null, due_date: dueDate, measured_value: form.measured_value.value || null, limit_value: form.limit_value.value || null, declared_litres_of_alcohol: form.declared_litres_of_alcohol.value || null, evidence_reference: form.evidence_reference.value || null, source_refs: refs, details: reviewMonths ? { review_interval_months: reviewMonths } : {} };
     setSubmitting(form, true);
     try { showError(''); await api('/api/compliant/records', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(data) }); form.reset(); await load(); }
     catch (err) { showError(err.message); }
