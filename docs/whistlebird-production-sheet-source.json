@@ -1,591 +1,860 @@
 {
-  "_comment": "Curated, human-reviewed manifest for scripts/whistlebird_migration.py --dry-run-production-sheet / --apply-production-sheet. Never auto-regenerated from the live Google Sheet. Edit this file directly to correct a date, quantity, or link, then rerun --confirm-reset-whistlebird-test followed by --apply-production-sheet to replay deterministically. See docs/whistlebird-production-sheet-migration-plan.md and whistlebird-findings.md (WB-020 onward) for how each field below was resolved.",
+  "_comment": "Curated, human-reviewed per-batch manifest for scripts/whistlebird_migration.py. One record per global VAT number. Each batch is one execution of its product workflow; 'steps' carries the real date of each production step with a per-step confidence (clean | resolved_by_context | derived). 'derived' means no separate event date was recorded for that step -- it inherits the nearest recorded step's date and is flagged as derived on the loaded row. Never auto-regenerated from the live sheet; edit here, then --confirm-reset-whistlebird-test and --rebuild-whistlebird-test to replay. See docs/whistlebird-production-import.md and docs/whistlebird-import-decisions.md.",
   "source": {
     "spreadsheet_id": "1R_4r1s1bIlHNPH_bSRNWUVcj3_iDiKu717u736Iiank",
     "tab_name": "Production!!",
     "gid": "1370312095"
   },
+  "outstanding_review": "Per-batch maceration and distillation dates for VAT28+ are currently 'derived' (inherited from the recorded VAT-fill/bottling date). The Production!! tab records these events but with mixed date formats and several contradictions; curating them precisely is the open review item. VAT27 and all VAT1-26 (prior database) have real per-step dates.",
   "records": [
     {
-      "id": 1080,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
+      "global_vat": 24,
       "batch_label": "VAT24",
-      "legacy_date": "2025-05-22",
-      "date_confidence": "clean",
-      "quantity": "77",
-      "unit": "units",
-      "sheet_row_range": "1010-1081",
-      "input_references": [],
-      "linked_legacy_source": {
-        "table": "product_actions_flavor_vat",
-        "id": 24
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2025-05-22",
+          "confidence": "clean"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        }
       },
-      "notes": "Cross-boundary: VAT24 was distilled 2025-04-23 (already legacy-imported as WBWF24, legacy_id 24) but bottled 2025-05-22, after the legacy DB cutoff. Links to the existing legacy item rather than creating a disconnected new one (WB-024)."
-    },
-    {
-      "id": 1110,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "solstice",
-      "batch_label": "VAT27",
-      "legacy_date": "2025-06-17",
-      "date_confidence": "clean",
-      "quantity": "56.5",
-      "unit": "units",
-      "sheet_row_range": "1083-1110",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Solstice's first-ever batch (VAT1/global VAT27). Fill quantity is not cleanly recorded (rows 1083-1090 lack a clean ethanol+water total unlike later batches) so this is imported source-only, no fabricated fill record -- same precedent stage 1 used for legacy rows without a recorded input."
-    },
-    {
-      "id": 1118,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "solstice",
-      "batch_label": "VAT28",
-      "legacy_date": "2025-06-25",
-      "date_confidence": "clean",
-      "quantity": "40",
-      "unit": "L",
-      "sheet_row_range": "1118-1150",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Solstice VAT2 (global VAT28). Quantity = 16.598L ethanol + 23.402L water. Final ABV confirmed 40.3% on 2025-07-08 (row 1150)."
-    },
-    {
-      "id": 1165,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "wildflower",
-      "batch_label": "VAT29",
-      "legacy_date": "2025-07-17",
-      "date_confidence": "resolved_by_context",
-      "quantity": "53.58",
-      "unit": "L",
-      "sheet_row_range": "1165-1191",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Founder-confirmed (2026-08-24): VAT29 is Wildflower, not Solstice, despite row 1194 calling it 'Distilling Solstice SS03 VAT29' -- that mention is a mislabel. Standard Wildflower fill recipe (29.124L water + 24.456L eth) confirms this. The real Solstice SS03 batch is VAT30 (see id 1309)."
-    },
-    {
-      "id": 1206,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "solstice",
-      "batch_label": "VAT28",
-      "legacy_date": "2025-07-23",
-      "date_confidence": "resolved_by_context",
-      "quantity": "56.5",
-      "unit": "units",
-      "sheet_row_range": "1206-1207",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "No explicit date on this row; sits between row 1194 (23/07/2025) and row 1209."
-    },
-    {
-      "id": 1256,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "rosella",
-      "batch_label": "VAT26",
-      "legacy_date": "2025-08-01",
-      "date_confidence": "resolved_by_context",
-      "quantity": "52.5",
-      "unit": "units",
-      "sheet_row_range": "1015-1257",
-      "input_references": [],
-      "linked_legacy_source": {
-        "table": "product_actions_flavor_vat",
-        "id": 26
-      },
-      "notes": "Cross-boundary: Rosella's first vat (WBRS26, legacy_id 26) was already legacy-imported (fill dated 2025-05-06, before cutoff). This is its real final bottling, dated 2025-08-01 per founder correction (WB-021, row 1250). An earlier bottling attempt at row 1114-1115 (2025-06-19) explicitly failed ('machine was playing up', no quantity recorded) and is deliberately excluded, not imported."
-    },
-    {
-      "id": 1260,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "wildflower",
-      "batch_label": "VAT31",
-      "legacy_date": "2025-05-08",
-      "date_confidence": "clean",
-      "quantity": "53.58",
-      "unit": "L",
-      "sheet_row_range": "1260-1277",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Genuinely new despite predating the nominal 2025-05-20 legacy cutoff -- confirmed by direct query that legacy only covers WBWF01-25; the cutoff is a guideline (last legacy execution date), not a guarantee every earlier event was captured. Quantity = standard Wildflower fill total (29.124L water + 24.456L ethanol)."
-    },
-    {
-      "id": 1309,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "solstice",
-      "batch_label": "VAT30",
-      "legacy_date": "2025-12-08",
-      "date_confidence": "clean",
-      "quantity": "64.75",
-      "unit": "units",
-      "sheet_row_range": "1209-1310",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "The real Solstice SS03 batch (founder-confirmed 2026-08-24; see id 1165's note). Fill quantity went through a mid-process recipe pivot (row 1230: 'changing solstice to 7.5%... yield approx 65 bottles') with several ethanol/water top-ups, so imported source-only rather than fabricating an unreliable fill total."
-    },
-    {
-      "id": 1312,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
-      "batch_label": "VAT29",
-      "legacy_date": "2025-12-08",
-      "date_confidence": "resolved_by_context",
-      "quantity": "78",
-      "unit": "units",
-      "sheet_row_range": "1312-1313",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "No explicit date on this row; sits right after row 1309 (2025-12-08). Explicitly labelled 'Bottling Wildflower VAT29' in the sheet, confirming WB product-line resolution."
-    },
-    {
-      "id": 1319,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "solstice",
-      "batch_label": "VAT32",
-      "legacy_date": "2025-08-14",
-      "date_confidence": "clean",
-      "quantity": "42.84",
-      "unit": "L",
-      "sheet_row_range": "1319-1338",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Quantity = 17.776L ethanol + 25.064L water (standard Solstice fill total)."
-    },
-    {
-      "id": 1340,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "solstice",
-      "batch_label": "VAT33",
-      "legacy_date": "2025-08-14",
-      "date_confidence": "clean",
-      "quantity": "42.84",
-      "unit": "L",
-      "sheet_row_range": "1340-1359",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Same fill session as VAT32 (row 1317 covers both)."
-    },
-    {
-      "id": 1405,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "solstice",
-      "batch_label": "VAT32",
-      "legacy_date": "2025-09-02",
-      "date_confidence": "resolved_by_context",
-      "quantity": "61",
-      "unit": "units",
-      "sheet_row_range": "1405-1406",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "No explicit date on this row; sits right after row 1402 (founder-corrected 2025-09-02, WB-021)."
-    },
-    {
-      "id": 1409,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "solstice",
-      "batch_label": "VAT34",
-      "legacy_date": "2025-09-02",
-      "date_confidence": "resolved_by_context",
-      "quantity": "42.84",
-      "unit": "L",
-      "sheet_row_range": "1409-1430",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "No explicit date on this row; sits right after row 1402 (2025-09-02)."
-    },
-    {
-      "id": 1452,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
-      "batch_label": "VAT31",
-      "legacy_date": "2025-09-18",
-      "date_confidence": "clean",
-      "quantity": "78",
-      "unit": "units",
-      "sheet_row_range": "1452-1453",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "VAT31's bottling."
-    },
-    {
-      "id": 1454,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "solstice",
-      "batch_label": "VAT34",
-      "legacy_date": "2025-09-18",
-      "date_confidence": "resolved_by_context",
-      "quantity": "60.5",
-      "unit": "units",
-      "sheet_row_range": "1454-1455",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Clusters with VAT31/VAT33 bottling near row 1449."
-    },
-    {
-      "id": 1456,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "solstice",
-      "batch_label": "VAT33",
-      "legacy_date": "2025-09-18",
-      "date_confidence": "resolved_by_context",
-      "quantity": "62",
-      "unit": "units",
-      "sheet_row_range": "1456-1457",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Clusters with VAT31/VAT34 bottling near row 1449 (16/09/2025)."
-    },
-    {
-      "id": 1459,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "solstice",
-      "batch_label": "VAT35",
-      "legacy_date": "2025-09-02",
-      "date_confidence": "resolved_by_context",
-      "quantity": "42.84",
-      "unit": "L",
-      "sheet_row_range": "1459-1476",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "No bottling event found anywhere in the sheet for VAT35 (confirmed by full-file search) -- still work-in-progress as of the sheet's last entry. Fill only."
-    },
-    {
-      "id": 1479,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "wildflower",
-      "batch_label": "VAT36",
-      "legacy_date": "2025-10-02",
-      "date_confidence": "clean",
-      "quantity": "53.58",
-      "unit": "L",
-      "sheet_row_range": "1479-1496",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": null
-    },
-    {
-      "id": 1499,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "wildflower",
-      "batch_label": "VAT37",
-      "legacy_date": "2025-09-10",
-      "date_confidence": "clean",
-      "quantity": "53.58",
-      "unit": "L",
-      "sheet_row_range": "1499-1514",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "No bottling event found anywhere in the sheet for VAT37 (confirmed by full-file search) -- still work-in-progress. Fill only."
-    },
-    {
-      "id": 1518,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "wildflower",
-      "batch_label": "VAT38",
-      "legacy_date": "2025-10-16",
-      "date_confidence": "clean",
-      "quantity": "53.58",
-      "unit": "L",
-      "sheet_row_range": "1518-1534",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": null
-    },
-    {
-      "id": 1539,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
-      "batch_label": "VAT36",
-      "legacy_date": "2025-10-16",
-      "date_confidence": "resolved_by_context",
-      "quantity": "78",
-      "unit": "units",
-      "sheet_row_range": "1539-1540",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Wider-than-usual date bracket: sits between row 1522 (16/10/2025) and row 1543 (28/10/2025), a 12-day window. Used the earlier bound; flagged as lower-confidence resolved_by_context."
-    },
-    {
-      "id": 1543,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "solstice",
-      "batch_label": "VAT39",
-      "legacy_date": "2025-10-28",
-      "date_confidence": "clean",
-      "quantity": "42.84",
-      "unit": "L",
-      "sheet_row_range": "1543-1561",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "The sheet itself writes 'VAT39?' (row 1544) -- the founder wasn't certain of the number when writing it. Imported as written; flag if a different number turns out to be correct."
-    },
-    {
-      "id": 1564,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "wildflower",
-      "batch_label": "VAT40",
-      "legacy_date": "2025-11-20",
-      "date_confidence": "clean",
-      "quantity": "53.58",
-      "unit": "L",
-      "sheet_row_range": "1564-1578",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Founder-corrected row 1588 ('Distilling Wildflower VAT40', WB-021) resolves to 2025-12-03, after this fill date -- plausible as a supplementary distillation topping up an already-filled vat, not a sequencing error."
-    },
-    {
-      "id": 1581,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
-      "batch_label": "VAT38",
-      "legacy_date": "2025-11-25",
-      "date_confidence": "clean",
-      "quantity": "78.5",
-      "unit": "units",
-      "sheet_row_range": "1581-1582",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": null
-    },
-    {
-      "id": 1584,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "solstice",
-      "batch_label": "VAT39",
-      "legacy_date": "2025-11-25",
-      "date_confidence": "clean",
-      "quantity": "62",
-      "unit": "units",
-      "sheet_row_range": "1584-1585",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Same session as VAT38's bottling (row 1581)."
-    },
-    {
-      "id": 1591,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "wildflower",
-      "batch_label": "VAT41",
-      "legacy_date": "2025-12-09",
-      "date_confidence": "clean",
-      "quantity": "53.58",
-      "unit": "L",
-      "sheet_row_range": "1591-1607",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": null
-    },
-    {
-      "id": 1610,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "solstice",
-      "batch_label": "VAT42",
-      "legacy_date": "2025-12-12",
-      "date_confidence": "clean",
-      "quantity": "42.84",
-      "unit": "L",
-      "sheet_row_range": "1610-1628",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Bottling for this batch is id 1676 (founder-corrected from an apparent VAT45 mislabel, WB-032) -- superseded the earlier read that no VAT42 bottling existed in the sheet."
-    },
-    {
-      "id": 1631,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
-      "batch_label": "VAT40",
-      "legacy_date": "2025-12-16",
-      "date_confidence": "clean",
-      "quantity": "79",
-      "unit": "units",
-      "sheet_row_range": "1631-1632",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": null
-    },
-    {
-      "id": 1635,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
-      "batch_label": "VAT41",
-      "legacy_date": "2025-12-23",
-      "date_confidence": "clean",
-      "quantity": "54",
-      "unit": "units",
-      "sheet_row_range": "1635-1636",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Partial bottling: sheet notes 'left remaining alcohol in VAT due to running out of corks' -- not all filled liquid was converted to bottles."
-    },
-    {
-      "id": 1639,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "wildflower",
-      "batch_label": "VAT43",
-      "legacy_date": "2026-01-06",
-      "date_confidence": "clean",
-      "quantity": "53.58",
-      "unit": "L",
-      "sheet_row_range": "1639-1655",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": null
-    },
-    {
-      "id": 1676,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "solstice",
-      "batch_label": "VAT42",
-      "legacy_date": "2026-01-20",
-      "date_confidence": "resolved_by_context",
-      "quantity": "60.5",
-      "unit": "units",
-      "sheet_row_range": "1676-1694",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Founder-corrected (2026-08-24): the sheet's own header here says 'Bottling Solstice (VAT 45)' but is actually VAT42's bottling (mislabelled, same pattern as VAT44/47) -- VAT45's own distillation only starts later at row 1696, which would make row 1676 predate its own distillation if taken literally. No explicit bottle count is recorded near this row; founder gave the average Solstice bottling yield (56.5, 56.5, 64.75, 61, 62, 60.5, 62, 61 across the other 8 recorded Solstice bottlings = 60.53) as the best estimate. Quantity is an ESTIMATE, not a directly recorded value -- flag for correction if the real count is later found."
-    },
-    {
-      "id": 1698,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
-      "batch_label": "VAT43",
-      "legacy_date": "2026-02-03",
-      "date_confidence": "resolved_by_context",
-      "quantity": "78.5",
-      "unit": "units",
-      "sheet_row_range": "1698-1699",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "No explicit date on this row; sits between row 1696 (2026-02-03) and row 1702 (2026-02-06)."
-    },
-    {
-      "id": 1751,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
-      "batch_label": "VAT44",
-      "legacy_date": "2026-02-19",
-      "date_confidence": "resolved_by_context",
-      "quantity": "79",
-      "unit": "units",
-      "sheet_row_range": "1657-1751",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Sheet text says 'Bottling VAT47 (WF)' but founder confirmed (WB-022) this is VAT44's missing bottling, mislabeled. Date resolved from surrounding rows 1727 (2026-02-12) and 1755 (2026-02-19); no explicit date on this row itself."
-    },
-    {
-      "id": 1755,
-      "record_type": "vat_fill",
-      "process_name": "Sheet: flavour vat",
-      "product_line": "solstice",
-      "batch_label": "VAT48",
-      "legacy_date": "2026-02-19",
-      "date_confidence": "clean",
-      "quantity": "42.84",
-      "unit": "L",
-      "sheet_row_range": "1755-1775",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Quantity computed as Ethanol 17.776 + Water 25.064 (rows 1761/1767), mirroring the Wildflower fill pattern. This is the Solstice base batch later macerated into Rosella (WB-023) -- see linked record id 1786."
-    },
-    {
-      "id": 1757,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "solstice",
-      "batch_label": "VAT45",
-      "legacy_date": "2026-02-19",
-      "date_confidence": "clean",
-      "quantity": "61",
-      "unit": "units",
-      "sheet_row_range": "1696-1757",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Same date row as row 1755 (19/02/2026)."
-    },
-    {
-      "id": 1786,
-      "record_type": "fruit_maceration",
-      "process_name": "Sheet: fruit maceration",
-      "product_line": "rosella",
-      "batch_label": "VAT48",
-      "legacy_date": "2026-03-26",
-      "date_confidence": "resolved_by_context",
-      "quantity": "64",
-      "unit": "units",
-      "sheet_row_range": "1778-1846",
-      "input_references": [
-        [
-          "vat_batch",
-          "VAT48"
-        ]
+      "bottlings": [
+        {
+          "date": "2025-05-22",
+          "bottles": "77",
+          "sheet_row": 1080
+        }
       ],
-      "linked_legacy_source": null,
-      "notes": "Founder confirmed (WB-023): Solstice is the deliberate base spirit for Rosella -- rhubarb post-maceration is a real production step, not a relabel. Consumes the Solstice VAT48 batch (record id 1755) as input via vat_batch reference, matching apply_evidenced_production's existing input-resolution pattern. Modelled as one execution producing the 64-bottle finished output directly (row 1821, dated by row 1812's 26/03/26); the intermediate 44L post-rhubarb WIP volume (row 1817) is recorded in notes only, not as a separate inventory item, in this first curation pass."
+      "continues_prior_database": true
     },
     {
-      "id": 1789,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
+      "global_vat": 26,
+      "batch_label": "VAT26",
+      "product": "rosella",
+      "steps": {
+        "rhubarb_maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2025-08-01",
+          "confidence": "resolved_by_context"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-08-01",
+          "bottles": "52.5",
+          "sheet_row": 1256
+        }
+      ],
+      "continues_prior_database": true
+    },
+    {
+      "global_vat": 27,
+      "batch_label": "VAT27",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": "2025-05-29",
+          "confidence": "clean"
+        },
+        "distilling": {
+          "date": "2025-06-03",
+          "confidence": "clean"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2025-06-17",
+          "confidence": "clean"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-06-17",
+          "bottles": "56.5",
+          "sheet_row": 1110
+        }
+      ],
+      "sheet_rows": "1083-1110",
+      "notes": "Solstice's first batch (global VAT27). Maceration 2025-05-29 (row 1093), distillation 2025-06-03 (row 1105), bottled 2025-06-17. No clean VAT-fill volume recorded."
+    },
+    {
+      "global_vat": 28,
+      "batch_label": "VAT28",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-06-25",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2025-07-23",
+          "confidence": "resolved_by_context"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-07-23",
+          "bottles": "56.5",
+          "sheet_row": 1206
+        }
+      ],
+      "vat_volume_l": "40"
+    },
+    {
+      "global_vat": 29,
+      "batch_label": "VAT29",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-07-17",
+          "confidence": "resolved_by_context"
+        },
+        "bottling": {
+          "date": "2025-12-08",
+          "confidence": "resolved_by_context"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-12-08",
+          "bottles": "78",
+          "sheet_row": 1312
+        }
+      ],
+      "vat_volume_l": "53.58"
+    },
+    {
+      "global_vat": 30,
+      "batch_label": "VAT30",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2025-12-08",
+          "confidence": "clean"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-12-08",
+          "bottles": "64.75",
+          "sheet_row": 1309
+        }
+      ]
+    },
+    {
+      "global_vat": 31,
+      "batch_label": "VAT31",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-05-08",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2025-09-18",
+          "confidence": "clean"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-09-18",
+          "bottles": "78",
+          "sheet_row": 1452
+        }
+      ],
+      "vat_volume_l": "53.58"
+    },
+    {
+      "global_vat": 32,
+      "batch_label": "VAT32",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-08-14",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2025-09-02",
+          "confidence": "resolved_by_context"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-09-02",
+          "bottles": "61",
+          "sheet_row": 1405
+        }
+      ],
+      "vat_volume_l": "42.84"
+    },
+    {
+      "global_vat": 33,
+      "batch_label": "VAT33",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-08-14",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2025-09-18",
+          "confidence": "resolved_by_context"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-09-18",
+          "bottles": "62",
+          "sheet_row": 1456
+        }
+      ],
+      "vat_volume_l": "42.84"
+    },
+    {
+      "global_vat": 34,
+      "batch_label": "VAT34",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-09-02",
+          "confidence": "resolved_by_context"
+        },
+        "bottling": {
+          "date": "2025-09-18",
+          "confidence": "resolved_by_context"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-09-18",
+          "bottles": "60.5",
+          "sheet_row": 1454
+        }
+      ],
+      "vat_volume_l": "42.84"
+    },
+    {
+      "global_vat": 35,
+      "batch_label": "VAT35",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-09-02",
+          "confidence": "resolved_by_context"
+        },
+        "bottling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [],
+      "vat_volume_l": "42.84"
+    },
+    {
+      "global_vat": 36,
+      "batch_label": "VAT36",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-10-02",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2025-10-16",
+          "confidence": "resolved_by_context"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-10-16",
+          "bottles": "78",
+          "sheet_row": 1539
+        }
+      ],
+      "vat_volume_l": "53.58"
+    },
+    {
+      "global_vat": 37,
+      "batch_label": "VAT37",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-09-10",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [],
+      "vat_volume_l": "53.58"
+    },
+    {
+      "global_vat": 38,
+      "batch_label": "VAT38",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-10-16",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2025-11-25",
+          "confidence": "clean"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-11-25",
+          "bottles": "78.5",
+          "sheet_row": 1581
+        }
+      ],
+      "vat_volume_l": "53.58"
+    },
+    {
+      "global_vat": 39,
+      "batch_label": "VAT39",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-10-28",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2025-11-25",
+          "confidence": "clean"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-11-25",
+          "bottles": "62",
+          "sheet_row": 1584
+        }
+      ],
+      "vat_volume_l": "42.84"
+    },
+    {
+      "global_vat": 40,
+      "batch_label": "VAT40",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-11-20",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2025-12-16",
+          "confidence": "clean"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-12-16",
+          "bottles": "79",
+          "sheet_row": 1631
+        }
+      ],
+      "vat_volume_l": "53.58"
+    },
+    {
+      "global_vat": 41,
+      "batch_label": "VAT41",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-12-09",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2025-12-23",
+          "confidence": "clean"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-12-23",
+          "bottles": "54",
+          "sheet_row": 1635
+        }
+      ],
+      "vat_volume_l": "53.58"
+    },
+    {
+      "global_vat": 42,
+      "batch_label": "VAT42",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2025-12-12",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2026-01-20",
+          "confidence": "resolved_by_context"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-01-20",
+          "bottles": "60.5",
+          "sheet_row": 1676
+        }
+      ],
+      "vat_volume_l": "42.84"
+    },
+    {
+      "global_vat": 43,
+      "batch_label": "VAT43",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2026-01-06",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": "2026-02-03",
+          "confidence": "resolved_by_context"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-02-03",
+          "bottles": "78.5",
+          "sheet_row": 1698
+        }
+      ],
+      "vat_volume_l": "53.58"
+    },
+    {
+      "global_vat": 44,
+      "batch_label": "VAT44",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-02-19",
+          "confidence": "resolved_by_context"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-02-19",
+          "bottles": "79",
+          "sheet_row": 1751
+        }
+      ]
+    },
+    {
+      "global_vat": 45,
+      "batch_label": "VAT45",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-02-19",
+          "confidence": "clean"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-02-19",
+          "bottles": "61",
+          "sheet_row": 1757
+        }
+      ]
+    },
+    {
+      "global_vat": 46,
       "batch_label": "VAT46",
-      "legacy_date": "2026-03-19",
-      "date_confidence": "resolved_by_context",
-      "quantity": "79",
-      "unit": "units",
-      "sheet_row_range": "1702-1789",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "No explicit date on this row; sits between row 1786 (19/03/2026) and row 1812 (26/03/26). Using the nearer preceding date."
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-03-19",
+          "confidence": "resolved_by_context"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-03-19",
+          "bottles": "79",
+          "sheet_row": 1789
+        }
+      ]
     },
     {
-      "id": 1936,
-      "record_type": "bottling",
-      "process_name": "Sheet: bottling",
-      "product_line": "wildflower",
+      "global_vat": 47,
       "batch_label": "VAT47",
-      "legacy_date": "2026-05-07",
-      "date_confidence": "resolved_by_context",
-      "quantity": "78.5",
-      "unit": "units",
-      "sheet_row_range": "1727-1936",
-      "input_references": [],
-      "linked_legacy_source": null,
-      "notes": "Single confirmed VAT47 bottling (WB-022). Raw serial resolved day/month-swapped; founder corrected to 2026-05-07 by checking it falls before row 1959 (2026-06-28). Row 1913 (identical 78.5 bottles) is a duplicate/premature note of this same event and is intentionally excluded from this manifest."
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-05-07",
+          "confidence": "resolved_by_context"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-05-07",
+          "bottles": "78.5",
+          "sheet_row": 1936
+        }
+      ]
+    },
+    {
+      "global_vat": 48,
+      "batch_label": "VAT48",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2026-02-19",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [],
+      "vat_volume_l": "42.84",
+      "diverted_to": "Rosella VAT48",
+      "notes": "WB-023: this Solstice fill is the base spirit for Rosella VAT48; it is not bottled as Solstice. Its aged VAT batch feeds the Rosella rhubarb maceration."
+    },
+    {
+      "global_vat": 1048,
+      "batch_label": "VAT48",
+      "product": "rosella",
+      "rosella_base_vat": 48,
+      "steps": {
+        "rhubarb_maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-03-26",
+          "confidence": "resolved_by_context"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-03-26",
+          "bottles": "64",
+          "sheet_row": 1786
+        }
+      ],
+      "sheet_rows": "1786-1846",
+      "notes": "WB-023: Rosella is Solstice post-macerated on rhubarb. Consumes the aged Solstice VAT48 batch. Rhubarb-maceration and aging dates not separately recorded in the sheet -- derived; confirm at review."
     }
   ],
   "excluded": [
