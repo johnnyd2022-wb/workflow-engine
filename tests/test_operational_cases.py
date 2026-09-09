@@ -23,18 +23,15 @@ from app.core.db import db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.audit_log import AuditLog
 from app.core.db.models.entity_event import EntityEvent
-from app.core.db.models.feature_subscription import FeatureSubscription
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import User, UserRole
-from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason, allow_inventory_quantity_write
 from app.features.operational_cases.models.operational_case import OperationalCase
 from app.features.operational_cases.models.operational_case_event import OperationalCaseEvent
 from app.features.operational_cases.models.operational_case_link import OperationalCaseLink
 from tests.factories import (
     DEFAULT_TEST_PASSWORD,
-    FeatureSubscriptionFactory,
     InventoryItemFactory,
     OrganisationFactory,
     UserFactory,
@@ -66,20 +63,12 @@ def _purge_org(db, org_id):
     db.query(ApiIdempotencyKey).filter(ApiIdempotencyKey.org_id == org_id).delete(synchronize_session=False)
     db.query(EntityEvent).filter(EntityEvent.org_id == org_id).delete(synchronize_session=False)
     db.query(InventoryItem).filter(InventoryItem.org_id == org_id).delete(synchronize_session=False)
-    db.query(FeatureSubscription).filter(FeatureSubscription.org_id == org_id).delete(synchronize_session=False)
     # audit_logs.user_id has no cascade (see tests/test_wastage.py's `org` fixture
     # comment) -- login itself writes an audit row, so this must go before User.
     db.query(AuditLog).filter(AuditLog.org_id == org_id).delete(synchronize_session=False)
     db.query(User).filter(User.org_id == org_id).delete(synchronize_session=False)
     db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
     db.commit()
-
-
-@pytest.fixture(autouse=True)
-def enable_cases(monkeypatch):
-    from app.utils.config_loader import Config
-
-    monkeypatch.setattr(Config, "operational_cases_enabled", property(lambda self: True))
 
 
 @pytest.fixture()
@@ -95,7 +84,6 @@ def db():
 @pytest.fixture()
 def org_a(db):
     o = OrganisationFactory()
-    FeatureSubscriptionFactory(org_id=o.id, feature_key="operational_cases")
     db.commit()
     yield o
     _purge_org(db, o.id)
@@ -103,9 +91,8 @@ def org_a(db):
 
 @pytest.fixture()
 def org_b(db):
-    """A second, also-subscribed org -- the hostile neighbour for cross-tenant tests."""
+    """A second organisation used as the hostile neighbour for cross-tenant tests."""
     o = OrganisationFactory()
-    FeatureSubscriptionFactory(org_id=o.id, feature_key="operational_cases")
     db.commit()
     yield o
     _purge_org(db, o.id)
@@ -546,27 +533,18 @@ def test_ac2_admin_can_reassign(db, admin_client, owner_client, owner_user, veri
     assert resp.get_json()["case"]["owner_id"] == str(verifier_user.id)
 
 
-def test_ac2_feature_disabled_for_org_404s_but_admin_history_route_still_works(
-    db, admin_client, owner_user, org_a, untracked_item
-):
+def test_ac2_cases_are_available_without_a_feature_subscription(db, admin_client, owner_user, org_a, untracked_item):
     create = admin_client.post(
         "/api/core/cases/from-finding", json=_create_payload(untracked_item.id, owner_user.id), headers=_idem()
     )
     case_id = create.get_json()["case"]["id"]
 
-    FeatureSubscriptionRepository(db).revoke(org_a.id, "operational_cases")
-    db.commit()
-
     list_resp = admin_client.get("/api/core/cases")
-    assert list_resp.status_code == 404
+    assert list_resp.status_code == 200
 
     history_resp = admin_client.get(f"/api/core/cases/history/{case_id}")
     assert history_resp.status_code == 200
     assert history_resp.get_json()["id"] == case_id
-
-    # restore for any subsequent assertions/cleanup relying on the grant
-    FeatureSubscriptionRepository(db).grant(org_a.id, "operational_cases")
-    db.commit()
 
 
 def test_ac2_history_route_requires_admin_role(owner_client):
@@ -955,18 +933,12 @@ def test_dashboard_summary_includes_operational_cases_counts(db, owner_client, o
     assert oc["href"] == "/core/cases"
 
 
-def test_dashboard_summary_not_enabled_when_org_unsubscribed(db, org_b, org_b_client):
-    # org_b fixture is subscribed for the API-route tests above; revoke it here to prove
-    # the disabled shape on the dashboard route, which lives on core_bp (always
-    # registered) rather than behind operational_cases_bp's own 404 gate.
-    FeatureSubscriptionRepository(db).revoke(org_b.id, "operational_cases")
-    db.commit()
-
+def test_dashboard_summary_is_enabled_without_a_feature_subscription(db, org_b, org_b_client):
     resp = org_b_client.get("/api/core/dashboard/summary")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["operational_cases"]["availability"] == "not_enabled"
-    assert body["operational_cases"]["active_count"] is None
+    assert body["operational_cases"]["availability"] == "ok"
+    assert body["operational_cases"]["active_count"] == 0
 
 
 def test_source_status_batch_returns_case_and_404_for_foreign_id(db, owner_client, owner_user, untracked_item, org_b):

@@ -21,7 +21,6 @@ from app.core.db.models.user import User, UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.user_repo import UserRepository
-from app.core.security.entitlements import org_has_feature
 from app.features.operational_cases.adapters import untracked_items_adapter
 from app.features.operational_cases.models.operational_case import (
     CaseCauseCategory,
@@ -44,7 +43,6 @@ from app.utils.config_loader import config
 
 logger = get_logger(__name__)
 
-OPERATIONAL_CASES_FEATURE_KEY = "operational_cases"
 SOURCE_TYPE_CORE_FINDING = "core_finding"
 
 _ALLOWED_EVIDENCE_TYPES = {"execution", "execution_evidence", "inventory_item"}
@@ -209,7 +207,7 @@ def _check_command_access(session, org_id, actor_id):
     actor = UserRepository(session).get_user_by_id(actor_id, org_id=org_id)
     if not actor or not actor.is_active:
         raise CaseError(403, "forbidden", "active organisation member required")
-    if not config.operational_cases_enabled or not org_has_feature(session, org_id, OPERATIONAL_CASES_FEATURE_KEY):
+    if not config.operational_cases_enabled:
         raise CaseError(404, "not_enabled", "not found")
 
 
@@ -1074,9 +1072,6 @@ def dashboard_summary(session: Session, org_id: UUID) -> dict:
     }
     if not config.operational_cases_enabled:
         return disabled_body
-    if not org_has_feature(session, org_id, OPERATIONAL_CASES_FEATURE_KEY):
-        return disabled_body
-
     try:
         now = datetime.now(UTC)
         aggregates = OperationalCaseRepository(session).count_aggregates(org_id, now)

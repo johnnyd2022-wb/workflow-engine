@@ -212,17 +212,16 @@ Repeated evaluations alone never open another case. No automatic reopen policy i
 ## Data model
 
 - changes: additive `operational_cases`, `operational_case_links`,
-  `operational_case_events`; register proposed `operational_cases_enabled` tenant
-  capability using the existing feature-flag mechanism; extend event/read-model handlers.
+  `operational_case_events`; register the deployment-wide `operational_cases_enabled`
+  capability; extend event/read-model handlers.
 - destructive: no forward drops, renames or existing-data rewrites. A schema downgrade
   drops new tables and is destructive to new case data; use only on disposable fixtures.
   Retained-data application rollback is specified below.
 
-Concrete gating: new deployment config `operational_cases_enabled=false` plus an active
-existing `FeatureSubscription` row with `feature_key='operational_cases'` for that org.
-Both are required for normal reads/writes. Reuse the generic entitlement repository/CLI;
-no new subscription table, tier or price. Missing grant means disabled. History/export
-exceptions still require the explicit same-org ADMIN/operator permissions above.
+Concrete gating: deployment config `operational_cases_enabled` is the sole capability
+switch. When it is enabled, Cases is available to every organisation; Compliant remains
+the only per-organisation subscription-gated module. History/export exceptions still
+require the explicit same-org ADMIN/operator permissions above.
 
 | Table | Required contract |
 |---|---|
