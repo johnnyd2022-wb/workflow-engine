@@ -175,6 +175,53 @@ verdict: **accepted-risk** — signed off by the repo owner, 2026-07-17
     assert fi.parse_doc(path) == []
 
 
+def test_corrected_verdict_from_build_review_is_treated_as_closed(tmp_path, monkeypatch):
+    """`build-review.md` closes a fully-fixed batch with `VERDICT: corrected` above a
+    `## Resolution verification` walk-through -- same "report closed its own findings"
+    meaning as `patched`. The first sweep of the operational-cases build review re-indexed
+    all 15 already-corrected findings because `corrected` was not in the closed set."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/operational_cases/build-review.md",
+        """# Independent build review — operational cases A1
+
+## Findings handed back for correction
+1. P1: ID-only FKs lack approved tenant-consistent composite parent/child integrity.
+2. P1: conditional app_factory blueprint registration strands history when flag off.
+3. P2: local/test configs enable the deployment capability rather than default off.
+
+## Resolution verification
+
+The implementation was corrected for each finding above: composite tenant reference
+constraints are added in `operational_cases_002`; the recovery blueprint mounts
+independently of the feature gate; the deployment flag is false by default everywhere.
+
+VERDICT: corrected; normal code review and pilot rollout remain required.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_corrected_in_prose_does_not_close_a_findings_open_report(tmp_path, monkeypatch):
+    """Only the `verdict:` field closes a report. A finding that merely says a bug was
+    "corrected" somewhere must still be indexed while the header verdict is open."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# SECURITY: x
+verdict: findings-open
+
+## Findings
+- F1 [fix] app/a.py:1 the org_id scope was corrected on one lookup but a sibling
+  cross-org query in the summary endpoint still leaks
+""",
+    )
+    items = fi.parse_doc(path)
+    assert [i.detail[:2] for i in items] == ["F1"]
+
+
 def test_report_with_findings_open_verdict_contributes(tmp_path, monkeypatch):
     path = write_doc(
         tmp_path,
