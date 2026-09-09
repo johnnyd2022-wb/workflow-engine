@@ -39,7 +39,9 @@ def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
     audit = (
         ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_audit.html"
     ).read_text(encoding="utf-8")
-    sidebar = (ROOT / "app" / "ui" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")
+    # The Flask app's Jinja root is app/ui/templates.  Guard the template it actually
+    # renders, rather than the separately served /ui/shared asset directory.
+    sidebar = (ROOT / "app" / "ui" / "templates" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")
     assert tabs.count('hx-boost="false"') == 3
     assert 'href="/compliant" hx-boost="false"' in sidebar
     assert 'href="/api/compliant/np3-audit?format=csv" hx-boost="false"' in audit

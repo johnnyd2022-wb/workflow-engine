@@ -209,6 +209,7 @@ def test_ac7_nav_item_visibility(db, app_ctx):
     try:
         subbed = _client(app_ctx, sub_email).get("/core/dashboard").get_data(as_text=True)
         assert _sidebar_has_compliance(subbed)
+        assert 'href="/compliant" hx-boost="false"' in subbed
 
         unsubbed = _client(app_ctx, unsub_email).get("/core/dashboard").get_data(as_text=True)
         assert not _sidebar_has_compliance(unsubbed)

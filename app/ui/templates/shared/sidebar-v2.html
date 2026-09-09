@@ -70,7 +70,10 @@
       </li>
       {% if compliant_subscribed %}
       <li class="nav-item">
-        <a href="/compliant" class="nav-link{% if active_page == 'compliant' %} active{% endif %}">
+        {# Compliant's CSS and page controller are deliberately page-scoped and enter
+           the document head/body on a full load.  Boosting this link only swaps
+           #page-content, leaving the workspace unstyled and inert on first entry. #}
+        <a href="/compliant" hx-boost="false" class="nav-link{% if active_page == 'compliant' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
             <svg class="nav-link-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
