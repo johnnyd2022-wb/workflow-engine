@@ -74,10 +74,12 @@ audit trail.
 - Fix: `UPDATE … WHERE id=:id AND updated_at=:expected`; 0 rows ⇒ 409. For reorder: `SELECT … FOR UPDATE`
   the steps inside the write txn, re-check the structural token there, then apply.
 - Test: barrier two-client, same initial token ⇒ exactly one 200, one 409.
-- **Shipped** in `1a5ad8c` (merged `b0284b4`): `process_repo.py` does the compare-and-set in
-  the `UPDATE … WHERE updated_at=:expected` statement (0 rows ⇒ 409) and `SELECT … FOR UPDATE`
-  for reorder inside the write txn. `tests/test_process_design.py` gained the barrier
-  two-client race test (+131 lines). Phase-D editor wiring followed in `8d6482d` / `b83da84`.
+- **Shipped** in `1a5ad8c` (merged `b0284b4`): `process_repo.py` — `update_process`,
+  `update_step` and `reorder_steps` each `SELECT … FOR UPDATE` the row inside the write txn
+  and re-compare `updated_at` there before applying, returning `STALE_WRITE` (→ 409) on a
+  mismatch, so the check-and-write is one atomic transaction rather than a TOCTOU.
+  `tests/test_process_design.py` gained the barrier two-client race test (+131 lines).
+  Phase-D editor wiring followed in `8d6482d` / `b83da84`.
   (verified 2026-09-11 by findings-sweep)
 
 ### E — system-findings failure semantics
