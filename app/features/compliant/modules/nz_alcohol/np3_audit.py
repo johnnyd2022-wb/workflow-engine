@@ -9,7 +9,10 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from app.features.compliant.modules.nz_alcohol.catalogue import control_reference
+from app.features.compliant.modules.nz_alcohol.catalogue import control_reference, framework_by_slug
+
+NP3_GUIDANCE_VERSION = "2025-v2"
+NP3_GUIDANCE_URL = "https://www.mpi.govt.nz/dmsdocument/21853/direct"
 
 NP3_AUDIT_CATEGORIES = (
     (
@@ -93,6 +96,7 @@ def build_np3_audit_rows(
     """Join NP3 topics to manual evidence and provenance-rich Core observations."""
     today = date.today()
     derived_evidence = derived_evidence or []
+    controls = dict((framework_by_slug("np3-food-control") or {}).get("controls", ()))
     rows: list[dict[str, Any]] = []
     for category, topics in NP3_AUDIT_CATEGORIES:
         for control_id, topic in topics:
@@ -108,28 +112,57 @@ def build_np3_audit_rows(
                 if record.status in {"open", "failed"} or (record.due_date and record.due_date < today)
             ]
             derived = [item for item in derived_evidence if item.get("control_id") == control_id]
+            attestations = [
+                record
+                for record in matched
+                if getattr(record, "record_type", None) == "attestation"
+                and (getattr(record, "details", None) or {}).get("np3_guidance_version")
+            ]
+            latest_attestation = max(attestations, key=lambda record: record.created_at, default=None)
+            guidance_update_required = bool(
+                latest_attestation
+                and (latest_attestation.details or {}).get("np3_guidance_version") != NP3_GUIDANCE_VERSION
+            )
             state = "ready" if current or derived else "attention" if failed else "missing"
             # A recorded failure remains an attention item even when another Core fact is
             # available: a trace cannot silently close an overdue corrective action.
             if failed:
+                state = "attention"
+            if guidance_update_required:
                 state = "attention"
             rows.append(
                 {
                     "category": category,
                     "control_id": control_id,
                     "source_reference": control_reference("np3-food-control", control_id),
+                    "guidance_url": NP3_GUIDANCE_URL,
+                    "guidance_version": NP3_GUIDANCE_VERSION,
+                    "requirement_summary": controls.get(control_id, topic),
                     "topic": topic,
                     "state": state,
+                    "guidance_update_required": guidance_update_required,
                     "evidence_count": len(current) + len(derived),
                     "manual_evidence_count": len(current),
                     "derived_evidence_count": len(derived),
-                    "evidence_titles": [record.title for record in current]
-                    + [item["title"] for item in derived],
+                    "evidence_titles": [record.title for record in current] + [item["title"] for item in derived],
                     "evidence_references": [
                         record.evidence_reference for record in current if record.evidence_reference
                     ],
                     "latest_recorded_at": max((record.created_at for record in current), default=None),
                     "derived_evidence": derived,
+                    "history": [
+                        {
+                            "title": record.title,
+                            "record_type": getattr(record, "record_type", None),
+                            "status": record.status,
+                            "created_at": record.created_at,
+                            "created_by_user_id": getattr(record, "created_by_user_id", None),
+                            "due_date": record.due_date,
+                            "how_we_meet": (getattr(record, "details", None) or {}).get("how_we_meet"),
+                            "guidance_version": (getattr(record, "details", None) or {}).get("np3_guidance_version"),
+                        }
+                        for record in sorted(matched, key=lambda record: record.created_at, reverse=True)
+                    ],
                 }
             )
     return rows

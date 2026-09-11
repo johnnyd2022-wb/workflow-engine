@@ -19,7 +19,7 @@ from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
 from app.features.compliant.modules.nz_alcohol.live_evidence import derive_np3_core_evidence
 from app.features.compliant.modules.nz_alcohol.module import run_check
-from app.features.compliant.routes.api_routes import _csv_safe
+from app.features.compliant.routes.api_routes import _add_months, _csv_safe
 from app.features.compliant.service import ComplianceService, calculate_customs_reconciliation
 from tests.dag_traversal_helpers import build_linear_dag, clear_org_synthetic_data
 from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
@@ -164,6 +164,44 @@ def test_compliant_routes_require_auth(flask_app):
     assert client.get("/api/compliant/overview").status_code == 401
     assert client.get("/api/compliant/capture-context").status_code == 401
     assert client.post("/api/compliant/records", json={}).status_code == 401
+    assert client.post("/api/compliant/np3-audit/attestations", json={}).status_code == 401
+
+
+def test_np3_check_attestation_is_signed_and_scheduled(db, flask_app):
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile", json={"enabled": True, "settings": {"food_control_programme": "np3"}}
+            ).status_code
+            == 200
+        )
+        response = client.post(
+            "/api/compliant/np3-audit/attestations",
+            json={
+                "control_id": "registration-scope",
+                "how_we_meet": "The operations manager checks the registration after any material site change.",
+                "confirmed": True,
+                "review_interval_months": 6,
+            },
+        )
+        assert response.status_code == 201
+        record = response.get_json()["record"]
+        assert record["record_type"] == "attestation"
+        assert record["details"]["attestation_confirmed"] is True
+        assert record["details"]["review_interval_months"] == 6
+        assert record["due_date"] == _add_months(date.today(), 6).isoformat()
+        audit = client.get("/api/compliant/np3-audit").get_json()
+        row = next(row for row in audit["rows"] if row["topic"] == "Registration / scope of operations")
+        assert row["history"][0]["signed_off_by"]
+        assert row["history"][0]["how_we_meet"].startswith("The operations manager")
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_np3_review_reminder_handles_month_end():
+    assert _add_months(date(2026, 8, 31), 6) == date(2027, 2, 28)
 
 
 def test_control_capture_requirements_are_enforced(db, flask_app):
@@ -660,9 +698,9 @@ def test_np3_required_capture_policy_blocks_direct_core_step_completion(db, flas
         assert execution_step.status.value != "completed"
     finally:
         if process is not None:
-            db.query(ExecutionStep).filter(ExecutionStep.execution_id.in_(
-                db.query(Execution.id).filter(Execution.process_id == process.id)
-            )).delete(synchronize_session=False)
+            db.query(ExecutionStep).filter(
+                ExecutionStep.execution_id.in_(db.query(Execution.id).filter(Execution.process_id == process.id))
+            ).delete(synchronize_session=False)
             db.query(Execution).filter(Execution.process_id == process.id).delete(synchronize_session=False)
             db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
             db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)

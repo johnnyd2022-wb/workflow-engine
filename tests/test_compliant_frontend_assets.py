@@ -25,21 +25,23 @@ def test_compliant_dashboard_documents_the_honest_product_boundary():
 
 
 def test_compliant_dashboard_hydrates_live_views_in_parallel_without_hiding_partial_failures():
-    script = (
-        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.js"
-    ).read_text(encoding="utf-8")
+    script = (_REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.js").read_text(
+        encoding="utf-8"
+    )
 
     assert "Promise.allSettled" in script
     assert "some supporting lists could not load" in script
     assert "setSubmitting(form, true)" in script
 
 
-def test_np3_dynamic_evidence_actions_force_a_full_document_navigation():
-    script = (
-        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js"
-    ).read_text(encoding="utf-8")
+def test_np3_audit_keeps_evidence_in_the_expanded_check():
+    script = (_REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js").read_text(
+        encoding="utf-8"
+    )
 
-    assert "add.setAttribute('hx-boost', 'false')" in script
+    assert "np3-evidence-options" in script
+    assert "/api/compliant/np3-audit/attestations" in script
+    assert "openControlDetail" not in script
     assert "rowsByCategory" in script
 
 
@@ -50,8 +52,11 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     dashboard_script = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.js"
     ).read_text(encoding="utf-8")
-    audit_script = (
-        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js"
+    audit_script = (_REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js").read_text(
+        encoding="utf-8"
+    )
+    audit = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_audit.html"
     ).read_text(encoding="utf-8")
 
     assert "data-evidence-control-heading" in dashboard
@@ -59,7 +64,9 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "evidence_coverage" in dashboard_script
     assert "card.open = !allPassing" in dashboard_script
     assert "section.open = !allReady" in audit_script
-    assert "openControlDetail" in audit_script
+    assert "np3-evidence-options" in audit_script
+    assert "data-np3-control-detail" not in audit
+    assert "AUDIT PREP" in audit
 
 
 def test_audit_pack_does_not_overclaim_tamper_evidence():
