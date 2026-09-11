@@ -6,6 +6,15 @@ from uuid import UUID
 
 from flask import Blueprint, g, jsonify, request, send_file
 
+from app.core.backend.tasks import (
+    TaskError,
+    assign_task_to_lane,
+    create_lane,
+    delete_lane,
+    list_lanes,
+    reorder_lanes,
+    update_lane,
+)
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.features.crm.services.crm_service import CRMService
@@ -361,6 +370,82 @@ def delete_task(task_id: str):
     if not ok:
         return jsonify({"error": "Task not found"}), 404
     return jsonify({"ok": True}), 200
+
+
+# ------------------------------------------------------------------
+# Durable CRM board lanes
+# ------------------------------------------------------------------
+
+
+@api_bp.route("/api/crm/tasks/lanes", methods=["GET"])
+@requires_auth
+def list_task_lanes():
+    return jsonify({"lanes": list_lanes(db_session(), UUID(g.org_id), "crm")}), 200
+
+
+@api_bp.route("/api/crm/tasks/lanes", methods=["POST"])
+@requires_auth
+def create_task_lane():
+    try:
+        lane = create_lane(
+            db_session(), UUID(g.org_id), "crm", UUID(g.user_id) if g.user_id else None, request.get_json(silent=True) or {}
+        )
+        return jsonify({"lane": lane}), 201
+    except TaskError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@api_bp.route("/api/crm/tasks/lanes/<lane_id>", methods=["PUT"])
+@requires_auth
+def update_task_lane(lane_id: str):
+    try:
+        lane = update_lane(db_session(), UUID(g.org_id), "crm", UUID(lane_id), request.get_json(silent=True) or {})
+        if lane is None:
+            return jsonify({"error": "Lane not found"}), 404
+        return jsonify({"lane": lane}), 200
+    except (TaskError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@api_bp.route("/api/crm/tasks/lanes/order", methods=["PUT"])
+@requires_auth
+def reorder_task_lanes():
+    data = request.get_json(silent=True) or {}
+    try:
+        raw_ids = data.get("lane_ids")
+        if set(data) != {"lane_ids"} or not isinstance(raw_ids, list):
+            raise TaskError("lane_ids is required")
+        lanes = reorder_lanes(db_session(), UUID(g.org_id), "crm", [UUID(raw_id) for raw_id in raw_ids])
+        return jsonify({"lanes": lanes}), 200
+    except (TaskError, ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@api_bp.route("/api/crm/tasks/lanes/<lane_id>", methods=["DELETE"])
+@requires_auth
+def delete_task_lane(lane_id: str):
+    try:
+        if not delete_lane(db_session(), UUID(g.org_id), "crm", UUID(lane_id)):
+            return jsonify({"error": "Lane not found"}), 404
+        return jsonify({"ok": True}), 200
+    except ValueError:
+        return jsonify({"error": "lane_id must be a UUID"}), 400
+
+
+@api_bp.route("/api/crm/tasks/<task_id>/lane", methods=["PUT"])
+@requires_auth
+def assign_task_lane(task_id: str):
+    data = request.get_json(silent=True) or {}
+    try:
+        if set(data) != {"lane_id"}:
+            raise TaskError("lane_id is required")
+        lane_id = UUID(data["lane_id"]) if data["lane_id"] else None
+        task = assign_task_to_lane(db_session(), UUID(g.org_id), "crm", UUID(task_id), lane_id)
+        if task is None:
+            return jsonify({"error": "Task not found"}), 404
+        return jsonify({"task": task}), 200
+    except (TaskError, ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 # ------------------------------------------------------------------

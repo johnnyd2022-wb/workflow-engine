@@ -113,6 +113,8 @@
               menuItems +
             '</div>' +
           '</div>';
+      } else if (checkId === 'tasks_due') {
+        actionBlock = '<a href="/core/tasks" class="btn btn-secondary btn-sm" hx-boost="false">Open tasks</a>';
       }
       return (
         '<li class="system-findings-item" data-index="' + index + '" data-check-id="' + escapeHtml(checkId) + '">' +
@@ -216,6 +218,15 @@
             '<p style="margin: 0; font-size: 12px;"><span style="color: var(--error, #ef4444);">' + escapeHtml(severity) + '</span>' + (expiryDate ? ' — Expiry: ' + expiryDate : '') + '</p>' +
             '</div>');
         });
+      }
+    } else if (checkId === 'tasks_due') {
+      var overdueTasks = Array.isArray(data.overdue_tasks) ? data.overdue_tasks : [];
+      var dueSoonTasks = Array.isArray(data.due_soon_tasks) ? data.due_soon_tasks : [];
+      if (overdueTasks.length > 0) {
+        parts.push('<p class="system-findings-item__detail-section"><strong>Overdue:</strong> ' + overdueTasks.map(function (x) { return escapeHtml(x && x.title ? x.title : 'Untitled task'); }).join(', ') + '</p>');
+      }
+      if (dueSoonTasks.length > 0) {
+        parts.push('<p class="system-findings-item__detail-section"><strong>Due soon:</strong> ' + dueSoonTasks.map(function (x) { return escapeHtml(x && x.title ? x.title : 'Untitled task'); }).join(', ') + '</p>');
       }
     } else if (checkId === 'output_ready_date') {
       var items = data.output_ready_date_items;

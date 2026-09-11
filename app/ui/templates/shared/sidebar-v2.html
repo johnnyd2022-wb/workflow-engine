@@ -68,6 +68,15 @@
           </svg>
         </a>
       </li>
+      <li class="nav-item">
+        <a href="/core/tasks" class="nav-link{% if active_page == 'tasks' %} active{% endif %}">
+          <div class="nav-link-icon-wrapper">
+            <svg class="nav-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5M8 17h7"/></svg>
+          </div>
+          <span class="nav-link-text">Tasks</span>
+          <svg class="nav-link-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+      </li>
       {% if compliant_subscribed %}
       <li class="nav-item">
         {# Compliant's CSS and page controller are deliberately page-scoped and enter

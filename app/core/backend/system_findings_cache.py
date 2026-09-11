@@ -58,12 +58,12 @@ def _lock_key(org_id: UUID) -> int:
     return int.from_bytes(digest, "big", signed=True)
 
 
-def _fetch(session):
+def _fetch(session, org_id: UUID):
     from app.core.db.models.system_findings_cache import SystemFindingsCache
 
-    # org_id filter is applied automatically by the TenantScoped global filter; be
-    # explicit anyway so this is correct if that filter is ever bypassed.
-    return session.query(SystemFindingsCache).first()
+    # The global tenant filter protects request paths. Keep this predicate explicit too:
+    # background work and direct callers do not necessarily have Flask's org context.
+    return session.query(SystemFindingsCache).filter(SystemFindingsCache.org_id == org_id).first()
 
 
 def _fresh(row, now: datetime) -> bool:
@@ -174,7 +174,7 @@ def _cached_expensive(org_id: UUID, session) -> list[dict]:
     """The cached (DAG-heavy) check results as plain-JSON dicts. Read-through with
     single-flight recompute; safe to call concurrently."""
     now = datetime.now(UTC)
-    row = _fetch(session)
+    row = _fetch(session, org_id)
     if _fresh(row, now):
         return row.payload.get("results", [])
 
@@ -185,11 +185,11 @@ def _cached_expensive(org_id: UUID, session) -> list[dict]:
         if row is not None:
             return row.payload.get("results", [])
         session.execute(sa.text("SELECT pg_advisory_xact_lock(:k)"), {"k": key})
-        row = _fetch(session)
+        row = _fetch(session, org_id)
         if row is not None:
             return row.payload.get("results", [])
 
-    row = _fetch(session)  # double-check: someone may have written just before we locked
+    row = _fetch(session, org_id)  # double-check: someone may have written just before we locked
     if _fresh(row, now):
         return row.payload.get("results", [])
 
@@ -287,7 +287,10 @@ def get_or_compute(org_id: UUID, session) -> dict:
 
     findings = []
     for r in results:
-        if not r.flagged or not r.message:
+        # Due-soon tasks are notifications without a health breach. Every other entry
+        # remains a system finding only when its check is flagged.
+        is_due_soon_notification = r.check_id == "tasks_due" and bool((r.data or {}).get("due_soon_tasks"))
+        if (not r.flagged and not is_due_soon_notification) or not r.message:
             continue
         finding = {"text": r.message, "check_id": r.check_id}
         if r.data is not None:

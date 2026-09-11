@@ -169,6 +169,25 @@ def _signals_from_results(results: list[CheckResult]) -> list[dict[str, Any]]:
                 }
             )
 
+    tasks_r = by_id.get("tasks_due")
+    if tasks_r and tasks_r.data:
+        overdue_tasks = tasks_r.data.get("overdue_tasks") or []
+        if overdue_tasks:
+            n = len(overdue_tasks)
+            signals.append(
+                {
+                    "type": "OVERDUE_TASKS",
+                    "category": "operations",
+                    "breach_type": "TASK_DUE_DATE_BREACH",
+                    "has_issue": True,
+                    # An overdue task warrants attention, but does not prove a live
+                    # production impact without its own operational check.
+                    "in_active_use": False,
+                    "count": n,
+                    "message": f"{n} overdue task{'s' if n != 1 else ''}",
+                }
+            )
+
     # A check that raised is surfaced by the runner (and the cache paths) as a flagged
     # result with no data. It carries no findings we can categorise, but the system is NOT
     # healthy: we simply don't know what that check would have reported. Emit a degraded
