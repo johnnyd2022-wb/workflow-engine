@@ -15,6 +15,47 @@ NP3_GUIDANCE_VERSION = "2025-v2"
 NP3_GUIDANCE_URL = "https://www.mpi.govt.nz/dmsdocument/21853/direct"
 
 
+def _field_guidance(key: str, label: str) -> tuple[str, str]:
+    """Give each review field usable, visible instructions rather than a vague placeholder."""
+    specific = {
+        "training_register_reference": (
+            "Identify the live register that lists every staff member, their required training and completed dates.",
+            "Training / Staff competency matrix / 2026",
+        ),
+        "last_training_review": (
+            "Record when the register was checked for every current worker, including new starters and changed roles.",
+            "12 September 2026",
+        ),
+        "competency_observation": (
+            "State how a supervisor confirmed people can follow the procedure in practice, not just that they attended training.",
+            "Packaging lead observed the allergen changeover on 8 Sep",
+        ),
+        "mock_recall_date": (
+            "Use the date of the latest trace or mock-recall exercise.",
+            "4 August 2026",
+        ),
+        "trace_result": (
+            "Record the batch traced, the result and how quickly the product could be located.",
+            "Batch B2408 traced to supplier lots and three customers in 38 min",
+        ),
+    }
+    if key in specific:
+        return specific[key]
+    if key.endswith("_date") or key.startswith("last_") or key.startswith("next_"):
+        return ("Record the actual date for this review, check or activity.", "12 September 2026")
+    if any(word in key for word in ("reference", "register", "log", "schedule", "report", "matrix")):
+        return (
+            "Name the exact record and where the verifier can open it; avoid a general description.",
+            "Food safety / Current records / " + label,
+        )
+    if any(word in key for word in ("person", "supplier", "carrier", "source", "area", "equipment", "asset", "device")):
+        return ("Identify the specific person, item or area reviewed for this sign-off.", "Name or ID used at this site")
+    return (
+        "Record the specific result, method or decision that shows this check is operating.",
+        "Brief factual result for this review",
+    )
+
+
 def _playbook(section: str, page: int, proof: tuple[str, ...], fields: tuple[tuple[str, str], ...]) -> dict[str, Any]:
     """A compact, check-specific evidence plan derived from the named MPI card.
 
@@ -26,7 +67,15 @@ def _playbook(section: str, page: int, proof: tuple[str, ...], fields: tuple[tup
         "page": page,
         "guidance_url": f"{NP3_GUIDANCE_URL}#page={page}",
         "proof": list(proof),
-        "fields": [{"key": key, "label": label} for key, label in fields],
+        "fields": [
+            {
+                "key": key,
+                "label": label,
+                "help": _field_guidance(key, label)[0],
+                "example": _field_guidance(key, label)[1],
+            }
+            for key, label in fields
+        ],
     }
 
 

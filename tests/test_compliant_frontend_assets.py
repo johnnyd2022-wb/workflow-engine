@@ -57,6 +57,9 @@ def test_np3_audit_has_a_dedicated_check_workspace_with_tailored_evidence_fields
     assert "evidence_playbook" in check_script
     assert "/settings" in check_script
     assert "evidence_fields" in check_script
+    assert "np3-field__help" in check_script
+    assert "What to collect for this check" in check_script
+    assert "np3-check-workspace__primary" in check_script
 
 
 def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quiet():
