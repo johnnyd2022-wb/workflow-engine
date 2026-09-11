@@ -1,5 +1,6 @@
 """Tenant-scoped JSON and audit-pack routes for Compliant."""
 
+import calendar
 import csv
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -28,6 +29,7 @@ _RECORD_STATUSES = {"complete", "failed", "open", "superseded"}
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 _FOOD_CONTROL_PROGRAMMES = {"np1", "np2", "np3", "none"}
 _LIQUOR_LICENCE_TYPES = {"on", "off", "club", "special"}
+_NP3_REVIEW_INTERVALS = {1, 3, 6, 12}
 
 
 def _csv_safe(value):
@@ -59,6 +61,13 @@ def _date(value, field: str):
         return date.fromisoformat(value)
     except (TypeError, ValueError):
         raise ValueError(f"{field} must be YYYY-MM-DD") from None
+
+
+def _add_months(value: date, months: int) -> date:
+    """Keep recurring reviews on a calendar cadence, including month ends."""
+    month_index = value.month - 1 + months
+    year, month = value.year + month_index // 12, month_index % 12 + 1
+    return date(year, month, min(value.day, calendar.monthrange(year, month)[1]))
 
 
 def _decimal(value, field: str) -> str | None:
@@ -118,6 +127,73 @@ def np3_audit():
     )
 
 
+@api_bp.route("/api/compliant/np3-audit/attestations", methods=["POST"])
+@requires_auth
+def attest_np3_check():
+    """Append a focused NP3 self-review without exposing the generic record register."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "JSON object required"}), 400
+    control_id = str(data.get("control_id") or "")
+    framework = framework_by_slug("np3-food-control") or {}
+    controls = dict(framework.get("controls", ()))
+    if control_id not in controls:
+        return jsonify({"error": "Unknown NP3 check"}), 400
+    how_we_meet = str(data.get("how_we_meet") or "").strip()
+    if not how_we_meet or len(how_we_meet) > 4000:
+        return jsonify({"error": "How we meet this requirement is required and must be at most 4000 characters"}), 400
+    if data.get("confirmed") is not True:
+        return jsonify({"error": "Confirm that you reviewed this check before signing it off"}), 400
+    try:
+        review_interval_months = int(data.get("review_interval_months", 6))
+    except (TypeError, ValueError):
+        return jsonify({"error": "review_interval_months must be 1, 3, 6, or 12"}), 400
+    if review_interval_months not in _NP3_REVIEW_INTERVALS:
+        return jsonify({"error": "review_interval_months must be 1, 3, 6, or 12"}), 400
+    evidence_reference = str(data.get("evidence_reference") or "").strip() or None
+    if evidence_reference and len(evidence_reference) > 1024:
+        return jsonify({"error": "evidence_reference must be at most 1024 characters"}), 400
+    source_refs = data.get("source_refs") or []
+    if (
+        not isinstance(source_refs, list)
+        or len(source_refs) > 30
+        or not all(isinstance(item, str) for item in source_refs)
+    ):
+        return jsonify({"error": "source_refs must be a list of at most 30 strings"}), 400
+    profile = _service().get_profile(_org_id())
+    if profile is None or not profile.enabled:
+        return jsonify({"error": "Configure Compliant before signing off NP3 checks"}), 409
+    if (profile.settings or {}).get("food_control_programme", "np3") != "np3":
+        return jsonify({"error": "Select National Programme 3 in Configuration before signing off checks"}), 409
+    invalid_source_refs = _service().invalid_core_source_references(_org_id(), source_refs)
+    if invalid_source_refs:
+        logger.warning("access_denied", reason="source_ref_not_in_org", feature="compliant", org_id=str(_org_id()))
+        return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
+    today = date.today()
+    record = _service().add_record(
+        _org_id(),
+        g.current_user.id,
+        {
+            "framework_slug": "np3-food-control",
+            "control_id": control_id,
+            "record_type": "attestation",
+            "status": "complete",
+            "title": f"NP3 review: {controls[control_id]}",
+            "due_date": _add_months(today, review_interval_months),
+            "evidence_reference": evidence_reference,
+            "source_refs": source_refs,
+            "details": {
+                "how_we_meet": how_we_meet,
+                "review_interval_months": review_interval_months,
+                "np3_guidance_version": framework.get("version"),
+                "attestation_confirmed": True,
+            },
+        },
+    )
+    log_action("create", "compliance_record", record.id, {"framework": "np3-food-control", "control": control_id})
+    return jsonify({"record": serialise_record(record)}), 201
+
+
 @api_bp.route("/api/compliant/capture-context", methods=["GET"])
 @requires_auth
 def capture_context():
@@ -141,6 +217,9 @@ def update_profile():
         programme = settings.get("food_control_programme")
         if programme is not None and programme not in _FOOD_CONTROL_PROGRAMMES:
             return jsonify({"error": "food_control_programme must be np1, np2, np3, or none"}), 400
+        review_interval = settings.get("np3_review_interval_months")
+        if review_interval is not None and review_interval not in _NP3_REVIEW_INTERVALS:
+            return jsonify({"error": "np3_review_interval_months must be 1, 3, 6, or 12"}), 400
         licence_types = settings.get("liquor_licence_types")
         if licence_types is not None and (
             not isinstance(licence_types, list)

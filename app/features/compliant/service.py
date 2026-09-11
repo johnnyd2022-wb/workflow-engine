@@ -22,6 +22,7 @@ from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.step import Step
+from app.core.db.models.user import User
 from app.features.compliant.models import AlcoholProductProfile, ComplianceProfile, ComplianceRecord, ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import (
     NZ_ALCOHOL_FRAMEWORKS,
@@ -183,7 +184,9 @@ def build_priority_actions(
         (
             record
             for record in (records or [])
-            if record.status == "complete" and record.due_date and today <= record.due_date <= today + timedelta(days=30)
+            if record.status == "complete"
+            and record.due_date
+            and today <= record.due_date <= today + timedelta(days=30)
         ),
         key=lambda record: record.due_date,
     )
@@ -683,6 +686,23 @@ class ComplianceService:
             derive_np3_core_evidence(self.session, org_id) if profile and profile.enabled else ([], {})
         )
         rows = build_np3_audit_rows(records, derived_evidence)
+        review_interval_months = settings.get("np3_review_interval_months", 6)
+        for row in rows:
+            row["default_review_interval_months"] = review_interval_months
+        signer_ids = {
+            event["created_by_user_id"] for row in rows for event in row["history"] if event["created_by_user_id"]
+        }
+        signers = (
+            {
+                user.id: " ".join(part for part in (user.first_name, user.last_name) if part) or user.email
+                for user in self.session.query(User).filter(User.org_id == org_id, User.id.in_(signer_ids)).all()
+            }
+            if signer_ids
+            else {}
+        )
+        for row in rows:
+            for event in row["history"]:
+                event["signed_off_by"] = signers.get(event.pop("created_by_user_id"), "Former team member")
         counts = {state: sum(1 for row in rows if row["state"] == state) for state in ("ready", "attention", "missing")}
         return _iso(
             {
@@ -691,14 +711,14 @@ class ComplianceService:
                     "verifier": settings.get("np3_verifier_name"),
                     "location": settings.get("np3_verification_location"),
                 },
+                "default_review_interval_months": review_interval_months,
                 "preparation_items": PREPARATION_ITEMS,
                 "categories": [category for category, _topics in NP3_AUDIT_CATEGORIES],
                 "rows": rows,
                 "counts": counts,
                 "configuration_required": not bool(profile and profile.enabled),
                 "core_evidence": (
-                    self.data_coverage(org_id, records=records)
-                    | {"live_np3_evidence": live_summary}
+                    self.data_coverage(org_id, records=records) | {"live_np3_evidence": live_summary}
                     if profile and profile.enabled
                     else {}
                 ),

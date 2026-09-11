@@ -12,10 +12,9 @@
   </header>
   <p class="compliant-error" data-np3-error hidden></p>
   <section class="np3-core-evidence" data-np3-core-evidence hidden><div><p class="compliant-eyebrow">LIVE FROM CORE</p><h2>Traceability evidence already connected to your operations.</h2><p>These are live counts from Core. They support the audit register; they do not replace the required records.</p></div><div class="np3-core-evidence__stats" data-np3-core-stats></div></section>
-  <section class="np3-prep-panel"><div><p class="compliant-eyebrow">BEFORE THE VISIT</p><h2>Bring the things that cannot be reconstructed later.</h2></div><ul data-np3-preparation></ul></section>
   <section class="np3-actions"><div><p class="compliant-eyebrow">EVIDENCE REGISTER</p><h2>Every verification topic, its current proof, and the next gap.</h2><p data-np3-disclaimer></p></div><a class="np3-download" href="/api/compliant/np3-audit?format=csv" hx-boost="false">Download evidence register (.csv)</a></section>
   <div data-np3-categories class="np3-categories" aria-live="polite"></div>
-  <dialog class="np3-control-detail" data-np3-control-detail aria-labelledby="np3-control-detail-title"></dialog>
+  <section class="np3-audit-prep"><details><summary><span><span class="compliant-eyebrow">AUDIT PREP</span>Prepare the last details before your visit</span><span class="np3-audit-prep__hint">Open checklist</span></summary><div class="np3-prep-panel"><div><p class="compliant-eyebrow">BEFORE THE VISIT</p><h2>Bring the things that cannot be reconstructed later.</h2></div><ul data-np3-preparation></ul></div></details></section>
 </main>
 {% endblock %}
 {% block scripts %}<script src="/compliant/static/np3-audit.js"></script>{% endblock %}

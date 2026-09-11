@@ -5,7 +5,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.features.compliant.modules.nz_alcohol.catalogue import control_reference, framework_applies
-from app.features.compliant.modules.nz_alcohol.np3_audit import NP3_AUDIT_CATEGORIES, build_np3_audit_rows
+from app.features.compliant.modules.nz_alcohol.np3_audit import (
+    NP3_AUDIT_CATEGORIES,
+    NP3_GUIDANCE_VERSION,
+    build_np3_audit_rows,
+)
 from app.features.compliant.modules.nz_alcohol.workflow_rules import rules_for_profile
 from app.features.compliant.service import build_priority_actions
 
@@ -114,9 +118,30 @@ def test_np3_audit_register_labels_live_core_evidence_and_does_not_hide_a_failur
 
 def test_np3_controls_carry_a_guidance_mapping_for_an_auditor_to_check():
     """Plain-language evidence prompts must remain tied to an official NP3 topic."""
-    assert control_reference("np3-food-control", "trace-and-recall") == "Sourcing, receiving and tracing food; Recalling food"
+    assert (
+        control_reference("np3-food-control", "trace-and-recall")
+        == "Sourcing, receiving and tracing food; Recalling food"
+    )
     assert control_reference("np3-food-control", "cleaning-and-hygiene") == "Cleaning and sanitising"
     assert control_reference("customs-alcohol", "reconciliation") is None
+
+
+def test_np3_check_calls_out_when_the_guidance_changed_since_its_last_attestation():
+    record = SimpleNamespace(
+        control_id="registration-scope",
+        status="complete",
+        due_date=None,
+        title="Previous scope review",
+        evidence_reference=None,
+        created_at=date.today(),
+        record_type="attestation",
+        created_by_user_id=None,
+        details={"np3_guidance_version": "2024-v1", "how_we_meet": "We review scope after changes."},
+    )
+    row = next(row for row in build_np3_audit_rows([record]) if row["topic"] == "Registration / scope of operations")
+    assert row["guidance_update_required"] is True
+    assert row["guidance_version"] == NP3_GUIDANCE_VERSION
+    assert row["history"][0]["how_we_meet"] == "We review scope after changes."
 
 
 def test_upcoming_evidence_review_is_a_live_priority_action():
