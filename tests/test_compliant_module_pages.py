@@ -155,6 +155,9 @@ def test_every_np3_audit_check_has_a_tailored_guidance_card_and_evidence_plan():
         "last_training_review",
         "competency_observation",
     }
+    training_register = next(field for field in training["fields"] if field["key"] == "training_register_reference")
+    assert "every staff member" in training_register["help"]
+    assert training_register["example"] == "Training / Staff competency matrix / 2026"
     assert "#page=" in training["guidance_url"]
 
 
