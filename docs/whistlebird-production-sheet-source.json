@@ -5,7 +5,7 @@
     "tab_name": "Production!!",
     "gid": "1370312095"
   },
-  "outstanding_review": "Per-batch maceration and distillation dates for VAT28+ are currently 'derived' (inherited from the recorded VAT-fill/bottling date). The Production!! tab records these events but with mixed date formats and several contradictions; curating them precisely is the open review item. VAT27 and all VAT1-26 (prior database) have real per-step dates.",
+  "outstanding_review": "Per-batch maceration and distillation dates for VAT28+ are 'derived' (inherited from the recorded VAT-fill/bottling date) except where a specific step date was recoverable from context (see notes on individual records). The Production!! tab's date column mixes literal dd/mm/yyyy strings with spreadsheet date serials that are sometimes day/month-swapped -- each serial in this manifest was resolved by chronological fit against its neighbours and, where available, an already founder-confirmed date (e.g. WB-022's VAT47 bottling), not by a single global format assumption. Six batches remain excluded: VAT52 (two distinct sub-issues, see excluded[] entry), VAT55, VAT57 (both awaiting their bottling row), and the still-unlabelled 'VAT56?' 26-bottle line. The Green Gold (gg01) trial output from VAT53 (row 2035) needs a script change (a sheet-sourced trial manifest section) before it can be imported at all -- tracked as a follow-up, not a curation gap. Rosella VAT26 (prior database, pre-Solstice) still needs founder confirmation that treating its RS01/RS02 flavour rows as the maceration step (no Solstice base to draw from that early) is the right call.",
   "records": [
     {
       "global_vat": 24,
@@ -855,32 +855,263 @@
       ],
       "sheet_rows": "1786-1846",
       "notes": "WB-023: Rosella is Solstice post-macerated on rhubarb. Consumes the aged Solstice VAT48 batch. Rhubarb-maceration and aging dates not separately recorded in the sheet -- derived; confirm at review."
+    },
+    {
+      "global_vat": 23,
+      "batch_label": "VAT23",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2025-07-17",
+          "confidence": "clean"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2025-07-17",
+          "bottles": "77",
+          "sheet_row": 1161
+        }
+      ],
+      "continues_prior_database": true,
+      "notes": "WB-030: same 77-bottle count as VAT24's bottling (row 1080, 2025-05-22) coincided by chronological accident, not duplication -- both rows explicitly and unambiguously name their own VAT number two months apart, unlike the VAT42/44/47 mislabelling cases. Founder reviewed both source lines and did not dispute; imported as a genuine separate event."
+    },
+    {
+      "global_vat": 49,
+      "batch_label": "VAT49",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-07-16",
+          "confidence": "clean"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-07-16",
+          "bottles": "78",
+          "sheet_row": 2016
+        }
+      ]
+    },
+    {
+      "global_vat": 50,
+      "batch_label": "VAT50",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-04-16",
+          "confidence": "resolved_by_context"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-04-16",
+          "bottles": "46",
+          "sheet_row": 1883
+        }
+      ],
+      "notes": "Founder-confirmed (2026-09-11): made from the remainder of a Solstice redistillation run whose concentrate was otherwise added directly to already-bottled VAT48 stock (see the VAT48 cleanup note, row 1846, excluded as not a production record). Row 1863 names it 'VAT50' directly. Bottling date resolved by context (row 1881's stamp)."
+    },
+    {
+      "global_vat": 51,
+      "batch_label": "VAT51",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": "2026-04-16",
+          "confidence": "resolved_by_context"
+        },
+        "aging": {
+          "date": "2026-04-16",
+          "confidence": "resolved_by_context"
+        },
+        "bottling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [],
+      "notes": "Base Solstice batch for the VAT51 Rosella conversion below (WB-031), same pattern as VAT48/1048. Never bottled as Solstice itself."
+    },
+    {
+      "global_vat": 1051,
+      "batch_label": "VAT51",
+      "product": "rosella",
+      "rosella_base_vat": 51,
+      "steps": {
+        "rhubarb_maceration": {
+          "date": "2026-04-28",
+          "confidence": "resolved_by_context"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-06-28",
+          "confidence": "resolved_by_context"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-06-28",
+          "bottles": "46",
+          "sheet_row": 1962
+        }
+      ],
+      "notes": "WB-031 (resolved 2026-09-11): row 1962 now explicitly reads 'Bottling Rosella (VAT51)' -- founder corrected this from an earlier 'VAT52' labelling. Row 1933's rhubarb addition confirms the same Solstice-to-Rosella conversion pattern as VAT48."
+    },
+    {
+      "global_vat": 53,
+      "batch_label": "VAT53",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-09-01",
+          "confidence": "clean"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-09-01",
+          "bottles": "21",
+          "sheet_row": 2040
+        }
+      ],
+      "notes": "Row 2035 (2026-07-31) records 41L drawn from this VAT to make 144x500ml 'Green Gold (gg01)' trial bottles before the 21-bottle Wildflower 'remains' bottling recorded here. The Green Gold trial output is NOT represented in this manifest or import: trials are only sourced from the legacy database by apply_trial_batches / _trial_records, and this manifest has no equivalent mechanism for a sheet-sourced trial yet. Needs a follow-up script change to add a sheet-trial section before Green Gold can be imported."
+    },
+    {
+      "global_vat": 54,
+      "batch_label": "VAT54",
+      "product": "solstice",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-09-10",
+          "confidence": "clean"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-09-10",
+          "bottles": "88",
+          "sheet_row": 2081
+        }
+      ]
     }
   ],
   "excluded": [
     {
       "sheet_row": 1846,
-      "reason": "WB-028: date contradicts surrounding sequence (resolves to 2026-02-04 but follows the 2026-03-26 bottling in sheet order); unresolved."
+      "reason": "WB-028 (resolved 2026-09-11): founder confirmed this is not a production record -- it refers to concentrate added directly to already-bottled VAT48 stock, not a VAT movement. Left excluded because there is nothing here to import, not because it's unresolved."
     },
     {
-      "sheet_row": 1883,
-      "reason": "WB-029: 'Bottling VATXX' -- sheet itself doesn't record which VAT this is; unresolved."
+      "sheet_row": "1910-1917, 1940, 1985",
+      "reason": "WB-029/WB-031 (narrowed 2026-09-11): VAT52 covers two unrelated events under one number. (1) An April 2026 'Distilled Wildflower (VAT52)' run (rows 1910-1917) with no fill or bottling recorded under VAT52 as Wildflower anywhere -- founder investigating whether it became VAT53's fill (row 1965), was blended as concentrate elsewhere, or is a stray. (2) A separate Solstice distill/fill/bottle chain (rows 1940-1985, still carries the founder's own '?') that is internally consistent but has no bottle count recorded anywhere near its row-1985 bottling. Excluded entirely until both are answered."
     },
     {
-      "sheet_row": 1939,
-      "reason": "WB-029: 'Distilling Solstice (VAT52?)' -- question mark in source; unresolved."
+      "sheet_row": 2019,
+      "reason": "VAT55: distilled and filled (row 2019, ~2026-07-23) but not yet bottled as of this pull. Re-import once a bottling row appears."
     },
     {
-      "sheet_row": 2015,
-      "reason": "VAT49 bottling has no recorded bottle count anywhere nearby in the sheet; excluded rather than guessed."
+      "sheet_row": 2058,
+      "reason": "An unlabelled '26 bottles' line sits right after VAT56's fill block (row 2042) with no 'Bottling VAT56' text and no VAT number given -- positionally it reads as VAT56's bottling, but that would mean bottling the same day as filling with no aging, unlike every other batch in this manifest. Excluded pending founder confirmation of the VAT number and date."
     },
     {
-      "sheet_row": "1160-1162",
-      "reason": "WB-030: 'Bottling wildflower VAT23, 77 bottles' -- same bottle count (77) as VAT24's confirmed bottling. Founder is investigating whether this is a genuine separate event or a duplicate/mislabel before this is curated into a record."
-    },
-    {
-      "sheet_row": "1916, 1932-1933, 1961, 1984",
-      "reason": "WB-031: VAT52 is labelled as three different products across three mentions (Wildflower, Rosella, Solstice), and VAT51 has a rhubarb addition suggesting a possible Solstice-to-Rosella conversion similar to VAT48's. Founder is investigating what actually happened before this is curated."
+      "sheet_row": 2061,
+      "reason": "VAT57: distilled (row 2061, ~2026-09-03) and filled after fridge storage (row 2065, ~2026-09-08, matching the sheet's own 'until 08/09/2026' note) but not yet bottled as of this pull. Re-import once a bottling row appears."
     }
   ]
 }
