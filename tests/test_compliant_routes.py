@@ -204,6 +204,32 @@ def test_np3_review_reminder_handles_month_end():
     assert _add_months(date(2026, 8, 31), 6) == date(2027, 2, 28)
 
 
+def test_np3_check_detail_and_review_setting_are_control_scoped(db, flask_app):
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile", json={"enabled": True, "settings": {"food_control_programme": "np3"}}
+            ).status_code
+            == 200
+        )
+        detail = client.get("/api/compliant/np3-audit/checks/staff-competency")
+        assert detail.status_code == 200
+        check = detail.get_json()["check"]
+        assert check["evidence_playbook"]["section"] == "Ensuring staff are trained and competent"
+        assert check["guidance_url"].endswith("#page=26")
+        setting = client.put(
+            "/api/compliant/np3-audit/checks/staff-competency/settings", json={"review_interval_months": 12}
+        )
+        assert setting.status_code == 200
+        assert setting.get_json()["review_interval_months"] == 12
+        updated = client.get("/api/compliant/np3-audit/checks/staff-competency").get_json()["check"]
+        assert updated["default_review_interval_months"] == 12
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
 def test_control_capture_requirements_are_enforced(db, flask_app):
     org, client = _admin_client(db, flask_app)
     try:
@@ -635,6 +661,8 @@ def test_np3_live_evidence_projects_real_core_dag_lineage(db, flask_app):
 
         observations, summary = derive_np3_core_evidence(db, org.id)
         trace = next(item for item in observations if item["control_id"] == "trace-and-recall")
+        assert trace["workspace_url"] == "/core/sourcemap?show=check-needed"
+        assert trace["workspace_label"] == "Open source map trace"
         assert str(graph["f1_id"]) in trace["source_refs"]
         assert str(graph["execution_id"]) in trace["source_refs"]
         assert summary["dag_lineage_edges"] == 2

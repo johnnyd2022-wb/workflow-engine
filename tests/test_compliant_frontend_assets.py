@@ -45,6 +45,20 @@ def test_np3_audit_keeps_evidence_in_the_expanded_check():
     assert "rowsByCategory" in script
 
 
+def test_np3_audit_has_a_dedicated_check_workspace_with_tailored_evidence_fields():
+    check_page = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_check.html"
+    ).read_text(encoding="utf-8")
+    check_script = (_REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-check.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "data-np3-check-root" in check_page
+    assert "evidence_playbook" in check_script
+    assert "/settings" in check_script
+    assert "evidence_fields" in check_script
+
+
 def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quiet():
     dashboard = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "dashboard.html"

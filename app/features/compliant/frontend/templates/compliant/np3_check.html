@@ -1,0 +1,14 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}NP3 check · NZ Alcohol · Compliant{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block content %}
+<main class="compliant-shell" data-np3-check-root data-control-id="{{ control_id }}" aria-busy="true">
+  <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant" hx-boost="false">Compliant</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol/np3-audit" hx-boost="false">NP3 audit</a><span aria-hidden="true">/</span><strong data-np3-check-breadcrumb>Check</strong></nav>
+  {% set active_compliant_tab = "np3-audit" %}{% include "compliant/_nz_alcohol_tabs.html" %}
+  <p class="compliant-error" data-np3-check-error hidden></p>
+  <header class="compliant-hero np3-check-hero"><div><p class="compliant-eyebrow">NATIONAL PROGRAMME 3 / CHECK DETAIL</p><h1 data-np3-check-title>Loading check…</h1><p data-np3-check-summary></p></div><div class="compliant-summary"><strong data-np3-check-state>Loading</strong><span data-np3-check-next-review></span></div></header>
+  <section class="np3-check-workspace" data-np3-check-workspace></section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/np3-check.js"></script>{% endblock %}

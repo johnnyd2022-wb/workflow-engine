@@ -16,6 +16,7 @@ from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
 from app.features.compliant.models import ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
+from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook
 from app.features.compliant.modules.nz_alcohol.workflow_rules import validate_workflow_settings
 from app.features.compliant.platform.workflow_rules import workflow_context
 from app.features.compliant.service import ComplianceService, serialise_record
@@ -127,6 +128,41 @@ def np3_audit():
     )
 
 
+@api_bp.route("/api/compliant/np3-audit/checks/<control_id>", methods=["GET"])
+@requires_auth
+def np3_audit_check(control_id: str):
+    """Return the one check a user chose to inspect in full."""
+    try:
+        audit = _service().np3_audit(_org_id())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 409
+    row = next((item for item in audit["rows"] if item["control_id"] == control_id), None)
+    if row is None:
+        return jsonify({"error": "Unknown NP3 check"}), 404
+    return jsonify({"check": row, "verification": audit["verification"]}), 200
+
+
+@api_bp.route("/api/compliant/np3-audit/checks/<control_id>/settings", methods=["PUT"])
+@requires_auth
+@requires_role(UserRole.ADMIN)
+def update_np3_check_settings(control_id: str):
+    if control_id not in dict((framework_by_slug("np3-food-control") or {}).get("controls", ())):
+        return jsonify({"error": "Unknown NP3 check"}), 404
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or data.get("review_interval_months") not in _NP3_REVIEW_INTERVALS:
+        return jsonify({"error": "review_interval_months must be 1, 3, 6, or 12"}), 400
+    profile = _service().get_profile(_org_id())
+    if profile is None or not profile.enabled:
+        return jsonify({"error": "Configure Compliant before changing NP3 check settings"}), 409
+    settings = dict(profile.settings or {})
+    intervals = dict(settings.get("np3_check_review_intervals") or {})
+    intervals[control_id] = data["review_interval_months"]
+    settings["np3_check_review_intervals"] = intervals
+    profile = _service().upsert_profile(_org_id(), {"settings": settings})
+    log_action("update", "compliance_profile", profile.id, {"np3_check_review_interval": control_id})
+    return jsonify({"review_interval_months": intervals[control_id]}), 200
+
+
 @api_bp.route("/api/compliant/np3-audit/attestations", methods=["POST"])
 @requires_auth
 def attest_np3_check():
@@ -169,6 +205,14 @@ def attest_np3_check():
     if invalid_source_refs:
         logger.warning("access_denied", reason="source_ref_not_in_org", feature="compliant", org_id=str(_org_id()))
         return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
+    evidence_fields = data.get("evidence_fields") or {}
+    allowed_evidence_fields = {field["key"] for field in evidence_playbook(control_id)["fields"]}
+    if (
+        not isinstance(evidence_fields, dict)
+        or not set(evidence_fields).issubset(allowed_evidence_fields)
+        or not all(isinstance(value, str) and len(value) <= 1024 for value in evidence_fields.values())
+    ):
+        return jsonify({"error": "Evidence fields do not match this NP3 check"}), 400
     today = date.today()
     record = _service().add_record(
         _org_id(),
@@ -187,6 +231,7 @@ def attest_np3_check():
                 "review_interval_months": review_interval_months,
                 "np3_guidance_version": framework.get("version"),
                 "attestation_confirmed": True,
+                "evidence_fields": evidence_fields,
             },
         },
     )
@@ -220,6 +265,16 @@ def update_profile():
         review_interval = settings.get("np3_review_interval_months")
         if review_interval is not None and review_interval not in _NP3_REVIEW_INTERVALS:
             return jsonify({"error": "np3_review_interval_months must be 1, 3, 6, or 12"}), 400
+        check_intervals = settings.get("np3_check_review_intervals")
+        if check_intervals is not None and (
+            not isinstance(check_intervals, dict)
+            or not all(
+                key in dict((framework_by_slug("np3-food-control") or {}).get("controls", ()))
+                and value in _NP3_REVIEW_INTERVALS
+                for key, value in check_intervals.items()
+            )
+        ):
+            return jsonify({"error": "np3_check_review_intervals must contain valid NP3 checks and intervals"}), 400
         licence_types = settings.get("liquor_licence_types")
         if licence_types is not None and (
             not isinstance(licence_types, list)

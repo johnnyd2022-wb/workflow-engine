@@ -38,6 +38,12 @@ def nz_alcohol_np3_audit():
     return render_template("compliant/np3_audit.html", active_page="compliant")
 
 
+@page_bp.route("/compliant/nz-alcohol/np3-audit/check/<control_id>", methods=["GET"])
+@requires_auth
+def nz_alcohol_np3_audit_check(control_id: str):
+    return render_template("compliant/np3_check.html", active_page="compliant", control_id=control_id)
+
+
 @page_bp.route("/compliant/nz-alcohol/configuration", methods=["GET"])
 @requires_auth
 def nz_alcohol_configuration():

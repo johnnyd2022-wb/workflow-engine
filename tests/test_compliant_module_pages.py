@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from app.features.compliant.modules.nz_alcohol.catalogue import control_reference, framework_applies
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
     NP3_AUDIT_CATEGORIES,
+    NP3_EVIDENCE_PLAYBOOKS,
     NP3_GUIDANCE_VERSION,
     build_np3_audit_rows,
 )
@@ -142,6 +143,19 @@ def test_np3_check_calls_out_when_the_guidance_changed_since_its_last_attestatio
     assert row["guidance_update_required"] is True
     assert row["guidance_version"] == NP3_GUIDANCE_VERSION
     assert row["history"][0]["how_we_meet"] == "We review scope after changes."
+
+
+def test_every_np3_audit_check_has_a_tailored_guidance_card_and_evidence_plan():
+    audit_controls = {control_id for _category, topics in NP3_AUDIT_CATEGORIES for control_id, _topic in topics}
+    assert audit_controls <= NP3_EVIDENCE_PLAYBOOKS.keys()
+    training = NP3_EVIDENCE_PLAYBOOKS["staff-competency"]
+    assert training["section"] == "Ensuring staff are trained and competent"
+    assert {field["key"] for field in training["fields"]} >= {
+        "training_register_reference",
+        "last_training_review",
+        "competency_observation",
+    }
+    assert "#page=" in training["guidance_url"]
 
 
 def test_upcoming_evidence_review_is_a_live_priority_action():
