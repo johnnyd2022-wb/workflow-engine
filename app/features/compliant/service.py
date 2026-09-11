@@ -687,8 +687,11 @@ class ComplianceService:
         )
         rows = build_np3_audit_rows(records, derived_evidence)
         review_interval_months = settings.get("np3_review_interval_months", 6)
+        check_review_intervals = settings.get("np3_check_review_intervals", {})
         for row in rows:
-            row["default_review_interval_months"] = review_interval_months
+            row["default_review_interval_months"] = check_review_intervals.get(
+                row["control_id"], review_interval_months
+            )
         signer_ids = {
             event["created_by_user_id"] for row in rows for event in row["history"] if event["created_by_user_id"]
         }

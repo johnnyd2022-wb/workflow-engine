@@ -33,7 +33,7 @@ def _observation(
     detail: str,
 ) -> dict[str, Any]:
     destinations = {
-        "core-dag": ("/core/inventory/view", "Open inventory trace"),
+        "core-dag": ("/core/sourcemap?show=check-needed", "Open source map trace"),
         "core-execution": ("/core/executions/live", "Open live executions"),
         "core-evidence-file": ("/core/executions/live", "Open execution evidence"),
         "core-inventory": ("/core/inventory/view", "Open inventory records"),
