@@ -75,6 +75,7 @@
               <button id="core2-tab-overview" type="button" class="flow-mode-segment flow-mode-segment--active" data-core2-tab-target="overview" role="tab" aria-controls="core2-panel-overview" aria-selected="true" tabindex="0">Overview</button>
               <button id="core2-tab-inventory" type="button" class="flow-mode-segment" data-core2-tab-target="inventory" role="tab" aria-controls="core2-panel-inventory" aria-selected="false" tabindex="-1">Inventory</button>
               <button id="core2-tab-workflows" type="button" class="flow-mode-segment" data-core2-tab-target="workflows" role="tab" aria-controls="core2-panel-workflows" aria-selected="false" tabindex="-1">Product workflows</button>
+              <button id="core2-tab-tasks" type="button" class="flow-mode-segment" data-core2-tab-target="tasks" role="tab" aria-controls="core2-panel-tasks" aria-selected="false" tabindex="-1">Tasks</button>
             </div>
           </section>
 
@@ -285,6 +286,11 @@
                   </span>
                 </a>
               </div>
+            </section>
+          </div>
+          <div id="core2-panel-tasks" class="core2-tab-panel" data-core2-tab-panel="tasks" role="tabpanel" aria-labelledby="core2-tab-tasks" hidden>
+            <section class="spa-form-section" aria-label="Tasks">
+              {% include "tasks/_board.html" %}
             </section>
           </div>
           {% elif core2_focus_mode == 'inventory_live' %}
@@ -610,7 +616,7 @@
     function setCore2MainTab(tab, options) {
       options = options || {};
       var historyMode = options.historyMode || 'replace';
-      const safeTab = (tab === 'inventory' || tab === 'workflows') ? tab : 'overview';
+      const safeTab = (tab === 'inventory' || tab === 'workflows' || tab === 'tasks') ? tab : 'overview';
       const tabButtons = document.querySelectorAll('[data-core2-tab-target]');
       const tabPanels = document.querySelectorAll('[data-core2-tab-panel]');
 
@@ -648,6 +654,7 @@
       // Lazy-load the detail data the first time each tab is shown.
       if (safeTab === 'inventory' && typeof loadCore2InventoryTab === 'function') loadCore2InventoryTab();
       else if (safeTab === 'workflows' && typeof loadCore2WorkflowsTab === 'function') loadCore2WorkflowsTab();
+      else if (safeTab === 'tasks') window.dispatchEvent(new Event('core2:tasks-open'));
     }
 
     function initCore2MainTabs() {
@@ -683,7 +690,7 @@
       let selectedTab = 'overview';
       try {
         const fromUrl = (new URL(window.location.href)).searchParams.get('tab');
-        if (fromUrl === 'inventory' || fromUrl === 'workflows' || fromUrl === 'overview') {
+        if (fromUrl === 'inventory' || fromUrl === 'workflows' || fromUrl === 'tasks' || fromUrl === 'overview') {
           selectedTab = fromUrl;
         }
       } catch (e) {}
@@ -694,7 +701,7 @@
           var tab = 'overview';
           try {
             var fromUrl = (new URL(window.location.href)).searchParams.get('tab');
-            if (fromUrl === 'inventory' || fromUrl === 'workflows') tab = fromUrl;
+            if (fromUrl === 'inventory' || fromUrl === 'workflows' || fromUrl === 'tasks') tab = fromUrl;
           } catch (e) {}
           setCore2MainTab(tab, { historyMode: 'none' });
         });
@@ -2548,7 +2555,7 @@
     function core2CurrentMainTab() {
       try {
         var fromUrl = (new URL(window.location.href)).searchParams.get('tab');
-        if (fromUrl === 'inventory' || fromUrl === 'workflows') return fromUrl;
+        if (fromUrl === 'inventory' || fromUrl === 'workflows' || fromUrl === 'tasks') return fromUrl;
       } catch (e) {}
       return 'overview';
     }

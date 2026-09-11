@@ -3,11 +3,16 @@
 {% block content %}
 <div class="max-content core-tasks" x-data="coreTaskConfiguration()" x-init="init()">
   <section class="card spa-primary-flat core-tasks__settings">
-    <div class="core-tasks__heading"><div><h1>Task settings</h1><p>Choose when open tasks appear in Notifications. Overdue tasks always remain system findings.</p></div><a href="/core/tasks" class="btn btn-secondary" hx-boost="false">Back to tasks</a></div>
+    <div class="core-tasks__heading"><div><h1>Task settings</h1><p>Choose when open tasks appear in Notifications. Overdue tasks always remain system findings.</p></div><a href="/core?tab=tasks" class="btn btn-secondary" hx-boost="false">Back to tasks</a></div>
     <p class="core-tasks__error" x-show="error" x-text="error" x-cloak></p>
     <label class="core-tasks__toggle core-tasks__toggle--setting"><input type="checkbox" x-model="config.due_notifications_enabled"> Notify for tasks due soon</label>
     <div class="core-tasks__settings-grid" :class="{disabled: !config.due_notifications_enabled}"><label>Notify before due date<input class="form-input" type="number" min="1" max="3650" x-model.number="config.notification_lead_value" :disabled="!config.due_notifications_enabled"></label><label>Period<select class="form-select" x-model="config.notification_lead_unit" :disabled="!config.due_notifications_enabled"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label></div>
     <p class="core-tasks__note">Default: 7 days. After a due date passes, the task is always shown as an overdue system finding.</p>
+    <hr>
+    <h2 class="core-tasks__settings-heading">Archive completed work</h2>
+    <p class="core-tasks__note">Completed or cancelled tasks move out of the active board after this period. They remain available from Load archive.</p>
+    <div class="core-tasks__settings-grid"><label>Archive after<input class="form-input" type="number" min="1" max="3650" x-model.number="config.done_archive_value"></label><label>Period<select class="form-select" x-model="config.done_archive_unit"><option value="days">Days</option><option value="weeks">Weeks</option><option value="months">Months</option></select></label></div>
+    <p class="core-tasks__note">Default: 1 week.</p>
     <button type="button" class="btn btn-primary" @click="save()" :disabled="saving" x-text="saving ? 'Saving…' : 'Save settings'"></button>
   </section>
 </div>

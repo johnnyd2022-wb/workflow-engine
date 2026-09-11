@@ -114,7 +114,7 @@
             '</div>' +
           '</div>';
       } else if (checkId === 'tasks_due') {
-        actionBlock = '<a href="/core/tasks" class="btn btn-secondary btn-sm" hx-boost="false">Open tasks</a>';
+        actionBlock = '<a href="/core?tab=tasks" class="btn btn-secondary btn-sm" hx-boost="false">Open tasks</a>';
       }
       return (
         '<li class="system-findings-item" data-index="' + index + '" data-check-id="' + escapeHtml(checkId) + '">' +

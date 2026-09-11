@@ -548,7 +548,7 @@
             detailText: overdue ? 'This task is overdue and remains a system finding until it is completed or cancelled.' : 'This task is within your organisation\'s due-date notification window.',
             detailDateCaption: 'Due date:', detailDateText: formatDate(due), itemName: task.title || id,
             extraFields: [{ label: 'Source:', value: task.source_label || source.toUpperCase() }, { label: 'Assigned to:', value: assignee }],
-            actions: [{ type: 'link', href: '/core/tasks?source=' + encodeURIComponent(source), label: 'Open tasks', boost: false }]
+            actions: [{ type: 'link', href: '/core?tab=tasks&source=' + encodeURIComponent(source), label: 'Open tasks', boost: false }]
           });
         });
         return;
