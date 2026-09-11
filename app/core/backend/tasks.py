@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
 from flask import g, jsonify, request
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
@@ -26,6 +27,7 @@ OPEN_STATUSES = frozenset({"pending", "in_progress"})
 ALL_STATUSES = OPEN_STATUSES | {"completed", "cancelled"}
 PRIORITIES = frozenset({"low", "medium", "high"})
 LEAD_UNITS = frozenset({"days", "weeks", "months"})
+DEFAULT_LANE_IDS = frozenset({"todo", "in-progress", "done", "cancelled"})
 # A board should never turn one organisation's full history into an unbounded response.
 # This remains well above a practical active operational queue while keeping task and
 # assignee lookup work predictable.
@@ -50,7 +52,7 @@ def _user_names(session: Session, org_id: UUID, ids: set[UUID]) -> dict[UUID, st
     return {row.id: _display_name(row) or row.email for row in rows}
 
 
-def _serialise_core_task(task: CoreTask, names: dict[UUID, str]) -> dict[str, Any]:
+def _serialise_core_task(task: CoreTask, names: dict[UUID, str], *, archived: bool = False) -> dict[str, Any]:
     return {
         "id": str(task.id),
         "source": "core",
@@ -68,10 +70,11 @@ def _serialise_core_task(task: CoreTask, names: dict[UUID, str]) -> dict[str, An
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
         "editable": True,
         "board_lane_id": str(task.board_lane_id) if task.board_lane_id else None,
+        "archived": archived,
     }
 
 
-def _serialise_crm_task(task: Any, names: dict[UUID, str]) -> dict[str, Any]:
+def _serialise_crm_task(task: Any, names: dict[UUID, str], *, archived: bool = False) -> dict[str, Any]:
     return {
         "id": str(task.id),
         "source": "crm",
@@ -90,12 +93,33 @@ def _serialise_crm_task(task: Any, names: dict[UUID, str]) -> dict[str, Any]:
         "editable": False,
         "href": "/crm/tasks?task_id=" + str(task.id),
         "board_lane_id": str(task.board_lane_id) if task.board_lane_id else None,
+        "archived": archived,
     }
 
 
-def _all_task_rows(session: Session, org_id: UUID, source: str = "all") -> list[dict[str, Any]]:
+def _archive_cutoff(config: dict[str, Any]) -> datetime:
+    value = config["done_archive_value"]
+    unit = config["done_archive_unit"]
+    now = utc_now()
+    if unit == "months":
+        return datetime.combine(_add_months(now.date(), -value), datetime.min.time(), tzinfo=UTC)
+    return now - timedelta(days=value * (7 if unit == "weeks" else 1))
+
+
+def _archive_filter(model: Any, archive: str, cutoff: datetime):
+    closed_at = func.coalesce(model.completed_at, model.updated_at, model.created_at)
+    if archive == "archived":
+        return and_(model.status.in_(("completed", "cancelled")), closed_at < cutoff)
+    return or_(model.status.in_(OPEN_STATUSES), and_(model.status.in_(("completed", "cancelled")), closed_at >= cutoff))
+
+
+def _all_task_rows(session: Session, org_id: UUID, source: str = "all", archive: str = "active") -> list[dict[str, Any]]:
+    cutoff = _archive_cutoff(serialise_config(_config_row(session, org_id)))
     core_rows = (
-        session.query(CoreTask).filter(CoreTask.org_id == org_id).limit(TASK_BOARD_QUERY_LIMIT).all()
+        session.query(CoreTask)
+        .filter(CoreTask.org_id == org_id, _archive_filter(CoreTask, archive, cutoff))
+        .limit(TASK_BOARD_QUERY_LIMIT)
+        .all()
         if source in {"all", "core"}
         else []
     )
@@ -110,21 +134,31 @@ def _all_task_rows(session: Session, org_id: UUID, source: str = "all") -> list[
 
         _ = XeroContact
 
-        crm_rows = session.query(CRMTask).filter(CRMTask.org_id == org_id).limit(TASK_BOARD_QUERY_LIMIT).all()
+        crm_rows = (
+            session.query(CRMTask)
+            .filter(CRMTask.org_id == org_id, _archive_filter(CRMTask, archive, cutoff))
+            .limit(TASK_BOARD_QUERY_LIMIT)
+            .all()
+        )
     ids = {row.assigned_to_user_id for row in core_rows + crm_rows if row.assigned_to_user_id}
     names = _user_names(session, org_id, ids)
-    result = [_serialise_core_task(row, names) for row in core_rows]
-    result.extend(_serialise_crm_task(row, names) for row in crm_rows)
+    archived = archive == "archived"
+    result = [_serialise_core_task(row, names, archived=archived) for row in core_rows]
+    result.extend(_serialise_crm_task(row, names, archived=archived) for row in crm_rows)
     result.sort(key=lambda row: (row["due_date"] is None, row["due_date"] or "9999-12-31", row["created_at"] or ""))
     return result
 
 
-def list_tasks(session: Session, org_id: UUID, source: str = "all", status: str | None = None) -> list[dict[str, Any]]:
+def list_tasks(
+    session: Session, org_id: UUID, source: str = "all", status: str | None = None, archive: str = "active"
+) -> list[dict[str, Any]]:
     if source not in {"all", "core", "crm"}:
         raise TaskError("source must be all, core, or crm")
     if status and status not in ALL_STATUSES:
         raise TaskError("invalid status")
-    rows = _all_task_rows(session, org_id, source)
+    if archive not in {"active", "archived"}:
+        raise TaskError("archive must be active or archived")
+    rows = _all_task_rows(session, org_id, source, archive)
     return [row for row in rows if not status or row["status"] == status]
 
 
@@ -267,6 +301,10 @@ def serialise_config(row: CoreTaskConfig | None) -> dict[str, Any]:
         "due_notifications_enabled": True if row is None else row.due_notifications_enabled,
         "notification_lead_value": 7 if row is None else row.notification_lead_value,
         "notification_lead_unit": "days" if row is None else row.notification_lead_unit,
+        "done_archive_value": 1 if row is None else row.done_archive_value,
+        "done_archive_unit": "weeks" if row is None else row.done_archive_unit,
+        "lane_order": [] if row is None else list(row.lane_order or []),
+        "hidden_default_lanes": [] if row is None else list(row.hidden_default_lanes or []),
     }
 
 
@@ -274,8 +312,20 @@ def get_config(session: Session, org_id: UUID) -> dict[str, Any]:
     return serialise_config(_config_row(session, org_id))
 
 
+def _validate_period(value: Any, unit: Any, *, prefix: str) -> tuple[int, str]:
+    if type(value) is not int or not 1 <= value <= 3650:
+        raise TaskError(f"{prefix}_value must be an integer from 1 to 3650")
+    parsed_unit = str(unit or "").lower()
+    if parsed_unit not in LEAD_UNITS:
+        raise TaskError(f"{prefix}_unit must be days, weeks, or months")
+    return value, parsed_unit
+
+
 def update_config(session: Session, org_id: UUID, data: dict[str, Any]) -> dict[str, Any]:
-    allowed = {"due_notifications_enabled", "notification_lead_value", "notification_lead_unit"}
+    allowed = {
+        "due_notifications_enabled", "notification_lead_value", "notification_lead_unit",
+        "done_archive_value", "done_archive_unit", "lane_order", "hidden_default_lanes",
+    }
     if set(data) - allowed:
         raise TaskError("unsupported configuration fields")
     row = _config_row(session, org_id)
@@ -286,16 +336,34 @@ def update_config(session: Session, org_id: UUID, data: dict[str, Any]) -> dict[
         if not isinstance(data["due_notifications_enabled"], bool):
             raise TaskError("due_notifications_enabled must be true or false")
         row.due_notifications_enabled = data["due_notifications_enabled"]
-    if "notification_lead_value" in data:
-        value = data["notification_lead_value"]
-        if type(value) is not int or not 1 <= value <= 3650:
-            raise TaskError("notification_lead_value must be an integer from 1 to 3650")
-        row.notification_lead_value = value
-    if "notification_lead_unit" in data:
-        unit = str(data["notification_lead_unit"] or "").lower()
-        if unit not in LEAD_UNITS:
-            raise TaskError("notification_lead_unit must be days, weeks, or months")
-        row.notification_lead_unit = unit
+    if "notification_lead_value" in data or "notification_lead_unit" in data:
+        row.notification_lead_value, row.notification_lead_unit = _validate_period(
+            data.get("notification_lead_value", row.notification_lead_value),
+            data.get("notification_lead_unit", row.notification_lead_unit),
+            prefix="notification_lead",
+        )
+    if "done_archive_value" in data or "done_archive_unit" in data:
+        row.done_archive_value, row.done_archive_unit = _validate_period(
+            data.get("done_archive_value", row.done_archive_value),
+            data.get("done_archive_unit", row.done_archive_unit),
+            prefix="done_archive",
+        )
+    if "lane_order" in data:
+        order = data["lane_order"]
+        if not isinstance(order, list) or len(order) > 100:
+            raise TaskError("lane_order must be a list of up to 100 lane ids")
+        clean_order = [str(lane_id).strip() for lane_id in order]
+        if not all(clean_order) or len(clean_order) != len(set(clean_order)):
+            raise TaskError("lane_order must contain unique lane ids")
+        row.lane_order = clean_order
+    if "hidden_default_lanes" in data:
+        hidden = data["hidden_default_lanes"]
+        if not isinstance(hidden, list):
+            raise TaskError("hidden_default_lanes must be a list")
+        clean_hidden = [str(lane_id).strip() for lane_id in hidden]
+        if len(clean_hidden) != len(set(clean_hidden)) or not set(clean_hidden).issubset(DEFAULT_LANE_IDS):
+            raise TaskError("hidden_default_lanes contains an invalid lane")
+        row.hidden_default_lanes = clean_hidden
     session.commit()
     return serialise_config(row)
 
@@ -451,7 +519,15 @@ def register_routes(bp) -> None:
     @requires_auth
     def list_core_tasks():
         try:
-            return jsonify({"tasks": list_tasks(db_session(), org_id(), request.args.get("source", "all"), request.args.get("status"))})
+            return jsonify({
+                "tasks": list_tasks(
+                    db_session(),
+                    org_id(),
+                    request.args.get("source", "all"),
+                    request.args.get("status"),
+                    request.args.get("archive", "active"),
+                )
+            })
         except TaskError as exc:
             return jsonify({"error": str(exc)}), 400
 

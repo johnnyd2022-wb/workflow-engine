@@ -19,8 +19,10 @@ from app.core.backend.tasks import (
     task_due_summary,
     update_config,
 )
+from app.core.db.models.core_task import CoreTask
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import User
+from app.core.utils.time import utc_now
 from app.features.crm.models.crm_task import CRMTask
 from app.features.crm.models.xero_contact import XeroContact
 from tests.factories import OrganisationFactory, UserFactory
@@ -118,3 +120,31 @@ def test_due_soon_notifications_can_be_disabled_but_overdue_is_fixed(task_world,
     result = run_tasks_due_check(world["org_a"].id, db)
     assert result.flagged is True
     assert derive_health_state(_signals_from_results([result])) == "degraded"
+
+
+def test_completed_tasks_load_from_archive_only_after_configured_period(task_world, db):
+    world = task_world
+    old_task = create_task(db, world["org_a"].id, world["user_a"].id, {"title": "Old completed task"})
+    recent_task = create_task(db, world["org_a"].id, world["user_a"].id, {"title": "Recent completed task"})
+    old_row = db.get(CoreTask, UUID(old_task["id"]))
+    recent_row = db.get(CoreTask, UUID(recent_task["id"]))
+    old_row.status = recent_row.status = "completed"
+    old_row.completed_at = old_row.updated_at = utc_now() - timedelta(days=2)
+    recent_row.completed_at = recent_row.updated_at = utc_now() - timedelta(hours=12)
+    db.commit()
+
+    saved = update_config(
+        db,
+        world["org_a"].id,
+        {"done_archive_value": 1, "done_archive_unit": "days", "lane_order": ["done", "todo"], "hidden_default_lanes": ["cancelled"]},
+    )
+    assert saved["done_archive_value"] == 1
+    assert saved["done_archive_unit"] == "days"
+    assert saved["lane_order"] == ["done", "todo"]
+    assert saved["hidden_default_lanes"] == ["cancelled"]
+
+    active = list_tasks(db, world["org_a"].id)
+    archived = list_tasks(db, world["org_a"].id, archive="archived")
+    assert [row["id"] for row in active] == [recent_task["id"]]
+    assert [row["id"] for row in archived] == [old_task["id"]]
+    assert archived[0]["archived"] is True

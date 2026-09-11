@@ -1176,8 +1176,9 @@ def notifications_page():
 @core_bp.route("/core/tasks", methods=["GET"])
 @requires_auth
 def tasks_page():
-    """Always-on work board. CRM work is included as a source when it exists."""
-    return render_template("tasks/tasks.html", active_page="core")
+    """Keep historical notification links working after Tasks moved into Core."""
+    query = request.query_string.decode("utf-8")
+    return redirect("/core?tab=tasks" + ("&" + query if query else ""))
 
 
 @core_bp.route("/core/tasks/configuration", methods=["GET"])

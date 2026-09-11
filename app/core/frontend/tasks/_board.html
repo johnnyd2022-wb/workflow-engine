@@ -1,0 +1,74 @@
+<div class="core-tasks" x-data="coreTasksBoard()" x-init="init()">
+  <section class="card spa-primary-flat core-tasks__hero">
+    <div class="core-tasks__heading">
+      <div><h2>Tasks</h2><p>Plan operational work alongside CRM follow-ups.</p></div>
+      <div class="core-tasks__heading-actions">
+        <a href="/core/tasks/configuration" class="btn btn-secondary" hx-boost="false">Task settings</a>
+        <button type="button" class="btn btn-primary" @click="openCreate()">New task</button>
+      </div>
+    </div>
+
+    <div class="core-tasks__calendar-heading">
+      <p>Upcoming — click a date to filter</p>
+      <span x-text="calVisibleMonthLabel"></span>
+    </div>
+    <div class="core-tasks__drag-hint" aria-live="polite">Drag to scroll dates</div>
+    <div x-ref="calStrip" class="core-tasks__cal-strip"
+      @pointerdown="onCalPointerDown($event)" @pointermove="onCalPointerMove($event)"
+      @pointerup="onCalPointerUp($event)" @pointercancel="onCalPointerUp($event)" @scroll.passive="onCalScroll()">
+      <template x-for="day in calDays" :key="day.iso">
+        <button type="button" class="core-tasks__cal-day" :data-cal-day="day.iso"
+          :class="{active: calSelectedDate === day.iso, today: day.isToday}" @click="selectCalDay(day.iso)">
+          <span class="dow" x-text="day.dow"></span><strong class="dom" x-text="day.dom"></strong>
+          <span class="core-tasks__cal-dots" x-show="calDayDots(day.iso)" x-text="calDayDots(day.iso)"></span>
+        </button>
+      </template>
+    </div>
+    <div class="core-tasks__selected-date" x-show="calSelectedDate" x-cloak>
+      <span>Filtered by <strong x-text="calSelectedDate"></strong></span>
+      <button type="button" class="btn btn-secondary" @click="calSelectedDate = null">Clear</button>
+    </div>
+
+    <div class="core-tasks__filters">
+      <input type="search" class="form-input" placeholder="Search tasks" x-model="searchQuery">
+      <select class="form-select" x-model="sourceFilter" aria-label="Task source"><option value="all">All task sources</option><option value="core">System tasks</option><option value="crm">CRM tasks</option></select>
+      <select class="form-select" x-model="assigneeFilter" aria-label="Assignee"><option value="">All assignees</option><template x-for="user in users" :key="user.id"><option :value="user.id" x-text="user.display_name || user.email"></option></template></select>
+      <label class="core-tasks__toggle"><input type="checkbox" x-model="onlyAssigned"> Assigned only</label>
+      <button type="button" class="btn btn-secondary" @click="openLaneManager()">Manage lanes</button>
+      <button type="button" class="btn btn-secondary" @click="openLaneModal()">Add lane</button>
+      <button type="button" class="btn btn-secondary" @click="toggleArchive()" :disabled="archiveLoading" x-text="showArchive ? 'Back to active tasks' : 'Load archive'"></button>
+    </div>
+  </section>
+
+  <p class="core-tasks__error" x-show="error" x-text="error" x-cloak></p>
+  <div class="core-tasks__loading" x-show="loading">Loading tasks…</div>
+  <p class="core-tasks__archive-note" x-show="showArchive" x-cloak>Archived tasks are loaded only when you open this view.</p>
+
+  <section class="core-tasks__board" x-show="!loading" :style="{'--lane-count': Math.max(1, visibleLanes.length)}">
+    <template x-for="lane in visibleLanes" :key="lane.id">
+      <div class="core-tasks__lane" :class="{'drop-target': dragOverLane === lane.id, 'lane-reorder-target': dragOverLaneOrder === lane.id}">
+        <header class="core-tasks__lane-header" :class="laneHeaderClass(lane)" draggable="true"
+          @dragstart.stop="startLaneDrag(lane, $event)" @dragend="endLaneDrag()"
+          @dragover.prevent.stop="setLaneDragOver(lane.id)" @dragleave="clearLaneDragOver(lane.id)" @drop.prevent.stop="dropLaneBefore(lane.id)">
+          <span class="core-tasks__lane-grip" aria-hidden="true">⠿</span><h3 x-text="lane.title"></h3><span class="core-tasks__lane-count" x-text="tasksForLane(lane).length"></span>
+          <div class="core-tasks__lane-actions" x-show="lane.custom"><button type="button" @click.stop="renameLane(lane)" aria-label="Rename lane" title="Rename lane">✎</button><button type="button" @click.stop="removeLane(lane.id)" aria-label="Delete lane" title="Delete lane">×</button></div>
+        </header>
+        <div class="core-tasks__lane-body" @dragover.prevent="setTaskDragOver(lane.id)" @dragleave="clearTaskDragOver(lane.id)" @drop.prevent="dropInLane(lane)">
+          <template x-for="task in tasksForLane(lane)" :key="task.key">
+            <article class="core-tasks__card" :class="{'core-tasks__card--crm': task.source === 'crm'}" :draggable="task.editable"
+              @dragstart="startTaskDrag(task)" @dragend="endTaskDrag()" @click="openTask(task)">
+              <div class="core-tasks__card-top"><span class="core-tasks__source" x-text="task.source_label"></span><span class="core-tasks__archived-tag" x-show="task.archived" x-cloak>Archived</span><span class="core-tasks__priority" :class="'priority-' + task.priority" x-text="task.priority"></span></div>
+              <h4 x-text="task.title"></h4><p x-show="task.description" x-text="task.description"></p>
+              <footer><span :class="{'overdue': isOverdue(task)}" x-text="dueLabel(task)"></span><span x-text="task.assigned_to_name || 'Unassigned'"></span></footer>
+            </article>
+          </template>
+          <p class="core-tasks__empty" x-show="tasksForLane(lane).length === 0">No tasks</p>
+        </div>
+      </div>
+    </template>
+  </section>
+
+  <div class="core-tasks__modal" x-show="showDrawer" x-cloak @click.self="closeDrawer()"><form class="core-tasks__dialog" @submit.prevent="saveTask()"><header><h3 x-text="editingTask ? 'Edit task' : 'New task'"></h3><button type="button" @click="closeDrawer()">×</button></header><label>Title<input class="form-input" required maxlength="500" x-model="form.title"></label><label>Notes (optional)<textarea class="form-input" rows="4" maxlength="20000" x-model="form.description"></textarea></label><div class="core-tasks__dialog-grid"><label>Due date<input class="form-input" type="date" x-model="form.due_date"></label><label>Priority<select class="form-select" x-model="form.priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label></div><div class="core-tasks__dialog-grid"><label>Assign to<select class="form-select" x-model="form.assigned_to_user_id"><option value="">Unassigned</option><template x-for="user in activeUsers" :key="user.id"><option :value="user.id" x-text="user.display_name || user.email"></option></template></select></label><label>Status<select class="form-select" x-model="form.status"><option value="pending">To do</option><option value="in_progress">In progress</option><option value="completed">Done</option><option value="cancelled">Cancelled</option></select></label></div><p class="core-tasks__readonly" x-show="editingTask && !editingTask.editable">CRM tasks are managed from CRM so their customer context is retained.</p><footer><button type="button" class="btn btn-secondary" x-show="editingTask && editingTask.editable" @click="deleteTask()">Delete</button><span></span><button type="button" class="btn btn-secondary" @click="closeDrawer()">Cancel</button><button type="button" class="btn btn-primary" x-show="editingTask && !editingTask.editable" @click="openCrmTask()">Open in CRM</button><button class="btn btn-primary" x-show="!editingTask || editingTask.editable" :disabled="saving" x-text="saving ? 'Saving…' : 'Save task'"></button></footer></form></div>
+  <div class="core-tasks__modal" x-show="showLaneModal" x-cloak @click.self="showLaneModal = false"><form class="core-tasks__dialog core-tasks__dialog--small" @submit.prevent="saveLane()"><header><h3>Add lane</h3><button type="button" @click="showLaneModal = false">×</button></header><label>Lane name<input class="form-input" required maxlength="80" x-model="laneTitle"></label><footer><span></span><button type="button" class="btn btn-secondary" @click="showLaneModal = false">Cancel</button><button class="btn btn-primary">Add lane</button></footer></form></div>
+  <div class="core-tasks__modal" x-show="showLaneManager" x-cloak @click.self="showLaneManager = false"><section class="core-tasks__dialog core-tasks__dialog--small"><header><h3>Visible lanes</h3><button type="button" @click="showLaneManager = false">×</button></header><p class="core-tasks__note">Drag lane headers on the board to place any lane between the others.</p><template x-for="lane in lanes.filter(lane => !lane.custom)" :key="lane.id"><label class="core-tasks__lane-visibility"><input type="checkbox" :checked="lane.visible" @change="toggleDefaultLane(lane.id)"><span x-text="lane.title"></span></label></template><footer><span></span><button type="button" class="btn btn-primary" @click="showLaneManager = false">Done</button></footer></section></div>
+</div>
