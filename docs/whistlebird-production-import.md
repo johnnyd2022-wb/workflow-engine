@@ -91,8 +91,11 @@ deletes only that tenant's loaded data and preserves its org, users and 2FA.
 ## Outstanding review
 
 Per-batch **maceration and distillation dates for VAT28+** currently load as `derived`
-(inherited from the recorded VAT-fill/bottling date). The "Production!!" tab records those
-events but with mixed date formats and several self-contradictions; curating them
-precisely into the manifest `steps` map is the open review item. VAT27 and all prior-DB
-batches (VAT1–26, trials) already have real per-step dates. Six batches remain excluded
-pending founder confirmation — see the decisions log.
+(inherited from the recorded VAT-fill/bottling date) except where a specific step date
+was recoverable from context. The "Production!!" tab records those events but with mixed
+date formats — spreadsheet date serials sometimes day/month-swapped — and several
+self-contradictions; each is resolved by chronological fit against its neighbours, not a
+single global format assumption. VAT27 and all prior-DB batches (VAT1–26, trials) already
+have real per-step dates. Five batches remain excluded pending founder confirmation
+(VAT52, VAT55, VAT57, and an unlabelled bottling line) and the Green Gold trial output
+needs a script change before it can be imported at all — see the decisions log.
