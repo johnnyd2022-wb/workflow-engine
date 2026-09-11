@@ -26,6 +26,10 @@ OPEN_STATUSES = frozenset({"pending", "in_progress"})
 ALL_STATUSES = OPEN_STATUSES | {"completed", "cancelled"}
 PRIORITIES = frozenset({"low", "medium", "high"})
 LEAD_UNITS = frozenset({"days", "weeks", "months"})
+# A board should never turn one organisation's full history into an unbounded response.
+# This remains well above a practical active operational queue while keeping task and
+# assignee lookup work predictable.
+TASK_BOARD_QUERY_LIMIT = 10_000
 
 
 class TaskError(ValueError):
@@ -42,7 +46,7 @@ def _display_name(user: User | None) -> str | None:
 def _user_names(session: Session, org_id: UUID, ids: set[UUID]) -> dict[UUID, str]:
     if not ids:
         return {}
-    rows = session.query(User).filter(User.org_id == org_id, User.id.in_(ids)).all()
+    rows = session.query(User).filter(User.org_id == org_id, User.id.in_(ids)).limit(TASK_BOARD_QUERY_LIMIT).all()
     return {row.id: _display_name(row) or row.email for row in rows}
 
 
@@ -90,7 +94,11 @@ def _serialise_crm_task(task: Any, names: dict[UUID, str]) -> dict[str, Any]:
 
 
 def _all_task_rows(session: Session, org_id: UUID, source: str = "all") -> list[dict[str, Any]]:
-    core_rows = session.query(CoreTask).filter(CoreTask.org_id == org_id).all() if source in {"all", "core"} else []
+    core_rows = (
+        session.query(CoreTask).filter(CoreTask.org_id == org_id).limit(TASK_BOARD_QUERY_LIMIT).all()
+        if source in {"all", "core"}
+        else []
+    )
     crm_rows = []
     if source in {"all", "crm"}:
         # CRM's storage is intentionally safe to read even when its product routes are
@@ -102,7 +110,7 @@ def _all_task_rows(session: Session, org_id: UUID, source: str = "all") -> list[
 
         _ = XeroContact
 
-        crm_rows = session.query(CRMTask).filter(CRMTask.org_id == org_id).all()
+        crm_rows = session.query(CRMTask).filter(CRMTask.org_id == org_id).limit(TASK_BOARD_QUERY_LIMIT).all()
     ids = {row.assigned_to_user_id for row in core_rows + crm_rows if row.assigned_to_user_id}
     names = _user_names(session, org_id, ids)
     result = [_serialise_core_task(row, names) for row in core_rows]
