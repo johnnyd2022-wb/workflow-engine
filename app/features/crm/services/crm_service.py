@@ -1183,6 +1183,7 @@ def _serialise_task(t, db=None) -> dict:
         "status": t.status,
         "priority": t.priority,
         "assigned_to_user_id": str(t.assigned_to_user_id) if t.assigned_to_user_id else None,
+        "board_lane_id": str(t.board_lane_id) if t.board_lane_id else None,
         "created_by_user_id": str(t.created_by_user_id) if t.created_by_user_id else None,
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
         "created_at": t.created_at.isoformat() if t.created_at else None,

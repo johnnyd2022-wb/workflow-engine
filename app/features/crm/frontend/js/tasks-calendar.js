@@ -1,7 +1,5 @@
 /* Tasks Kanban + Calendar Alpine.js component */
 function crmTasks() {
-  const LANE_STORAGE_KEY = 'crm_task_lanes_v2';
-  const LANE_ASSIGNMENT_STORAGE_KEY = 'crm_task_lane_assignments_v1';
   const DEFAULT_LANE_IDS = {
     todo: 'lane-todo',
     inProgress: 'lane-in-progress',
@@ -26,7 +24,6 @@ function crmTasks() {
     operatorFilter: '',
     onlyAssigned: false,
     lanes: defaultLanes(),
-    laneAssignments: {},
     loading: true,
     error: null,
     searchQuery: '',
@@ -65,13 +62,10 @@ function crmTasks() {
 
     async init() {
       CRMAPI.ensureBackButton('/crm');
-      this.loadLanes();
-      this.loadLaneAssignments();
       this.syncViewport();
       window.addEventListener('resize', () => { this.syncViewport(); });
       this.initCalendarWindow();
-      await Promise.all([this.loadOperators(), this.loadTasks(), this.loadCustomers(), this.loadTraceabilityConfig()]);
-      this.pruneLaneAssignments();
+      await Promise.all([this.loadLanes(), this.loadOperators(), this.loadTasks(), this.loadCustomers(), this.loadTraceabilityConfig()]);
       this.openTaskFromQueryString();
     },
 
@@ -338,37 +332,25 @@ function crmTasks() {
       return t;
     },
 
-    get customLaneCount() {
-      return this.lanes.filter((lane) => lane.deletable).length;
-    },
-
     get canAddCustomLane() {
-      return this.customLaneCount < 1;
+      return true;
     },
 
-    loadLanes() {
+    async loadLanes() {
       const base = defaultLanes();
       this.lanes = base.slice();
-      const seenDefault = new Set(base.map((lane) => lane.id));
       try {
-        const raw = localStorage.getItem(LANE_STORAGE_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return;
-        let customAdded = 0;
-        parsed.forEach((lane) => {
-          if (!lane || typeof lane !== 'object') return;
-          const id = String(lane.id || '').trim();
-          const title = String(lane.title || '').trim();
-          if (!id || !title || seenDefault.has(id)) return;
-          if (customAdded >= 1) return;
+        const data = await CRMAPI.getTaskLanes();
+        (data?.lanes || []).forEach((lane) => {
+          const id = String(lane?.id || '').trim();
+          const title = String(lane?.title || '').trim();
+          if (!id || !title) return;
           this.lanes.push({
             id,
             title,
             status_mode: 'custom',
             deletable: true,
           });
-          customAdded += 1;
         });
       } catch (_) {}
       if (!this.activeLaneId || !this.lanes.some((lane) => lane.id === this.activeLaneId)) {
@@ -376,41 +358,7 @@ function crmTasks() {
       }
     },
 
-    persistLanes() {
-      try {
-        const custom = this.lanes.filter((lane) => lane.deletable);
-        localStorage.setItem(LANE_STORAGE_KEY, JSON.stringify(custom));
-      } catch (_) {}
-    },
-
-    loadLaneAssignments() {
-      try {
-        const raw = localStorage.getItem(LANE_ASSIGNMENT_STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : {};
-        this.laneAssignments = parsed && typeof parsed === 'object' ? parsed : {};
-      } catch (_) {
-        this.laneAssignments = {};
-      }
-    },
-
-    persistLaneAssignments() {
-      try {
-        localStorage.setItem(LANE_ASSIGNMENT_STORAGE_KEY, JSON.stringify(this.laneAssignments));
-      } catch (_) {}
-    },
-
-    pruneLaneAssignments() {
-      const taskIds = new Set(this.tasks.map((t) => t.id));
-      const laneIds = new Set(this.lanes.map((l) => l.id));
-      Object.keys(this.laneAssignments).forEach((taskId) => {
-        const laneId = this.laneAssignments[taskId];
-        if (!taskIds.has(taskId) || !laneIds.has(laneId)) delete this.laneAssignments[taskId];
-      });
-      this.persistLaneAssignments();
-    },
-
     openLaneModal() {
-      if (!this.canAddCustomLane) return;
       this.laneDraft = { title: '' };
       this.showLaneModal = true;
     },
@@ -419,39 +367,51 @@ function crmTasks() {
       this.showLaneModal = false;
     },
 
-    saveLane() {
+    async saveLane() {
       const title = (this.laneDraft.title || '').trim();
       if (!title) return;
-      if (!this.canAddCustomLane) return;
       const exists = this.lanes.some((lane) => lane.title.toLowerCase() === title.toLowerCase());
       if (exists) {
         alert('A lane with this name already exists.');
         return;
       }
-      this.lanes.push({
-        id: `lane-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        title,
-        status_mode: 'custom',
-        deletable: true,
-      });
-      this.activeLaneId = this.lanes[this.lanes.length - 1].id;
-      this.persistLanes();
-      this.closeLaneModal();
+      try {
+        const { lane } = await CRMAPI.createTaskLane({ title });
+        this.lanes.push({ ...lane, status_mode: 'custom', deletable: true });
+        this.activeLaneId = lane.id;
+        this.closeLaneModal();
+      } catch (e) { alert(e.message || 'Failed to add lane.'); }
     },
 
-    removeLane(laneId) {
+    async removeLane(laneId) {
       const lane = this.lanes.find((x) => x.id === laneId);
       if (!lane || !lane.deletable) return;
       if (!window.confirm(`Delete lane "${lane.title}"?`)) return;
-      this.lanes = this.lanes.filter((x) => x.id !== laneId);
-      Object.keys(this.laneAssignments).forEach((taskId) => {
-        if (this.laneAssignments[taskId] === laneId) delete this.laneAssignments[taskId];
-      });
-      if (!this.lanes.some((x) => x.id === this.activeLaneId)) {
-        this.activeLaneId = this.lanes[0]?.id || null;
-      }
-      this.persistLanes();
-      this.persistLaneAssignments();
+      try {
+        await CRMAPI.deleteTaskLane(laneId);
+        await Promise.all([this.loadLanes(), this.loadTasks()]);
+      } catch (e) { alert(e.message || 'Failed to delete lane.'); }
+    },
+
+    async renameLane(lane) {
+      const title = window.prompt('Lane name', lane.title);
+      if (title === null || title.trim() === lane.title) return;
+      try {
+        const { lane: updated } = await CRMAPI.updateTaskLane(lane.id, { title: title.trim() });
+        Object.assign(lane, updated);
+      } catch (e) { alert(e.message || 'Failed to rename lane.'); }
+    },
+
+    async moveLane(lane, direction) {
+      const custom = this.lanes.filter((item) => item.status_mode === 'custom');
+      const index = custom.findIndex((item) => item.id === lane.id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= custom.length) return;
+      [custom[index], custom[target]] = [custom[target], custom[index]];
+      try {
+        await CRMAPI.reorderTaskLanes(custom.map((item) => item.id));
+        await this.loadLanes();
+      } catch (e) { alert(e.message || 'Failed to reorder lanes.'); }
     },
 
     get visibleLanes() {
@@ -479,7 +439,7 @@ function crmTasks() {
     laneForTask(task) {
       if (!task) return DEFAULT_LANE_IDS.todo;
       if (!OPEN_STATUSES.includes(task.status)) return this.defaultLaneForStatus(task.status);
-      const assignedLaneId = this.laneAssignments[task.id];
+      const assignedLaneId = task.board_lane_id;
       if (assignedLaneId && this.lanes.some((lane) => lane.id === assignedLaneId && lane.status_mode === 'custom')) {
         return assignedLaneId;
       }
@@ -632,16 +592,20 @@ function crmTasks() {
       if (!task) return;
 
       if (lane.status_mode === 'custom') {
-        this.laneAssignments[task.id] = lane.id;
-        this.persistLaneAssignments();
+        try {
+          const { task: updated } = await CRMAPI.assignTaskLane(task.id, lane.id);
+          task.board_lane_id = updated.board_lane_id;
+        } catch (e) { alert(e.message || 'Failed to move task.'); return; }
         if (!OPEN_STATUSES.includes(task.status)) {
           await this.moveTask(task, 'pending');
         }
         return;
       }
 
-      delete this.laneAssignments[task.id];
-      this.persistLaneAssignments();
+      try {
+        const { task: updated } = await CRMAPI.assignTaskLane(task.id, null);
+        task.board_lane_id = updated.board_lane_id;
+      } catch (e) { alert(e.message || 'Failed to move task.'); return; }
       const targetStatus = lane.status_mode;
       await this.moveTask(task, targetStatus);
     },
@@ -716,7 +680,6 @@ function crmTasks() {
           const { task } = await CRMAPI.createTask(data);
           this.tasks.unshift(task);
         }
-        this.pruneLaneAssignments();
         this.closeDrawer();
       } catch (e) {
         alert(e.message || 'Failed to save task.');
@@ -730,8 +693,6 @@ function crmTasks() {
       try {
         await CRMAPI.deleteTask(task.id);
         this.tasks = this.tasks.filter((t) => t.id !== task.id);
-        delete this.laneAssignments[task.id];
-        this.persistLaneAssignments();
       } catch (e) {
         alert(e.message || 'Failed to delete task.');
       }

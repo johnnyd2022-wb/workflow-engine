@@ -11,7 +11,8 @@
     expired_materials: 'Expired raw materials',
     output_expiry: 'Custom output expiry',
     output_ready_date: 'Output ready date',
-    untracked_items: 'Untracked items'
+    untracked_items: 'Untracked items',
+    tasks_due: 'Tasks'
   };
 
   /** Deep-link filter: ?category= matches system status bar routing (see core2 health nav). */
@@ -528,6 +529,30 @@
       var checkId = f && f.check_id != null ? String(f.check_id) : '';
       if (!checkId) return;
       var data = f.data && typeof f.data === 'object' ? f.data : {};
+
+      if (checkId === 'tasks_due') {
+        var overdueTasks = Array.isArray(data.overdue_tasks) ? data.overdue_tasks : [];
+        var dueSoonTasks = Array.isArray(data.due_soon_tasks) ? data.due_soon_tasks : [];
+        overdueTasks.concat(dueSoonTasks).forEach(function (task) {
+          var id = task && task.id != null ? String(task.id) : '';
+          var source = task && task.source ? String(task.source) : 'core';
+          var due = task && task.due_date ? String(task.due_date) : '';
+          var key = 'task_' + source + '_' + id + '_' + due;
+          if (!id || isIgnoredToday(checkId, key, todayKey) || isDismissed(checkId, key)) return;
+          var overdue = overdueTasks.indexOf(task) !== -1;
+          var assignee = task && task.assigned_to_name ? String(task.assigned_to_name) : 'Unassigned';
+          records.push({
+            checkId: checkId, itemKey: key, sortMs: parseDateMs(due) || 0,
+            triggeredDateText: formatDate(due), systemFinding: categoryLabel(checkId),
+            summaryText: 'Task ' + fallbackText(task.title, 'Untitled task') + (overdue ? ' is overdue.' : ' is due soon.'),
+            detailText: overdue ? 'This task is overdue and remains a system finding until it is completed or cancelled.' : 'This task is within your organisation\'s due-date notification window.',
+            detailDateCaption: 'Due date:', detailDateText: formatDate(due), itemName: task.title || id,
+            extraFields: [{ label: 'Source:', value: task.source_label || source.toUpperCase() }, { label: 'Assigned to:', value: assignee }],
+            actions: [{ type: 'link', href: '/core/tasks?source=' + encodeURIComponent(source), label: 'Open tasks', boost: false }]
+          });
+        });
+        return;
+      }
 
       if (checkId === 'expired_materials') {
         var impactedAll = Array.isArray(data.impacted_items) ? data.impacted_items : [];

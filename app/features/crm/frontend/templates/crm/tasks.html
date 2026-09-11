@@ -161,7 +161,6 @@
       </button>
     </div>
 
-    <span x-show="!canAddCustomLane" x-cloak class="crm-task-filters__lane-hint">Max 1 custom lane</span>
   </div>
 
   <div class="crm-lane-mobile-selector crm-lane-mobile-selector--tasks" x-show="!loading && lanes.length > 0" x-cloak>
@@ -203,6 +202,33 @@
             <span x-show="!isMobileView" x-text="lane.title"></span>
             <div style="display:flex; align-items:center; gap:6px;">
               <span class="crm-kanban-count" x-text="tasksForLane(lane).length">0</span>
+              <button
+                x-show="lane.deletable"
+                x-cloak
+                class="crm-btn crm-btn--ghost crm-btn--sm"
+                style="padding:2px 6px; color:inherit;"
+                @click.stop="moveLane(lane, -1)"
+                aria-label="Move lane left"
+                title="Move lane left"
+              >&larr;</button>
+              <button
+                x-show="lane.deletable"
+                x-cloak
+                class="crm-btn crm-btn--ghost crm-btn--sm"
+                style="padding:2px 6px; color:inherit;"
+                @click.stop="moveLane(lane, 1)"
+                aria-label="Move lane right"
+                title="Move lane right"
+              >&rarr;</button>
+              <button
+                x-show="lane.deletable"
+                x-cloak
+                class="crm-btn crm-btn--ghost crm-btn--sm"
+                style="padding:2px 6px; color:inherit;"
+                @click.stop="renameLane(lane)"
+                aria-label="Rename lane"
+                title="Rename lane"
+              >&#9998;</button>
               <button
                 x-show="lane.deletable"
                 x-cloak

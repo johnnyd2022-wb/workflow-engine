@@ -71,12 +71,14 @@ class CoreChecksRunner:
         from app.core.backend.checks.output_ready_date_check import (
             run_output_ready_date_check,
         )
+        from app.core.backend.checks.tasks_due import run_tasks_due_check
         from app.core.backend.checks.untracked_items import run_untracked_items_check
 
         self.register_check("expired_materials", run_expired_materials_check)
         self.register_check("untracked_items", run_untracked_items_check)
         self.register_check("output_expiry", run_output_expiry_check)
         self.register_check(OUTPUT_READY_DATE_CHECK_ID, run_output_ready_date_check)
+        self.register_check("tasks_due", run_tasks_due_check)
 
         # Product modules register through this public composition seam.  The runner
         # deliberately knows no industry-specific IDs or data shapes.

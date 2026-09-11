@@ -363,6 +363,25 @@ window.CoreAPI = window.CoreAPI || {
         });
     },
 
+    // -- Core Tasks ---------------------------------------------------------------
+    async getTasks(params = {}) {
+        const qs = new URLSearchParams(params).toString();
+        return this.request('/tasks' + (qs ? '?' + qs : ''));
+    },
+    async createTask(data) { return this.request('/tasks', { method: 'POST', body: data }); },
+    async updateTask(taskId, data) { return this.request('/tasks/' + encodeURIComponent(taskId), { method: 'PUT', body: data }); },
+    async deleteTask(taskId) { return this.request('/tasks/' + encodeURIComponent(taskId), { method: 'DELETE' }); },
+    async getTaskConfiguration() { return this.request('/tasks/configuration'); },
+    async updateTaskConfiguration(data) { return this.request('/tasks/configuration', { method: 'PUT', body: data }); },
+    async getTaskLanes() { return this.request('/tasks/lanes'); },
+    async createTaskLane(data) { return this.request('/tasks/lanes', { method: 'POST', body: data }); },
+    async updateTaskLane(laneId, data) { return this.request('/tasks/lanes/' + encodeURIComponent(laneId), { method: 'PUT', body: data }); },
+    async reorderTaskLanes(laneIds) { return this.request('/tasks/lanes/order', { method: 'PUT', body: { lane_ids: laneIds } }); },
+    async deleteTaskLane(laneId) { return this.request('/tasks/lanes/' + encodeURIComponent(laneId), { method: 'DELETE' }); },
+    async assignTaskLane(taskId, laneId) {
+        return this.request('/tasks/' + encodeURIComponent(taskId) + '/lane', { method: 'PUT', body: { lane_id: laneId } });
+    },
+
     // GET /auth/me, shared for a short window so the page-load user/name widgets (sidebar
     // account info + flows2's getCurrentUser, at least) don't each fetch it. Identity is
     // stable within a session; the window is short enough that a role/2FA change picked up

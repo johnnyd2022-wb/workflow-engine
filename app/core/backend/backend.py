@@ -17,7 +17,7 @@ from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
-from app.core.backend import changes_feed, corechecks, inventory_upload_routes, reconciliation_routes
+from app.core.backend import changes_feed, corechecks, inventory_upload_routes, reconciliation_routes, tasks
 from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.complete_step_payload import (
     MAX_COMPLETE_STEP_CONTENT_LENGTH,
@@ -1171,6 +1171,19 @@ def flows_create_next_steps_page():
 def notifications_page():
     """Serve system notifications (system findings) as a card list."""
     return render_template("notifications/notifications.html", active_page="core")
+
+
+@core_bp.route("/core/tasks", methods=["GET"])
+@requires_auth
+def tasks_page():
+    """Always-on work board. CRM work is included as a source when it exists."""
+    return render_template("tasks/tasks.html", active_page="core")
+
+
+@core_bp.route("/core/tasks/configuration", methods=["GET"])
+@requires_auth
+def tasks_configuration_page():
+    return render_template("tasks/configuration.html", active_page="core")
 
 
 @core_bp.route("/core/processes", methods=["GET"])
@@ -3849,6 +3862,7 @@ reconciliation_routes.register_routes(core_bp)
 inventory_upload_routes.register_routes(core_bp)
 evidence_routes.register_routes(core_bp)
 process_docs_routes.register_routes(core_bp)
+tasks.register_routes(core_bp)
 demo_data_routes.register_routes(core_bp)
 
 
