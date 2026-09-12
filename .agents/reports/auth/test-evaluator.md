@@ -34,7 +34,8 @@ gaps-found (patched in this pass)
   correct level to test at — asserting `rotate_session()` was called via a mock would be
   an implementation-detail (tautological) test that breaks on refactor and doesn't prove
   the actual security property (a persistent cookie surviving password change). No change
-  made; logged as considered-and-rejected rather than silently dropped.
+  made; logged as considered-and-rejected rather than silently dropped (already handled:
+  not a defect, no action needed — verified 2026-09-13 by findings-sweep).
 
 ## Incidental note
 Mid-review, restoring one of the F1 regression tests (`test_login_locked_account_still_invokes_bcrypt`)

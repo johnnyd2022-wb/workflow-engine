@@ -65,8 +65,12 @@ discipline we lack.
   appends one row: skill, run date, findings opened, MR outcome (merged / closed /
   amended), escaped-to-prod (cross-ref `prod-sentinel`). No ML — just a CSV/JSONL and a
   `scripts/skill_scorecard.py` that prints acceptance rate per skill.
+  Already done: `scripts/skill_metrics.py` + `.agents/metrics/{README.md,runs.jsonl,
+  outcomes.jsonl}` implement exactly this ledger, documented in `.agents/autonomy.md`'s
+  "Measure yourself" section (verified 2026-09-13 by findings-sweep).
 - **Payoff:** turns "retire poor performers" from a slogan into a decision we can make,
-  and tells us which skills earn their token cost.
+  and tells us which skills earn their token cost (already done, see the "Cheap first
+  step" bullet above — verified 2026-09-13 by findings-sweep).
 
 ### 2. Systematise the finding→rule learning loop (high ROI, fits our philosophy)
 We already convert findings into semgrep rules by hand. AER's flagship idea — *every
@@ -81,7 +85,8 @@ not ad hoc effort.
   (verified 2026-08-25 by findings-sweep).
 - **Payoff:** directly serves the North Star (reduce the need for LLM reasoning over
   time). This is the highest-leverage idea in the whole AER doc and it's aligned with what
-  we already do.
+  we already do (already done, see the "Step" bullet above — verified 2026-09-13 by
+  findings-sweep).
 
 ### 3. Historical-findings / previous-PR-outcome store (medium ROI)
 AER lists "historical findings" and "previous PR outcomes" in its intelligence layer; we
@@ -94,7 +99,8 @@ skills start cold on *"what did we already find/reject here."*
   findings history store, AER Phase 3") implement exactly this — sha1 area|kind|evidence
   signatures, confirmed/fixed/false-positive/accepted-risk verdict vocabulary,
   suppress-on-human-verdict (verified 2026-08-25 by findings-sweep).
-- **Payoff:** fewer repeat false positives; compounding memory.
+- **Payoff:** fewer repeat false positives; compounding memory (already done, see the
+  "Step" bullet above — verified 2026-09-13 by findings-sweep).
 
 ### 4. Declarative capability graph — partial, lower ROI
 AER wants each skill to declare triggers/inputs/outputs/cost budget/confidence thresholds,

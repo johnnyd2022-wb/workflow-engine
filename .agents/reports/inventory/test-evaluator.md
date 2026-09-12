@@ -68,7 +68,7 @@ Required strengthening: parse the JSON, assert the planted item is present, and 
 | `test_org_b_matching_untracked_excludes_org_a_items` | Exact empty-list assertion is useful, but there is no owner-side positive control; an endpoint that always returns empty passes. |
 | `test_org_b_cannot_reconcile_via_addition_onto_org_a_untracked_item` | Membership in matching results does not prove an unchanged balance. A partial reduction from 8 to 3 still matches. Assert `quantity == "8"` and `remaining_balance_to_reconcile == "8"`, and verify Org B did not receive a partially-created item. |
 
-## Other assertion-strength findings
+## Other assertion-strength findings (resolved by round 3 below — verified 2026-09-13 by findings-sweep)
 
 ### CSV flow
 
@@ -161,7 +161,7 @@ verdict: invalid
 | Pin exact owner state after rejected hostile mutations | **Adjust and wastage verified. Reconciliation partial.** Adjust and wastage both assert owner quantity remains exactly `"5"`, with wastage checking before the owner's write. Reconciliation asserts quantity remains `"8"` and Org B receives no item, but it still does not assert `remaining_balance_to_reconcile == "8"` as required by the prior report. |
 | Strengthen the wastage-list leak probe | **Verified.** It checks foreign record ID, inventory item ID, reason, and marker-name absence. Removing only the wastage repository org filter would now fail this test. |
 
-## Blocking falsifiability finding
+## Blocking falsifiability finding (resolved by round 3 below — verified 2026-09-13 by findings-sweep)
 
 ### `test_create_item_rejects_source_output_id_from_another_orgs_step`
 
@@ -183,7 +183,7 @@ Deterministic mutation probe:
 
 This directly fails the required falsifiability standard. Fix by creating an owned step and supplying an output UUID not declared by that step—preferably an output UUID declared on a foreign step—then assert 400 and no row written.
 
-## Other unresolved assertion-strength findings
+## Other unresolved assertion-strength findings (resolved by round 3 below — verified 2026-09-13 by findings-sweep)
 
 These were present in the first report, remain in the current files, and were not included in the submitted “known not addressed” disclosure:
 
@@ -358,7 +358,7 @@ Fix: add a parameterized route-level test for zero, negative, NaN/Infinity, and 
 - AC9–AC11 guard-internal coverage remains disclosed; the separately verified live PostgreSQL trigger materially reduces release risk. Already fixed: `tests/test_inventory_quantity_guard.py` (commit `f5f268e`) now covers the Python-level guard, all three repository write paths, the raw-SQL trigger rejection, and rearm behavior (verified 2026-08-25 by findings-sweep).
 - AC31/AC32 Path B remains outside this router-focused batch.
 - The `EntityEventSummary.org_id` filter remains an untested defense-in-depth change and is not a release blocker on the supplied evidence. Already fixed: `tests/test_inventory.py:881 test_list_inventory_enriches_items_with_their_own_org_event_summary` now covers it (verified 2026-08-25 by findings-sweep).
-- None of these disclosed gaps independently rises to AC14’s previous ship-blocking severity.
+- None of these disclosed gaps independently rises to AC14's previous ship-blocking severity — a summary sentence, not its own finding (verified 2026-09-13 by findings-sweep).
 
 ## Runtime verification
 

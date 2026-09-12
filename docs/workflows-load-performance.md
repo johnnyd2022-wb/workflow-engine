@@ -101,7 +101,9 @@ items, correct dates/names, 0 console errors.
 per-finding `data` to what the banner actually renders:
 - `expired_raw_materials`: `[{id, name, expiry_date}]` — not the full item object.
 - `impacted_items`: `[{id, name}]` — not the full item object.
-- **drop `connections` entirely** — the banner never touches it.
+- **drop `connections` entirely** — the banner never touches it. Already done: see
+  "Done." above and `_EXPIRED_RAW_KEEP` in `app/core/backend/system_findings_cache.py`
+  (verified 2026-09-13 by findings-sweep).
 - add `impacted_count` / `expired_count` scalars so the headline never needs the arrays.
 
 Do the projection in `get_or_compute` when it builds `findings` (after
