@@ -4,6 +4,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+from app.core.backend.corechecks import CheckResult
+from app.core.backend.system_status import _signals_from_results
 from app.features.compliant.modules.nz_alcohol.catalogue import control_reference, framework_applies
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
     NP3_AUDIT_CATEGORIES,
@@ -35,6 +37,36 @@ def test_nz_alcohol_module_has_a_dedicated_page():
     assert "Liquor licence" in configuration
 
 
+def test_module_alert_contract_projects_into_the_generic_core_health_bar():
+    signals = _signals_from_results(
+        [
+            CheckResult(
+                check_id="example.module",
+                flagged=True,
+                data={
+                    "system_finding": {
+                        "category": "Example compliance",
+                        "action": {"href": "/compliant/example", "label": "Open example"},
+                    },
+                    "system_alerts": [{"id": "example-overall"}, {"id": "example-action"}],
+                },
+            )
+        ]
+    )
+
+    assert signals[-1] == {
+        "type": "MODULE_SYSTEM_FINDING",
+        "category": "module",
+        "breach_type": "MODULE_REQUIREMENT",
+        "has_issue": True,
+        "in_active_use": False,
+        "count": 2,
+        "message": "Example compliance",
+        "href": "/compliant/example",
+        "action_label": "Open example",
+    }
+
+
 def test_complaint_spelling_redirects_to_the_compliant_workspace():
     routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
     assert 'route("/complaint"' in routes
@@ -52,7 +84,7 @@ def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
     # The Flask app's Jinja root is app/ui/templates.  Guard the template it actually
     # renders, rather than the separately served /ui/shared asset directory.
     sidebar = (ROOT / "app" / "ui" / "templates" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")
-    assert tabs.count('hx-boost="false"') == 3
+    assert tabs.count('hx-boost="false"') == 4
     assert 'href="/compliant" hx-boost="false"' in sidebar
     assert 'href="/api/compliant/np3-audit?format=csv" hx-boost="false"' in audit
 
@@ -80,8 +112,10 @@ def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeho
     assert _food_safety_programme({"food_control_programme": "np2"}) == "np2"
     assert _food_safety_programme({"food_control_programme": "unexpected"}) == "np3"
     assert 'href="/compliant/nz-alcohol/food-safety"' in tabs
+    assert 'href="/compliant/nz-alcohol/evidence"' in tabs
     assert "food_control_programme|upper" in tabs
     assert 'route("/compliant/nz-alcohol/food-safety"' in routes
+    assert 'route("/compliant/nz-alcohol/evidence"' in routes
     assert "updateFoodSafetyTab" in configuration
     assert "support is coming soon" in placeholder
 

@@ -5,15 +5,19 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_compliant_dashboard_links_to_a_separate_configuration_surface():
-    """Configuration must not be embedded in the evidence dashboard."""
+def test_compliant_overview_is_a_summary_not_an_evidence_workbench():
+    """Overview directs work into scoped surfaces instead of embedding unrelated forms."""
     dashboard = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "dashboard.html"
     ).read_text(encoding="utf-8")
 
     assert "<form data-profile-form" not in dashboard
-    assert "data-profile-target" in dashboard
-    assert "/compliant/nz-alcohol/configuration" in dashboard
+    assert "data-record-form" not in dashboard
+    assert "data-product-form" not in dashboard
+    assert "YOUR NEXT BEST MOVES" not in dashboard
+    assert "MODULE SETTINGS" not in dashboard
+    assert "data-frameworks" in dashboard
+    assert "data-compliant-surface=\"overview\"" in dashboard
 
 
 def test_compliant_dashboard_documents_the_honest_product_boundary():
@@ -60,10 +64,13 @@ def test_core_renders_module_defined_system_finding_contracts_without_module_bra
     assert "compliant.nz_alcohol" not in notifications
 
 
-def test_core_hub_includes_the_shared_system_findings_banner():
+def test_core_hub_consolidates_findings_inside_its_system_issues_health_bar():
     core_hub = (_REPO_ROOT / "app" / "core" / "frontend" / "core" / "core2.html").read_text(encoding="utf-8")
+    system_status = (_REPO_ROOT / "app" / "core" / "backend" / "system_status.py").read_text(encoding="utf-8")
 
-    assert "{% include 'shared/system-findings-banner.html' %}" in core_hub
+    assert "{% include 'shared/system-findings-banner.html' %}" not in core_hub
+    assert "MODULE_SYSTEM_FINDING" in system_status
+    assert "system_alerts" in system_status
 
 
 def test_np3_audit_has_a_dedicated_check_workspace_with_tailored_evidence_fields():
@@ -89,6 +96,9 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     dashboard = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "dashboard.html"
     ).read_text(encoding="utf-8")
+    evidence_register = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "evidence_register.html"
+    ).read_text(encoding="utf-8")
     dashboard_script = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.js"
     ).read_text(encoding="utf-8")
@@ -99,16 +109,25 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_audit.html"
     ).read_text(encoding="utf-8")
 
-    assert "data-evidence-control-heading" in dashboard
-    assert "review_interval_months" in dashboard
+    assert "data-evidence-control-heading" not in dashboard
+    assert "data-evidence-control-heading" in evidence_register
+    assert "review_interval_months" in evidence_register
     assert "evidence_coverage" in dashboard_script
-    assert "card.open = !allPassing" in dashboard_script
+    assert "compliant-framework-summary" in dashboard_script
+    assert "compliantSurface" in dashboard_script
     assert "activeCategory" in audit_script
     assert "np3-evidence-options" in audit_script
     assert "data-np3-control-detail" not in audit
     assert ">NP3</strong>" in audit
     assert "np3-overview-panels" in audit
     assert "AUDIT PREP" in audit
+
+
+def test_core_overview_keeps_system_issues_out_of_competing_alert_cards():
+    core_hub = (_REPO_ROOT / "app" / "core" / "frontend" / "core" / "core2.html").read_text(encoding="utf-8")
+
+    assert "Inventory alerts" not in core_hub
+    assert "core2-overview-inventory-alerts" not in core_hub
 
 
 def test_audit_pack_does_not_overclaim_tamper_evidence():

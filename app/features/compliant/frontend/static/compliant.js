@@ -5,12 +5,11 @@
   root.dataset.boundCompliant = '1';
 
   var state = { overview: null };
+  var evidenceWorkspace = root.dataset.compliantSurface === 'evidence';
   var errorEl = root.querySelector('[data-compliant-error]');
   var frameworkRoot = root.querySelector('[data-frameworks]');
   var summaryEl = root.querySelector('[data-compliant-summary]');
   var readinessEl = root.querySelector('[data-readiness]');
-  var setupEl = root.querySelector('[data-compliant-setup]');
-  var priorityActionsEl = root.querySelector('[data-priority-actions]');
   var frameworkSelect = root.querySelector('[data-framework-select]');
   var controlSelect = root.querySelector('[data-control-select]');
   var captureGuidance = root.querySelector('[data-capture-guidance]');
@@ -33,9 +32,7 @@
     return body;
   }
   function clear(element) { while (element.firstChild) element.removeChild(element.firstChild); }
-  function statusClass(status) { return 'state state-' + (status || 'setup'); }
   function option(value, label) { var el = document.createElement('option'); el.value = value; el.textContent = label; return el; }
-  function scrollTo(target) { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   function setSubmitting(form, submitting) {
     var submit = form.querySelector('button[type="submit"]');
     if (!submit) return;
@@ -80,82 +77,30 @@
     return (coverage.current_controls || 0) + ' / ' + (coverage.total_controls || 0) + ' current';
   }
   function renderModuleHealth(frameworks) {
-    var target = root.querySelector('[data-module-health]'); clear(target);
+    var target = frameworkRoot; clear(target);
     if (!frameworks.length) return;
-    var label = document.createElement('p'); label.className = 'compliant-eyebrow'; label.textContent = 'EVIDENCE COVERAGE BY MODULE'; target.appendChild(label);
-    var cards = document.createElement('div'); cards.className = 'module-health-grid';
     frameworks.forEach(function (framework) {
       var coverage = framework.evidence_coverage || {};
-      var card = document.createElement('article'); card.className = 'module-health-card state-' + framework.state;
+      var card = document.createElement('article'); card.className = 'module-health-card compliant-framework-summary state-' + framework.state;
       card.appendChild(textElement('strong', framework.name));
       card.appendChild(textElement('span', String(coverage.percent || 0) + '%', 'module-health-percent'));
       card.appendChild(textElement('small', coverageLabel(framework) + ' evidence controls', 'module-health-count'));
-      cards.appendChild(card);
+      var destination = framework.slug === 'np3-food-control'
+        ? '/compliant/nz-alcohol/food-safety'
+        : '/compliant/nz-alcohol/evidence?framework=' + encodeURIComponent(framework.slug);
+      var link = document.createElement('a'); link.href = destination; link.setAttribute('hx-boost', 'false');
+      link.className = 'compliant-framework-summary__link';
+      link.textContent = framework.slug === 'np3-food-control' ? 'Open NP3' : 'Open evidence';
+      card.appendChild(link);
+      target.appendChild(card);
     });
-    target.appendChild(cards);
   }
   function textElement(tag, value, className) { var el = document.createElement(tag); el.textContent = value; if (className) el.className = className; return el; }
-  function frameworkCard(framework) {
-    var allPassing = framework.state === 'compliant';
-    var card = document.createElement('details'); card.className = 'compliant-framework' + (allPassing ? ' compliant-framework--passing' : ''); card.open = !allPassing;
-    var summary = document.createElement('summary');
-    var stateBadge = document.createElement('span'); stateBadge.className = statusClass(framework.state); stateBadge.textContent = framework.state;
-    var h2 = document.createElement('h2'); h2.textContent = framework.name;
-    var score = textElement('span', coverageLabel(framework), 'framework-score');
-    summary.appendChild(stateBadge); summary.appendChild(h2); summary.appendChild(score); card.appendChild(summary);
-    var source = document.createElement('p');
-    if (framework.source_url) { var link = document.createElement('a'); link.href = framework.source_url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = framework.source_title + ' ↗'; source.appendChild(link); }
-    else source.textContent = framework.source_title + ' — configure your council source.';
-    var list = document.createElement('ul');
-    framework.controls.forEach(function (control) {
-      var item = document.createElement('li'); item.className = 'framework-control framework-control--' + control.state;
-      var copy = document.createElement('div'); var strong = document.createElement('strong'); strong.textContent = control.control_id.replace(/-/g, ' '); copy.appendChild(strong);
-      copy.appendChild(textElement('span', control.description, 'framework-control-description'));
-      copy.appendChild(textElement('small', control.source_reference ? 'Guidance: ' + control.source_reference : control.reason, 'framework-control-reference'));
-      var add = document.createElement('button'); add.type = 'button'; add.className = 'framework-control-action'; add.textContent = control.state === 'compliant' ? 'Review proof' : 'Add proof';
-      add.addEventListener('click', function () { selectControl(framework.slug, control.control_id); scrollTo(root.querySelector('[data-record-target]')); root.querySelector('[data-record-form]').title.focus(); });
-      item.appendChild(copy); item.appendChild(textElement('span', control.state, statusClass(control.state))); item.appendChild(add); list.appendChild(item);
-    });
-    var pack = document.createElement('button'); pack.type = 'button'; pack.textContent = 'Generate audit pack';
-    pack.addEventListener('click', async function () {
-      try { showError(''); var result = await api('/api/compliant/reports/' + encodeURIComponent(framework.slug), { method: 'POST', headers: csrfHeaders(), body: '{}' }); window.open(result.view_url, '_blank', 'noopener'); }
-      catch (err) { showError(err.message); }
-    });
-    card.appendChild(source); card.appendChild(list); card.appendChild(pack); return card;
-  }
   function selectControl(frameworkSlug, controlId) {
     frameworkSelect.value = frameworkSlug;
     frameworkSelect.dispatchEvent(new Event('change'));
     controlSelect.value = controlId;
     controlSelect.dispatchEvent(new Event('change'));
-  }
-  function actionButton(action) {
-    var button = document.createElement('button'); button.type = 'button';
-    button.textContent = action.kind === 'record' ? (action.state === 'attention' ? 'Rectify this' : action.state === 'review' ? 'Review proof' : 'Add proof') : action.kind === 'product' ? 'Map from Core' : 'Set this up';
-    button.addEventListener('click', function () {
-      if (action.kind === 'profile') { window.location.href = '/compliant/nz-alcohol/configuration'; return; }
-      if (action.kind === 'product') {
-        var productForm = root.querySelector('[data-product-form]');
-        if (action.suggestions && action.suggestions.length) productForm.inventory_name.value = action.suggestions[0];
-        scrollTo(root.querySelector('[data-product-target]')); productForm.inventory_name.focus(); return;
-      }
-      selectControl(action.framework_slug, action.control_id);
-      scrollTo(root.querySelector('[data-record-target]')); root.querySelector('[data-record-form]').title.focus();
-    });
-    return button;
-  }
-  function renderPriorityActions(actions) {
-    clear(priorityActionsEl);
-    if (!actions.length) { priorityActionsEl.textContent = 'You have no priority actions right now. Keep records current and Compliant will surface the next gap.'; return; }
-    actions.forEach(function (action, index) {
-      var card = document.createElement('article'); card.className = 'priority-action priority-' + (action.state || action.kind);
-      var number = document.createElement('span'); number.className = 'action-number'; number.textContent = String(index + 1);
-      var body = document.createElement('div'); var heading = document.createElement('h3'); heading.textContent = action.title;
-      var description = document.createElement('p'); description.textContent = action.description;
-      var value = document.createElement('p'); value.className = 'action-value'; value.textContent = action.value;
-      body.appendChild(heading); body.appendChild(description); body.appendChild(value);
-      card.appendChild(number); card.appendChild(body); card.appendChild(actionButton(action)); priorityActionsEl.appendChild(card);
-    });
   }
   function renderProductSuggestions(reconciliation) {
     var target = root.querySelector('[data-product-suggestions]'); clear(target);
@@ -197,30 +142,37 @@
   function render() {
     var overview = state.overview; var counts = overview.counts || {};
     var coverage = overview.data_coverage || {};
-    summaryEl.textContent = (counts.attention || 0) + ' need attention · ' + (counts.compliant || 0) + ' on track · ' + (coverage.unresolved_live_data_gaps || 0) + ' live-data gaps';
+    if (summaryEl) summaryEl.textContent = (counts.attention || 0) + ' need attention · ' + (counts.compliant || 0) + ' on track · ' + (coverage.unresolved_live_data_gaps || 0) + ' live-data gaps';
     var readiness = overview.evidence_readiness || {};
-    readinessEl.textContent = readiness.total_controls ? readiness.current_controls + ' of ' + readiness.total_controls + ' applicable controls have current proof' : 'Your first useful result is one minute away';
-    setupEl.hidden = !!(overview.profile && overview.profile.enabled);
+    if (readinessEl) readinessEl.textContent = readiness.total_controls ? readiness.current_controls + ' of ' + readiness.total_controls + ' applicable controls have current proof' : 'Your first useful result is one minute away';
+    if (!evidenceWorkspace) {
+      renderModuleHealth(overview.frameworks || []);
+      return;
+    }
     var reconciliation = overview.customs_reconciliation || {};
     root.querySelector('[data-customs-reconciliation]').textContent = 'Live calculated: ' + (reconciliation.production_litres_of_alcohol || '0') + ' LAL produced, ' + (reconciliation.wastage_litres_of_alcohol || '0') + ' LAL wasted. ' + (reconciliation.unprofiled_movement_count || 0) + ' movement(s) need a product profile.';
-    clear(frameworkRoot);
-    if (!overview.frameworks.length) { var empty = document.createElement('p'); empty.textContent = 'Enable Compliant to see your applicable framework packs.'; frameworkRoot.appendChild(empty); }
-    overview.frameworks.forEach(function (framework) { frameworkRoot.appendChild(frameworkCard(framework)); });
-    renderModuleHealth(overview.frameworks || []);
-    renderPriorityActions(overview.priority_actions || []);
     renderProductSuggestions(reconciliation);
     renderExistingEvidence(overview.core_proof_candidates || []);
     populateControls();
     var params = new URLSearchParams(window.location.search);
-    if (params.get('framework') && params.get('control')) selectControl(params.get('framework'), params.get('control'));
+    if (params.get('framework')) {
+      frameworkSelect.value = params.get('framework');
+      frameworkSelect.dispatchEvent(new Event('change'));
+      if (params.get('control')) selectControl(params.get('framework'), params.get('control'));
+    }
   }
   async function load() {
     root.setAttribute('aria-busy', 'true');
     try {
       showError('');
-      // These views are independent: run them together so the audit picture is limited
-      // by the slowest request instead of the sum of three request round trips.
       var overviewRequest = api('/api/compliant/overview');
+      if (!evidenceWorkspace) {
+        state.overview = await overviewRequest;
+        render();
+        return;
+      }
+      // Evidence lists are independent: load them together without delaying the
+      // mapping and record workspace behind serial requests.
       var supportingRequests = Promise.allSettled([
         api('/api/compliant/records'),
         api('/api/compliant/alcohol-products'),
@@ -236,12 +188,13 @@
       if (secondaryFailures.length) showError('Your readiness view is current, but some supporting lists could not load. Refresh to retry.');
     } catch (err) {
       showError(err.message);
-      summaryEl.textContent = 'Unable to load';
+      if (summaryEl) summaryEl.textContent = 'Unable to load';
     } finally {
       root.setAttribute('aria-busy', 'false');
     }
   }
-  root.querySelector('[data-record-form]').addEventListener('submit', async function (event) {
+  var recordForm = root.querySelector('[data-record-form]');
+  if (recordForm) recordForm.addEventListener('submit', async function (event) {
     event.preventDefault(); var form = event.currentTarget; var refs = form.source_refs.value.split(',').map(function (value) { return value.trim(); }).filter(Boolean);
     var reviewMonths = Number(form.review_interval_months.value || 0);
     var dueDate = form.due_date.value || null;
@@ -252,7 +205,8 @@
     catch (err) { showError(err.message); }
     finally { setSubmitting(form, false); }
   });
-  root.querySelector('[data-product-form]').addEventListener('submit', async function (event) {
+  var productForm = root.querySelector('[data-product-form]');
+  if (productForm) productForm.addEventListener('submit', async function (event) {
     event.preventDefault(); var form = event.currentTarget;
     setSubmitting(form, true);
     try { showError(''); await api('/api/compliant/alcohol-products', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ inventory_name: form.inventory_name.value, product_type: form.product_type.value, abv_percent: form.abv_percent.value, customs_product_code: form.customs_product_code.value || null }) }); form.reset(); await load(); }

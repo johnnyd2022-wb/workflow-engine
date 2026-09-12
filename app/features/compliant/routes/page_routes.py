@@ -49,6 +49,13 @@ def nz_alcohol_dashboard():
     return render_template("compliant/dashboard.html", **_nz_alcohol_template_context())
 
 
+@page_bp.route("/compliant/nz-alcohol/evidence", methods=["GET"])
+@requires_auth
+def nz_alcohol_evidence_register():
+    """Fallback evidence and product-mapping workspace for non-NP3 controls."""
+    return render_template("compliant/evidence_register.html", **_nz_alcohol_template_context(active_compliant_tab="evidence"))
+
+
 @page_bp.route("/compliant/nz-alcohol/np3-audit", methods=["GET"])
 @requires_auth
 def nz_alcohol_np3_audit():
