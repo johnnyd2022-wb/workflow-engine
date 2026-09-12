@@ -246,9 +246,15 @@ def test_np3_staff_log_is_roster_driven_and_surfaces_as_a_system_action(db, flas
         assert any(action["kind"] == "staff-training" for action in audit["work_queue"])
         finding = run_check(org.id, db)
         assert finding.flagged is True
-        assert finding.data["np3_alert"]["title"] == "NP3 compliance needs attention"
-        assert finding.data["np3_alert"]["description"].endswith("NP3 checks require evidence or a response.")
-        assert finding.data["np3_alert"]["href"] == "/compliant/nz-alcohol/np3-audit"
+        assert finding.data["system_finding"]["category"] == "NP3 compliance"
+        assert finding.data["system_finding"]["action"] == {
+            "href": "/compliant/nz-alcohol/np3-audit",
+            "label": "Open NP3",
+        }
+        overall_alert = finding.data["system_alerts"][0]
+        assert overall_alert["title"] == "NP3 compliance needs attention"
+        assert overall_alert["description"].endswith("NP3 checks require evidence or a response.")
+        assert overall_alert["href"] == "/compliant/nz-alcohol/np3-audit"
         assert finding.data["np3_work_queue"][0]["kind"] == "staff-training"
 
         entry = client.post(

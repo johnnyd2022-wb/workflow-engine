@@ -1,5 +1,6 @@
 """Install-time registration for the NZ Alcohol module."""
 
+from urllib.parse import quote
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -9,6 +10,29 @@ from app.features.compliant.service import ComplianceService
 from app.utils.config_loader import config
 
 CHECK_ID = "compliant.nz_alcohol"
+
+
+def _np3_system_alerts(queue: list[dict], overall_alert: dict | None) -> list[dict]:
+    """Describe NP3 work in the generic Core finding/notification contract."""
+    alerts = []
+    if overall_alert:
+        alerts.append({"id": "np3-overall", **overall_alert, "action_label": "Open NP3"})
+    for index, action in enumerate(queue):
+        control_id = str(action.get("control_id") or "")
+        if not control_id:
+            continue
+        suffix = str(action.get("person") or action.get("kind") or index)
+        alerts.append(
+            {
+                "id": f"np3-{control_id}-{suffix}",
+                "title": str(action.get("title") or "NP3 action"),
+                "description": str(action.get("description") or "Open the tailored NP3 check to complete this action."),
+                "due_date": action.get("due_date"),
+                "href": f"/compliant/nz-alcohol/np3-audit/check/{quote(control_id, safe='')}",
+                "action_label": "Open NP3 check",
+            }
+        )
+    return alerts
 
 
 def run_check(org_id: UUID, session: Session) -> CheckResult:
@@ -39,6 +63,16 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
         if needs_attention
         else None
     )
+    system_alerts = _np3_system_alerts(queue, np3_alert)
+    system_finding = (
+        {
+            "category": "NP3 compliance",
+            "action": {"href": "/compliant/nz-alcohol/np3-audit", "label": "Open NP3"},
+            "details": system_alerts[:6],
+        }
+        if system_alerts
+        else None
+    )
     critical_actions = [action for action in queue if action["severity"] in {"attention", "overdue"}]
     training_actions = [action for action in queue if action["kind"] == "staff-training"]
     if np3_alert:
@@ -66,7 +100,8 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
             "attention_controls": attention_controls,
             "np3_health": health,
             "np3_work_queue": queue,
-            "np3_alert": np3_alert,
+            "system_finding": system_finding,
+            "system_alerts": system_alerts,
         },
     )
 

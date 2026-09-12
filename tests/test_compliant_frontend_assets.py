@@ -47,6 +47,18 @@ def test_np3_audit_keeps_evidence_in_the_expanded_check():
     assert "rowsByCategory" in script
 
 
+def test_core_renders_module_defined_system_finding_contracts_without_module_branches():
+    banner = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "system-findings-banner.js").read_text(encoding="utf-8")
+    notifications = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "system-findings-notifications.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "system_finding" in banner
+    assert "system_alerts" in notifications
+    assert "compliant.nz_alcohol" not in banner
+    assert "compliant.nz_alcohol" not in notifications
+
+
 def test_np3_audit_has_a_dedicated_check_workspace_with_tailored_evidence_fields():
     check_page = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_check.html"
