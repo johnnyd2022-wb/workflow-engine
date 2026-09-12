@@ -116,7 +116,12 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "review_interval_months" in evidence_register
     assert "evidence_coverage" in dashboard_script
     assert "compliant-framework-summary" in dashboard_script
-    assert "np3_audit_health" in dashboard_script
+    assert "summary_health" in dashboard_script
+    assert "Compliance score:" in dashboard_script
+    assert "current evidence controls" in dashboard_script
+    assert "evidence ready" in dashboard_script
+    assert "need attention" in dashboard_script
+    assert "overdue" in dashboard_script
     assert "compliantSurface" in dashboard_script
     assert "activeCategory" in audit_script
     assert "np3-evidence-options" in audit_script
@@ -148,6 +153,9 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert "Includes people, evidence, guidance and remediation" in audit_script
     assert "np3-health-card--attention strong" in stylesheet
     assert "np3-health-card--overdue strong" in stylesheet
+    assert "compliant-framework-summary__metric--ready" in stylesheet
+    assert "compliant-framework-summary__metric--attention" in stylesheet
+    assert "compliant-framework-summary__metric--overdue" in stylesheet
 
 
 def test_audit_pack_does_not_overclaim_tamper_evidence():

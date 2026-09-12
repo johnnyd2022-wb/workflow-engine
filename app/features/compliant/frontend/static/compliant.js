@@ -72,25 +72,40 @@
     captureGuidance.textContent = (control.source_reference ? 'NP3 guidance card: ' + control.source_reference + '. ' : '') + (needs.length ? 'To record this: ' + needs.join(', ') + '.' : 'Add a clear record, attachment reference, or reasoned attestation.');
     declaredLalField.hidden = !(capture.fields || []).includes('declared_litres_of_alcohol');
   }
-  function coverageLabel(framework) {
+  function moduleSummaryHealth(framework) {
     var coverage = framework.evidence_coverage || {};
-    return (coverage.current_controls || 0) + ' / ' + (coverage.total_controls || 0) + ' current';
+    var health = framework.summary_health || {};
+    var ready = Number(health.evidence_ready == null ? coverage.current_controls || 0 : health.evidence_ready);
+    var total = Number(health.total_controls == null ? coverage.total_controls || 0 : health.total_controls);
+    return {
+      score: Number(health.score == null ? coverage.percent || 0 : health.score),
+      currentControls: Number(health.current_controls == null ? ready : health.current_controls),
+      totalControls: total,
+      evidenceReady: ready,
+      needsAttention: Number(health.needs_attention == null ? Math.max(0, total - ready) : health.needs_attention),
+      overdue: Number(health.overdue || 0)
+    };
+  }
+  function moduleMetric(number, label, tone) {
+    var metric = document.createElement('span'); metric.className = 'compliant-framework-summary__metric compliant-framework-summary__metric--' + tone;
+    metric.appendChild(textElement('strong', String(number)));
+    metric.appendChild(document.createTextNode(' ' + label));
+    return metric;
   }
   function renderModuleHealth(frameworks) {
     var target = frameworkRoot; clear(target);
     if (!frameworks.length) return;
     frameworks.forEach(function (framework) {
-      var coverage = framework.evidence_coverage || {};
-      var np3Health = framework.np3_audit_health;
+      var health = moduleSummaryHealth(framework);
       var card = document.createElement('article'); card.className = 'module-health-card compliant-framework-summary state-' + framework.state;
-      card.appendChild(textElement('strong', framework.name));
-      if (np3Health) {
-        card.appendChild(textElement('span', String(np3Health.ok || 0) + ' evidence ready', 'module-health-percent'));
-        card.appendChild(textElement('small', String(np3Health.needs_attention || 0) + ' need attention', 'module-health-count compliant-framework-summary__attention'));
-      } else {
-        card.appendChild(textElement('span', String(coverage.percent || 0) + '%', 'module-health-percent'));
-        card.appendChild(textElement('small', coverageLabel(framework) + ' evidence controls', 'module-health-count'));
-      }
+      card.appendChild(textElement('h2', framework.name, 'compliant-framework-summary__title'));
+      card.appendChild(textElement('p', 'Compliance score: ' + health.score + '%', 'compliant-framework-summary__score'));
+      card.appendChild(textElement('p', health.currentControls + ' / ' + health.totalControls + ' current evidence controls', 'compliant-framework-summary__coverage'));
+      var metrics = document.createElement('div'); metrics.className = 'compliant-framework-summary__metrics';
+      metrics.appendChild(moduleMetric(health.evidenceReady, 'evidence ready', 'ready'));
+      metrics.appendChild(moduleMetric(health.needsAttention, 'need attention', 'attention'));
+      metrics.appendChild(moduleMetric(health.overdue, 'overdue', 'overdue'));
+      card.appendChild(metrics);
       var destination = framework.slug === 'np3-food-control'
         ? '/compliant/nz-alcohol/food-safety'
         : '/compliant/nz-alcohol/evidence?framework=' + encodeURIComponent(framework.slug);

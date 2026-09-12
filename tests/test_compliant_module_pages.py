@@ -17,7 +17,7 @@ from app.features.compliant.modules.nz_alcohol.np3_audit import (
 )
 from app.features.compliant.modules.nz_alcohol.workflow_rules import rules_for_profile
 from app.features.compliant.routes.page_routes import _food_safety_programme
-from app.features.compliant.service import build_priority_actions, np3_audit_coverage
+from app.features.compliant.service import build_priority_actions, module_summary_health, np3_audit_coverage
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -73,6 +73,17 @@ def test_np3_overview_coverage_uses_the_register_health_not_the_generic_catalogu
         "total_controls": 38,
         "percent": 11,
         "label": "NP3 audit evidence status",
+    }
+
+
+def test_module_summary_health_uses_one_consistent_card_contract():
+    assert module_summary_health({"current_controls": 4, "total_controls": 38, "percent": 11}, overdue=2) == {
+        "score": 11,
+        "current_controls": 4,
+        "total_controls": 38,
+        "evidence_ready": 4,
+        "needs_attention": 34,
+        "overdue": 2,
     }
 
 

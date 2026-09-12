@@ -74,6 +74,20 @@ def np3_audit_coverage(health: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def module_summary_health(coverage: dict[str, Any], *, overdue: int = 0) -> dict[str, int]:
+    """Provide one comparable, operational health summary for every module card."""
+    evidence_ready = int(coverage.get("current_controls") or 0)
+    total_controls = int(coverage.get("total_controls") or 0)
+    return {
+        "score": int(coverage.get("percent") or 0),
+        "current_controls": evidence_ready,
+        "total_controls": total_controls,
+        "evidence_ready": evidence_ready,
+        "needs_attention": max(0, total_controls - evidence_ready),
+        "overdue": overdue,
+    }
+
+
 def serialise_record(record: ComplianceRecord) -> dict[str, Any]:
     return _iso(
         {
@@ -649,6 +663,13 @@ class ComplianceService:
             records = []
             reconciliation = {}
         frameworks = self.evaluate(org_id, records=records, reconciliation=reconciliation)
+        for framework in frameworks:
+            overdue = sum(
+                1
+                for control in framework["controls"]
+                if str(control.get("reason") or "").startswith("Overdue since")
+            )
+            framework["summary_health"] = module_summary_health(framework["evidence_coverage"], overdue=overdue)
         # The tailored NP3 register considers structured logs and evidence derived
         # from Core. Project that exact health into the module summary rather than
         # showing the generic catalogue count beside a different NP3 audit count.
@@ -658,6 +679,9 @@ class ComplianceService:
                 if framework["slug"] == "np3-food-control":
                     framework["np3_audit_health"] = np3_health
                     framework["evidence_coverage"] = np3_audit_coverage(np3_health)
+                    framework["summary_health"] = module_summary_health(
+                        framework["evidence_coverage"], overdue=int(np3_health.get("overdue") or 0)
+                    )
         counts = {"compliant": 0, "attention": 0, "setup": 0}
         for framework in frameworks:
             counts[framework["state"]] += 1
@@ -682,13 +706,8 @@ class ComplianceService:
             else {},
             "priority_actions": build_priority_actions(profile, frameworks, reconciliation, records=records),
             "evidence_readiness": {
-                "current_controls": sum(
-                    1
-                    for framework in frameworks
-                    for control in framework["controls"]
-                    if control["state"] == "compliant"
-                ),
-                "total_controls": sum(len(framework["controls"]) for framework in frameworks),
+                "current_controls": sum(framework["summary_health"]["evidence_ready"] for framework in frameworks),
+                "total_controls": sum(framework["summary_health"]["total_controls"] for framework in frameworks),
                 "label": "Current operational evidence, not a legal compliance score.",
             },
             "core_proof_candidates": self.recent_core_proof(org_id) if profile else [],
