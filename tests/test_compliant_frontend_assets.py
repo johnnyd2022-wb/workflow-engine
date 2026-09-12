@@ -60,6 +60,12 @@ def test_core_renders_module_defined_system_finding_contracts_without_module_bra
     assert "compliant.nz_alcohol" not in notifications
 
 
+def test_core_hub_includes_the_shared_system_findings_banner():
+    core_hub = (_REPO_ROOT / "app" / "core" / "frontend" / "core" / "core2.html").read_text(encoding="utf-8")
+
+    assert "{% include 'shared/system-findings-banner.html' %}" in core_hub
+
+
 def test_np3_audit_has_a_dedicated_check_workspace_with_tailored_evidence_fields():
     check_page = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_check.html"

@@ -8,9 +8,9 @@
 {% endblock %}
 
 {% block content %}
-        {# System findings moved to /core/notifications #}
         {% set core2_focus_mode = core2_focus if core2_focus is defined else '' %}
         <div class="max-content">
+          {% include 'shared/system-findings-banner.html' %}
           {# Dark mode: full-bleed yellow sleeve (spa-theme.css) pulls into #page-content top padding so fill meets the header. #}
           <div class="spa-hub-yellow-sleeve">
             <section class="spa-form-section core2-journey-section" aria-label="Traceability bar">

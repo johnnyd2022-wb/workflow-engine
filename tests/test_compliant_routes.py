@@ -257,6 +257,15 @@ def test_np3_staff_log_is_roster_driven_and_surfaces_as_a_system_action(db, flas
         assert overall_alert["href"] == "/compliant/nz-alcohol/food-safety"
         assert finding.data["np3_work_queue"][0]["kind"] == "staff-training"
 
+        system_findings = client.get("/api/core/system-findings")
+        assert system_findings.status_code == 200
+        np3_finding = next(
+            item for item in system_findings.get_json()["findings"] if item["check_id"] == "compliant.nz_alcohol"
+        )
+        assert np3_finding["data"]["system_finding"]["category"] == "NP3 compliance"
+        assert np3_finding["data"]["system_alerts"][0]["id"] == "np3-overall"
+        assert any(alert["id"].startswith("np3-staff-competency-") for alert in np3_finding["data"]["system_alerts"])
+
         entry = client.post(
             "/api/compliant/np3-audit/checks/staff-competency/logs",
             json={
