@@ -124,6 +124,9 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert ">NP3</strong>" in audit
     assert "np3-overview-panels" in audit
     assert "AUDIT PREP" in audit
+    assert "np3-rail-register" in audit
+    assert "data-np3-disclaimer" not in audit
+    assert "This checklist reflects the verification-confirmation topics" not in audit
 
 
 def test_core_overview_keeps_system_issues_out_of_competing_alert_cards():

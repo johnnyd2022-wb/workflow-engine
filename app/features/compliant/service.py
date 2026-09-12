@@ -857,7 +857,6 @@ class ComplianceService:
                     if profile and profile.enabled
                     else {}
                 ),
-                "disclaimer": "This checklist reflects the verification-confirmation topics. Keep the current National Programme guidance available; the verifier determines the final scope.",
             }
         )
 

@@ -6,7 +6,6 @@
 
   var error = root.querySelector('[data-np3-error]');
   var date = root.querySelector('[data-np3-date]');
-  var disclaimer = root.querySelector('[data-np3-disclaimer]');
   var tabs = root.querySelector('[data-np3-category-tabs]');
   var categoryRoot = root.querySelector('[data-np3-categories]');
   var activeCategoryHeading = root.querySelector('[data-np3-active-category]');
@@ -232,7 +231,6 @@
     date.textContent = audit.verification && audit.verification.date
       ? 'Verification date: ' + audit.verification.date
       : 'Set the verification date in Configuration.';
-    disclaimer.textContent = audit.disclaimer || '';
     root.setAttribute('aria-busy', 'false');
   }
   fetch('/api/compliant/np3-audit').then(function (response) {
