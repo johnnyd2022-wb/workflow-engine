@@ -115,6 +115,12 @@
           '</div>';
       } else if (checkId === 'tasks_due') {
         actionBlock = '<a href="/core?tab=tasks" class="btn btn-secondary btn-sm" hx-boost="false">Open tasks</a>';
+      } else if (checkId === 'compliant.nz_alcohol') {
+        var actions = f.data && Array.isArray(f.data.np3_work_queue) ? f.data.np3_work_queue : [];
+        var firstAction = actions.find(function (action) { return action && action.control_id; });
+        if (firstAction) {
+          actionBlock = '<a href="/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(String(firstAction.control_id)) + '" class="btn btn-secondary btn-sm" hx-boost="false">Open NP3 action</a>';
+        }
       }
       return (
         '<li class="system-findings-item" data-index="' + index + '" data-check-id="' + escapeHtml(checkId) + '">' +
@@ -324,6 +330,21 @@
             '</div>'
           );
         });
+      }
+    } else if (checkId === 'compliant.nz_alcohol') {
+      var np3Queue = Array.isArray(data.np3_work_queue) ? data.np3_work_queue : [];
+      var np3Health = data.np3_health && typeof data.np3_health === 'object' ? data.np3_health : {};
+      if (np3Queue.length) {
+        parts.push('<p class="system-findings-item__detail-section"><strong>NP3 actions:</strong></p>');
+        parts.push('<ul class="system-findings-item__detail-section">' + np3Queue.slice(0, 5).map(function (action) {
+          return '<li>' + escapeHtml(action && action.title ? action.title : 'NP3 audit action') + '</li>';
+        }).join('') + '</ul>');
+      }
+      if (np3Health.overdue || np3Health.due_soon || np3Health.staff_actions) {
+        parts.push('<p class="system-findings-item__detail-section"><strong>Audit health:</strong> ' +
+          escapeHtml(String(np3Health.overdue || 0)) + ' overdue · ' +
+          escapeHtml(String(np3Health.due_soon || 0)) + ' due soon · ' +
+          escapeHtml(String(np3Health.staff_actions || 0)) + ' people action(s).</p>');
       }
     } else if (data && Object.keys(data).length > 0) {
       parts.push('<pre class="system-findings-item__detail-raw">' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>');

@@ -1,47 +1,247 @@
 (function () {
   'use strict';
+
   var root = document.querySelector('[data-np3-audit-root]');
   if (!root) return;
+
   var error = root.querySelector('[data-np3-error]');
+  var summary = root.querySelector('[data-np3-summary]');
+  var date = root.querySelector('[data-np3-date]');
+  var disclaimer = root.querySelector('[data-np3-disclaimer]');
+  var tabs = root.querySelector('[data-np3-category-tabs]');
+  var categoryRoot = root.querySelector('[data-np3-categories]');
+  var activeCategoryHeading = root.querySelector('[data-np3-active-category]');
+  var healthCards = root.querySelector('[data-np3-health-cards]');
+  var queue = root.querySelector('[data-np3-work-queue]');
+  var queueItems = root.querySelector('[data-np3-work-queue-items]');
+  var prep = root.querySelector('[data-np3-preparation]');
+  var coreEvidence = root.querySelector('[data-np3-core-evidence]');
+  var coreStats = root.querySelector('[data-np3-core-stats]');
+  var audit;
+  var activeCategory;
+  var activeFilter = 'all';
+
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-  function text(tag, value, className) { var node = document.createElement(tag); node.textContent = value; if (className) node.className = className; return node; }
+  function text(tag, value, className) {
+    var node = document.createElement(tag);
+    node.textContent = value;
+    if (className) node.className = className;
+    return node;
+  }
   function showError(message) { error.textContent = message || ''; error.hidden = !message; }
-  function csrfHeaders() { var token = document.querySelector('meta[name="csrf-token"]'); return { 'Content-Type': 'application/json', 'X-CSRFToken': token ? token.content : '' }; }
-  async function api(url, options) { var response = await fetch(url, options || {}); var body = await response.json().catch(function () { return {}; }); if (!response.ok) throw new Error(body.error || 'Could not load the NP3 audit plan'); return body; }
-  function stateLabel(row) { if (row.guidance_update_required) return 'Guidance update'; if (row.state === 'attention') return 'Needs attention'; if (row.state !== 'ready') return 'Evidence needed'; return row.derived_evidence_count ? 'Live Core proof' : 'Reviewed'; }
-  function guidance(row) { var copy = text('p', 'NP3 requirement: ' + (row.requirement_summary || row.topic), 'np3-guidance-reference'); copy.appendChild(document.createTextNode(' ')); var link = document.createElement('a'); link.href = row.guidance_url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Read “' + (row.source_reference || 'the NP3 guidance') + '” ↗'; copy.appendChild(link); return copy; }
-  function liveEvidence(row) {
-    var panel = document.createElement('section'); panel.className = 'np3-check-evidence'; panel.appendChild(text('h4', 'Evidence already connected'));
-    if (row.evidence_titles && row.evidence_titles.length) panel.appendChild(text('p', row.evidence_titles.join(' · ')));
-    (row.derived_evidence || []).forEach(function (evidence) { var item = text('p', 'Live from Core: ' + evidence.detail + ' ', 'np3-core-derived'); if (evidence.workspace_url) { var link = document.createElement('a'); link.href = evidence.workspace_url; link.setAttribute('hx-boost', 'false'); link.textContent = evidence.workspace_label || 'Open Core'; item.appendChild(link); } panel.appendChild(item); });
-    if (!panel.querySelector('p')) panel.appendChild(text('p', 'Nothing is connected from Core for this check yet. Add a short, signed explanation below so the auditor can see how the requirement is met.'));
-    return panel;
+  function stateLabel(row) {
+    if (row.state === 'ready') return 'Evidence ready';
+    if (row.state === 'attention') return 'Needs attention';
+    return 'Needs evidence';
   }
-  function reviewHistory(row) {
-    var history = document.createElement('details'); history.className = 'np3-review-history'; var events = row.history || []; history.appendChild(text('summary', 'Review history (' + events.length + ')'));
-    if (!events.length) { history.appendChild(text('p', 'No one has signed off this check yet.')); return history; }
-    var list = document.createElement('ol'); events.forEach(function (event) { var line = event.created_at ? new Date(event.created_at).toLocaleDateString() : 'Date unavailable'; var item = text('li', line + ' · ' + (event.signed_off_by || 'Former team member') + ' · ' + event.title); if (event.how_we_meet) item.appendChild(text('span', event.how_we_meet, 'np3-history-note')); if (event.due_date) item.appendChild(text('small', 'Next review: ' + event.due_date)); list.appendChild(item); }); history.appendChild(list); return history;
+  function stateClass(row) {
+    if (row.state === 'ready') return 'ready';
+    if (row.state === 'attention') return 'attention';
+    return 'setup';
   }
-  function attestationForm(row) {
-    var form = document.createElement('form'); form.className = 'np3-attestation-form'; form.appendChild(text('p', 'Record a practical, reviewable explanation for this check. This signs off the current NP3 guidance version and creates your next review reminder.', 'np3-form-intro'));
-    var how = document.createElement('label'); how.textContent = 'How we meet this requirement'; var textarea = document.createElement('textarea'); textarea.name = 'how_we_meet'; textarea.required = true; textarea.maxLength = 4000; textarea.rows = 4; textarea.placeholder = 'Describe the process, records or routine your team uses.'; how.appendChild(textarea); form.appendChild(how);
-    var evidence = document.createElement('label'); evidence.textContent = 'Supporting record reference (optional)'; var input = document.createElement('input'); input.name = 'evidence_reference'; input.maxLength = 1024; input.placeholder = 'e.g. cleaning log, SOP number or shared-drive link'; evidence.appendChild(input); form.appendChild(evidence);
-    var interval = document.createElement('label'); interval.textContent = 'Review again'; var select = document.createElement('select'); select.name = 'review_interval_months'; [[1, 'Every month'], [3, 'Every 3 months'], [6, 'Every 6 months'], [12, 'Every year']].forEach(function (choice) { var option = document.createElement('option'); option.value = String(choice[0]); option.textContent = choice[1]; if (choice[0] === Number(row.default_review_interval_months || 6)) option.selected = true; select.appendChild(option); }); interval.appendChild(select); form.appendChild(interval);
-    var confirmation = document.createElement('label'); confirmation.className = 'np3-confirmation'; var checked = document.createElement('input'); checked.type = 'checkbox'; checked.name = 'confirmed'; checked.required = true; confirmation.appendChild(checked); confirmation.appendChild(document.createTextNode(' I have reviewed this check and confirm this explanation is still fit for purpose.')); form.appendChild(confirmation);
-    var submit = document.createElement('button'); submit.type = 'submit'; submit.textContent = row.state === 'ready' ? 'Record review' : 'Add evidence and sign off'; form.appendChild(submit);
-    form.addEventListener('submit', async function (event) { event.preventDefault(); submit.disabled = true; submit.textContent = 'Saving review…'; try { showError(''); await api('/api/compliant/np3-audit/attestations', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ control_id: row.control_id, how_we_meet: textarea.value, evidence_reference: input.value || null, review_interval_months: Number(select.value), confirmed: checked.checked }) }); await load(); } catch (err) { showError(err.message); submit.disabled = false; submit.textContent = row.state === 'ready' ? 'Record review' : 'Add evidence and sign off'; } });
-    return form;
+  function isOverdue(row) {
+    return Boolean(row.review_due_date) && new Date(row.review_due_date + 'T00:00:00') < new Date(new Date().toDateString());
   }
-  function checkDetail(row) { var detail = document.createElement('div'); detail.className = 'np3-topic__detail'; detail.appendChild(guidance(row)); if (row.guidance_update_required) detail.appendChild(text('p', 'The NP3 guidance version changed after the last signed review. Reconfirm this check against the current guidance before your visit.', 'np3-guidance-alert')); var guidanceSummary = document.createElement('details'); guidanceSummary.className = 'np3-evidence-options'; guidanceSummary.appendChild(text('summary', 'Show tailored evidence guidance')); var body = document.createElement('div'); body.className = 'np3-evidence-options__body'; var list = document.createElement('ul'); ((row.evidence_playbook || {}).proof || []).forEach(function (item) { list.appendChild(text('li', item)); }); body.appendChild(list); guidanceSummary.appendChild(body); detail.appendChild(guidanceSummary); var open = document.createElement('a'); open.href = '/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(row.control_id); open.setAttribute('hx-boost', 'false'); open.className = 'np3-download np3-open-check'; open.textContent = row.state === 'ready' ? 'Open full check and review' : 'Open full check and add evidence'; detail.appendChild(open); return detail; }
-  function render(audit) {
-    var counts = audit.counts || {}; root.querySelector('[data-np3-summary]').textContent = (counts.ready || 0) + ' topics have proof · ' + (counts.missing || 0) + ' need evidence';
-    var verification = audit.verification || {}; root.querySelector('[data-np3-date]').textContent = verification.date ? 'Verification: ' + verification.date + (verification.verifier ? ' · ' + verification.verifier : '') : 'Set the verification date in Configuration.'; root.querySelector('[data-np3-disclaimer]').textContent = audit.disclaimer || '';
-    var coreEvidence = audit.core_evidence || {}; var corePanel = root.querySelector('[data-np3-core-evidence]'); corePanel.hidden = !Object.keys(coreEvidence).length;
-    if (!corePanel.hidden) { var stats = root.querySelector('[data-np3-core-stats]'); var live = coreEvidence.live_np3_evidence || {}; clear(stats); [['DAG-traced final-product batches', live.dag_traced_final_products], ['DAG lineage edges', live.dag_lineage_edges], ['Completed Core steps with captured data', live.completed_steps_with_operational_data], ['Active Core evidence files', live.active_evidence_files]].forEach(function (item) { var stat = document.createElement('div'); stat.appendChild(text('strong', String(item[1] || 0))); stat.appendChild(text('span', item[0])); stats.appendChild(stat); }); }
-    var preparation = root.querySelector('[data-np3-preparation]'); clear(preparation); (audit.preparation_items || []).forEach(function (item) { preparation.appendChild(text('li', item)); });
-    var categories = root.querySelector('[data-np3-categories]'); clear(categories); var rowsByCategory = (audit.rows || []).reduce(function (grouped, row) { (grouped[row.category] || (grouped[row.category] = [])).push(row); return grouped; }, {});
-    (audit.categories || []).forEach(function (category) { var rows = rowsByCategory[category] || []; var allReady = rows.length && rows.every(function (row) { return row.state === 'ready'; }); var section = document.createElement('details'); section.className = 'np3-category' + (allReady ? ' np3-category--ready' : ''); section.open = !allReady; var heading = text('summary', category); heading.appendChild(text('span', rows.filter(function (row) { return row.state === 'ready'; }).length + ' / ' + rows.length + ' recorded', 'np3-category-count')); section.appendChild(heading); var list = document.createElement('div'); list.className = 'np3-topic-list'; rows.forEach(function (row) { var item = document.createElement('details'); item.className = 'np3-topic np3-topic--' + row.state; var summary = document.createElement('summary'); var copy = document.createElement('span'); copy.appendChild(text('strong', row.topic)); copy.appendChild(text('small', row.state === 'ready' ? 'Open check and review evidence' : 'Open check to add evidence', 'np3-topic-action')); summary.appendChild(copy); summary.appendChild(text('span', stateLabel(row), 'np3-state')); item.appendChild(summary); item.appendChild(checkDetail(row)); list.appendChild(item); }); section.appendChild(list); categories.appendChild(section); });
+  function isDueSoon(row) {
+    if (!row.review_due_date || isOverdue(row)) return false;
+    var due = new Date(row.review_due_date + 'T00:00:00');
+    var limit = new Date();
+    limit.setDate(limit.getDate() + 30);
+    return due <= limit;
   }
-  async function load() { root.setAttribute('aria-busy', 'true'); try { showError(''); render(await api('/api/compliant/np3-audit')); } catch (err) { showError(err.message); root.querySelector('[data-np3-summary]').textContent = 'Audit plan unavailable'; } finally { root.setAttribute('aria-busy', 'false'); } }
-  load();
-})();
+  function matchesFilter(row) {
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'ok') return row.state === 'ready';
+    if (activeFilter === 'attention') return row.state === 'attention' || row.state === 'missing';
+    if (activeFilter === 'overdue') return isOverdue(row);
+    if (activeFilter === 'due-soon') return isDueSoon(row);
+    if (activeFilter === 'staff') return Boolean((row.staff_actions || []).length);
+    if (activeFilter === 'remediation') return Boolean(row.open_remediation);
+    return true;
+  }
+  function checkUrl(row) { return '/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(row.control_id); }
+  function guidance(row) {
+    var plan = row.evidence_playbook || {};
+    var details = document.createElement('details');
+    details.className = 'np3-evidence-options';
+    details.appendChild(text('summary', 'Show guidance and evidence options'));
+    var body = document.createElement('div');
+    body.className = 'np3-evidence-options__body';
+    body.appendChild(text('p', 'The official guidance is mapped to “' + (plan.section || row.source_reference || 'NP3 guidance') + '”.'));
+    var link = document.createElement('a');
+    link.className = 'np3-inline-link';
+    link.href = row.guidance_url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Open the official NP3 section ↗';
+    body.appendChild(link);
+    if ((plan.proof || []).length) {
+      var list = document.createElement('ul');
+      (plan.proof || []).forEach(function (proof) { list.appendChild(text('li', proof)); });
+      body.appendChild(list);
+    }
+    if ((plan.reference_notes || []).length) {
+      body.appendChild(text('p', 'Important guidance notes:'));
+      var notes = document.createElement('ul');
+      (plan.reference_notes || []).forEach(function (note) { notes.appendChild(text('li', note)); });
+      body.appendChild(notes);
+    }
+    details.appendChild(body);
+    return details;
+  }
+  function topic(row) {
+    var details = document.createElement('details');
+    details.className = 'np3-topic np3-topic--' + stateClass(row);
+    var heading = document.createElement('summary');
+    var copy = document.createElement('span');
+    copy.appendChild(text('strong', row.topic || row.control_title || 'NP3 check'));
+    copy.appendChild(text('span', row.requirement_summary || row.summary || '', 'np3-topic-action'));
+    heading.appendChild(copy);
+    heading.appendChild(text('span', stateLabel(row), 'np3-state'));
+    details.appendChild(heading);
+    var detail = document.createElement('div');
+    detail.className = 'np3-topic__detail';
+    detail.appendChild(text('p', row.requirement_summary || 'Review this NP3 requirement and its evidence.'));
+    detail.appendChild(text('p', 'MPI section: ' + (row.source_reference || (row.evidence_playbook || {}).section || 'National Programme 3 guidance'), 'np3-guidance-reference'));
+    if (row.guidance_update) detail.appendChild(text('p', row.guidance_update, 'np3-guidance-alert'));
+    if ((row.staff_actions || []).length) {
+      detail.appendChild(text('p', row.staff_actions.length + ' active team member' + (row.staff_actions.length === 1 ? '' : 's') + ' needs a training/competency entry.', 'np3-guidance-alert'));
+    }
+    detail.appendChild(guidance(row));
+    var open = document.createElement('a');
+    open.className = 'np3-download np3-open-check';
+    open.href = checkUrl(row);
+    open.setAttribute('hx-boost', 'false');
+    open.textContent = 'Open full check, register and history';
+    detail.appendChild(open);
+    details.appendChild(detail);
+    return details;
+  }
+  function renderTabs(rowsByCategory) {
+    clear(tabs);
+    (audit.categories || []).forEach(function (category, index) {
+      var rows = rowsByCategory[category.key] || [];
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'np3-category-tab' + (category.key === activeCategory ? ' is-active' : '');
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-selected', category.key === activeCategory ? 'true' : 'false');
+      button.setAttribute('aria-controls', 'np3-category-panel');
+      button.id = 'np3-category-tab-' + index;
+      button.appendChild(text('strong', category.title));
+      var outstanding = rows.filter(function (row) { return row.state !== 'ready'; }).length;
+      button.appendChild(text('span', outstanding ? outstanding + ' to work on' : 'All evidence ready'));
+      button.addEventListener('click', function () { activeCategory = category.key; render(); });
+      tabs.appendChild(button);
+    });
+  }
+  function renderCategory(rowsByCategory) {
+    clear(categoryRoot);
+    var category = (audit.categories || []).filter(function (item) { return item.key === activeCategory; })[0];
+    if (!category) return;
+    var allRows = rowsByCategory[category.key] || [];
+    var visibleRows = allRows.filter(matchesFilter);
+    activeCategoryHeading.textContent = category.title;
+    var section = document.createElement('section');
+    section.className = 'np3-category';
+    section.id = 'np3-category-panel';
+    section.setAttribute('role', 'tabpanel');
+    section.setAttribute('aria-labelledby', 'np3-category-tab-' + (audit.categories || []).indexOf(category));
+    section.appendChild(text('p', visibleRows.length + ' of ' + allRows.length + ' verification check' + (allRows.length === 1 ? '' : 's') + (activeFilter === 'all' ? '' : ' matching this health view'), 'np3-category-count'));
+    var list = document.createElement('div');
+    list.className = 'np3-topic-list';
+    if (visibleRows.length) visibleRows.forEach(function (row) { list.appendChild(topic(row)); });
+    else list.appendChild(text('p', 'No checks in this section match the selected health view. Choose another status above to see the full register.'));
+    section.appendChild(list);
+    categoryRoot.appendChild(section);
+  }
+  function healthCard(key, number, label, detail) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'np3-health-card' + (activeFilter === key ? ' is-active' : '');
+    button.appendChild(text('strong', String(number)));
+    button.appendChild(text('span', label));
+    button.appendChild(text('small', detail));
+    button.addEventListener('click', function () { activeFilter = activeFilter === key ? 'all' : key; render(); });
+    return button;
+  }
+  function renderHealth() {
+    clear(healthCards);
+    var health = audit.health || {};
+    healthCards.appendChild(healthCard('ok', health.ok || 0, 'Evidence ready', 'Current and signed off'));
+    healthCards.appendChild(healthCard('attention', health.needs_attention || 0, 'Needs attention', 'Evidence or response required'));
+    healthCards.appendChild(healthCard('overdue', health.overdue || 0, 'Overdue review', 'Past its review date'));
+    healthCards.appendChild(healthCard('due-soon', health.due_soon || 0, 'Due soon', 'Review within 30 days'));
+    healthCards.appendChild(healthCard('staff', health.staff_actions || 0, 'People actions', 'Staff records to add or refresh'));
+    healthCards.appendChild(healthCard('remediation', health.open_remediation || 0, 'Open remediation', 'A logged deviation remains open'));
+  }
+  function renderQueue() {
+    clear(queueItems);
+    var items = audit.work_queue || [];
+    queue.hidden = !items.length;
+    items.forEach(function (item) {
+      var link = document.createElement('a');
+      link.className = 'np3-work-queue__item np3-work-queue__item--' + (item.severity || 'attention');
+      link.href = '/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(item.control_id);
+      link.setAttribute('hx-boost', 'false');
+      link.appendChild(text('strong', item.title));
+      link.appendChild(text('span', item.description));
+      link.appendChild(text('small', 'Open check →'));
+      queueItems.appendChild(link);
+    });
+  }
+  function renderCoreStats() {
+    clear(coreStats);
+    var stats = audit.core_evidence || {};
+    var live = stats.live_np3_evidence || {};
+    var data = [
+      [live.dag_traced_final_products || 0, 'traceable product batches'],
+      [stats.completed_core_steps_with_captured_data || 0, 'completed execution records'],
+      [stats.active_core_evidence_files || 0, 'active evidence files'],
+      [live.supplier_identified_materials || 0, 'material records with supplier']
+    ];
+    coreEvidence.hidden = !data.some(function (item) { return item[0]; });
+    data.forEach(function (item) {
+      var stat = document.createElement('div');
+      stat.appendChild(text('strong', String(item[0])));
+      stat.appendChild(text('span', item[1]));
+      coreStats.appendChild(stat);
+    });
+  }
+  function renderPrep() {
+    clear(prep);
+    (audit.preparation_items || []).forEach(function (item) { prep.appendChild(text('li', item)); });
+  }
+  function render() {
+    if (!audit) return;
+    // Kept as a named mapping because category selection must never require the user to
+    // scroll through every NP3 topic to find their next action.
+    var rowsByCategory = {};
+    (audit.categories || []).forEach(function (category) { rowsByCategory[category.key] = []; });
+    (audit.rows || []).forEach(function (row) {
+      if (!rowsByCategory[row.category_key]) rowsByCategory[row.category_key] = [];
+      rowsByCategory[row.category_key].push(row);
+    });
+    if (!activeCategory || !rowsByCategory[activeCategory]) activeCategory = (audit.categories || [])[0] && audit.categories[0].key;
+    renderHealth();
+    renderTabs(rowsByCategory);
+    renderQueue();
+    renderCategory(rowsByCategory);
+    renderCoreStats();
+    renderPrep();
+    var health = audit.health || {};
+    summary.textContent = (health.ok || 0) + ' checks have current evidence; ' + (health.needs_attention || 0) + ' need attention.';
+    date.textContent = audit.verification && audit.verification.date
+      ? 'Verification date: ' + audit.verification.date
+      : 'Set the verification date in Configuration.';
+    disclaimer.textContent = audit.disclaimer || '';
+    root.setAttribute('aria-busy', 'false');
+  }
+  fetch('/api/compliant/np3-audit').then(function (response) {
+    if (!response.ok) throw new Error('Could not load the NP3 audit register');
+    return response.json();
+  }).then(function (data) { audit = data; render(); }).catch(function (err) {
+    root.setAttribute('aria-busy', 'false');
+    showError(err.message || 'Could not load the NP3 audit register');
+  });
+}());

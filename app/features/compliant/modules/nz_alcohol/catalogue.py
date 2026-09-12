@@ -34,6 +34,8 @@ NP3_CONTROL_REFERENCES = {
     "transporting-food": "Transporting food safely",
     "food-labelling-advertising": "Food labelling and advertising",
     "biological-hazards": "Managing biological hazards",
+    "water-activity-control": "Using water activity to control bugs",
+    "acidification-fermentation-control": "Pickling, fermenting, or acidifying food to keep them safe",
     "chemical-hazards": "Managing chemical hazards",
     "physical-hazards": "Managing physical hazards",
     "importing-food": "Importing food",
@@ -49,6 +51,7 @@ NP3_CONTROL_REFERENCES = {
 def control_reference(framework_slug: str, control_id: str) -> str | None:
     """Return the official guidance card that contextualises an NP3 check."""
     return NP3_CONTROL_REFERENCES.get(control_id) if framework_slug == "np3-food-control" else None
+
 
 NZ_ALCOHOL_FRAMEWORKS = (
     {
@@ -123,6 +126,14 @@ NZ_ALCOHOL_FRAMEWORKS = (
             ("transporting-food", "Keep controls for safe transport where it applies."),
             ("food-labelling-advertising", "Keep current retail label and advertising examples for verification."),
             ("biological-hazards", "Show process controls for biological hazards where they apply."),
+            (
+                "water-activity-control",
+                "For dried or concentrated food, retain the per-batch water-activity method and result where it applies.",
+            ),
+            (
+                "acidification-fermentation-control",
+                "For pickled, fermented or acidified food, retain the method and pH result, or record why it is not applicable.",
+            ),
             ("chemical-hazards", "Show process controls for chemical hazards where they apply."),
             ("physical-hazards", "Show process controls for physical hazards where they apply."),
             ("importing-food", "Keep food-importing records where it applies."),

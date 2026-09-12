@@ -40,7 +40,8 @@ def test_np3_audit_keeps_evidence_in_the_expanded_check():
     )
 
     assert "np3-evidence-options" in script
-    assert "/api/compliant/np3-audit/attestations" in script
+    assert "np3-category-tabs" in script
+    assert "np3-health-card" in script
     assert "openControlDetail" not in script
     assert "rowsByCategory" in script
 
@@ -60,6 +61,8 @@ def test_np3_audit_has_a_dedicated_check_workspace_with_tailored_evidence_fields
     assert "np3-field__help" in check_script
     assert "What to collect for this check" in check_script
     assert "np3-check-workspace__primary" in check_script
+    assert "/logs" in check_script
+    assert "BUILT-IN REGISTER" in check_script
 
 
 def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quiet():
@@ -80,7 +83,7 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "review_interval_months" in dashboard
     assert "evidence_coverage" in dashboard_script
     assert "card.open = !allPassing" in dashboard_script
-    assert "section.open = !allReady" in audit_script
+    assert "activeCategory" in audit_script
     assert "np3-evidence-options" in audit_script
     assert "data-np3-control-detail" not in audit
     assert "AUDIT PREP" in audit

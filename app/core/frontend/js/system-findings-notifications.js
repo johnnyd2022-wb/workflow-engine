@@ -12,7 +12,8 @@
     output_expiry: 'Custom output expiry',
     output_ready_date: 'Output ready date',
     untracked_items: 'Untracked items',
-    tasks_due: 'Tasks'
+    tasks_due: 'Tasks',
+    'compliant.nz_alcohol': 'NP3 audit actions'
   };
 
   /** Deep-link filter: ?category= matches system status bar routing (see core2 health nav). */
@@ -755,6 +756,38 @@
             itemName: name,
             extraFields: [],
             actions: untrackedActions
+          });
+        });
+        return;
+      }
+
+      if (checkId === 'compliant.nz_alcohol') {
+        var np3Queue = Array.isArray(data.np3_work_queue) ? data.np3_work_queue : [];
+        np3Queue.forEach(function (action, index) {
+          var controlId = action && action.control_id ? String(action.control_id) : '';
+          if (!controlId) return;
+          var itemKey = 'np3_' + controlId + '_' + (action.person || action.kind || index);
+          if (isIgnoredToday(checkId, itemKey, todayKey)) return;
+          if (isDismissed(checkId, itemKey)) return;
+          var due = action.due_date ? String(action.due_date) : '';
+          records.push({
+            checkId: checkId,
+            itemKey: itemKey,
+            sortMs: parseDateMs(due) || 0,
+            triggeredDateText: due ? formatDate(due) : resolveTriggeredDateText(null, f, data),
+            systemFinding: categoryLabel(checkId),
+            summaryText: String(action.title || 'NP3 audit action'),
+            detailText: String(action.description || 'Open the tailored NP3 check to complete this action.'),
+            detailDateCaption: due ? 'Review due:' : null,
+            detailDateText: due ? formatDate(due) : null,
+            itemName: null,
+            extraFields: [],
+            actions: [{
+              type: 'link',
+              href: '/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(controlId),
+              label: 'Open NP3 check',
+              boost: false
+            }]
           });
         });
         return;

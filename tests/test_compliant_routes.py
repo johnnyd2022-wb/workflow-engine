@@ -230,6 +230,46 @@ def test_np3_check_detail_and_review_setting_are_control_scoped(db, flask_app):
         db.commit()
 
 
+def test_np3_staff_log_is_roster_driven_and_surfaces_as_a_system_action(db, flask_app):
+    """A new active user is actionable without anyone creating a parallel checklist."""
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile", json={"enabled": True, "settings": {"food_control_programme": "np3"}}
+            ).status_code
+            == 200
+        )
+        audit = client.get("/api/compliant/np3-audit").get_json()
+        staff = audit["staff"]
+        assert len(staff) == 1
+        assert any(action["kind"] == "staff-training" for action in audit["work_queue"])
+        finding = run_check(org.id, db)
+        assert finding.flagged is True
+        assert finding.data["np3_work_queue"][0]["kind"] == "staff-training"
+
+        entry = client.post(
+            "/api/compliant/np3-audit/checks/staff-competency/logs",
+            json={
+                "fields": {
+                    "event_date": "2026-09-12",
+                    "employee_user_id": staff[0]["id"],
+                    "training_topic": "Allergen changeover and hygiene induction",
+                    "competency_result": "observed-competent",
+                    "review_notes": "Observed by the food safety lead.",
+                }
+            },
+        )
+        assert entry.status_code == 201
+        assert entry.get_json()["record"]["record_type"] == "competency"
+        check = client.get("/api/compliant/np3-audit/checks/staff-competency").get_json()["check"]
+        assert check["log_entries"][0]["fields"]["training_topic"].startswith("Allergen")
+        assert check["staff_actions"] == []
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
 def test_control_capture_requirements_are_enforced(db, flask_app):
     org, client = _admin_client(db, flask_app)
     try:

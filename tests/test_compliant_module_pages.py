@@ -10,6 +10,8 @@ from app.features.compliant.modules.nz_alcohol.np3_audit import (
     NP3_EVIDENCE_PLAYBOOKS,
     NP3_GUIDANCE_VERSION,
     build_np3_audit_rows,
+    evidence_playbook,
+    np3_log_template,
 )
 from app.features.compliant.modules.nz_alcohol.workflow_rules import rules_for_profile
 from app.features.compliant.service import build_priority_actions
@@ -125,6 +127,18 @@ def test_np3_controls_carry_a_guidance_mapping_for_an_auditor_to_check():
     )
     assert control_reference("np3-food-control", "cleaning-and-hygiene") == "Cleaning and sanitising"
     assert control_reference("customs-alcohol", "reconciliation") is None
+
+
+def test_np3_mindmap_gaps_are_explicit_controls_with_audit_ready_registers():
+    """Water and preservation controls must not disappear into a generic hazard note."""
+    water = evidence_playbook("water-supply")
+    assert water["page"] == 21
+    assert water["log_template"]["key"] == "water_check"
+    assert any("self-supply" in note.lower() for note in water["reference_notes"])
+    assert np3_log_template("maintenance")["key"] == "maintenance_check"
+    assert np3_log_template("unsafe-unsuitable-food")["key"] == "unsafe_food_incident"
+    assert evidence_playbook("water-activity-control")["page"] == 55
+    assert evidence_playbook("acidification-fermentation-control")["page"] == 57
 
 
 def test_np3_check_calls_out_when_the_guidance_changed_since_its_last_attestation():

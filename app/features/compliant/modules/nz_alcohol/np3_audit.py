@@ -49,14 +49,24 @@ def _field_guidance(key: str, label: str) -> tuple[str, str]:
             "Food safety / Current records / " + label,
         )
     if any(word in key for word in ("person", "supplier", "carrier", "source", "area", "equipment", "asset", "device")):
-        return ("Identify the specific person, item or area reviewed for this sign-off.", "Name or ID used at this site")
+        return (
+            "Identify the specific person, item or area reviewed for this sign-off.",
+            "Name or ID used at this site",
+        )
     return (
         "Record the specific result, method or decision that shows this check is operating.",
         "Brief factual result for this review",
     )
 
 
-def _playbook(section: str, page: int, proof: tuple[str, ...], fields: tuple[tuple[str, str], ...]) -> dict[str, Any]:
+def _playbook(
+    section: str,
+    page: int,
+    proof: tuple[str, ...],
+    fields: tuple[tuple[str, str], ...],
+    *,
+    reference_notes: tuple[str, ...] = (),
+) -> dict[str, Any]:
     """A compact, check-specific evidence plan derived from the named MPI card.
 
     The product deliberately paraphrases the action to take; the official card remains
@@ -67,6 +77,7 @@ def _playbook(section: str, page: int, proof: tuple[str, ...], fields: tuple[tup
         "page": page,
         "guidance_url": f"{NP3_GUIDANCE_URL}#page={page}",
         "proof": list(proof),
+        "reference_notes": list(reference_notes),
         "fields": [
             {
                 "key": key,
@@ -77,6 +88,589 @@ def _playbook(section: str, page: int, proof: tuple[str, ...], fields: tuple[tup
             for key, label in fields
         ],
     }
+
+
+def _log_template(
+    key: str,
+    title: str,
+    description: str,
+    record_type: str,
+    fields: tuple[dict[str, Any], ...],
+    *,
+    roster_driven: bool = False,
+) -> dict[str, Any]:
+    """Describe an audit-ready operational register the product can maintain itself.
+
+    These are deliberately control-specific.  A temperature check is not a staff-training
+    record and an illness/exclusion decision should not ask for medical detail.
+    """
+    return {
+        "key": key,
+        "title": title,
+        "description": description,
+        "record_type": record_type,
+        "roster_driven": roster_driven,
+        "fields": list(fields),
+    }
+
+
+NP3_LOG_TEMPLATES: dict[str, dict[str, Any]] = {
+    "staff-competency": _log_template(
+        "staff_training",
+        "Staff training and competency register",
+        "One entry per person and competency review. The system shows active team members who still need an entry.",
+        "competency",
+        (
+            {"key": "event_date", "label": "Training or review date", "type": "date", "required": True},
+            {"key": "employee_user_id", "label": "Employee", "type": "user", "required": True},
+            {"key": "training_topic", "label": "Training, procedure or task", "type": "text", "required": True},
+            {
+                "key": "competency_result",
+                "label": "Competency confirmation",
+                "type": "select",
+                "required": True,
+                "options": (
+                    ("observed-competent", "Observed competent"),
+                    ("refresher-needed", "Refresher or follow-up needed"),
+                ),
+            },
+            {"key": "review_notes", "label": "Supervisor notes", "type": "textarea", "required": False},
+        ),
+        roster_driven=True,
+    ),
+    "health-and-sickness": _log_template(
+        "health_exclusion",
+        "Illness and exclusion register",
+        "Record the food-safety decision and return-to-work review. Do not enter diagnosis or other unnecessary medical detail.",
+        "incident",
+        (
+            {"key": "event_date", "label": "Report or review date", "type": "date", "required": True},
+            {"key": "employee_user_id", "label": "Employee", "type": "user", "required": True},
+            {
+                "key": "food_safety_decision",
+                "label": "Food-safety decision",
+                "type": "select",
+                "required": True,
+                "options": (
+                    ("cleared", "Cleared for food handling"),
+                    ("restricted", "Restricted from affected work"),
+                    ("excluded", "Excluded from food handling"),
+                ),
+            },
+            {"key": "return_review_date", "label": "Return-to-work review date", "type": "date", "required": False},
+            {"key": "manager_notes", "label": "Decision notes", "type": "textarea", "required": False},
+        ),
+    ),
+    "cleaning-and-hygiene": _log_template(
+        "cleaning_verification",
+        "Cleaning and sanitising verification log",
+        "Capture what was checked, whether it was effective, and the correction when it was not.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Check date", "type": "date", "required": True},
+            {"key": "area_or_equipment", "label": "Area or equipment", "type": "text", "required": True},
+            {"key": "method", "label": "Cleaning or verification method", "type": "text", "required": True},
+            {
+                "key": "result",
+                "label": "Result",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Effective"), ("action-required", "Action required")),
+            },
+            {"key": "corrective_action", "label": "Corrective action", "type": "textarea", "required": False},
+        ),
+    ),
+    "receiving-food": _log_template(
+        "receiving_check",
+        "Food receiving log",
+        "Capture identification, condition and the accept/hold/reject decision for the delivery checked.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Receiving date", "type": "date", "required": True},
+            {
+                "key": "supplier_or_delivery",
+                "label": "Supplier and delivery reference",
+                "type": "text",
+                "required": True,
+            },
+            {"key": "food_or_batch", "label": "Food, batch or lot", "type": "text", "required": True},
+            {
+                "key": "condition_or_temperature",
+                "label": "Condition or temperature checked",
+                "type": "text",
+                "required": True,
+            },
+            {
+                "key": "decision",
+                "label": "Decision",
+                "type": "select",
+                "required": True,
+                "options": (("accepted", "Accepted"), ("held", "Held"), ("rejected", "Rejected")),
+            },
+        ),
+    ),
+    "time-temperature-processing": _log_template(
+        "process_temperature",
+        "Process time and temperature log",
+        "Record the batch, the observed critical limit and the action when a limit is not met.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Process date", "type": "date", "required": True},
+            {"key": "batch_or_product", "label": "Batch or product", "type": "text", "required": True},
+            {"key": "observed_limit", "label": "Observed time / temperature", "type": "text", "required": True},
+            {
+                "key": "result",
+                "label": "Limit met",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Yes"), ("action-required", "No — action required")),
+            },
+            {"key": "corrective_action", "label": "Action for any deviation", "type": "textarea", "required": False},
+        ),
+    ),
+    "cooling-freezing": _log_template(
+        "cooling_freezing",
+        "Cooling and freezing log",
+        "Record applicable batch cooling/freezing checks and any action taken for a deviation.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Check date", "type": "date", "required": True},
+            {"key": "batch_or_product", "label": "Batch or product", "type": "text", "required": True},
+            {"key": "observed_limit", "label": "Observed time / temperature", "type": "text", "required": True},
+            {
+                "key": "result",
+                "label": "Limit met",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Yes"), ("action-required", "No — action required")),
+            },
+            {"key": "corrective_action", "label": "Action for any deviation", "type": "textarea", "required": False},
+        ),
+    ),
+    "display-temperature": _log_template(
+        "display_temperature",
+        "Display temperature log",
+        "Record each display area checked and what happened if it was outside its limit.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Check date", "type": "date", "required": True},
+            {"key": "display_area", "label": "Display area", "type": "text", "required": True},
+            {"key": "observed_temperature", "label": "Observed temperature", "type": "text", "required": True},
+            {
+                "key": "result",
+                "label": "Within limit",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Yes"), ("action-required", "No — action required")),
+            },
+            {"key": "corrective_action", "label": "Action for any deviation", "type": "textarea", "required": False},
+        ),
+    ),
+    "calibration": _log_template(
+        "calibration_check",
+        "Measuring equipment calibration register",
+        "Record the device, comparison/check result and follow-up for an out-of-tolerance result.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Calibration or check date", "type": "date", "required": True},
+            {"key": "device", "label": "Device ID or description", "type": "text", "required": True},
+            {"key": "check_result", "label": "Calibration/check result", "type": "text", "required": True},
+            {
+                "key": "result",
+                "label": "Within tolerance",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Yes"), ("action-required", "No — action required")),
+            },
+            {"key": "corrective_action", "label": "Action for any deviation", "type": "textarea", "required": False},
+        ),
+    ),
+    "pest-animal-control": _log_template(
+        "pest_inspection",
+        "Pest inspection and treatment log",
+        "Record inspections, findings, treatment and close-out rather than relying on an unstructured contractor note.",
+        "incident",
+        (
+            {"key": "event_date", "label": "Inspection date", "type": "date", "required": True},
+            {"key": "area", "label": "Area checked", "type": "text", "required": True},
+            {"key": "finding", "label": "Finding or service completed", "type": "textarea", "required": True},
+            {
+                "key": "result",
+                "label": "Follow-up needed",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "No"), ("action-required", "Yes — action required")),
+            },
+            {"key": "corrective_action", "label": "Treatment or follow-up", "type": "textarea", "required": False},
+        ),
+    ),
+    "corrective-actions": _log_template(
+        "corrective_action",
+        "Corrective action register",
+        "Record containment, cause, corrective action and verification rather than only the incident title.",
+        "incident",
+        (
+            {"key": "event_date", "label": "Incident date", "type": "date", "required": True},
+            {"key": "issue", "label": "What happened", "type": "textarea", "required": True},
+            {"key": "containment", "label": "Immediate containment", "type": "textarea", "required": True},
+            {"key": "cause_and_action", "label": "Cause and corrective action", "type": "textarea", "required": True},
+            {
+                "key": "result",
+                "label": "Action status",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Verified closed"), ("action-required", "Still open")),
+            },
+        ),
+    ),
+    "trace-and-recall": _log_template(
+        "mock_recall",
+        "Mock recall and trace exercise log",
+        "Capture the batch, trace result, elapsed time and improvement action from each exercise.",
+        "incident",
+        (
+            {"key": "event_date", "label": "Exercise date", "type": "date", "required": True},
+            {"key": "batch_or_product", "label": "Batch or product traced", "type": "text", "required": True},
+            {"key": "trace_result", "label": "Trace and recall result", "type": "textarea", "required": True},
+            {"key": "elapsed_time", "label": "Elapsed time", "type": "text", "required": True},
+            {"key": "improvement_action", "label": "Improvement action", "type": "textarea", "required": False},
+        ),
+    ),
+    "water-supply": _log_template(
+        "water_check",
+        "Water suitability register",
+        "For self-supply, record the accredited-lab test before first use and after a severe-weather/adverse-event restart. For a registered supply, record the current supplier check.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Test or check date", "type": "date", "required": True},
+            {
+                "key": "source_type",
+                "label": "Source type",
+                "type": "select",
+                "required": True,
+                "options": (
+                    ("self-supply", "Self-supply: bore, roof or aquifer"),
+                    ("registered-supplier", "Registered drinking-water supplier"),
+                ),
+            },
+            {
+                "key": "test_or_check",
+                "label": "Accredited-lab test or supplier check",
+                "type": "text",
+                "required": True,
+            },
+            {
+                "key": "result",
+                "label": "Result",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Meets criteria"), ("action-required", "Action required")),
+            },
+            {"key": "corrective_action", "label": "Corrective action", "type": "textarea", "required": False},
+        ),
+    ),
+    "maintenance": _log_template(
+        "maintenance_check",
+        "Maintenance register",
+        "One entry per service or check. If maintenance chemicals are used, confirm they are labelled, sealed and cannot be mistaken for food containers.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Date", "type": "date", "required": True},
+            {"key": "asset_or_area", "label": "Asset, equipment or area", "type": "text", "required": True},
+            {"key": "task_performed", "label": "Task performed or check made", "type": "text", "required": True},
+            {
+                "key": "maintenance_chemicals_checked",
+                "label": "Maintenance chemicals handled safely (if used)",
+                "type": "select",
+                "required": False,
+                "options": (
+                    ("ok", "Confirmed"),
+                    ("not-applicable", "No chemicals used"),
+                    ("action-required", "Action required"),
+                ),
+            },
+            {
+                "key": "result",
+                "label": "Result",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Suitable / working properly"), ("action-required", "Action required")),
+            },
+            {"key": "corrective_action", "label": "Corrective action", "type": "textarea", "required": False},
+        ),
+    ),
+    "food-labelling-advertising": _log_template(
+        "packaging_handling",
+        "Packaging handling verification",
+        "Spot-check that empty packaging and filled containers are handled to prevent contamination. The listed practices are site-specific applications of NP3's packaging-care requirement.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Check date", "type": "date", "required": True},
+            {
+                "key": "checked_practice",
+                "label": "Practice checked",
+                "type": "select",
+                "required": True,
+                "options": (
+                    ("bottles-boxed-until-filling", "Bottles kept boxed/sealed until filling"),
+                    ("corked-immediately", "Corked/capped immediately after filling"),
+                    ("packaging-storage", "Packaging stored away from contamination risk"),
+                ),
+            },
+            {
+                "key": "result",
+                "label": "Result",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Confirmed"), ("action-required", "Action required")),
+            },
+            {"key": "corrective_action", "label": "Corrective action", "type": "textarea", "required": False},
+        ),
+    ),
+    "water-activity-control": _log_template(
+        "water_activity",
+        "Water-activity control register",
+        "For dried or concentrated food, capture the per-batch method and water-activity result. This is only applicable where this preservation method is used.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Batch or test date", "type": "date", "required": True},
+            {"key": "batch_or_product", "label": "Batch or product", "type": "text", "required": True},
+            {"key": "method", "label": "Drying/concentrating method or test method", "type": "text", "required": True},
+            {"key": "test_result", "label": "Water-activity result", "type": "text", "required": True},
+            {
+                "key": "result",
+                "label": "Result",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Within the validated limit"), ("action-required", "Action required")),
+            },
+            {"key": "corrective_action", "label": "Corrective action", "type": "textarea", "required": False},
+        ),
+    ),
+    "acidification-fermentation-control": _log_template(
+        "acidification_fermentation",
+        "Acidification and fermentation control register",
+        "Use for pickled, fermented or acidified food. If the method is not used in this product line, use the tailored review sign-off to record that decision instead.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Batch or test date", "type": "date", "required": True},
+            {"key": "batch_or_product", "label": "Batch or product", "type": "text", "required": True},
+            {"key": "method", "label": "Acidification or fermentation method", "type": "text", "required": True},
+            {"key": "test_result", "label": "pH result and test method", "type": "text", "required": True},
+            {
+                "key": "result",
+                "label": "Result",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Within the validated limit"), ("action-required", "Action required")),
+            },
+            {"key": "corrective_action", "label": "Corrective action", "type": "textarea", "required": False},
+        ),
+    ),
+    "unsafe-unsuitable-food": _log_template(
+        "unsafe_food_incident",
+        "Unsafe or unsuitable food and recall register",
+        "Record the hold/disposition decision. If a self-initiated recall is needed, use the guidance drawer for the NZFS reporting and communication sequence.",
+        "incident",
+        (
+            {"key": "event_date", "label": "Incident date", "type": "date", "required": True},
+            {"key": "affected_product", "label": "Affected product or batch", "type": "text", "required": True},
+            {"key": "containment", "label": "Immediate hold or containment", "type": "textarea", "required": True},
+            {
+                "key": "disposition",
+                "label": "Disposition decision",
+                "type": "select",
+                "required": True,
+                "options": (
+                    ("isolated", "Isolated / held"),
+                    ("disposed", "Disposed"),
+                    ("reworked", "Reworked"),
+                    ("recall", "Recall initiated"),
+                ),
+            },
+            {
+                "key": "recall_level",
+                "label": "Recall level (if a recall was initiated)",
+                "type": "select",
+                "required": False,
+                "options": (("not-applicable", "No recall"), ("trade", "Trade level"), ("consumer", "Consumer level")),
+            },
+            {
+                "key": "result",
+                "label": "Follow-up status",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Verified closed"), ("action-required", "Follow-up still open")),
+            },
+            {
+                "key": "corrective_action",
+                "label": "Investigation, notification or prevention action",
+                "type": "textarea",
+                "required": False,
+            },
+        ),
+    ),
+}
+
+
+# A Core connection says where an operator should work once, not where they should copy
+# the same fact into another register.  These are intentionally only surfaced where Core
+# already owns a useful operational concept; the tailored NP3 log captures the small
+# food-safety judgement that Core cannot truthfully infer.
+NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
+    "trace-and-recall": (
+        {
+            "title": "Source Map traceability",
+            "detail": "Use the product-to-input trace in Core for live lineage. The mock-recall register records the exercise result and elapsed time once.",
+            "workspace_url": "/core/sourcemap?show=check-needed",
+            "workspace_label": "Open Source Map trace",
+        },
+    ),
+    "documentation-record-keeping": (
+        {
+            "title": "Core execution records",
+            "detail": "Completed step data and active evidence files remain in Core; the NP3 review only confirms that the record set is accessible and retained.",
+            "workspace_url": "/core/executions/live",
+            "workspace_label": "Open execution evidence",
+        },
+    ),
+    "suppliers-and-purchasing": (
+        {
+            "title": "Core inventory supplier data",
+            "detail": "Supplier identity belongs on the raw-material record in Core. Review supplier approval here rather than creating a second stock register.",
+            "workspace_url": "/core/inventory/view",
+            "workspace_label": "Open inventory records",
+        },
+    ),
+    "receiving-food": (
+        {
+            "title": "Core inventory receiving details",
+            "detail": "Supplier, supplier batch and purchase date are reused from inventory. The receiving log adds only the condition/temperature and accept, hold or reject decision.",
+            "workspace_url": "/core/inventory/add/manual",
+            "workspace_label": "Add or review inventory",
+        },
+    ),
+    "staff-competency": (
+        {
+            "title": "Organisation people roster",
+            "detail": "Every active Core user appears in the competency work queue until a per-person record is added. New starters are detected automatically.",
+            "workspace_url": "/org/users",
+            "workspace_label": "Open organisation users",
+        },
+    ),
+    "health-and-sickness": (
+        {
+            "title": "Organisation people roster",
+            "detail": "Select the active team member once when recording a food-safety decision; keep unnecessary medical information out of the food-safety register.",
+            "workspace_url": "/org/users",
+            "workspace_label": "Open organisation users",
+        },
+    ),
+    "time-temperature-processing": (
+        {
+            "title": "Core workflow evidence",
+            "detail": "When NP3 workflow evidence is enabled, Core execution steps prompt for the operational evidence. The log records the critical result and deviation decision.",
+            "workspace_url": "/core/executions/live",
+            "workspace_label": "Open live executions",
+        },
+    ),
+    "cooling-freezing": (
+        {
+            "title": "Core workflow evidence",
+            "detail": "Use the execution record for the batch workflow; retain the cooling/freezing observation and any deviation only once in this check register.",
+            "workspace_url": "/core/executions/live",
+            "workspace_label": "Open live executions",
+        },
+    ),
+    "display-temperature": (
+        {
+            "title": "Core tasks",
+            "detail": "Use a recurring Core task to prompt the display check. This register retains the actual measured result and corrective action.",
+            "workspace_url": "/core?tab=tasks",
+            "workspace_label": "Open Core tasks",
+        },
+    ),
+    "cleaning-and-hygiene": (
+        {
+            "title": "Core tasks",
+            "detail": "Schedule cleaning verification in Core Tasks; record the inspection result and correction here, not in a duplicate task note.",
+            "workspace_url": "/core?tab=tasks",
+            "workspace_label": "Open Core tasks",
+        },
+    ),
+    "calibration": (
+        {
+            "title": "Core tasks",
+            "detail": "Use a recurring Core task for each calibration due date. This register holds the device result and any out-of-tolerance action.",
+            "workspace_url": "/core?tab=tasks",
+            "workspace_label": "Open Core tasks",
+        },
+    ),
+    "pest-animal-control": (
+        {
+            "title": "Core tasks",
+            "detail": "Schedule inspections or contractor visits in Core Tasks; record findings, treatment and close-out in this audit-ready log.",
+            "workspace_url": "/core?tab=tasks",
+            "workspace_label": "Open Core tasks",
+        },
+    ),
+    "maintenance": (
+        {
+            "title": "Core tasks",
+            "detail": "Plan maintenance in Core Tasks and retain the food-safety release decision with the check evidence.",
+            "workspace_url": "/core?tab=tasks",
+            "workspace_label": "Open Core tasks",
+        },
+    ),
+    "water-supply": (
+        {
+            "title": "Core tasks",
+            "detail": "Use Core Tasks to schedule the next supplier or self-supply review. The water register retains the test/check result and any corrective action.",
+            "workspace_url": "/core?tab=tasks",
+            "workspace_label": "Open Core tasks",
+        },
+    ),
+    "food-labelling-advertising": (
+        {
+            "title": "Core workflow evidence",
+            "detail": "Use the production workflow to retain the operational evidence; the packaging register records the contamination-prevention spot check once.",
+            "workspace_url": "/core/executions/live",
+            "workspace_label": "Open live executions",
+        },
+    ),
+    "water-activity-control": (
+        {
+            "title": "Core workflow evidence",
+            "detail": "Use the batch execution for the product context; this register retains the measured water-activity result once per applicable batch.",
+            "workspace_url": "/core/executions/live",
+            "workspace_label": "Open live executions",
+        },
+    ),
+    "acidification-fermentation-control": (
+        {
+            "title": "Core workflow evidence",
+            "detail": "Use the batch execution for the product context; this register retains the applicable pH result once per batch.",
+            "workspace_url": "/core/executions/live",
+            "workspace_label": "Open live executions",
+        },
+    ),
+    "unsafe-unsuitable-food": (
+        {
+            "title": "Source Map traceability",
+            "detail": "Use Source Map to identify the connected product, inputs and downstream movement. Keep the containment, disposition and recall decision in this register.",
+            "workspace_url": "/core/sourcemap?show=check-needed",
+            "workspace_label": "Open Source Map trace",
+        },
+    ),
+    "corrective-actions": (
+        {
+            "title": "Core tasks",
+            "detail": "Assign corrective work in Core Tasks, then keep the containment, cause and verification record here as the single audit trail.",
+            "workspace_url": "/core?tab=tasks",
+            "workspace_label": "Open Core tasks",
+        },
+    ),
+}
 
 
 # Each audit check has a useful starting point instead of a one-size-fits-all note.
@@ -93,7 +687,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "corrective-actions": _playbook(
         "Taking action when something goes wrong",
-        67,
+        66,
         ("Incident or complaint log", "Containment, cause, corrective action and close-out evidence"),
         (
             ("incident_reference", "Incident or corrective-action reference"),
@@ -101,8 +695,8 @@ NP3_EVIDENCE_PLAYBOOKS = {
         ),
     ),
     "trace-and-recall": _playbook(
-        "Sourcing, receiving and tracing food; Recalling food",
-        35,
+        "Sourcing, receiving and tracing food",
+        37,
         (
             "Trace from a finished batch to inputs and customers",
             "Mock recall result, including time taken and improvement actions",
@@ -111,10 +705,14 @@ NP3_EVIDENCE_PLAYBOOKS = {
             ("mock_recall_date", "Date of the latest mock recall"),
             ("trace_result", "Batch/lot traced and recall outcome"),
         ),
+        reference_notes=(
+            "For a self-initiated recall: investigate and hold affected food, inform your verifier or NZFS, assess, report the recall decision to NZFS within 24 hours, communicate, then audit the outcome.",
+            "A mock recall is required at least every 12 months unless a real recall was carried out effectively in that period. Keep the risk assessment, recall notice and actions taken.",
+        ),
     ),
     "documentation-record-keeping": _playbook(
         "Checking the programme is working well",
-        19,
+        15,
         ("Current NP3 guidance accessible to staff", "Record index showing where required logs are held and retained"),
         (
             ("record_register_location", "Location of the record register"),
@@ -123,7 +721,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "staff-competency": _playbook(
         "Ensuring staff are trained and competent",
-        26,
+        25,
         (
             "Training matrix covering managers, staff and relevant visitors",
             "Per-person training dates and evidence that practice has been observed",
@@ -148,7 +746,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "operator-verification": _playbook(
         "Checking the programme is working well",
-        19,
+        15,
         ("Latest verifier report", "Completed responses to every verifier finding"),
         (
             ("verifier_report_reference", "Latest verifier report reference"),
@@ -178,7 +776,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "food-standards-composition": _playbook(
         "Allergens and knowing what is in your food",
-        40,
+        43,
         ("Current ingredient specifications and recipe/formula version", "Product-composition or standards review"),
         (
             ("product_or_recipe", "Product, recipe or formula reviewed"),
@@ -187,7 +785,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "food-standards-microbiological": _playbook(
         "Preventing contamination of your food",
-        43,
+        46,
         ("Hazard assessment for the process", "Relevant sampling, test result or control verification"),
         (
             ("hazard_assessment", "Microbiological hazard assessment reference"),
@@ -196,7 +794,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "time-temperature-processing": _playbook(
         "Thoroughly cooking or pasteurising food",
-        46,
+        48,
         ("Critical time/temperature limits for the process", "Batch logs and action taken for any deviation"),
         (
             ("process_step", "Process or product covered"),
@@ -206,7 +804,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "cross-contamination": _playbook(
         "Preventing contamination of your food",
-        43,
+        46,
         ("Separation, scheduling or zoning controls", "Cleaning/changeover verification"),
         (
             ("control_method", "Separation or changeover control used"),
@@ -215,7 +813,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "equipment-design": _playbook(
         "Managing places and equipment",
-        59,
+        19,
         ("Food-contact equipment suitability and condition", "Cleaning, maintenance or replacement evidence"),
         (
             ("equipment_or_area", "Equipment or area reviewed"),
@@ -224,13 +822,13 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "suppliers-and-purchasing": _playbook(
         "Sourcing, receiving and tracing food",
-        35,
+        37,
         ("Approved supplier list and specifications", "Supplier approval or review evidence"),
         (("supplier_name", "Supplier reviewed"), ("approval_reference", "Supplier approval/specification reference")),
     ),
     "receiving-food": _playbook(
         "Sourcing, receiving and tracing food",
-        35,
+        37,
         (
             "Receiving checks for condition, temperature and identification",
             "Rejected or held delivery record where applicable",
@@ -242,7 +840,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "allergen-management": _playbook(
         "Allergens and knowing what is in your food",
-        40,
+        43,
         ("Allergen/ingredient matrix and current label review", "Segregation, changeover or verification records"),
         (
             ("allergen_matrix", "Allergen matrix or ingredient review reference"),
@@ -251,37 +849,37 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "cooking-poultry": _playbook(
         "Thoroughly cooking or pasteurising food",
-        46,
+        48,
         ("Validated cooking limit for poultry", "Per-batch temperature/time record"),
         (("critical_limit", "Validated poultry cooking limit"), ("batch_log", "Latest poultry batch-log reference")),
     ),
     "defrosting-reheating": _playbook(
         "Defrosting and reheating food safely",
-        48,
+        53,
         ("Approved defrost/reheat method and limits", "Batch or temperature record"),
         (("method", "Defrosting/reheating method"), ("log_reference", "Latest process-log reference")),
     ),
     "storage-stock-rotation": _playbook(
         "Safe storage and display",
-        37,
+        40,
         ("Storage limits and stock-rotation method", "Storage check or stock-rotation record"),
         (("storage_area", "Storage area reviewed"), ("check_reference", "Storage/rotation check reference")),
     ),
     "cooling-freezing": _playbook(
         "Safe storage and display",
-        37,
+        40,
         ("Cooling/freezing limits for applicable food", "Batch cooling/freezing log and deviation action"),
         (("critical_limit", "Cooling/freezing limit"), ("log_reference", "Latest cooling/freezing log reference")),
     ),
     "display-temperature": _playbook(
         "Safe storage and display",
-        37,
+        40,
         ("Display temperature limits and checking frequency", "Display log and action when out of limit"),
         (("display_area", "Display area reviewed"), ("log_reference", "Latest display-temperature log reference")),
     ),
     "calibration": _playbook(
-        "Checking measuring equipment",
-        57,
+        "Managing places and equipment",
+        19,
         (
             "Register of food-safety measuring devices",
             "Calibration/check result and action for an out-of-tolerance device",
@@ -294,7 +892,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "transporting-food": _playbook(
         "Transporting food",
-        66,
+        64,
         ("Transport hygiene and temperature controls", "Dispatch/load check or carrier assurance"),
         (("transport_method", "Transport method or carrier"), ("dispatch_check", "Dispatch/transport check reference")),
     ),
@@ -312,25 +910,57 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "biological-hazards": _playbook(
         "Preventing contamination of your food",
-        43,
+        46,
         ("Process hazard assessment", "Control monitoring or verification result"),
         (("hazard", "Biological hazard considered"), ("control_verification", "Control or verification reference")),
     ),
+    "water-activity-control": _playbook(
+        "Using water activity to control bugs",
+        55,
+        (
+            "Per-batch drying or concentrating method",
+            "Per-batch water-activity result from a calibrated meter, accredited laboratory or proven consistent method",
+        ),
+        (
+            ("applicability", "Product or process to which water-activity control applies"),
+            ("method", "Drying, concentrating or verification method"),
+            ("result_reference", "Latest per-batch water-activity result reference"),
+        ),
+        reference_notes=(
+            "The guidance uses water activity below 0.85 to prevent bug growth. A proven consistent method is only an option where its target water activity is below 0.80.",
+        ),
+    ),
+    "acidification-fermentation-control": _playbook(
+        "Pickling, fermenting, or acidifying food to keep them safe",
+        57,
+        (
+            "Applicable acidification or fermentation method",
+            "Per-batch pH test result using a calibrated meter or accredited laboratory, where this preservation method is used",
+        ),
+        (
+            ("applicability", "Product line or explicit not-applicable decision"),
+            ("method", "Acidification or fermentation method"),
+            ("result_reference", "Latest pH test-result reference"),
+        ),
+        reference_notes=(
+            "The guidance distinguishes pH below 3.6 from pH 3.6–4.6, where an additional pasteurising or cooking control is needed. Use the official card for the applicable method and limit.",
+        ),
+    ),
     "chemical-hazards": _playbook(
         "Preventing contamination of your food",
-        43,
+        46,
         ("Chemical/cleaner/allergen hazard assessment", "Storage, use or residue control verification"),
         (("hazard", "Chemical hazard considered"), ("control_verification", "Control or verification reference")),
     ),
     "physical-hazards": _playbook(
         "Keeping foreign matter out of food",
-        57,
+        59,
         ("Foreign-matter risk assessment", "Inspection, maintenance or detection-control evidence"),
         (("hazard", "Physical hazard considered"), ("control_verification", "Control or inspection reference")),
     ),
     "importing-food": _playbook(
         "Sourcing, receiving and tracing food",
-        35,
+        37,
         (
             "Importer registration and supplier/consignment documents",
             "Relevant food-safety clearance or import controls",
@@ -364,7 +994,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "waste-management": _playbook(
         "Managing places and equipment",
-        59,
+        19,
         ("Waste handling and disposal controls", "Cleaning or contractor record that shows the controls operate"),
         (
             ("waste_control", "Waste handling/disposal method"),
@@ -373,7 +1003,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "premises-services": _playbook(
         "Managing places and equipment",
-        59,
+        19,
         ("Premises, facilities and essential-service suitability check", "Repair or maintenance action for a defect"),
         (
             ("area_or_service", "Premises area or essential service reviewed"),
@@ -382,9 +1012,21 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "water-supply": _playbook(
         "Ensuring your water is suitable",
-        64,
-        ("Water source and suitability assessment", "Relevant treatment, test or maintenance record"),
-        (("water_source", "Water source reviewed"), ("water_assurance", "Test, treatment or assurance reference")),
+        21,
+        (
+            "Water source and, for self-supply, accredited-lab test results",
+            "Food-grade tank, container, pipe and treatment-system evidence",
+        ),
+        (
+            ("water_source_type", "Registered supplier or self-supply source"),
+            ("water_source", "Water source reviewed"),
+            ("water_assurance", "Supplier registration or accredited-lab test reference"),
+            ("storage_container_provenance", "Repurposed container and food-grade confirmation, if relevant"),
+        ),
+        reference_notes=(
+            "Self-supply requires accredited-lab testing before a new source is used and within one week of restarting after severe weather or another adverse event that could affect the supply.",
+            "For chlorinated self-supply, the guidance gives pH and chlorine criteria; use the official card and your verifier for the applicable testing plan. Keep self-supply test records.",
+        ),
     ),
     "maintenance": _playbook(
         "Maintaining equipment and facilities",
@@ -397,7 +1039,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
     ),
     "unsafe-unsuitable-food": _playbook(
         "Taking action when something goes wrong",
-        67,
+        66,
         (
             "Product isolation/disposition decision",
             "Investigation, verifier notification where needed, and prevention action",
@@ -407,13 +1049,17 @@ NP3_EVIDENCE_PLAYBOOKS = {
             ("disposition", "Isolation, disposal, rework or recall decision"),
             ("incident_reference", "Incident/close-out reference"),
         ),
+        reference_notes=(
+            "For a self-initiated recall, report the recall decision to NZFS within 24 hours. Use the official recall card (page 68) for the current contact and communication process.",
+            "Keep actions taken, the risk assessment and recall notice for the required retention period. A consumer-level recall includes consumer communication; a trade-level recall removes food from the supply chain.",
+        ),
     ),
 }
 
 
 def evidence_playbook(control_id: str) -> dict[str, Any]:
     """Return an explicit fallback only for a new/unmapped future NP3 control."""
-    return NP3_EVIDENCE_PLAYBOOKS.get(
+    playbook = NP3_EVIDENCE_PLAYBOOKS.get(
         control_id,
         _playbook(
             "National Programme 3 Guidance",
@@ -422,6 +1068,17 @@ def evidence_playbook(control_id: str) -> dict[str, Any]:
             (("supporting_record", "Supporting record reference"),),
         ),
     )
+    # Copy the outer mapping so attaching the presentational log contract never mutates
+    # the module catalogue shared by another tenant/request.
+    return playbook | {
+        "log_template": NP3_LOG_TEMPLATES.get(control_id),
+        "core_connections": list(NP3_CORE_CONNECTIONS.get(control_id, ())),
+    }
+
+
+def np3_log_template(control_id: str) -> dict[str, Any] | None:
+    """Return the built-in record schema for controls that genuinely need a register."""
+    return NP3_LOG_TEMPLATES.get(control_id)
 
 
 NP3_AUDIT_CATEGORIES = (
@@ -465,6 +1122,8 @@ NP3_AUDIT_CATEGORIES = (
             ("transporting-food", "Transporting food"),
             ("food-labelling-advertising", "Food labelling and advertising"),
             ("biological-hazards", "Process control for biological hazards"),
+            ("water-activity-control", "Water activity for dried or concentrated food"),
+            ("acidification-fermentation-control", "Pickling, fermenting or acidifying food"),
             ("chemical-hazards", "Process control for chemical hazards"),
             ("physical-hazards", "Process control for physical hazards"),
             ("importing-food", "Importing food"),
@@ -500,15 +1159,30 @@ PREPARATION_ITEMS = (
 )
 
 
+def _log_entry(record: Any) -> dict[str, Any]:
+    details = getattr(record, "details", None) or {}
+    return {
+        "id": getattr(record, "id", None),
+        "created_at": getattr(record, "created_at", None),
+        "event_date": details.get("log_fields", {}).get("event_date"),
+        "status": getattr(record, "status", None),
+        "fields": details.get("log_fields", {}),
+        "signed_off_by_user_id": getattr(record, "created_by_user_id", None),
+    }
+
+
 def build_np3_audit_rows(
-    records: list[Any], derived_evidence: list[dict[str, Any]] | None = None
+    records: list[Any],
+    derived_evidence: list[dict[str, Any]] | None = None,
+    staff: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Join NP3 topics to manual evidence and provenance-rich Core observations."""
     today = date.today()
     derived_evidence = derived_evidence or []
     controls = dict((framework_by_slug("np3-food-control") or {}).get("controls", ()))
     rows: list[dict[str, Any]] = []
-    for category, topics in NP3_AUDIT_CATEGORIES:
+    for category_index, (category, topics) in enumerate(NP3_AUDIT_CATEGORIES):
+        category_key = f"section-{category_index}"
         for control_id, topic in topics:
             playbook = evidence_playbook(control_id)
             matched = [record for record in records if record.control_id == control_id]
@@ -530,6 +1204,7 @@ def build_np3_audit_rows(
                 and (getattr(record, "details", None) or {}).get("np3_guidance_version")
             ]
             latest_attestation = max(attestations, key=lambda record: record.created_at, default=None)
+            review_due_date = getattr(latest_attestation, "due_date", None)
             guidance_update_required = bool(
                 latest_attestation
                 and (latest_attestation.details or {}).get("np3_guidance_version") != NP3_GUIDANCE_VERSION
@@ -541,9 +1216,33 @@ def build_np3_audit_rows(
                 state = "attention"
             if guidance_update_required:
                 state = "attention"
+            log_template = np3_log_template(control_id)
+            log_entries = [
+                _log_entry(record)
+                for record in sorted(matched, key=lambda record: record.created_at, reverse=True)
+                if (getattr(record, "details", None) or {}).get("np3_log_type") == (log_template or {}).get("key")
+            ]
+            staff_actions: list[dict[str, Any]] = []
+            if log_template and log_template.get("roster_driven"):
+                trained_user_ids = {
+                    str(entry["fields"].get("employee_user_id"))
+                    for entry in log_entries
+                    if entry["fields"].get("employee_user_id") and entry["status"] == "complete"
+                }
+                staff_actions = [
+                    {
+                        "user_id": member["id"],
+                        "name": member["name"],
+                        "created_at": member.get("created_at"),
+                        "reason": "No training and competency entry has been recorded for this active user.",
+                    }
+                    for member in (staff or [])
+                    if str(member["id"]) not in trained_user_ids
+                ]
             rows.append(
                 {
                     "category": category,
+                    "category_key": category_key,
                     "control_id": control_id,
                     "source_reference": control_reference("np3-food-control", control_id),
                     "guidance_url": playbook["guidance_url"],
@@ -552,7 +1251,11 @@ def build_np3_audit_rows(
                     "evidence_playbook": playbook,
                     "topic": topic,
                     "state": state,
+                    "open_remediation": any(
+                        getattr(record, "status", None) in {"open", "failed"} for record in matched
+                    ),
                     "guidance_update_required": guidance_update_required,
+                    "review_due_date": review_due_date,
                     "evidence_count": len(current) + len(derived),
                     "manual_evidence_count": len(current),
                     "derived_evidence_count": len(derived),
@@ -562,6 +1265,9 @@ def build_np3_audit_rows(
                     ],
                     "latest_recorded_at": max((record.created_at for record in current), default=None),
                     "derived_evidence": derived,
+                    "log_template": log_template,
+                    "log_entries": log_entries,
+                    "staff_actions": staff_actions,
                     "history": [
                         {
                             "title": record.title,
@@ -573,6 +1279,7 @@ def build_np3_audit_rows(
                             "how_we_meet": (getattr(record, "details", None) or {}).get("how_we_meet"),
                             "evidence_fields": (getattr(record, "details", None) or {}).get("evidence_fields", {}),
                             "guidance_version": (getattr(record, "details", None) or {}).get("np3_guidance_version"),
+                            "log_entry": bool((getattr(record, "details", None) or {}).get("np3_log_type")),
                         }
                         for record in sorted(matched, key=lambda record: record.created_at, reverse=True)
                     ],
