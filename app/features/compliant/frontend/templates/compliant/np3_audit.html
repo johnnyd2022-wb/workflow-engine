@@ -5,7 +5,7 @@
 {% block content %}
 <main class="compliant-shell" data-np3-audit-root aria-busy="true">
   <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant" hx-boost="false">Compliant</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol" hx-boost="false">NZ Alcohol</a><span aria-hidden="true">/</span><strong>NP3</strong></nav>
-  {% set active_compliant_tab = "np3-audit" %}{% include "compliant/_nz_alcohol_tabs.html" %}
+  {% include "compliant/_nz_alcohol_tabs.html" %}
   <header class="compliant-hero np3-audit-hero">
     <div><p class="compliant-eyebrow">NATIONAL PROGRAMME 3 / VERIFICATION READY</p><p><a class="np3-guidance-link" href="https://www.mpi.govt.nz/dmsdocument/21853/direct" target="_blank" rel="noopener noreferrer">Open the latest MPI National Programme 3 guidance ↗</a></p></div>
     <div class="compliant-summary" role="status" aria-live="polite"><span data-np3-date>Set the verification date in Configuration.</span></div>

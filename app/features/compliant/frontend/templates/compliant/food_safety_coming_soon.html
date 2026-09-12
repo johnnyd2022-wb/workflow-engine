@@ -1,0 +1,12 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}{{ food_control_programme|upper }} · NZ Alcohol · Compliant{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block content %}
+<main class="compliant-shell">
+  <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant" hx-boost="false">Compliant</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol" hx-boost="false">NZ Alcohol</a><span aria-hidden="true">/</span><strong>{{ food_control_programme|upper }}</strong></nav>
+  {% include "compliant/_nz_alcohol_tabs.html" %}
+  <header class="compliant-hero"><div><p class="compliant-eyebrow">NATIONAL PROGRAMME {{ food_control_programme[-1] }}</p><h1>{{ food_control_programme|upper }} support is coming soon.</h1><p>Your programme selection is saved. This is where the guided evidence workspace and verification preparation will appear.</p></div></header>
+  <section class="compliant-record-panel"><p class="compliant-eyebrow">COMING SOON</p><h2>We are preparing this programme workspace.</h2><p>Use Configuration if your food safety programme changes. We will not show NP3 evidence requirements while {{ food_control_programme|upper }} is selected.</p><a class="np3-download" href="/compliant/nz-alcohol/configuration" hx-boost="false">Review configuration</a></section>
+</main>
+{% endblock %}

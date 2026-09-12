@@ -58,7 +58,7 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
         {
             "title": "NP3 compliance needs attention",
             "description": f"{needs_attention} NP3 check{'s' if needs_attention != 1 else ''} require evidence or a response.",
-            "href": "/compliant/nz-alcohol/np3-audit",
+            "href": "/compliant/nz-alcohol/food-safety",
         }
         if needs_attention
         else None
@@ -67,7 +67,7 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
     system_finding = (
         {
             "category": "NP3 compliance",
-            "action": {"href": "/compliant/nz-alcohol/np3-audit", "label": "Open NP3"},
+            "action": {"href": "/compliant/nz-alcohol/food-safety", "label": "Open NP3"},
             "details": system_alerts[:6],
         }
         if system_alerts

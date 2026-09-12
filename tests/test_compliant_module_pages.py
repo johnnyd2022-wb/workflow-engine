@@ -14,6 +14,7 @@ from app.features.compliant.modules.nz_alcohol.np3_audit import (
     np3_log_template,
 )
 from app.features.compliant.modules.nz_alcohol.workflow_rules import rules_for_profile
+from app.features.compliant.routes.page_routes import _food_safety_programme
 from app.features.compliant.service import build_priority_actions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,35 @@ def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
     assert tabs.count('hx-boost="false"') == 3
     assert 'href="/compliant" hx-boost="false"' in sidebar
     assert 'href="/api/compliant/np3-audit?format=csv" hx-boost="false"' in audit
+
+
+def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeholders():
+    tabs = (
+        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_nz_alcohol_tabs.html"
+    ).read_text(encoding="utf-8")
+    routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
+    configuration = (ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "configuration.js").read_text(
+        encoding="utf-8"
+    )
+    placeholder = (
+        ROOT
+        / "app"
+        / "features"
+        / "compliant"
+        / "frontend"
+        / "templates"
+        / "compliant"
+        / "food_safety_coming_soon.html"
+    ).read_text(encoding="utf-8")
+
+    assert _food_safety_programme({"food_control_programme": "np1"}) == "np1"
+    assert _food_safety_programme({"food_control_programme": "np2"}) == "np2"
+    assert _food_safety_programme({"food_control_programme": "unexpected"}) == "np3"
+    assert 'href="/compliant/nz-alcohol/food-safety"' in tabs
+    assert "food_control_programme|upper" in tabs
+    assert 'route("/compliant/nz-alcohol/food-safety"' in routes
+    assert "updateFoodSafetyTab" in configuration
+    assert "support is coming soon" in placeholder
 
 
 def test_selected_national_programme_is_the_only_programme_in_the_plan():
