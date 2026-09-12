@@ -43,6 +43,7 @@ def test_np3_audit_keeps_evidence_in_the_expanded_check():
     assert "np3-category-tabs" in script
     assert "np3-health-card" in script
     assert "require evidence" in script
+    assert "np3-category-tab__evidence-needed" in script
     assert "openControlDetail" not in script
     assert "rowsByCategory" in script
 

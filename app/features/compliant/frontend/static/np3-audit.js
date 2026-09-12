@@ -128,7 +128,11 @@
       button.id = 'np3-category-tab-' + index;
       button.appendChild(text('strong', category.title));
       var outstanding = rows.filter(function (row) { return row.state !== 'ready'; }).length;
-      button.appendChild(text('span', outstanding ? outstanding + ' require evidence' : 'All evidence ready'));
+      button.appendChild(text(
+        'span',
+        outstanding ? outstanding + ' require evidence' : 'All evidence ready',
+        outstanding ? 'np3-category-tab__evidence-needed' : 'np3-category-tab__evidence-ready'
+      ));
       button.addEventListener('click', function () { activeCategory = category.key; render(); });
       tabs.appendChild(button);
     });
