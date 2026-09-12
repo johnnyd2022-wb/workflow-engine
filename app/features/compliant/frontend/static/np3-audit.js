@@ -160,7 +160,7 @@
   function healthCard(key, number, label, detail) {
     var button = document.createElement('button');
     button.type = 'button';
-    button.className = 'np3-health-card' + (activeFilter === key ? ' is-active' : '');
+    button.className = 'np3-health-card np3-health-card--' + key + (activeFilter === key ? ' is-active' : '');
     button.appendChild(text('strong', String(number)));
     button.appendChild(text('span', label));
     button.appendChild(text('small', detail));
@@ -171,10 +171,9 @@
     clear(healthCards);
     var health = audit.health || {};
     healthCards.appendChild(healthCard('ok', health.ok || 0, 'Evidence ready', 'Current and signed off'));
-    healthCards.appendChild(healthCard('attention', health.needs_attention || 0, 'Needs attention', 'Evidence or response required'));
+    healthCards.appendChild(healthCard('attention', health.needs_attention || 0, 'Needs attention', 'Includes people, evidence, guidance and remediation'));
     healthCards.appendChild(healthCard('overdue', health.overdue || 0, 'Overdue review', 'Past its review date'));
     healthCards.appendChild(healthCard('due-soon', health.due_soon || 0, 'Due soon', 'Review within 30 days'));
-    healthCards.appendChild(healthCard('staff', health.staff_actions || 0, 'People actions', 'Staff records to add or refresh'));
     healthCards.appendChild(healthCard('remediation', health.open_remediation || 0, 'Open remediation', 'A logged deviation remains open'));
   }
   function renderQueue() {

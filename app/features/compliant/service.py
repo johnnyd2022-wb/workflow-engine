@@ -56,6 +56,24 @@ def _iso(value: Any) -> Any:
     return value
 
 
+def np3_audit_coverage(health: dict[str, Any]) -> dict[str, Any]:
+    """Translate the NP3 register health into the Overview coverage contract.
+
+    The generic framework catalogue is useful for configuration, but it cannot see
+    tailored logs or evidence derived from Core. Overview must therefore use the
+    same NP3 register result an operator sees after opening the NP3 workspace.
+    """
+    current_controls = int(health.get("ok") or 0)
+    needs_attention = int(health.get("needs_attention") or 0)
+    total_controls = current_controls + needs_attention
+    return {
+        "current_controls": current_controls,
+        "total_controls": total_controls,
+        "percent": round((current_controls / total_controls) * 100) if total_controls else 0,
+        "label": "NP3 audit evidence status",
+    }
+
+
 def serialise_record(record: ComplianceRecord) -> dict[str, Any]:
     return _iso(
         {
@@ -631,6 +649,15 @@ class ComplianceService:
             records = []
             reconciliation = {}
         frameworks = self.evaluate(org_id, records=records, reconciliation=reconciliation)
+        # The tailored NP3 register considers structured logs and evidence derived
+        # from Core. Project that exact health into the module summary rather than
+        # showing the generic catalogue count beside a different NP3 audit count.
+        if profile is not None and profile.enabled and (profile.settings or {}).get("food_control_programme") == "np3":
+            np3_health = self.np3_audit(org_id)["health"]
+            for framework in frameworks:
+                if framework["slug"] == "np3-food-control":
+                    framework["np3_audit_health"] = np3_health
+                    framework["evidence_coverage"] = np3_audit_coverage(np3_health)
         counts = {"compliant": 0, "attention": 0, "setup": 0}
         for framework in frameworks:
             counts[framework["state"]] += 1

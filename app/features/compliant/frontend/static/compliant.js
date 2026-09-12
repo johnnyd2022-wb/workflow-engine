@@ -81,10 +81,16 @@
     if (!frameworks.length) return;
     frameworks.forEach(function (framework) {
       var coverage = framework.evidence_coverage || {};
+      var np3Health = framework.np3_audit_health;
       var card = document.createElement('article'); card.className = 'module-health-card compliant-framework-summary state-' + framework.state;
       card.appendChild(textElement('strong', framework.name));
-      card.appendChild(textElement('span', String(coverage.percent || 0) + '%', 'module-health-percent'));
-      card.appendChild(textElement('small', coverageLabel(framework) + ' evidence controls', 'module-health-count'));
+      if (np3Health) {
+        card.appendChild(textElement('span', String(np3Health.ok || 0) + ' evidence ready', 'module-health-percent'));
+        card.appendChild(textElement('small', String(np3Health.needs_attention || 0) + ' need attention', 'module-health-count compliant-framework-summary__attention'));
+      } else {
+        card.appendChild(textElement('span', String(coverage.percent || 0) + '%', 'module-health-percent'));
+        card.appendChild(textElement('small', coverageLabel(framework) + ' evidence controls', 'module-health-count'));
+      }
       var destination = framework.slug === 'np3-food-control'
         ? '/compliant/nz-alcohol/food-safety'
         : '/compliant/nz-alcohol/evidence?framework=' + encodeURIComponent(framework.slug);

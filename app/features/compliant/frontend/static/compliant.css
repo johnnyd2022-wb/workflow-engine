@@ -33,3 +33,4 @@ button:disabled{cursor:wait;opacity:.7}.compliant-recent{overflow-x:auto}.compli
 
 .np3-category-tab__evidence-needed{color:#b42318;font-weight:800}.np3-category-tab__evidence-ready{color:#175c52;font-weight:800}
 .compliant-framework-summary{min-height:144px}.compliant-framework-summary__link{grid-column:1/-1;justify-self:start;color:#175c52;font-size:.85rem;font-weight:800;text-decoration:none}.compliant-framework-summary__link:hover{text-decoration:underline}.compliant-hero--compact h1{font-size:clamp(1.8rem,3vw,2.7rem)}
+.compliant-framework-summary__attention{color:#9a6700;font-weight:800}.np3-health-card--attention strong{color:#9a6700}.np3-health-card--attention:hover,.np3-health-card--attention.is-active{border-color:#d67a00;background:#fff8e6}.np3-health-card--overdue strong{color:#b42318}.np3-health-card--overdue:hover,.np3-health-card--overdue.is-active{border-color:#d92d20;background:#fff5f4}

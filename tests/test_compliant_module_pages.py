@@ -17,7 +17,7 @@ from app.features.compliant.modules.nz_alcohol.np3_audit import (
 )
 from app.features.compliant.modules.nz_alcohol.workflow_rules import rules_for_profile
 from app.features.compliant.routes.page_routes import _food_safety_programme
-from app.features.compliant.service import build_priority_actions
+from app.features.compliant.service import build_priority_actions, np3_audit_coverage
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -64,6 +64,15 @@ def test_module_alert_contract_projects_into_the_generic_core_health_bar():
         "message": "Example compliance",
         "href": "/compliant/example",
         "action_label": "Open example",
+    }
+
+
+def test_np3_overview_coverage_uses_the_register_health_not_the_generic_catalogue():
+    assert np3_audit_coverage({"ok": 4, "needs_attention": 34}) == {
+        "current_controls": 4,
+        "total_controls": 38,
+        "percent": 11,
+        "label": "NP3 audit evidence status",
     }
 
 

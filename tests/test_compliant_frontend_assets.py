@@ -16,16 +16,18 @@ def test_compliant_overview_is_a_summary_not_an_evidence_workbench():
     assert "data-product-form" not in dashboard
     assert "YOUR NEXT BEST MOVES" not in dashboard
     assert "MODULE SETTINGS" not in dashboard
+    assert "A clear view of what applies." not in dashboard
+    assert "without pretending to be legal certification" not in dashboard
     assert "data-frameworks" in dashboard
     assert "data-compliant-surface=\"overview\"" in dashboard
 
 
-def test_compliant_dashboard_documents_the_honest_product_boundary():
+def test_compliant_dashboard_keeps_its_summary_copy_concise():
     dashboard = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "dashboard.html"
     ).read_text(encoding="utf-8")
 
-    assert "without pretending to be legal certification" in dashboard
+    assert "without pretending to be legal certification" not in dashboard
 
 
 def test_compliant_dashboard_hydrates_live_views_in_parallel_without_hiding_partial_failures():
@@ -114,6 +116,7 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "review_interval_months" in evidence_register
     assert "evidence_coverage" in dashboard_script
     assert "compliant-framework-summary" in dashboard_script
+    assert "np3_audit_health" in dashboard_script
     assert "compliantSurface" in dashboard_script
     assert "activeCategory" in audit_script
     assert "np3-evidence-options" in audit_script
@@ -128,6 +131,20 @@ def test_core_overview_keeps_system_issues_out_of_competing_alert_cards():
 
     assert "Inventory alerts" not in core_hub
     assert "core2-overview-inventory-alerts" not in core_hub
+
+
+def test_np3_health_uses_attention_as_one_actionable_total():
+    audit_script = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js"
+    ).read_text(encoding="utf-8")
+    stylesheet = (_REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.css").read_text(
+        encoding="utf-8"
+    )
+
+    assert "People actions" not in audit_script
+    assert "Includes people, evidence, guidance and remediation" in audit_script
+    assert "np3-health-card--attention strong" in stylesheet
+    assert "np3-health-card--overdue strong" in stylesheet
 
 
 def test_audit_pack_does_not_overclaim_tamper_evidence():
