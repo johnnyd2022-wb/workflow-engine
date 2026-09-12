@@ -48,7 +48,7 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
     profile = service.get_profile(org_id)
     np3_audit = (
         service.np3_audit(org_id)
-        if (profile.settings or {}).get("food_control_programme", "np3") == "np3"
+        if (profile.settings or {}).get("food_control_programme") == "np3"
         else {"work_queue": [], "health": {}}
     )
     queue = np3_audit["work_queue"]

@@ -217,7 +217,7 @@ def test_np3_check_detail_and_review_setting_are_control_scoped(db, flask_app):
         assert detail.status_code == 200
         check = detail.get_json()["check"]
         assert check["evidence_playbook"]["section"] == "Ensuring staff are trained and competent"
-        assert check["guidance_url"].endswith("#page=26")
+        assert check["guidance_url"].endswith("#page=25")
         setting = client.put(
             "/api/compliant/np3-audit/checks/staff-competency/settings", json={"review_interval_months": 12}
         )
