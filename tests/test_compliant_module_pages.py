@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from app.core.backend.corechecks import CheckResult
 from app.core.backend.system_status import _signals_from_results
 from app.features.compliant.modules.nz_alcohol.catalogue import control_reference, framework_applies
+from app.features.compliant.modules.nz_alcohol.module import _np3_workspace_summary
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
     NP3_AUDIT_CATEGORIES,
     NP3_EVIDENCE_PLAYBOOKS,
@@ -78,6 +79,21 @@ def test_np3_overview_coverage_uses_the_register_health_not_the_generic_catalogu
 
 def test_module_summary_health_uses_one_consistent_card_contract():
     assert module_summary_health({"current_controls": 4, "total_controls": 38, "percent": 11}, overdue=2) == {
+        "score": 11,
+        "current_controls": 4,
+        "total_controls": 38,
+        "evidence_ready": 4,
+        "needs_attention": 34,
+        "overdue": 2,
+    }
+
+
+def test_np3_emits_the_dashboard_workspace_summary_contract():
+    assert _np3_workspace_summary({"ok": 4, "needs_attention": 34, "overdue": 2}) == {
+        "workspace": "compliant",
+        "module_name": "NP3",
+        "href": "/compliant/nz-alcohol/food-safety",
+        "action_label": "Open NP3",
         "score": 11,
         "current_controls": 4,
         "total_controls": 38,

@@ -4962,7 +4962,39 @@ def _dashboard_operations_weekly_summary(org_id: UUID, session, now_dt: datetime
     }
 
 
-def _dashboard_compliant_workspace_summary(org_id: UUID, session) -> dict[str, Any]:
+def _dashboard_module_workspace_summaries(check_results: list[Any], workspace: str) -> list[dict[str, Any]]:
+    """Project module-owned Dashboard summaries without knowing module check IDs."""
+    summaries = []
+    for result in check_results:
+        data = result.data if isinstance(getattr(result, "data", None), dict) else {}
+        summary = data.get("workspace_summary") if isinstance(data, dict) else None
+        if not isinstance(summary, dict) or summary.get("workspace") != workspace:
+            continue
+        href = str(summary.get("href") or "")
+        if not href.startswith("/") or href.startswith("//"):
+            continue
+        try:
+            summaries.append(
+                {
+                    "module_name": str(summary.get("module_name") or "Module"),
+                    "href": href,
+                    "action_label": str(summary.get("action_label") or "Open module"),
+                    "score": max(0, min(100, int(summary.get("score") or 0))),
+                    "current_controls": max(0, int(summary.get("current_controls") or 0)),
+                    "total_controls": max(0, int(summary.get("total_controls") or 0)),
+                    "evidence_ready": max(0, int(summary.get("evidence_ready") or 0)),
+                    "needs_attention": max(0, int(summary.get("needs_attention") or 0)),
+                    "overdue": max(0, int(summary.get("overdue") or 0)),
+                }
+            )
+        except (TypeError, ValueError):
+            continue
+    return summaries
+
+
+def _dashboard_compliant_workspace_summary(
+    org_id: UUID, session, *, module_summaries: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Return the small, dashboard-safe summary of the optional Compliant workspace.
 
     This deliberately avoids ``ComplianceService.overview()``: that view calculates the
@@ -4974,6 +5006,7 @@ def _dashboard_compliant_workspace_summary(org_id: UUID, session) -> dict[str, A
         "state": "unavailable",
         "label": "Compliant is not enabled for this organisation.",
         "attention_count": 0,
+        "modules": [],
     }
     if not config.compliant_enabled:
         return unavailable
@@ -4993,6 +5026,21 @@ def _dashboard_compliant_workspace_summary(org_id: UUID, session) -> dict[str, A
                 "state": "setup",
                 "label": "Set up the evidence plan for your operation.",
                 "attention_count": 0,
+                "modules": [],
+            }
+
+        if module_summaries:
+            attention_count = sum(item["needs_attention"] for item in module_summaries)
+            return {
+                "available": True,
+                "state": "attention" if attention_count else "ready",
+                "label": (
+                    f"{attention_count} compliance check{'s' if attention_count != 1 else ''} need attention."
+                    if attention_count
+                    else "All current compliance evidence is ready."
+                ),
+                "attention_count": attention_count,
+                "modules": module_summaries,
             }
 
         status_counts = dict(
@@ -5011,12 +5059,14 @@ def _dashboard_compliant_workspace_summary(org_id: UUID, session) -> dict[str, A
                 "state": "attention",
                 "label": f"{attention_count} evidence record{'s' if attention_count != 1 else ''} need attention.",
                 "attention_count": attention_count,
+                "modules": [],
             }
         return {
             "available": True,
             "state": "ready",
             "label": "No open or failed evidence records.",
             "attention_count": 0,
+            "modules": [],
         }
     except Exception:
         # Compliant is an optional workspace. A failed summary must not take the shared
@@ -5226,7 +5276,11 @@ def get_dashboard_summary():
         except Exception:
             logger.exception("Failed to assemble CRM summary for org_id=%s", org_id)
 
-    compliant_workspace = _dashboard_compliant_workspace_summary(org_id, db_session)
+    compliant_workspace = _dashboard_compliant_workspace_summary(
+        org_id,
+        db_session,
+        module_summaries=_dashboard_module_workspace_summaries(check_results, "compliant"),
+    )
     action_board = _dashboard_build_action_board(tasks_summary, compliance, compliant_workspace)
     operational_cases_summary = _dashboard_operational_cases_summary(org_id, db_session)
 

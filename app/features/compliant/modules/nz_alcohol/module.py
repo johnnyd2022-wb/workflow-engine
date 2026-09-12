@@ -35,6 +35,25 @@ def _np3_system_alerts(queue: list[dict], overall_alert: dict | None) -> list[di
     return alerts
 
 
+def _np3_workspace_summary(health: dict) -> dict:
+    """Describe NP3 health for the generic shared-Dashboard workspace contract."""
+    evidence_ready = int(health.get("ok") or 0)
+    needs_attention = int(health.get("needs_attention") or 0)
+    total_controls = evidence_ready + needs_attention
+    return {
+        "workspace": "compliant",
+        "module_name": "NP3",
+        "href": "/compliant/nz-alcohol/food-safety",
+        "action_label": "Open NP3",
+        "score": round((evidence_ready / total_controls) * 100) if total_controls else 0,
+        "current_controls": evidence_ready,
+        "total_controls": total_controls,
+        "evidence_ready": evidence_ready,
+        "needs_attention": needs_attention,
+        "overdue": int(health.get("overdue") or 0),
+    }
+
+
 def run_check(org_id: UUID, session: Session) -> CheckResult:
     service = ComplianceService(session)
     frameworks = service.evaluate(org_id)
@@ -100,6 +119,7 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
             "attention_controls": attention_controls,
             "np3_health": health,
             "np3_work_queue": queue,
+            "workspace_summary": _np3_workspace_summary(health) if health else None,
             "system_finding": system_finding,
             "system_alerts": system_alerts,
         },

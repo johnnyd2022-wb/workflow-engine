@@ -38,12 +38,28 @@ banner and Notifications, it may put these JSON-safe keys in `CheckResult.data`:
             "action_label": "Open action",             # optional
         },
     ],
+    "workspace_summary": {
+        "workspace": "compliant",
+        "module_name": "NP3",
+        "href": "/compliant/nz-alcohol/food-safety",
+        "action_label": "Open NP3",
+        "score": 11,
+        "current_controls": 4,
+        "total_controls": 38,
+        "evidence_ready": 4,
+        "needs_attention": 34,
+        "overdue": 0,
+    },
 }
 ```
 
 `system_finding` controls the one summary row in the Core banner. `system_alerts` creates
 one notification card per alert and supplies the banner detail list. Emit both keys for
 actionable work so the same signal reaches operators in both Core surfaces.
+
+`workspace_summary` is optional. Use it when a module has a compact, operator-facing
+health snapshot that belongs on the shared Dashboard workspace card. The module owns its
+numbers and labels; Core groups and renders summaries by the declared `workspace` only.
 
 ## Rules
 
@@ -54,6 +70,8 @@ actionable work so the same signal reaches operators in both Core surfaces.
   external destinations before rendering.
 - Keep the summary focused. Put module-specific evidence, people, control IDs, and next
   steps in `details` and `system_alerts`, not in Core code.
+- `workspace_summary.workspace` identifies the destination card (for example,
+  `compliant`). Never make Core branch on the emitting module check ID.
 - Preserve the module's original domain data separately when its own workspace needs it;
   the system-finding contract is a presentation boundary, not a replacement data model.
 - Add a contract test proving the module emits the payload, and a static guard that Core

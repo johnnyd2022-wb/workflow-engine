@@ -141,6 +141,17 @@ def test_core_overview_keeps_system_issues_out_of_competing_alert_cards():
     assert "core2-overview-inventory-alerts" not in core_hub
 
 
+def test_dashboard_projects_module_owned_compliance_health():
+    dashboard = (_REPO_ROOT / "app" / "core" / "frontend" / "dashboard" / "dashboard.html").read_text(encoding="utf-8")
+    script = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "dashboard.js").read_text(encoding="utf-8")
+
+    assert "data-dashboard-compliant-health" in dashboard
+    assert "data-dashboard-compliant-card" in dashboard
+    assert "renderCompliantHealth" in script
+    assert "data-dashboard-compliant-link" in script
+    assert "compliant.nz_alcohol" not in script
+
+
 def test_np3_health_uses_attention_as_one_actionable_total():
     audit_script = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js"
