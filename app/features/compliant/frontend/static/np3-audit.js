@@ -5,7 +5,6 @@
   if (!root) return;
 
   var error = root.querySelector('[data-np3-error]');
-  var summary = root.querySelector('[data-np3-summary]');
   var date = root.querySelector('[data-np3-date]');
   var disclaimer = root.querySelector('[data-np3-disclaimer]');
   var tabs = root.querySelector('[data-np3-category-tabs]');
@@ -15,7 +14,6 @@
   var queue = root.querySelector('[data-np3-work-queue]');
   var queueItems = root.querySelector('[data-np3-work-queue-items]');
   var prep = root.querySelector('[data-np3-preparation]');
-  var coreEvidence = root.querySelector('[data-np3-core-evidence]');
   var coreStats = root.querySelector('[data-np3-core-stats]');
   var audit;
   var activeCategory;
@@ -130,7 +128,7 @@
       button.id = 'np3-category-tab-' + index;
       button.appendChild(text('strong', category.title));
       var outstanding = rows.filter(function (row) { return row.state !== 'ready'; }).length;
-      button.appendChild(text('span', outstanding ? outstanding + ' to work on' : 'All evidence ready'));
+      button.appendChild(text('span', outstanding ? outstanding + ' require evidence' : 'All evidence ready'));
       button.addEventListener('click', function () { activeCategory = category.key; render(); });
       tabs.appendChild(button);
     });
@@ -200,7 +198,6 @@
       [stats.active_core_evidence_files || 0, 'active evidence files'],
       [live.supplier_identified_materials || 0, 'material records with supplier']
     ];
-    coreEvidence.hidden = !data.some(function (item) { return item[0]; });
     data.forEach(function (item) {
       var stat = document.createElement('div');
       stat.appendChild(text('strong', String(item[0])));
@@ -229,8 +226,6 @@
     renderCategory(rowsByCategory);
     renderCoreStats();
     renderPrep();
-    var health = audit.health || {};
-    summary.textContent = (health.ok || 0) + ' checks have current evidence; ' + (health.needs_attention || 0) + ' need attention.';
     date.textContent = audit.verification && audit.verification.date
       ? 'Verification date: ' + audit.verification.date
       : 'Set the verification date in Configuration.';

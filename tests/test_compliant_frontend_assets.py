@@ -42,6 +42,7 @@ def test_np3_audit_keeps_evidence_in_the_expanded_check():
     assert "np3-evidence-options" in script
     assert "np3-category-tabs" in script
     assert "np3-health-card" in script
+    assert "require evidence" in script
     assert "openControlDetail" not in script
     assert "rowsByCategory" in script
 
@@ -86,6 +87,8 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "activeCategory" in audit_script
     assert "np3-evidence-options" in audit_script
     assert "data-np3-control-detail" not in audit
+    assert ">NP3</strong>" in audit
+    assert "np3-overview-panels" in audit
     assert "AUDIT PREP" in audit
 
 

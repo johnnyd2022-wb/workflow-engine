@@ -13,7 +13,7 @@
     output_ready_date: 'Output ready date',
     untracked_items: 'Untracked items',
     tasks_due: 'Tasks',
-    'compliant.nz_alcohol': 'NP3 audit actions'
+    'compliant.nz_alcohol': 'NP3 compliance'
   };
 
   /** Deep-link filter: ?category= matches system status bar routing (see core2 health nav). */
@@ -763,6 +763,31 @@
 
       if (checkId === 'compliant.nz_alcohol') {
         var np3Queue = Array.isArray(data.np3_work_queue) ? data.np3_work_queue : [];
+        var np3Alert = data.np3_alert && typeof data.np3_alert === 'object' ? data.np3_alert : null;
+        if (np3Alert && np3Alert.description) {
+          var alertKey = 'np3_overall_compliance';
+          if (!isIgnoredToday(checkId, alertKey, todayKey) && !isDismissed(checkId, alertKey)) {
+            records.push({
+              checkId: checkId,
+              itemKey: alertKey,
+              sortMs: 0,
+              triggeredDateText: resolveTriggeredDateText(null, f, data),
+              systemFinding: categoryLabel(checkId),
+              summaryText: String(np3Alert.title || 'NP3 compliance needs attention'),
+              detailText: String(np3Alert.description),
+              detailDateCaption: null,
+              detailDateText: null,
+              itemName: null,
+              extraFields: [],
+              actions: [{
+                type: 'link',
+                href: String(np3Alert.href || '/compliant/nz-alcohol/np3-audit'),
+                label: 'Open NP3',
+                boost: false
+              }]
+            });
+          }
+        }
         np3Queue.forEach(function (action, index) {
           var controlId = action && action.control_id ? String(action.control_id) : '';
           if (!controlId) return;

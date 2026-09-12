@@ -118,8 +118,11 @@
       } else if (checkId === 'compliant.nz_alcohol') {
         var actions = f.data && Array.isArray(f.data.np3_work_queue) ? f.data.np3_work_queue : [];
         var firstAction = actions.find(function (action) { return action && action.control_id; });
+        var np3Alert = f.data && f.data.np3_alert;
         if (firstAction) {
           actionBlock = '<a href="/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(String(firstAction.control_id)) + '" class="btn btn-secondary btn-sm" hx-boost="false">Open NP3 action</a>';
+        } else if (np3Alert && np3Alert.href) {
+          actionBlock = '<a href="' + escapeHtml(String(np3Alert.href)) + '" class="btn btn-secondary btn-sm" hx-boost="false">Open NP3</a>';
         }
       }
       return (
@@ -334,6 +337,10 @@
     } else if (checkId === 'compliant.nz_alcohol') {
       var np3Queue = Array.isArray(data.np3_work_queue) ? data.np3_work_queue : [];
       var np3Health = data.np3_health && typeof data.np3_health === 'object' ? data.np3_health : {};
+      var np3Alert = data.np3_alert && typeof data.np3_alert === 'object' ? data.np3_alert : null;
+      if (np3Alert && np3Alert.description) {
+        parts.push('<p class="system-findings-item__detail-section"><strong>Compliance signal:</strong> ' + escapeHtml(String(np3Alert.description)) + '</p>');
+      }
       if (np3Queue.length) {
         parts.push('<p class="system-findings-item__detail-section"><strong>NP3 actions:</strong></p>');
         parts.push('<ul class="system-findings-item__detail-section">' + np3Queue.slice(0, 5).map(function (action) {

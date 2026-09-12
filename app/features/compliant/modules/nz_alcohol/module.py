@@ -28,9 +28,22 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
         else {"work_queue": [], "health": {}}
     )
     queue = np3_audit["work_queue"]
+    health = np3_audit["health"]
+    needs_attention = health.get("needs_attention", 0)
+    np3_alert = (
+        {
+            "title": "NP3 compliance needs attention",
+            "description": f"{needs_attention} NP3 check{'s' if needs_attention != 1 else ''} require evidence or a response.",
+            "href": "/compliant/nz-alcohol/np3-audit",
+        }
+        if needs_attention
+        else None
+    )
     critical_actions = [action for action in queue if action["severity"] in {"attention", "overdue"}]
     training_actions = [action for action in queue if action["kind"] == "staff-training"]
-    if training_actions:
+    if np3_alert:
+        message = np3_alert["description"]
+    elif training_actions:
         message = f"{len(training_actions)} active staff member(s) need NP3 training and competency records"
     elif any(action["kind"] == "overdue-review" for action in critical_actions):
         message = "An NP3 evidence review is overdue"
@@ -46,13 +59,14 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
         check_id=CHECK_ID,
         # NP3 is a live (uncached) system check, so due-soon work becomes visible as
         # soon as it is actionable rather than waiting until the review is overdue.
-        flagged=bool(attention or queue),
+        flagged=bool(attention or queue or np3_alert),
         message=message,
         data={
             "frameworks": frameworks,
             "attention_controls": attention_controls,
-            "np3_health": np3_audit["health"],
+            "np3_health": health,
             "np3_work_queue": queue,
+            "np3_alert": np3_alert,
         },
     )
 
