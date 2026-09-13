@@ -165,7 +165,7 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     )
 
     assert "People actions" not in audit_script
-    assert "Includes people, evidence, guidance and remediation" in audit_script
+    assert "Includes people, evidence, guidance and remediation" not in audit_script
     assert "np3-health-card--attention strong" in stylesheet
     assert "np3-health-card--overdue strong" in stylesheet
     assert "compliant-framework-summary__metric--ready" in stylesheet
