@@ -12,11 +12,13 @@
   var healthCards = root.querySelector('[data-np3-health-cards]');
   var queue = root.querySelector('[data-np3-work-queue]');
   var queueItems = root.querySelector('[data-np3-work-queue-items]');
+  var checkSearch = root.querySelector('[data-np3-check-search]');
   var prep = root.querySelector('[data-np3-preparation]');
   var coreStats = root.querySelector('[data-np3-core-stats]');
   var audit;
   var activeCategory;
   var activeFilter = 'all';
+  var searchQuery = '';
 
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
   function text(tag, value, className) {
@@ -55,6 +57,12 @@
     if (activeFilter === 'staff') return Boolean((row.staff_actions || []).length);
     if (activeFilter === 'remediation') return Boolean(row.open_remediation);
     return true;
+  }
+  function matchesSearch(row) {
+    if (!searchQuery) return true;
+    return [row.topic, row.control_title, row.control_id].some(function (value) {
+      return String(value || '').toLowerCase().includes(searchQuery);
+    });
   }
   function checkUrl(row) { return '/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(row.control_id); }
   function guidance(row) {
@@ -132,7 +140,12 @@
         outstanding ? outstanding + ' require evidence' : 'All evidence ready',
         outstanding ? 'np3-category-tab__evidence-needed' : 'np3-category-tab__evidence-ready'
       ));
-      button.addEventListener('click', function () { activeCategory = category.key; render(); });
+      button.addEventListener('click', function () {
+        activeCategory = category.key;
+        searchQuery = '';
+        if (checkSearch) checkSearch.value = '';
+        render();
+      });
       tabs.appendChild(button);
     });
   }
@@ -140,19 +153,24 @@
     clear(categoryRoot);
     var category = (audit.categories || []).filter(function (item) { return item.key === activeCategory; })[0];
     if (!category) return;
-    var allRows = rowsByCategory[category.key] || [];
-    var visibleRows = allRows.filter(matchesFilter);
-    activeCategoryHeading.textContent = category.title;
+    var searching = Boolean(searchQuery);
+    var allRows = searching ? (audit.rows || []) : (rowsByCategory[category.key] || []);
+    var matchingRows = allRows.filter(matchesSearch);
+    var visibleRows = matchingRows.filter(matchesFilter);
+    activeCategoryHeading.textContent = searching ? 'Search results' : category.title;
     var section = document.createElement('section');
     section.className = 'np3-category';
     section.id = 'np3-category-panel';
     section.setAttribute('role', 'tabpanel');
     section.setAttribute('aria-labelledby', 'np3-category-tab-' + (audit.categories || []).indexOf(category));
-    section.appendChild(text('p', visibleRows.length + ' of ' + allRows.length + ' verification check' + (allRows.length === 1 ? '' : 's') + (activeFilter === 'all' ? '' : ' matching this health view'), 'np3-category-count'));
+    var countText = searching
+      ? visibleRows.length + ' of ' + matchingRows.length + ' matching check' + (matchingRows.length === 1 ? '' : 's')
+      : visibleRows.length + ' of ' + allRows.length + ' verification check' + (allRows.length === 1 ? '' : 's') + (activeFilter === 'all' ? '' : ' matching this health view');
+    section.appendChild(text('p', countText, 'np3-category-count'));
     var list = document.createElement('div');
     list.className = 'np3-topic-list';
     if (visibleRows.length) visibleRows.forEach(function (row) { list.appendChild(topic(row)); });
-    else list.appendChild(text('p', 'No checks in this section match the selected health view. Choose another status above to see the full register.'));
+    else list.appendChild(text('p', searching ? 'No NP3 checks match this search.' : 'No checks in this section match the selected health view. Choose another status above to see the full register.'));
     section.appendChild(list);
     categoryRoot.appendChild(section);
   }
@@ -211,6 +229,10 @@
     clear(prep);
     (audit.preparation_items || []).forEach(function (item) { prep.appendChild(text('li', item)); });
   }
+  if (checkSearch) checkSearch.addEventListener('input', function (event) {
+    searchQuery = String(event.currentTarget.value || '').trim().toLowerCase();
+    render();
+  });
   function render() {
     if (!audit) return;
     // Kept as a named mapping because category selection must never require the user to

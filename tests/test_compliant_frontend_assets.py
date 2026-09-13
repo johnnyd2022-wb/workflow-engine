@@ -47,6 +47,9 @@ def test_np3_audit_keeps_evidence_in_the_expanded_check():
 
     assert "np3-evidence-options" in script
     assert "np3-category-tabs" in script
+    assert "data-np3-check-search" in script
+    assert "matchesSearch" in script
+    assert "Search results" in script
     assert "np3-health-card" in script
     assert "require evidence" in script
     assert "np3-category-tab__evidence-needed" in script
@@ -130,6 +133,7 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "np3-overview-panels" in audit
     assert "AUDIT PREP" in audit
     assert "np3-rail-register" in audit
+    assert "np3-check-search" in audit
     assert "data-np3-disclaimer" not in audit
     assert "This checklist reflects the verification-confirmation topics" not in audit
 
@@ -168,7 +172,7 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert "compliant-framework-summary__metric--attention" in stylesheet
     assert "compliant-framework-summary__metric--overdue" in stylesheet
     assert ".np3-category-tab strong{font-size:.875rem;font-weight:500" in stylesheet
-    assert ".np3-overview-panels .compliant-eyebrow{font-family:Inter" in stylesheet
+    assert ".np3-overview-panels .np3-core-evidence__stats span,.np3-overview-panels .np3-health-card span" in stylesheet
 
 
 def test_shared_favicon_uses_the_biz_e_status_dot():
