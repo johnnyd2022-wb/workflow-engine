@@ -28,7 +28,15 @@ from app.observability import get_logger
 
 @dataclass
 class CheckResult:
-    """Result of a single check. Used by APIs and UI (banner, warnings)."""
+    """Result of a single check. Used by APIs and UI (banner, warnings).
+
+    Modules can supply presentation-ready, JSON-safe data without teaching Core about
+    their check ID. ``data["system_finding"]`` may contain a ``category``, an
+    ``action`` (``href`` and ``label``), and ``details`` (``title``,
+    ``description``, optional action). ``data["system_alerts"]`` is a list of
+    notification records with a stable ``id``, title, description, optional due
+    date, and optional action. Core renders those contracts generically.
+    """
 
     check_id: str
     flagged: bool

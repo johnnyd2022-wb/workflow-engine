@@ -16,10 +16,6 @@
 {% block content %}
   <div class="workflow-dashboard dashboard-v3" data-dashboard-root>
     <div class="dashboard-shell">
-      <section data-dashboard-cases hidden aria-label="Operational cases">
-        <h2>Cases needing attention</h2><p data-dashboard-cases-count aria-live="polite"></p>
-        <a href="/core/cases" hx-boost="false">Open cases</a>
-      </section>
       <div class="spa-hub-yellow-sleeve">
         <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
           <div class="inventory-spa-header__banner" aria-hidden="true">
@@ -105,11 +101,12 @@
           </a>
 
           {% if compliant_subscribed %}
-          <a class="dash-workspace-card" href="/compliant" hx-boost="false" aria-label="Open Compliant evidence workspace">
+          <a class="dash-workspace-card" href="/compliant" hx-boost="false" data-dashboard-compliant-card aria-label="Open Compliant evidence workspace">
             <span class="dash-workspace-card__eyebrow">COMPLIANT</span>
             <h3>Prove compliance with evidence</h3>
             <p data-dashboard-compliant-summary>Loading evidence summary...</p>
-            <span class="dash-workspace-card__link">Open Compliant <span aria-hidden="true">→</span></span>
+            <div class="dash-compliant-health" data-dashboard-compliant-health hidden aria-live="polite"></div>
+            <span class="dash-workspace-card__link" data-dashboard-compliant-link>Open Compliant <span aria-hidden="true">→</span></span>
           </a>
           {% else %}
           <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Compliant workspace availability">

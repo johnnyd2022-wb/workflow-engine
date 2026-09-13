@@ -918,27 +918,21 @@ def test_ac6_every_case_event_has_a_matching_entity_event(db, owner_client, admi
 # ---------------------------------------------------------------------------------
 
 
-def test_dashboard_summary_includes_operational_cases_counts(db, owner_client, owner_user, untracked_item):
+def test_dashboard_summary_omits_legacy_operational_cases_counts(db, owner_client, owner_user, untracked_item):
     owner_client.post(
         "/api/core/cases/from-finding", json=_create_payload(untracked_item.id, owner_user.id), headers=_idem()
     )
     resp = owner_client.get("/api/core/dashboard/summary")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert "operational_cases" in body
-    oc = body["operational_cases"]
-    assert oc["availability"] == "ok"
-    assert oc["active_count"] == 1
-    assert oc["critical_count"] == 1
-    assert oc["href"] == "/core/cases"
+    assert "operational_cases" not in body
 
 
 def test_dashboard_summary_is_enabled_without_a_feature_subscription(db, org_b, org_b_client):
     resp = org_b_client.get("/api/core/dashboard/summary")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["operational_cases"]["availability"] == "ok"
-    assert body["operational_cases"]["active_count"] == 0
+    assert "operational_cases" not in body
 
 
 def test_source_status_batch_returns_case_and_404_for_foreign_id(db, owner_client, owner_user, untracked_item, org_b):

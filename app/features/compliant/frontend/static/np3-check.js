@@ -61,6 +61,13 @@
     list.className = 'np3-evidence-checklist';
     (plan.proof || []).forEach(function (item) { list.appendChild(text('li', item)); });
     drawer.appendChild(list);
+    if ((plan.reference_notes || []).length) {
+      drawer.appendChild(text('p', 'Important guidance notes:'));
+      var notes = document.createElement('ul');
+      notes.className = 'np3-evidence-checklist';
+      (plan.reference_notes || []).forEach(function (note) { notes.appendChild(text('li', note)); });
+      drawer.appendChild(notes);
+    }
     show.appendChild(drawer);
     section.appendChild(show);
     return section;
@@ -70,7 +77,8 @@
     var section = card('CONNECTED EVIDENCE', 'What Core can already show');
     var evidence = check.derived_evidence || [];
     var titles = check.evidence_titles || [];
-    if (!evidence.length && !titles.length) {
+    var connections = (check.evidence_playbook || {}).core_connections || [];
+    if (!evidence.length && !titles.length && !connections.length) {
       section.appendChild(text(
         'p',
         'There is no linked Core evidence for this check yet. That is normal for policy and people controls; record the tailored evidence in the review below.'
@@ -82,6 +90,20 @@
     titles.forEach(function (item) { list.appendChild(text('li', item)); });
     evidence.forEach(function (item) {
       var line = text('li', item.detail + ' ');
+      if (item.workspace_url) {
+        var link = document.createElement('a');
+        link.href = item.workspace_url;
+        link.setAttribute('hx-boost', 'false');
+        link.textContent = item.workspace_label || 'Open Core';
+        line.appendChild(link);
+      }
+      list.appendChild(line);
+    });
+    connections.forEach(function (item) {
+      var line = document.createElement('li');
+      line.appendChild(text('strong', item.title));
+      line.appendChild(document.createElement('br'));
+      line.appendChild(document.createTextNode(item.detail + ' '));
       if (item.workspace_url) {
         var link = document.createElement('a');
         link.href = item.workspace_url;
@@ -239,6 +261,119 @@
     return section;
   }
 
+  function logInput(field, staff) {
+    var control;
+    if (field.type === 'textarea') {
+      control = document.createElement('textarea');
+      control.rows = 3;
+    } else if (field.type === 'select' || field.type === 'user') {
+      control = document.createElement('select');
+      var blank = document.createElement('option');
+      blank.value = '';
+      blank.textContent = 'Choose an option';
+      control.appendChild(blank);
+      var options = field.type === 'user'
+        ? (staff || []).map(function (person) { return [person.id, person.name]; })
+        : (field.options || []);
+      options.forEach(function (option) {
+        var item = document.createElement('option');
+        item.value = option[0];
+        item.textContent = option[1];
+        control.appendChild(item);
+      });
+    } else {
+      control = document.createElement('input');
+      control.type = field.type === 'date' ? 'date' : 'text';
+    }
+    control.name = field.key;
+    control.maxLength = 4000;
+    if (field.required) control.required = true;
+    return control;
+  }
+
+  function logBook(check, staff) {
+    var template = check.log_template;
+    if (!template) return null;
+    var section = card('BUILT-IN REGISTER', template.title, 'np3-logbook');
+    section.appendChild(text('p', template.description));
+
+    var staffActions = check.staff_actions || [];
+    if (staffActions.length) {
+      var prompt = document.createElement('div');
+      prompt.className = 'np3-logbook__prompt';
+      prompt.appendChild(text('strong', staffActions.length + ' active team member' + (staffActions.length === 1 ? '' : 's') + ' need an entry'));
+      var names = staffActions.map(function (action) { return action.name; }).join(', ');
+      prompt.appendChild(text('p', 'Add a training and competency record for: ' + names + '.'));
+      section.appendChild(prompt);
+    }
+
+    var entries = check.log_entries || [];
+    var register = document.createElement('details');
+    register.className = 'np3-logbook__entries';
+    register.open = !!entries.length;
+    register.appendChild(text('summary', 'Saved entries (' + entries.length + ')'));
+    var registerBody = document.createElement('div');
+    registerBody.className = 'np3-logbook__entries-body';
+    if (!entries.length) {
+      registerBody.appendChild(text('p', 'No entries yet. Add the first record below; it becomes part of this check’s audit trail.'));
+    } else {
+      var list = document.createElement('ol');
+      entries.slice(0, 12).forEach(function (entry) {
+        var eventDate = entry.event_date || (entry.created_at ? new Date(entry.created_at).toLocaleDateString() : 'Date unavailable');
+        var item = text('li', eventDate + (entry.status === 'open' ? ' · follow-up open' : ' · recorded'));
+        Object.keys(entry.fields || {}).forEach(function (key) {
+          var definition = (template.fields || []).find(function (field) { return field.key === key; });
+          var value = entry.fields[key];
+          if (key === 'employee_user_id') {
+            var person = (staff || []).find(function (candidate) { return candidate.id === value; });
+            value = person ? person.name : value;
+          }
+          item.appendChild(text('small', (definition ? definition.label : key.replace(/_/g, ' ')) + ': ' + value));
+        });
+        list.appendChild(item);
+      });
+      registerBody.appendChild(list);
+    }
+    register.appendChild(registerBody);
+    section.appendChild(register);
+
+    var form = document.createElement('form');
+    form.className = 'np3-logbook__form';
+    var controls = {};
+    (template.fields || []).forEach(function (field) {
+      var input = logInput(field, staff);
+      var help = field.required ? 'Required for this record.' : 'Optional supporting detail.';
+      form.appendChild(reviewField(field.label, help, '', input));
+      controls[field.key] = input;
+    });
+    var submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = 'Add log entry';
+    form.appendChild(submit);
+    form.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      var fields = {};
+      Object.keys(controls).forEach(function (key) { fields[key] = controls[key].value || ''; });
+      submit.disabled = true;
+      submit.textContent = 'Saving entry…';
+      try {
+        showError('');
+        await api('/api/compliant/np3-audit/checks/' + encodeURIComponent(check.control_id) + '/logs', {
+          method: 'POST',
+          headers: csrfHeaders(),
+          body: JSON.stringify({ fields: fields }),
+        });
+        await load();
+      } catch (err) {
+        showError(err.message);
+        submit.disabled = false;
+        submit.textContent = 'Add log entry';
+      }
+    });
+    section.appendChild(form);
+    return section;
+  }
+
   function history(check) {
     var section = card('AUDIT TRAIL', 'Records and review history');
     var events = check.history || [];
@@ -279,6 +414,8 @@
     var primary = document.createElement('div');
     primary.className = 'np3-check-workspace__primary';
     primary.appendChild(reviewForm(check));
+    var log = logBook(check, payload.available_staff || []);
+    if (log) primary.appendChild(log);
     primary.appendChild(history(check));
     var context = document.createElement('aside');
     context.className = 'np3-check-workspace__context';

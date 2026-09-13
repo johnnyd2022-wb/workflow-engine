@@ -11,12 +11,12 @@ from flask import Blueprint, Response, g, jsonify, render_template, request
 from sqlalchemy.exc import IntegrityError
 
 from app.core.db import db_session
-from app.core.db.models.user import UserRole
+from app.core.db.models.user import User, UserRole
 from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
 from app.features.compliant.models import ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
-from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook
+from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook, np3_log_template
 from app.features.compliant.modules.nz_alcohol.workflow_rules import validate_workflow_settings
 from app.features.compliant.platform.workflow_rules import workflow_context
 from app.features.compliant.service import ComplianceService, serialise_record
@@ -139,7 +139,7 @@ def np3_audit_check(control_id: str):
     row = next((item for item in audit["rows"] if item["control_id"] == control_id), None)
     if row is None:
         return jsonify({"error": "Unknown NP3 check"}), 404
-    return jsonify({"check": row, "verification": audit["verification"]}), 200
+    return jsonify({"check": row, "verification": audit["verification"], "available_staff": audit["staff"]}), 200
 
 
 @api_bp.route("/api/compliant/np3-audit/checks/<control_id>/settings", methods=["PUT"])
@@ -236,6 +236,93 @@ def attest_np3_check():
         },
     )
     log_action("create", "compliance_record", record.id, {"framework": "np3-food-control", "control": control_id})
+    return jsonify({"record": serialise_record(record)}), 201
+
+
+@api_bp.route("/api/compliant/np3-audit/checks/<control_id>/logs", methods=["POST"])
+@requires_auth
+def add_np3_check_log(control_id: str):
+    """Append a control-specific operational log entry from the check workspace."""
+    template = np3_log_template(control_id)
+    framework = framework_by_slug("np3-food-control") or {}
+    controls = dict(framework.get("controls", ()))
+    if control_id not in controls or template is None:
+        return jsonify({"error": "This NP3 check does not have a built-in log"}), 404
+    data = request.get_json(silent=True)
+    fields = data.get("fields") if isinstance(data, dict) else None
+    if not isinstance(fields, dict):
+        return jsonify({"error": "fields must be an object"}), 400
+    template_fields = {field["key"]: field for field in template["fields"]}
+    if not set(fields).issubset(template_fields):
+        return jsonify({"error": "Log fields do not match this NP3 check"}), 400
+    normalised: dict[str, str] = {}
+    for key, definition in template_fields.items():
+        raw_value = fields.get(key, "")
+        if raw_value is None:
+            raw_value = ""
+        if not isinstance(raw_value, str) or len(raw_value.strip()) > 4000:
+            return jsonify({"error": f"{definition['label']} must be text of at most 4000 characters"}), 400
+        value = raw_value.strip()
+        if definition.get("required") and not value:
+            return jsonify({"error": f"{definition['label']} is required"}), 400
+        if definition.get("type") == "date" and value:
+            try:
+                date.fromisoformat(value)
+            except ValueError:
+                return jsonify({"error": f"{definition['label']} must be YYYY-MM-DD"}), 400
+        if definition.get("type") == "select" and value:
+            allowed = {option[0] for option in definition.get("options", ())}
+            if value not in allowed:
+                return jsonify({"error": f"{definition['label']} has an invalid option"}), 400
+        if value:
+            normalised[key] = value
+    employee_id = normalised.get("employee_user_id")
+    owner_user_id = None
+    if employee_id:
+        try:
+            owner_user_id = UUID(employee_id)
+        except ValueError:
+            return jsonify({"error": "Employee must be a user in this organisation"}), 400
+        employee = (
+            db_session()
+            .query(User)
+            .filter(User.id == owner_user_id, User.org_id == _org_id(), User.is_active.is_(True))
+            .one_or_none()
+        )
+        if employee is None:
+            return jsonify({"error": "Employee must be an active user in this organisation"}), 400
+    profile = _service().get_profile(_org_id())
+    if profile is None or not profile.enabled or (profile.settings or {}).get("food_control_programme", "np3") != "np3":
+        return jsonify({"error": "Configure National Programme 3 before adding a log entry"}), 409
+    status = "open" if normalised.get("result") == "action-required" else "complete"
+    if status == "open" and not (normalised.get("corrective_action") or normalised.get("cause_and_action")):
+        return jsonify({"error": "Describe the corrective action when follow-up is required"}), 400
+    event_date = _date(normalised.get("event_date"), "event_date") or date.today()
+    record = _service().add_record(
+        _org_id(),
+        g.current_user.id,
+        {
+            "framework_slug": "np3-food-control",
+            "control_id": control_id,
+            "record_type": template["record_type"],
+            "status": status,
+            "title": f"NP3 log: {template['title']}",
+            "period_start": event_date,
+            "due_date": _add_months(event_date, 1) if status == "open" else None,
+            "owner_user_id": owner_user_id,
+            "details": {
+                "np3_log_type": template["key"],
+                "log_fields": normalised,
+                "np3_guidance_version": framework.get("version"),
+            },
+        },
+    )
+    log_action(
+        "create",
+        "compliance_record",
+        record.id,
+        {"framework": "np3-food-control", "control": control_id, "log": template["key"]},
+    )
     return jsonify({"record": serialise_record(record)}), 201
 
 

@@ -8,7 +8,6 @@
 {% endblock %}
 
 {% block content %}
-        {# System findings moved to /core/notifications #}
         {% set core2_focus_mode = core2_focus if core2_focus is defined else '' %}
         <div class="max-content">
           {# Dark mode: full-bleed yellow sleeve (spa-theme.css) pulls into #page-content top padding so fill meets the header. #}
@@ -100,21 +99,13 @@
                 </div>
               </div>
             </section>
-            <section class="spa-form-section core2-kpi-grid core2-kpi-grid--overview-priority" aria-label="Overview insights requiring attention">
+            <section class="spa-form-section core2-kpi-grid core2-kpi-grid--overview-priority" aria-label="Overview operational metrics">
               <article class="core2-kpi-card">
                 <h3 class="core2-kpi-card__title">Batch dwell by current step</h3>
                 <p class="core2-kpi-card__sub">Average hours batches are spending at each process step</p>
                 <div id="core2-overview-batch-aging" class="core2-kpi-bars">
                   <p class="core2-active-batches-empty">Loading...</p>
                 </div>
-              </article>
-              <article class="core2-kpi-card">
-                <h3 class="core2-kpi-card__title">Inventory alerts</h3>
-                <p class="core2-kpi-card__sub">Low stock, expiring, and expired item pressure</p>
-                <div id="core2-overview-inventory-alerts" class="core2-kpi-stack">
-                  <p class="core2-active-batches-empty">Loading...</p>
-                </div>
-                <p class="core2-kpi-card__note">Low stock means 10% or less remaining vs starting quantity. Allocated means linked to an active execution via source execution.</p>
               </article>
             </section>
 
@@ -1102,8 +1093,10 @@
       });
 
       var order = ['inventory', 'traceability', 'availability'];
-
-      var hasCategoryLinks = state !== 'healthy' && Object.keys(seen).length > 0;
+      var hasGenericFinding = (signals || []).some(function (signal) {
+        return signal && signal.has_issue && !core2SignalToNotifyCategory(signal.category);
+      });
+      var hasCategoryLinks = state !== 'healthy' && (Object.keys(seen).length > 0 || hasGenericFinding);
 
       if (!hasCategoryLinks) {
         var p = document.createElement('p');
@@ -1142,6 +1135,23 @@
         a.appendChild(spanCat);
         a.appendChild(spanMean);
         nav.appendChild(a);
+      });
+
+      (signals || []).forEach(function (signal) {
+        if (!signal || !signal.has_issue || core2SignalToNotifyCategory(signal.category)) return;
+        var moduleLink = document.createElement('a');
+        moduleLink.className = 'core2-journey-health-nav__link';
+        moduleLink.href = typeof signal.href === 'string' && signal.href.charAt(0) === '/' ? signal.href : '/core/notifications';
+        moduleLink.setAttribute('hx-boost', 'false');
+        var moduleTitle = document.createElement('span');
+        moduleTitle.className = 'core2-journey-health-nav__category';
+        moduleTitle.textContent = signal.message || 'System finding';
+        var moduleMeaning = document.createElement('span');
+        moduleMeaning.className = 'core2-journey-health-nav__meaning';
+        moduleMeaning.textContent = String(signal.count || 1) + ' action' + (Number(signal.count || 1) === 1 ? '' : 's') + ' need attention';
+        moduleLink.appendChild(moduleTitle);
+        moduleLink.appendChild(moduleMeaning);
+        nav.appendChild(moduleLink);
       });
 
       frag.appendChild(nav);
@@ -2455,13 +2465,6 @@
         { label: 'Unlinked items', value: Math.max(0, totalLines - linked) },
       ]);
 
-      var expiry = inv.expiry || {};
-      core2RenderKpiStack('core2-overview-inventory-alerts', [
-        { label: 'Low stock', value: Number(inv.low_stock || 0) },
-        { label: 'Expiring in 7 days', value: Number(expiry.d0_7 || 0) },
-        { label: 'Expired', value: Number(expiry.expired || 0) },
-        { label: 'Allocated to executions', value: Number(inv.allocated || 0) },
-      ]);
     }
 
     async function loadCore2Overview() {

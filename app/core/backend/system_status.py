@@ -188,6 +188,33 @@ def _signals_from_results(results: list[CheckResult]) -> list[dict[str, Any]]:
                 }
             )
 
+    # Product modules own the human-facing alert content.  Core only projects that
+    # contract into the common health bar so a module finding never needs a second,
+    # competing banner on the Core hub.
+    for result in results:
+        data = result.data if isinstance(result.data, dict) else {}
+        module_finding = data.get("system_finding") if isinstance(data, dict) else None
+        module_alerts = data.get("system_alerts") if isinstance(data, dict) else None
+        if not result.flagged or not isinstance(module_finding, dict) or not isinstance(module_alerts, list):
+            continue
+        if not module_alerts:
+            continue
+        category = str(module_finding.get("category") or "Module compliance")
+        action = module_finding.get("action") if isinstance(module_finding.get("action"), dict) else {}
+        signals.append(
+            {
+                "type": "MODULE_SYSTEM_FINDING",
+                "category": "module",
+                "breach_type": "MODULE_REQUIREMENT",
+                "has_issue": True,
+                "in_active_use": False,
+                "count": len(module_alerts),
+                "message": category,
+                "href": action.get("href"),
+                "action_label": action.get("label") or "Open finding",
+            }
+        )
+
     # A check that raised is surfaced by the runner (and the cache paths) as a flagged
     # result with no data. It carries no findings we can categorise, but the system is NOT
     # healthy: we simply don't know what that check would have reported. Emit a degraded

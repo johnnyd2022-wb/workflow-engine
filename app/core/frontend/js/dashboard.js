@@ -105,6 +105,64 @@
         return String(count) + ' ' + (count === 1 ? singular : (plural || singular + 's'));
     }
 
+    function dashboardMetric(number, label, tone) {
+        var metric = document.createElement('span');
+        metric.className = 'dash-compliant-health__metric dash-compliant-health__metric--' + tone;
+        var value = document.createElement('strong'); value.textContent = String(number);
+        metric.appendChild(value);
+        metric.appendChild(document.createTextNode(' ' + label));
+        return metric;
+    }
+
+    function dashboardReadinessBar(score, moduleName) {
+        var percent = Math.max(0, Math.min(100, Number(score) || 0));
+        var bar = document.createElement('div');
+        bar.className = 'dash-compliant-health__progress';
+        bar.setAttribute('role', 'progressbar');
+        bar.setAttribute('aria-label', String(moduleName || 'Compliance') + ' evidence readiness');
+        bar.setAttribute('aria-valuemin', '0');
+        bar.setAttribute('aria-valuemax', '100');
+        bar.setAttribute('aria-valuenow', String(percent));
+        var fill = document.createElement('span');
+        fill.style.width = percent + '%';
+        bar.appendChild(fill);
+        return bar;
+    }
+
+    function renderCompliantHealth(root, compliantWorkspace) {
+        var host = byData(root, '[data-dashboard-compliant-health]');
+        var card = byData(root, '[data-dashboard-compliant-card]');
+        var cardLink = byData(root, '[data-dashboard-compliant-link]');
+        if (!host) return;
+        while (host.firstChild) host.removeChild(host.firstChild);
+        var modules = Array.isArray((compliantWorkspace || {}).modules) ? compliantWorkspace.modules : [];
+        host.hidden = modules.length === 0;
+        if (card && cardLink) {
+            var onlyModule = modules.length === 1 ? modules[0] : null;
+            card.href = onlyModule && typeof onlyModule.href === 'string' && onlyModule.href.charAt(0) === '/'
+                ? onlyModule.href
+                : '/compliant';
+            card.setAttribute('aria-label', onlyModule ? String(onlyModule.action_label || 'Open module') : 'Open Compliant evidence workspace');
+            cardLink.textContent = onlyModule ? String(onlyModule.action_label || 'Open module') + ' →' : 'Open Compliant →';
+        }
+        modules.slice(0, 2).forEach(function (module) {
+            var section = document.createElement('section'); section.className = 'dash-compliant-health__module';
+            var title = document.createElement('p'); title.className = 'dash-compliant-health__title';
+            title.textContent = String(module.module_name || 'Compliance') + ' compliance score: ' + String(module.score || 0) + '%';
+            section.appendChild(title);
+            section.appendChild(dashboardReadinessBar(module.score, module.module_name));
+            var coverage = document.createElement('p'); coverage.className = 'dash-compliant-health__coverage';
+            coverage.textContent = String(module.current_controls || 0) + ' / ' + String(module.total_controls || 0) + ' current evidence controls';
+            section.appendChild(coverage);
+            var metrics = document.createElement('div'); metrics.className = 'dash-compliant-health__metrics';
+            metrics.appendChild(dashboardMetric(module.evidence_ready || 0, 'evidence ready', 'ready'));
+            metrics.appendChild(dashboardMetric(module.needs_attention || 0, 'need attention', 'attention'));
+            metrics.appendChild(dashboardMetric(module.overdue || 0, 'overdue', 'overdue'));
+            section.appendChild(metrics);
+            host.appendChild(section);
+        });
+    }
+
     function renderWorkspaceSummaries(root, operations, compliantWorkspace, tasks, sales) {
         var activeBatches = Number((operations || {}).active_executions || 0);
         setText(
@@ -119,6 +177,7 @@
             '[data-dashboard-compliant-summary]',
             compliant.label || 'Compliant is not enabled for this organisation.'
         );
+        renderCompliantHealth(root, compliant);
 
         var safeTasks = tasks || {};
         var safeSales = sales || {};
@@ -271,13 +330,6 @@
     }
 
     function renderDashboard(root, data) {
-        var cases = data.operational_cases || {};
-        var casesHost = root.querySelector('[data-dashboard-cases]');
-        if (casesHost) {
-            casesHost.hidden = cases.availability === 'not_enabled' || !cases.availability;
-            var casesText = casesHost.querySelector('[data-dashboard-cases-count]');
-            casesText.textContent = cases.availability === 'ok' ? String(cases.active_count) + ' active cases · ' + String(cases.overdue_count) + ' overdue · ' + String(cases.awaiting_verification_count) + ' awaiting verification' : 'Case counts unavailable — retry';
-        }
         var tasks = data.tasks || {};
         var operations = data.operations || {};
         var sales = data.sales || {};

@@ -56,6 +56,38 @@ def _iso(value: Any) -> Any:
     return value
 
 
+def np3_audit_coverage(health: dict[str, Any]) -> dict[str, Any]:
+    """Translate the NP3 register health into the Overview coverage contract.
+
+    The generic framework catalogue is useful for configuration, but it cannot see
+    tailored logs or evidence derived from Core. Overview must therefore use the
+    same NP3 register result an operator sees after opening the NP3 workspace.
+    """
+    current_controls = int(health.get("ok") or 0)
+    needs_attention = int(health.get("needs_attention") or 0)
+    total_controls = current_controls + needs_attention
+    return {
+        "current_controls": current_controls,
+        "total_controls": total_controls,
+        "percent": round((current_controls / total_controls) * 100) if total_controls else 0,
+        "label": "NP3 audit evidence status",
+    }
+
+
+def module_summary_health(coverage: dict[str, Any], *, overdue: int = 0) -> dict[str, int]:
+    """Provide one comparable, operational health summary for every module card."""
+    evidence_ready = int(coverage.get("current_controls") or 0)
+    total_controls = int(coverage.get("total_controls") or 0)
+    return {
+        "score": int(coverage.get("percent") or 0),
+        "current_controls": evidence_ready,
+        "total_controls": total_controls,
+        "evidence_ready": evidence_ready,
+        "needs_attention": max(0, total_controls - evidence_ready),
+        "overdue": overdue,
+    }
+
+
 def serialise_record(record: ComplianceRecord) -> dict[str, Any]:
     return _iso(
         {
@@ -631,6 +663,25 @@ class ComplianceService:
             records = []
             reconciliation = {}
         frameworks = self.evaluate(org_id, records=records, reconciliation=reconciliation)
+        for framework in frameworks:
+            overdue = sum(
+                1
+                for control in framework["controls"]
+                if str(control.get("reason") or "").startswith("Overdue since")
+            )
+            framework["summary_health"] = module_summary_health(framework["evidence_coverage"], overdue=overdue)
+        # The tailored NP3 register considers structured logs and evidence derived
+        # from Core. Project that exact health into the module summary rather than
+        # showing the generic catalogue count beside a different NP3 audit count.
+        if profile is not None and profile.enabled and (profile.settings or {}).get("food_control_programme") == "np3":
+            np3_health = self.np3_audit(org_id)["health"]
+            for framework in frameworks:
+                if framework["slug"] == "np3-food-control":
+                    framework["np3_audit_health"] = np3_health
+                    framework["evidence_coverage"] = np3_audit_coverage(np3_health)
+                    framework["summary_health"] = module_summary_health(
+                        framework["evidence_coverage"], overdue=int(np3_health.get("overdue") or 0)
+                    )
         counts = {"compliant": 0, "attention": 0, "setup": 0}
         for framework in frameworks:
             counts[framework["state"]] += 1
@@ -655,13 +706,8 @@ class ComplianceService:
             else {},
             "priority_actions": build_priority_actions(profile, frameworks, reconciliation, records=records),
             "evidence_readiness": {
-                "current_controls": sum(
-                    1
-                    for framework in frameworks
-                    for control in framework["controls"]
-                    if control["state"] == "compliant"
-                ),
-                "total_controls": sum(len(framework["controls"]) for framework in frameworks),
+                "current_controls": sum(framework["summary_health"]["evidence_ready"] for framework in frameworks),
+                "total_controls": sum(framework["summary_health"]["total_controls"] for framework in frameworks),
                 "label": "Current operational evidence, not a legal compliance score.",
             },
             "core_proof_candidates": self.recent_core_proof(org_id) if profile else [],
@@ -685,7 +731,22 @@ class ComplianceService:
         derived_evidence, live_summary = (
             derive_np3_core_evidence(self.session, org_id) if profile and profile.enabled else ([], {})
         )
-        rows = build_np3_audit_rows(records, derived_evidence)
+        staff = (
+            [
+                {
+                    "id": str(user.id),
+                    "name": " ".join(part for part in (user.first_name, user.last_name) if part) or user.email,
+                    "created_at": user.created_at,
+                }
+                for user in self.session.query(User)
+                .filter(User.org_id == org_id, User.is_active.is_(True))
+                .order_by(User.first_name, User.last_name, User.email)
+                .all()
+            ]
+            if profile and profile.enabled
+            else []
+        )
+        rows = build_np3_audit_rows(records, derived_evidence, staff=staff)
         review_interval_months = settings.get("np3_review_interval_months", 6)
         check_review_intervals = settings.get("np3_check_review_intervals", {})
         for row in rows:
@@ -706,7 +767,83 @@ class ComplianceService:
         for row in rows:
             for event in row["history"]:
                 event["signed_off_by"] = signers.get(event.pop("created_by_user_id"), "Former team member")
-        counts = {state: sum(1 for row in rows if row["state"] == state) for state in ("ready", "attention", "missing")}
+        # Recap topics can appear in two navigation sections. They are one underlying
+        # control, so health cards and notifications deliberately count them once.
+        unique_rows = list({row["control_id"]: row for row in rows}.values())
+        counts = {
+            state: sum(1 for row in unique_rows if row["state"] == state) for state in ("ready", "attention", "missing")
+        }
+        today = date.today()
+        overdue_rows = [row for row in unique_rows if row.get("review_due_date") and row["review_due_date"] < today]
+        due_soon_rows = [
+            row
+            for row in unique_rows
+            if row.get("review_due_date") and today <= row["review_due_date"] <= today + timedelta(days=30)
+        ]
+        staff_actions = [
+            {"control_id": row["control_id"], "topic": row["topic"]} | action
+            for row in unique_rows
+            for action in row.get("staff_actions", [])
+        ]
+        guidance_actions = [row for row in unique_rows if row["guidance_update_required"]]
+        remediation_rows = [
+            row for row in unique_rows if any(event["status"] in {"open", "failed"} for event in row["history"])
+        ]
+        work_queue = (
+            [
+                {
+                    "kind": "staff-training",
+                    "severity": "attention",
+                    "control_id": action["control_id"],
+                    "title": f"Record training and competency for {action['name']}",
+                    "description": action["reason"],
+                    "person": action["name"],
+                }
+                for action in staff_actions
+            ]
+            + [
+                {
+                    "kind": "overdue-review",
+                    "severity": "overdue",
+                    "control_id": row["control_id"],
+                    "title": f"Review overdue: {row['topic']}",
+                    "description": "The scheduled NP3 sign-off is overdue. Review the evidence and create a fresh attestation.",
+                    "due_date": row["review_due_date"],
+                }
+                for row in overdue_rows
+            ]
+            + [
+                {
+                    "kind": "guidance-update",
+                    "severity": "attention",
+                    "control_id": row["control_id"],
+                    "title": f"Guidance changed: {row['topic']}",
+                    "description": "The official NP3 guidance changed after the last sign-off. Reconfirm this check.",
+                }
+                for row in guidance_actions
+            ]
+            + [
+                {
+                    "kind": "open-remediation",
+                    "severity": "attention",
+                    "control_id": row["control_id"],
+                    "title": f"Follow up an open record: {row['topic']}",
+                    "description": "A logged deviation, incident or corrective action is still open.",
+                }
+                for row in remediation_rows
+            ]
+            + [
+                {
+                    "kind": "due-soon-review",
+                    "severity": "due-soon",
+                    "control_id": row["control_id"],
+                    "title": f"Review due soon: {row['topic']}",
+                    "description": "Review the current evidence before the scheduled sign-off date.",
+                    "due_date": row["review_due_date"],
+                }
+                for row in due_soon_rows
+            ]
+        )
         return _iso(
             {
                 "verification": {
@@ -716,16 +853,29 @@ class ComplianceService:
                 },
                 "default_review_interval_months": review_interval_months,
                 "preparation_items": PREPARATION_ITEMS,
-                "categories": [category for category, _topics in NP3_AUDIT_CATEGORIES],
+                "categories": [
+                    {"key": f"section-{index}", "title": category}
+                    for index, (category, _topics) in enumerate(NP3_AUDIT_CATEGORIES)
+                ],
                 "rows": rows,
                 "counts": counts,
+                "staff": staff,
+                "health": {
+                    "ok": counts["ready"],
+                    "needs_attention": counts["attention"] + counts["missing"],
+                    "needs_evidence": counts["missing"],
+                    "overdue": len(overdue_rows),
+                    "due_soon": len(due_soon_rows),
+                    "staff_actions": len(staff_actions),
+                    "open_remediation": len(remediation_rows),
+                },
+                "work_queue": work_queue,
                 "configuration_required": not bool(profile and profile.enabled),
                 "core_evidence": (
                     self.data_coverage(org_id, records=records) | {"live_np3_evidence": live_summary}
                     if profile and profile.enabled
                     else {}
                 ),
-                "disclaimer": "This checklist reflects the verification-confirmation topics. Keep the current National Programme guidance available; the verifier determines the final scope.",
             }
         )
 

@@ -90,8 +90,8 @@
       var detailsBlock = hasDetails
         ? '<div id="' + detailsId + '" class="system-findings-item__details" hidden><p class="system-findings-item__details-title">What triggered this</p><div class="system-findings-item__details-body">' + triggerHtml + '</div></div>'
         : '';
-      var actionBlock = '';
-      if (checkId === 'expired_materials') {
+      var actionBlock = genericFindingAction(f && f.data);
+      if (!actionBlock && checkId === 'expired_materials') {
         var expiredIds = [];
         if (f.data && Array.isArray(f.data.expired_raw_materials)) {
           f.data.expired_raw_materials.forEach(function (x) {
@@ -113,7 +113,7 @@
               menuItems +
             '</div>' +
           '</div>';
-      } else if (checkId === 'tasks_due') {
+      } else if (!actionBlock && checkId === 'tasks_due') {
         actionBlock = '<a href="/core?tab=tasks" class="btn btn-secondary btn-sm" hx-boost="false">Open tasks</a>';
       }
       return (
@@ -130,6 +130,20 @@
       );
     }).join('');
     banner.style.display = 'block';
+  }
+
+  function safeInternalHref(value) {
+    var href = value == null ? '' : String(value).trim();
+    return href.charAt(0) === '/' && href.charAt(1) !== '/' ? href : '';
+  }
+
+  function genericFindingAction(data) {
+    var finding = data && data.system_finding && typeof data.system_finding === 'object' ? data.system_finding : null;
+    var action = finding && finding.action && typeof finding.action === 'object' ? finding.action : null;
+    var href = action ? safeInternalHref(action.href) : '';
+    if (!href) return '';
+    var label = action.label == null ? 'Open finding' : String(action.label);
+    return '<a href="' + escapeHtml(href) + '" class="btn btn-secondary btn-sm" hx-boost="false">' + escapeHtml(label) + '</a>';
   }
 
   function onFindingActionClick(ev) {
@@ -184,7 +198,17 @@
   function formatTriggerDetails(checkId, data) {
     if (!data || typeof data !== 'object') return '';
     var parts = [];
-    if (checkId === 'expired_materials') {
+    var moduleFinding = data.system_finding && typeof data.system_finding === 'object' ? data.system_finding : null;
+    if (moduleFinding && Array.isArray(moduleFinding.details)) {
+      moduleFinding.details.slice(0, 6).forEach(function (detail) {
+        if (!detail || typeof detail !== 'object') return;
+        var title = detail.title == null ? 'Action' : String(detail.title);
+        var description = detail.description == null ? '' : String(detail.description);
+        var href = safeInternalHref(detail.href);
+        var action = href ? '<a href="' + escapeHtml(href) + '" hx-boost="false">' + escapeHtml(String(detail.action_label || 'Open')) + '</a>' : '';
+        parts.push('<p class="system-findings-item__detail-section"><strong>' + escapeHtml(title) + ':</strong> ' + escapeHtml(description) + (action ? ' ' + action : '') + '</p>');
+      });
+    } else if (checkId === 'expired_materials') {
       var expired = data.expired_raw_materials;
       if (Array.isArray(expired) && expired.length > 0) {
         parts.push('<p class="system-findings-item__detail-section"><strong>Expired raw material(s):</strong> ' +

@@ -4,15 +4,21 @@ from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+from app.core.backend.corechecks import CheckResult
+from app.core.backend.system_status import _signals_from_results
 from app.features.compliant.modules.nz_alcohol.catalogue import control_reference, framework_applies
+from app.features.compliant.modules.nz_alcohol.module import _np3_workspace_summary
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
     NP3_AUDIT_CATEGORIES,
     NP3_EVIDENCE_PLAYBOOKS,
     NP3_GUIDANCE_VERSION,
     build_np3_audit_rows,
+    evidence_playbook,
+    np3_log_template,
 )
 from app.features.compliant.modules.nz_alcohol.workflow_rules import rules_for_profile
-from app.features.compliant.service import build_priority_actions
+from app.features.compliant.routes.page_routes import _food_safety_programme
+from app.features.compliant.service import build_priority_actions, module_summary_health, np3_audit_coverage
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,6 +38,71 @@ def test_nz_alcohol_module_has_a_dedicated_page():
     assert "Liquor licence" in configuration
 
 
+def test_module_alert_contract_projects_into_the_generic_core_health_bar():
+    signals = _signals_from_results(
+        [
+            CheckResult(
+                check_id="example.module",
+                flagged=True,
+                data={
+                    "system_finding": {
+                        "category": "Example compliance",
+                        "action": {"href": "/compliant/example", "label": "Open example"},
+                    },
+                    "system_alerts": [{"id": "example-overall"}, {"id": "example-action"}],
+                },
+            )
+        ]
+    )
+
+    assert signals[-1] == {
+        "type": "MODULE_SYSTEM_FINDING",
+        "category": "module",
+        "breach_type": "MODULE_REQUIREMENT",
+        "has_issue": True,
+        "in_active_use": False,
+        "count": 2,
+        "message": "Example compliance",
+        "href": "/compliant/example",
+        "action_label": "Open example",
+    }
+
+
+def test_np3_overview_coverage_uses_the_register_health_not_the_generic_catalogue():
+    assert np3_audit_coverage({"ok": 4, "needs_attention": 34}) == {
+        "current_controls": 4,
+        "total_controls": 38,
+        "percent": 11,
+        "label": "NP3 audit evidence status",
+    }
+
+
+def test_module_summary_health_uses_one_consistent_card_contract():
+    assert module_summary_health({"current_controls": 4, "total_controls": 38, "percent": 11}, overdue=2) == {
+        "score": 11,
+        "current_controls": 4,
+        "total_controls": 38,
+        "evidence_ready": 4,
+        "needs_attention": 34,
+        "overdue": 2,
+    }
+
+
+def test_np3_emits_the_dashboard_workspace_summary_contract():
+    assert _np3_workspace_summary({"ok": 4, "needs_attention": 34, "overdue": 2}) == {
+        "workspace": "compliant",
+        "module_name": "NP3",
+        "href": "/compliant/nz-alcohol/food-safety",
+        "action_label": "Open NP3",
+        "score": 11,
+        "current_controls": 4,
+        "total_controls": 38,
+        "evidence_ready": 4,
+        "needs_attention": 34,
+        "overdue": 2,
+    }
+
+
 def test_complaint_spelling_redirects_to_the_compliant_workspace():
     routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
     assert 'route("/complaint"' in routes
@@ -49,9 +120,40 @@ def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
     # The Flask app's Jinja root is app/ui/templates.  Guard the template it actually
     # renders, rather than the separately served /ui/shared asset directory.
     sidebar = (ROOT / "app" / "ui" / "templates" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")
-    assert tabs.count('hx-boost="false"') == 3
+    assert tabs.count('hx-boost="false"') == 4
     assert 'href="/compliant" hx-boost="false"' in sidebar
     assert 'href="/api/compliant/np3-audit?format=csv" hx-boost="false"' in audit
+
+
+def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeholders():
+    tabs = (
+        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_nz_alcohol_tabs.html"
+    ).read_text(encoding="utf-8")
+    routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
+    configuration = (ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "configuration.js").read_text(
+        encoding="utf-8"
+    )
+    placeholder = (
+        ROOT
+        / "app"
+        / "features"
+        / "compliant"
+        / "frontend"
+        / "templates"
+        / "compliant"
+        / "food_safety_coming_soon.html"
+    ).read_text(encoding="utf-8")
+
+    assert _food_safety_programme({"food_control_programme": "np1"}) == "np1"
+    assert _food_safety_programme({"food_control_programme": "np2"}) == "np2"
+    assert _food_safety_programme({"food_control_programme": "unexpected"}) == "np3"
+    assert 'href="/compliant/nz-alcohol/food-safety"' in tabs
+    assert 'href="/compliant/nz-alcohol/evidence"' in tabs
+    assert "food_control_programme|upper" in tabs
+    assert 'route("/compliant/nz-alcohol/food-safety"' in routes
+    assert 'route("/compliant/nz-alcohol/evidence"' in routes
+    assert "updateFoodSafetyTab" in configuration
+    assert "support is coming soon" in placeholder
 
 
 def test_selected_national_programme_is_the_only_programme_in_the_plan():
@@ -125,6 +227,32 @@ def test_np3_controls_carry_a_guidance_mapping_for_an_auditor_to_check():
     )
     assert control_reference("np3-food-control", "cleaning-and-hygiene") == "Cleaning and sanitising"
     assert control_reference("customs-alcohol", "reconciliation") is None
+
+
+def test_np3_mindmap_gaps_are_explicit_controls_with_audit_ready_registers():
+    """Water and preservation controls must not disappear into a generic hazard note."""
+    water = evidence_playbook("water-supply")
+    assert water["page"] == 21
+    assert water["log_template"]["key"] == "water_check"
+    assert any("self-supply" in note.lower() for note in water["reference_notes"])
+    assert np3_log_template("maintenance")["key"] == "maintenance_check"
+    assert np3_log_template("unsafe-unsuitable-food")["key"] == "unsafe_food_incident"
+    assert evidence_playbook("water-activity-control")["page"] == 55
+    assert evidence_playbook("acidification-fermentation-control")["page"] == 57
+
+
+def test_np3_labelling_check_captures_pre_visit_alcohol_label_evidence():
+    labels = evidence_playbook("food-labelling-advertising")
+    assert labels["page"] == 61
+    assert {field["key"] for field in labels["fields"]} >= {
+        "label_or_artwork",
+        "label_requirements_check",
+        "pre_visit_submission_reference",
+    }
+    assert any("pregnancy warning" in note.lower() for note in labels["reference_notes"])
+    label_register = np3_log_template("food-labelling-advertising")
+    assert label_register["key"] == "packaging_and_label_review"
+    assert any(field["key"] == "pre_visit_submission" for field in label_register["fields"])
 
 
 def test_np3_check_calls_out_when_the_guidance_changed_since_its_last_attestation():

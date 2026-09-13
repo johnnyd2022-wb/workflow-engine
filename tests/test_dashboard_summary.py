@@ -10,6 +10,7 @@ from app.core.backend.backend import (
     _dashboard_build_action_board,
     _dashboard_build_compliance_summary,
     _dashboard_count_red_amber,
+    _dashboard_module_workspace_summaries,
     _dashboard_open_action_item_dates,
     _dashboard_operations_summary,
     _dashboard_parse_date_like,
@@ -152,6 +153,45 @@ def test_dashboard_action_board_routes_compliant_evidence_to_its_own_workspace()
     assert item["href"] == "/compliant"
     assert item["workspace"] == "Compliant"
     assert item["count"] == 2
+
+
+def test_dashboard_projects_module_workspace_summaries_without_check_id_branches():
+    summaries = _dashboard_module_workspace_summaries(
+        [
+            SimpleNamespace(
+                check_id="any.future.module",
+                data={
+                    "workspace_summary": {
+                        "workspace": "compliant",
+                        "module_name": "NP3",
+                        "href": "/compliant/nz-alcohol/food-safety",
+                        "action_label": "Open NP3",
+                        "score": 11,
+                        "current_controls": 4,
+                        "total_controls": 38,
+                        "evidence_ready": 4,
+                        "needs_attention": 34,
+                        "overdue": 2,
+                    }
+                },
+            )
+        ],
+        "compliant",
+    )
+
+    assert summaries == [
+        {
+            "module_name": "NP3",
+            "href": "/compliant/nz-alcohol/food-safety",
+            "action_label": "Open NP3",
+            "score": 11,
+            "current_controls": 4,
+            "total_controls": 38,
+            "evidence_ready": 4,
+            "needs_attention": 34,
+            "overdue": 2,
+        }
+    ]
 
 
 def test_dashboard_operations_summary_org_isolated(db):
