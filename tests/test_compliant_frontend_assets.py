@@ -135,7 +135,8 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "data-np3-control-detail" not in audit
     assert ">NP3</strong>" in audit
     assert "np3-overview-panels" in audit
-    assert audit.index('np3-audit-rail') < audit.index('data-np3-core-evidence') < audit.index('data-np3-health-progress')
+    assert audit.index('np3-audit-layout') < audit.index('np3-audit-rail') < audit.index('np3-audit-content')
+    assert audit.index('data-np3-core-evidence') < audit.index('data-np3-health-progress') < audit.index('np3-audit-register')
     assert "data-np3-health-progress" in audit
     assert "AUDIT PREP" in audit
     assert "np3-rail-register" in audit
@@ -191,8 +192,8 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert ".compliant-framework-summary__progress" in stylesheet
     assert ".np3-check-search{display:grid;grid-template-columns:12px minmax(0,1fr)" in stylesheet
     assert "padding:0!important;border:0!important" in stylesheet
-    assert ".np3-overview-panels{grid-template-columns:minmax(200px,.85fr)" in stylesheet
-    assert "gap:14px;align-items:start" in stylesheet
+    assert ".np3-audit-layout{display:grid;grid-template-columns:220px minmax(0,1fr)" in stylesheet
+    assert ".np3-audit-content .np3-overview-panels{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:stretch" in stylesheet
 
 
 def test_shared_favicon_uses_the_biz_e_status_dot():
