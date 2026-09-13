@@ -167,6 +167,7 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert "compliant-framework-summary__metric--ready" in stylesheet
     assert "compliant-framework-summary__metric--attention" in stylesheet
     assert "compliant-framework-summary__metric--overdue" in stylesheet
+    assert ".np3-category-tab strong{font-size:.875rem;font-weight:500" in stylesheet
 
 
 def test_audit_pack_does_not_overclaim_tamper_evidence():
