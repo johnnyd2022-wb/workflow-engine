@@ -123,6 +123,8 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "compliant-framework-summary" in dashboard_script
     assert "summary_health" in dashboard_script
     assert "Compliance score:" in dashboard_script
+    assert "np3ReadinessBar" in dashboard_script
+    assert "framework.slug === 'np3-food-control'" in dashboard_script
     assert "current evidence controls" in dashboard_script
     assert "evidence ready" in dashboard_script
     assert "need attention" in dashboard_script
@@ -178,6 +180,7 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert ".np3-overview-panels .np3-core-evidence__stats span,.np3-overview-panels .np3-health-card span" in stylesheet
     assert ".np3-health-progress__track" in stylesheet
     assert ".np3-health-progress__counts{display:flex;justify-content:space-between" in stylesheet
+    assert ".compliant-framework-summary__progress" in stylesheet
     assert ".np3-check-search{display:grid;grid-template-columns:17px minmax(0,1fr)" in stylesheet
     assert "padding:0!important;border:0!important" in stylesheet
 

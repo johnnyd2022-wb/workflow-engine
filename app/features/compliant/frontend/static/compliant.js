@@ -92,6 +92,19 @@
     metric.appendChild(document.createTextNode(' ' + label));
     return metric;
   }
+  function np3ReadinessBar(health) {
+    var bar = document.createElement('div');
+    bar.className = 'compliant-framework-summary__progress';
+    bar.setAttribute('role', 'progressbar');
+    bar.setAttribute('aria-label', 'NP3 evidence readiness');
+    bar.setAttribute('aria-valuemin', '0');
+    bar.setAttribute('aria-valuemax', '100');
+    bar.setAttribute('aria-valuenow', String(health.score));
+    var fill = document.createElement('span');
+    fill.style.width = Math.max(0, Math.min(100, health.score)) + '%';
+    bar.appendChild(fill);
+    return bar;
+  }
   function renderModuleHealth(frameworks) {
     var target = frameworkRoot; clear(target);
     if (!frameworks.length) return;
@@ -100,6 +113,7 @@
       var card = document.createElement('article'); card.className = 'module-health-card compliant-framework-summary state-' + framework.state;
       card.appendChild(textElement('h2', framework.name, 'compliant-framework-summary__title'));
       card.appendChild(textElement('p', 'Compliance score: ' + health.score + '%', 'compliant-framework-summary__score'));
+      if (framework.slug === 'np3-food-control') card.appendChild(np3ReadinessBar(health));
       card.appendChild(textElement('p', health.currentControls + ' / ' + health.totalControls + ' current evidence controls', 'compliant-framework-summary__coverage'));
       var metrics = document.createElement('div'); metrics.className = 'compliant-framework-summary__metrics';
       metrics.appendChild(moduleMetric(health.evidenceReady, 'evidence ready', 'ready'));
