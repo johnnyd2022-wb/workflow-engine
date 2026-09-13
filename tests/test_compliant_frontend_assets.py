@@ -188,7 +188,7 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert ".np3-health-progress__track" in stylesheet
     assert ".np3-health-progress__counts{display:flex;justify-content:space-between" in stylesheet
     assert ".compliant-framework-summary__progress" in stylesheet
-    assert ".np3-check-search{display:grid;grid-template-columns:15px minmax(0,1fr)" in stylesheet
+    assert ".np3-check-search{display:grid;grid-template-columns:12px minmax(0,1fr)" in stylesheet
     assert "padding:0!important;border:0!important" in stylesheet
 
 
