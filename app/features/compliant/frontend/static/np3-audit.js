@@ -10,6 +10,7 @@
   var categoryRoot = root.querySelector('[data-np3-categories]');
   var activeCategoryHeading = root.querySelector('[data-np3-active-category]');
   var healthCards = root.querySelector('[data-np3-health-cards]');
+  var healthProgress = root.querySelector('[data-np3-health-progress]');
   var queue = root.querySelector('[data-np3-work-queue]');
   var queueItems = root.querySelector('[data-np3-work-queue-items]');
   var checkSearch = root.querySelector('[data-np3-check-search]');
@@ -186,8 +187,33 @@
   function renderHealth() {
     clear(healthCards);
     var health = audit.health || {};
-    healthCards.appendChild(healthCard('ok', health.ok || 0, 'Evidence ready'));
-    healthCards.appendChild(healthCard('attention', health.needs_attention || 0, 'Needs attention'));
+    var ready = Number(health.ok || 0);
+    var needsAttention = Number(health.needs_attention || 0);
+    var total = ready + needsAttention;
+    var percent = total ? Math.round((ready / total) * 100) : 0;
+    if (healthProgress) {
+      clear(healthProgress);
+      var score = text('strong', percent + '%', 'np3-health-progress__score');
+      var track = document.createElement('div');
+      track.className = 'np3-health-progress__track';
+      track.setAttribute('role', 'progressbar');
+      track.setAttribute('aria-label', 'NP3 evidence readiness');
+      track.setAttribute('aria-valuemin', '0');
+      track.setAttribute('aria-valuemax', '100');
+      track.setAttribute('aria-valuenow', String(percent));
+      var fill = document.createElement('span');
+      fill.style.width = percent + '%';
+      track.appendChild(fill);
+      var counts = document.createElement('div');
+      counts.className = 'np3-health-progress__counts';
+      counts.appendChild(text('span', ready + ' ready'));
+      counts.appendChild(text('span', total + ' total'));
+      healthProgress.appendChild(score);
+      healthProgress.appendChild(track);
+      healthProgress.appendChild(counts);
+    }
+    healthCards.appendChild(healthCard('ok', ready, 'Evidence ready'));
+    healthCards.appendChild(healthCard('attention', needsAttention, 'Needs attention'));
     healthCards.appendChild(healthCard('overdue', health.overdue || 0, 'Overdue review'));
     healthCards.appendChild(healthCard('due-soon', health.due_soon || 0, 'Due soon'));
     healthCards.appendChild(healthCard('remediation', health.open_remediation || 0, 'Open remediation'));

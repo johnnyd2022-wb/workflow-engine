@@ -51,6 +51,8 @@ def test_np3_audit_keeps_evidence_in_the_expanded_check():
     assert "matchesSearch" in script
     assert "Search results" in script
     assert "np3-health-card" in script
+    assert "np3-health-progress" in script
+    assert "np3-health-progress__counts" in script
     assert "require evidence" in script
     assert "np3-category-tab__evidence-needed" in script
     assert "openControlDetail" not in script
@@ -131,6 +133,7 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "data-np3-control-detail" not in audit
     assert ">NP3</strong>" in audit
     assert "np3-overview-panels" in audit
+    assert "data-np3-health-progress" in audit
     assert "AUDIT PREP" in audit
     assert "np3-rail-register" in audit
     assert "np3-check-search" in audit
@@ -173,6 +176,8 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert "compliant-framework-summary__metric--overdue" in stylesheet
     assert ".np3-category-tab strong{font-size:.875rem;font-weight:500" in stylesheet
     assert ".np3-overview-panels .np3-core-evidence__stats span,.np3-overview-panels .np3-health-card span" in stylesheet
+    assert ".np3-health-progress__track" in stylesheet
+    assert ".np3-health-progress__counts{display:flex;justify-content:space-between" in stylesheet
 
 
 def test_shared_favicon_uses_the_biz_e_status_dot():
