@@ -168,6 +168,15 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert "compliant-framework-summary__metric--attention" in stylesheet
     assert "compliant-framework-summary__metric--overdue" in stylesheet
     assert ".np3-category-tab strong{font-size:.875rem;font-weight:500" in stylesheet
+    assert ".np3-overview-panels .compliant-eyebrow{font-family:Inter" in stylesheet
+
+
+def test_shared_favicon_uses_the_biz_e_status_dot():
+    base = (_REPO_ROOT / "app" / "core" / "frontend" / "shared" / "base_spa.html").read_text(encoding="utf-8")
+
+    assert "fill='%232DD4BF' fill-opacity='.22'" in base
+    assert "%3Ccircle cx='16' cy='16' r='7' fill='%232DD4BF'" in base
+    assert "font-weight='700'%3EF%3C/text%3E" not in base
 
 
 def test_audit_pack_does_not_overclaim_tamper_evidence():
