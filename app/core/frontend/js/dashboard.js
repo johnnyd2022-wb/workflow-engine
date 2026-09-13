@@ -114,6 +114,21 @@
         return metric;
     }
 
+    function dashboardReadinessBar(score, moduleName) {
+        var percent = Math.max(0, Math.min(100, Number(score) || 0));
+        var bar = document.createElement('div');
+        bar.className = 'dash-compliant-health__progress';
+        bar.setAttribute('role', 'progressbar');
+        bar.setAttribute('aria-label', String(moduleName || 'Compliance') + ' evidence readiness');
+        bar.setAttribute('aria-valuemin', '0');
+        bar.setAttribute('aria-valuemax', '100');
+        bar.setAttribute('aria-valuenow', String(percent));
+        var fill = document.createElement('span');
+        fill.style.width = percent + '%';
+        bar.appendChild(fill);
+        return bar;
+    }
+
     function renderCompliantHealth(root, compliantWorkspace) {
         var host = byData(root, '[data-dashboard-compliant-health]');
         var card = byData(root, '[data-dashboard-compliant-card]');
@@ -135,6 +150,7 @@
             var title = document.createElement('p'); title.className = 'dash-compliant-health__title';
             title.textContent = String(module.module_name || 'Compliance') + ' compliance score: ' + String(module.score || 0) + '%';
             section.appendChild(title);
+            section.appendChild(dashboardReadinessBar(module.score, module.module_name));
             var coverage = document.createElement('p'); coverage.className = 'dash-compliant-health__coverage';
             coverage.textContent = String(module.current_controls || 0) + ' / ' + String(module.total_controls || 0) + ' current evidence controls';
             section.appendChild(coverage);

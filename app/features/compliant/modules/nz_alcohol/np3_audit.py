@@ -38,6 +38,14 @@ def _field_guidance(key: str, label: str) -> tuple[str, str]:
             "Record the batch traced, the result and how quickly the product could be located.",
             "Batch B2408 traced to supplier lots and three customers in 38 min",
         ),
+        "label_requirements_check": (
+            "Confirm the current retail label against the applicable alcohol requirements: ABV and standard drinks, pregnancy warning where alcohol is over 1.15% ABV, and any permitted claim.",
+            "ABV, standard drinks and pregnancy warning checked; no prohibited health claim",
+        ),
+        "pre_visit_submission_reference": (
+            "Record when and how the current label pack was supplied to the council or verifier before the visit.",
+            "Email to council food verifier, 12 September 2026",
+        ),
     }
     if key in specific:
         return specific[key]
@@ -400,21 +408,25 @@ NP3_LOG_TEMPLATES: dict[str, dict[str, Any]] = {
         ),
     ),
     "food-labelling-advertising": _log_template(
-        "packaging_handling",
-        "Packaging handling verification",
-        "Spot-check that empty packaging and filled containers are handled to prevent contamination. The listed practices are site-specific applications of NP3's packaging-care requirement.",
+        "packaging_and_label_review",
+        "Packaging and label review",
+        "One entry per current retail label or label pack. Confirm packaging is protected from contamination and record the current version, label review, and pre-visit submission status.",
         "reading",
         (
             {"key": "event_date", "label": "Check date", "type": "date", "required": True},
+            {"key": "product_or_label", "label": "Retail product or label", "type": "text", "required": True},
+            {"key": "label_artwork_version", "label": "Label/artwork version", "type": "text", "required": True},
+            {"key": "label_requirements_checked", "label": "Requirements checked", "type": "textarea", "required": True},
             {
-                "key": "checked_practice",
-                "label": "Practice checked",
+                "key": "pre_visit_submission",
+                "label": "Current label pack status",
                 "type": "select",
                 "required": True,
                 "options": (
-                    ("bottles-boxed-until-filling", "Bottles kept boxed/sealed until filling"),
-                    ("corked-immediately", "Corked/capped immediately after filling"),
-                    ("packaging-storage", "Packaging stored away from contamination risk"),
+                    ("sent-to-council", "Sent to council before the visit"),
+                    ("sent-to-verifier", "Sent to verifier before the visit"),
+                    ("ready-to-send", "Ready to send when requested"),
+                    ("not-yet-required", "Not yet requested / no visit scheduled"),
                 ),
             },
             {
@@ -633,7 +645,7 @@ NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
     "food-labelling-advertising": (
         {
             "title": "Core workflow evidence",
-            "detail": "Use the production workflow to retain the operational evidence; the packaging register records the contamination-prevention spot check once.",
+            "detail": "Use the production workflow for the batch context; the packaging and label register retains the current label version, review and pre-visit submission once.",
             "workspace_url": "/core/executions/live",
             "workspace_label": "Open live executions",
         },
@@ -901,11 +913,18 @@ NP3_EVIDENCE_PLAYBOOKS = {
         61,
         (
             "Approved current label/artwork and version",
-            "Label review covering ingredients, allergens, lot/date and claims",
+            "Label review covering alcohol content, standard drinks, pregnancy warning where required, and permitted claims",
+            "Current label pack supplied to council or verifier before the visit",
         ),
         (
             ("label_or_artwork", "Label/artwork version reviewed"),
+            ("label_requirements_check", "Alcohol label requirements checked"),
+            ("pre_visit_submission_reference", "Pre-visit label pack submission reference"),
             ("approval_reference", "Label approval or review reference"),
+        ),
+        reference_notes=(
+            "For packaged drinks with more than 1.15% ABV, confirm the mandatory pregnancy warning label is present.",
+            "For alcohol at or above 0.5% ABV, confirm ABV and standard-drinks information; do not use prohibited health or nutrition claims on drinks above 1.15% ABV.",
         ),
     ),
     "biological-hazards": _playbook(
@@ -1153,7 +1172,8 @@ NP3_AUDIT_CATEGORIES = (
 PREPARATION_ITEMS = (
     "Current National Programme guidance and all relevant records and documentation.",
     "Suitable table or workspace, and access to relevant staff members.",
-    "Retail label and advertising examples sent to the verifier before the visit, if used.",
+    "Current packaging labels/artwork for each retail product sent to the council or verifier before the visit, including pregnancy warning labels where required.",
+    "Label review evidence covering ABV, standard drinks, pregnancy warning where alcohol is over 1.15% ABV, and any health or nutrition claims.",
     "Any site health-and-safety requirements or risks communicated before the visit.",
     "A translator arranged where needed.",
 )

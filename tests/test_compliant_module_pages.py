@@ -241,6 +241,20 @@ def test_np3_mindmap_gaps_are_explicit_controls_with_audit_ready_registers():
     assert evidence_playbook("acidification-fermentation-control")["page"] == 57
 
 
+def test_np3_labelling_check_captures_pre_visit_alcohol_label_evidence():
+    labels = evidence_playbook("food-labelling-advertising")
+    assert labels["page"] == 61
+    assert {field["key"] for field in labels["fields"]} >= {
+        "label_or_artwork",
+        "label_requirements_check",
+        "pre_visit_submission_reference",
+    }
+    assert any("pregnancy warning" in note.lower() for note in labels["reference_notes"])
+    label_register = np3_log_template("food-labelling-advertising")
+    assert label_register["key"] == "packaging_and_label_review"
+    assert any(field["key"] == "pre_visit_submission" for field in label_register["fields"])
+
+
 def test_np3_check_calls_out_when_the_guidance_changed_since_its_last_attestation():
     record = SimpleNamespace(
         control_id="registration-scope",

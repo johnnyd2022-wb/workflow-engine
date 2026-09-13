@@ -157,8 +157,13 @@ def test_dashboard_projects_module_owned_compliance_health():
     assert "data-dashboard-compliant-health" in dashboard
     assert "data-dashboard-compliant-card" in dashboard
     assert "renderCompliantHealth" in script
+    assert "dashboardReadinessBar" in script
+    assert "dash-compliant-health__progress" in script
     assert "data-dashboard-compliant-link" in script
     assert "compliant.nz_alcohol" not in script
+
+    stylesheet = (_REPO_ROOT / "app" / "core" / "frontend" / "css" / "dashboard_spa.css").read_text(encoding="utf-8")
+    assert ".dash-compliant-health__progress" in stylesheet
 
 
 def test_np3_health_uses_attention_as_one_actionable_total():

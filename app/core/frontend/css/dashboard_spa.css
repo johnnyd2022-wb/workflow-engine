@@ -218,6 +218,22 @@ html[data-spa-theme="dark"] .dashboard-v3 .dash-workspace-card--unavailable {
   font-size: 0.75rem;
 }
 
+.dashboard-v3 .dash-compliant-health__progress {
+  height: 5px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--dash-border);
+}
+
+.dashboard-v3 .dash-compliant-health__progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2f9e8f;
+  transition: width 0.2s ease;
+}
+
 .dashboard-v3 .dash-compliant-health__metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
