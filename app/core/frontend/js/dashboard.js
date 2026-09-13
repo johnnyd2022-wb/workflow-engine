@@ -330,13 +330,6 @@
     }
 
     function renderDashboard(root, data) {
-        var cases = data.operational_cases || {};
-        var casesHost = root.querySelector('[data-dashboard-cases]');
-        if (casesHost) {
-            casesHost.hidden = cases.availability === 'not_enabled' || !cases.availability;
-            var casesText = casesHost.querySelector('[data-dashboard-cases-count]');
-            casesText.textContent = cases.availability === 'ok' ? String(cases.active_count) + ' active cases · ' + String(cases.overdue_count) + ' overdue · ' + String(cases.awaiting_verification_count) + ' awaiting verification' : 'Case counts unavailable — retry';
-        }
         var tasks = data.tasks || {};
         var operations = data.operations || {};
         var sales = data.sales || {};
