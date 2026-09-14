@@ -195,6 +195,7 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert "padding:0!important;border:0!important" in stylesheet
     assert ".np3-audit-layout{display:grid;grid-template-columns:220px minmax(0,1fr)" in stylesheet
     assert "box-sizing:border-box;border:1px solid #dce4e9;border-radius:16px;background:#fff" in stylesheet
+    assert ".np3-audit-layout .np3-audit-prep .np3-prep-panel li{position:relative;padding:9px 10px 9px 28px" in stylesheet
     assert ".np3-overview-panels{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:stretch" in stylesheet
     assert ".np3-audit-layout .np3-audit-prep>details>summary" in stylesheet
 
