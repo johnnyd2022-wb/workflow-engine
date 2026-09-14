@@ -135,8 +135,9 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "data-np3-control-detail" not in audit
     assert ">NP3</strong>" in audit
     assert "np3-overview-panels" in audit
-    assert audit.index('np3-audit-layout') < audit.index('np3-audit-rail') < audit.index('np3-audit-content')
-    assert audit.index('data-np3-core-evidence') < audit.index('data-np3-health-progress') < audit.index('np3-audit-register')
+    assert audit.index('np3-overview-panels') < audit.index('np3-audit-layout')
+    assert audit.index('data-np3-health-progress') < audit.index('data-np3-core-evidence') < audit.index('np3-audit-layout')
+    assert audit.index('np3-audit-rail') < audit.index('np3-audit-prep') < audit.index('np3-audit-content')
     assert "data-np3-health-progress" in audit
     assert "AUDIT PREP" in audit
     assert "np3-rail-register" in audit
@@ -190,10 +191,13 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert ".np3-health-progress__track" in stylesheet
     assert ".np3-health-progress__counts{display:flex;justify-content:space-between" in stylesheet
     assert ".compliant-framework-summary__progress" in stylesheet
-    assert ".np3-check-search{display:grid;grid-template-columns:12px minmax(0,1fr)" in stylesheet
+    assert ".np3-check-search{display:grid;grid-template-columns:10px minmax(0,1fr)" in stylesheet
     assert "padding:0!important;border:0!important" in stylesheet
     assert ".np3-audit-layout{display:grid;grid-template-columns:220px minmax(0,1fr)" in stylesheet
-    assert ".np3-audit-content .np3-overview-panels{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:stretch" in stylesheet
+    assert "box-sizing:border-box;border:1px solid #dce4e9;border-radius:16px;background:#fff" in stylesheet
+    assert ".np3-audit-layout .np3-audit-prep .np3-prep-panel li{position:relative;padding:9px 10px 9px 28px" in stylesheet
+    assert ".np3-overview-panels{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:stretch" in stylesheet
+    assert ".np3-audit-layout .np3-audit-prep>details>summary" in stylesheet
 
 
 def test_shared_favicon_uses_the_biz_e_status_dot():
