@@ -34,6 +34,7 @@ import argparse
 import os
 import re
 import sys
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -42,13 +43,13 @@ import requests
 from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent))
-from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
+from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
 
 CSRF_META_RE = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"')
 
 
-class ReplayRejected(RuntimeError):
+class ReplayRejectedError(RuntimeError):
     """A real API call was rejected. Stop -- don't paper over it."""
 
 
@@ -65,11 +66,11 @@ class ReplayClient:
             timeout=30,
         )
         if response.status_code != 200 or response.json().get("requires_2fa"):
-            raise ReplayRejected(f"login failed or requires 2FA: {response.status_code} {response.text[:500]}")
+            raise ReplayRejectedError(f"login failed or requires 2FA: {response.status_code} {response.text[:500]}")
         page = self.session.get(f"{self.base_url}/", timeout=30)
         match = CSRF_META_RE.search(page.text)
         if not match:
-            raise ReplayRejected("could not find csrf-token meta tag on authenticated page")
+            raise ReplayRejectedError("could not find csrf-token meta tag on authenticated page")
         self._csrf_token = match.group(1)
 
     def _headers(self) -> dict[str, str]:
@@ -79,13 +80,13 @@ class ReplayClient:
     def post(self, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
         response = self.session.post(f"{self.base_url}{path}", json=json_body, headers=self._headers(), timeout=60)
         if response.status_code not in (200, 201):
-            raise ReplayRejected(f"POST {path} -> {response.status_code}: {response.text[:1000]}")
+            raise ReplayRejectedError(f"POST {path} -> {response.status_code}: {response.text[:1000]}")
         return response.json()
 
     def get(self, path: str) -> dict[str, Any]:
         response = self.session.get(f"{self.base_url}{path}", timeout=60)
         if response.status_code != 200:
-            raise ReplayRejected(f"GET {path} -> {response.status_code}: {response.text[:1000]}")
+            raise ReplayRejectedError(f"GET {path} -> {response.status_code}: {response.text[:1000]}")
         return response.json()
 
 
@@ -153,7 +154,7 @@ class MarkerStore:
                 {"org_id": str(self.org_id), "name": workflow_name},
             ).first()
             if not row:
-                raise ReplayRejected(f"no process named {workflow_name!r} exists for org {self.org_id}")
+                raise ReplayRejectedError(f"no process named {workflow_name!r} exists for org {self.org_id}")
             return row[0]
 
     def compliant_profile_enabled(self) -> bool:
@@ -204,25 +205,69 @@ def _execute_purchase(client: ReplayClient, store: MarkerStore, event: ReplayEve
 
 
 def _ingredient_inputs_for_step(
-    store: MarkerStore, ingredient_codes: tuple[str, ...]
+    store: MarkerStore, known_input_quantities: dict[str, tuple[str, str]]
 ) -> list[dict[str, Any]]:
-    if not ingredient_codes:
+    """Consume exactly the codes with a known per-batch amount (the inferred raw-material
+    tier). Legacy-evidence and clean-tier codes are ordering-only, per the "real
+    constraint that changes scope" decision in docs/whistlebird-replay-plan.md -- they
+    are never fabricated into a consumption quantity here.
+    """
+    if not known_input_quantities:
         return []
     inputs = []
     with store._engine.connect() as conn:
-        for code in ingredient_codes:
+        for code, (quantity, unit) in known_input_quantities.items():
             row = conn.execute(
                 text(
-                    "SELECT id, name, unit, quantity FROM inventory_items "
+                    "SELECT id, name FROM inventory_items "
                     "WHERE org_id = :org_id AND extra_data->>'ingredient_code' = :code LIMIT 1"
                 ),
                 {"org_id": str(store.org_id), "code": code},
             ).first()
-            if row:
-                inputs.append(
-                    {"inventory_item_id": str(row[0]), "name": row[1], "quantity": None, "unit": row[2]}
-                )
+            if row is None:
+                raise ReplayRejectedError(f"no inventory item carries ingredient_code={code!r} yet")
+            inputs.append({"inventory_item_id": str(row[0]), "name": row[1], "quantity": quantity, "unit": unit})
     return inputs
+
+
+def _produced_item_for_step(store: MarkerStore, execution_step_id: UUID, name: str) -> dict[str, Any] | None:
+    with store._engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT id, name, unit, quantity FROM inventory_items "
+                "WHERE org_id = :org_id AND source_execution_step_id = :step_id AND name = :name LIMIT 1"
+            ),
+            {"org_id": str(store.org_id), "step_id": str(execution_step_id), "name": name},
+        ).first()
+        if row is None:
+            return None
+        return {"id": row[0], "name": row[1], "unit": row[2], "quantity": row[3]}
+
+
+def _consume_whole_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "inventory_item_id": str(item["id"]),
+        "name": item["name"],
+        "quantity": str(item["quantity"]),
+        "unit": item["unit"],
+    }
+
+
+def _vat_batch_volume_l(batch: wm.ProductionBatch) -> str | None:
+    """Best-available real number, never a fabricated one. See the replay plan's
+    "VAT-batch output volume" note for the fallback order and why."""
+    if batch.vat_volume_l is not None and batch.vat_volume_l > 0:
+        return str(batch.vat_volume_l)
+    if batch.bottlings:
+        size_ml = batch.bottlings[0].get("bottle_size_ml")
+        if size_ml:
+
+
+            total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
+            computed = total_bottles * Decimal(str(size_ml)) / Decimal("1000")
+            if computed > 0:
+                return str(computed)
+    return None  # caller falls back to the documented last-resort placeholder
 
 
 def _execute_create_execution(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> None:
@@ -242,29 +287,88 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
     marker = batch.marker if batch else trial.marker
     step_key = event.payload["step_key"]
     step_index = event.payload["step_index"]
+    step_number = step_index + 1
 
     execution_id = store.existing_execution_id(marker)
     if execution_id is None:
-        raise ReplayRejected(f"execution for {marker!r} not found -- create_execution event must run first")
-    if store.step_already_completed(execution_id, step_index + 1):
+        raise ReplayRejectedError(f"execution for {marker!r} not found -- create_execution event must run first")
+    if store.step_already_completed(execution_id, step_number):
         return
 
     steps = store.execution_steps(execution_id)
-    step_row = next((s for s in steps if s["step_number"] == step_index + 1), None)
+    step_row = next((s for s in steps if s["step_number"] == step_number), None)
     if step_row is None:
-        raise ReplayRejected(f"{marker} has no step_number={step_index + 1}")
+        raise ReplayRejectedError(f"{marker} has no step_number={step_number}")
 
     actual_inputs: list[dict[str, Any]] = []
-    if batch is not None and step_key in ("maceration", "rhubarb_maceration"):
-        actual_inputs = _ingredient_inputs_for_step(store, batch.ingredient_codes)
+    actual_outputs: list[dict[str, Any]] = []
+
+    if batch is not None:
+        is_rosella = batch.product_line == "rosella"
+        produces_vat = (step_key == "rhubarb_maceration") if is_rosella else (step_key == "aging")
+        produces_bottles = step_key == "bottling"
+
+        if step_key in ("maceration", "rhubarb_maceration"):
+            actual_inputs.extend(
+                _ingredient_inputs_for_step(store, event.payload.get("known_input_quantities", {}))
+            )
         if step_key == "rhubarb_maceration" and batch.base_vat is not None:
-            base_marker = f"{batch.product_line}-vat{batch.base_vat}"  # placeholder; real lookup below
+            base_marker = f"{batch.product_line}-vat{batch.base_vat}"
+            base_execution_id = store.existing_execution_id(base_marker)
+            if base_execution_id is None:
+                raise ReplayRejectedError(f"{marker} needs base VAT{batch.base_vat}, which was never loaded")
+            base_steps = store.execution_steps(base_execution_id)
+            base_vat_item = None
+            for s in base_steps:
+                candidate = _produced_item_for_step(store, s["id"], "VAT batch")
+                if candidate:
+                    base_vat_item = candidate
+            if base_vat_item is None:
+                raise ReplayRejectedError(f"base VAT{batch.base_vat}'s VAT batch item was never produced")
+            actual_inputs.append(_consume_whole_item(base_vat_item))
+
+        if produces_vat:
+            volume = _vat_batch_volume_l(batch) or "1"
+            actual_outputs.append(
+                {"name": "VAT batch", "quantity": volume, "unit": "L"}
+            )
+
+        if produces_bottles:
+            vat_item = None
+            for s in steps:
+                if s["step_number"] < step_number:
+                    candidate = _produced_item_for_step(store, s["id"], "VAT batch")
+                    if candidate:
+                        vat_item = candidate
+            if vat_item is not None:
+                actual_inputs.append(_consume_whole_item(vat_item))
+            if batch.bottlings:
+
+
+                total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
+                if total_bottles > 0:
+                    actual_outputs.append(
+                        {"name": "Bottled product", "quantity": str(total_bottles), "unit": "units"}
+                    )
+
+        if step_key == "labelling":
+            bottled_item = None
+            for s in steps:
+                if s["step_number"] < step_number:
+                    candidate = _produced_item_for_step(store, s["id"], "Bottled product")
+                    if candidate:
+                        bottled_item = candidate
+            if bottled_item is not None:
+                actual_inputs.append(_consume_whole_item(bottled_item))
+
+    elif trial is not None and step_key == "library_stock" and trial.library_ml:
+        actual_outputs.append({"name": "Library stock", "quantity": str(trial.library_ml), "unit": "mL"})
 
     client.post(
         f"/api/core/executions/{execution_id}/steps/{step_row['id']}/complete",
         {
             "actual_inputs": actual_inputs,
-            "actual_outputs": [],
+            "actual_outputs": actual_outputs,
             "execution_data": {
                 "batch_ref": marker,
                 "batch_label": (batch.batch_label if batch else trial.label),
@@ -280,7 +384,7 @@ def _execute_customs(client: ReplayClient, store: MarkerStore, event: ReplayEven
     if store.existing_compliance_record(marker):
         return
     if not store.compliant_profile_enabled():
-        raise ReplayRejected("customs-alcohol compliant profile is not enabled for this org yet")
+        raise ReplayRejectedError("customs-alcohol compliant profile is not enabled for this org yet")
     client.post(
         "/api/compliant/records",
         {
@@ -325,7 +429,7 @@ def run_replay(
     with engine.connect() as conn:
         row = conn.execute(text("SELECT id FROM organisations WHERE name = :name"), {"name": org_name}).first()
         if not row:
-            raise ReplayRejected(f"org {org_name!r} does not exist -- run --ensure-test-tenant first")
+            raise ReplayRejectedError(f"org {org_name!r} does not exist -- run --ensure-test-tenant first")
         org_id = row[0]
     engine.dispose()
 
@@ -336,10 +440,9 @@ def run_replay(
     counts = {"issued": 0, "skipped": 0, "total": len(events)}
     for index, event in enumerate(events):
         handler = DISPATCH[event.event_type]
-        before = counts["issued"] + counts["skipped"]
         try:
             handler(client, store, event)
-        except ReplayRejected:
+        except ReplayRejectedError:
             print(f"[{index + 1}/{len(events)}] REJECTED at {event.event_id} ({event.real_date})", file=sys.stderr)
             raise
         counts["issued"] += 1

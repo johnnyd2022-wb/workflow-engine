@@ -179,6 +179,49 @@ interruption, read it before re-deriving anything)
   `complete_step` response shape before finishing this file — DO NOT trust its current
   contents as more than a skeleton.
 
+**2026-09-14, second pass (research complete, design decisions locked in):**
+- `complete_step`'s JSON response never returns a created output item's id — read it
+  back via a direct DB query (same read-only pattern as `MarkerStore`, matched by
+  `source_execution_step_id` + name), not via the API.
+- Confirmed output shapes: Wildflower/Solstice aging -> "VAT batch" (L); Rosella
+  rhubarb_maceration -> "VAT batch" (L); all four workflows' bottling -> "Bottled
+  product" (units); trials' library_stock -> "Library stock" (mL). No step anywhere
+  configures `custom_expiry`/`ready_date`, so `{"name": ..., "quantity": "..."}` is a
+  fully valid output — no extra fields required. No "active_evidence" Compliant
+  constraint is live for this org's current settings, and freshly-created inventory is
+  never blocked by a ready-date cooldown. All confirmed by direct code reading, not
+  assumed.
+- **Real constraint that changes scope**: the live endpoint requires `actual_inputs`
+  quantities to be genuine positive numbers (`Decimal(str(quantity))`, `>0`) to
+  actually consume anything — unlike the existing ORM-direct script's `quantity: None`
+  "link only, amount unknown" convention (which exists specifically because WB-018
+  says legacy ingredient links have no quantity data and inventing one is exactly the
+  kind of allocation the decisions log says never to do).
+  **Decision**: real per-batch ingredient consumption is only reported through the API
+  where an exact quantity is actually known — the 110 `resolved_by_context`-sourced
+  raw-material records already carry a precise per-batch quantity (2x-multiplied
+  recipe amount) by construction. Legacy-DB ingredient links (`product_actions_flavors
+  .ingredient_codes`, real evidence, no quantity) and clean-tier Alembics receipts (not
+  allocated to a specific batch, WB-018) stay **ordering-only**: the purchase-before-
+  consumption dependency edge is still enforced in the timeline (a real purchase must
+  still exist before the batch that used it), but no `actual_inputs` entry is sent for
+  them, since fabricating a split would be exactly the invented-allocation WB-018
+  already ruled out — just now via the API instead of the ORM. Documented here instead
+  of anywhere in the loaded data itself.
+- **VAT-batch output volume**: not every VAT27+ manifest record has a curated
+  `vat_volume_l` (the sheet has it in places but it was never systematically pulled
+  into the manifest). The real endpoint silently drops an output whose quantity is
+  `<=0`, which would break the chain (bottling has nothing to consume). Fallback order:
+  (1) `batch.vat_volume_l` when curated, (2) total bottles x recorded bottle size in L
+  when both are known (a real computation from real recorded numbers, not a guess),
+  (3) `Decimal("1")` as a last-resort non-zero placeholder **only when neither real
+  number exists**, tracked here as a known gap, never labelled as anything but a plain
+  quantity in the actual API payload (no confidence flag written to the app).
+- Bottling consumes the *entire* VAT-batch item (the whole intermediate is used up by
+  definition) and produces the real recorded bottle count. Labelling consumes the
+  entire bottled-product item. Both are exact, real numbers already in the curated
+  data — no fabrication needed for these two.
+
 ## Build checklist
 
 - [x] Research round 1: auth/CSRF/2FA, trial route, inventory-consumption side effect,

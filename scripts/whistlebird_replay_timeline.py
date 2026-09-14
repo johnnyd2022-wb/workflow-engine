@@ -23,10 +23,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Connection
-
 import whistlebird_migration as wm
+from sqlalchemy import create_engine
 
 DEFAULT_RAW_MATERIAL_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-raw-material-source.json"
 
@@ -42,16 +40,26 @@ class ReplayEvent:
     payload: dict[str, Any] = field(default_factory=dict)
 
 
-def _load_raw_material_manifest(path: Path) -> tuple[list[dict[str, Any]], dict[int, list[str]]]:
-    """Return (all purchase records, {global_vat: [codes purchased for it]})."""
+def _load_raw_material_manifest(
+    path: Path,
+) -> tuple[list[dict[str, Any]], dict[int, list[str]], dict[int, dict[str, tuple[str, str]]]]:
+    """Return (all purchase records, {global_vat: [codes purchased for it]},
+    {global_vat: {code: (quantity, unit)}} -- only for records with a known exact
+    per-batch amount, i.e. the inferred tier. See whistlebird-replay-plan.md's
+    "real constraint that changes scope" note for why clean-tier/legacy codes never
+    appear in the third return value.
+    """
     payload = json.loads(path.read_text(encoding="utf-8"))
     records = list(payload.get("clean_records", [])) + list(payload.get("inferred_records", []))
     codes_by_vat: dict[int, list[str]] = defaultdict(list)
+    known_quantity_by_vat: dict[int, dict[str, tuple[str, str]]] = defaultdict(dict)
     for record in payload.get("inferred_records", []):
         consumed = record.get("consumed_by")
         if consumed and "global_vat" in consumed:
-            codes_by_vat[int(consumed["global_vat"])].append(record["code"])
-    return records, dict(codes_by_vat)
+            vat = int(consumed["global_vat"])
+            codes_by_vat[vat].append(record["code"])
+            known_quantity_by_vat[vat][record["code"]] = (str(record["quantity"]), record["unit"])
+    return records, dict(codes_by_vat), dict(known_quantity_by_vat)
 
 
 def _enrich_ingredient_codes(
@@ -105,7 +113,10 @@ def _purchase_event(record: dict[str, Any]) -> ReplayEvent:
 
 
 def _batch_events(
-    batch: wm.ProductionBatch, purchase_event_by_code: dict[str, str], marker_by_vat: dict[int, str]
+    batch: wm.ProductionBatch,
+    purchase_event_by_code: dict[str, str],
+    marker_by_vat: dict[int, str],
+    known_quantities: dict[str, tuple[str, str]],
 ) -> list[ReplayEvent]:
     step_keys = wm.RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else wm.BOTANICAL_GIN_STEP_KEYS
     raw_dates = [batch.steps[key].step_date if key in batch.steps else None for key in step_keys]
@@ -135,13 +146,18 @@ def _batch_events(
                 if base_marker is None:
                     raise ValueError(f"Rosella {batch.marker} needs base VAT{batch.base_vat}, which was never loaded")
                 depends.append(f"step:{base_marker}:aging")
+        payload: dict[str, Any] = {"batch": batch, "step_key": key, "step_index": index}
+        if key in ("maceration", "rhubarb_maceration"):
+            payload["known_input_quantities"] = {
+                code: known_quantities[code] for code in batch.ingredient_codes if code in known_quantities
+            }
         events.append(
             ReplayEvent(
                 event_id=step_id,
                 event_type="complete_step",
                 real_date=resolved[index],
                 depends_on=tuple(depends),
-                payload={"batch": batch, "step_key": key, "step_index": index},
+                payload=payload,
             )
         )
         prev_step_id = step_id
@@ -244,7 +260,7 @@ def build_timeline(
     manifest_batches, _excluded = wm._load_manifest(production_manifest_path)
     merged = wm._merge_batches(legacy_batches, manifest_batches)
 
-    raw_records, codes_by_vat = _load_raw_material_manifest(raw_material_manifest_path)
+    raw_records, codes_by_vat, known_quantity_by_vat = _load_raw_material_manifest(raw_material_manifest_path)
     merged = _enrich_ingredient_codes(merged, codes_by_vat)
 
     events: list[ReplayEvent] = []
@@ -276,7 +292,14 @@ def build_timeline(
 
     marker_by_vat = {batch.global_vat: batch.marker for batch in merged}
     for batch in merged:
-        events.extend(_batch_events(batch, purchase_event_by_code, marker_by_vat))
+        events.extend(
+            _batch_events(
+                batch,
+                purchase_event_by_code,
+                marker_by_vat,
+                known_quantity_by_vat.get(batch.global_vat, {}),
+            )
+        )
 
     for trial in trials:
         events.extend(_trial_events(trial))
