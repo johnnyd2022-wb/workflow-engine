@@ -40,6 +40,7 @@ from typing import Any
 from uuid import UUID
 
 import requests
+import urllib3
 from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -54,9 +55,12 @@ class ReplayRejectedError(RuntimeError):
 
 
 class ReplayClient:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, verify_tls: bool = True):
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
+        self.session.verify = verify_tls
+        if not verify_tls:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self._csrf_token: str | None = None
 
     def login(self, email: str, password: str) -> None:
@@ -91,11 +95,26 @@ class ReplayClient:
 
 
 class MarkerStore:
-    """Read-only lookups against the target DB to make the replay idempotent/resumable."""
+    """Read-only lookups against the target DB to make the replay idempotent/resumable.
+
+    `execution_data->>'batch_ref'` is only stamped once an execution's FIRST step
+    completes (see `_execute_complete_step`) -- `POST /api/core/executions` itself has
+    no marker field. `_created_this_run` closes that gap within a single process by
+    caching the id `_execute_create_execution` gets back from the API directly, so nothing
+    tries to create the same execution twice in one run. Across separate runs, a crash
+    landing exactly between "execution created" and "its first step completed" could in
+    principle leave one orphaned, marker-less execution with zero completed steps behind;
+    accepted as a known, narrow, low-harm gap (documented in whistlebird-replay-plan.md)
+    rather than adding more machinery to close a one-request-wide window.
+    """
 
     def __init__(self, target_url: str, org_id: UUID):
         self._engine = create_engine(target_url)
         self.org_id = org_id
+        self._created_this_run: dict[str, str] = {}
+
+    def note_created_execution(self, marker: str, execution_id: str) -> None:
+        self._created_this_run[marker] = execution_id
 
     def existing_inventory_item_id(self, marker: str) -> UUID | None:
         with self._engine.connect() as conn:
@@ -108,7 +127,9 @@ class MarkerStore:
             ).first()
             return row[0] if row else None
 
-    def existing_execution_id(self, marker: str) -> UUID | None:
+    def existing_execution_id(self, marker: str) -> str | None:
+        if marker in self._created_this_run:
+            return self._created_this_run[marker]
         with self._engine.connect() as conn:
             row = conn.execute(
                 text(
@@ -117,7 +138,7 @@ class MarkerStore:
                 ),
                 {"org_id": str(self.org_id), "marker": marker},
             ).first()
-            return row[0] if row else None
+            return str(row[0]) if row else None
 
     def execution_steps(self, execution_id: UUID) -> list[dict[str, Any]]:
         with self._engine.connect() as conn:
@@ -169,11 +190,11 @@ class MarkerStore:
             return bool(row and row[0])
 
 
-def _execute_purchase(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> None:
+def _execute_purchase(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
     record = event.payload["record"]
     marker = event.payload["marker"]
     if store.existing_inventory_item_id(marker):
-        return
+        return False
     name = record.get("name") or record.get("ingredient")
     quantity = record.get("quantity")
     unit = record.get("unit")
@@ -202,6 +223,7 @@ def _execute_purchase(client: ReplayClient, store: MarkerStore, event: ReplayEve
             "metadata": {**extra_data, "import_ref": marker},
         },
     )
+    return True
 
 
 def _ingredient_inputs_for_step(
@@ -270,18 +292,20 @@ def _vat_batch_volume_l(batch: wm.ProductionBatch) -> str | None:
     return None  # caller falls back to the documented last-resort placeholder
 
 
-def _execute_create_execution(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> None:
+def _execute_create_execution(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
     batch = event.payload.get("batch")
     trial = event.payload.get("trial")
     marker = batch.marker if batch else trial.marker
     if store.existing_execution_id(marker):
-        return
+        return False
     workflow_name = batch.workflow_name if batch else trial.workflow_name
     process_id = store.process_id_for_workflow(workflow_name)
-    client.post("/api/core/executions", {"process_id": str(process_id)})
+    response = client.post("/api/core/executions", {"process_id": str(process_id)})
+    store.note_created_execution(marker, response["id"])
+    return True
 
 
-def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> None:
+def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
     batch = event.payload.get("batch")
     trial = event.payload.get("trial")
     marker = batch.marker if batch else trial.marker
@@ -293,7 +317,7 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
     if execution_id is None:
         raise ReplayRejectedError(f"execution for {marker!r} not found -- create_execution event must run first")
     if store.step_already_completed(execution_id, step_number):
-        return
+        return False
 
     steps = store.execution_steps(execution_id)
     step_row = next((s for s in steps if s["step_number"] == step_number), None)
@@ -343,8 +367,6 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
             if vat_item is not None:
                 actual_inputs.append(_consume_whole_item(vat_item))
             if batch.bottlings:
-
-
                 total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
                 if total_bottles > 0:
                     actual_outputs.append(
@@ -376,13 +398,14 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
             },
         },
     )
+    return True
 
 
-def _execute_customs(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> None:
+def _execute_customs(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
     row = event.payload["row"]
     marker = f"customs-{row['id']}"
     if store.existing_compliance_record(marker):
-        return
+        return False
     if not store.compliant_profile_enabled():
         raise ReplayRejectedError("customs-alcohol compliant profile is not enabled for this org yet")
     client.post(
@@ -404,6 +427,7 @@ def _execute_customs(client: ReplayClient, store: MarkerStore, event: ReplayEven
             },
         },
     )
+    return True
 
 
 DISPATCH = {
@@ -422,8 +446,12 @@ def run_replay(
     admin_email: str,
     admin_password: str,
     org_name: str,
+    verify_tls: bool = True,
+    limit: int | None = None,
 ) -> dict[str, int]:
     events = build_timeline(legacy_url, production_manifest_path)
+    if limit is not None:
+        events = events[:limit]
 
     engine = create_engine(target_url)
     with engine.connect() as conn:
@@ -434,18 +462,21 @@ def run_replay(
     engine.dispose()
 
     store = MarkerStore(target_url, org_id)
-    client = ReplayClient(base_url)
+    client = ReplayClient(base_url, verify_tls=verify_tls)
     client.login(admin_email, admin_password)
 
     counts = {"issued": 0, "skipped": 0, "total": len(events)}
     for index, event in enumerate(events):
         handler = DISPATCH[event.event_type]
         try:
-            handler(client, store, event)
+            issued = handler(client, store, event)
         except ReplayRejectedError:
             print(f"[{index + 1}/{len(events)}] REJECTED at {event.event_id} ({event.real_date})", file=sys.stderr)
             raise
-        counts["issued"] += 1
+        if not issued:
+            counts["skipped"] += 1
+        else:
+            counts["issued"] += 1
         if (index + 1) % 25 == 0:
             print(f"[{index + 1}/{len(events)}] {event.event_id} ({event.real_date})")
     return counts
@@ -453,13 +484,15 @@ def run_replay(
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", default="http://localhost:8001")
+    parser.add_argument("--base-url", default="https://localhost:8001")
+    parser.add_argument("--insecure", action="store_true", help="Skip TLS verification (self-signed local certs).")
     parser.add_argument("--legacy-url", default=os.environ.get("WB_LEGACY_DATABASE_URL"))
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
     parser.add_argument("--production-manifest", type=Path, default=wm.DEFAULT_PRODUCTION_MANIFEST)
     parser.add_argument("--admin-email", default=wm.DEFAULT_TEST_ADMIN_EMAIL)
     parser.add_argument("--admin-password-env", default="WHISTLEBIRD_TEST_ADMIN_PASSWORD")
     parser.add_argument("--org-name", default=wm.RESET_ORG_NAME)
+    parser.add_argument("--limit", type=int, default=None, help="Only issue the first N events (smoke-testing).")
     args = parser.parse_args()
     if not args.legacy_url or not args.target_url:
         parser.error("--legacy-url and --target-url are required")
@@ -479,6 +512,8 @@ def main() -> int:
         args.admin_email,
         args.admin_password,
         args.org_name,
+        verify_tls=not args.insecure,
+        limit=args.limit,
     )
     print(result)
     return 0
