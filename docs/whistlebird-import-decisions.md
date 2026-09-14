@@ -97,3 +97,41 @@ VAT51 + VAT1051/Rosella (WB-031, Rosella side), VAT53, VAT54. Still excluded: VA
 26-bottle line (WB-036), and Rosella VAT26's early-method confirmation (unchanged from
 the 2026-09-07 rebuild). Green Gold (gg01) trial output tracked as WB-037, needs a
 script change before it can be imported at all.
+
+## Stage 4: 2026-09-14 -- raw-material (botanical) purchase reconstruction
+
+New manifest: `docs/whistlebird-raw-material-source.json` -- purchase-level curation for the
+same post-legacy-cutoff window (2025-05-13 onward), covering the botanicals consumed by
+every Wildflower/Solstice maceration step already loaded (Stage 3).
+
+**Founder-confirmed methodology (2026-09-14):**
+- Each distillation runs two multi-shot concentrates into one VAT, so real per-batch
+  consumption is **2x** the founder's stated per-shot recipe quantity.
+- Untracked (foraged, no purchase record): Wildflower's Lemon juice, Grapefruit (pink)
+  juice, Lemon peel; Solstice's Kawakawa leaf, fresh orange peel, fresh orange juice.
+- Supplier map: Alembics (Juniper Macedonia/Himalayan, Cinnamon, Liquorice root, Orris
+  root, Coriander seeds, Hibiscus flowers, Lemon Myrtle, Elderflower), Davis Trading
+  (Cardamom, Nutmeg), Moore Wilsons (Dried mango, Dried apples, Sumac Berries, Persian
+  Black Limes), HB Malt Station (Dried orange peel).
+
+**Clean tier (20 records):** real `jill@alembics.co.nz` order-confirmation emails --
+orders #24600, #25053, #26770, #26930, #27558, #27804 (2025-08-10 through 2026-06-11).
+Imported as dated receipts with quantity/price/supplier-batch-number, continuing the
+legacy `ingredients_code` sequences (JBM004+, JBH004+, WNO006+, CIN002+, LR004+, COR005+,
+ORR004+, LM006+, EF003+) -- not allocated to a specific consuming batch, same policy as
+the legacy raw-material import (WB-018). Note: two of these orders' Nutmeg line items
+came from Alembics even though the founder's current mental model has Nutmeg under Davis
+Trading -- both suppliers evidently sold it at different times; kept as emailed.
+
+**Inferred tier (110 records):** no email or database evidence exists for Hibiscus,
+Cardamom, dried orange peel, Persian black lime, Sumac berries, Dried mango, Dried apple,
+Green tea, or Szechuan pepper in this window. One record per consuming VAT, sized to that
+VAT's own 2x-multiplied recipe requirement, dated 3 days before its maceration date,
+supplier per the founder's list (updated same day to add Szechuan pepper -> Davis Trading
+and Green tea -> Countdown/Woolworths), confidence `resolved_by_context`.
+
+**Known gap, same shape as WB-037:** `_raw_material_records` in
+`scripts/whistlebird_migration.py` only reads the legacy database's purchase tables --
+there is no manifest-driven loader for this new file yet, and no mechanism to link a raw
+material receipt as `actual_inputs` on a maceration step. The manifest above is data-only
+until that script extension exists; not attempted in this pass.
