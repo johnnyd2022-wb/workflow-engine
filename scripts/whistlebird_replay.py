@@ -71,7 +71,9 @@ class ReplayClient:
         )
         if response.status_code != 200 or response.json().get("requires_2fa"):
             raise ReplayRejectedError(f"login failed or requires 2FA: {response.status_code} {response.text[:500]}")
-        page = self.session.get(f"{self.base_url}/", timeout=30)
+        # "/" is the public marketing page and carries no CSRF meta tag; the SPA shell
+        # (with it) only renders behind auth, at /core/dashboard.
+        page = self.session.get(f"{self.base_url}/core/dashboard", timeout=30)
         match = CSRF_META_RE.search(page.text)
         if not match:
             raise ReplayRejectedError("could not find csrf-token meta tag on authenticated page")
@@ -79,7 +81,10 @@ class ReplayClient:
 
     def _headers(self) -> dict[str, str]:
         assert self._csrf_token, "login() must run before any mutating call"
-        return {"X-CSRFToken": self._csrf_token}
+        # Flask-WTF's CSRF protection requires a same-origin Referer on HTTPS requests
+        # in addition to the token; a script has no natural referring page, so supply
+        # one explicitly, matching what a real same-origin browser request would send.
+        return {"X-CSRFToken": self._csrf_token, "Referer": f"{self.base_url}/core/dashboard"}
 
     def post(self, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
         response = self.session.post(f"{self.base_url}{path}", json=json_body, headers=self._headers(), timeout=60)
@@ -152,9 +157,12 @@ class MarkerStore:
             return [{"id": r[0], "step_number": r[1], "status": r[2]} for r in rows]
 
     def step_already_completed(self, execution_id: UUID, step_number: int) -> bool:
+        # execution_steps.status is stored as the Python enum's member NAME (upper-case,
+        # e.g. "COMPLETED"), not its lower-case .value the app compares against
+        # internally -- a raw SQL read sees the former, so normalise case here.
         for step in self.execution_steps(execution_id):
             if step["step_number"] == step_number:
-                return step["status"] == "completed"
+                return step["status"].lower() == "completed"
         return False
 
     def existing_compliance_record(self, marker: str) -> bool:
@@ -182,12 +190,49 @@ class MarkerStore:
         with self._engine.connect() as conn:
             row = conn.execute(
                 text(
-                    "SELECT enabled FROM compliant_profiles "
-                    "WHERE org_id = :org_id AND framework_slug = 'customs-alcohol' LIMIT 1"
+                    "SELECT enabled FROM compliance_profiles "
+                    "WHERE org_id = :org_id AND industry_module = 'nz_alcohol' LIMIT 1"
                 ),
                 {"org_id": str(self.org_id)},
             ).first()
             return bool(row and row[0])
+
+    def execution_id_for_global_vat(self, global_vat: int) -> str | None:
+        """Find an execution by its global_vat marker regardless of product line -- a
+        Rosella conversion's base VAT was distilled as Solstice, not Rosella, so
+        `f"{batch.product_line}-vat{base_vat}"` (the Rosella record's OWN product line)
+        is the wrong marker to guess; this looks the base execution up by its own
+        recorded global_vat instead of assuming a product line at all."""
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT DISTINCT execution_id FROM execution_steps "
+                    "WHERE org_id = :org_id AND (execution_data->>'global_vat')::int = :vat LIMIT 1"
+                ),
+                {"org_id": str(self.org_id), "vat": global_vat},
+            ).first()
+            return str(row[0]) if row else None
+
+    def most_recently_created_execution_id(self) -> str | None:
+        """The execution this replay itself created last, so far.
+
+        Timestamps only reflect real historical dates after
+        whistlebird_replay_correct_timestamps.py's later pass -- during replay every row's
+        created_at is "now" -- so this can't filter by a real-history cutoff date. It
+        doesn't need to: replay processes every event in real chronological order, so
+        whatever execution was inserted most recently (by insertion order, i.e. this
+        row's own created_at during THIS run) is, by construction, the one that happened
+        last in real history among everything loaded so far. Used as a customs
+        lodgement's required Core source_ref -- the legacy customs data carries no
+        per-lodgement link to a specific batch, so this is a real, existing link to
+        whatever production activity preceded that lodgement, not a fabricated one.
+        """
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT id FROM executions WHERE org_id = :org_id ORDER BY created_at DESC LIMIT 1"),
+                {"org_id": str(self.org_id)},
+            ).first()
+            return str(row[0]) if row else None
 
 
 def _execute_purchase(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
@@ -337,8 +382,7 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
                 _ingredient_inputs_for_step(store, event.payload.get("known_input_quantities", {}))
             )
         if step_key == "rhubarb_maceration" and batch.base_vat is not None:
-            base_marker = f"{batch.product_line}-vat{batch.base_vat}"
-            base_execution_id = store.existing_execution_id(base_marker)
+            base_execution_id = store.execution_id_for_global_vat(batch.base_vat)
             if base_execution_id is None:
                 raise ReplayRejectedError(f"{marker} needs base VAT{batch.base_vat}, which was never loaded")
             base_steps = store.execution_steps(base_execution_id)
@@ -408,6 +452,14 @@ def _execute_customs(client: ReplayClient, store: MarkerStore, event: ReplayEven
         return False
     if not store.compliant_profile_enabled():
         raise ReplayRejectedError("customs-alcohol compliant profile is not enabled for this org yet")
+    # date_period is a "YYYY-MM" label, not a real date (400s the endpoint's YYYY-MM-DD
+    # parser) -- the actual period bounds are the real lodgement date column, same as
+    # the existing ORM-direct script (apply_customs_lodgements uses source_date for
+    # both period_start and period_end; date_period is only ever a human-readable label).
+    lodgement_date = row["date"]
+    lodgement_date_iso = lodgement_date.isoformat() if hasattr(lodgement_date, "isoformat") else lodgement_date
+    period_label = row.get("date_period") or lodgement_date_iso
+    source_execution_id = store.most_recently_created_execution_id()
     client.post(
         "/api/compliant/records",
         {
@@ -415,12 +467,15 @@ def _execute_customs(client: ReplayClient, store: MarkerStore, event: ReplayEven
             "control_id": "period-lodgement",
             "record_type": "lodgement",
             "status": "complete",
-            "title": f"Customs lodgement {row['date']}",
-            "period_start": row["date_period"],
-            "period_end": row["date_period"],
+            "source_refs": [source_execution_id] if source_execution_id else [],
+            "title": f"Customs lodgement — {period_label}",
+            "period_start": lodgement_date_iso,
+            "period_end": lodgement_date_iso,
+            "evidence_reference": f"Customs alcohol reconciliation lodgement for period {period_label}.",
             "measured_value": str(row["lal"]) if row.get("lal") is not None else None,
             "details": {
                 "import_ref": marker,
+                "period_label": period_label,
                 "lodged_volume": str(row.get("lodged_volume")),
                 "lodged_abv": str(row.get("lodged_abv")),
                 "bottles": str(row.get("bottles")),

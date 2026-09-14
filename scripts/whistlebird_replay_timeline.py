@@ -267,6 +267,15 @@ def build_timeline(
 
     purchase_event_by_code: dict[str, str] = {}
     for legacy_record in legacy_raw_materials:
+        if legacy_record.quantity <= 0:
+            # purchases_ingredients id 17 ("liquorice root", LR001) is recorded with
+            # ingredients_amount = 0 in the legacy database -- a genuine pre-existing
+            # data anomaly (a zero purchase contributes nothing to inventory either
+            # way), not something this replay introduces. The real API correctly
+            # rejects a non-positive quantity ("quantity must be greater than 0"),
+            # which is exactly the kind of thing the old ORM-direct script's bypass of
+            # the endpoint silently let through. Skip rather than fabricate a number.
+            continue
         event = _purchase_event(
             {
                 "source_table": legacy_record.source_table,

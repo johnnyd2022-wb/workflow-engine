@@ -2802,10 +2802,16 @@ def complete_step(execution_id: str, execution_step_id: str):
         # TRANSACTION INTEGRITY: Commit all inventory operations atomically
         # This ensures inventory consumption and output creation are atomic per execution step
         try:
-            # Apply inventory updates
+            # Apply inventory updates. Flush while still inside the guard: a step that only
+            # consumes (no actual_outputs, e.g. a terminal "labelling" step consuming a
+            # bottled-product item) never re-enters allow_inventory_quantity_write via
+            # create_inventory_item below, so these dirty quantity changes would otherwise
+            # sit unflushed until the plain db_session.commit() further down -- outside any
+            # guard -- and autoflush's before_flush check would reject them right there.
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.EXECUTION_STEP_INVENTORY):
                 for inventory_item, new_quantity in inventory_updates:
                     inventory_item.quantity = new_quantity
+                db_session.flush()
 
             # Create inventory items for outputs; when reconciling to untracked, reduce first then create only surplus
             from app.core.backend.reconciliation_service import reconcile_output_to_untracked_reduce_only

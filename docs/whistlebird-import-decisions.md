@@ -135,3 +135,14 @@ and Green tea -> Countdown/Woolworths), confidence `resolved_by_context`.
 there is no manifest-driven loader for this new file yet, and no mechanism to link a raw
 material receipt as `actual_inputs` on a maceration step. The manifest above is data-only
 until that script extension exists; not attempted in this pass.
+
+## Stage 5: 2026-09-15 -- fixes surfaced by the real API-replay run
+
+Replaying Stage 4's raw-material manifest through the live application API (rather than
+direct ORM writes) surfaced a real, pre-existing gap: four Alembics batch numbers
+(`MJUN-PP440328`, `PO786MAR22-1`, `WNUT-NMW-0-1000`, `LIQ-B401600`) are each reused across
+two separate orders, and `inventory_items` enforces a `(org_id, name, supplier_batch_number)`
+uniqueness constraint the ORM-direct script never actually exercised. Disambiguated the
+second occurrence of each with a `-{internal code}` suffix, the same deterministic pattern
+WB-017 already established for the legacy period -- the first (original) occurrence keeps
+its real batch number unchanged. Affected: JBM005, JBH005, WNO007, LR005.
