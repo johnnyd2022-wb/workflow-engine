@@ -328,8 +328,6 @@ def _vat_batch_volume_l(batch: wm.ProductionBatch) -> str | None:
     if batch.bottlings:
         size_ml = batch.bottlings[0].get("bottle_size_ml")
         if size_ml:
-
-
             total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
             computed = total_bottles * Decimal(str(size_ml)) / Decimal("1000")
             if computed > 0:
@@ -378,9 +376,7 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
         produces_bottles = step_key == "bottling"
 
         if step_key in ("maceration", "rhubarb_maceration"):
-            actual_inputs.extend(
-                _ingredient_inputs_for_step(store, event.payload.get("known_input_quantities", {}))
-            )
+            actual_inputs.extend(_ingredient_inputs_for_step(store, event.payload.get("known_input_quantities", {})))
         if step_key == "rhubarb_maceration" and batch.base_vat is not None:
             base_execution_id = store.execution_id_for_global_vat(batch.base_vat)
             if base_execution_id is None:
@@ -397,9 +393,7 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
 
         if produces_vat:
             volume = _vat_batch_volume_l(batch) or "1"
-            actual_outputs.append(
-                {"name": "VAT batch", "quantity": volume, "unit": "L"}
-            )
+            actual_outputs.append({"name": "VAT batch", "quantity": volume, "unit": "L"})
 
         if produces_bottles:
             vat_item = None
@@ -413,9 +407,7 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
             if batch.bottlings:
                 total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
                 if total_bottles > 0:
-                    actual_outputs.append(
-                        {"name": "Bottled product", "quantity": str(total_bottles), "unit": "units"}
-                    )
+                    actual_outputs.append({"name": "Bottled product", "quantity": str(total_bottles), "unit": "units"})
 
         if step_key == "labelling":
             bottled_item = None
