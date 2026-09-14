@@ -146,3 +146,43 @@ uniqueness constraint the ORM-direct script never actually exercised. Disambigua
 second occurrence of each with a `-{internal code}` suffix, the same deterministic pattern
 WB-017 already established for the legacy period -- the first (original) occurrence keeps
 its real batch number unchanged. Affected: JBM005, JBH005, WNO007, LR005.
+
+## Stage 6: 2026-09-15 -- API-replay framework replaces the ORM-direct loader
+
+Per Johnny's direction, `whistlebird_test` is now loaded by two scripts instead of one:
+
+1. **`scripts/whistlebird_replay.py`** replays every historical event (raw material
+   purchase, execution/step, trial, customs lodgement) through the real application API
+   -- the same routes, auth, validation, and business logic (including real inventory
+   consumption) a browser hits. Ordering comes from
+   `scripts/whistlebird_replay_timeline.py`'s date-prioritised topological sort over
+   the same sources `whistlebird_migration.py` already reads.
+2. **`scripts/whistlebird_replay_correct_timestamps.py`** runs after, and is the ONLY
+   place a historical date gets applied -- directly at the database level, keyed off
+   the same import markers. The live API is never given a backdating capability; this
+   script is internal tooling for populating/resetting `whistlebird_test` only.
+
+**No "derived"/`date_confidence`/`timestamp_policy` language reaches the loaded data.**
+Verified by direct SQL sweep across every `execution_data`/`extra_data`/`details`
+column in the org: zero matches. That curation trail lives only in this file and the
+JSON manifests.
+
+**Full verification, exact on every count**: `--verify-import` reports
+`raw_material_items` 200/200, `Rosella gin`/`Solstice gin`/`Wildflower gin` 3/14/38
+each exact, `customs_lodgements` 13/13, `date_mismatches` 0/0, `incomplete_batch_steps`
+0/0, `wording_leaks` all 0. `build_import_verification`'s raw-material baseline was
+extended to include the new manifest (previously only knew about the legacy DB).
+
+**Real bugs found and fixed by going through the real API instead of writing around
+it** (see `docs/whistlebird-replay-plan.md`'s "Real bugs found" section for detail):
+a genuine flush-timing gap in `complete_step` that would affect any real user
+completing a consumption-only step; two Alembics batch-number reuse collisions against
+a uniqueness constraint the ORM-direct path never exercised; one legacy zero-quantity
+data row; and the ORM-direct script's "quantity unknown" `actual_inputs` convention,
+which the real endpoint correctly rejects (real consumption is now only ever reported
+where an exact quantity is actually known).
+
+The old `scripts/whistlebird_migration.py` `apply_*` functions remain as-is (used by
+`--rebuild-whistlebird-test`'s bootstrap, and as the read-only source layer
+`build_timeline()` itself reads from) -- this stage adds a parallel, API-driven loading
+path rather than replacing the underlying data model.

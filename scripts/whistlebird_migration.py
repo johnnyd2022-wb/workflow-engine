@@ -1823,7 +1823,17 @@ def build_import_verification(
             )
         }
         expected_lodgements = source.execute(text("SELECT count(*) FROM customs_lodgements")).scalar_one()
+        zero_quantity_legacy_ingredients = source.execute(
+            text("SELECT count(*) FROM purchases_ingredients WHERE ingredients_amount <= 0")
+        ).scalar_one()
         legacy = _legacy_batches(source)
+    raw_material_manifest_path = Path(__file__).parents[1] / "docs" / "whistlebird-raw-material-source.json"
+    if raw_material_manifest_path.exists():
+        raw_material_manifest = json.loads(raw_material_manifest_path.read_text(encoding="utf-8"))
+        raw_material_sources["docs/whistlebird-raw-material-source.json"] = len(
+            raw_material_manifest.get("clean_records", [])
+        ) + len(raw_material_manifest.get("inferred_records", []))
+    raw_material_sources["purchases_ingredients"] -= zero_quantity_legacy_ingredients
     manifest_batches: list[ProductionBatch] = []
     if manifest_path and manifest_path.exists():
         manifest_batches, _ = _load_manifest(manifest_path)

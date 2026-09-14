@@ -226,33 +226,55 @@ interruption, read it before re-deriving anything)
 
 - [x] Research round 1: auth/CSRF/2FA, trial route, inventory-consumption side effect,
       customs route, rate limiting
-- [x] Timeline compiler, tested against real legacy DB + both manifests (625 events,
-      no cycles, dependencies verified)
-- [ ] Research round 2 (dispatched): exact `outputs`/`inputs` schema per process-step
-      template (Wildflower/Solstice/Rosella/Trial), full `complete_step` response
-      shape and remaining validation (custom_expiry/ready_date/untracked
-      reconciliation), whether "active_evidence" Compliant constraint is actually wired
-      to these steps, whether a freshly-created raw material passes
-      `is_inventory_item_ready_for_consumption`
-- [ ] Rewrite `scripts/whistlebird_replay.py`'s step-completion payload builder once
-      round 2 lands: produce VAT-batch output on aging/rhubarb_maceration, consume it
-      + produce bottled-product output on bottling, consume bottled-product on
-      labelling, wire the real base-vat item id into a Rosella conversion's
-      rhubarb_maceration inputs (read back via `GET /api/core/executions/<id>` after
-      the base batch's aging step completes)
-- [ ] Unit tests for the ordering algorithm itself (hard-dependency violations must be
-      caught; date-tiebreak behavior)
-- [ ] Start a real dev server against `whistlebird_test`'s DB and smoke-test the client
-      end-to-end against a tiny slice (one purchase, one execution, its first step)
-      before trusting it on the full 625-event timeline
-- [ ] Full replay run against `whistlebird_test`, with resumability actually exercised
-      (kill it partway through, rerun, confirm no duplicates)
-- [ ] Timestamp-correction after-script, keyed off the same import markers
-- [ ] Verification: same checks the current script already has
-      (`build_import_verification`) plus a new check that NO row anywhere in the org
-      contains `date_confidence`/`timestamp_policy`/"derived" in its `execution_data`
-      or `extra_data`
-- [ ] Update `docs/whistlebird-production-import.md` / decisions log to describe the
-      new two-pass approach and retire the "derived" language from anything
-      user-facing in the app
+- [x] Timeline compiler, tested against real legacy DB + both manifests
+- [x] Research round 2: exact `outputs`/`inputs` schema per process-step template,
+      `complete_step` response shape, no custom_expiry/ready_date/active-evidence
+      constraints apply to these four workflows
+- [x] Replay client rewritten with real output/input semantics per round 2's findings
+- [x] Unit tests for the ordering algorithm (8 tests, dependency-over-date precedence,
+      cycle/missing-dep detection, deterministic tiebreak)
+- [x] Local dev server (`uv run workflow start`, port 8005, HTTPS) used instead of the
+      shared `workflow-engine-test` Docker container -- that container bakes its image
+      at build time and doesn't pick up local edits, which would have hidden every fix
+      below
+- [x] **Full 624-event replay succeeds end-to-end against a real running server.**
+      Verified idempotent (second full run: 0 issued / 624 skipped) and verified clean
+      from a fresh reset (624 issued / 0 skipped, zero leftover orphans)
+- [x] Timestamp-correction after-script
+      (`scripts/whistlebird_replay_correct_timestamps.py`), keyed off the same import
+      markers via a second call to `build_timeline()`
+- [x] Verification: `--verify-import` reports every count exact
+      (raw_material_items 200/200, Rosella/Solstice/Wildflower 3/14/38 each exact,
+      customs 13/13, date_mismatches 0/0, incomplete_batch_steps 0/0, wording_leaks
+      all 0) -- extended `build_import_verification`'s expected raw-material baseline
+      to include the new manifest (it only knew about the legacy DB before)
+- [x] Direct SQL sweep for "derived"/"date_confidence"/"timestamp_policy" across every
+      `execution_data`/`extra_data`/`details` column in the org: **zero matches**
+- [x] Regression test (`tests/test_executions.py::TestConsumptionOnlyStepCompletion`)
+      for the flush-timing bug found in `complete_step` -- verified it fails without
+      the fix and passes with it
+- [ ] Update `docs/whistlebird-production-import.md` to describe the new two-pass
+      approach
 - [ ] Open the MR
+
+## Real bugs found and fixed by going through the real API (not a complete list of
+work -- see git log for the full story; this is the "why this was worth doing" summary)
+
+1. **`app/core/backend/backend.py`'s `complete_step`**: a step that only consumes
+   inventory (no `actual_outputs` -- e.g. a terminal step like "labelling") never
+   re-enters `allow_inventory_quantity_write` via `create_inventory_item`, so the
+   earlier quantity update sat dirty and unflushed until the plain
+   `db_session.commit()` outside any guard -- `before_flush`'s authorization check
+   correctly rejected it as unauthorized. This affects any real user completing a
+   consumption-only step, not just this replay. Fixed with a `db_session.flush()`
+   while still inside the guard.
+2. Four Alembics batch numbers are reused across separate orders and tripped a real
+   `(org_id, name, supplier_batch_number)` uniqueness constraint the ORM-direct script
+   never exercised (disambiguated per WB-017's existing pattern).
+3. One legacy raw-material row (`purchases_ingredients` id 17, "liquorice root") has a
+   genuine zero recorded quantity -- the real endpoint's positive-quantity check caught
+   it; the ORM-direct script had silently written a zero-quantity row.
+4. The ORM-direct script's "link only, quantity unknown" `actual_inputs` convention
+   (`quantity: None`, used for legacy ingredient links with no recorded amount) fails
+   the real endpoint's `Decimal(str(quantity))` parse outright -- real consumption can
+   only be reported where an exact amount is actually known.
