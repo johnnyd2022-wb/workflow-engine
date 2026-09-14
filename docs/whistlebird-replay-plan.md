@@ -133,22 +133,78 @@ dependency edges above.
 - Whether Flask-Limiter rate-limits apply beyond `/auth/*` (matters for ~700+ calls in
   one process).
 
+## Progress log (update this as work lands — this is the resume point after any
+interruption, read it before re-deriving anything)
+
+**2026-09-14, first pass:**
+- Auth/CSRF/routes research done (see below) — login is plain POST /auth/login
+  (test admin has 2FA disabled by construction), CSRF token comes from a `<meta>` tag
+  on any authenticated page and does not rotate per request, org scope is derived
+  purely from the logged-in user's session (no header/param needed), no rate limits on
+  business routes, trials use the exact same execution/step endpoints as production
+  batches (no separate trial API).
+- **Key finding that changes the client design**: `complete_step`
+  (`app/core/backend/backend.py:2234`) does NOT require outputs to be pre-created via
+  `/api/core/inventory` — passing an `actual_outputs` entry with no `inventory_item_id`
+  makes the route create the inventory item itself as part of the same transaction
+  (`output_creations`, first seen ~backend.py:2790). This matters a lot: it means the
+  replay client must NOT try to pre-create VAT-batch/bottled-product inventory items
+  the way `apply_production_batches` does at the ORM level — it must describe the
+  output on the `complete_step` call and then read the created item's id back out of
+  the response for later steps (e.g. bottling needs the VAT item id from the aging
+  step; a Rosella conversion needs the base VAT's item id) via the follow-up `GET
+  /api/core/executions/<id>` call.
+- Also confirmed (important, matches Johnny's whole thesis): inventory consumption for
+  `actual_inputs` is real business logic that lives ONLY in this HTTP route, not in
+  `ExecutionRepository.complete_step` — the existing ORM-direct script never actually
+  exercises it. Going through the real endpoint is a genuine behavioural upgrade, not
+  just a formality.
+- Timeline compiler (`scripts/whistlebird_replay_timeline.py`) is written and tested:
+  625 events, zero dependency-cycle errors, zero missing deps, Rosella-conversion
+  ordering verified (base VAT's `aging` step lands before the linked conversion's
+  `rhubarb_maceration`), first execution is a trial (2023-06-18) then Wildflower VAT1
+  (2024-01-22) — matches "Wildflower is first product" once trials are set aside.
+  44 "date inversions" were found (a raw-material purchase dated after something that
+  depends on it) — these are all legacy-DB rows bought in bulk well ahead of need
+  (e.g. a Dec-2024 restock nominally "after" an Oct-2024 batch that in reality drew
+  from stock bought earlier); the topological sort still orders them correctly by
+  dependency, this is just a note that the *soft* date-ordering isn't purely
+  chronological where bulk restocking created lead time. Not a bug — expected.
+- `scripts/whistlebird_replay.py` (the client) is a first-draft skeleton, NOT yet
+  correct: it currently passes `actual_outputs: []` on every step, which is wrong for
+  `aging`/`rhubarb_maceration` (must produce the VAT-batch item) and `bottling` (must
+  produce the bottled-product item and consume the VAT item), and has a dead
+  placeholder line for the Rosella base-vat input lookup. Second research pass
+  dispatched to map the exact `outputs`/`inputs` schema per workflow step and the
+  `complete_step` response shape before finishing this file — DO NOT trust its current
+  contents as more than a skeleton.
+
 ## Build checklist
 
-- [ ] Research: auth/CSRF/2FA under test_client, trial route, inventory-consumption
-      side effect, customs route, rate limiting (dispatched, awaiting results)
-- [ ] Timeline compiler (`_build_replay_timeline()` or new module): pure function,
-      legacy DB + both manifests in, ordered typed-event list out. Unit-testable
-      without touching a database.
+- [x] Research round 1: auth/CSRF/2FA, trial route, inventory-consumption side effect,
+      customs route, rate limiting
+- [x] Timeline compiler, tested against real legacy DB + both manifests (625 events,
+      no cycles, dependencies verified)
+- [ ] Research round 2 (dispatched): exact `outputs`/`inputs` schema per process-step
+      template (Wildflower/Solstice/Rosella/Trial), full `complete_step` response
+      shape and remaining validation (custom_expiry/ready_date/untracked
+      reconciliation), whether "active_evidence" Compliant constraint is actually wired
+      to these steps, whether a freshly-created raw material passes
+      `is_inventory_item_ready_for_consumption`
+- [ ] Rewrite `scripts/whistlebird_replay.py`'s step-completion payload builder once
+      round 2 lands: produce VAT-batch output on aging/rhubarb_maceration, consume it
+      + produce bottled-product output on bottling, consume bottled-product on
+      labelling, wire the real base-vat item id into a Rosella conversion's
+      rhubarb_maceration inputs (read back via `GET /api/core/executions/<id>` after
+      the base batch's aging step completes)
 - [ ] Unit tests for the ordering algorithm itself (hard-dependency violations must be
-      caught; date-tiebreak behavior; resumability of a partial run)
-- [ ] Replay client: auth session bootstrap, per-event-type dispatch to the right route,
-      idempotency check, fail-loud on rejection
-- [ ] Verify real inventory decrement happens on step completion (or add the missing
-      write if the route doesn't do it — this would be a real app bug worth fixing
-      separately, not worked around)
-- [ ] Timestamp-correction after-script, keyed off the same markers
-- [ ] End-to-end run against `whistlebird_test` (reset -> replay -> correct -> verify)
+      caught; date-tiebreak behavior)
+- [ ] Start a real dev server against `whistlebird_test`'s DB and smoke-test the client
+      end-to-end against a tiny slice (one purchase, one execution, its first step)
+      before trusting it on the full 625-event timeline
+- [ ] Full replay run against `whistlebird_test`, with resumability actually exercised
+      (kill it partway through, rerun, confirm no duplicates)
+- [ ] Timestamp-correction after-script, keyed off the same import markers
 - [ ] Verification: same checks the current script already has
       (`build_import_verification`) plus a new check that NO row anywhere in the org
       contains `date_confidence`/`timestamp_policy`/"derived" in its `execution_data`
