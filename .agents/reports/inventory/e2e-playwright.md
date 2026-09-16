@@ -70,7 +70,8 @@ encoding check, so those two tests specifically exercise multipart uploads.
 - `test_config_units_returns_allowed_units` (AC27)
 - `test_decode_barcode_is_deprecated_and_returns_410` (AC28)
 - `test_reconcile_matching_untracked_returns_untracked_items` (AC29, incl. the
-  both-params-required empty-result case)
+  both-params-required empty-result case) — also fixed: differently-named/unit decoys
+  added (verified 2026-09-15 by findings-sweep)
 - `test_reconcile_via_addition_maps_onto_untracked_item` (AC30, incl. missing-fields and
   malformed-UUID unhappy paths)
 

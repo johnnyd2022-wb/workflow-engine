@@ -171,8 +171,12 @@ observability-instrumentation one); flagged as a gap below.
 
 - Live OTel/Grafana LGTM stack not running locally — event names verified by
   unit test and code reading, not by a live log/dashboard capture.
-- The same `BLUEPRINT_FEATURE` dotted-path bug affects `crm` (pre-existing,
-  out of scope for this feature-scoped run — see above).
+- The same `BLUEPRINT_FEATURE` dotted-path bug affected `crm` (pre-existing,
+  was out of scope for this feature-scoped run — see above). Already fixed: dotted-path
+  entries `crm.crm_api`/`crm.crm_oauth`/`crm.crm_pages` are now in
+  `app/observability/context.py`, with regression test
+  `test_feature_mapping_for_nested_crm_blueprints` in `tests/test_observability_context.py`
+  (verified 2026-09-15 by findings-sweep).
 - Ran on `grader_engine=claude` fallback (no Codex available in this
   environment), per `.agents/verification-chain.md` convention.
 - Pre-existing, unrelated: `tests/test_execution_shared_utils_js.py::test_execution_js_node_unit`

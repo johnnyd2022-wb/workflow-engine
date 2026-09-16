@@ -97,3 +97,92 @@ VAT51 + VAT1051/Rosella (WB-031, Rosella side), VAT53, VAT54. Still excluded: VA
 26-bottle line (WB-036), and Rosella VAT26's early-method confirmation (unchanged from
 the 2026-09-07 rebuild). Green Gold (gg01) trial output tracked as WB-037, needs a
 script change before it can be imported at all.
+
+## Stage 4: 2026-09-14 -- raw-material (botanical) purchase reconstruction
+
+New manifest: `docs/whistlebird-raw-material-source.json` -- purchase-level curation for the
+same post-legacy-cutoff window (2025-05-13 onward), covering the botanicals consumed by
+every Wildflower/Solstice maceration step already loaded (Stage 3).
+
+**Founder-confirmed methodology (2026-09-14):**
+- Each distillation runs two multi-shot concentrates into one VAT, so real per-batch
+  consumption is **2x** the founder's stated per-shot recipe quantity.
+- Untracked (foraged, no purchase record): Wildflower's Lemon juice, Grapefruit (pink)
+  juice, Lemon peel; Solstice's Kawakawa leaf, fresh orange peel, fresh orange juice.
+- Supplier map: Alembics (Juniper Macedonia/Himalayan, Cinnamon, Liquorice root, Orris
+  root, Coriander seeds, Hibiscus flowers, Lemon Myrtle, Elderflower), Davis Trading
+  (Cardamom, Nutmeg), Moore Wilsons (Dried mango, Dried apples, Sumac Berries, Persian
+  Black Limes), HB Malt Station (Dried orange peel).
+
+**Clean tier (20 records):** real `jill@alembics.co.nz` order-confirmation emails --
+orders #24600, #25053, #26770, #26930, #27558, #27804 (2025-08-10 through 2026-06-11).
+Imported as dated receipts with quantity/price/supplier-batch-number, continuing the
+legacy `ingredients_code` sequences (JBM004+, JBH004+, WNO006+, CIN002+, LR004+, COR005+,
+ORR004+, LM006+, EF003+) -- not allocated to a specific consuming batch, same policy as
+the legacy raw-material import (WB-018). Note: two of these orders' Nutmeg line items
+came from Alembics even though the founder's current mental model has Nutmeg under Davis
+Trading -- both suppliers evidently sold it at different times; kept as emailed.
+
+**Inferred tier (110 records):** no email or database evidence exists for Hibiscus,
+Cardamom, dried orange peel, Persian black lime, Sumac berries, Dried mango, Dried apple,
+Green tea, or Szechuan pepper in this window. One record per consuming VAT, sized to that
+VAT's own 2x-multiplied recipe requirement, dated 3 days before its maceration date,
+supplier per the founder's list (updated same day to add Szechuan pepper -> Davis Trading
+and Green tea -> Countdown/Woolworths), confidence `resolved_by_context`.
+
+**Known gap, same shape as WB-037:** `_raw_material_records` in
+`scripts/whistlebird_migration.py` only reads the legacy database's purchase tables --
+there is no manifest-driven loader for this new file yet, and no mechanism to link a raw
+material receipt as `actual_inputs` on a maceration step. The manifest above is data-only
+until that script extension exists; not attempted in this pass.
+
+## Stage 5: 2026-09-15 -- fixes surfaced by the real API-replay run
+
+Replaying Stage 4's raw-material manifest through the live application API (rather than
+direct ORM writes) surfaced a real, pre-existing gap: four Alembics batch numbers
+(`MJUN-PP440328`, `PO786MAR22-1`, `WNUT-NMW-0-1000`, `LIQ-B401600`) are each reused across
+two separate orders, and `inventory_items` enforces a `(org_id, name, supplier_batch_number)`
+uniqueness constraint the ORM-direct script never actually exercised. Disambiguated the
+second occurrence of each with a `-{internal code}` suffix, the same deterministic pattern
+WB-017 already established for the legacy period -- the first (original) occurrence keeps
+its real batch number unchanged. Affected: JBM005, JBH005, WNO007, LR005.
+
+## Stage 6: 2026-09-15 -- API-replay framework replaces the ORM-direct loader
+
+Per Johnny's direction, `whistlebird_test` is now loaded by two scripts instead of one:
+
+1. **`scripts/whistlebird_replay.py`** replays every historical event (raw material
+   purchase, execution/step, trial, customs lodgement) through the real application API
+   -- the same routes, auth, validation, and business logic (including real inventory
+   consumption) a browser hits. Ordering comes from
+   `scripts/whistlebird_replay_timeline.py`'s date-prioritised topological sort over
+   the same sources `whistlebird_migration.py` already reads.
+2. **`scripts/whistlebird_replay_correct_timestamps.py`** runs after, and is the ONLY
+   place a historical date gets applied -- directly at the database level, keyed off
+   the same import markers. The live API is never given a backdating capability; this
+   script is internal tooling for populating/resetting `whistlebird_test` only.
+
+**No "derived"/`date_confidence`/`timestamp_policy` language reaches the loaded data.**
+Verified by direct SQL sweep across every `execution_data`/`extra_data`/`details`
+column in the org: zero matches. That curation trail lives only in this file and the
+JSON manifests.
+
+**Full verification, exact on every count**: `--verify-import` reports
+`raw_material_items` 200/200, `Rosella gin`/`Solstice gin`/`Wildflower gin` 3/14/38
+each exact, `customs_lodgements` 13/13, `date_mismatches` 0/0, `incomplete_batch_steps`
+0/0, `wording_leaks` all 0. `build_import_verification`'s raw-material baseline was
+extended to include the new manifest (previously only knew about the legacy DB).
+
+**Real bugs found and fixed by going through the real API instead of writing around
+it** (see `docs/whistlebird-replay-plan.md`'s "Real bugs found" section for detail):
+a genuine flush-timing gap in `complete_step` that would affect any real user
+completing a consumption-only step; two Alembics batch-number reuse collisions against
+a uniqueness constraint the ORM-direct path never exercised; one legacy zero-quantity
+data row; and the ORM-direct script's "quantity unknown" `actual_inputs` convention,
+which the real endpoint correctly rejects (real consumption is now only ever reported
+where an exact quantity is actually known).
+
+The old `scripts/whistlebird_migration.py` `apply_*` functions remain as-is (used by
+`--rebuild-whistlebird-test`'s bootstrap, and as the read-only source layer
+`build_timeline()` itself reads from) -- this stage adds a parallel, API-driven loading
+path rather than replacing the underlying data model.

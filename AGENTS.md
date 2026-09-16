@@ -69,6 +69,10 @@ HTTP Request
 
 Vanilla JS SPA — no React/Vue. HTML templates live alongside their feature blueprints (`app/core/frontend/`, `app/features/*/frontend/`). Shared JS/CSS is in `app/ui/shared/`.
 
+### System-finding module boundary
+
+Product modules own the system-finding content and actions they expose to Core. They emit the generic `CheckResult.data["system_finding"]` and `CheckResult.data["system_alerts"]` contract; Core only renders that contract and must not branch on a product/module check ID. Read `docs/system-findings-module-contract.md` before adding or changing module alerts.
+
 ### Testing
 
 Tests use a real PostgreSQL instance (not mocks). The test suite covers execution workflows, DAG traversal, business logic, login/2FA flows, and multi-tenant API isolation. See `tests/TEST_DOCUMENTATION.md` for details.

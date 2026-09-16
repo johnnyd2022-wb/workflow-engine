@@ -1,0 +1,2165 @@
+{
+  "_comment": "Curated raw-material purchase manifest for scripts/whistlebird_migration.py (post-legacy-cutoff botanicals, 2025-05-13 onward). 'clean' records are real jill@alembics.co.nz order-confirmation emails, imported as dated receipts without allocation to a specific consuming batch (same policy as legacy raw materials, WB-018). 'resolved_by_context' records have no email or database purchase evidence -- each is sized to exactly the named batch's own 2x-multiplied recipe requirement and dated 3 days before that batch's maceration date; supplier per the founder's 2026-09-14 supplier list (updated same day to add Szechuan pepper -> Davis Trading and Green tea -> Countdown/Woolworths), not verified against a receipt. Founder-confirmed 2026-09-14: each distillation runs two multi-shot concentrates into one VAT, so real per-batch consumption is 2x the founder's stated per-shot recipe quantity.",
+  "excluded_from_recipe": "Fresh/foraged items never tracked as purchases, per founder (2026-09-14): Wildflower's Lemon juice, Grapefruit (pink) juice, Lemon peel; Solstice's Kawakawa leaf, fresh orange peel, fresh orange juice.",
+  "recipe_wildflower_per_shot_g": {
+    "JBM": 29.7,
+    "JBH": 24.3,
+    "ORR": 15.3,
+    "COR": 21.6,
+    "WNO": 5.5,
+    "OPD": 7.2,
+    "HF": 9,
+    "LR": 2.7,
+    "CP": 21.6,
+    "PBL": 10.8,
+    "SBG": 3.6,
+    "LM": 7,
+    "DMS": 9,
+    "DAS": 18,
+    "EF": 9,
+    "GRT": 2
+  },
+  "recipe_solstice_per_shot_g": {
+    "JBM": 113.4,
+    "JBH": 48.6,
+    "WNO": 10.8,
+    "CIN": 2.88,
+    "LR": 10.8,
+    "SZP": 1.8
+  },
+  "clean_records": [
+    {
+      "code": "JBM004",
+      "ingredient": "Juniper Berries (Macedonian)",
+      "quantity": 1000,
+      "unit": "g",
+      "date": "2025-08-10",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#24600",
+      "supplier_batch_number": "MJUN-PP440328",
+      "price_nzd": 49.6,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "JBH004",
+      "ingredient": "Juniper Berries (Himalayan)",
+      "quantity": 500,
+      "unit": "g",
+      "date": "2025-08-10",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#24600",
+      "supplier_batch_number": "PO786MAR22-1",
+      "price_nzd": 35.2,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "WNO006",
+      "ingredient": "Whole nutmeg (organic)",
+      "quantity": 100,
+      "unit": "g",
+      "date": "2025-08-10",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#24600",
+      "supplier_batch_number": "WNUT-NMW-0-1000",
+      "price_nzd": 55,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "CIN002",
+      "ingredient": "Cinnamon",
+      "quantity": 50,
+      "unit": "g",
+      "date": "2025-08-10",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#24600",
+      "supplier_batch_number": "TCIN-C217",
+      "price_nzd": 35,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "LR004",
+      "ingredient": "Liquorice root",
+      "quantity": 100,
+      "unit": "g",
+      "date": "2025-08-10",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#24600",
+      "supplier_batch_number": "LIQ-B401600",
+      "price_nzd": 11.2,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "JBM005",
+      "ingredient": "Juniper Berries (Macedonian)",
+      "quantity": 1000,
+      "unit": "g",
+      "date": "2025-10-06",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#25053",
+      "supplier_batch_number": "MJUN-PP440328-JBM005",
+      "price_nzd": 62,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "WNO007",
+      "ingredient": "Whole nutmeg (organic)",
+      "quantity": 200,
+      "unit": "g",
+      "date": "2025-10-06",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#25053",
+      "supplier_batch_number": "WNUT-NMW-0-1000-WNO007",
+      "price_nzd": 89,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "JBM006",
+      "ingredient": "Juniper Berries (Macedonian)",
+      "quantity": 1000,
+      "unit": "g",
+      "date": "2026-01-05",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#26770",
+      "supplier_batch_number": null,
+      "price_nzd": 62,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "JBH005",
+      "ingredient": "Juniper Berries (Himalayan)",
+      "quantity": 500,
+      "unit": "g",
+      "date": "2026-01-05",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#26770",
+      "supplier_batch_number": "PO786MAR22-1-JBH005",
+      "price_nzd": 44,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "LR005",
+      "ingredient": "Liquorice root",
+      "quantity": 500,
+      "unit": "g",
+      "date": "2026-01-05",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#26770",
+      "supplier_batch_number": "LIQ-B401600-LR005",
+      "price_nzd": 35,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "EF003",
+      "ingredient": "Elderflower",
+      "quantity": 200,
+      "unit": "g",
+      "date": "2026-01-05",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#26770",
+      "supplier_batch_number": "ELDO-C61",
+      "price_nzd": 132,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "ORR004",
+      "ingredient": "Orris root",
+      "quantity": 500,
+      "unit": "g",
+      "date": "2026-02-10",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#26930",
+      "supplier_batch_number": "P458403-1",
+      "price_nzd": 84,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "JBM007",
+      "ingredient": "Juniper Berries (Macedonian)",
+      "quantity": 1000,
+      "unit": "g",
+      "date": "2026-04-30",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#27558",
+      "supplier_batch_number": "MJUN-P459777",
+      "price_nzd": 64,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "JBH006",
+      "ingredient": "Juniper Berries (Himalayan)",
+      "quantity": 1000,
+      "unit": "g",
+      "date": "2026-04-30",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#27558",
+      "supplier_batch_number": null,
+      "price_nzd": 62,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "COR005",
+      "ingredient": "Coriander seeds",
+      "quantity": 1000,
+      "unit": "g",
+      "date": "2026-04-30",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#27558",
+      "supplier_batch_number": "ICOR-SS433991-2",
+      "price_nzd": 16,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "CIN003",
+      "ingredient": "Cinnamon",
+      "quantity": 100,
+      "unit": "g",
+      "date": "2026-04-30",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#27558",
+      "supplier_batch_number": "TC-CEYCQ241",
+      "price_nzd": 58,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "JBH007",
+      "ingredient": "Juniper Berries (Himalayan)",
+      "quantity": 1000,
+      "unit": "g",
+      "date": "2026-06-11",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#27804",
+      "supplier_batch_number": null,
+      "price_nzd": 62,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "JBM008",
+      "ingredient": "Juniper Berries (Macedonian)",
+      "quantity": 1000,
+      "unit": "g",
+      "date": "2026-06-11",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#27804",
+      "supplier_batch_number": null,
+      "price_nzd": 64,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "LM006",
+      "ingredient": "Lemon myrtle",
+      "quantity": 100,
+      "unit": "g",
+      "date": "2026-06-11",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#27804",
+      "supplier_batch_number": "L230201B-NC",
+      "price_nzd": 72,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "EF004",
+      "ingredient": "Elderflower",
+      "quantity": 100,
+      "unit": "g",
+      "date": "2026-06-11",
+      "confidence": "clean",
+      "supplier": "Alembics",
+      "supplier_order_ref": "#27804",
+      "supplier_batch_number": null,
+      "price_nzd": 82,
+      "source": "email: jill@alembics.co.nz order confirmation"
+    }
+  ],
+  "inferred_records": [
+    {
+      "code": "OPD004",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-07-14",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT29 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 29,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF005",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-07-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT29 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 29,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP003",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-07-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT29 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 29,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL004",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2025-07-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT29 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 29,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG002",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-07-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT29 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 29,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS003",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-07-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT29 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 29,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS003",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2025-07-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT29 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 29,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT001",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2025-07-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT29 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 29,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD005",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-09-29",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT36 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 36,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF006",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-09-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT36 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 36,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP004",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-09-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT36 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 36,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL005",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2025-09-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT36 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 36,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG003",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-09-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT36 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 36,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS004",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-09-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT36 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 36,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS004",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2025-09-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT36 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 36,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT002",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2025-09-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT36 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 36,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD006",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT37 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF007",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT37 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP005",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT37 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL006",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT37 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG004",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT37 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS005",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT37 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS005",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT37 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT003",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT37 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD007",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-10-13",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT38 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 38,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF008",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-10-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT38 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 38,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP006",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-10-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT38 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 38,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL007",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2025-10-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT38 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 38,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG005",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-10-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT38 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 38,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS006",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-10-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT38 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 38,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS006",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2025-10-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT38 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 38,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT004",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2025-10-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT38 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 38,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD008",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-11-17",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT40 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 40,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF009",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-11-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT40 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 40,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP007",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-11-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT40 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 40,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL008",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2025-11-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT40 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 40,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG006",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-11-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT40 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 40,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS007",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-11-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT40 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 40,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS007",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2025-11-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT40 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 40,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT005",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2025-11-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT40 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 40,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD009",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-12-06",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT41 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 41,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF010",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-12-06",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT41 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 41,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP008",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-12-06",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT41 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 41,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL009",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2025-12-06",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT41 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 41,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG007",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-12-06",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT41 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 41,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS008",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2025-12-06",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT41 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 41,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS008",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2025-12-06",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT41 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 41,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT006",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2025-12-06",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT41 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 41,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD010",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2026-01-03",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT43 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 43,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF011",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-01-03",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT43 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 43,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP009",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2026-01-03",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT43 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 43,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL010",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-01-03",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT43 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 43,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG008",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-01-03",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT43 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 43,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS009",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-01-03",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT43 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 43,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS009",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2026-01-03",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT43 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 43,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT007",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2026-01-03",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT43 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 43,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD011",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT44 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 44,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF012",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT44 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 44,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP010",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT44 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 44,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL011",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT44 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 44,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG009",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT44 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 44,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS010",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT44 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 44,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS010",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT44 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 44,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT008",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT44 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 44,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD012",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2026-03-16",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT46 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 46,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF013",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-03-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT46 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 46,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP011",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2026-03-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT46 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 46,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL012",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-03-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT46 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 46,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG010",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-03-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT46 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 46,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS011",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-03-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT46 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 46,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS011",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2026-03-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT46 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 46,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT009",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2026-03-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT46 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 46,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD013",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2026-05-04",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT47 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF014",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-05-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT47 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP012",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2026-05-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT47 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL013",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-05-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT47 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG011",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-05-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT47 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS012",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-05-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT47 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS012",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2026-05-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT47 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT010",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2026-05-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT47 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD014",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2026-03-14",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT49 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 49,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF015",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-03-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT49 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 49,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP013",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2026-03-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT49 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 49,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL014",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-03-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT49 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 49,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG012",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-03-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT49 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 49,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS013",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-03-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT49 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 49,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS013",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2026-03-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT49 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 49,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT011",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2026-03-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT49 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 49,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD015",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2026-06-25",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT53 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 53,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "HF016",
+      "ingredient": "Hibiscus flowers",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-06-25",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT53 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 53,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP014",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2026-06-25",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT53 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 53,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL015",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-06-25",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT53 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 53,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG013",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-06-25",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT53 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 53,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DMS014",
+      "ingredient": "Dried mango slices",
+      "quantity": 18,
+      "unit": "g",
+      "date": "2026-06-25",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT53 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 53,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAS014",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2026-06-25",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT53 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 53,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT012",
+      "ingredient": "Green tea",
+      "quantity": 4,
+      "unit": "bags",
+      "date": "2026-06-25",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT53 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 53,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SZP001",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2025-05-26",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT27 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 27,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP002",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2025-06-22",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT28 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 28,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP003",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2025-12-05",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT30 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 30,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP004",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2025-08-11",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT32 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 32,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP005",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2025-08-11",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT33 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 33,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP006",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2025-08-30",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT34 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 34,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP007",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2025-08-30",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT35 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 35,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP008",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2025-10-25",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT39 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 39,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP009",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2025-12-09",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT42 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 42,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP010",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT45 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 45,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP011",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2026-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT48 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 48,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP012",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2026-04-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT50 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 50,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP013",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2026-04-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT51 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 51,
+        "product": "solstice"
+      }
+    },
+    {
+      "code": "SZP014",
+      "ingredient": "Szechuan pepper",
+      "quantity": 3.6,
+      "unit": "g",
+      "date": "2026-06-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: solstice VAT54 maceration requirement, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 54,
+        "product": "solstice"
+      }
+    }
+  ],
+  "excluded": []
+}

@@ -183,24 +183,38 @@ Deterministic mutation probe:
 
 This directly fails the required falsifiability standard. Fix by creating an owned step and supplying an output UUID not declared by that step—preferably an output UUID declared on a foreign step—then assert 400 and no row written.
 
-## Other unresolved assertion-strength findings (resolved by round 3 below — verified 2026-09-13 by findings-sweep)
+## Other assertion-strength findings from this batch — all now fixed (verified 2026-09-15 by findings-sweep)
 
-These were present in the first report, remain in the current files, and were not included in the submitted “known not addressed” disclosure:
+These were present in the first report and, at the time, remained in the current files without
+being included in the submitted "known not addressed" disclosure. All 12 have since been
+strengthened exactly as required; re-checked against the current tests by findings-sweep:
 
-1. `test_list_inventory_by_process_id_does_not_match_another_orgs_execution` still lacks a same-org `process_id` positive control; an implementation returning no process-filtered inventory passes.
-2. `test_create_accepts_every_valid_inventory_type` checks only 201, not that each supplied type was persisted unchanged.
-3. `test_csv_validate_happy_path_returns_per_row_status` still does not assert the subsequent inventory listing request succeeded before using its text as the no-write proof.
-4. `test_csv_validate_rejects_missing_required_columns` claims all three required columns but tests only missing Unit.
-5. `test_csv_commit_happy_path_creates_item_with_audit_history` still omits acting-user and UTC-timestamp assertions from AC25.
-6. `test_csv_commit_rejects_over_max_rows` still does not prove zero rows were written.
-7. `test_csv_commit_skips_duplicate_batch_but_commits_the_rest` still does not verify the final count and quantity of the colliding `(org, name, batch)` tuple.
-8. `test_out_of_stock_lists_zero_quantity_raw_materials` still has no nonzero or non-raw-material decoys.
-9. `test_config_units_returns_allowed_units` checks only `kg` and `l`, not equality with the `CONVERSION_FACTORS` source of truth.
-10. `test_decode_barcode_is_deprecated_and_returns_410` checks only an `error` key, not the required explanatory message.
-11. `test_reconcile_matching_untracked_returns_untracked_items` still has no differently named/unit decoys.
-12. `test_reconcile_via_addition_maps_onto_untracked_item` says the missing-fields rejection writes nothing but asserts only status 400.
-
-These are mostly weak rather than inert individually, but they prevent a `valid` grade because several test names and AC docstrings claim more than their assertions prove.
+1. `test_list_inventory_by_process_id_does_not_match_another_orgs_execution` now has an
+   `Own Process Item` same-org positive control (`tests/test_inventory.py`).
+2. `test_create_accepts_every_valid_inventory_type` now asserts the stored row's
+   `inventory_type` matches exactly what was sent, per type (`tests/test_inventory.py`).
+3. `test_csv_validate_happy_path_returns_per_row_status` now asserts the listing request's
+   own `200` before using its text as the no-write proof (`tests/e2e/test_inventory_csv_flow.py`).
+4. `test_csv_validate_rejects_missing_required_columns` now tests all three required
+   columns individually (`tests/e2e/test_inventory_csv_flow.py`).
+5. `test_csv_commit_happy_path_creates_item_with_audit_history` now asserts the UTC
+   timestamp; the acting-user half of AC25 is proven separately in
+   `test_csv_commit_records_acting_user_in_audit_history` (`tests/test_inventory.py`), since
+   the list endpoint deliberately strips `user_id` from audit-history entries.
+6. `test_csv_commit_rejects_over_max_rows` now asserts none of the batch's distinctively
+   named rows were written (`tests/e2e/test_inventory_csv_flow.py`).
+7. `test_csv_commit_skips_duplicate_batch_but_commits_the_rest` now asserts the colliding
+   row's final count/quantity is unchanged (`tests/e2e/test_inventory_csv_flow.py`).
+8. `test_out_of_stock_lists_zero_quantity_raw_materials` now includes a nonzero decoy and a
+   zeroed-final-product decoy (`tests/e2e/test_inventory_flow.py`).
+9. `test_config_units_returns_allowed_units` now asserts set-equality against
+   `CONVERSION_FACTORS` (`tests/e2e/test_inventory_flow.py`).
+10. `test_decode_barcode_is_deprecated_and_returns_410` now asserts the explanatory message
+    (`tests/e2e/test_inventory_flow.py`).
+11. `test_reconcile_matching_untracked_returns_untracked_items` now plants differently-named
+    and differently-unitted decoys (`tests/e2e/test_inventory_flow.py`).
+12. `test_reconcile_via_addition_maps_onto_untracked_item` now asserts the inventory count is
+    unchanged after the missing-fields rejection (`tests/e2e/test_inventory_flow.py`).
 
 ## Coverage disclosure and release risk
 

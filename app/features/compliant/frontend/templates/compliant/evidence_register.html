@@ -1,0 +1,36 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Evidence — NZ Alcohol{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block content %}
+<main class="compliant-shell" data-compliant-root data-compliant-surface="evidence" aria-busy="true">
+  <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant" hx-boost="false">Compliant</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol" hx-boost="false">NZ Alcohol</a><span aria-hidden="true">/</span><strong>Evidence</strong></nav>
+  {% set active_compliant_tab = "evidence" %}{% include "compliant/_nz_alcohol_tabs.html" %}
+  <header class="compliant-hero compliant-hero--compact"><div><p class="compliant-eyebrow">NZ ALCOHOL / EVIDENCE</p><h1>Evidence and product mapping.</h1><p>Use this workspace for Customs and other non-NP3 evidence. NP3 evidence, logs and reviews live in its dedicated programme workspace.</p></div></header>
+  <p class="compliant-error" data-compliant-error hidden></p>
+  <section class="compliant-record-panel" data-product-target>
+    <div><p class="compliant-eyebrow">CUSTOMS PRODUCT MAPPING</p><h2>Connect alcohol profiles to Core movements.</h2><p>Set the ABV and Customs classification once. Compliant then calculates litres of alcohol from Core production and wastage movements.</p><p data-customs-reconciliation></p><div data-product-suggestions class="product-suggestions"></div></div>
+    <form data-product-form>
+      <label>Core inventory name <input name="inventory_name" required maxlength="255" placeholder="Choose a detected Core inventory item"></label>
+      <label>Product type <select name="product_type"><option value="spirits">Spirits</option><option value="beer">Beer</option><option value="wine">Wine</option><option value="cider">Cider</option><option value="mead">Mead</option><option value="rtd">RTD</option><option value="other">Other</option></select></label>
+      <label>ABV % <input name="abv_percent" type="number" min="0.0001" max="100" step="0.0001" required></label>
+      <label>Customs product code <input name="customs_product_code" maxlength="100" placeholder="Optional classification"></label>
+      <button type="submit">Save product mapping</button>
+    </form>
+    <div data-alcohol-products></div>
+  </section>
+  <section id="evidence" class="compliant-record-panel" data-record-target>
+    <div><p class="compliant-eyebrow">EVIDENCE REGISTER</p><h2 data-evidence-control-heading>Record evidence for a scoped control.</h2><p data-evidence-control-summary>Select only the relevant framework and control. Reuse a Core source when it already proves the work.</p><p data-capture-guidance></p><div data-existing-evidence class="existing-evidence"></div></div>
+    <form data-record-form>
+      <label>Framework <select name="framework_slug" required data-framework-select></select></label><label>Control <select name="control_id" required data-control-select></select></label>
+      <label>Record type <select name="record_type"><option value="attestation">Attestation</option><option value="reading">Reading / sample</option><option value="lodgement">Lodgement</option><option value="competency">Training / competency</option><option value="incident">Incident / corrective action</option></select></label><label>Status <select name="status"><option value="complete">Complete</option><option value="open">Open</option><option value="failed">Failed</option></select></label>
+      <label class="span-2">Title <input name="title" required maxlength="255" placeholder="What does this record prove?"></label><label>Period start <input name="period_start" type="date"></label><label>Period end <input name="period_end" type="date"></label><label>Due date <input name="due_date" type="date"></label><label>Review again <select name="review_interval_months"><option value="">No recurring review</option><option value="1">Every month</option><option value="3">Every 3 months</option><option value="6">Every 6 months</option><option value="12">Every year</option></select></label>
+      <label>Measured value <input name="measured_value" type="number" step="0.0001"></label><label>Limit <input name="limit_value" type="number" step="0.0001"></label><label data-declared-lal-field hidden>Declared LAL <input name="declared_litres_of_alcohol" type="number" min="0" step="0.0001" placeholder="Filed litres of alcohol"></label>
+      <label class="span-2">Evidence reference <input name="evidence_reference" maxlength="1024" placeholder="File location, certificate number, or signed record reference"></label><label class="span-2">Core source references <input name="source_refs" maxlength="2048" placeholder="Optional comma-separated execution, movement, or evidence UUIDs"></label>
+      <button type="submit">Add evidence record</button>
+    </form>
+  </section>
+  <section class="compliant-recent"><h2>Recent records</h2><div data-recent-records>No records yet.</div></section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/compliant.js"></script>{% endblock %}

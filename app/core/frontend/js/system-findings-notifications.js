@@ -172,6 +172,41 @@
     return CATEGORY_LABELS[checkId] || String(checkId || '').replace(/_/g, ' ') || 'System finding';
   }
 
+  function moduleSystemAlerts(data) {
+    return data && Array.isArray(data.system_alerts) ? data.system_alerts.filter(function (alert) {
+      return alert && typeof alert === 'object' && alert.id != null;
+    }) : [];
+  }
+
+  function moduleFindingCategory(checkId, data) {
+    var finding = data && data.system_finding && typeof data.system_finding === 'object' ? data.system_finding : null;
+    return finding && finding.category ? String(finding.category) : categoryLabel(checkId);
+  }
+
+  function safeInternalHref(value) {
+    var href = value == null ? '' : String(value).trim();
+    return href.charAt(0) === '/' && href.charAt(1) !== '/' ? href : '';
+  }
+
+  function moduleAlertRecord(checkId, finding, data, alert) {
+    var due = alert.due_date ? String(alert.due_date) : '';
+    var href = safeInternalHref(alert.href);
+    return {
+      checkId: checkId,
+      itemKey: 'module_' + String(alert.id),
+      sortMs: parseDateMs(due) || 0,
+      triggeredDateText: due ? formatDate(due) : resolveTriggeredDateText(null, finding, data),
+      systemFinding: moduleFindingCategory(checkId, data),
+      summaryText: String(alert.title || 'System action needed'),
+      detailText: String(alert.description || 'Open this finding to complete the next action.'),
+      detailDateCaption: due ? 'Review due:' : null,
+      detailDateText: due ? formatDate(due) : null,
+      itemName: null,
+      extraFields: [],
+      actions: href ? [{ type: 'link', href: href, label: String(alert.action_label || 'Open'), boost: false }] : []
+    };
+  }
+
   function safeUnique(arr) {
     var out = [];
     var seen = new Set();
@@ -529,6 +564,16 @@
       var checkId = f && f.check_id != null ? String(f.check_id) : '';
       if (!checkId) return;
       var data = f.data && typeof f.data === 'object' ? f.data : {};
+      var moduleAlerts = moduleSystemAlerts(data);
+
+      if (moduleAlerts.length) {
+        moduleAlerts.forEach(function (alert) {
+          var record = moduleAlertRecord(checkId, f, data, alert);
+          if (isIgnoredToday(checkId, record.itemKey, todayKey) || isDismissed(checkId, record.itemKey)) return;
+          records.push(record);
+        });
+        return;
+      }
 
       if (checkId === 'tasks_due') {
         var overdueTasks = Array.isArray(data.overdue_tasks) ? data.overdue_tasks : [];
@@ -867,6 +912,15 @@
         if (!rec) return;
         rec.archiveStatus = hidden ? 'hidden' : 'snoozed';
         allRecords.push(rec);
+      }
+
+      var moduleAlerts = moduleSystemAlerts(data);
+      if (moduleAlerts.length) {
+        moduleAlerts.forEach(function (alert) {
+          var itemKey = 'module_' + String(alert.id);
+          tryAdd(itemKey, function () { return moduleAlertRecord(checkId, f, data, alert); });
+        });
+        return;
       }
 
       if (checkId === 'expired_materials') {

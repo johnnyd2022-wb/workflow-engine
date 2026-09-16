@@ -2802,10 +2802,16 @@ def complete_step(execution_id: str, execution_step_id: str):
         # TRANSACTION INTEGRITY: Commit all inventory operations atomically
         # This ensures inventory consumption and output creation are atomic per execution step
         try:
-            # Apply inventory updates
+            # Apply inventory updates. Flush while still inside the guard: a step that only
+            # consumes (no actual_outputs, e.g. a terminal "labelling" step consuming a
+            # bottled-product item) never re-enters allow_inventory_quantity_write via
+            # create_inventory_item below, so these dirty quantity changes would otherwise
+            # sit unflushed until the plain db_session.commit() further down -- outside any
+            # guard -- and autoflush's before_flush check would reject them right there.
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.EXECUTION_STEP_INVENTORY):
                 for inventory_item, new_quantity in inventory_updates:
                     inventory_item.quantity = new_quantity
+                db_session.flush()
 
             # Create inventory items for outputs; when reconciling to untracked, reduce first then create only surplus
             from app.core.backend.reconciliation_service import reconcile_output_to_untracked_reduce_only
@@ -4962,7 +4968,39 @@ def _dashboard_operations_weekly_summary(org_id: UUID, session, now_dt: datetime
     }
 
 
-def _dashboard_compliant_workspace_summary(org_id: UUID, session) -> dict[str, Any]:
+def _dashboard_module_workspace_summaries(check_results: list[Any], workspace: str) -> list[dict[str, Any]]:
+    """Project module-owned Dashboard summaries without knowing module check IDs."""
+    summaries = []
+    for result in check_results:
+        data = result.data if isinstance(getattr(result, "data", None), dict) else {}
+        summary = data.get("workspace_summary") if isinstance(data, dict) else None
+        if not isinstance(summary, dict) or summary.get("workspace") != workspace:
+            continue
+        href = str(summary.get("href") or "")
+        if not href.startswith("/") or href.startswith("//"):
+            continue
+        try:
+            summaries.append(
+                {
+                    "module_name": str(summary.get("module_name") or "Module"),
+                    "href": href,
+                    "action_label": str(summary.get("action_label") or "Open module"),
+                    "score": max(0, min(100, int(summary.get("score") or 0))),
+                    "current_controls": max(0, int(summary.get("current_controls") or 0)),
+                    "total_controls": max(0, int(summary.get("total_controls") or 0)),
+                    "evidence_ready": max(0, int(summary.get("evidence_ready") or 0)),
+                    "needs_attention": max(0, int(summary.get("needs_attention") or 0)),
+                    "overdue": max(0, int(summary.get("overdue") or 0)),
+                }
+            )
+        except (TypeError, ValueError):
+            continue
+    return summaries
+
+
+def _dashboard_compliant_workspace_summary(
+    org_id: UUID, session, *, module_summaries: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Return the small, dashboard-safe summary of the optional Compliant workspace.
 
     This deliberately avoids ``ComplianceService.overview()``: that view calculates the
@@ -4974,6 +5012,7 @@ def _dashboard_compliant_workspace_summary(org_id: UUID, session) -> dict[str, A
         "state": "unavailable",
         "label": "Compliant is not enabled for this organisation.",
         "attention_count": 0,
+        "modules": [],
     }
     if not config.compliant_enabled:
         return unavailable
@@ -4993,6 +5032,21 @@ def _dashboard_compliant_workspace_summary(org_id: UUID, session) -> dict[str, A
                 "state": "setup",
                 "label": "Set up the evidence plan for your operation.",
                 "attention_count": 0,
+                "modules": [],
+            }
+
+        if module_summaries:
+            attention_count = sum(item["needs_attention"] for item in module_summaries)
+            return {
+                "available": True,
+                "state": "attention" if attention_count else "ready",
+                "label": (
+                    f"{attention_count} compliance check{'s' if attention_count != 1 else ''} need attention."
+                    if attention_count
+                    else "All current compliance evidence is ready."
+                ),
+                "attention_count": attention_count,
+                "modules": module_summaries,
             }
 
         status_counts = dict(
@@ -5011,12 +5065,14 @@ def _dashboard_compliant_workspace_summary(org_id: UUID, session) -> dict[str, A
                 "state": "attention",
                 "label": f"{attention_count} evidence record{'s' if attention_count != 1 else ''} need attention.",
                 "attention_count": attention_count,
+                "modules": [],
             }
         return {
             "available": True,
             "state": "ready",
             "label": "No open or failed evidence records.",
             "attention_count": 0,
+            "modules": [],
         }
     except Exception:
         # Compliant is an optional workspace. A failed summary must not take the shared
@@ -5091,31 +5147,6 @@ def _dashboard_build_action_board(
     )
 
     return {"critical_actions_total": critical_actions_total, "items": items[:6]}
-
-
-def _dashboard_operational_cases_summary(org_id: UUID, session) -> dict[str, Any]:
-    """Dashboard's `operational_cases` section. Delegates entirely to the feature's own
-    summary service (spec: "Dashboard consumes a case summary service; its route must
-    not query new tables directly.") -- this wrapper only isolates a failure so one
-    feature's outage can't 500 the whole dashboard summary.
-    """
-    unavailable = {
-        "availability": "unavailable",
-        "as_of": None,
-        "active_count": None,
-        "critical_count": None,
-        "overdue_count": None,
-        "needs_owner_count": None,
-        "awaiting_verification_count": None,
-        "href": "/core/cases",
-    }
-    try:
-        from app.features.operational_cases.services.operational_case_service import dashboard_summary
-
-        return dashboard_summary(session, org_id)
-    except Exception:
-        logger.exception("Failed to assemble operational_cases dashboard summary for org_id=%s", org_id)
-        return unavailable
 
 
 @core_bp.route("/api/core/dashboard/summary", methods=["GET"])
@@ -5226,10 +5257,12 @@ def get_dashboard_summary():
         except Exception:
             logger.exception("Failed to assemble CRM summary for org_id=%s", org_id)
 
-    compliant_workspace = _dashboard_compliant_workspace_summary(org_id, db_session)
+    compliant_workspace = _dashboard_compliant_workspace_summary(
+        org_id,
+        db_session,
+        module_summaries=_dashboard_module_workspace_summaries(check_results, "compliant"),
+    )
     action_board = _dashboard_build_action_board(tasks_summary, compliance, compliant_workspace)
-    operational_cases_summary = _dashboard_operational_cases_summary(org_id, db_session)
-
     operator_series = _dashboard_series_from_date_counts(
         _dashboard_event_counts_by_day(org_id, db_session, week_start, next_week_start, actor_type="user"),
         start_day=week_start.date(),
@@ -5310,7 +5343,6 @@ def get_dashboard_summary():
                 "operations": operations_week_summary,
                 "operations_today": operations_day_summary,
                 "sales": sales_summary,
-                "operational_cases": operational_cases_summary,
                 "insight_series": {
                     "operator_actions_week": operator_series,
                     "open_action_items": open_action_series,

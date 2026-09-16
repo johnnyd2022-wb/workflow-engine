@@ -1,5 +1,30 @@
 # Whistlebird production-history import
 
+## Two loading paths (as of 2026-09-15)
+
+There are now two ways to load `whistlebird_test`, and they produce data that looks
+different in one specific way — read this before touching either.
+
+1. **`scripts/whistlebird_migration.py`** (documented below) — writes directly at the
+   ORM/repository layer. Fast, and the layer `scripts/whistlebird_replay_timeline.py`
+   itself reads from. Every row it writes carries `date_confidence` and
+   `timestamp_policy: derived_noon_pacific_auckland` in its provenance marker (see
+   "Provenance marker" below) — this is intentional for this path: an internal
+   curation-confidence trail on a script-owned migration artifact.
+2. **`scripts/whistlebird_replay.py`** + **`scripts/whistlebird_replay_correct_timestamps.py`**
+   (see `docs/whistlebird-replay-plan.md`) — replays the exact same underlying data
+   through the real application API instead (real auth, validation, business logic,
+   real inventory consumption), then a second pass stamps real historical dates
+   on the resulting rows directly at the database level. **This path never writes
+   `date_confidence`, `timestamp_policy`, or any other internal-curation language into
+   the loaded data** — verified by a direct SQL sweep across every `execution_data`/
+   `extra_data`/`details` column. The curation trail lives only in this repo's docs and
+   JSON manifests, never in the data itself. This is the preferred path going forward,
+   including for resetting/populating a demo tenant.
+
+Both paths are safe to run against `whistlebird_test` (guarded the same way, preserve
+users) and read from the same two sources below.
+
 `scripts/whistlebird_migration.py` loads Whistlebird's real production history into a
 `whistlebird_test` organisation in `workflow-engine-test` so the tool shows what the
 business has actually done, from two frozen sources:
