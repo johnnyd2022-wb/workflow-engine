@@ -255,7 +255,7 @@ interruption, read it before re-deriving anything)
       the fix and passes with it
 - [x] Update `docs/whistlebird-production-import.md` to describe the new two-pass
       approach
-- [ ] Open the MR
+- [x] Open the MR (!247)
 
 ## Real bugs found and fixed by going through the real API (not a complete list of
 work -- see git log for the full story; this is the "why this was worth doing" summary)
