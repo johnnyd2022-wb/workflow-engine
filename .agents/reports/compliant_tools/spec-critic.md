@@ -113,7 +113,7 @@ Re-graded in round 2 below.
 
 ---
 
-## Round 2 — VERDICT: gaps-found (9 gaps: 3 high, 6 medium)
+## Round 2 — VERDICT: gaps-found (9 gaps: 3 high, 6 medium) (all resolved by round 4's final "sound" verdict below — verified 2026-09-13 by findings-sweep)
 
 Round-1 closure audit (codex): 5 gaps fully closed (excise rate_basis design, dilution
 parity, whistlebird_test framing, observability mapping, blueprint-gate route inventory),

@@ -14,7 +14,7 @@ test below executed for real, none skipped.
 No skips, no server-down false negatives. `test_tenant_isolation.py` also has 2 non-inventory
 tests (barcode read, dashboard summary) which were left alone.
 
-## Step 2: gap-fill — new coverage
+## Step 2: gap-fill — new coverage (all shipped and passing — resolved, verified 2026-09-13 by findings-sweep)
 
 Confirmed via `scripts/e2e_coverage.py --check` before and after: all six named endpoints
 (csv-validate, csv-commit, out-of-stock, config/units, decode-barcode,

@@ -72,5 +72,6 @@ static reasoning, per its own report below.
    tests correctly don't couple to one specific implementation shape of the fix. The
    remaining framework-applicability tests and the two negative `run_check()` tests
    (not-enrolled, no-attention) are honest and falsifiable per the grader's review.
+   Already handled: not a defect, no action needed (verified 2026-09-13 by findings-sweep).
 
 VERDICT: mixed

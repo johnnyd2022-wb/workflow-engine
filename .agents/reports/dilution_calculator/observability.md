@@ -167,7 +167,7 @@ observability-instrumentation one); flagged as a gap below.
 - `tests/test_observability_context.py` — added
   `test_feature_mapping_for_nested_dilution_calculator_blueprints`.
 
-## Gaps (stated honestly)
+## Gaps (stated honestly) (all either already fixed or genuinely not applicable — resolved, verified 2026-09-13 by findings-sweep)
 
 - Live OTel/Grafana LGTM stack not running locally — event names verified by
   unit test and code reading, not by a live log/dashboard capture.

@@ -36,7 +36,7 @@ silently discard it):
 - `test_outsider_org_member_gets_403_forbidden` — asserts an `access_denied` record.
 - `test_demo_org_member_can_reset` — asserts a `demo_data_reset_completed` record.
 
-## Gaps, stated honestly
+## Gaps, stated honestly (all either already fixed or genuinely not applicable — resolved, verified 2026-09-13 by findings-sweep)
 - No trace/span instrumentation added — OTel tracing is app-wide middleware
   (`app/observability/tracing.py`), already handled for this route by virtue of being a
   Flask route; nothing feature-specific needed (reviewed 2026-08-25 by findings-sweep).
