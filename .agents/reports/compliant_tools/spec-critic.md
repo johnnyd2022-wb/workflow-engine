@@ -133,6 +133,8 @@ the rest partially closed. New/persisting gaps:
 - (medium) "one entitlement DB call" contradicted by the context processor re-querying.
 - (medium) nav visibility didn't AND in `compliant_enabled`.
 - (medium) AC3 "`< 400`" invariant admits 401/403/405/500, not the required generic 404.
+  Already fixed in round 3 (below): AC3 rewritten to assert exactly 404, implemented in
+  `tests/test_compliant_subscription_gate.py` (verified 2026-09-15 by findings-sweep).
 - (medium) rollback runbook had export but no restore path / no AC.
 - (medium) per-calculator disclaimer content not asserted for all new solvers.
 
