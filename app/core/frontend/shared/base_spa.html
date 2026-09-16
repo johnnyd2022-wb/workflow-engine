@@ -50,8 +50,9 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='tasks.css') }}">
   {# Inventory spa header: used across many pages (core, integrations, settings, notifications). Global for HTMX swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
-  {# CRM styles must be global because HTMX only swaps #page-content, not <head>. #}
-  <link rel="stylesheet" href="/crm/static/css/crm.css">
+  {# CRM is available in every supported environment. Its styles must be global because
+     HTMX only swaps #page-content, not <head>. #}
+  <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='crm.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
