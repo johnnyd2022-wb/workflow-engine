@@ -66,6 +66,23 @@ def test_core_shell_degrades_when_optional_product_registration_fails(
     assert workspace_href not in html
 
 
+def test_integrations_page_degrades_when_crm_registration_fails(monkeypatch):
+    from app.api.app_factory import create_app
+    from app.core.backend.backend import integrations
+
+    def fail_registration():
+        raise RuntimeError("simulated optional CRM failure")
+
+    monkeypatch.setattr(crm_bp, "create_crm_blueprint", fail_registration)
+    app = create_app()
+
+    with app.test_request_context("/core/integrations"):
+        html = integrations.__wrapped__()
+
+    assert "CRM is unavailable in this environment." in html
+    assert "/crm/configuration" not in html
+
+
 def test_unsubscribed_org_loads_core_without_compliant_workspace(monkeypatch):
     import app.core.security.entitlements as entitlements
     from app.api.app_factory import create_app
