@@ -82,7 +82,7 @@
             <section class="spa-form-section core2-stats-panel" aria-label="Core overview stats">
               <div class="core2-stats-hybrid" role="group" aria-label="Core metrics segmented">
                 <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Total Processes</div>
+                  <div class="core2-stats-hybrid__label">Product workflows</div>
                   <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
                 </div>
                 <div class="core2-stats-hybrid__cell">
@@ -90,85 +90,54 @@
                   <div class="core2-stats-hybrid__value" id="metric-active-executions">0</div>
                 </div>
                 <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Completed Batches</div>
+                  <div class="core2-stats-hybrid__label">Finished batches</div>
                   <div class="core2-stats-hybrid__value" id="metric-completed">0</div>
                 </div>
                 <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Inventory Items</div>
+                  <div class="core2-stats-hybrid__label">Stock lines</div>
                   <div class="core2-stats-hybrid__value" id="metric-inventory">0</div>
                 </div>
               </div>
             </section>
-            <section class="spa-form-section core2-kpi-grid core2-kpi-grid--overview-priority" aria-label="Overview operational metrics">
-              <article class="core2-kpi-card">
-                <h3 class="core2-kpi-card__title">Batch dwell by current step</h3>
-                <p class="core2-kpi-card__sub">Average hours batches are spending at each process step</p>
-                <div id="core2-overview-batch-aging" class="core2-kpi-bars">
-                  <p class="core2-active-batches-empty">Loading...</p>
+            <section class="spa-form-section core2-operational-section" aria-labelledby="core2-overview-attention-title">
+              <div class="core2-section-heading">
+                <div>
+                  <p class="core2-eyebrow">Run today</p>
+                  <h2 id="core2-overview-attention-title" class="spa-form-section-title">What needs attention</h2>
                 </div>
-              </article>
+                <a href="/core/notifications" class="core2-text-link">View all alerts</a>
+              </div>
+              <div id="core2-overview-attention" class="core2-attention-grid" aria-live="polite">
+                <p class="core2-active-batches-empty">Loading operational priorities...</p>
+              </div>
             </section>
 
-            <section class="spa-form-section core2-overview-secondary" aria-label="Traceability coverage">
-              <details class="core2-overview-secondary__details">
-                <summary>
-                  <span>Traceability coverage</span>
-                  <span id="core2-overview-traceability-summary" class="core2-overview-secondary__summary-value">Loading...</span>
-                </summary>
-                <article class="core2-kpi-card">
-                  <h3 class="core2-kpi-card__title">Traceability capture</h3>
-                  <p class="core2-kpi-card__sub">Inventory items linked to execution flow or supplier batch</p>
-                  <div id="core2-overview-traceability" class="core2-kpi-stack">
-                    <p class="core2-active-batches-empty">Loading...</p>
-                  </div>
-                </article>
-              </details>
+            <section class="spa-form-section core2-operational-section" aria-labelledby="core2-overview-batches-title">
+              <div class="core2-section-heading">
+                <div>
+                  <p class="core2-eyebrow">Production</p>
+                  <h2 id="core2-overview-batches-title" class="spa-form-section-title">Batches to move forward</h2>
+                </div>
+                <a href="/core/executions/live" class="core2-text-link">Open production board</a>
+              </div>
+              <div id="core2-overview-active-batches" class="core2-work-list" aria-live="polite">
+                <p class="core2-active-batches-empty">Loading active batches...</p>
+              </div>
             </section>
           </div>
 
           <div id="core2-panel-inventory" class="core2-tab-panel" data-core2-tab-panel="inventory" role="tabpanel" aria-labelledby="core2-tab-inventory" hidden>
             <section class="spa-form-section core2-stats-panel core2-tab-summary" aria-label="Inventory summary">
               <div class="core2-stats-hybrid" role="group" aria-label="Inventory summary metrics">
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Items on hand</div>
-                  <div class="core2-stats-hybrid__value" id="core2-inv-summary-lines">0</div>
-                  <div class="core2-mini-meter"><span id="core2-inv-summary-lines-bar" style="width:0%"></span></div>
-                </div>
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Items in use</div>
-                  <div class="core2-stats-hybrid__value" id="core2-inv-summary-inuse">0</div>
-                  <div class="core2-mini-meter"><span id="core2-inv-summary-inuse-bar" style="width:0%"></span></div>
-                </div>
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Low stock</div>
-                  <div class="core2-stats-hybrid__value" id="core2-inv-summary-low">0</div>
-                  <div class="core2-mini-meter"><span id="core2-inv-summary-low-bar" style="width:0%"></span></div>
-                </div>
+                <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Stock lines</div><div class="core2-stats-hybrid__value" id="core2-inv-summary-lines">0</div></div>
+                <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Allocated to batches</div><div class="core2-stats-hybrid__value" id="core2-inv-summary-inuse">0</div></div>
+                <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Low stock</div><div class="core2-stats-hybrid__value" id="core2-inv-summary-low">0</div></div>
+                <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Traceable stock</div><div class="core2-stats-hybrid__value" id="core2-inv-summary-traceable">0%</div></div>
               </div>
-              <div class="core2-kpi-grid core2-kpi-grid--two">
-                <article class="core2-kpi-card">
-                  <h3 class="core2-kpi-card__title">Expiry pressure</h3>
-                  <p class="core2-kpi-card__sub">How much stock is at risk over time horizons</p>
-                  <div id="core2-inventory-expiry-pressure" class="core2-kpi-stack">
-                    <p class="core2-active-batches-empty">Loading...</p>
-                  </div>
-                </article>
-                <article class="core2-kpi-card">
-                  <h3 class="core2-kpi-card__title">Traceability gaps</h3>
-                  <p class="core2-kpi-card__sub">Items missing both execution linkage and supplier batch</p>
-                  <div id="core2-inventory-traceability-gaps" class="core2-kpi-table">
-                    <p class="core2-active-batches-empty">Loading...</p>
-                  </div>
-                </article>
-                <article class="core2-kpi-card">
-                  <h3 class="core2-kpi-card__title">Recent stock movement</h3>
-                  <p class="core2-kpi-card__sub">Quantity changes in the last 24 hours</p>
-                  <div id="core2-inventory-recent-movement" class="core2-kpi-stack">
-                    <p class="core2-active-batches-empty">Loading...</p>
-                  </div>
-                  <p class="core2-kpi-card__note">Net change is signed quantity movement in the last 24h. Total moved is absolute volume moved regardless of direction.</p>
-                </article>
-              </div>
+              <section class="core2-operational-section" aria-labelledby="core2-inventory-priorities-title">
+                <div class="core2-section-heading"><div><p class="core2-eyebrow">Stock health</p><h2 id="core2-inventory-priorities-title" class="spa-form-section-title">Inventory to review</h2></div></div>
+                <div id="core2-inventory-priorities" class="core2-attention-grid" aria-live="polite"><p class="core2-active-batches-empty">Loading inventory priorities...</p></div>
+              </section>
               <div class="core2-hub-card-stack core2-hub-card-stack--single">
                 <a href="/core/inventory/live?back_tab=inventory" class="core2-hub-card" aria-labelledby="core2-live-inventory-title">
                   <span class="core2-hub-card__icon" aria-hidden="true">
@@ -190,45 +159,19 @@
           <div id="core2-panel-workflows" class="core2-tab-panel" data-core2-tab-panel="workflows" role="tabpanel" aria-labelledby="core2-tab-workflows" hidden>
             <section class="spa-form-section core2-stats-panel core2-tab-summary" aria-label="Product workflow summary">
               <div class="core2-stats-hybrid" role="group" aria-label="Workflow summary metrics">
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Batches in flight</div>
-                  <div class="core2-stats-hybrid__value" id="core2-wf-summary-active">0</div>
-                  <div class="core2-mini-meter"><span id="core2-wf-summary-active-bar" style="width:0%"></span></div>
-                </div>
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Completed this week</div>
-                  <div class="core2-stats-hybrid__value" id="core2-wf-summary-completed7d">0</div>
-                  <div class="core2-mini-meter"><span id="core2-wf-summary-completed7d-bar" style="width:0%"></span></div>
-                </div>
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Active workflows</div>
-                  <div class="core2-stats-hybrid__value" id="core2-wf-summary-processes">0</div>
-                  <div class="core2-mini-meter"><span id="core2-wf-summary-processes-bar" style="width:0%"></span></div>
-                </div>
+                <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Batches in flight</div><div class="core2-stats-hybrid__value" id="core2-wf-summary-active">0</div></div>
+                <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Ready to record</div><div class="core2-stats-hybrid__value" id="core2-wf-summary-ready">0</div></div>
+                <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Finished this week</div><div class="core2-stats-hybrid__value" id="core2-wf-summary-completed7d">0</div></div>
+                <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Product workflows</div><div class="core2-stats-hybrid__value" id="core2-wf-summary-processes">0</div></div>
               </div>
-              <div class="core2-kpi-grid core2-kpi-grid--two">
-                <article class="core2-kpi-card">
-                  <h3 class="core2-kpi-card__title">Batches at current step</h3>
-                  <p class="core2-kpi-card__sub">Active queue by process and current step</p>
-                  <div id="core2-workflow-step-load" class="core2-kpi-bars">
-                    <p class="core2-active-batches-empty">Loading...</p>
-                  </div>
-                </article>
-                <article class="core2-kpi-card">
-                  <h3 class="core2-kpi-card__title">Throughput by workflow (7d)</h3>
-                  <p class="core2-kpi-card__sub">Completed batches per process this week</p>
-                  <div id="core2-workflow-throughput" class="core2-kpi-table">
-                    <p class="core2-active-batches-empty">Loading...</p>
-                  </div>
-                </article>
-                <article class="core2-kpi-card">
-                  <h3 class="core2-kpi-card__title">Action readiness</h3>
-                  <p class="core2-kpi-card__sub">Whether active batches are ready to be progressed now</p>
-                  <div id="core2-workflow-readiness" class="core2-kpi-stack">
-                    <p class="core2-active-batches-empty">Loading...</p>
-                  </div>
-                </article>
-              </div>
+              <section class="core2-operational-section" aria-labelledby="core2-workflow-queue-title">
+                <div class="core2-section-heading"><div><p class="core2-eyebrow">Next work</p><h2 id="core2-workflow-queue-title" class="spa-form-section-title">Production queue</h2></div><a href="/core/executions/live" class="core2-text-link">Open production board</a></div>
+                <div id="core2-workflow-queue" class="core2-work-list" aria-live="polite"><p class="core2-active-batches-empty">Loading production queue...</p></div>
+              </section>
+              <section class="core2-operational-section" aria-labelledby="core2-workflow-activity-title">
+                <div class="core2-section-heading"><div><p class="core2-eyebrow">Last 7 days</p><h2 id="core2-workflow-activity-title" class="spa-form-section-title">Workflow activity</h2></div></div>
+                <div id="core2-workflow-activity" class="core2-work-list" aria-live="polite"><p class="core2-active-batches-empty">Loading workflow activity...</p></div>
+              </section>
               <div class="core2-hub-card-stack core2-hub-card-stack--single">
                 <a href="/core/executions/live?back_tab=workflows" class="core2-hub-card" aria-labelledby="core2-open-batches-title">
                   <span class="core2-hub-card__icon" aria-hidden="true">
@@ -389,17 +332,17 @@
           <section class="spa-form-section core2-focus-nav">
             <a href="/core?tab=workflows" class="core2-focus-nav__back">← Back to product workflows</a>
           </section>
-          <section id="core2-active-batches-panel" class="spa-form-section core2-active-batches-panel" aria-labelledby="core2-active-batches-title">
-            <details id="core2-active-details" class="core2-active-details" open>
-              <summary id="core2-active-batches-title" class="spa-form-section-title core2-active-details-summary">ACTIVE BATCHES</summary>
+          <section id="core2-active-batches-panel" class="spa-form-section core2-active-batches-panel" aria-labelledby="core2-active-batches-title" data-core2-active-board="full">
               <div class="core2-active-details-body">
               <div class="core2-active-header-row">
                 <div class="core2-active-heading-wrap">
-                  <p class="core2-active-subline">EXECUTIONS <span class="core2-active-live-dot"></span> LIVE</p>
+                  <p class="core2-eyebrow">Production</p>
+                  <h2 id="core2-active-batches-title" class="spa-form-section-title">Active batches</h2>
+                  <p class="core2-active-subline">Live view of the work currently moving through production.</p>
                 </div>
                 <div class="core2-active-controls">
                   <label class="core2-active-control">
-                    <span>Process</span>
+                    <span class="sr-only">Process</span>
                     <select id="core2-active-process-select" class="core2-active-select" aria-label="Select process">
                       <option value="">Loading processes...</option>
                     </select>
@@ -410,18 +353,30 @@
                   </div>
                 </div>
               </div>
-              <div class="core2-active-step-rail" id="core2-active-step-rail">
-                <p class="core2-active-batches-empty">Loading process steps...</p>
+              <div class="core2-active-filter-row" aria-label="Filter active batches">
+                <label class="core2-active-search-label" for="core2-active-search">Find a batch
+                  <input id="core2-active-search" type="search" class="spa-inp" placeholder="Search workflow or batch" autocomplete="off">
+                </label>
+                <div class="core2-active-status-filter" role="group" aria-label="Batch status">
+                  <button type="button" class="core2-filter-chip is-active" data-core2-active-status="all" aria-pressed="true">All</button>
+                  <button type="button" class="core2-filter-chip" data-core2-active-status="pending" aria-pressed="false">Ready to record</button>
+                  <button type="button" class="core2-filter-chip" data-core2-active-status="in_progress" aria-pressed="false">In progress</button>
+                </div>
               </div>
 
               <div class="core2-active-status-row">
                 <div class="core2-active-status-metrics">
-                  <span><strong data-core2-inflight-count>0</strong> in flight</span>
-                  <span><strong data-core2-completed7d-count>0</strong> completed (7d)</span>
+                  <span><strong data-core2-inflight-count>0</strong> active</span>
+                  <span><strong data-core2-ready-count>0</strong> ready to record</span>
+                  <span><strong data-core2-completed7d-count>0</strong> finished this week</span>
                 </div>
                 <div class="core2-active-status-note">
                   <span data-core2-active-total-note>Showing 0 active batches</span>
                 </div>
+              </div>
+
+              <div class="core2-active-step-rail" id="core2-active-step-rail" aria-live="polite">
+                <p class="core2-active-batches-empty">Loading process steps...</p>
               </div>
 
               <div class="core2-active-view" id="core2-active-pipeline-view">
@@ -431,12 +386,12 @@
               </div>
 
               <div class="core2-active-view" id="core2-active-timeline-view" hidden>
+                <p class="core2-active-timeline-help">Each bar shows the time a batch has spent in a production step. Select a row for the full batch record.</p>
                 <div class="core2-active-timeline" id="core2-active-timeline">
                   <p class="core2-active-batches-empty">Loading timeline...</p>
                 </div>
               </div>
               </div>
-            </details>
           </section>
           {% endif %}
 
@@ -828,14 +783,14 @@
       const inUse = nonZeroItems.filter(function (it) { return !!(it && it.source_execution_id); }).length;
       const low = nonZeroItems.filter(core2IsLowStock).length;
       const total = nonZeroItems.length;
+      const linked = nonZeroItems.filter(function (it) {
+        return !!(it && (it.source_execution_id || it.supplier_batch_number));
+      }).length;
 
       core2SetText('core2-inv-summary-lines', total);
       core2SetText('core2-inv-summary-inuse', inUse);
       core2SetText('core2-inv-summary-low', low);
-
-      core2SetBar('core2-inv-summary-lines-bar', total, Math.max(total, 1));
-      core2SetBar('core2-inv-summary-inuse-bar', inUse, Math.max(total, 1));
-      core2SetBar('core2-inv-summary-low-bar', low, Math.max(total, 1));
+      core2SetText('core2-inv-summary-traceable', total ? Math.round((linked / total) * 100) + '%' : '0%');
     }
 
     function updateCore2WorkflowSummary(processes, executions) {
@@ -843,6 +798,10 @@
       const inFlight = allExecutions.filter(function (e) {
         const status = String(e.status || '').toLowerCase();
         return status === 'in_progress' || status === 'pending';
+      }).length;
+      const readyNow = allExecutions.filter(function (e) {
+        if (String(e.status || '').toLowerCase() !== 'pending') return false;
+        return true;
       }).length;
 
       const sevenDaysAgo = new Date(Date.now() - (7 * 24 * 3600 * 1000));
@@ -854,15 +813,11 @@
       }).length;
 
       const processCount = (processes || []).length;
-      const executionTotal = Math.max(1, allExecutions.length);
 
       core2SetText('core2-wf-summary-active', inFlight);
+      core2SetText('core2-wf-summary-ready', readyNow);
       core2SetText('core2-wf-summary-completed7d', completed7d);
       core2SetText('core2-wf-summary-processes', processCount);
-
-      core2SetBar('core2-wf-summary-active-bar', inFlight, executionTotal);
-      core2SetBar('core2-wf-summary-completed7d-bar', completed7d, executionTotal);
-      core2SetBar('core2-wf-summary-processes-bar', processCount, Math.max(processCount, 1));
     }
 
     function core2RenderKpiBars(targetId, rows) {
@@ -939,13 +894,7 @@
         const d = diffDays(it.expiry_date);
         return d != null && d < 0;
       }).length;
-      core2RenderKpiStack('core2-inventory-expiry-pressure', [
-        { label: 'Expired', value: expired },
-        { label: '0-7 days', value: expiry7 },
-        { label: '8-30 days', value: expiry30 },
-        { label: '31-90 days', value: expiry90 },
-      ]);
-
+      const low = nonZeroItems.filter(core2IsLowStock).length;
       const traceabilityGaps = nonZeroItems
         .filter((it) => !it.source_execution_id && !it.supplier_batch_number)
         .slice(0, 6)
@@ -954,29 +903,20 @@
           metaA: `${it.quantity || 0}${it.unit || ''}`,
           metaB: 'missing link',
         }));
-      core2RenderKpiTable('core2-inventory-traceability-gaps', traceabilityGaps);
-
-      let movementNet = 0;
-      let movementAbs = 0;
-      let movementEvents = 0;
-      const dayAgo = new Date(now.getTime() - (24 * 3600 * 1000));
-      nonZeroItems.forEach((it) => {
-        const logs = Array.isArray(it.audit_logs) ? it.audit_logs : [];
-        logs.forEach((log) => {
-          if (!log || !log.created_at) return;
-          const dt = new Date(log.created_at);
-          if (Number.isNaN(dt.getTime()) || dt < dayAgo) return;
-          const qty = Number(log.quantity_changed || 0);
-          movementNet += qty;
-          movementAbs += Math.abs(qty);
-          movementEvents += 1;
-        });
-      });
-      core2RenderKpiStack('core2-inventory-recent-movement', [
-        { label: 'Net change (24h)', value: movementNet.toFixed(1) },
-        { label: 'Total moved (24h)', value: movementAbs.toFixed(1) },
-        { label: 'Movement events (24h)', value: movementEvents },
-      ]);
+      const priorities = [
+        { count: expired, label: 'Expired stock', hint: 'Remove or assess before it is used.', tone: 'urgent', href: '/core/notifications' },
+        { count: expiry7, label: 'Expires in 7 days', hint: 'Prioritise use or decide what to do with it.', tone: 'watch', href: '/core/inventory/live' },
+        { count: low, label: 'Low stock lines', hint: 'Review replenishment before production is affected.', tone: 'watch', href: '/core/inventory/live' },
+        { count: traceabilityGaps.length, label: 'Missing a trace link', hint: 'Add supplier or production provenance.', tone: 'watch', href: '/core/notifications' },
+      ];
+      const priorityHost = document.getElementById('core2-inventory-priorities');
+      if (priorityHost) {
+        priorityHost.innerHTML = priorities.map(function (item) {
+          return '<a class="core2-attention-item core2-attention-item--' + item.tone + '" href="' + item.href + '"><span class="core2-attention-item__count">' +
+            escapeHtml(String(item.count)) + '</span><span class="core2-attention-item__label">' + escapeHtml(item.label) +
+            '</span><span class="core2-attention-item__hint">' + escapeHtml(item.hint) + '</span></a>';
+        }).join('');
+      }
     }
 
     function updateCore2WorkflowInsights(processes, executions) {
@@ -1024,20 +964,14 @@
       const throughputRows = Object.entries(throughputByProcess)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 6)
-        .map(([name, count]) => ({ name, metaA: `${count} completed`, metaB: 'last 7d' }));
-      core2RenderKpiTable('core2-workflow-throughput', throughputRows);
+        .map(([name, count]) => ({ title: name, meta: 'Completed batches', value: `${count} this week`, href: '/core/processes' }));
+      core2RenderWorkList('core2-workflow-activity', throughputRows, 'No batches have finished in the last 7 days.');
 
-      core2RenderKpiStack('core2-workflow-readiness', [
-        { label: 'Ready to record now', value: readyNow },
-        { label: 'Currently in progress', value: inProgressNow },
-        { label: 'Pending batches', value: pendingNow },
-      ]);
-
-      const stepRows = Object.entries(activeStepCounts)
+      const queueRows = Object.entries(activeStepCounts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 7)
-        .map(([name, count]) => ({ label: name, value: count }));
-      core2RenderKpiBars('core2-workflow-step-load', stepRows);
+        .map(([name, count]) => ({ title: name, meta: count === 1 ? '1 batch waiting here' : `${count} batches waiting here`, value: count === 1 ? '1 batch' : `${count} batches`, href: '/core/executions/live' }));
+      core2RenderWorkList('core2-workflow-queue', queueRows, 'No batches are currently in the production queue.');
     }
 
     /** SVG icons for journey CTAs (24 viewBox; drawn at 26px inside 64px circle) */
@@ -2431,40 +2365,46 @@
     function applyCore2OverviewInsights(ov) {
       var wf = (ov && ov.workflows) || {};
       var inv = (ov && ov.inventory) || {};
-      var now = new Date();
+      var expiry = inv.expiry || {};
+      var attention = [
+        { count: expiry.expired || 0, label: 'Expired stock', hint: 'Remove or assess before it is used.', tone: 'urgent', href: '/core/notifications' },
+        { count: expiry.d0_7 || 0, label: 'Expires in 7 days', hint: 'Use, hold, or plan disposal.', tone: 'watch', href: '/core/inventory/live' },
+        { count: inv.low_stock || 0, label: 'Low stock lines', hint: 'Check what needs replenishing.', tone: 'watch', href: '/core/inventory/live' },
+        { count: Math.max(0, Number(inv.nonzero_lines || 0) - Number(inv.linked || 0)), label: 'Missing a trace link', hint: 'Add a supplier batch or production link.', tone: 'watch', href: '/core/notifications' },
+      ];
+      var attentionHost = document.getElementById('core2-overview-attention');
+      if (attentionHost) {
+        attentionHost.innerHTML = attention.map(function (item) {
+          return '<a class="core2-attention-item core2-attention-item--' + item.tone + '" href="' + item.href + '">' +
+            '<span class="core2-attention-item__count">' + escapeHtml(String(item.count)) + '</span>' +
+            '<span class="core2-attention-item__label">' + escapeHtml(item.label) + '</span>' +
+            '<span class="core2-attention-item__hint">' + escapeHtml(item.hint) + '</span></a>';
+        }).join('');
+      }
 
-      // Batch dwell by current step -- computed from the <=20 active-execution summaries.
-      var dwellByStep = {};
-      (wf.active_executions || []).forEach(function (e) {
-        if (!e || !e.started_at) return;
-        var startDt = new Date(e.started_at);
-        if (Number.isNaN(startDt.getTime())) return;
-        var processName = e.process_name || 'Untitled process';
-        var stepName = e.current_step && e.current_step.name ? e.current_step.name : 'Awaiting step';
-        var key = processName + ' · ' + stepName;
-        var ageH = (now.getTime() - startDt.getTime()) / (3600 * 1000);
-        if (!dwellByStep[key]) dwellByStep[key] = { totalHours: 0, count: 0 };
-        dwellByStep[key].totalHours += ageH;
-        dwellByStep[key].count += 1;
-      });
-      var dwellRows = Object.keys(dwellByStep).map(function (label) {
-        var bucket = dwellByStep[label];
-        var avg = bucket.count > 0 ? bucket.totalHours / bucket.count : 0;
-        return { label: label + ' (' + bucket.count + ')', value: Math.max(0, Math.round(avg)) };
-      }).sort(function (a, b) { return b.value - a.value; }).slice(0, 6);
-      core2RenderKpiBars('core2-overview-batch-aging', dwellRows);
+      core2RenderWorkList('core2-overview-active-batches', (wf.active_executions || []).slice(0, 6).map(function (execution) {
+        var current = execution.current_step && execution.current_step.name ? execution.current_step.name : 'Ready to start';
+        return {
+          title: execution.process_name || 'Untitled workflow',
+          meta: current,
+          value: execution.status === 'pending' ? 'Ready to record' : 'In progress',
+          href: '/core/executions/live',
+        };
+      }), 'No batches are active right now. Start a batch from a product workflow when work begins.');
+    }
 
-      var linked = Number(inv.linked || 0);
-      var totalLines = Number(inv.nonzero_lines || 0);
-      var tracePct = totalLines ? Math.round((linked / totalLines) * 100) : 0;
-      var traceSummary = document.getElementById('core2-overview-traceability-summary');
-      if (traceSummary) traceSummary.textContent = tracePct + '% covered';
-      core2RenderKpiStack('core2-overview-traceability', [
-        { label: 'Linked items', value: linked + ' / ' + totalLines },
-        { label: 'Coverage', value: tracePct + '%' },
-        { label: 'Unlinked items', value: Math.max(0, totalLines - linked) },
-      ]);
-
+    function core2RenderWorkList(targetId, rows, emptyCopy) {
+      var host = document.getElementById(targetId);
+      if (!host) return;
+      if (!rows || !rows.length) {
+        host.innerHTML = '<p class="core2-active-batches-empty">' + escapeHtml(emptyCopy || 'No activity yet.') + '</p>';
+        return;
+      }
+      host.innerHTML = rows.map(function (row) {
+        return '<a class="core2-work-list__item" href="' + escapeHtml(row.href || '#') + '"><span><p class="core2-work-list__title">' +
+          escapeHtml(row.title || '') + '</p><p class="core2-work-list__meta">' + escapeHtml(row.meta || '') +
+          '</p></span><span class="core2-work-list__value">' + escapeHtml(row.value || '') + '</span></a>';
+      }).join('');
     }
 
     async function loadCore2Overview() {
