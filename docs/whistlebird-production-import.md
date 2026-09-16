@@ -63,7 +63,14 @@ workflow's steps in order and every step is stamped with its own real date.
   inherits the nearest recorded step's date and is flagged `date_confidence: "derived"`
   on the row. Step timestamps are clamped non-decreasing so they never run backwards.
 - **Raw materials** (ingredients, GNS, bottles, premix prep) load as dated
-  `raw_material` inventory items with an `ADD` movement — **no workflow, no execution**.
+  `raw_material` inventory items with an `ADD` movement. The API-replay path also
+  consumes the measured NGS quantities against those items during Wildflower/Solstice
+  production; water and foraged botanicals are recorded as non-inventory "other
+  materials" inputs, never as phantom purchases.
+- **Finished product:** the Labelling & packaging step consumes its bottled-product WIP
+  and produces an obvious product-line final item at exactly the same recorded bottle
+  quantity. Historical bottle counts already account for breakages, and no sales have
+  been replayed, so that stock remains on hand.
 - **Customs lodgements** load as NZ-alcohol compliance records
   (`customs-alcohol` / `period-lodgement`) with their real periods.
 - **Trial sample consumption** rows become dated adjustment movements against the trial's

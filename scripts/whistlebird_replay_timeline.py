@@ -19,7 +19,8 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,107 @@ import whistlebird_migration as wm
 from sqlalchemy import create_engine
 
 DEFAULT_RAW_MATERIAL_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-raw-material-source.json"
+
+# --- Neutral grain spirit (NGS) / dilution-water / foraged-botanical recipe -----------
+#
+# Founder-specified recipe (2026-09-16), applied as a fixed formula to every Wildflower/
+# Solstice batch -- the distillery doesn't record these per-VAT, it follows a constant
+# recipe, so unlike the botanical purchase manifest (which curates real per-batch receipt
+# evidence) these are computed, not looked up. See docs/whistlebird-import-decisions.md
+# for the full writeup, including the water-quantity correction (30.397L for Wildflower's
+# VAT fill, superseding an earlier 29.124L reading off the Production sheet -- the founder
+# confirmed a 1.273L "pyrex + tube" top-up line was added to the real recipe later to
+# correct for contraction, after that reading was taken).
+_NGS_STOCK_ABV = Decimal("0.964")  # purchases_gns.abv -- every legacy NGS purchase is 96.4%
+_QUANT3 = Decimal("0.001")
+
+# Day after the last real purchases_gns row (2025-04-01, 100L, "Southern Grain Spirits").
+# Batches macerating before this date draw from that real legacy purchase pool (see
+# whistlebird_replay.MarkerStore.consume_available_raw_material); batches on or after it
+# get their own dedicated, formula-sized purchase (see _ngs_purchase_event) so the real
+# legacy pool is never double-counted against production it didn't actually fund.
+NGS_LEGACY_POOL_CUTOFF = date(2025, 4, 2)
+
+# Foraged/untracked botanicals, per shot (founder, 2026-09-16); doubled below, same
+# 2-shots-per-VAT convention as the tracked recipe (see the "Founder-confirmed 2026-09-14"
+# note in docs/whistlebird-raw-material-source.json's _comment). Never purchased --
+# recorded as "other materials" inputs, not real inventory items.
+_FORAGED_BOTANICALS_PER_SHOT: dict[str, tuple[tuple[str, Decimal, str], ...]] = {
+    "wildflower": (
+        ("Lemon juice", Decimal("17"), "mL"),
+        ("Grapefruit (pink) juice", Decimal("27"), "mL"),
+        ("Lemon peel", Decimal("1.5"), "g"),
+    ),
+    "solstice": (
+        ("Kawakawa leaf", Decimal("4"), "g"),
+        ("Orange peel", Decimal("2.5"), "g"),
+        ("Orange juice", Decimal("54"), "mL"),
+    ),
+}
+
+
+def _round3(value: Decimal) -> Decimal:
+    return value.quantize(_QUANT3, rounding=ROUND_HALF_UP)
+
+
+def _flask_ngs_and_water_l() -> tuple[Decimal, Decimal]:
+    """Each VAT distils 2 flasks of 1.8L @ 20% ABV; the raw NGS in each flask is diluted
+    from the 96.4% purchased stock, the rest is water. Identical for Wildflower and
+    Solstice -- returns (total NGS litres, total water litres) for both flasks combined.
+    """
+    flask_volume = Decimal("1.8")
+    flask_abv = Decimal("0.20")
+    flasks_per_vat = 2
+    ngs_per_flask = _round3(flask_volume * flask_abv / _NGS_STOCK_ABV)
+    water_per_flask = _round3(flask_volume - ngs_per_flask)
+    return ngs_per_flask * flasks_per_vat, water_per_flask * flasks_per_vat
+
+
+def _vat_fill_ngs_and_water_l(product_line: str) -> tuple[Decimal, Decimal]:
+    """Post-distillation VAT fill that dilutes the concentrate to label strength.
+    Returns (total NGS litres, total water litres)."""
+    if product_line == "wildflower":
+        ngs = Decimal("24.456")
+        water = Decimal("30.397")
+        # Wildflower only: a 1.260L top-up of 66.6% ethanol, cut from the same NGS stock.
+        topup_volume = Decimal("1.260")
+        topup_abv = Decimal("0.666")
+        topup_ngs = _round3(topup_volume * topup_abv / _NGS_STOCK_ABV)
+        topup_water = _round3(topup_volume - topup_ngs)
+        return ngs + topup_ngs, water + topup_water
+    if product_line == "solstice":
+        return Decimal("17.776"), Decimal("25.064")
+    raise ValueError(f"no VAT-fill recipe for product line {product_line!r}")
+
+
+def _foraged_botanical_inputs(product_line: str) -> list[dict[str, Any]]:
+    per_shot = _FORAGED_BOTANICALS_PER_SHOT.get(product_line, ())
+    return [{"name": name, "quantity": str(quantity * 2), "unit": unit} for name, quantity, unit in per_shot]
+
+
+def _ngs_purchase_event(batch: wm.ProductionBatch, governing_date: date) -> ReplayEvent | None:
+    """A dedicated NGS purchase for batches the real legacy `purchases_gns` purchases
+    can't reach (see NGS_LEGACY_POOL_CUTOFF). Sized to exactly this batch's own computed
+    need (flask charge + VAT fill), dated 3 days before its governing date -- the same
+    "resolved by context" convention already used for post-cutoff botanicals (see
+    docs/whistlebird-raw-material-source.json's _comment and
+    docs/whistlebird-import-decisions.md).
+    """
+    if batch.product_line not in ("wildflower", "solstice") or governing_date < NGS_LEGACY_POOL_CUTOFF:
+        return None
+    flask_ngs, _flask_water = _flask_ngs_and_water_l()
+    fill_ngs, _fill_water = _vat_fill_ngs_and_water_l(batch.product_line)
+    record = {
+        "code": f"NGS-{batch.marker}",
+        "ingredient": "Neutral grain spirit",
+        "quantity": str(flask_ngs + fill_ngs),
+        "unit": "L",
+        "date": (governing_date - timedelta(days=3)).isoformat(),
+        "supplier": "Southern Grain Spirits",
+        "supplier_batch_number": None,
+        "expiry_date": None,
+    }
+    return _purchase_event(record)
 
 
 @dataclass(frozen=True)
@@ -108,8 +210,22 @@ def _purchase_event(record: dict[str, Any]) -> ReplayEvent:
         event_type="create_inventory_item",
         real_date=real_date,
         depends_on=(),
-        payload={"record": record, "marker": f"raw-{code}" if is_legacy else f"raw-botanical-{record['code']}"},
+        payload={"record": record, "marker": f"raw-{code}" if is_legacy else f"raw-manifest-{record['code']}"},
     )
+
+
+def _resolved_step_dates(batch: wm.ProductionBatch) -> list[date]:
+    step_keys = wm.RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else wm.BOTANICAL_GIN_STEP_KEYS
+    raw_dates = [batch.steps[key].step_date if key in batch.steps else None for key in step_keys]
+    resolved, _adjusted = wm._monotonic_step_dates(raw_dates)
+    return resolved
+
+
+def count_dedicated_ngs_purchases(batches: list[wm.ProductionBatch]) -> int:
+    """How many `_ngs_purchase_event` will fire across `batches` -- used by
+    `whistlebird_migration.build_import_verification` so its expected raw-material count
+    includes these without duplicating the cutoff/formula logic there."""
+    return sum(1 for batch in batches if _ngs_purchase_event(batch, _resolved_step_dates(batch)[0]) is not None)
 
 
 def _batch_events(
@@ -119,8 +235,7 @@ def _batch_events(
     known_quantities: dict[str, tuple[str, str]],
 ) -> list[ReplayEvent]:
     step_keys = wm.RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else wm.BOTANICAL_GIN_STEP_KEYS
-    raw_dates = [batch.steps[key].step_date if key in batch.steps else None for key in step_keys]
-    resolved, _adjusted = wm._monotonic_step_dates(raw_dates)
+    resolved = _resolved_step_dates(batch)
 
     exec_id = f"exec:{batch.marker}"
     events = [
@@ -132,6 +247,9 @@ def _batch_events(
             payload={"batch": batch},
         )
     ]
+    ngs_purchase = _ngs_purchase_event(batch, resolved[0])
+    if ngs_purchase is not None:
+        events.append(ngs_purchase)
     prev_step_id = exec_id
     for index, key in enumerate(step_keys):
         step_id = f"step:{batch.marker}:{key}"
@@ -151,6 +269,23 @@ def _batch_events(
             payload["known_input_quantities"] = {
                 code: known_quantities[code] for code in batch.ingredient_codes if code in known_quantities
             }
+        if key == "maceration":
+            # A post-cutoff batch's formula-sized NGS receipt is not just dated before
+            # this step: it is the stock this step must draw. Keep that relationship
+            # explicit so a future date correction cannot accidentally reorder the API
+            # calls into an impossible consume-before-purchase sequence.
+            if ngs_purchase is not None:
+                depends.append(ngs_purchase.event_id)
+            flask_ngs, flask_water = _flask_ngs_and_water_l()
+            payload["ngs_quantity_l"] = str(flask_ngs)
+            payload["other_material_inputs"] = [
+                {"name": "Water", "quantity": str(flask_water), "unit": "L"},
+                *_foraged_botanical_inputs(batch.product_line),
+            ]
+        if key == "aging" and batch.product_line != "rosella":
+            fill_ngs, fill_water = _vat_fill_ngs_and_water_l(batch.product_line)
+            payload["ngs_quantity_l"] = str(fill_ngs)
+            payload["other_material_inputs"] = [{"name": "Water", "quantity": str(fill_water), "unit": "L"}]
         events.append(
             ReplayEvent(
                 event_id=step_id,

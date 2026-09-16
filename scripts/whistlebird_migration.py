@@ -1794,6 +1794,10 @@ def ensure_compliant_nz_alcohol_setup(target_url: str, requested_org_name: str) 
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Compliant NZ-alcohol setup is only permitted for {RESET_ORG_NAME!r}")
 
+    # Importing InventoryMovement through the compliance/repository path configures its
+    # relationship to InventoryWastage. The app factory imports both at startup, but
+    # this standalone maintenance script must do the same before its first ORM query.
+    from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401
     from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
     from app.features.compliant.service import ComplianceService
 
@@ -1899,6 +1903,15 @@ def build_import_verification(
         manifest_batches, _ = _load_manifest(manifest_path)
     batches = _merge_batches(legacy, manifest_batches)
     expected_by_workflow = Counter(batch.workflow_name for batch in batches)
+
+    # The API-replay path (scripts/whistlebird_replay.py) buys Neutral grain spirit
+    # dedicated to a single batch wherever the real purchases_gns purchases can't reach
+    # (see whistlebird_replay_timeline.NGS_LEGACY_POOL_CUTOFF) -- not sourced from any
+    # legacy table or manifest file, so it has to be counted here rather than read off a
+    # source count above.
+    from whistlebird_replay_timeline import count_dedicated_ngs_purchases
+
+    raw_material_sources["ngs_dedicated_purchases"] = count_dedicated_ngs_purchases(batches)
 
     with create_engine(target_url).connect() as target:
         org_id = target.execute(
