@@ -323,6 +323,9 @@ def test_bootstrap_runs_preflight_then_scoped_replay_then_verify(migration_modul
     monkeypatch.setattr(
         migration_module, "ensure_target_org_admin", record("ensure", {"org_created": True, "admin_created": True})
     )
+    monkeypatch.setattr(
+        migration_module, "sync_whistlebird_test_admin_password", record("password_sync", {"synced": True})
+    )
     monkeypatch.setattr(migration_module, "reset_target_org", record("reset", {"deleted_rows": {}}))
     monkeypatch.setattr(migration_module, "setup_product_workflows", record("workflows", {}))
     monkeypatch.setattr(migration_module, "apply_raw_material_inventory", record("raw_materials", {}))
@@ -346,6 +349,7 @@ def test_bootstrap_runs_preflight_then_scoped_replay_then_verify(migration_modul
         "dry_production",
         "dry_manifest",
         "ensure",
+        "password_sync",
         "reset",
         "workflows",
         "raw_materials",

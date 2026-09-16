@@ -500,6 +500,11 @@ def run_replay(
     if limit is not None:
         events = events[:limit]
 
+    # Keep the account's actual password in sync with KeePass before every run, rather
+    # than trusting whatever it was last set to -- self-healing, so it never silently
+    # drifts out from under whoever needs to log in and check on this tenant by hand.
+    wm.sync_whistlebird_test_admin_password(target_url, org_name, admin_email)
+
     engine = create_engine(target_url)
     with engine.connect() as conn:
         row = conn.execute(text("SELECT id FROM organisations WHERE name = :name"), {"name": org_name}).first()
@@ -545,7 +550,13 @@ def _arguments() -> argparse.Namespace:
         parser.error("--legacy-url and --target-url are required")
     args.admin_password = os.environ.get(args.admin_password_env)
     if not args.admin_password:
-        parser.error(f"{args.admin_password_env} must be set")
+        # Same KeePassXC entry wm.sync_whistlebird_test_admin_password() keeps the
+        # account synced with -- the env var remains a valid override, it's just no
+        # longer required for local use.
+        try:
+            args.admin_password = wm._keepass_password(wm.WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY)
+        except ValueError as e:
+            parser.error(f"{args.admin_password_env} is not set and KeePassXC fallback failed: {e}")
     return args
 
 

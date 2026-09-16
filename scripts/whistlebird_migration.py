@@ -98,6 +98,7 @@ RESET_TABLES = (
 )
 RESET_ORG_NAME = "whistlebird_test"
 DEFAULT_TEST_ADMIN_EMAIL = "whistlebird_test_admin@whistlebird.test"
+WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY = "workflow-engine/whistlebird_test"
 DEFAULT_PRODUCTION_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
 WHISTLEBIRD_NZ_ALCOHOL_SETTINGS = {
     "alcohol_product_types": ["spirits"],
@@ -1729,6 +1730,65 @@ def ensure_target_org_admin(
         engine.dispose()
 
 
+def _keepass_password(entry_name: str) -> str:
+    """Read a KeePassXC entry's Password field, using this repo's existing helper
+    (scripts/local_secrets.py) and its KEEPASS_KDBX_PATH/KEEPASS_PASSWORD env vars.
+    Raises rather than returning a falsy value -- a missing/wrong entry here should
+    stop the caller, not silently fall through to some other credential.
+    """
+    from local_secrets import get_keepass_entry
+
+    entry = get_keepass_entry(entry_name)
+    password = entry.get("Password")
+    if not password:
+        raise ValueError(
+            f"KeePassXC entry {entry_name!r} not found or has no Password field "
+            "(check KEEPASS_KDBX_PATH/KEEPASS_PASSWORD)"
+        )
+    return password
+
+
+def sync_whistlebird_test_admin_password(
+    target_url: str, requested_org_name: str, admin_email: str = DEFAULT_TEST_ADMIN_EMAIL
+) -> dict[str, bool]:
+    """Reset the deterministic test admin's password to match the KeePassXC entry
+    `workflow-engine/whistlebird_test` -- the single source of truth for this one
+    disposable account's credential from now on.
+
+    Unlike `ensure_target_org_admin` (which deliberately never touches an existing
+    password -- appropriate for a general-purpose "create if absent" helper), this
+    function is meant to run every time a bootstrap/replay script touches this
+    account, so its password never again silently drifts out of sync with what the
+    founder has actually set in KeePass.
+    """
+    if requested_org_name != RESET_ORG_NAME:
+        raise ValueError(f"Password sync is only permitted for {RESET_ORG_NAME!r}")
+
+    password = _keepass_password(WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY)
+
+    from app.core.db.models.user import User
+    from app.core.security.auth_service import AuthService
+    from app.core.security.tenant_scope import unscoped
+
+    normalized_email = admin_email.lower().strip()
+    engine = create_engine(target_url)
+    session = sessionmaker(bind=engine, expire_on_commit=False)()
+    try:
+        with unscoped():
+            user = session.query(User).filter(User.email == normalized_email).one_or_none()
+        if user is None:
+            raise ValueError(f"test admin {admin_email!r} does not exist yet -- run --ensure-test-tenant first")
+        user.password_hash = AuthService.hash_password(password)
+        session.commit()
+        return {"synced": True}
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def ensure_compliant_nz_alcohol_setup(target_url: str, requested_org_name: str) -> dict[str, bool | str]:
     """Set up the documented Compliant NZ-alcohol tier for the Whistlebird test tenant."""
     if requested_org_name != RESET_ORG_NAME:
@@ -2001,6 +2061,7 @@ def bootstrap_whistlebird_test(
         "manifest": build_manifest_dry_run(manifest_path),
     }
     setup = ensure_target_org_admin(target_url, requested_org_name, admin_email, admin_password)
+    password_sync = sync_whistlebird_test_admin_password(target_url, requested_org_name, admin_email)
     reset = reset_target_org(target_url, requested_org_name)
     workflows = setup_product_workflows(target_url, requested_org_name)
     raw_materials = apply_raw_material_inventory(legacy_url, target_url, requested_org_name)
@@ -2014,6 +2075,7 @@ def bootstrap_whistlebird_test(
     return {
         "preflight": preflight,
         "tenant_setup": setup,
+        "password_sync": password_sync,
         "reset": reset,
         "workflows": workflows,
         "raw_materials": raw_materials,
@@ -2069,6 +2131,13 @@ def _arguments() -> argparse.Namespace:
         "--confirm-reset-whistlebird-test",
         action="store_true",
         help="Delete loaded data only for the whistlebird_test tenant; preserves its users.",
+    )
+    parser.add_argument(
+        "--sync-test-admin-password",
+        action="store_true",
+        help="Reset the deterministic test admin's password to match the KeePassXC entry "
+        f"{WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY!r} (also runs automatically as part of "
+        "--rebuild-whistlebird-test).",
     )
     parser.add_argument(
         "--dry-run-core",
@@ -2133,6 +2202,7 @@ def _arguments() -> argparse.Namespace:
         arguments.ensure_test_tenant,
         arguments.rebuild_whistlebird_test,
         arguments.confirm_reset_whistlebird_test,
+        arguments.sync_test_admin_password,
         arguments.dry_run_core,
         arguments.dry_run_traceability,
         arguments.dry_run_production,
@@ -2151,6 +2221,7 @@ def _arguments() -> argparse.Namespace:
         arguments.ensure_test_tenant,
         arguments.rebuild_whistlebird_test,
         arguments.confirm_reset_whistlebird_test,
+        arguments.sync_test_admin_password,
         arguments.setup_workflows,
         arguments.apply_raw_materials,
         arguments.apply_batches,
@@ -2161,10 +2232,15 @@ def _arguments() -> argparse.Namespace:
     )
     if any(target_scoped) and arguments.org_name != RESET_ORG_NAME:
         parser.error(f"--org-name must be exactly {RESET_ORG_NAME!r} for this action")
-    if (arguments.ensure_test_tenant or arguments.rebuild_whistlebird_test) and not os.environ.get(
-        arguments.admin_password_env
-    ):
-        parser.error(f"{arguments.admin_password_env} must contain the test-admin password")
+    arguments.admin_password = os.environ.get(arguments.admin_password_env)
+    if (arguments.ensure_test_tenant or arguments.rebuild_whistlebird_test) and not arguments.admin_password:
+        # Falls back to the same KeePassXC entry the deterministic test admin's password
+        # is kept in sync with (sync_whistlebird_test_admin_password) -- the env var
+        # remains a valid override (e.g. CI), it's just no longer required for local use.
+        try:
+            arguments.admin_password = _keepass_password(WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY)
+        except ValueError as e:
+            parser.error(f"{arguments.admin_password_env} is not set and KeePassXC fallback failed: {e}")
     if not arguments.sheet_manifest and (
         arguments.rebuild_whistlebird_test or arguments.dry_run_manifest or arguments.verify_manifest
     ):
@@ -2195,15 +2271,17 @@ def main() -> int:
             arguments.target_url,
             arguments.org_name,
             arguments.admin_email,
-            os.environ[arguments.admin_password_env],
+            arguments.admin_password,
             arguments.sheet_manifest,
         )
     elif arguments.ensure_test_tenant:
         report = ensure_target_org_admin(
-            arguments.target_url, arguments.org_name, arguments.admin_email, os.environ[arguments.admin_password_env]
+            arguments.target_url, arguments.org_name, arguments.admin_email, arguments.admin_password
         )
     elif arguments.confirm_reset_whistlebird_test:
         report = reset_target_org(arguments.target_url, arguments.org_name)
+    elif arguments.sync_test_admin_password:
+        report = sync_whistlebird_test_admin_password(arguments.target_url, arguments.org_name, arguments.admin_email)
     elif arguments.setup_workflows:
         report = setup_product_workflows(arguments.target_url, arguments.org_name)
     elif arguments.apply_raw_materials:
