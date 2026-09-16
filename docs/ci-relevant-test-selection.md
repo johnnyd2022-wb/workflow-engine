@@ -18,7 +18,8 @@ Selection is conservative:
 1. A changed `tests/**/*.py` file always runs itself.
 2. Explicit maps cover Core execution/inventory/API/security, Core and Inventory UI,
    Compliant, CRM, operational cases, process templates, demo data, and observability.
-3. A conventional `tests/test_<module>.py` companion is included when present.
+3. A conventional `tests/test_<module>.py` companion is included when a Python source
+   file has one; frontend filenames do not accidentally pull in a same-named backend test.
 4. Shared CI/dependency/config/migration/app-factory changes, or an unmapped `app/` or
    `scripts/` code path, select the complete `tests/` suite. The selector therefore
    fails safe rather than silently under-testing a new architecture area.
@@ -31,12 +32,15 @@ can see and challenge every selection.
 ## CI rollout
 
 - `relevant_tests` runs on merge requests. It asks the selector for the pytest targets,
-  installs Chromium and starts the local app only when a deliberately selected E2E test
-  requires them, and exits successfully without bootstrapping a database for
-  documentation-only work. UI source changes select the fast frontend/JS regression
-  suites; browser smoke coverage remains the existing deployed `cd_e2e` gate on `main`.
+  starts PostgreSQL only when the selected tests need it, and installs Node.js, Chromium,
+  or starts the local app only when a deliberately selected test requires each runtime.
+  Documentation-only work exits before dependency/database setup. UI source changes
+  select the fast frontend/JS regression suites; browser smoke coverage remains the
+  existing deployed `cd_e2e` gate on `main`.
 - `unit_tests` runs `pytest tests/ -v` on `main` only. This preserves a full-suite gate
-  as part of the post-merge CD pipeline before build and deploy.
+  as part of the post-merge CD pipeline before build and deploy. The separate `cd_e2e`
+  job remains the browser gate against the deployed candidate, so the unit-test job does
+  not download Chromium or start an unused local server.
 - Lint, security, migration reversibility, dependency auditing, and data-store checks
   remain independently configured checks; this change only targets the expensive Python
   test-suite invocation.

@@ -108,7 +108,6 @@ RULES = (
         ("app/core/frontend/inventory/**", "app/core/frontend/inventory_static/**"),
         (
             "tests/test_execution_modal_frontend_assets.py",
-            "tests/test_inventory.py",
             "tests/test_inventory_csv_validation.py",
         ),
     ),
@@ -179,6 +178,18 @@ FULL_SUITE_PATTERNS = (
     "tests/e2e/conftest.py",
 )
 
+# These checks inspect frontend assets or use pure utility code. Keeping this allow-list
+# small means a new or misclassified test still gets a database by default.
+DATABASE_FREE_TESTS = frozenset(
+    {
+        "tests/test_execution_modal_frontend_assets.py",
+        "tests/test_execution_shared_utils_js.py",
+        "tests/test_inventory_csv_validation.py",
+        "tests/test_ui_shared_access_denied.py",
+    }
+)
+NODE_TESTS = frozenset({"tests/test_execution_shared_utils_js.py"})
+
 
 def _matches(path: str, patterns: tuple[str, ...]) -> bool:
     return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
@@ -213,6 +224,8 @@ def changed_paths(base: str, head: str) -> list[str]:
 
 def _direct_test_for_source(path: str) -> str | None:
     """Use the conventional ``tests/test_<module>.py`` companion when it exists."""
+    if not path.endswith(".py"):
+        return None
     stem = Path(path).stem
     candidate = f"tests/test_{stem}.py"
     return candidate if _existing_test(candidate) else None
@@ -264,6 +277,8 @@ def select(paths: list[str]) -> dict[str, Any]:
             "needs_browser": False,
             "needs_server": False,
             "needs_e2e": False,
+            "needs_database": True,
+            "needs_node": True,
         }
 
     tests = sorted(selected)
@@ -279,6 +294,8 @@ def select(paths: list[str]) -> dict[str, Any]:
         "needs_browser": needs_e2e,
         "needs_server": needs_server,
         "needs_e2e": needs_e2e,
+        "needs_database": bool(tests) and (needs_e2e or not set(tests).issubset(DATABASE_FREE_TESTS)),
+        "needs_node": bool(set(tests) & NODE_TESTS),
     }
 
 
@@ -294,6 +311,8 @@ def _render(plan: dict[str, Any]) -> str:
         for enabled, label in (
             (plan["needs_server"], "app server"),
             (plan["needs_browser"], "Chromium"),
+            (plan["needs_database"], "PostgreSQL"),
+            (plan["needs_node"], "Node.js"),
         )
         if enabled
     )
@@ -315,6 +334,10 @@ def main() -> int:
     )
     parser.add_argument("--needs-browser", action="store_true", help="Exit 0 only when the selection needs Chromium.")
     parser.add_argument("--needs-e2e", action="store_true", help="Exit 0 only when the selection contains E2E tests.")
+    parser.add_argument(
+        "--needs-database", action="store_true", help="Exit 0 only when the selection needs PostgreSQL."
+    )
+    parser.add_argument("--needs-node", action="store_true", help="Exit 0 only when the selection needs Node.js.")
     args = parser.parse_args()
 
     try:
@@ -327,6 +350,8 @@ def main() -> int:
         (args.needs_server, "needs_server"),
         (args.needs_browser, "needs_browser"),
         (args.needs_e2e, "needs_e2e"),
+        (args.needs_database, "needs_database"),
+        (args.needs_node, "needs_node"),
     )
     for requested, key in requested_requirement:
         if requested:
