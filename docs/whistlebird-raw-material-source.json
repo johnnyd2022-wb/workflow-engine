@@ -102,7 +102,7 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#25053",
-      "supplier_batch_number": "MJUN-PP440328",
+      "supplier_batch_number": "MJUN-PP440328-JBM005",
       "price_nzd": 62,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -115,7 +115,7 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#25053",
-      "supplier_batch_number": "WNUT-NMW-0-1000",
+      "supplier_batch_number": "WNUT-NMW-0-1000-WNO007",
       "price_nzd": 89,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -141,7 +141,7 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#26770",
-      "supplier_batch_number": "PO786MAR22-1",
+      "supplier_batch_number": "PO786MAR22-1-JBH005",
       "price_nzd": 44,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -154,7 +154,7 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#26770",
-      "supplier_batch_number": "LIQ-B401600",
+      "supplier_batch_number": "LIQ-B401600-LR005",
       "price_nzd": 35,
       "source": "email: jill@alembics.co.nz order confirmation"
     },

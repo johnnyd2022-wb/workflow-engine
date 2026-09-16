@@ -1254,6 +1254,126 @@ class TestCustomExpiryWarningNotExceedDuration:
 
 
 # ---------------------------------------------------------------------------
+# Consumption-only step completion (no actual_outputs)
+# ---------------------------------------------------------------------------
+
+
+class TestConsumptionOnlyStepCompletion:
+    """A step that only consumes inventory (empty actual_outputs) must complete via the
+    real route, not just the repository. Regression for a flush-timing gap: the route's
+    inventory-quantity update loop set ORM attributes inside
+    allow_inventory_quantity_write(...) but never flushed before leaving that block. A
+    step with actual_outputs re-enters the guard via create_inventory_item and so
+    incidentally flushes the earlier update too; a step with none (e.g. a terminal
+    "labelling"-style step that only consumes a prior output) never does, leaving the
+    quantity change dirty until the plain db_session.commit() outside any guard --
+    where before_flush's authorization check correctly rejected it as an unauthorized
+    write. Found via scripts/whistlebird_replay.py replaying real historical data
+    through this exact route."""
+
+    def test_step_with_no_outputs_can_fully_consume_a_prior_steps_output(self, db, demo_data):
+        import json
+
+        from flask import g
+
+        from app.core.backend.backend import complete_step
+        from app.core.db.models.inventory_item import InventoryItem
+        from app.core.db.repositories.user_repo import UserRepository
+
+        org_id = demo_data["org_id"]
+        user_repo = UserRepository(db)
+        user = user_repo.get_user_by_email(DEMO_USER_EMAIL)
+        assert user is not None, "demo user must exist for this test"
+
+        process_repo = ProcessRepository(db)
+        exec_repo = ExecutionRepository(db)
+        process = process_repo.create_process(
+            org_id=org_id,
+            name="Consumption-Only Step Test Process",
+            description="",
+            is_draft=False,
+        )
+        step1 = process_repo.add_step(
+            process_id=process.id,
+            org_id=org_id,
+            step_number=1,
+            position=1000,
+            name="Produce",
+            inputs=[],
+            outputs=[{"name": "Widget", "unit": "kg"}],
+            execution_prompts=[],
+        )
+        step2 = process_repo.add_step(
+            process_id=process.id,
+            org_id=org_id,
+            step_number=2,
+            position=2000,
+            name="Consume only",
+            inputs=[],
+            outputs=[],
+            execution_prompts=[],
+        )
+        assert step1 is not None and step2 is not None
+        execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
+        exec_steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
+        db.commit()
+
+        def _call(step, payload):
+            path = f"/api/core/executions/{execution.id}/steps/{step.id}/complete"
+            from flask import Flask
+
+            from app.core.backend.backend import core_bp
+
+            app = Flask(__name__)
+            app.secret_key = "test-secret"
+            app.register_blueprint(core_bp)
+            with app.app_context(), app.test_request_context(
+                path, method="POST", data=json.dumps(payload), content_type="application/json"
+            ):
+                g.org_id = str(org_id)
+                g.current_user = user
+                g.user_id = str(user.id)
+                g.user_email = getattr(user, "email", None)
+                return complete_step(str(execution.id), str(step.id))
+
+        response1, status1 = _call(
+            exec_steps[0],
+            {"actual_inputs": [], "actual_outputs": [{"name": "Widget", "quantity": 10, "unit": "kg"}]},
+        )
+        assert status1 == 200, response1.get_json()
+
+        produced = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.org_id == org_id, InventoryItem.source_execution_step_id == exec_steps[0].id)
+            .one()
+        )
+        assert str(produced.quantity) == "10.0000" or float(produced.quantity) == 10
+
+        response2, status2 = _call(
+            exec_steps[1],
+            {
+                "actual_inputs": [
+                    {"inventory_item_id": str(produced.id), "name": "Widget", "quantity": 10, "unit": "kg"}
+                ],
+                "actual_outputs": [],
+            },
+        )
+        assert status2 == 200, response2.get_json()
+
+        db.refresh(produced)
+        assert float(produced.quantity) == 0
+
+        # Teardown (inventory_items.source_execution_step_id FKs to execution_steps, so
+        # the item must go first)
+        db.query(InventoryItem).filter(InventoryItem.id == produced.id).delete(synchronize_session=False)
+        db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).delete(synchronize_session=False)
+        db.query(Execution).filter(Execution.id == execution.id).delete(synchronize_session=False)
+        db.query(Step).filter(Step.process_id == process.id).delete(synchronize_session=False)
+        db.query(Process).filter(Process.id == process.id).delete(synchronize_session=False)
+        db.commit()
+
+
+# ---------------------------------------------------------------------------
 # Full flow (E2E-style)
 # ---------------------------------------------------------------------------
 
