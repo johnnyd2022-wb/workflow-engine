@@ -31,8 +31,10 @@ can see and challenge every selection.
 ## CI rollout
 
 - `relevant_tests` runs on merge requests. It asks the selector for the pytest targets,
-  installs Chromium and starts the local app only when the selected tests require them,
-  and exits successfully without bootstrapping a database for documentation-only work.
+  installs Chromium and starts the local app only when a deliberately selected E2E test
+  requires them, and exits successfully without bootstrapping a database for
+  documentation-only work. UI source changes select the fast frontend/JS regression
+  suites; browser smoke coverage remains the existing deployed `cd_e2e` gate on `main`.
 - `unit_tests` runs `pytest tests/ -v` on `main` only. This preserves a full-suite gate
   as part of the post-merge CD pipeline before build and deploy.
 - Lint, security, migration reversibility, dependency auditing, and data-store checks

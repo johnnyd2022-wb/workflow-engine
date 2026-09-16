@@ -101,10 +101,6 @@ RULES = (
             "tests/test_execution_shared_utils_js.py",
             "tests/test_hub_overview.py",
             "tests/test_process_design.py",
-            "tests/e2e/test_core_load_waterfall.py",
-            "tests/e2e/test_process_steps_flow.py",
-            "tests/e2e/test_process_wizard_flow.py",
-            "tests/e2e/test_workflow_flow.py",
         ),
     ),
     Rule(
@@ -114,9 +110,6 @@ RULES = (
             "tests/test_execution_modal_frontend_assets.py",
             "tests/test_inventory.py",
             "tests/test_inventory_csv_validation.py",
-            "tests/e2e/test_inventory_csv_flow.py",
-            "tests/e2e/test_inventory_dispose_pages.py",
-            "tests/e2e/test_inventory_flow.py",
         ),
     ),
     Rule(
@@ -126,8 +119,6 @@ RULES = (
             "tests/test_execution_modal_frontend_assets.py",
             "tests/test_execution_shared_utils_js.py",
             "tests/test_ui_shared_access_denied.py",
-            "tests/e2e/test_landing_regressions.py",
-            "tests/e2e/test_static_asset_security.py",
         ),
     ),
     Rule(
@@ -144,7 +135,7 @@ RULES = (
             "tests/test_feature_subscriptions.py",
         ),
     ),
-    Rule("CRM product", ("app/features/crm/**",), ("tests/test_crm.py", "tests/e2e/test_crm_flow.py")),
+    Rule("CRM product", ("app/features/crm/**",), ("tests/test_crm.py",)),
     Rule(
         "Operational cases product",
         ("app/features/operational_cases/**",),
@@ -266,9 +257,13 @@ def select(paths: list[str]) -> dict[str, Any]:
             "mode": "full",
             "tests": ["tests/"],
             "reasons": {"tests/": reasons},
-            "needs_browser": True,
-            "needs_server": True,
-            "needs_e2e": True,
+            # Match the established full-suite CI behaviour. tests/e2e is collected
+            # but skipped under ENVIRONMENT=test; deployed smoke E2E remains the CD
+            # gate rather than turning a broad fallback into a new, unproven browser
+            # matrix.
+            "needs_browser": False,
+            "needs_server": False,
+            "needs_e2e": False,
         }
 
     tests = sorted(selected)

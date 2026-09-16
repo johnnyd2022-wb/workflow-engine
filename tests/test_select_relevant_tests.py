@@ -22,14 +22,14 @@ def _load_module():
 selector = _load_module()
 
 
-def test_inventory_ui_selects_inventory_and_browser_regressions():
+def test_inventory_ui_selects_inventory_and_frontend_regressions():
     plan = selector.select(["app/core/frontend/inventory/inventory.js"])
 
     assert plan["mode"] == "selected"
     assert "tests/test_inventory.py" in plan["tests"]
-    assert "tests/e2e/test_inventory_flow.py" in plan["tests"]
-    assert plan["needs_browser"] is True
-    assert plan["needs_server"] is True
+    assert "tests/test_execution_modal_frontend_assets.py" in plan["tests"]
+    assert plan["needs_browser"] is False
+    assert plan["needs_server"] is False
     assert "Inventory UI: app/core/frontend/inventory/inventory.js" in plan["reasons"]["tests/test_inventory.py"]
 
 
@@ -47,6 +47,7 @@ def test_shared_ci_or_migration_change_uses_the_full_suite():
         plan = selector.select([path])
         assert plan["mode"] == "full"
         assert plan["tests"] == ["tests/"]
+        assert plan["needs_e2e"] is False
 
 
 def test_unmapped_application_code_falls_back_to_the_full_suite():
