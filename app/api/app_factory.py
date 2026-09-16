@@ -146,23 +146,48 @@ def create_app():
 
     app.register_blueprint(create_process_templates_blueprint())
 
-    # Register CRM blueprint (feature-flagged)
+    # Optional product areas must never prevent Core from starting. A malformed optional
+    # module is logged and omitted from the shell rather than taking down every tenant.
+    crm_available = False
     if config.crm_enabled:
-        from app.features.crm.crm_bp import create_crm_blueprint
+        try:
+            from app.features.crm.crm_bp import create_crm_blueprint
 
-        app.register_blueprint(create_crm_blueprint())
+            app.register_blueprint(create_crm_blueprint())
+        except Exception:
+            logger.exception("optional_product_unavailable", product="crm")
+        else:
+            crm_available = True
 
     # Compliant is a separately mounted, feature-gated product area.  Its checks register
     # with CoreChecksRunner only when this flag is on; core remains usable without it.
+    compliant_available = False
     if config.compliant_enabled:
-        from app.features.compliant.compliant_bp import create_compliant_blueprint
+        try:
+            from app.features.compliant.compliant_bp import create_compliant_blueprint
 
-        app.register_blueprint(create_compliant_blueprint())
+            app.register_blueprint(create_compliant_blueprint())
+        except Exception:
+            logger.exception("optional_product_unavailable", product="compliant")
+        else:
+            compliant_available = True
+
+    app.extensions["product_availability"] = {
+        "crm": crm_available,
+        "compliant": compliant_available,
+    }
 
     # Always mount history/recovery routes; ordinary feature access is gated per request.
-    from app.features.operational_cases.operational_cases_bp import create_operational_cases_blueprint
+    operational_cases_available = False
+    try:
+        from app.features.operational_cases.operational_cases_bp import create_operational_cases_blueprint
 
-    app.register_blueprint(create_operational_cases_blueprint())
+        app.register_blueprint(create_operational_cases_blueprint())
+    except Exception:
+        logger.exception("optional_product_unavailable", product="operational_cases")
+    else:
+        operational_cases_available = True
+    app.extensions["product_availability"]["operational_cases"] = operational_cases_available
 
     # Serve shared UI files (JavaScript and CSS) (register before middleware)
     @app.route("/ui/shared/<path:filename>")
@@ -472,6 +497,9 @@ def create_app():
 
     @app.context_processor
     def _inject_feature_flags():
+        product_availability = app.extensions["product_availability"]
+        crm_available = bool(product_availability["crm"])
+        compliant_available = bool(product_availability["compliant"])
         # Per-org Compliant entitlement for the sidebar. Reuse the value the compliant
         # blueprint's before_request cached on g for /compliant* requests — but ONLY when
         # it was cached for THIS request's org (g.compliant_subscribed_org), since a
@@ -481,7 +509,7 @@ def create_app():
         org_id = getattr(g, "current_org_id", None)
         if getattr(g, "compliant_subscribed_org", None) == org_id and org_id is not None:
             compliant_subscribed = bool(getattr(g, "compliant_subscribed", False))
-        elif org_id and config.compliant_enabled:
+        elif org_id and compliant_available:
             from app.core.db import db_session
             from app.core.security.entitlements import org_has_feature
 
@@ -496,12 +524,14 @@ def create_app():
         else:
             compliant_subscribed = False
 
-        cases_available = bool(org_id and config.operational_cases_enabled)
+        cases_available = bool(
+            org_id and product_availability["operational_cases"] and config.operational_cases_enabled
+        )
 
         return dict(
             operational_cases_available=cases_available,
-            crm_enabled=config.crm_enabled,
-            compliant_enabled=config.compliant_enabled,
+            crm_enabled=crm_available,
+            compliant_enabled=compliant_available,
             compliant_subscribed=bool(compliant_subscribed),
             rum_enabled=config.rum_enabled,
             grafana_data_enabled=config.grafana_data_enabled,
@@ -566,7 +596,7 @@ def create_app():
     app.wsgi_app.add_files(os.path.join(_core_frontend, "css"), prefix="static/css/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory_static"), prefix="static/inventory/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
-    if config.crm_enabled:
+    if crm_available:
         _crm_frontend = os.path.join(app_dir, "features", "crm", "frontend")
         app.wsgi_app.add_files(os.path.join(_crm_frontend, "js"), prefix="crm/static/js/")
         app.wsgi_app.add_files(os.path.join(_crm_frontend, "css"), prefix="crm/static/css/")

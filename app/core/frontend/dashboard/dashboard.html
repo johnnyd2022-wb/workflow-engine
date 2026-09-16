@@ -168,6 +168,7 @@
           <a class="dash-kpi-link" href="/core">Open Core</a>
         </article>
 
+        {% if crm_enabled %}
         <article class="dash-kpi-card">
           <p class="dash-kpi-label">Monthly revenue goal</p>
           <p class="dash-kpi-value" data-kpi-revenue-goal>n/a</p>
@@ -183,6 +184,7 @@
           <div class="dash-kpi-spark" data-kpi-spark="tasks_week"></div>
           <a class="dash-kpi-link" href="/crm/tasks">Open CRM tasks</a>
         </article>
+        {% endif %}
 
         <article class="dash-kpi-card">
           <p class="dash-kpi-label">Batch completion vs last week</p>
@@ -234,6 +236,7 @@
           </div>
         </section>
 
+        {% if crm_enabled %}
         <section class="dash-card" aria-label="Commercial pulse mtd">
           <div class="dash-card-header">
             <h2>Commercial pulse (MTD)</h2>
@@ -247,6 +250,7 @@
           </div>
           <p class="dash-caption" data-sales-caption>Define a baseline in CRM Configuration to track attainment.</p>
         </section>
+        {% endif %}
       </div>
 
       <div class="dash-footer-note" data-dashboard-loading>Loading dashboard summary...</div>
