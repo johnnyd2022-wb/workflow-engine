@@ -253,9 +253,9 @@ interruption, read it before re-deriving anything)
 - [x] Regression test (`tests/test_executions.py::TestConsumptionOnlyStepCompletion`)
       for the flush-timing bug found in `complete_step` -- verified it fails without
       the fix and passes with it
-- [ ] Update `docs/whistlebird-production-import.md` to describe the new two-pass
+- [x] Update `docs/whistlebird-production-import.md` to describe the new two-pass
       approach
-- [ ] Open the MR
+- [x] Open the MR (!247)
 
 ## Real bugs found and fixed by going through the real API (not a complete list of
 work -- see git log for the full story; this is the "why this was worth doing" summary)
@@ -278,3 +278,30 @@ work -- see git log for the full story; this is the "why this was worth doing" s
    (`quantity: None`, used for legacy ingredient links with no recorded amount) fails
    the real endpoint's `Decimal(str(quantity))` parse outright -- real consumption can
    only be reported where an exact amount is actually known.
+
+## Recipe and finished-stock accounting added 2026-09-16
+
+The API replay now records the inputs and outputs that were previously absent from the
+historical load, using the founder-confirmed per-VAT process rather than invented
+allocations:
+
+- **Neutral grain spirit (NGS):** every Wildflower/Solstice maceration consumes 0.746 L
+  of the real 96.4% NGS stock to prepare two 1.8 L, 20% ABV flasks (and records 2.854 L
+  of water as an untracked `other material`). Batches before 2025-04-02 draw from the
+  nine real `purchases_gns` receipts. From that date onward, the compiler creates one
+  formula-sized NGS receipt per VAT, dated three days before maceration and explicitly
+  dependent on by the consuming step, so the historical pool is not double-counted.
+- **VAT fill:** Wildflower uses 24.456 L NGS + 30.397 L water, then a 1.260 L 66.6% NGS
+  top-up. The replay resolves that top-up to the real underlying stock draw (0.870 L NGS
+  and 0.390 L water), yielding 25.326 L NGS and 30.787 L recorded water at aging.
+  Solstice uses 17.776 L NGS and 25.064 L water. The historic bottled quantities remain
+  the final output; no yield is manufactured from the recipe figures.
+- **Foraged and dilution inputs:** water plus the six founder-supplied foraged botanical
+  quantities are recorded as `other materials` inputs (no inventory identifier, so no
+  phantom purchased stock): Wildflower's lemon juice/grapefruit juice/lemon peel and
+  Solstice's kawakawa/orange peel/orange juice. Each per-flask amount is doubled for a
+  VAT.
+- **Finished stock:** labelling consumes the bottled-product item and produces a clear
+  product-line final item with the identical recorded quantity. Historical breakages are
+  already included in those bottle counts, so the replay does not invent separate
+  wastage.

@@ -213,6 +213,42 @@ class MarkerStore:
             ).first()
             return str(row[0]) if row else None
 
+    def consume_available_raw_material(self, name: str, quantity_needed: Decimal, unit: str) -> list[dict[str, Any]]:
+        """Greedily consume `quantity_needed` from existing raw_material items named
+        `name`, oldest `purchase_date` first, splitting across multiple lots if needed.
+
+        Unlike `_ingredient_inputs_for_step` (one purchase row per ingredient_code, exact
+        1:1 match), Neutral grain spirit is a shared, continuously-purchased consumable:
+        the real legacy `purchases_gns` rows are bulk lots (2L..200L) bought over 2023-2025
+        and drawn down by many VATs, not tied to a single batch. This mirrors that reality
+        instead of forcing an artificial one-purchase-per-batch link.
+        """
+        remaining = Decimal(str(quantity_needed))
+        consumed: list[dict[str, Any]] = []
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT id, name, unit, quantity FROM inventory_items "
+                    "WHERE org_id = :org_id AND name = :name AND inventory_type = 'raw_material' "
+                    "AND quantity > 0 ORDER BY purchase_date ASC NULLS LAST, created_at ASC"
+                ),
+                {"org_id": str(self.org_id), "name": name},
+            ).fetchall()
+        for row in rows:
+            if remaining <= 0:
+                break
+            available = Decimal(str(row[3]))
+            take = min(available, remaining)
+            if take <= 0:
+                continue
+            consumed.append({"inventory_item_id": str(row[0]), "name": row[1], "quantity": str(take), "unit": unit})
+            remaining -= take
+        if remaining > 0:
+            raise ReplayRejectedError(
+                f"not enough {name!r} stock to consume {quantity_needed} {unit} (short by {remaining} {unit})"
+            )
+        return consumed
+
     def most_recently_created_execution_id(self) -> str | None:
         """The execution this replay itself created last, so far.
 
@@ -377,6 +413,18 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
 
         if step_key in ("maceration", "rhubarb_maceration"):
             actual_inputs.extend(_ingredient_inputs_for_step(store, event.payload.get("known_input_quantities", {})))
+
+        # Neutral grain spirit (real inventory draw) and water/foraged botanicals ("other
+        # materials" -- no inventory_item_id, matching the UI's "Other materials" input
+        # concept: real usage the app records without tracking as purchased stock).
+        ngs_quantity_l = event.payload.get("ngs_quantity_l")
+        if ngs_quantity_l:
+            actual_inputs.extend(
+                store.consume_available_raw_material("Neutral grain spirit", Decimal(ngs_quantity_l), "L")
+            )
+        for other_input in event.payload.get("other_material_inputs", []):
+            actual_inputs.append(dict(other_input))
+
         if step_key == "rhubarb_maceration" and batch.base_vat is not None:
             base_execution_id = store.execution_id_for_global_vat(batch.base_vat)
             if base_execution_id is None:
@@ -418,6 +466,18 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
                         bottled_item = candidate
             if bottled_item is not None:
                 actual_inputs.append(_consume_whole_item(bottled_item))
+                # Labelling is the terminal step: what goes on-hand as finished stock is
+                # exactly what came in as bottled product (breakages, if any, are already
+                # netted into the recorded bottled-product count -- see the founder's
+                # 2026-09-16 note). Without this, labelling only ever consumed and never
+                # produced, so finished stock vanished from the UI entirely.
+                actual_outputs.append(
+                    {
+                        "name": f"{batch.product_line.capitalize()} - final product",
+                        "quantity": str(bottled_item["quantity"]),
+                        "unit": bottled_item["unit"],
+                    }
+                )
 
     elif trial is not None and step_key == "library_stock" and trial.library_ml:
         actual_outputs.append({"name": "Library stock", "quantity": str(trial.library_ml), "unit": "mL"})
@@ -500,6 +560,11 @@ def run_replay(
     if limit is not None:
         events = events[:limit]
 
+    # Keep the account's actual password in sync with KeePass before every run, rather
+    # than trusting whatever it was last set to -- self-healing, so it never silently
+    # drifts out from under whoever needs to log in and check on this tenant by hand.
+    wm.sync_whistlebird_test_admin_password(target_url, org_name, admin_email)
+
     engine = create_engine(target_url)
     with engine.connect() as conn:
         row = conn.execute(text("SELECT id FROM organisations WHERE name = :name"), {"name": org_name}).first()
@@ -545,7 +610,13 @@ def _arguments() -> argparse.Namespace:
         parser.error("--legacy-url and --target-url are required")
     args.admin_password = os.environ.get(args.admin_password_env)
     if not args.admin_password:
-        parser.error(f"{args.admin_password_env} must be set")
+        # Same KeePassXC entry wm.sync_whistlebird_test_admin_password() keeps the
+        # account synced with -- the env var remains a valid override, it's just no
+        # longer required for local use.
+        try:
+            args.admin_password = wm._keepass_password(wm.WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY)
+        except ValueError as e:
+            parser.error(f"{args.admin_password_env} is not set and KeePassXC fallback failed: {e}")
     return args
 
 

@@ -6,15 +6,25 @@ in `scripts/whistlebird_replay.py`'s own dry-run; these tests only cover
 silently reorder a 600+ event replay instead of loudly failing.
 """
 
+import sys
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-import sys
-
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
-from whistlebird_replay_timeline import ReplayEvent, date_prioritised_topological_sort  # noqa: E402
+import whistlebird_migration as wm  # noqa: E402
+from whistlebird_replay_timeline import (  # noqa: E402
+    NGS_LEGACY_POOL_CUTOFF,
+    ReplayEvent,
+    _batch_events,
+    _flask_ngs_and_water_l,
+    _foraged_botanical_inputs,
+    _ngs_purchase_event,
+    _vat_fill_ngs_and_water_l,
+    date_prioritised_topological_sort,
+)
 
 
 def _event(event_id: str, real_date: str, depends_on: tuple[str, ...] = ()) -> ReplayEvent:
@@ -96,3 +106,64 @@ def test_tiebreak_on_identical_dates_is_deterministic_by_event_id():
     ordered1 = date_prioritised_topological_sort(list(events))
     ordered2 = date_prioritised_topological_sort(list(reversed(events)))
     assert [e.event_id for e in ordered1] == [e.event_id for e in ordered2] == ["a", "m", "z"]
+
+
+def _wildflower_batch(step_date: date) -> wm.ProductionBatch:
+    return wm.ProductionBatch(
+        global_vat=27,
+        product_line="wildflower",
+        batch_label="VAT27",
+        steps={
+            "maceration": wm.BatchStep("maceration", step_date, "clean"),
+            "distilling": wm.BatchStep("distilling", step_date, "clean"),
+            "aging": wm.BatchStep("aging", step_date, "clean"),
+            "bottling": wm.BatchStep("bottling", step_date, "clean"),
+            "labelling": wm.BatchStep("labelling", step_date, "clean"),
+        },
+        vat_volume_l=Decimal("55"),
+        vat_abv=Decimal("44"),
+        bottlings=({"bottles": "78.5", "bottle_size_ml": "700"},),
+        ingredient_codes=(),
+        base_vat=None,
+        extra_data={},
+    )
+
+
+def test_wildflower_recipe_uses_founder_confirmed_ngs_water_and_foraged_inputs():
+    flask_ngs, flask_water = _flask_ngs_and_water_l()
+    fill_ngs, fill_water = _vat_fill_ngs_and_water_l("wildflower")
+
+    assert (flask_ngs, flask_water) == (Decimal("0.746"), Decimal("2.854"))
+    # 24.456 L initial dilution, plus the NGS portion of the 1.260 L / 66.6% top-up.
+    assert (fill_ngs, fill_water) == (Decimal("25.326"), Decimal("30.787"))
+    assert _foraged_botanical_inputs("wildflower") == [
+        {"name": "Lemon juice", "quantity": "34", "unit": "mL"},
+        {"name": "Grapefruit (pink) juice", "quantity": "54", "unit": "mL"},
+        {"name": "Lemon peel", "quantity": "3.0", "unit": "g"},
+    ]
+    assert _foraged_botanical_inputs("solstice") == [
+        {"name": "Kawakawa leaf", "quantity": "8", "unit": "g"},
+        {"name": "Orange peel", "quantity": "5.0", "unit": "g"},
+        {"name": "Orange juice", "quantity": "108", "unit": "mL"},
+    ]
+
+
+def test_post_cutoff_ngs_purchase_is_created_before_maceration_consumes_it():
+    batch = _wildflower_batch(NGS_LEGACY_POOL_CUTOFF)
+    events = _batch_events(batch, {}, {batch.global_vat: batch.marker}, {})
+    purchase = next(event for event in events if event.event_id.startswith("purchase:NGS-"))
+    maceration = next(event for event in events if event.event_id.endswith(":maceration"))
+
+    assert purchase.real_date == date(2025, 3, 30)
+    assert purchase.payload["record"]["quantity"] == "26.072"
+    assert purchase.event_id in maceration.depends_on
+    assert maceration.payload["ngs_quantity_l"] == "0.746"
+    assert maceration.payload["other_material_inputs"][0] == {"name": "Water", "quantity": "2.854", "unit": "L"}
+    aging = next(event for event in events if event.event_id.endswith(":aging"))
+    assert aging.payload["ngs_quantity_l"] == "25.326"
+    assert aging.payload["other_material_inputs"] == [{"name": "Water", "quantity": "30.787", "unit": "L"}]
+
+
+def test_pre_cutoff_batch_does_not_invent_a_dedicated_ngs_purchase():
+    batch = _wildflower_batch(NGS_LEGACY_POOL_CUTOFF.replace(day=1))
+    assert _ngs_purchase_event(batch, batch.steps["maceration"].step_date) is None
