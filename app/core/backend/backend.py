@@ -11,7 +11,18 @@ from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+)
 from pydantic import ValidationError
 from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
@@ -76,6 +87,12 @@ from app.observability import get_logger
 from app.utils.config_loader import config
 
 logger = get_logger(__name__)
+
+
+def _product_available(feature: str) -> bool:
+    """Whether an optional product completed registration in this app instance."""
+    return bool(current_app.extensions.get("product_availability", {}).get(feature, False))
+
 
 # Guardrail: batch size caps row-lock duration under concurrent SELECT ... FOR UPDATE.
 MAX_WASTAGE_BATCH_ENTRIES = 100
@@ -735,7 +752,9 @@ def dashboard():
 @core_bp.route("/core/integrations", methods=["GET"])
 @requires_auth
 def integrations():
-    return redirect("/crm/configuration")
+    if _product_available("crm"):
+        return redirect("/crm/configuration")
+    return render_template("integrations/integrations.html", active_page="integrations")
 
 
 @core_bp.route("/core/settings", methods=["GET"])
@@ -2306,7 +2325,7 @@ def complete_step(execution_id: str, execution_step_id: str):
         # own platform registry. Core knows only how to verify its own operational facts
         # (such as an active evidence file), never which industry or framework requested
         # the constraint.
-        if config.compliant_enabled:
+        if _product_available("compliant"):
             from app.features.compliant.platform.workflow_rules import completion_constraints
 
             constraints = completion_constraints(db_session, org_id)

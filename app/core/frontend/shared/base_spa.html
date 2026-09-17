@@ -50,8 +50,11 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='tasks.css') }}">
   {# Inventory spa header: used across many pages (core, integrations, settings, notifications). Global for HTMX swaps. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_inventory_static', filename='inventory-spa-header.css') }}">
-  {# CRM styles must be global because HTMX only swaps #page-content, not <head>. #}
-  <link rel="stylesheet" href="/crm/static/css/crm.css">
+  {# CRM is enabled in every shipped environment. Keep the assets behind the runtime
+     availability gate so a failed optional product cannot break the Core shell. #}
+  {% if crm_enabled %}
+  <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='crm.css') }}">
+  {% endif %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -347,6 +350,7 @@
   <script src="{{ url_for('core.serve_core_js', filename='htmx.min.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='tasks.js') }}" defer></script>
   {# CRM scripts loaded before Alpine so components are defined when Alpine initialises x-data. #}
+  {% if crm_enabled %}
   <script src="/crm/static/js/crm-api.js" defer></script>
   <script src="/crm/static/js/overview.js" defer></script>
   <script src="/crm/static/js/customers.js" defer></script>
@@ -354,6 +358,7 @@
   <script src="/crm/static/js/tasks-calendar.js" defer></script>
   <script src="/crm/static/js/configuration.js" defer></script>
   <script src="/crm/static/js/integrations.js" defer></script>
+  {% endif %}
   <script src="{{ url_for('core.serve_core_js', filename='alpinejs.min.js') }}" defer></script>
 
   <script>
