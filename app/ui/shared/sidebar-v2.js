@@ -1,5 +1,8 @@
+// This file is re-evaluated after an HTMX boosted navigation. Keep its state
+// private so a second evaluation cannot redeclare a top-level lexical binding.
+(() => {
 // Shared sidebar toggle function for V2 Modern design
-function toggleSidebar() {
+window.toggleSidebar = function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
   const mainContent = document.querySelector('.main-content');
   sidebar.classList.toggle('collapsed');
@@ -64,19 +67,12 @@ function updateSidebarActiveLink() {
   });
 }
 
-// Initial paint (full load)
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', function () {
-    _lastSidebarPathname = normalizePathname(window.location.pathname);
-    updateSidebarActiveLink();
-  });
-} else {
+function refreshSidebarActiveLink() {
   _lastSidebarPathname = normalizePathname(window.location.pathname);
   updateSidebarActiveLink();
 }
 
-// HTMX SPA navigation: sidebar stays, content swaps.
-document.body.addEventListener('htmx:afterSwap', function (evt) {
+function handleSidebarAfterSwap(evt) {
   // Only run when main content was swapped
   const target = evt && evt.detail && evt.detail.target;
   if (target && (target.id === 'page-content' || target.closest && target.closest('#page-content'))) {
@@ -85,12 +81,27 @@ document.body.addEventListener('htmx:afterSwap', function (evt) {
     _lastSidebarPathname = now;
     updateSidebarActiveLink();
   }
-});
+}
 
-// Back/forward navigation
-window.addEventListener('popstate', function () {
-  const now = normalizePathname(window.location.pathname);
-  _lastSidebarPathname = now;
-  updateSidebarActiveLink();
-});
+window.__sidebarV2Refresh = refreshSidebarActiveLink;
+window.__sidebarV2HandleAfterSwap = handleSidebarAfterSwap;
 
+// The asset can be evaluated again after HTMX navigation. Bind the shared
+// document listeners once, while dispatching to the most recently evaluated
+// implementation above.
+if (!window.__sidebarV2ListenersBound) {
+  document.addEventListener('DOMContentLoaded', function () {
+    window.__sidebarV2Refresh();
+  });
+  document.body.addEventListener('htmx:afterSwap', function (evt) {
+    window.__sidebarV2HandleAfterSwap(evt);
+  });
+  window.addEventListener('popstate', function () {
+    window.__sidebarV2Refresh();
+  });
+  window.__sidebarV2ListenersBound = true;
+}
+
+// Initial paint (full load) or an immediately-evaluated boosted script.
+if (document.readyState !== 'loading') refreshSidebarActiveLink();
+})();
