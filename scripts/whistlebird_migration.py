@@ -1870,9 +1870,21 @@ def _require_matching_import(report: dict[str, Any], report_name: str) -> None:
 
 
 def build_import_verification(
-    legacy_url: str, target_url: str, requested_org_name: str, manifest_path: Path | None
+    legacy_url: str,
+    target_url: str,
+    requested_org_name: str,
+    manifest_path: Path | None,
+    include_replay_ngs_purchases: bool = True,
 ) -> dict[str, Any]:
-    """Compare loaded counts against the sources and assert no legacy wording leaked."""
+    """Compare loaded counts against the sources and assert no legacy wording leaked.
+
+    `include_replay_ngs_purchases` defaults to True because `--verify-import` (its main
+    real-world caller) checks a target populated by the preferred API-replay path
+    (`scripts/whistlebird_replay.py`), which buys dedicated per-batch NGS on top of the
+    sources below. `bootstrap_whistlebird_test` -- the older ORM-direct path, which never
+    creates those purchases -- passes False so its own internal verification isn't broken
+    by counting stock it doesn't produce.
+    """
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Verification is only permitted for {RESET_ORG_NAME!r}")
 
@@ -1904,14 +1916,15 @@ def build_import_verification(
     batches = _merge_batches(legacy, manifest_batches)
     expected_by_workflow = Counter(batch.workflow_name for batch in batches)
 
-    # The API-replay path (scripts/whistlebird_replay.py) buys Neutral grain spirit
-    # dedicated to a single batch wherever the real purchases_gns purchases can't reach
-    # (see whistlebird_replay_timeline.NGS_LEGACY_POOL_CUTOFF) -- not sourced from any
-    # legacy table or manifest file, so it has to be counted here rather than read off a
-    # source count above.
-    from whistlebird_replay_timeline import count_dedicated_ngs_purchases
+    if include_replay_ngs_purchases:
+        # The API-replay path (scripts/whistlebird_replay.py) buys Neutral grain spirit
+        # dedicated to a single batch wherever the real purchases_gns purchases can't
+        # reach (see whistlebird_replay_timeline.NGS_LEGACY_POOL_CUTOFF) -- not sourced
+        # from any legacy table or manifest file, so it has to be counted here rather
+        # than read off a source count above.
+        from whistlebird_replay_timeline import count_dedicated_ngs_purchases
 
-    raw_material_sources["ngs_dedicated_purchases"] = count_dedicated_ngs_purchases(batches)
+        raw_material_sources["ngs_dedicated_purchases"] = count_dedicated_ngs_purchases(batches)
 
     with create_engine(target_url).connect() as target:
         org_id = target.execute(
@@ -2081,7 +2094,12 @@ def bootstrap_whistlebird_test(
     batches = apply_production_batches(legacy_url, target_url, requested_org_name, manifest_path)
     trials = apply_trial_batches(legacy_url, target_url, requested_org_name)
     lodgements = apply_customs_lodgements(legacy_url, target_url, requested_org_name)
-    verification = build_import_verification(legacy_url, target_url, requested_org_name, manifest_path)
+    # This ORM-direct path never buys the API-replay path's dedicated per-batch NGS
+    # purchases (see build_import_verification's docstring), so its own verification
+    # must not expect them.
+    verification = build_import_verification(
+        legacy_url, target_url, requested_org_name, manifest_path, include_replay_ngs_purchases=False
+    )
     manifest_verification = build_manifest_verification(manifest_path, target_url, requested_org_name)
     _require_matching_import(verification, "Production history load")
     compliant_nz_alcohol_setup = ensure_compliant_nz_alcohol_setup(target_url, requested_org_name)
