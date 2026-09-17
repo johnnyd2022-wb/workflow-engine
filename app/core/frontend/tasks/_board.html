@@ -1,18 +1,18 @@
 <div class="core-tasks" x-data="coreTasksBoard()" x-init="init()">
-  <section class="card spa-primary-flat core-tasks__hero">
+  <section class="core-tasks__hero">
     <div class="core-tasks__heading">
       <div><h2>Tasks</h2><p>Plan operational work alongside CRM follow-ups.</p></div>
       <div class="core-tasks__heading-actions">
         <a href="/core/tasks/configuration" class="btn btn-secondary" hx-boost="false">Task settings</a>
-        <button type="button" class="btn btn-primary" @click="openCreate()">New task</button>
       </div>
     </div>
+  </section>
 
+  <section class="core-tasks__calendar-card">
     <div class="core-tasks__calendar-heading">
       <p>Upcoming — click a date to filter</p>
       <span x-text="calVisibleMonthLabel"></span>
     </div>
-    <div class="core-tasks__drag-hint" aria-live="polite">Drag to scroll dates</div>
     <div x-ref="calStrip" class="core-tasks__cal-strip"
       @pointerdown="onCalPointerDown($event)" @pointermove="onCalPointerMove($event)"
       @pointerup="onCalPointerUp($event)" @pointercancel="onCalPointerUp($event)" @scroll.passive="onCalScroll()">
@@ -29,15 +29,21 @@
       <button type="button" class="btn btn-secondary" @click="calSelectedDate = null">Clear</button>
     </div>
 
-    <div class="core-tasks__filters">
-      <input type="search" class="form-input" placeholder="Search tasks" x-model="searchQuery">
+    <div class="core-tasks__calendar-actions">
+      <div class="core-tasks__search-wrap">
+        <input type="search" class="form-input" placeholder="Search tasks" x-model="searchQuery" autocomplete="off">
+      </div>
+      <button type="button" class="btn btn-primary core-tasks__new-task" @click="openCreate()">New task</button>
+    </div>
+  </section>
+
+  <section class="core-tasks__filters">
       <select class="form-select" x-model="sourceFilter" aria-label="Task source"><option value="all">All task sources</option><option value="core">System tasks</option><option value="crm">CRM tasks</option></select>
       <select class="form-select" x-model="assigneeFilter" aria-label="Assignee"><option value="">All assignees</option><template x-for="user in users" :key="user.id"><option :value="user.id" x-text="user.display_name || user.email"></option></template></select>
       <label class="core-tasks__toggle"><input type="checkbox" x-model="onlyAssigned"> Assigned only</label>
       <button type="button" class="btn btn-secondary" @click="openLaneManager()">Manage lanes</button>
       <button type="button" class="btn btn-secondary" @click="openLaneModal()">Add lane</button>
       <button type="button" class="btn btn-secondary" @click="toggleArchive()" :disabled="archiveLoading" x-text="showArchive ? 'Back to active tasks' : 'Load archive'"></button>
-    </div>
   </section>
 
   <p class="core-tasks__error" x-show="error" x-text="error" x-cloak></p>
