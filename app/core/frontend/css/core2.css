@@ -1031,6 +1031,124 @@ button.core2-hub-card {
   box-shadow: 0 6px 22px rgba(18, 46, 66, 0.04);
 }
 
+/* Core hub summaries use the same quiet outer container and compact, discrete
+ * metric cards as the NP3 Audit Health snapshot. */
+.core2-summary-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+  margin-bottom: 24px;
+}
+
+.core2-summary-layout__full {
+  grid-column: 1 / -1;
+}
+
+.core2-summary-container {
+  align-content: start;
+  padding: 14px;
+  gap: 12px;
+  box-sizing: border-box;
+  box-shadow: none;
+}
+
+.core2-stats-hybrid--cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.core2-stats-hybrid--cards .core2-stats-hybrid__cell {
+  min-height: 70px;
+  padding: 10px;
+  gap: 5px;
+  border: 1px solid var(--border-light, #e6ecef);
+  border-radius: 12px;
+  background: var(--bg-secondary, #fbfcfd);
+}
+
+.core2-stats-hybrid--cards .core2-stats-hybrid__cell + .core2-stats-hybrid__cell {
+  border-left: 1px solid var(--border-light, #e6ecef);
+}
+
+.core2-stats-hybrid--cards .core2-stats-hybrid__label {
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.core2-stats-hybrid--cards .core2-stats-hybrid__value {
+  font-size: 1.15rem;
+}
+
+.core2-summary-container .core2-attention-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.core2-summary-container .core2-attention-item {
+  min-height: 70px;
+  padding: 10px;
+  border-radius: 12px;
+}
+
+.core2-embedded-work-section {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light, #e6ecef);
+}
+
+.core2-action-container {
+  gap: 12px;
+}
+
+.core2-action-container .core2-hub-card-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.core2-action-container .core2-hub-card-stack--single {
+  grid-template-columns: 1fr;
+}
+
+.core2-action-container .core2-hub-card {
+  min-height: 78px;
+  padding: 12px;
+  border: 1px solid var(--border-light, #e6ecef);
+  border-radius: 12px;
+  background: var(--bg-secondary, #fbfcfd);
+}
+
+.core2-action-container .core2-hub-card:hover {
+  border-color: #51a69c;
+  background: #f0fbf9;
+  box-shadow: 0 3px 12px rgba(18, 46, 66, 0.07);
+}
+
+.core2-action-container .core2-hub-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #e7f3f1;
+  color: #175c52;
+}
+
+.core2-action-container .core2-hub-card__text .spa-form-section-title {
+  font-size: 0.92rem;
+}
+
+.core2-action-container .core2-hub-card__text .page-subtitle {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .core2-workspace-container .core2-attention-item,
 .core2-workspace-container .core2-work-list {
   border-color: var(--border-light, #dce4e9);
@@ -1150,6 +1268,14 @@ button.core2-hub-card {
 
 @media (max-width: 640px) {
   .core2-workspace-container { padding: 16px; border-radius: 14px; }
+  .core2-summary-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .core2-summary-layout__full { grid-column: auto; }
+  .core2-summary-container { padding: 14px; }
+  .core2-action-container .core2-hub-card-stack { grid-template-columns: 1fr; }
 }
 @media (min-width: 900px) {
   .core2-stats-hybrid__cell {

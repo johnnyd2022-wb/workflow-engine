@@ -79,8 +79,15 @@
           </section>
 
           <div id="core2-panel-overview" class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview" role="tabpanel" aria-labelledby="core2-tab-overview">
-            <section class="spa-form-section core2-stats-panel" aria-label="Core overview stats">
-              <div class="core2-stats-hybrid" role="group" aria-label="Core metrics segmented">
+            <div class="spa-form-section core2-summary-layout">
+              <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-overview-summary-title">
+                <div class="core2-section-heading">
+                  <div>
+                    <p class="core2-eyebrow">Overview</p>
+                    <h2 id="core2-overview-summary-title" class="spa-form-section-title">Core overview</h2>
+                  </div>
+                </div>
+                <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Core metrics">
                 <div class="core2-stats-hybrid__cell">
                   <div class="core2-stats-hybrid__label">Product workflows</div>
                   <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
@@ -97,48 +104,54 @@
                   <div class="core2-stats-hybrid__label">Stock lines</div>
                   <div class="core2-stats-hybrid__value" id="metric-inventory">0</div>
                 </div>
-              </div>
-            </section>
-            <section class="spa-form-section core2-workspace-container" aria-labelledby="core2-overview-attention-title">
-              <div class="core2-section-heading">
-                <div>
-                  <p class="core2-eyebrow">Overview</p>
-                  <h2 id="core2-overview-attention-title" class="spa-form-section-title">Operational status</h2>
                 </div>
-                <a href="/core/notifications" class="core2-text-link">View all alerts</a>
-              </div>
-              <div id="core2-overview-attention" class="core2-attention-grid" aria-live="polite">
-                <p class="core2-active-batches-empty">Loading operational priorities...</p>
-              </div>
-            </section>
+              </section>
 
-            <section class="spa-form-section core2-workspace-container" aria-labelledby="core2-overview-batches-title">
-              <div class="core2-section-heading">
-                <div>
-                  <p class="core2-eyebrow">Workflow</p>
-                  <h2 id="core2-overview-batches-title" class="spa-form-section-title">Active production</h2>
+              <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-overview-attention-title">
+                <div class="core2-section-heading">
+                  <div>
+                    <p class="core2-eyebrow">Overview</p>
+                    <h2 id="core2-overview-attention-title" class="spa-form-section-title">Operational status</h2>
+                  </div>
+                  <a href="/core/notifications" class="core2-text-link">View all alerts</a>
                 </div>
-                <a href="/core/executions/live" class="core2-text-link">Open production board</a>
-              </div>
-              <div id="core2-overview-active-batches" class="core2-work-list" aria-live="polite">
-                <p class="core2-active-batches-empty">Loading active batches...</p>
-              </div>
-            </section>
+                <div id="core2-overview-attention" class="core2-attention-grid" aria-live="polite">
+                  <p class="core2-active-batches-empty">Loading operational priorities...</p>
+                </div>
+                <div class="core2-embedded-work-section" aria-labelledby="core2-overview-batches-title">
+                  <div class="core2-section-heading">
+                    <div>
+                      <p class="core2-eyebrow">Workflow</p>
+                      <h3 id="core2-overview-batches-title" class="spa-form-section-title">Active production</h3>
+                    </div>
+                    <a href="/core/executions/live" class="core2-text-link">Open production board</a>
+                  </div>
+                  <div id="core2-overview-active-batches" class="core2-work-list" aria-live="polite">
+                    <p class="core2-active-batches-empty">Loading active batches...</p>
+                  </div>
+                </div>
+              </section>
+            </div>
           </div>
 
           <div id="core2-panel-inventory" class="core2-tab-panel" data-core2-tab-panel="inventory" role="tabpanel" aria-labelledby="core2-tab-inventory" hidden>
-            <section class="spa-form-section core2-stats-panel core2-tab-summary" aria-label="Inventory summary">
-              <div class="core2-stats-hybrid" role="group" aria-label="Inventory summary metrics">
+            <div class="spa-form-section core2-summary-layout core2-tab-summary" aria-label="Inventory summary">
+              <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-inventory-overview-title">
+                <div class="core2-section-heading"><div><p class="core2-eyebrow">Inventory</p><h2 id="core2-inventory-overview-title" class="spa-form-section-title">Inventory overview</h2></div></div>
+                <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Inventory summary metrics">
                 <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Stock lines</div><div class="core2-stats-hybrid__value" id="core2-inv-summary-lines">0</div></div>
                 <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Allocated to batches</div><div class="core2-stats-hybrid__value" id="core2-inv-summary-inuse">0</div></div>
                 <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Low stock</div><div class="core2-stats-hybrid__value" id="core2-inv-summary-low">0</div></div>
                 <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Traceable stock</div><div class="core2-stats-hybrid__value" id="core2-inv-summary-traceable">0%</div></div>
               </div>
-              <section class="core2-operational-section" aria-labelledby="core2-inventory-priorities-title">
-                <div class="core2-section-heading"><div><p class="core2-eyebrow">Stock health</p><h2 id="core2-inventory-priorities-title" class="spa-form-section-title">Inventory to review</h2></div></div>
+              </section>
+              <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-inventory-priorities-title">
+                <div class="core2-section-heading"><div><p class="core2-eyebrow">Stock health</p><h2 id="core2-inventory-priorities-title" class="spa-form-section-title">Inventory review</h2></div></div>
                 <div id="core2-inventory-priorities" class="core2-attention-grid" aria-live="polite"><p class="core2-active-batches-empty">Loading inventory priorities...</p></div>
               </section>
-              <div class="core2-hub-card-stack core2-hub-card-stack--single">
+              <section class="core2-workspace-container core2-action-container core2-summary-layout__full" aria-labelledby="core2-inventory-actions-title">
+                <div class="core2-section-heading"><div><p class="core2-eyebrow">Inventory</p><h2 id="core2-inventory-actions-title" class="spa-form-section-title">Inventory actions</h2></div></div>
+                <div class="core2-hub-card-stack core2-hub-card-stack--single">
                 <a href="/core/inventory/live?back_tab=inventory" class="core2-hub-card" aria-labelledby="core2-live-inventory-title">
                   <span class="core2-hub-card__icon" aria-hidden="true">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -152,27 +165,29 @@
                     <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Drill into item cards, movement feed, and by-process stock view.</p>
                   </span>
                 </a>
+                </div>
+              </section>
               </div>
-            </section>
           </div>
 
           <div id="core2-panel-workflows" class="core2-tab-panel" data-core2-tab-panel="workflows" role="tabpanel" aria-labelledby="core2-tab-workflows" hidden>
-            <section class="spa-form-section core2-stats-panel core2-tab-summary" aria-label="Product workflow summary">
-              <div class="core2-stats-hybrid" role="group" aria-label="Workflow summary metrics">
+            <div class="spa-form-section core2-summary-layout core2-tab-summary" aria-label="Product workflow summary">
+              <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-workflows-overview-title">
+                <div class="core2-section-heading"><div><p class="core2-eyebrow">Workflows</p><h2 id="core2-workflows-overview-title" class="spa-form-section-title">Overview</h2></div></div>
+                <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Workflow summary metrics">
                 <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Batches in flight</div><div class="core2-stats-hybrid__value" id="core2-wf-summary-active">0</div></div>
                 <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Ready to record</div><div class="core2-stats-hybrid__value" id="core2-wf-summary-ready">0</div></div>
                 <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Finished this week</div><div class="core2-stats-hybrid__value" id="core2-wf-summary-completed7d">0</div></div>
                 <div class="core2-stats-hybrid__cell"><div class="core2-stats-hybrid__label">Product workflows</div><div class="core2-stats-hybrid__value" id="core2-wf-summary-processes">0</div></div>
               </div>
-              <section class="core2-operational-section" aria-labelledby="core2-workflow-queue-title">
+              </section>
+              <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-workflow-queue-title">
                 <div class="core2-section-heading"><div><p class="core2-eyebrow">Next work</p><h2 id="core2-workflow-queue-title" class="spa-form-section-title">Production queue</h2></div><a href="/core/executions/live" class="core2-text-link">Open production board</a></div>
                 <div id="core2-workflow-queue" class="core2-work-list" aria-live="polite"><p class="core2-active-batches-empty">Loading production queue...</p></div>
               </section>
-              <section class="core2-operational-section" aria-labelledby="core2-workflow-activity-title">
-                <div class="core2-section-heading"><div><p class="core2-eyebrow">Last 7 days</p><h2 id="core2-workflow-activity-title" class="spa-form-section-title">Workflow activity</h2></div></div>
-                <div id="core2-workflow-activity" class="core2-work-list" aria-live="polite"><p class="core2-active-batches-empty">Loading workflow activity...</p></div>
-              </section>
-              <div class="core2-hub-card-stack core2-hub-card-stack--single">
+              <section class="core2-workspace-container core2-action-container core2-summary-layout__full" aria-labelledby="core2-workflow-actions-title">
+                <div class="core2-section-heading"><div><p class="core2-eyebrow">Workflow</p><h2 id="core2-workflow-actions-title" class="spa-form-section-title">Workflow actions</h2></div></div>
+                <div class="core2-hub-card-stack core2-hub-card-stack--single">
                 <a href="/core/executions/live?back_tab=workflows" class="core2-hub-card" aria-labelledby="core2-open-batches-title">
                   <span class="core2-hub-card__icon" aria-hidden="true">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -186,8 +201,8 @@
                     <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Pipeline and timeline views to continue in-flight production quickly.</p>
                   </span>
                 </a>
-              </div>
-              <div class="core2-hub-card-stack">
+                </div>
+                <div class="core2-hub-card-stack">
                 <a href="/core/flows/create/start" class="core2-hub-card" aria-labelledby="core2-proc-create-title">
                   <span class="core2-hub-card__icon" aria-hidden="true">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -219,8 +234,13 @@
                     <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Open a product to run executions, edit steps, and manage inventory.</p>
                   </span>
                 </a>
-              </div>
-            </section>
+                </div>
+              </section>
+              <section class="core2-workspace-container core2-summary-layout__full" aria-labelledby="core2-workflow-activity-title">
+                <div class="core2-section-heading"><div><p class="core2-eyebrow">Last 7 days</p><h2 id="core2-workflow-activity-title" class="spa-form-section-title">Workflow activity</h2></div></div>
+                <div id="core2-workflow-activity" class="core2-work-list" aria-live="polite"><p class="core2-active-batches-empty">Loading workflow activity...</p></div>
+              </section>
+            </div>
           </div>
           <div id="core2-panel-tasks" class="core2-tab-panel" data-core2-tab-panel="tasks" role="tabpanel" aria-labelledby="core2-tab-tasks" hidden>
             <section class="spa-form-section" aria-label="Tasks">
@@ -440,13 +460,14 @@
     window.ExecutionModalConfig = {
       onStepCompleted: async function() {
         // Reload inventory to reflect consumed items and new outputs
-        await loadInventoryV2();
+        await window.loadInventoryV2();
       }
     };
   </script>
   {% include 'shared/execution_modal_stack_scripts.html' %}
   <script src="{{ url_for('core.serve_core_js', filename='add-inventory-reconciliation.js') }}"></script>
   <script>
+    {
     // Global variable for notification timeout
     let notificationTimeout = null;
     
@@ -3086,14 +3107,33 @@
     // looks fine but every click is dead until a full refresh), and the Overview shows
     // stale/zero metrics. Re-run the bootstraps on settle. Each init is idempotent
     // (per-node dataset guards / module-level flags), so repeated calls are safe.
-    document.body.addEventListener('htmx:afterSettle', function (evt) {
+    window.__core2AfterSettle = function (evt) {
       var tgt = evt && evt.detail && evt.detail.target;
       if (!tgt || tgt.id !== 'page-content') return;
       if (!document.getElementById('core2-hub-title')) return;  // not the /core hub
       initCore2Page();
       initCore2CreateProcessForm();
       initCore2HubLoad();
+    };
+    if (!window.__core2AfterSettleBound) {
+      document.body.addEventListener('htmx:afterSettle', function (evt) {
+        window.__core2AfterSettle(evt);
+      });
+      window.__core2AfterSettleBound = true;
+    }
+
+    Object.assign(window, {
+      closeNotification,
+      loadInventoryV2,
+      toggleInventoryItemDetails,
+      openEditInventoryModal,
+      updateInventoryItem,
+      showDeleteInventoryConfirmation,
+      confirmDeleteInventory,
+      cancelDeleteInventory,
+      updateProcess,
     });
+    }
   </script>
   
   <!-- Create Process Modal - Guided flow (like flows2) -->
