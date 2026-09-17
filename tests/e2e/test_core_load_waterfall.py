@@ -196,6 +196,21 @@ def test_executions_live_reuses_hub_overview_no_heavy_lists(logged_in_page):
     assert not any(c == "inventory" or c.startswith("inventory?") for c in calls), calls
 
 
+def test_live_inventory_loads_items_on_first_paint(logged_in_page):
+    """The focused inventory page has no main tab to trigger its lazy item load."""
+    page = logged_in_page
+    calls = _core_api_calls(page)
+
+    page.goto("/core/inventory/live")
+    _wait(page)
+
+    assert calls.count("hub/overview") == 1, calls
+    assert sum(1 for c in calls if c == "inventory" or c.startswith("inventory?")) == 1, calls
+    page.wait_for_function(
+        "() => document.querySelector('#core2-inv-result-count')?.textContent !== 'Loading inventory...'"
+    )
+
+
 def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page):
     """core2.html's scripts live in the template's scripts block, outside #page-content,
     so an hx-boost return to /core swaps in fresh markup they never re-touch. Without the

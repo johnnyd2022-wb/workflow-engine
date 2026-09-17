@@ -2538,6 +2538,14 @@
 
     function initCore2HubLoad() {
       loadCore2Overview();
+      // The focused Live Inventory page has no main-tab selection to trigger the
+      // lazy inventory request. Load its item data explicitly so its result area
+      // cannot remain on "Loading inventory..." after the overview has painted.
+      if (document.querySelector('.core2-live-inv')) {
+        loadCore2InventoryTab(true);
+        core2SubscribeLive();
+        return;
+      }
       var tab = core2CurrentMainTab();
       if (tab === 'inventory') loadCore2InventoryTab();
       else if (tab === 'workflows') loadCore2WorkflowsTab();
