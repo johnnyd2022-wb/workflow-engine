@@ -146,7 +146,13 @@ def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypat
         {"name": "Bottled product", "quantity": "60", "unit": "units", "batch_number": 1},
         {"name": "Bottled product", "quantity": "18.5", "unit": "units", "batch_number": 2},
     ]
+    assert payloads["bottling"]["execution_data"]["Batch number"] == "1, 2"
     assert payloads["labelling"]["actual_outputs"] == [
         {"name": "Wildflower - final product", "quantity": "60", "unit": "units", "batch_number": 1},
         {"name": "Wildflower - final product", "quantity": "18.5", "unit": "units", "batch_number": 2},
     ]
+    assert payloads["labelling"]["execution_data"]["Batch number"] == "1, 2"
+
+
+def test_replay_marks_unbottled_vat_as_not_applicable_for_required_batch_prompt():
+    assert replay._batch_number_prompt_value(None) == "Not applicable — no bottled output recorded"
