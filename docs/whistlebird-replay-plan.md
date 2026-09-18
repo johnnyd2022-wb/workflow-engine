@@ -332,3 +332,26 @@ See `docs/whistlebird-import-decisions.md`'s Stage 7 for the full writeup. Summa
   A live `consume-fifo` call for 600 Wildflower units correctly drained batch 1 (500)
   then 100 units of batch 2; the target was then reset and replayed again so no test
   consumption was left in what represents real, sales-free production history.
+
+## Real NGS receipts backfilled from source correspondence, 2026-09-18
+
+The nine real `purchases_gns` rows only covered orders through 2025-04-01; every
+Wildflower/Solstice VAT after that date was funded by a formula-sized synthetic
+shortfall receipt (see "Recipe and finished-stock accounting" above and the
+`reconcile replay raw stock` allocator work merged the same day). Read every
+Southern Grain Spirits order thread in the founder's Gmail and found eight further
+completed orders (invoiced, paid, dispatched) the legacy purchase register was
+missing, from 2025-06-18 through 2026-09-08 -- all 100 L at 96.4% ABV. Added them to
+`purchases_gns` (same `Purchase of GNS` convention as the existing nine), dated by
+each order's invoice-issue date (NZ local), since the existing rows' own date
+convention is inconsistent across payment/dispatch/receipt and this was the only
+anchor consistently present in every thread.
+
+Ran a full `--confirm-reset-whistlebird-test` -> replay (632 events) ->
+timestamp-correction -> `--verify-import` cycle on the live target. Result: every
+one of the 17 `Neutral grain spirit` inventory items now carries a real
+`supplier_batch_number` -- the real receipts fully cover demand through the present,
+so the allocator generated zero dedicated shortfall purchases this run (down from 24
+in the prior build). `--verify-import` reports exact matches on every count
+(batch executions, customs lodgements, raw-material items, date mismatches, wording
+leaks all clean).
