@@ -587,87 +587,52 @@
     }
 
     function flows2AppendInventoryUpstreamSection(frag, item) {
-      const ex = item.extra_data || {};
-      const fq = flows2InvFormatQty;
-      const fd = flows2InvFormatDate;
-      const prevSteps = ex.previous_steps_data;
-      if (!Array.isArray(prevSteps) || !prevSteps.length) return;
-
       const section = document.createElement('div');
       section.className = 'flows2-inv-detail-section';
+      section.dataset.upstreamTraceFor = String(item.id || '');
       const h = document.createElement('h4');
-      h.textContent = 'Upstream chain';
+      h.textContent = 'Production trace';
       section.appendChild(h);
 
-      prevSteps.slice(0, FLOWS2_MAX_UPSTREAM_STEPS).forEach((step) => {
+      const loading = document.createElement('p');
+      loading.className = 'flows2-inv-upstream-status';
+      loading.textContent = 'Expand this item to load its complete production trace.';
+      section.appendChild(loading);
+      frag.appendChild(section);
+    }
+
+    function flows2RenderInventoryTrace(section, trace) {
+      if (!section) return;
+      section.replaceChildren();
+      const h = document.createElement('h4');
+      h.textContent = 'Production trace';
+      section.appendChild(h);
+
+      const steps = trace && Array.isArray(trace.trace_steps) ? trace.trace_steps : [];
+      if (!steps.length) {
+        const empty = document.createElement('p');
+        empty.className = 'flows2-inv-upstream-status';
+        empty.textContent = 'This item has no recorded upstream production steps.';
+        section.appendChild(empty);
+        return;
+      }
+
+      steps.forEach((step) => {
         const box = document.createElement('div');
-        box.style.cssText =
-          'padding:12px;border:1px solid var(--border-default,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--bg-secondary,#f9fafb);';
-        const sn = step.step_name || 'Step';
-        const snum = step.step_number != null ? `#${step.step_number}` : '';
-        const p1 = document.createElement('p');
-        p1.style.margin = '0 0 8px';
-        p1.style.fontWeight = '600';
-        p1.textContent = `${sn} ${snum}`.trim();
-        box.appendChild(p1);
+        box.className = 'flows2-inv-upstream-step';
+        const title = document.createElement('p');
+        title.className = 'flows2-inv-upstream-step__title';
+        const number = step.step_number != null ? `Step #${step.step_number}` : 'Step';
+        title.textContent = `${number} — ${step.step_name || 'Unnamed step'}`;
+        box.appendChild(title);
         if (step.completed_at) {
-          const p2 = document.createElement('p');
-          p2.style.cssText = 'margin:0 0 6px;font-size:12px;color:var(--text-secondary);';
-          p2.textContent = `Completed: ${fd(step.completed_at)}`;
-          box.appendChild(p2);
-        }
-        if (step.input_name) {
-          const p3 = document.createElement('p');
-          p3.style.cssText = 'margin:0 0 4px;font-size:12px;';
-          p3.textContent = `Consumed: ${step.input_name} — ${fq(step.input_quantity)} ${step.input_unit || ''}`;
-          box.appendChild(p3);
-        }
-        const sp = step.execution_prompts;
-        if (sp && typeof sp === 'object' && flows2SafeKeys(sp).length) {
-          const pl = document.createElement('p');
-          pl.style.cssText = 'margin:8px 0 4px;font-size:11px;font-weight:600;color:var(--text-secondary);';
-          pl.textContent = 'Prompts in chain';
-          box.appendChild(pl);
-          flows2SafeKeys(sp)
-            .slice(0, FLOWS2_MAX_PROMPT_ENTRIES)
-            .forEach((k) => {
-              const row = document.createElement('div');
-              row.className = 'flows2-inv-kv';
-              const s1 = document.createElement('span');
-              s1.textContent = k;
-              const s2 = document.createElement('span');
-              s2.textContent = flows2SerializeForDisplay(sp[k]);
-              row.appendChild(s1);
-              row.appendChild(s2);
-              box.appendChild(row);
-            });
-        }
-        if (step.completed_by) {
-          const row = document.createElement('div');
-          row.className = 'flows2-inv-kv';
-          const s1 = document.createElement('span');
-          s1.textContent = 'Completed by';
-          const s2 = document.createElement('span');
-          s2.textContent = flows2SerializeForDisplay(step.completed_by);
-          row.appendChild(s1);
-          row.appendChild(s2);
-          box.appendChild(row);
-        }
-        if (step.execution_errors) {
-          const pe = document.createElement('p');
-          pe.style.cssText = 'margin:8px 0 0;font-size:12px;color:var(--error,#b91c1c);';
-          pe.textContent = flows2SerializeForDisplay(step.execution_errors);
-          box.appendChild(pe);
-        }
-        if (step.execution_warnings) {
-          const pw = document.createElement('p');
-          pw.style.cssText = 'margin:4px 0 0;font-size:12px;color:var(--warning,#b45309);';
-          pw.textContent = flows2SerializeForDisplay(step.execution_warnings);
-          box.appendChild(pw);
+          const completed = document.createElement('p');
+          completed.className = 'flows2-inv-upstream-step__meta';
+          completed.textContent = `Completed: ${flows2InvFormatDate(step.completed_at)}`;
+          box.appendChild(completed);
         }
         section.appendChild(box);
       });
-      frag.appendChild(section);
     }
 
     /** DOM-only inventory details (no innerHTML); appended under `.execution-content`. */
@@ -808,7 +773,7 @@
       card.appendChild(content);
 
       header.addEventListener('click', () => {
-        toggleInventoryItemDetailsFlows(String(item.id));
+        toggleInventoryItemDetailsFlows(String(item.id), item);
       });
 
       return card;
@@ -868,7 +833,34 @@
       }
     }
 
-    function toggleInventoryItemDetailsFlows(itemId) {
+    async function loadInventoryTraceForCard(card, details, itemId) {
+      if (!card || card.dataset.traceState === 'loading' || card.dataset.traceState === 'loaded') return;
+      const section = details.querySelector('.flows2-inv-detail-section[data-upstream-trace-for]');
+      if (!section || !window.CoreAPI || typeof window.CoreAPI.traceInventoryBackward !== 'function') return;
+
+      card.dataset.traceState = 'loading';
+      try {
+        const trace = await window.CoreAPI.traceInventoryBackward(itemId);
+        // The list may have been re-rendered while the trace request was in flight.
+        if (!document.body.contains(card)) return;
+        flows2RenderInventoryTrace(section, trace);
+        card.dataset.traceState = 'loaded';
+      } catch (error) {
+        if (!document.body.contains(card)) return;
+        console.error('Failed to load inventory production trace:', error);
+        section.replaceChildren();
+        const h = document.createElement('h4');
+        h.textContent = 'Production trace';
+        const message = document.createElement('p');
+        message.className = 'flows2-inv-upstream-status';
+        message.textContent = 'Couldn’t load the complete production trace. Please try again.';
+        section.appendChild(h);
+        section.appendChild(message);
+        card.dataset.traceState = 'error';
+      }
+    }
+
+    function toggleInventoryItemDetailsFlows(itemId, item) {
       const idStr = String(itemId);
       const escAttr = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(idStr) : idStr.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const card = document.querySelector(`[data-inventory-id="${escAttr}"]`);
@@ -886,6 +878,7 @@
         details.style.display = 'block';
         arrow.style.transform = 'rotate(180deg)';
         card.dataset.isExpanded = 'true';
+        loadInventoryTraceForCard(card, details, item && item.id ? String(item.id) : idStr);
         card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
       }
     }

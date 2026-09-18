@@ -160,6 +160,14 @@
             return (
               '<article class="processes-list-item">' +
                 '<a href="' + esc(href) + '" class="processes-list-item__open" aria-label="Open workflow: ' + esc(p.name || 'Untitled') + '">' +
+                '<span class="processes-list-item__icon" aria-hidden="true">' +
+                  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '<rect x="3" y="3" width="7" height="9" rx="1"/>' +
+                    '<rect x="14" y="3" width="7" height="5" rx="1"/>' +
+                    '<rect x="14" y="12" width="7" height="9" rx="1"/>' +
+                    '<rect x="3" y="16" width="7" height="5" rx="1"/>' +
+                  '</svg>' +
+                '</span>' +
                 '<div class="processes-list-item__main">' +
                   '<p class="processes-list-item__name">' + esc(p.name || 'Untitled') + '</p>' +
                   '<p class="processes-list-item__meta">' + esc(meta) + '</p>' +
@@ -204,6 +212,20 @@
         input.addEventListener('input', render);
         input.dataset.boundProcessesListSearch = '1';
       }
+
+      // HTMX replaces #page-content but leaves this script's globals and document-level
+      // listeners alive. Remember the particular list DOM we have initialised, rather
+      // than treating the page as a one-shot script: returning here after a later swap
+      // was what left the newly inserted list stuck on “Loading product workflows…”.
+      var initializedStack = null;
+      function initPage() {
+        var stack = document.getElementById('processes-list-stack');
+        if (!stack || stack === initializedStack) return;
+        initializedStack = stack;
+        initSearch();
+        load();
+      }
+      window.processesListInitPage = initPage;
 
       // Wire history buttons (delegated — cards re-render on load)
       document.addEventListener('click', function (e) {
@@ -312,13 +334,19 @@
 
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
-          initSearch();
-          load();
+          initPage();
         });
       } else {
-        initSearch();
-        load();
+        initPage();
       }
+
+      // A boosted link can settle after this inline script has run. Initialising from
+      // the settle event makes the list reliable both on first SPA entry and on return
+      // navigation, while initPage's DOM identity guard prevents a duplicate request.
+      document.body.addEventListener('htmx:afterSettle', function (evt) {
+        var target = evt && evt.detail && evt.detail.target;
+        if (target && target.id === 'page-content') initPage();
+      });
     })();
   </script>
 {% endblock %}

@@ -92,7 +92,7 @@
     .processes-list-stack {
       display: flex;
       flex-direction: column;
-      gap: 0;
+      gap: 8px;
       width: 100%;
     }
     .processes-list-item {
@@ -100,25 +100,28 @@
       align-items: flex-start;
       justify-content: space-between;
       gap: 16px;
-      padding: 14px 0;
+      min-height: 78px;
+      padding: 12px;
       margin: 0;
-      border: none;
-      border-radius: 0;
+      border: 1px solid var(--border-light, #e6ecef);
+      border-radius: 12px;
       color: inherit;
-      background: transparent;
-      transition: background 0.2s ease;
+      background: var(--bg-secondary, #fbfcfd);
+      transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
       text-align: left;
       box-sizing: border-box;
       width: 100%;
     }
-    .processes-list-item:not(:first-child) {
-      border-top: 1px solid var(--border-default, #e5e7eb);
-    }
     .processes-list-item:hover,
     .processes-list-item:focus-within {
-      background: rgba(59, 130, 246, 0.06);
+      border-color: #51a69c;
+      background: #f0fbf9;
+      box-shadow: 0 3px 12px rgba(18, 46, 66, 0.07);
     }
     .processes-list-item__open {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
       flex: 1;
       min-width: 0;
       color: inherit;
@@ -133,6 +136,22 @@
     .processes-list-item__main {
       flex: 1;
       min-width: 0;
+    }
+    .processes-list-item__icon {
+      flex: 0 0 36px;
+      width: 36px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background: #e7f3f1;
+      color: #175c52;
+    }
+    .processes-list-item__icon svg {
+      width: 20px;
+      height: 20px;
+      display: block;
     }
     .processes-list-item__name {
       font-size: 1rem;
