@@ -42,11 +42,8 @@ DEFAULT_RAW_MATERIAL_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebir
 _NGS_STOCK_ABV = Decimal("0.964")  # purchases_gns.abv -- every legacy NGS purchase is 96.4%
 _QUANT3 = Decimal("0.001")
 
-# Day after the last real purchases_gns row (2025-04-01, 100L, "Southern Grain Spirits").
-# Batches macerating before this date draw from that real legacy purchase pool (see
-# whistlebird_replay.MarkerStore.consume_available_raw_material); batches on or after it
-# get their own dedicated, formula-sized purchase (see _ngs_purchase_event) so the real
-# legacy pool is never double-counted against production it didn't actually fund.
+# Retained for compatibility with the original fixture tests.  The production allocator
+# now uses every dated legacy receipt before creating a deterministic shortfall receipt.
 NGS_LEGACY_POOL_CUTOFF = date(2025, 4, 2)
 
 # Foraged/untracked botanicals, per shot (founder, 2026-09-16); doubled below, same
@@ -106,22 +103,33 @@ def _foraged_botanical_inputs(product_line: str) -> list[dict[str, Any]]:
     return [{"name": name, "quantity": str(quantity * 2), "unit": unit} for name, quantity, unit in per_shot]
 
 
-def _ngs_purchase_event(batch: wm.ProductionBatch, governing_date: date) -> ReplayEvent | None:
-    """A dedicated NGS purchase for batches the real legacy `purchases_gns` purchases
-    can't reach (see NGS_LEGACY_POOL_CUTOFF). Sized to exactly this batch's own computed
-    need (flask charge + VAT fill), dated 3 days before its governing date -- the same
-    "resolved by context" convention already used for post-cutoff botanicals (see
-    docs/whistlebird-raw-material-source.json's _comment and
-    docs/whistlebird-import-decisions.md).
-    """
-    if batch.product_line not in ("wildflower", "solstice") or governing_date < NGS_LEGACY_POOL_CUTOFF:
-        return None
+def _ngs_required_l(batch: wm.ProductionBatch) -> Decimal:
     flask_ngs, _flask_water = _flask_ngs_and_water_l()
     fill_ngs, _fill_water = _vat_fill_ngs_and_water_l(batch.product_line)
+    return flask_ngs + fill_ngs
+
+
+def _ngs_purchase_event(
+    batch: wm.ProductionBatch, governing_date: date, quantity_l: Decimal | None = None
+) -> ReplayEvent | None:
+    """Create only the deterministic NGS shortfall for a botanical VAT.
+
+    ``quantity_l=None`` retains the old isolated-fixture behaviour.  The complete
+    timeline always supplies the calculated shortfall after allocating dated legacy NGS
+    receipts, so it never duplicates genuine stock with a formula-sized purchase.
+    """
+    if batch.product_line not in ("wildflower", "solstice"):
+        return None
+    if quantity_l is None:
+        if governing_date < NGS_LEGACY_POOL_CUTOFF:
+            return None
+        quantity_l = _ngs_required_l(batch)
+    if quantity_l <= 0:
+        return None
     record = {
         "code": f"NGS-{batch.marker}",
         "ingredient": "Neutral grain spirit",
-        "quantity": str(flask_ngs + fill_ngs),
+        "quantity": str(quantity_l),
         "unit": "L",
         "date": (governing_date - timedelta(days=3)).isoformat(),
         "supplier": "Southern Grain Spirits",
@@ -294,11 +302,47 @@ def _resolved_step_dates(batch: wm.ProductionBatch) -> list[date]:
     return resolved
 
 
-def count_dedicated_ngs_purchases(batches: list[wm.ProductionBatch]) -> int:
-    """How many `_ngs_purchase_event` will fire across `batches` -- used by
-    `whistlebird_migration.build_import_verification` so its expected raw-material count
-    includes these without duplicating the cutoff/formula logic there."""
-    return sum(1 for batch in batches if _ngs_purchase_event(batch, _resolved_step_dates(batch)[0]) is not None)
+def _ngs_allocations(
+    batches: list[wm.ProductionBatch], legacy_raw_materials: list[wm.RawMaterialRecord]
+) -> dict[str, tuple[Decimal, Decimal]]:
+    """Return ``{batch_marker: (legacy_pool_l, generated_shortfall_l)}``.
+
+    Allocation is chronological by maceration date and global VAT, with each source
+    receipt becoming available only on its recorded date.  This preserves real stock,
+    consumes it before generating any inferred NGS, and is stable across every replay.
+    """
+    receipts = sorted(
+        (
+            (record.source_date, Decimal(str(record.quantity)))
+            for record in legacy_raw_materials
+            if record.name == "Neutral grain spirit" and record.quantity > 0
+        ),
+        key=lambda entry: entry[0],
+    )
+    botanical_batches = sorted(
+        (batch for batch in batches if batch.product_line in ("wildflower", "solstice")),
+        key=lambda batch: (_resolved_step_dates(batch)[0], batch.global_vat),
+    )
+    receipt_index = 0
+    available = Decimal("0")
+    allocations: dict[str, tuple[Decimal, Decimal]] = {}
+    for batch in botanical_batches:
+        governing_date = _resolved_step_dates(batch)[0]
+        while receipt_index < len(receipts) and receipts[receipt_index][0] <= governing_date:
+            available += receipts[receipt_index][1]
+            receipt_index += 1
+        required = _ngs_required_l(batch)
+        from_legacy = min(required, available)
+        available -= from_legacy
+        allocations[batch.marker] = (from_legacy, required - from_legacy)
+    return allocations
+
+
+def count_dedicated_ngs_purchases(
+    batches: list[wm.ProductionBatch], legacy_raw_materials: list[wm.RawMaterialRecord]
+) -> int:
+    """Count only batches that need an inferred NGS shortfall receipt."""
+    return sum(1 for _legacy, shortfall in _ngs_allocations(batches, legacy_raw_materials).values() if shortfall > 0)
 
 
 def _batch_events(
@@ -308,6 +352,7 @@ def _batch_events(
     known_quantities: dict[str, tuple[str, str]],
     label_batches: dict[str, list[tuple[int, Decimal]]] | None = None,
     flask_codes: dict[str, tuple[str, str]] | None = None,
+    ngs_allocation: tuple[Decimal, Decimal] | None = None,
 ) -> list[ReplayEvent]:
     step_keys = wm.RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else wm.BOTANICAL_GIN_STEP_KEYS
     resolved = _resolved_step_dates(batch)
@@ -322,7 +367,11 @@ def _batch_events(
             payload={"batch": batch},
         )
     ]
-    ngs_purchase = _ngs_purchase_event(batch, resolved[0])
+    if batch.product_line in ("wildflower", "solstice"):
+        legacy_ngs_remaining, generated_ngs_remaining = ngs_allocation or (Decimal("0"), _ngs_required_l(batch))
+    else:
+        legacy_ngs_remaining, generated_ngs_remaining = Decimal("0"), Decimal("0")
+    ngs_purchase = _ngs_purchase_event(batch, resolved[0], generated_ngs_remaining)
     if ngs_purchase is not None:
         events.append(ngs_purchase)
     prev_step_id = exec_id
@@ -344,6 +393,7 @@ def _batch_events(
             payload["known_input_quantities"] = {
                 code: known_quantities[code] for code in batch.ingredient_codes if code in known_quantities
             }
+        ngs_needed = Decimal("0")
         if key == "maceration":
             # A post-cutoff batch's formula-sized NGS receipt is not just dated before
             # this step: it is the stock this step must draw. Keep that relationship
@@ -352,15 +402,26 @@ def _batch_events(
             if ngs_purchase is not None:
                 depends.append(ngs_purchase.event_id)
             flask_ngs, flask_water = _flask_ngs_and_water_l()
-            payload["ngs_quantity_l"] = str(flask_ngs)
+            ngs_needed = flask_ngs
             payload["other_material_inputs"] = [
                 {"name": "Water", "quantity": str(flask_water), "unit": "L"},
                 *_foraged_botanical_inputs(batch.product_line),
             ]
         if key == "aging" and batch.product_line != "rosella":
             fill_ngs, fill_water = _vat_fill_ngs_and_water_l(batch.product_line)
-            payload["ngs_quantity_l"] = str(fill_ngs)
+            ngs_needed = fill_ngs
             payload["other_material_inputs"] = [{"name": "Water", "quantity": str(fill_water), "unit": "L"}]
+        if ngs_needed:
+            from_legacy = min(ngs_needed, legacy_ngs_remaining)
+            legacy_ngs_remaining -= from_legacy
+            from_generated = ngs_needed - from_legacy
+            generated_ngs_remaining -= from_generated
+            if from_legacy:
+                payload["legacy_ngs_quantity_l"] = str(from_legacy)
+            if from_generated:
+                assert ngs_purchase is not None
+                payload["dedicated_ngs_marker"] = ngs_purchase.payload["marker"]
+                payload["dedicated_ngs_quantity_l"] = str(from_generated)
         if key == "distilling" and flask_codes and batch.marker in flask_codes:
             payload["flask_codes"] = flask_codes[batch.marker]
         if key in ("bottling", "labelling") and label_batches:
@@ -478,6 +539,7 @@ def build_timeline(
 
     raw_records, codes_by_vat, known_quantity_by_vat = _load_raw_material_manifest(raw_material_manifest_path)
     merged = _enrich_ingredient_codes(merged, codes_by_vat)
+    ngs_allocations = _ngs_allocations(merged, legacy_raw_materials)
 
     events: list[ReplayEvent] = []
 
@@ -527,6 +589,7 @@ def build_timeline(
                 known_quantity_by_vat.get(batch.global_vat, {}),
                 label_batches,
                 flask_codes,
+                ngs_allocations.get(batch.marker),
             )
         )
 

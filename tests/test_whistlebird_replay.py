@@ -34,6 +34,12 @@ class _Store:
     def consume_available_raw_material(self, name, quantity, unit):
         return [{"inventory_item_id": "ngs-id", "name": name, "quantity": str(quantity), "unit": unit}]
 
+    def consume_available_raw_material_up_to(self, name, quantity, unit):
+        return self.consume_available_raw_material(name, quantity, unit), Decimal("0")
+
+    def consume_marked_raw_material(self, marker, quantity, unit):
+        return [{"inventory_item_id": marker, "name": "Neutral grain spirit", "quantity": str(quantity), "unit": unit}]
+
 
 def _batch() -> wm.ProductionBatch:
     step_date = date(2025, 4, 2)
@@ -59,6 +65,28 @@ def test_replay_uses_vat_batch_wip_for_a_documented_rosella_diversion():
 
     assert replay._aging_output_name(solstice_base) == "VAT batch"
     assert replay._aging_output_name(_batch()) == "Aged Gin"
+
+
+def test_replay_uses_canonical_recipe_fallback_and_dedicated_ngs():
+    batch = _batch()
+    store = _Store()
+    precise_inputs = [{"inventory_item_id": "cardamom", "name": "Cardamom pods", "quantity": "43.2", "unit": "g"}]
+
+    fallback = replay._recipe_fallback_inputs(store, batch, precise_inputs)
+
+    assert not any(item["name"] == "Cardamom pods" for item in fallback)
+    assert any(item["name"] == "Juniper Berries (Macedonian)" for item in fallback)
+
+
+def test_replay_records_untracked_recipe_shortfall_without_backdating_a_purchase():
+    class _ShortfallStore:
+        def consume_available_raw_material_up_to(self, _name, quantity, _unit):
+            return [], quantity
+
+    fallback = replay._recipe_fallback_inputs(_ShortfallStore(), _batch(), [])
+
+    juniper = next(item for item in fallback if item["name"] == "Juniper Berries (Macedonian)")
+    assert juniper == {"name": "Juniper Berries (Macedonian)", "quantity": "59.4", "unit": "g"}
 
 
 def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypatch):
@@ -104,6 +132,10 @@ def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypat
     assert payloads["maceration"]["actual_outputs"] == [
         {"name": wm._MACERATION_OUTPUT_NAME, "quantity": "3.6", "unit": "L"}
     ]
+    assert any(
+        item["inventory_item_id"] == "raw-manifest-NGS-wildflower-vat27"
+        for item in payloads["maceration"]["actual_inputs"]
+    )
     assert payloads["distilling"]["execution_data"]["Flask code"] == "WBWF01, WBWF02"
     assert payloads["distilling"]["actual_outputs"] == [
         {"name": wm._DISTILLATE_OUTPUT_NAME, "quantity": "2.16", "unit": "L"}

@@ -22,8 +22,10 @@ from whistlebird_replay_timeline import (  # noqa: E402
     _batch_events,
     _flask_ngs_and_water_l,
     _foraged_botanical_inputs,
+    _ngs_allocations,
     _ngs_purchase_event,
     _vat_fill_ngs_and_water_l,
+    count_dedicated_ngs_purchases,
     date_prioritised_topological_sort,
 )
 
@@ -160,10 +162,11 @@ def test_post_cutoff_ngs_purchase_is_created_before_maceration_consumes_it():
     assert purchase.real_date == date(2025, 3, 30)
     assert purchase.payload["record"]["quantity"] == "26.072"
     assert purchase.event_id in maceration.depends_on
-    assert maceration.payload["ngs_quantity_l"] == "0.746"
+    assert maceration.payload["dedicated_ngs_quantity_l"] == "0.746"
+    assert maceration.payload["dedicated_ngs_marker"] == "raw-manifest-NGS-wildflower-vat27"
     assert maceration.payload["other_material_inputs"][0] == {"name": "Water", "quantity": "2.854", "unit": "L"}
     aging = next(event for event in events if event.event_id.endswith(":aging"))
-    assert aging.payload["ngs_quantity_l"] == "25.326"
+    assert aging.payload["dedicated_ngs_quantity_l"] == "25.326"
     assert aging.payload["other_material_inputs"] == [{"name": "Water", "quantity": "30.787", "unit": "L"}]
 
 
@@ -202,3 +205,24 @@ def test_bottling_and_labelling_share_batch_numbers_and_distilling_carries_flask
 def test_pre_cutoff_batch_does_not_invent_a_dedicated_ngs_purchase():
     batch = _wildflower_batch(NGS_LEGACY_POOL_CUTOFF.replace(day=1))
     assert _ngs_purchase_event(batch, batch.steps["maceration"].step_date) is None
+
+
+def test_ngs_allocation_uses_only_dated_source_receipts_before_creating_shortfall():
+    first = _wildflower_batch(date(2025, 1, 10), global_vat=2)
+    second = _wildflower_batch(date(2025, 1, 20), global_vat=1)
+    receipts = [
+        wm.RawMaterialRecord(
+            "purchases_gns", 1, date(2025, 1, 5), "Neutral grain spirit", Decimal("20"), "L", None, None, None, {}
+        ),
+        wm.RawMaterialRecord(
+            "purchases_gns", 2, date(2025, 1, 15), "Neutral grain spirit", Decimal("50"), "L", None, None, None, {}
+        ),
+    ]
+
+    allocations = _ngs_allocations([second, first], receipts)
+
+    assert allocations == {
+        first.marker: (Decimal("20"), Decimal("6.072")),
+        second.marker: (Decimal("26.072"), Decimal("0")),
+    }
+    assert count_dedicated_ngs_purchases([second, first], receipts) == 1

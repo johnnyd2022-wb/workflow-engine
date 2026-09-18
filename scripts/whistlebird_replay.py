@@ -54,6 +54,19 @@ class ReplayRejectedError(RuntimeError):
     """A real API call was rejected. Stop -- don't paper over it."""
 
 
+_MATERIAL_NAME_ALIASES = {
+    # The legacy purchase register uses "Macedonia" while the fixed production recipe
+    # uses "Macedonian".  They are the same botanical, and the alias keeps reset/replay
+    # allocation deterministic without rewriting the source receipt's display name.
+    "juniper berries (macedonia)": "juniper berries (macedonian)",
+}
+
+
+def _canonical_material_name(name: str) -> str:
+    normalized = " ".join(name.lower().split())
+    return _MATERIAL_NAME_ALIASES.get(normalized, normalized)
+
+
 class ReplayClient:
     def __init__(self, base_url: str, verify_tls: bool = True):
         self.base_url = base_url.rstrip("/")
@@ -131,6 +144,18 @@ class MarkerStore:
                 {"org_id": str(self.org_id), "marker": marker},
             ).first()
             return row[0] if row else None
+
+    def raw_material_for_marker(self, marker: str) -> dict[str, Any] | None:
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT id, name, unit, quantity FROM inventory_items "
+                    "WHERE org_id = :org_id AND inventory_type = 'raw_material' "
+                    "AND extra_data->>'import_ref' = :marker LIMIT 1"
+                ),
+                {"org_id": str(self.org_id), "marker": marker},
+            ).first()
+            return {"id": row[0], "name": row[1], "unit": row[2], "quantity": row[3]} if row else None
 
     def existing_execution_id(self, marker: str) -> str | None:
         if marker in self._created_this_run:
@@ -214,40 +239,62 @@ class MarkerStore:
             return str(row[0]) if row else None
 
     def consume_available_raw_material(self, name: str, quantity_needed: Decimal, unit: str) -> list[dict[str, Any]]:
-        """Greedily consume `quantity_needed` from existing raw_material items named
-        `name`, oldest `purchase_date` first, splitting across multiple lots if needed.
+        """Greedily consume canonical-name-matched raw material FIFO lots.
 
-        Unlike `_ingredient_inputs_for_step` (one purchase row per ingredient_code, exact
-        1:1 match), Neutral grain spirit is a shared, continuously-purchased consumable:
-        the real legacy `purchases_gns` rows are bulk lots (2L..200L) bought over 2023-2025
-        and drawn down by many VATs, not tied to a single batch. This mirrors that reality
-        instead of forcing an artificial one-purchase-per-batch link.
+        Receipt display names remain faithful to their sources, while allocation ignores
+        harmless spelling/case variants such as ``Macedonia``/``Macedonian``.  This makes
+        a destroy-and-replay run allocate the same historical recipe quantities every time.
         """
+        consumed, remaining = self.consume_available_raw_material_up_to(name, quantity_needed, unit)
+        if remaining > 0:
+            raise ReplayRejectedError(
+                f"not enough {name!r} stock to consume {quantity_needed} {unit} (short by {remaining} {unit})"
+            )
+        return consumed
+
+    def consume_available_raw_material_up_to(
+        self, name: str, quantity_needed: Decimal, unit: str
+    ) -> tuple[list[dict[str, Any]], Decimal]:
+        """Return canonical FIFO consumption plus any source-evidenced shortfall."""
         remaining = Decimal(str(quantity_needed))
         consumed: list[dict[str, Any]] = []
+        canonical_name = _canonical_material_name(name)
         with self._engine.connect() as conn:
             rows = conn.execute(
                 text(
                     "SELECT id, name, unit, quantity FROM inventory_items "
-                    "WHERE org_id = :org_id AND name = :name AND inventory_type = 'raw_material' "
+                    "WHERE org_id = :org_id AND inventory_type = 'raw_material' "
                     "AND quantity > 0 ORDER BY purchase_date ASC NULLS LAST, created_at ASC"
                 ),
-                {"org_id": str(self.org_id), "name": name},
+                {"org_id": str(self.org_id)},
             ).fetchall()
         for row in rows:
             if remaining <= 0:
                 break
+            if row[2] != unit or _canonical_material_name(row[1]) != canonical_name:
+                continue
             available = Decimal(str(row[3]))
             take = min(available, remaining)
             if take <= 0:
                 continue
             consumed.append({"inventory_item_id": str(row[0]), "name": row[1], "quantity": str(take), "unit": unit})
             remaining -= take
-        if remaining > 0:
-            raise ReplayRejectedError(
-                f"not enough {name!r} stock to consume {quantity_needed} {unit} (short by {remaining} {unit})"
-            )
-        return consumed
+        return consumed, remaining
+
+    def consume_marked_raw_material(self, marker: str, quantity_needed: Decimal, unit: str) -> list[dict[str, Any]]:
+        item = self.raw_material_for_marker(marker)
+        if item is None:
+            raise ReplayRejectedError(f"no raw-material item carries import_ref={marker!r} yet")
+        if item["unit"] != unit or Decimal(str(item["quantity"])) < quantity_needed:
+            raise ReplayRejectedError(f"raw-material item {marker!r} cannot supply {quantity_needed} {unit}")
+        return [
+            {
+                "inventory_item_id": str(item["id"]),
+                "name": item["name"],
+                "quantity": str(quantity_needed),
+                "unit": unit,
+            }
+        ]
 
     def most_recently_created_execution_id(self) -> str | None:
         """The execution this replay itself created last, so far.
@@ -331,6 +378,47 @@ def _ingredient_inputs_for_step(
                 raise ReplayRejectedError(f"no inventory item carries ingredient_code={code!r} yet")
             inputs.append({"inventory_item_id": str(row[0]), "name": row[1], "quantity": quantity, "unit": unit})
     return inputs
+
+
+def _recipe_botanical_inputs(batch: wm.ProductionBatch) -> list[tuple[str, Decimal, str]]:
+    recipe = wm._WILDFLOWER_MACERATION_INPUTS if batch.product_line == "wildflower" else wm._SOLSTICE_MACERATION_INPUTS
+    return [
+        (entry["name"], Decimal(entry["quantity"]), entry["unit"])
+        for entry in recipe
+        if entry["requires_inventory_selection"] and entry["name"] != "Neutral grain spirit"
+    ]
+
+
+def _recipe_fallback_inputs(
+    store: MarkerStore, batch: wm.ProductionBatch, precise_inputs: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Use the fixed VAT recipe for botanical amounts not precisely source-linked.
+
+    Curated inferred purchases remain pinned through ``ingredient_code``.  For earlier
+    source receipts that only establish availability, consume the residual recipe demand
+    from canonical-name FIFO lots instead of leaving every historical receipt on hand.
+    """
+    precise_by_material: dict[tuple[str, str], Decimal] = {}
+    for item in precise_inputs:
+        key = (_canonical_material_name(item["name"]), item["unit"])
+        precise_by_material[key] = precise_by_material.get(key, Decimal("0")) + Decimal(str(item["quantity"]))
+
+    fallback: list[dict[str, Any]] = []
+    for name, recipe_quantity, unit in _recipe_botanical_inputs(batch):
+        known_quantity = precise_by_material.get((_canonical_material_name(name), unit), Decimal("0"))
+        if known_quantity > recipe_quantity:
+            raise ReplayRejectedError(
+                f"precisely linked {name!r} quantity {known_quantity} exceeds recipe quantity {recipe_quantity}"
+            )
+        remaining = recipe_quantity - known_quantity
+        if remaining > 0:
+            allocated, shortfall = store.consume_available_raw_material_up_to(name, remaining, unit)
+            fallback.extend(allocated)
+            if shortfall > 0:
+                # A recipe predates every matching receipt in the source database.  Keep
+                # its documented material use without falsely tying it to a later lot.
+                fallback.append({"name": name, "quantity": str(shortfall), "unit": unit})
+    return fallback
 
 
 def _produced_item_for_step(store: MarkerStore, execution_step_id: UUID, name: str) -> dict[str, Any] | None:
@@ -429,15 +517,25 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
         produces_bottles = step_key == "bottling"
 
         if step_key in ("maceration", "rhubarb_maceration"):
-            actual_inputs.extend(_ingredient_inputs_for_step(store, event.payload.get("known_input_quantities", {})))
+            precise_inputs = _ingredient_inputs_for_step(store, event.payload.get("known_input_quantities", {}))
+            actual_inputs.extend(precise_inputs)
+            if not is_rosella:
+                actual_inputs.extend(_recipe_fallback_inputs(store, batch, precise_inputs))
 
         # Neutral grain spirit (real inventory draw) and water/foraged botanicals ("other
         # materials" -- no inventory_item_id, matching the UI's "Other materials" input
         # concept: real usage the app records without tracking as purchased stock).
-        ngs_quantity_l = event.payload.get("ngs_quantity_l")
-        if ngs_quantity_l:
+        legacy_ngs_quantity_l = event.payload.get("legacy_ngs_quantity_l")
+        if legacy_ngs_quantity_l:
             actual_inputs.extend(
-                store.consume_available_raw_material("Neutral grain spirit", Decimal(ngs_quantity_l), "L")
+                store.consume_available_raw_material("Neutral grain spirit", Decimal(legacy_ngs_quantity_l), "L")
+            )
+        dedicated_ngs_quantity_l = event.payload.get("dedicated_ngs_quantity_l")
+        if dedicated_ngs_quantity_l:
+            actual_inputs.extend(
+                store.consume_marked_raw_material(
+                    event.payload["dedicated_ngs_marker"], Decimal(dedicated_ngs_quantity_l), "L"
+                )
             )
         for other_input in event.payload.get("other_material_inputs", []):
             actual_inputs.append(dict(other_input))
