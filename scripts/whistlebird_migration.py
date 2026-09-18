@@ -2203,6 +2203,7 @@ def build_import_verification(
             text("SELECT count(*) FROM purchases_ingredients WHERE ingredients_amount <= 0")
         ).scalar_one()
         legacy = _legacy_batches(source)
+        legacy_raw_materials = _disambiguate_reused_supplier_batches(list(_raw_material_records(source)))
     raw_material_manifest_path = Path(__file__).parents[1] / "docs" / "whistlebird-raw-material-source.json"
     if raw_material_manifest_path.exists():
         raw_material_manifest = json.loads(raw_material_manifest_path.read_text(encoding="utf-8"))
@@ -2217,14 +2218,11 @@ def build_import_verification(
     expected_by_workflow = Counter(batch.workflow_name for batch in batches)
 
     if include_replay_ngs_purchases:
-        # The API-replay path (scripts/whistlebird_replay.py) buys Neutral grain spirit
-        # dedicated to a single batch wherever the real purchases_gns purchases can't
-        # reach (see whistlebird_replay_timeline.NGS_LEGACY_POOL_CUTOFF) -- not sourced
-        # from any legacy table or manifest file, so it has to be counted here rather
-        # than read off a source count above.
+        # The API replay first drains dated real NGS receipts and only creates a
+        # deterministic receipt for the remaining shortfall of a batch's fixed recipe.
         from whistlebird_replay_timeline import count_dedicated_ngs_purchases
 
-        raw_material_sources["ngs_dedicated_purchases"] = count_dedicated_ngs_purchases(batches)
+        raw_material_sources["ngs_dedicated_purchases"] = count_dedicated_ngs_purchases(batches, legacy_raw_materials)
 
     with create_engine(target_url).connect() as target:
         org_id = target.execute(
