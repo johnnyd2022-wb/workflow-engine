@@ -364,6 +364,7 @@ class InventoryRepository:
         name: str,
         quantity: str | Decimal,
         reference: str | None = None,
+        source_output_id: UUID | None = None,
         commit: bool = True,
     ) -> list[dict]:
         """Consume `quantity` units of the FINAL_PRODUCT item(s) named `name`, draining
@@ -404,8 +405,10 @@ class InventoryRepository:
                     InventoryItem.created_at.asc(),
                 )
                 .with_for_update()
-                .all()
             )
+            if source_output_id is not None:
+                items = items.filter(InventoryItem.source_output_id == source_output_id)
+            items = items.all()
             total_available = sum((parse_stored_quantity_to_decimal(i.quantity) for i in items), Decimal("0"))
             if total_available < needed:
                 raise ValueError(f"Insufficient stock for {name!r}: requested {needed}, available {total_available}")
@@ -454,6 +457,64 @@ class InventoryRepository:
             if commit:
                 self.db.commit()
             return consumed
+
+    def reverse_final_product_fifo_consumption(
+        self,
+        org_id: UUID,
+        inventory_item_id: UUID,
+        quantity: str | Decimal,
+        reference: str | None = None,
+        commit: bool = True,
+    ) -> dict:
+        """Restore a previously recorded FIFO sale allocation to its original stock item.
+
+        A voided/deleted Xero invoice must return stock to the exact labelled batch that
+        supplied it; re-running generic FIFO in reverse would invent a different batch
+        history. ``reference`` is kept on the emitted event for invoice-line auditability.
+        """
+        amount = _parse_quantity(quantity)
+        if amount is None or not amount.is_finite() or amount <= 0:
+            raise ValueError("quantity must be a positive finite number")
+
+        item = (
+            self.db.query(InventoryItem)
+            .filter(
+                InventoryItem.id == inventory_item_id,
+                InventoryItem.org_id == org_id,
+                InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if item is None:
+            raise ValueError(f"Final product inventory item {inventory_item_id} was not found")
+
+        quantity_before = parse_stored_quantity_to_decimal(item.quantity)
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.SALES_FIFO_REVERSAL):
+            item.quantity = coerce_stored_quantity(quantity_before + amount)
+            self.db.flush()
+            EventWriter(self.db, org_id).emit(
+                event_type="inventory_item.quantity_adjusted",
+                entity_type="inventory_item",
+                entity_id=item.id,
+                payload={
+                    **_item_snapshot(item),
+                    "quantity_before": str(quantity_before),
+                    "quantity_after": str(item.quantity),
+                    "delta": str(amount),
+                    "reason": "sales_fifo_reversal",
+                    "reference": reference,
+                },
+                diff={"quantity": {"before": str(quantity_before), "after": str(item.quantity)}},
+            )
+        if commit:
+            self.db.commit()
+        return {
+            "inventory_item_id": str(item.id),
+            "batch_number": (item.extra_data or {}).get("batch_number"),
+            "quantity_restored": str(amount),
+            "unit": item.unit,
+        }
 
     def get_inventory_item_by_id(self, item_id: UUID, org_id: UUID | None = None) -> InventoryItem | None:
         """Get inventory item by ID, optionally scoped to org"""

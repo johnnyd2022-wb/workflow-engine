@@ -34,6 +34,7 @@ from app.features.crm.models.product_mapping import ProductMapping
 from app.features.crm.models.crm_note import CRMNote
 from app.features.crm.models.crm_task import CRMTask
 from app.features.crm.models.sales_traceability_config import SalesTraceabilityConfig
+from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.compliant.models.compliance_profile import ComplianceProfile
 from app.features.compliant.models.compliance_record import ComplianceRecord
 from app.features.compliant.models.compliance_report import ComplianceReport

@@ -64,6 +64,13 @@
               <a href="/crm/xero/auth" hx-boost="false" class="crm-btn crm-btn--primary crm-btn--sm" @click.prevent="beginXeroConnect()">Connect</a>
             </template>
           </div>
+          <template x-if="syncSummary">
+            <div style="font-size:.78rem; color:var(--text-secondary,#6b7280); margin-top:8px;">
+              FIFO sales: <span x-text="syncSummary.allocated"></span> allocated
+              <template x-if="syncSummary.unmapped"><span>; <span x-text="syncSummary.unmapped"></span> unmapped</span></template>
+              <template x-if="syncSummary.insufficientStock"><span>; <span x-text="syncSummary.insufficientStock"></span> awaiting stock</span></template>
+            </div>
+          </template>
         </section>
 
         <section class="crm-card" aria-disabled="true" style="padding:14px; border-radius:10px; opacity:.6; filter:grayscale(1);">

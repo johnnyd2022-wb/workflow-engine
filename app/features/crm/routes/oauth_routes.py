@@ -267,6 +267,9 @@ def xero_sync():
                 "ok": True,
                 "contacts_synced": result.contacts_synced,
                 "invoices_synced": result.invoices_synced,
+                "sales_allocated": result.sales_allocated,
+                "sales_unmapped": result.sales_unmapped,
+                "sales_insufficient_stock": result.sales_insufficient_stock,
                 "errors": result.errors,
             }
         ), 200
