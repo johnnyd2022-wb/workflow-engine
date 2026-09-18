@@ -86,15 +86,100 @@ def test_product_workflows_have_the_agreed_step_shape(migration_module):
     assert rosella_steps[0] == "Rhubarb maceration" and "Distilling" not in rosella_steps
 
 
-def test_only_the_maceration_step_declares_inputs(migration_module):
-    """Step 1 is where botanicals must be traceable -- every other step stays input-free."""
-    for _shape, steps in migration_module.PRODUCT_WORKFLOWS.values():
+def test_wildflower_and_solstice_declare_inputs_on_every_step(migration_module):
+    """2026-09-18: every step now consumes something -- the recipe at Maceration, and
+    from Distilling onward, the immediately preceding step's own output (see
+    _previous_step_output_input)."""
+    for workflow_name in ("Wildflower gin", "Solstice gin"):
+        _shape, steps = migration_module.PRODUCT_WORKFLOWS[workflow_name]
+        for step in steps:
+            assert step[4], f"{workflow_name}'s {step[0]!r} step should declare inputs"
+
+
+def test_rosella_and_trial_workflows_still_only_declare_inputs_on_their_first_step(migration_module):
+    """Unchanged by the 2026-09-18 chaining request, which was scoped to Wildflower/Solstice only."""
+    for workflow_name in ("Rosella gin", "GG gin trials", "WB recipe trials", "SGS spirit trials"):
+        _shape, steps = migration_module.PRODUCT_WORKFLOWS[workflow_name]
         for index, step in enumerate(steps):
-            inputs = step[4]
-            if index == 0 and step[0] in ("Maceration", "Rhubarb maceration"):
-                assert inputs, f"{step[0]} must declare inputs so botanicals are traceable"
+            if index == 0 and step[0] == "Rhubarb maceration":
+                assert step[4], "Rhubarb maceration must declare inputs so botanicals are traceable"
             else:
-                assert inputs == (), f"{step[0]} (step {index + 1}) should not declare inputs"
+                assert step[4] == (), f"{step[0]} (step {index + 1}) should not declare inputs"
+
+
+def test_wildflower_and_solstice_declare_an_output_on_every_step(migration_module):
+    for workflow_name in ("Wildflower gin", "Solstice gin"):
+        _shape, steps = migration_module.PRODUCT_WORKFLOWS[workflow_name]
+        for step in steps:
+            assert step[2], f"{workflow_name}'s {step[0]!r} step should declare an output"
+    wildflower_outputs = [s[2] for s in migration_module.PRODUCT_WORKFLOWS["Wildflower gin"][1]]
+    solstice_outputs = [s[2] for s in migration_module.PRODUCT_WORKFLOWS["Solstice gin"][1]]
+    assert wildflower_outputs[-1] == "Wildflower - final product"
+    assert solstice_outputs[-1] == "Solstice - final product"
+    # Bottling's own output name is shared/generic -- what matters is the two
+    # workflows' distinguishing final-product names above.
+    assert wildflower_outputs[3] == solstice_outputs[3] == "Bottled product"
+
+
+def test_distilling_and_aging_steps_from_index_1_wire_to_the_previous_step_output(migration_module):
+    """Steps 2-5 (Distilling through Labelling) each carry a `_wire_previous_output`
+    marker -- setup_product_workflows() resolves it into a real source_output_id once
+    the preceding step's output actually exists in the database."""
+    for workflow_name in ("Wildflower gin", "Solstice gin"):
+        _shape, steps = migration_module.PRODUCT_WORKFLOWS[workflow_name]
+        for step in steps[1:]:
+            markers = [i for i in step[4] if i.get("_wire_previous_output")]
+            assert markers, f"{workflow_name}'s {step[0]!r} step should wire the previous step's output"
+
+
+def test_aging_has_the_vat_fill_ngs_and_water_inputs(migration_module):
+    for workflow_name, expected_ngs, expected_water in (
+        ("Wildflower gin", "25.326", "30.787"),
+        ("Solstice gin", "17.776", "25.064"),
+    ):
+        _shape, steps = migration_module.PRODUCT_WORKFLOWS[workflow_name]
+        aging = next(s for s in steps if s[0] == "Aging")
+        by_name = {i["name"]: i for i in aging[4] if "name" in i}
+        assert by_name["Neutral grain spirit"]["quantity"] == expected_ngs
+        assert by_name["Neutral grain spirit"]["requires_inventory_selection"] is True
+        assert by_name["Water"]["quantity"] == expected_water
+        assert by_name["Water"]["requires_inventory_selection"] is False
+
+
+def test_aging_and_distilling_carry_the_agreed_custom_prompts(migration_module):
+    for workflow_name in ("Wildflower gin", "Solstice gin"):
+        _shape, steps = migration_module.PRODUCT_WORKFLOWS[workflow_name]
+        by_name = {s[0]: s for s in steps}
+        aging_prompts = by_name["Aging"][5]
+        assert len(aging_prompts) == 1
+        assert aging_prompts[0] == {"label": "VAT number", "type": "number", "unit": None, "required": True}
+        distilling_prompts = by_name["Distilling"][5]
+        assert len(distilling_prompts) == 1
+        assert distilling_prompts[0] == {"label": "Flask code", "type": "text", "unit": None, "required": True}
+        for other in ("Maceration", "Bottling", "Labelling & packaging"):
+            assert by_name[other][5] == (), f"{other} should not have a custom prompt"
+
+
+def test_resolve_step_inputs_expands_the_previous_output_marker(migration_module):
+    marker = migration_module._previous_step_output_input("3.6", "L")
+    previous_output = {"id": "output-uuid-1", "name": "Maceration charge", "unit": "L"}
+    resolved = migration_module._resolve_step_inputs((marker,), previous_output)
+    assert resolved == [
+        {
+            "name": "Maceration charge",
+            "source_output_id": "output-uuid-1",
+            "quantity": "3.6",
+            "unit": "L",
+            "requires_inventory_selection": True,
+            "is_variable": False,
+        }
+    ]
+
+
+def test_resolve_step_inputs_raises_without_a_previous_output(migration_module):
+    marker = migration_module._previous_step_output_input(None, "units")
+    with pytest.raises(ValueError, match="previous step has no output"):
+        migration_module._resolve_step_inputs((marker,), None)
 
 
 def test_maceration_inputs_cover_the_tracked_botanicals_and_dont_fabricate_quantities(migration_module):
