@@ -715,9 +715,9 @@
     }
 
     try {
-      const endpoint = isBackward
-        ? `/api/core/inventory/trace-backward/${itemId}`
-        : `/api/core/inventory/trace/${itemId}`;
+      // The unified graph traces both upstream and downstream so any clicked item
+      // can show its source batches, production steps, and FIFO-linked sales.
+      const endpoint = `/api/core/inventory/trace-graph/${itemId}`;
       const res = await fetch(endpoint, { headers: smCsrfHeader() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -863,6 +863,8 @@
 
     const allItems = traceResult.all_items || [];
     const connections = traceResult.connections || [];
+    const sales = allItems.filter(item => item.node_type === 'sale');
+    const productionConnections = connections.filter(connection => connection.edge_type !== 'sale');
     // raw_material = forward trace root; traced_item = backward trace root
     const tracedItem = traceResult.raw_material || traceResult.traced_item || allItems[0];
 
@@ -871,7 +873,7 @@
       return;
     }
 
-    const groups = connections.length ? smBuildExecutionGroups(allItems, connections) : [];
+    const groups = productionConnections.length ? smBuildExecutionGroups(allItems, productionConnections) : [];
 
     const rawCountMap = new Map();
     groups.forEach(g => g.raws.forEach(r => rawCountMap.set(r.id, (rawCountMap.get(r.id) || 0) + 1)));
@@ -879,12 +881,12 @@
 
     area.appendChild(smBuildImpactHeader(tracedItem, groups));
 
-    if (!connections.length) {
+    if (!productionConnections.length && !sales.length) {
       const lone = document.createElement('div');
       lone.className = 'sm-lone-item';
       lone.appendChild(smBuildItemCard(tracedItem, smTypeClass(tracedItem.inventory_type), false, null));
       area.appendChild(lone);
-      if (currentView === 'table') smUpdateTable(allItems, []);
+      if (currentView === 'table') smUpdateTraceTable(allItems, [], tracedItem.id);
       return;
     }
 
@@ -893,8 +895,9 @@
     } else if (currentView === 'map') {
       area.appendChild(smRenderMap(groups, tracedItem, sharedSourceIds));
     }
+    if (currentView !== 'table' && sales.length) area.appendChild(smBuildSalesTerminal(sales));
 
-    if (currentView === 'table') smUpdateTable(allItems, connections);
+    if (currentView === 'table') smUpdateTraceTable(allItems, connections, tracedItem.id);
   }
 
   /* ── Impact header ─────────────────────────────────────── */
@@ -1768,36 +1771,135 @@
   }
 
   /* ── Table view ─────────────────────────────────────────── */
-  function smUpdateTable(items, connections) {
-    const wrap = document.getElementById('sm-table-wrap');
-    if (!wrap) return;
+  function smBuildSalesTerminal(sales) {
+    const section = document.createElement('section');
+    section.className = 'sm-sales-terminal';
+    const heading = document.createElement('div');
+    heading.className = 'sm-sales-terminal__heading';
+    heading.textContent = 'Sales linked by FIFO';
+    section.appendChild(heading);
+    sales.forEach(sale => {
+      const row = document.createElement('div');
+      row.className = 'sm-sales-terminal__row';
+      const title = document.createElement('strong');
+      title.textContent = sale.name || 'Sale';
+      const meta = document.createElement('span');
+      const invoice = sale.invoice_number || sale.xero_invoice_id || 'Xero invoice';
+      const customer = sale.customer_name ? ' · ' + sale.customer_name : '';
+      const saleDate = sale.sale_date ? ' · ' + smFmtDate(sale.sale_date) : '';
+      meta.textContent = invoice + customer + saleDate;
+      row.append(title, meta);
+      section.appendChild(row);
+    });
+    return section;
+  }
 
-    if (!items || !items.length) {
-      wrap.style.display = 'none';
+  /* Compact tree table: each material appears once, nested under its producing step. */
+  function smUpdateTraceTable(items, connections, tracedRootId) {
+    const wrap = document.getElementById('sm-table-wrap');
+    const tbody = document.getElementById('sm-table-body');
+    if (!wrap || !tbody || !items || !items.length) {
+      if (wrap) wrap.style.display = 'none';
       return;
     }
-
     wrap.style.display = 'block';
-
-    const tbody = document.getElementById('sm-table-body');
-    if (!tbody) return;
     tbody.innerHTML = '';
 
-    items.forEach(item => {
-      const tr = document.createElement('tr');
-      const typeClass = smTypeClass(item.inventory_type);
-      const qty = item.quantity != null ? `${smFmtQty(item.quantity)} ${smEsc(item.unit || '')}`.trim() : '—';
-      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
-      tr.innerHTML = `
-        <td>${smEsc(item.name || '—')}</td>
-        <td><span class="sm-type-badge sm-type-badge--${typeClass}">${smEsc(smTypeLabel(item.inventory_type))}</span></td>
-        <td>${qty}</td>
-        <td>${smEsc(item.batch_id || item.supplier_batch_number || '—')}</td>
-        <td>${smEsc(item.supplier || '—')}</td>
-        <td>${smFmtDate(item.expiry_date)}</td>
-      `;
-      tbody.appendChild(tr);
+    const itemMap = new Map(items.map(item => [item.id, item]));
+    const inventoryItems = items.filter(item => item.node_type !== 'sale');
+    const outgoing = new Map();
+    const incomingInventory = new Set();
+    connections.forEach(connection => {
+      if (!itemMap.has(connection.from_id) || !itemMap.has(connection.to_id)) return;
+      if (!outgoing.has(connection.from_id)) outgoing.set(connection.from_id, []);
+      outgoing.get(connection.from_id).push(connection);
+      if (itemMap.get(connection.to_id).node_type !== 'sale') incomingInventory.add(connection.to_id);
     });
+
+    const appendCell = (row, value, className) => {
+      const cell = document.createElement('td');
+      if (className) cell.className = className;
+      cell.textContent = value || '—';
+      row.appendChild(cell);
+      return cell;
+    };
+    const appendMaterial = (item, depth) => {
+      const row = document.createElement('tr');
+      row.className = 'sm-trace-row sm-trace-row--material';
+      const trace = document.createElement('td');
+      trace.className = 'sm-trace-row__item';
+      trace.style.setProperty('--sm-trace-depth', String(depth));
+      const badge = document.createElement('span');
+      badge.className = 'sm-type-badge sm-type-badge--' + smTypeClass(item.inventory_type);
+      badge.textContent = smTypeLabelShort(item.inventory_type);
+      const name = document.createElement('span');
+      name.textContent = item.name || 'Unnamed material';
+      trace.append(badge, name);
+      row.appendChild(trace);
+      appendCell(row, item.source_step_name ? 'Produced at ' + item.source_step_name : 'Source material', 'sm-trace-row__detail');
+      appendCell(row, item.batch_id || item.supplier_batch_number || '—');
+      appendCell(row, item.quantity != null ? (smFmtQty(item.quantity) + ' ' + (item.unit || '')).trim() : '—');
+      appendCell(row, item.supplier || '—');
+      tbody.appendChild(row);
+    };
+    const appendStep = (child, depth) => {
+      const row = document.createElement('tr');
+      row.className = 'sm-trace-row sm-trace-row--step';
+      const trace = document.createElement('td');
+      trace.className = 'sm-trace-row__step';
+      trace.style.setProperty('--sm-trace-depth', String(depth));
+      trace.textContent = '↳ ' + (child.source_step_name || 'Production step');
+      row.appendChild(trace);
+      appendCell(row, child.process_name || 'Production');
+      appendCell(row, '—');
+      appendCell(row, '—');
+      appendCell(row, '—');
+      tbody.appendChild(row);
+    };
+    const appendSale = (sale, allocation, depth) => {
+      const row = document.createElement('tr');
+      row.className = 'sm-trace-row sm-trace-row--sale';
+      const trace = document.createElement('td');
+      trace.className = 'sm-trace-row__sale';
+      trace.style.setProperty('--sm-trace-depth', String(depth));
+      trace.textContent = '↳ Sale · ' + (sale.name || 'Xero sale');
+      row.appendChild(trace);
+      appendCell(row, sale.invoice_number || sale.xero_invoice_id || 'Xero invoice');
+      appendCell(row, sale.sale_date ? smFmtDate(sale.sale_date) : '—');
+      const quantity = allocation.quantity != null ? allocation.quantity : sale.quantity;
+      appendCell(row, quantity != null ? (smFmtQty(quantity) + ' ' + (sale.unit || '')).trim() : '—');
+      appendCell(row, sale.customer_name || '—');
+      tbody.appendChild(row);
+    };
+
+    const visited = new Set();
+    const visit = (itemId, depth) => {
+      if (visited.has(itemId)) return;
+      const item = itemMap.get(itemId);
+      if (!item || item.node_type === 'sale') return;
+      visited.add(itemId);
+      appendMaterial(item, depth);
+      (outgoing.get(itemId) || []).forEach(connection => {
+        const child = itemMap.get(connection.to_id);
+        if (!child) return;
+        if (child.node_type === 'sale') {
+          appendSale(child, connection, depth + 1);
+        } else if (!visited.has(child.id)) {
+          appendStep(child, depth + 1);
+          visit(child.id, depth + 2);
+        }
+      });
+    };
+
+    const roots = inventoryItems
+      .filter(item => !incomingInventory.has(item.id))
+      .sort((a, b) => {
+        if (a.id === tracedRootId) return -1;
+        if (b.id === tracedRootId) return 1;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+    roots.forEach(item => visit(item.id, 0));
+    inventoryItems.filter(item => !visited.has(item.id)).forEach(item => visit(item.id, 0));
   }
 
   function smClearTable() {
@@ -2018,7 +2120,8 @@
         if (view === 'table') {
           if (flowArea) flowArea.style.display = 'none';
           if (lastTraceResult && (lastTraceResult.all_items || []).length) {
-            smUpdateTable(lastTraceResult.all_items || [], lastTraceResult.connections || []);
+            const root = lastTraceResult.traced_item || lastTraceResult.raw_material;
+            smUpdateTraceTable(lastTraceResult.all_items || [], lastTraceResult.connections || [], root ? root.id : tracedItemId);
           } else {
             if (tableWrap) tableWrap.style.display = 'none';
           }
