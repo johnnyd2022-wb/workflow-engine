@@ -40,13 +40,14 @@ Two scripts, run in sequence:
 
 ### 1. `scripts/whistlebird_replay.py` — the replay client
 
-- Drives the app through **Flask's `test_client()`**, not a live server + real network
-  auth. This still executes the exact route function, its decorators
-  (`@requires_auth`, `@requires_org_scope`), the Pydantic request-body validation, and
-  the real repository/business logic — nothing about the code path is faked — while
-  avoiding the complexity of managing a live server process, TLS, and external
-  rate-limit/CSRF handling from outside the process. `with app.test_client() as
-  client:` keeps a cookie jar across requests, so one login covers the whole replay.
+- Drives a **running app server over HTTP**: `ReplayClient`
+  (`scripts/whistlebird_replay.py:70`) wraps a `requests.Session` pointed at `--base-url`,
+  not Flask's `test_client()` as this plan first proposed. Every call still executes the
+  exact route function, its decorators (`@requires_auth`, `@requires_org_scope`), the
+  Pydantic request-body validation, and the real repository/business logic — nothing
+  about the code path is faked — and because the client is a real one, the real CSRF and
+  rate-limit handling apply (see "Resolved questions"). The session's cookie jar means
+  one login covers the whole replay. (verified 2026-09-19 by findings-sweep)
 - Logs in once as the deterministic test admin (`DEFAULT_TEST_ADMIN_EMAIL`), then issues
   every event as a real request against the real routes, in the order produced by the
   timeline compiler below.
@@ -121,17 +122,55 @@ dependency edges above.
 
 ## Open questions being researched before implementation starts
 
-- Exact login route, payload, CSRF/2FA behavior under `test_client()` (does 2FA gate a
-  test-admin session created via `ensure_target_org_admin`, and does `test_client()`
-  need an explicit CSRF token or does test config disable that check?).
 - Whether a trial is just a regular execution of a "trial" workflow (reusing the same
   two endpoints) or has its own route.
 - Whether completing a step with `actual_inputs` pointing at an inventory item actually
   decrements that item's quantity through the real route (confirms "replay exercises
   real logic" claim) or only via the direct-ORM path today.
 - Customs/compliance lodgement route and payload shape.
-- Whether Flask-Limiter rate-limits apply beyond `/auth/*` (matters for ~700+ calls in
-  one process).
+
+## Resolved questions
+
+Answered from the code rather than from the research notes in the progress log below, and
+pinned by `tests/test_replay_app_contract.py`, so a change that breaks the replay fails
+there instead of partway through a run. (verified 2026-09-19 by findings-sweep)
+
+- **Login route, payload, CSRF and 2FA.**
+  - Login is `POST /auth/login` with JSON `{"email", "password"}`
+    (`app/api/routes/auth_routes.py:255`; client at `scripts/whistlebird_replay.py:79-93`).
+  - A 2FA-enabled account answers `{"requires_2fa": true}` (`auth_routes.py:573`) and
+    `ReplayClient.login` stops on it (`whistlebird_replay.py:85`), so the replay admin
+    must have 2FA off. A newly created admin does: `User.two_factor_enabled` defaults to
+    `False` (`app/core/db/models/user.py:39`) and `ensure_target_org_admin` creates the
+    admin without setting it (`scripts/whistlebird_migration.py:2078-2084`). An admin that
+    already exists is left untouched (`:2088`), so its 2FA setting is whatever it was.
+  - The app never turns CSRF off: it installs `CSRFProtect(app)` unconditionally
+    (`app/api/app_factory.py:473`; only a missing Flask-WTF degrades it, and only in
+    local/test) and sets no `WTF_CSRF_ENABLED`. Many test fixtures do set
+    `WTF_CSRF_ENABLED = False` on their own app instances (27 test files mention it, e.g.
+    `tests/test_auth_login_security.py:58`), so a `test_client()` built like those needs
+    no token, while one on a plain `create_app()` does. Every `/auth/*` view and the two
+    `/telemetry*` ingest routes are exempt (`app_factory.py:478-479`), so login needs no
+    token. Every other mutating route needs it in `X-CSRFToken` (`app_factory.py:469`); the
+    client also sends a same-origin `Referer` because Flask-WTF requires one over HTTPS
+    (comment at `whistlebird_replay.py:96-99`). The token is the `<meta name="csrf-token">`
+    on the authenticated SPA shell at `/core/dashboard` (`/` is the public page and has
+    none), fetched once per login (`whistlebird_replay.py:50,86-100`). Flask-WTF expires a
+    token after 3600 s (`WTF_CSRF_TIME_LIMIT`, not overridden in `app/`) and the client
+    never refreshes it, so a single run longer than an hour would start getting 400s.
+- **Do Flask-Limiter limits apply beyond `/auth/*`? No — and `/auth/*` is only partly
+  covered.** The limiter is built with no `default_limits` (`auth_routes.py:131-132`), so
+  only routes with an explicit `@limiter.limit` are throttled: `/auth/signup` (`:159`) and
+  `/auth/login` (`:256`) at 5/min per IP+email, and the public `/telemetry` and
+  `/telemetry/posthog/<path>` ingest routes at 120/min (`app_factory.py:308,331`). The
+  5/min is relaxed to 1000/min in the test environment and local-under-CI, never in
+  production (`USE_RELAXED_AUTH_RATE_LIMITS`, pinned by
+  `tests/test_auth_rate_limit_gating.py`). Business routes are never throttled, so ~700
+  calls from one process cannot trip a limit. The remaining `/auth/*` routes carry no
+  limit either: `/auth/verify-2fa` has neither a limit nor an attempt counter — only
+  `/auth/login` touches `failed_login_attempts` / `lock_account` (`auth_routes.py:378-459`)
+  and `verify_totp` is a bare `pyotp` check (`app/core/security/auth_service.py:188-193`).
+  **Unfixed**; tracked as F6 in `.agents/reports/auth/security-audit.md`.
 
 ## Progress log (update this as work lands — this is the resume point after any
 interruption, read it before re-deriving anything)

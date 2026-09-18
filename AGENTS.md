@@ -59,7 +59,7 @@ HTTP Request
 
 **Inventory**: Quantity writes require an `InventoryQuantityWriteReason` enum value (guards against untracked mutations). Unit conversion utilities live in `app/core/utils/`. Wastage is tracked in a separate table with batch-based entry hashing for idempotency.
 
-**Security**: Session-based auth + TOTP 2FA (pyotp). CSRF via Flask-WTF — SPAs send `X-CSRFToken` header. Rate limiting on `/auth/*` via Flask-Limiter. Passwords hashed with bcrypt.
+**Security**: Session-based auth + TOTP 2FA (pyotp). CSRF via Flask-WTF — SPAs send `X-CSRFToken` header. Rate limiting via Flask-Limiter is per-route with no app-wide default (`app/api/routes/auth_routes.py:131`): only `/auth/login`, `/auth/signup` and the public `/telemetry*` ingest routes carry a limit. The other `/auth/*` routes do not — notably `/auth/verify-2fa`, an open finding (F6 in `.agents/reports/auth/security-audit.md`). Passwords hashed with bcrypt.
 
 **Database sessions**: Scoped per request; cleaned up in `teardown_appcontext`. All queries are multi-tenant filtered by `org_id`.
 
