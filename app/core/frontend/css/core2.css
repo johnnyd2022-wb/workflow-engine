@@ -602,15 +602,25 @@ button.core2-hub-card {
   gap: 12px;
 }
 .core2-live-inv__clear-link {
-  border: none;
-  background: transparent;
-  color: #2563eb;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-light, #e6ecef);
+  border-radius: 9px;
+  background: var(--bg-secondary, #fbfcfd);
+  color: #0f766e;
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.core2-live-inv__clear-link:hover { text-decoration: underline; }
+.core2-live-inv__clear-link:hover,
+.core2-live-inv__clear-link:focus-visible {
+  border-color: #51a69c;
+  background: #f0fbf9;
+  box-shadow: 0 3px 12px rgba(18, 46, 66, 0.07);
+  color: #115e59;
+}
 .core2-live-inv__refine-panel {
   display: grid;
   gap: 10px;
@@ -1034,6 +1044,7 @@ button.core2-hub-card {
 /* Core hub summaries use the same quiet outer container and compact, discrete
  * metric cards as the NP3 Audit Health snapshot. */
 .core2-summary-layout {
+  --core2-summary-card-min-height: 112px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
@@ -1064,7 +1075,7 @@ button.core2-hub-card {
 }
 
 .core2-stats-hybrid--cards .core2-stats-hybrid__cell {
-  min-height: 70px;
+  min-height: var(--core2-summary-card-min-height);
   padding: 10px;
   gap: 5px;
   border: 1px solid var(--border-light, #e6ecef);
@@ -1091,16 +1102,13 @@ button.core2-hub-card {
 }
 
 .core2-summary-container .core2-attention-item {
-  min-height: 70px;
+  min-height: var(--core2-summary-card-min-height);
   padding: 10px;
   border-radius: 12px;
 }
 
-.core2-embedded-work-section {
-  display: grid;
-  gap: 10px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-light, #e6ecef);
+.core2-active-production-container .core2-work-list {
+  min-height: var(--core2-summary-card-min-height);
 }
 
 .core2-action-container {
@@ -1185,17 +1193,29 @@ button.core2-hub-card {
 }
 
 .core2-text-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--border-light, #e6ecef);
+  border-radius: 9px;
+  background: var(--bg-secondary, #fbfcfd);
   color: #0f766e;
   font-size: 0.84rem;
   font-weight: 750;
   text-decoration: none;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
   white-space: nowrap;
 }
 
 .core2-text-link:hover,
 .core2-text-link:focus-visible {
+  border-color: #51a69c;
+  background: #f0fbf9;
+  box-shadow: 0 3px 12px rgba(18, 46, 66, 0.07);
   color: #115e59;
-  text-decoration: underline;
 }
 
 .core2-attention-grid {

@@ -118,17 +118,18 @@
                 <div id="core2-overview-attention" class="core2-attention-grid" aria-live="polite">
                   <p class="core2-active-batches-empty">Loading operational priorities...</p>
                 </div>
-                <div class="core2-embedded-work-section" aria-labelledby="core2-overview-batches-title">
-                  <div class="core2-section-heading">
-                    <div>
-                      <p class="core2-eyebrow">Workflow</p>
-                      <h3 id="core2-overview-batches-title" class="spa-form-section-title">Active production</h3>
-                    </div>
-                    <a href="/core/executions/live" class="core2-text-link">Open production board</a>
+              </section>
+
+              <section class="core2-workspace-container core2-summary-container core2-summary-layout__full core2-active-production-container" aria-labelledby="core2-overview-batches-title">
+                <div class="core2-section-heading">
+                  <div>
+                    <p class="core2-eyebrow">Workflow</p>
+                    <h3 id="core2-overview-batches-title" class="spa-form-section-title">Active production</h3>
                   </div>
-                  <div id="core2-overview-active-batches" class="core2-work-list" aria-live="polite">
-                    <p class="core2-active-batches-empty">Loading active batches...</p>
-                  </div>
+                  <a href="/core/executions/live" class="core2-text-link">Open production board</a>
+                </div>
+                <div id="core2-overview-active-batches" class="core2-work-list" aria-live="polite">
+                  <p class="core2-active-batches-empty">Loading active batches...</p>
                 </div>
               </section>
             </div>
@@ -2087,7 +2088,7 @@
         ${item.source_execution_id ? `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 20px 4px 24px; border-top: 1px solid var(--border-default, #e5e7eb); margin-top: 0; flex-shrink: 0;">
           <p style="word-wrap: break-word; overflow-wrap: break-word; margin: 0; font-size: 12px; color: var(--text-secondary);">${formattedQuantity} ${item.unit || ''}</p>
-          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); executeNextStepFromInventory('${item.source_execution_id}', '${(item.producing_step_id || "").replace(/'/g, "\\'")}')" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; border: none; box-shadow: none; line-height: 1.2; height: 18px;">
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); executeNextStepFromInventory('${item.source_execution_id}', '${(item.producing_step_id || "").replace(/'/g, "\\'")}')" title="Execute next step" style="padding: 2px 6px; font-size: 10px; white-space: nowrap; margin: 0; box-shadow: none; line-height: 1.2; height: 18px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px; display: inline-block; vertical-align: middle;">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>

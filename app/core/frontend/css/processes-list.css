@@ -19,22 +19,25 @@
       flex-direction: row;
       align-items: flex-start;
       gap: 14px;
+      min-height: 78px;
       width: 100%;
       box-sizing: border-box;
-      padding: 16px 0;
-      margin: 0 0 8px 0;
-      border: none;
-      border-radius: var(--radius-xl, 12px);
+      padding: 12px;
+      margin: 0 0 12px 0;
+      border: 1px solid var(--border-light, #e6ecef);
+      border-radius: 12px;
       text-decoration: none;
       color: inherit;
-      background: transparent;
+      background: var(--bg-secondary, #fbfcfd);
       cursor: pointer;
       text-align: left;
       font: inherit;
-      transition: background 0.2s ease;
+      transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     }
     .processes-list-create-card:hover {
-      background: rgba(59, 130, 246, 0.06);
+      border-color: #51a69c;
+      background: #f0fbf9;
+      box-shadow: 0 3px 12px rgba(18, 46, 66, 0.07);
     }
     .processes-list-create-card:focus-visible {
       outline: 2px solid var(--primary, #3b82f6);
