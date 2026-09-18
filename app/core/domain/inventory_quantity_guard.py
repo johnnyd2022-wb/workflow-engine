@@ -80,6 +80,7 @@ class InventoryQuantityWriteReason(str, Enum):
     REPOSITORY_UPDATE = "repository_update"
     MANUAL_API_UPDATE = "manual_api_update"
     RESETDB_DEV = "resetdb_dev"
+    SALES_FIFO_CONSUMPTION = "sales_fifo_consumption"
 
 
 class InventoryQuantityWriteForbiddenError(RuntimeError):

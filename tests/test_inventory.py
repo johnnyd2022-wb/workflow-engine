@@ -36,6 +36,7 @@ from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement
 from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.organisation import Organisation
+from app.core.db.models.step import Step
 from app.core.security.auth_service import AuthService
 from app.core.security.tenant_scope import unscoped
 from tests.factories import (
@@ -443,9 +444,7 @@ def test_trace_enrichment_enriches_own_org_step_data(db, app_client, org):
     step.actual_inputs = [{"name": "our own input", "quantity": "7"}]
     db.commit()
 
-    item = _plant_item_with_foreign_ref(
-        db, org.id, "Own Item", execution_id=execution.id, step_id=step.id
-    )
+    item = _plant_item_with_foreign_ref(db, org.id, "Own Item", execution_id=execution.id, step_id=step.id)
 
     resp = app_client.get(f"/api/core/inventory/trace/{item.id}")
 
@@ -948,6 +947,179 @@ def test_list_inventory_query_count_does_not_scale_with_chain_depth(db, app_clie
         f"list_inventory issued {counter.count} queries for a 60-node chain — "
         "query count is scaling with DAG depth again (N+1 regression in trace_step_chain)"
     )
+
+
+# --------------------------------------------------------------------------------------
+# POST /api/core/inventory/consume-fifo -- drains labelled/lot-numbered finished stock
+# oldest batch first (batch_number ascending), splitting across items when a request
+# spans a batch boundary. Built for Whistlebird's label-batch-of-500 sales allocation
+# (see scripts/whistlebird_replay_timeline.py), but generic to any final_product item
+# tagged with extra_data.batch_number via complete_step's output batch_number field.
+# --------------------------------------------------------------------------------------
+
+
+def test_consume_fifo_drains_oldest_batch_first(db, app_client, org):
+    InventoryItemFactory(
+        org_id=org.id,
+        name="Wildflower - final product",
+        quantity="500",
+        unit="units",
+        inventory_type="final_product",
+        extra_data={"batch_number": 1},
+    )
+    InventoryItemFactory(
+        org_id=org.id,
+        name="Wildflower - final product",
+        quantity="500",
+        unit="units",
+        inventory_type="final_product",
+        extra_data={"batch_number": 2},
+    )
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/consume-fifo",
+        json={"name": "Wildflower - final product", "quantity": "120"},
+    )
+
+    assert resp.status_code == 200, resp.data
+    body = resp.get_json()
+    assert len(body["consumed"]) == 1
+    assert body["consumed"][0]["batch_number"] == 1
+    assert body["consumed"][0]["quantity_consumed"] == "120"
+    db.expire_all()
+    items = {
+        i.extra_data["batch_number"]: i.quantity
+        for i in db.query(InventoryItem).filter(InventoryItem.org_id == org.id).all()
+    }
+    assert items[1] == Decimal("380.0000")
+    assert items[2] == Decimal("500.0000")
+
+
+def test_consume_fifo_splits_across_a_batch_boundary(db, app_client, org):
+    InventoryItemFactory(
+        org_id=org.id,
+        name="Solstice - final product",
+        quantity="500",
+        unit="units",
+        inventory_type="final_product",
+        extra_data={"batch_number": 1},
+    )
+    InventoryItemFactory(
+        org_id=org.id,
+        name="Solstice - final product",
+        quantity="500",
+        unit="units",
+        inventory_type="final_product",
+        extra_data={"batch_number": 2},
+    )
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/consume-fifo",
+        json={"name": "Solstice - final product", "quantity": "600"},
+    )
+
+    assert resp.status_code == 200, resp.data
+    consumed = {c["batch_number"]: Decimal(c["quantity_consumed"]) for c in resp.get_json()["consumed"]}
+    assert consumed == {1: Decimal("500"), 2: Decimal("100")}
+    db.expire_all()
+    items = {
+        i.extra_data["batch_number"]: i.quantity
+        for i in db.query(InventoryItem).filter(InventoryItem.org_id == org.id).all()
+    }
+    assert items[1] == Decimal("0.0000")
+    assert items[2] == Decimal("400.0000")
+
+
+def test_consume_fifo_rejects_insufficient_stock_without_partial_consumption(db, app_client, org):
+    """[CONTROL] A request that can't be fully satisfied must consume nothing at all --
+    a partial FIFO drain would silently under-report what a sale actually took."""
+    InventoryItemFactory(
+        org_id=org.id,
+        name="Rosella - final product",
+        quantity="100",
+        unit="units",
+        inventory_type="final_product",
+        extra_data={"batch_number": 1},
+    )
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/consume-fifo",
+        json={"name": "Rosella - final product", "quantity": "150"},
+    )
+
+    assert resp.status_code == 400, resp.data
+    db.expire_all()
+    item = db.query(InventoryItem).filter(InventoryItem.org_id == org.id).one()
+    assert item.quantity == Decimal("100.0000")
+
+
+def test_complete_step_output_batch_number_lands_on_the_created_item(db, app_client, org):
+    """A step output's optional `batch_number` (e.g. which physical run of 500
+    pre-printed labels these bottles came off) is stored on the created item's
+    extra_data -- the tag consume-fifo drains by."""
+    process = ProcessFactory(org_id=org.id)
+    db.add(
+        Step(
+            org_id=org.id,
+            process_id=process.id,
+            step_number=1,
+            position=1000,
+            name="Labelling & packaging",
+            inputs=[],
+            outputs=[{"name": "Wildflower - final product", "unit": "units"}],
+            execution_prompts=[],
+        )
+    )
+    db.commit()
+    execution = ExecutionFactory(org_id=org.id, process_id=process.id)
+    db.commit()
+    step = (
+        db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id, ExecutionStep.org_id == org.id).one()
+    )
+
+    resp = app_client.post(
+        f"/api/core/executions/{execution.id}/steps/{step.id}/complete",
+        json={
+            "actual_inputs": [],
+            "actual_outputs": [
+                {"name": "Wildflower - final product", "quantity": 46, "unit": "units", "batch_number": 7}
+            ],
+        },
+    )
+
+    assert resp.status_code == 200, resp.data
+    item = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org.id, InventoryItem.source_execution_step_id == step.id)
+        .one()
+    )
+    assert item.extra_data["batch_number"] == 7
+    assert item.inventory_type == "final_product"
+
+
+def test_consume_fifo_ignores_other_orgs_stock(db, app_client, org, other_org):
+    InventoryItemFactory(
+        org_id=other_org.id,
+        name="Wildflower - final product",
+        quantity="500",
+        unit="units",
+        inventory_type="final_product",
+        extra_data={"batch_number": 1},
+    )
+    db.commit()
+
+    resp = app_client.post(
+        "/api/core/inventory/consume-fifo",
+        json={"name": "Wildflower - final product", "quantity": "10"},
+    )
+
+    assert resp.status_code == 400, resp.data
+    db.expire_all()
+    other_item = db.query(InventoryItem).filter(InventoryItem.org_id == other_org.id).one()
+    assert other_item.quantity == Decimal("500.0000")
 
 
 def test_backward_trace_returns_every_producing_step_for_a_final_product(db, app_client, org):

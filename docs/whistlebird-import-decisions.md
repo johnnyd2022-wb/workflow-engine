@@ -215,3 +215,53 @@ receipt to a *specific* historical VAT's `actual_inputs` (beyond the "inferred" 
 tier's already-linked entries) is a separate, larger exercise -- matching which purchase
 lot fed which batch is a business-judgement call, not something this template change
 attempts.
+
+## Stage 8: 2026-09-17/18 -- label-batch numbering and a real FIFO sales-drain engine
+
+Per Johnny's direction: Whistlebird buys pre-printed label rolls of 500. The first 500
+bottles ever labelled for a product are physically "batch 1", the next 500 "batch 2",
+and so on -- independent of which VAT produced them. He asked for this to be modelled
+now (via the replay, on real historical data) so a future Xero-invoice sales sync has a
+real batch identity to drain FIFO against, and asked me to check whether the CRM
+module's existing "sales traceability" settings (`matching_strategy: fifo`,
+`matching_key: batch_id`) already implement that draining.
+
+**They don't.** `app/features/crm/models/sales_traceability_config.py` /
+`sales_traceability_repo.py` is a config row only -- a toggle a user sets, with no
+engine anywhere that reads it and actually walks batches. `app/initialize.py`'s
+`workflow_execution_sales_mapping` table (the only other hit for "batch"/"fifo" in the
+codebase) is dead legacy scaffolding from before the multi-tenant rewrite -- its
+`create_*_table()` functions are only called from that file's own standalone `main()`,
+never from the running app. There was nothing to "just connect."
+
+**What this stage builds instead:**
+
+1. **Batch numbering at Labelling** (`scripts/whistlebird_replay_timeline.py`'s
+   `_assign_label_batches`): for each product line, sorts every batch by its real
+   labelling date, then walks the cumulative bottle count in fixed 500-unit windows.
+   Almost every VAT lands in exactly one label batch; a VAT whose run straddles a
+   500-bottle boundary produces two (rare, but real -- e.g. Wildflower VAT6, VAT12,
+   VAT18, VAT23, VAT43 and Solstice VAT45 all straddle a boundary in the current data).
+2. **A real place to store it**: `complete_step` (`app/core/backend/backend.py`) now
+   accepts an optional `batch_number` on any output, stored on the created item's
+   `extra_data` -- generic, not Whistlebird-specific (any manufacturer tagging finished
+   goods with a lot/run number can use it). `scripts/whistlebird_replay.py`'s labelling
+   branch now posts one `actual_outputs` entry per label batch a VAT's bottles fall
+   into, instead of one lump sum.
+3. **A real FIFO drain**: `InventoryRepository.consume_final_product_fifo` (new) plus
+   `POST /api/core/inventory/consume-fifo` (new) -- given a product name and a quantity,
+   walks that product's final_product items oldest-batch-number-first, splitting across
+   items when a request crosses a batch boundary, and refusing (no partial consumption)
+   if on-hand stock is short. This is the landing point for the eventual Xero sync,
+   which does not exist yet -- Johnny was explicit that connecting Xero is separate,
+   future work. Nothing calls this endpoint automatically today.
+
+**Verified against the live `whistlebird_test` target** (full reset -> replay -> 654
+events issued -> timestamp correction -> `--verify-import`, all exact, same as Stage
+6): Wildflower lands in 6 batches (five full 500s + a 413.5-bottle open batch 6),
+Solstice in 2 (one full 500 + a 178.75-bottle open batch 2), Rosella in 1 (162.5
+bottles, still filling batch 1) -- matching the previously-verified totals (2913.5 /
+678.75 / 162.5) exactly. A live test call to `consume-fifo` for 600 Wildflower units
+correctly drained all of batch 1 (500) then 100 units of batch 2, confirmed against the
+DB, then the target was reset and replayed again from scratch so no test consumption
+was left sitting in what is supposed to be a real, sales-free production history.

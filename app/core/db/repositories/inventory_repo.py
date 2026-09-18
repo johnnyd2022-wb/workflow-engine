@@ -4,11 +4,11 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import Integer, and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
-from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.domain.inventory_quantity_guard import (
     InventoryQuantityWriteReason,
     allow_inventory_quantity_write,
@@ -357,6 +357,103 @@ class InventoryRepository:
             self.db.expire(item, ["updated_at"])
             _ = item.updated_at
             return item
+
+    def consume_final_product_fifo(
+        self,
+        org_id: UUID,
+        name: str,
+        quantity: str | Decimal,
+        reference: str | None = None,
+        commit: bool = True,
+    ) -> list[dict]:
+        """Consume `quantity` units of the FINAL_PRODUCT item(s) named `name`, draining
+        the oldest label/lot batch first -- `extra_data.batch_number` ascending (a batch
+        with no number sorts last), ties broken by `purchase_date`/`created_at` -- and
+        splitting across items when a batch boundary falls mid-request.
+
+        This is the landing point for sales-driven consumption (e.g. a future Xero
+        invoice sync): batch numbers are assigned once, at production time (see
+        scripts/whistlebird_replay_timeline.py's batch-splitting at Labelling), and this
+        is the only place they get drained. Nothing is partially consumed if on-hand
+        stock across all matching items is short -- raises ValueError instead.
+        """
+        needed = _parse_quantity(quantity)
+        if needed is None or not needed.is_finite() or needed <= 0:
+            raise ValueError("quantity must be a positive finite number")
+
+        with start_span(
+            "inventory.consume_fifo",
+            attributes={
+                "org_id": str(org_id),
+                "name": name,
+                "reason": InventoryQuantityWriteReason.SALES_FIFO_CONSUMPTION.value,
+            },
+        ):
+            batch_number_sort = func.coalesce(InventoryItem.extra_data["batch_number"].astext.cast(Integer), 2**31 - 1)
+            items = (
+                self.db.query(InventoryItem)
+                .filter(
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.name == name,
+                    InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                    InventoryItem.quantity > 0,
+                )
+                .order_by(
+                    batch_number_sort.asc(),
+                    InventoryItem.purchase_date.asc().nulls_last(),
+                    InventoryItem.created_at.asc(),
+                )
+                .with_for_update()
+                .all()
+            )
+            total_available = sum((parse_stored_quantity_to_decimal(i.quantity) for i in items), Decimal("0"))
+            if total_available < needed:
+                raise ValueError(f"Insufficient stock for {name!r}: requested {needed}, available {total_available}")
+
+            remaining = needed
+            consumed: list[dict] = []
+            ew = EventWriter(self.db, org_id)
+            with allow_inventory_quantity_write(InventoryQuantityWriteReason.SALES_FIFO_CONSUMPTION):
+                for item in items:
+                    if remaining <= 0:
+                        break
+                    current = parse_stored_quantity_to_decimal(item.quantity)
+                    take = min(current, remaining)
+                    if take <= 0:
+                        continue
+                    quantity_before = str(current)
+                    item.quantity = coerce_stored_quantity(current - take)
+                    # Flush per item while the write reason is active, same as
+                    # set_inventory_item_quantity: EventWriter.emit() below flushes
+                    # outside this context, where the guard would reject the change.
+                    self.db.flush()
+                    batch_number = (item.extra_data or {}).get("batch_number")
+                    consumed.append(
+                        {
+                            "inventory_item_id": str(item.id),
+                            "batch_number": batch_number,
+                            "quantity_consumed": str(take),
+                            "unit": item.unit,
+                        }
+                    )
+                    ew.emit(
+                        event_type="inventory_item.quantity_adjusted",
+                        entity_type="inventory_item",
+                        entity_id=item.id,
+                        payload={
+                            **_item_snapshot(item),
+                            "quantity_before": quantity_before,
+                            "quantity_after": str(item.quantity),
+                            "delta": str(-take),
+                            "reason": "sales_fifo_consumption",
+                            "reference": reference,
+                        },
+                        diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+                    )
+                    remaining -= take
+            if commit:
+                self.db.commit()
+            return consumed
 
     def get_inventory_item_by_id(self, item_id: UUID, org_id: UUID | None = None) -> InventoryItem | None:
         """Get inventory item by ID, optionally scoped to org"""
