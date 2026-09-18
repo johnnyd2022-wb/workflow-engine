@@ -81,15 +81,15 @@ def _add_sale(db, org_id, *, invoice_id: str, description: str, quantity: str, s
 
 
 def _add_mapping(db, org_id, *, product: str, pattern: str, match_type: str = "exact"):
-    db.add(
-        ProductMapping(
-            org_id=org_id,
-            biz_e_product_name=product,
-            xero_description_pattern=pattern,
-            match_type=match_type,
-        )
+    mapping = ProductMapping(
+        org_id=org_id,
+        biz_e_product_name=product,
+        xero_description_pattern=pattern,
+        match_type=match_type,
     )
+    db.add(mapping)
     db.commit()
+    return mapping
 
 
 def _stock_by_batch(db, org_id):
@@ -198,6 +198,36 @@ def test_reconcile_accepts_a_unique_contains_mapping_when_exact_only_is_disabled
     assert _stock_by_batch(db, sales_org.id) == {1: Decimal("8.0000")}
 
 
+def test_reconcile_prefers_an_exact_mapping_over_a_broad_contains_mapping(db, sales_org):
+    product = "Wildflower - final product"
+    InventoryRepository(db).create_inventory_item(
+        sales_org.id,
+        name=product,
+        quantity="10",
+        unit="units",
+        inventory_type="final_product",
+        extra_data={"batch_number": 1},
+    )
+    exact_mapping = _add_mapping(db, sales_org.id, product=product, pattern="Whistlebird Wildflower 700ml")
+    _add_mapping(db, sales_org.id, product=product, pattern="Wildflower", match_type="contains")
+    db.add(SalesTraceabilityConfig(org_id=sales_org.id, matching_strategy="fifo", strict_mapping=False))
+    db.commit()
+    _add_sale(
+        db,
+        sales_org.id,
+        invoice_id="xero-wildflower-exact",
+        description="Whistlebird Wildflower 700ml",
+        quantity="2",
+    )
+
+    summary = SalesTraceabilityService(db).reconcile_org(sales_org.id)
+
+    allocation = db.query(SalesFifoAllocation).filter(SalesFifoAllocation.org_id == sales_org.id).one()
+    assert summary["allocated"] == 1
+    assert allocation.product_mapping_id == exact_mapping.id
+    assert _stock_by_batch(db, sales_org.id) == {1: Decimal("8.0000")}
+
+
 def test_reviewed_mappings_are_created_together_in_one_save(db, sales_org):
     from app.features.crm.services.crm_service import CRMService
 
@@ -220,6 +250,30 @@ def test_reviewed_mappings_are_created_together_in_one_save(db, sales_org):
 
     assert [mapping["xero_description_pattern"] for mapping in saved] == ["Wildflower", "Solstice"]
     assert db.query(ProductMapping).filter(ProductMapping.org_id == sales_org.id).count() == 2
+
+
+def test_reviewed_mappings_reject_case_insensitive_duplicates(db, sales_org):
+    from app.features.crm.services.crm_service import CRMService
+
+    _add_mapping(
+        db,
+        sales_org.id,
+        product="Wildflower - final product",
+        pattern="Whistlebird Gin 44% - Wildflower - 700ml",
+    )
+
+    with pytest.raises(ValueError, match="already exists"):
+        CRMService(db).create_mappings(
+            sales_org.id,
+            [
+                {
+                    "biz_e_product_name": "Wildflower - final product",
+                    "xero_description_pattern": "Whistlebird Gin 44% - WIldflower - 700ml",
+                    "match_type": "exact",
+                }
+            ],
+            user_id=None,
+        )
 
 
 def test_invoice_sync_returns_fifo_reconciliation_summary(db, sales_org, monkeypatch):

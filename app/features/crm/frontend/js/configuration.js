@@ -8,6 +8,9 @@ function crmConfiguration() {
     syncSummary: null,
     disconnecting: false,
     showDisconnectModal: false,
+    showDeleteMappingModal: false,
+    mappingToDelete: null,
+    deletingMapping: false,
     mappings: [],
     pendingMappings: [],
     finalProducts: [],
@@ -165,8 +168,10 @@ function crmConfiguration() {
         this.traceConfig.task_done_archive_days = Number(saved?.task_done_archive_days || this.traceConfig.task_done_archive_days);
         this.traceConfig.revenue_baseline_target_mtd =
           saved?.revenue_baseline_target_mtd == null ? '' : Number(saved.revenue_baseline_target_mtd);
+        return true;
       } catch (e) {
         this.error = e.message || 'Failed to save traceability settings.';
+        return false;
       }
     },
 
@@ -214,6 +219,16 @@ function crmConfiguration() {
       if (this.savingMapping || this.pendingMappings.length === 0) return;
       this.savingMapping = true;
       try {
+        const needsPartialMatching = this.pendingMappings.some((mapping) => mapping.match_type === 'contains');
+        if (needsPartialMatching && this.traceConfig.strict) {
+          const strictBeforeSave = this.traceConfig.strict;
+          this.traceConfig.strict = false;
+          const configured = await this.saveTraceConfig();
+          if (!configured) {
+            this.traceConfig.strict = strictBeforeSave;
+            return;
+          }
+        }
         const { product_mappings } = await CRMAPI.createProductMappings({ mappings: this.pendingMappings });
         this.mappings = [...(product_mappings || []), ...this.mappings];
         this.pendingMappings = [];
@@ -224,13 +239,30 @@ function crmConfiguration() {
       }
     },
 
-    async deleteMapping(id) {
-      if (!confirm('Delete this mapping?')) return;
+    openDeleteMappingModal(mapping) {
+      this.mappingToDelete = mapping;
+      this.showDeleteMappingModal = true;
+    },
+
+    closeDeleteMappingModal() {
+      if (this.deletingMapping) return;
+      this.showDeleteMappingModal = false;
+      this.mappingToDelete = null;
+    },
+
+    async confirmDeleteMapping() {
+      const mapping = this.mappingToDelete;
+      if (!mapping || this.deletingMapping) return;
+      this.deletingMapping = true;
       try {
-        await CRMAPI.deleteProductMapping(id);
-        this.mappings = this.mappings.filter((m) => m.id !== id);
+        await CRMAPI.deleteProductMapping(mapping.id);
+        this.mappings = this.mappings.filter((m) => m.id !== mapping.id);
+        this.showDeleteMappingModal = false;
+        this.mappingToDelete = null;
       } catch (e) {
         this.error = e.message || 'Failed to delete mapping.';
+      } finally {
+        this.deletingMapping = false;
       }
     },
 
