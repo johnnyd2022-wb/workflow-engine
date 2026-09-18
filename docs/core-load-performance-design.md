@@ -142,6 +142,15 @@ deployment:
    header alone breaks those components. It needs the CSP-safe Alpine build
    (`@alpinejs/csp`) plus each `x-data` expression rewritten to its object form — the
    same "inline code to versioned modules" migration this item already calls for.
+4. `/auth/verify-2fa` has no brute-force throttle. It carries no `@limiter.limit` and no
+   attempt counter, so a caller who already holds a user's password can submit unlimited
+   TOTP guesses for the 5-minute pending-2FA window (`app/api/routes/auth_routes.py:707`,
+   `app/core/security/auth_service.py:188-193`). Unrelated to !181; recorded here because
+   this is the repo's standing ledger of security findings. Evidence, impact and an
+   observed repro are in F6 of `.agents/reports/auth/security-audit.md`. Needs a policy
+   decision before code — whether a 2FA failure feeds the existing login lockout or gets
+   its own counter, and at what limits — then `fix-bug` with a failing repro test first.
+   Not started.
 
 Credential/certificate rotation needs the credential owner and deployment access; do not
 attempt it from an engineering worktree. Pair the code change with verification of HTTPS,
