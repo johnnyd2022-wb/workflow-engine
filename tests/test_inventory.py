@@ -948,3 +948,18 @@ def test_list_inventory_query_count_does_not_scale_with_chain_depth(db, app_clie
         f"list_inventory issued {counter.count} queries for a 60-node chain — "
         "query count is scaling with DAG depth again (N+1 regression in trace_step_chain)"
     )
+
+
+def test_backward_trace_returns_every_producing_step_for_a_final_product(db, app_client, org):
+    """Inventory-card provenance must use the complete backward DAG, not a short
+    ``previous_steps_data`` projection. A four-step final product therefore exposes
+    all four completed operations (#1 through #4)."""
+    from tests.dag_traversal_helpers import build_large_linear_chain
+
+    dag = build_large_linear_chain(db, org.id, length=4)
+    response = app_client.get(f"/api/core/inventory/trace-backward/{dag['last_id']}")
+
+    assert response.status_code == 200, response.data
+    trace_steps = response.get_json()["trace_steps"]
+    assert [step["step_number"] for step in trace_steps] == [1, 2, 3, 4]
+    assert [step["step_name"] for step in trace_steps] == ["Step0", "Step1", "Step2", "Step3"]

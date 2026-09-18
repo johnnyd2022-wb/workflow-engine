@@ -667,6 +667,51 @@ def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
         )
 
 
+def _trace_step_summaries(items: list[dict], db_session, org_id: UUID) -> list[dict]:
+    """Return every producing operation represented by a traced inventory DAG.
+
+    An inventory item points at the execution step that produced it. Collecting those
+    pointers from the complete backward trace is more reliable than the old
+    ``previous_steps_data`` display projection and gives clients a compact operation
+    timeline without reimplementing DAG traversal from item JSON.
+    """
+    from sqlalchemy.orm import joinedload
+
+    source_step_ids = {uid for item in items if (uid := _parse_uuid(item.get("source_execution_step_id"))) is not None}
+    if not source_step_ids:
+        return []
+
+    traced_steps = (
+        db_session.query(ExecutionStep)
+        .join(Execution, ExecutionStep.execution_id == Execution.id)
+        .filter(Execution.org_id == org_id, ExecutionStep.id.in_(source_step_ids))
+        .options(joinedload(ExecutionStep.step))
+        .all()
+    )
+
+    summaries = [
+        {
+            "execution_step_id": str(step.id),
+            "execution_id": str(step.execution_id),
+            "step_name": step.step.name if step.step else None,
+            "step_number": step.step_number,
+            "completed_at": _to_iso_timestamp(step.completed_at),
+        }
+        for step in traced_steps
+    ]
+    # Completion time is the clearest ordering across branches/executions. Within one
+    # execution it naturally presents the familiar #1 → #N operation sequence.
+    summaries.sort(
+        key=lambda step: (
+            step["completed_at"] is None,
+            step["completed_at"] or "",
+            step["step_number"],
+            step["execution_step_id"],
+        )
+    )
+    return summaries
+
+
 def _to_iso_timestamp(ts) -> str | None:
     """Normalize a timestamp to ISO format string for consistent API output."""
     if ts is None:
@@ -4411,6 +4456,7 @@ def trace_inventory_backward(inventory_item_id: str):
 
     # Attach step_data (including traced item itself, which is now in all_result_items).
     _hydrate_step_data(all_result_items, db_session, org_id)
+    trace_steps = _trace_step_summaries(all_result_items, db_session, org_id)
 
     # Add direct connections from every source item to traced item (for sourcemap execution grouping)
     traced_id_str = str(traced_item.id)
@@ -4444,6 +4490,10 @@ def trace_inventory_backward(inventory_item_id: str):
             "intermediates": intermediates,
             "all_items": all_result_items,
             "connections": connections,
+            # Complete, deduplicated operations for inventory-card provenance. This
+            # includes the traced item's producing step and every upstream operation,
+            # regardless of current inventory quantity.
+            "trace_steps": trace_steps,
         }
     ), 200
 
