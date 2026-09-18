@@ -2539,7 +2539,12 @@
     function initCore2HubLoad() {
       loadCore2Overview();
       var tab = core2CurrentMainTab();
-      if (tab === 'inventory') loadCore2InventoryTab();
+      // The dedicated /core/inventory/live page renders the live-inventory grid outside
+      // the tabbed hub (it links back via ?back_tab=, not ?tab=), so core2CurrentMainTab()
+      // never resolves to 'inventory' there. Detect it directly by its grid element,
+      // the same way core-active-batches-graph.js detects its own dedicated page.
+      var isDedicatedInventoryPage = !!document.getElementById('core2-inv-items-grid');
+      if (tab === 'inventory' || isDedicatedInventoryPage) loadCore2InventoryTab();
       else if (tab === 'workflows') loadCore2WorkflowsTab();
       core2SubscribeLive();
     }
