@@ -127,12 +127,11 @@
     <table class="sm-table">
       <thead>
         <tr>
-          <th>Item</th>
-          <th>Type</th>
+          <th>Trace</th>
+          <th>Step / invoice</th>
+          <th>Batch / date</th>
           <th>Quantity</th>
-          <th>Batch</th>
-          <th>Supplier</th>
-          <th>Expiry</th>
+          <th>Supplier / customer</th>
         </tr>
       </thead>
       <tbody id="sm-table-body"></tbody>
@@ -211,5 +210,5 @@
   re-executes it when the content is swapped in via boost navigation.
   core-api.js is already loaded globally by base_spa.html.
 #}
-<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}?v=11"></script>
+<script src="{{ url_for('core.serve_core_js', filename='sourcemap.js') }}?v=12"></script>
 {% endblock %}

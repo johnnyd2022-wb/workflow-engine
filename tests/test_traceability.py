@@ -57,8 +57,14 @@ def _purge_org(db, org_id):
     from app.core.db.models.process import Process
     from app.core.db.models.process_version import ProcessVersion
     from app.core.db.models.step import Step
+    from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
 
     try:
+        db.query(SalesFifoAllocation).filter(SalesFifoAllocation.org_id == org_id).delete(synchronize_session=False)
+        db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.org_id == org_id).delete(synchronize_session=False)
+        db.query(XeroInvoice).filter(XeroInvoice.org_id == org_id).delete(synchronize_session=False)
         for model in (EntityEvent, EntityEventSummary, InventoryItem):
             db.query(model).filter(model.org_id == org_id).delete(synchronize_session=False)
         exec_ids = [e.id for e in db.query(Execution).filter(Execution.org_id == org_id).all()]
@@ -197,6 +203,57 @@ class TestCurrentStateTraceBranch:
             json={"root_type": "inventory_item", "root_id": str(other_dag["r1_id"])},
         )
         assert resp.status_code == 404, resp.data
+
+
+class TestSourcemapSalesDAG:
+    def test_graph_trace_links_the_exact_final_product_batch_to_its_sale(self, app_client, dag, db, org):
+        from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+        from app.features.crm.models.xero_contact import XeroContact  # noqa: F401 - registers invoice FK metadata
+        from app.features.crm.models.xero_invoice import XeroInvoice
+        from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+
+        invoice = XeroInvoice(
+            org_id=org.id,
+            xero_invoice_id="xero-sale-trace-1",
+            xero_tenant_id="test-tenant",
+            invoice_number="INV-42",
+            invoice_type="ACCREC",
+            status="PAID",
+        )
+        db.add(invoice)
+        db.flush()
+        db.add(
+            XeroInvoiceLineItem(
+                org_id=org.id,
+                invoice_id=invoice.id,
+                xero_line_item_id="sale-line-1",
+                description="F1 retail bottle",
+                quantity="1",
+            )
+        )
+        db.add(
+            SalesFifoAllocation(
+                org_id=org.id,
+                xero_invoice_id=invoice.xero_invoice_id,
+                xero_line_key="sale-line-1",
+                inventory_item_id=dag["f1_id"],
+                product_name="F1",
+                quantity="1",
+                unit="kg",
+            )
+        )
+        db.commit()
+
+        resp = app_client.get(f"/api/core/inventory/trace-graph/{dag['r1_id']}")
+        assert resp.status_code == 200, resp.data
+        body = resp.get_json()
+        sale = next(node for node in body["all_items"] if node.get("node_type") == "sale")
+        assert sale["invoice_number"] == "INV-42"
+        assert sale["name"] == "F1 retail bottle"
+        assert any(
+            edge["from_id"] == str(dag["f1_id"]) and edge["to_id"] == sale["id"] and edge["edge_type"] == "sale"
+            for edge in body["connections"]
+        )
 
 
 class TestSourcemapObjectsPageLimitParsing:
