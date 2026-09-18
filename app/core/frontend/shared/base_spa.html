@@ -351,13 +351,13 @@
   <script src="{{ url_for('core.serve_core_js', filename='tasks.js') }}" defer></script>
   {# CRM scripts loaded before Alpine so components are defined when Alpine initialises x-data. #}
   {% if crm_enabled %}
-  <script src="/crm/static/js/crm-api.js" defer></script>
-  <script src="/crm/static/js/overview.js" defer></script>
-  <script src="/crm/static/js/customers.js" defer></script>
-  <script src="/crm/static/js/customer-detail.js" defer></script>
-  <script src="/crm/static/js/tasks-calendar.js" defer></script>
-  <script src="/crm/static/js/configuration.js" defer></script>
-  <script src="/crm/static/js/integrations.js" defer></script>
+  <script src="{{ url_for('crm.serve_crm_js', filename='crm-api.js') }}" defer></script>
+  <script src="{{ url_for('crm.serve_crm_js', filename='overview.js') }}" defer></script>
+  <script src="{{ url_for('crm.serve_crm_js', filename='customers.js') }}" defer></script>
+  <script src="{{ url_for('crm.serve_crm_js', filename='customer-detail.js') }}" defer></script>
+  <script src="{{ url_for('crm.serve_crm_js', filename='tasks-calendar.js') }}" defer></script>
+  <script src="{{ url_for('crm.serve_crm_js', filename='configuration.js') }}" defer></script>
+  <script src="{{ url_for('crm.serve_crm_js', filename='integrations.js') }}" defer></script>
   {% endif %}
   <script src="{{ url_for('core.serve_core_js', filename='alpinejs.min.js') }}" defer></script>
 
