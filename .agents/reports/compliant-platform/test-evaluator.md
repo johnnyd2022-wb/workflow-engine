@@ -31,7 +31,7 @@ on its behalf, then patched every finding below.
 >
 > VERDICT: mixed
 
-## Findings and patches (orchestrator, this pass)
+## Findings and patches (orchestrator, this pass) (all fixed and merged — resolved, verified 2026-09-13 by findings-sweep)
 
 1. **Real source defect, not just a test gap**: `POST /api/compliant/records`
    (`api_routes.py:238`, was `if profile is None:`) accepted records against a profile that

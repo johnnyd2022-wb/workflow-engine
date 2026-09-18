@@ -113,7 +113,7 @@ Re-graded in round 2 below.
 
 ---
 
-## Round 2 — VERDICT: gaps-found (9 gaps: 3 high, 6 medium)
+## Round 2 — VERDICT: gaps-found (9 gaps: 3 high, 6 medium) (all resolved by round 4's final "sound" verdict below — verified 2026-09-13 by findings-sweep)
 
 Round-1 closure audit (codex): 5 gaps fully closed (excise rate_basis design, dilution
 parity, whistlebird_test framing, observability mapping, blueprint-gate route inventory),
@@ -133,6 +133,8 @@ the rest partially closed. New/persisting gaps:
 - (medium) "one entitlement DB call" contradicted by the context processor re-querying.
 - (medium) nav visibility didn't AND in `compliant_enabled`.
 - (medium) AC3 "`< 400`" invariant admits 401/403/405/500, not the required generic 404.
+  Already fixed in round 3 (below): AC3 rewritten to assert exactly 404, implemented in
+  `tests/test_compliant_subscription_gate.py` (verified 2026-09-15 by findings-sweep).
 - (medium) rollback runbook had export but no restore path / no AC.
 - (medium) per-calculator disclaimer content not asserted for all new solvers.
 

@@ -12,6 +12,8 @@
     selectedProcessId: '',
     view: 'pipeline',
     throughput7d: null,
+    search: '',
+    status: 'all',
   };
 
   var latestRequest = 0;
@@ -209,6 +211,26 @@
     });
   }
 
+  function isDedicatedBoard() {
+    var panel = byId('core2-active-batches-panel');
+    return !!(panel && panel.getAttribute('data-core2-active-board') === 'full');
+  }
+
+  function visibleExecutions(executions) {
+    var query = String(state.search || '').trim().toLowerCase();
+    return (executions || []).filter(function (execution) {
+      if (!isActiveExecution(execution)) return false;
+      if (state.status !== 'all' && String(execution.status || '').toLowerCase() !== state.status) return false;
+      if (!query) return true;
+      var searchable = [
+        execution.process_name,
+        extractBatchLabel(execution),
+        execution.current_step && execution.current_step.name,
+      ].join(' ').toLowerCase();
+      return searchable.indexOf(query) !== -1;
+    });
+  }
+
   function computeStepCounts(steps, activeExecutions) {
     var out = {};
     (steps || []).forEach(function (step) {
@@ -253,6 +275,16 @@
     var timeline = byId('core2-active-timeline-view');
     if (pipeline) pipeline.hidden = state.view !== 'pipeline';
     if (timeline) timeline.hidden = state.view !== 'timeline';
+  }
+
+  function renderFilters() {
+    var search = byId('core2-active-search');
+    if (search && search.value !== state.search) search.value = state.search;
+    document.querySelectorAll('[data-core2-active-status]').forEach(function (button) {
+      var active = button.getAttribute('data-core2-active-status') === state.status;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
   }
 
   function renderStepRail(process, activeExecutions, now) {
@@ -301,6 +333,7 @@
   function renderStatusSummary(processExecutions, activeExecutions, now, process) {
     var inflightNode = document.querySelector('[data-core2-inflight-count]');
     var completed7dNode = document.querySelector('[data-core2-completed7d-count]');
+    var readyNode = document.querySelector('[data-core2-ready-count]');
     var noteNode = document.querySelector('[data-core2-active-total-note]');
 
     var sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 3600 * 1000));
@@ -321,8 +354,11 @@
     }
 
     if (inflightNode) inflightNode.textContent = String(activeExecutions.length);
+    if (readyNode) readyNode.textContent = String(activeExecutions.filter(function (execution) {
+      return String(execution.status || '').toLowerCase() === 'pending';
+    }).length);
     if (completed7dNode) completed7dNode.textContent = String(completed7d);
-    if (noteNode) noteNode.textContent = 'Showing ' + String(activeExecutions.length) + ' active · sorted by elapsed time';
+    if (noteNode) noteNode.textContent = 'Showing ' + String(activeExecutions.length) + ' batch' + (activeExecutions.length === 1 ? '' : 'es') + ' for this workflow';
   }
 
   function renderPipeline(process, activeExecutions, now) {
@@ -376,14 +412,14 @@
         var operator = getExecutionOperator(row.execution);
         var primaryLabel = row.batchLabel || startedAt;
         return (
-          '<article class="core2-active-card" data-core2-execution-id="' + escapeHtml(String(row.execution.id || '')) + '">' +
+          '<button type="button" class="core2-active-card" data-core2-execution-id="' + escapeHtml(String(row.execution.id || '')) + '" aria-label="Open batch details for ' + escapeHtml(primaryLabel) + '">' +
             '<div class="core2-active-card-top">' +
               '<p class="core2-active-card-id">' + escapeHtml(primaryLabel) + '</p>' +
               '<p class="core2-active-card-time">' + escapeHtml(formatDurationMs(row.elapsedMs)) + '</p>' +
             '</div>' +
             '<p class="core2-active-card-name">' + escapeHtml(process.name || 'Process') + '</p>' +
             '<p class="core2-active-card-sub">' + escapeHtml(row.currentStepName) + ' · ' + escapeHtml(operator) + '</p>' +
-          '</article>'
+          '</button>'
         );
       }).join('');
 
@@ -550,13 +586,13 @@
       }).filter(Boolean).join('');
 
       return (
-        '<div class="core2-tl-row" data-core2-execution-id="' + escapeHtml(String(execution.id || '')) + '">' +
+        '<button type="button" class="core2-tl-row" data-core2-execution-id="' + escapeHtml(String(execution.id || '')) + '" aria-label="Open batch details for ' + escapeHtml(primaryLabel) + '">' +
           '<div class="core2-tl-left">' +
             '<p class="core2-tl-batch-name">' + escapeHtml(primaryLabel) + '</p>' +
             '<p class="core2-tl-batch-meta">' + escapeHtml(startedAt) + ' · ' + escapeHtml(operator) + ' · ' + escapeHtml(currentStepName) + '</p>' +
           '</div>' +
           '<div class="core2-tl-right">' + gridLineHtml + segments + '</div>' +
-        '</div>'
+        '</button>'
       );
     }).join('');
 
@@ -684,6 +720,24 @@
       btn.dataset.boundCore2Active = '1';
     });
 
+    var search = byId('core2-active-search');
+    if (search && !search.dataset.boundCore2Active) {
+      search.addEventListener('input', function (event) {
+        state.search = String(event.target.value || '');
+        renderAll();
+      });
+      search.dataset.boundCore2Active = '1';
+    }
+
+    document.querySelectorAll('[data-core2-active-status]').forEach(function (button) {
+      if (button.dataset.boundCore2Active) return;
+      button.addEventListener('click', function () {
+        state.status = button.getAttribute('data-core2-active-status') || 'all';
+        renderAll();
+      });
+      button.dataset.boundCore2Active = '1';
+    });
+
     var pipelineHost = byId('core2-active-pipeline-grid');
     if (pipelineHost && !pipelineHost.dataset.boundCore2Active) {
       pipelineHost.addEventListener('click', function (event) {
@@ -731,19 +785,30 @@
   }
 
   function renderAll() {
-    var hasAnyActive = state.executions.some(isActiveExecution);
-    setPanelVisibility(hasAnyActive);
-    if (!hasAnyActive) {
-      return;
-    }
+    // A production board must still explain an empty queue. The old behaviour hid the
+    // entire section, which was indistinguishable from a failed load.
+    setPanelVisibility(true);
 
     renderProcessSelect();
     renderViewToggle();
+    renderFilters();
+
+    if (!state.processes.length) {
+      var noProcessMessage = '<p class="core2-active-batches-empty">No product workflows have been created yet. Create a workflow before starting a batch.</p>';
+      var noProcessRail = byId('core2-active-step-rail');
+      var noProcessPipeline = byId('core2-active-pipeline-grid');
+      var noProcessTimeline = byId('core2-active-timeline');
+      if (noProcessRail) noProcessRail.innerHTML = noProcessMessage;
+      if (noProcessPipeline) noProcessPipeline.innerHTML = noProcessMessage;
+      if (noProcessTimeline) noProcessTimeline.innerHTML = noProcessMessage;
+      renderStatusSummary([], [], new Date(), null);
+      return;
+    }
 
     var process = getSelectedProcess();
     var now = new Date();
     var processExecutions = process ? getProcessExecutions(process.id) : [];
-    var activeExecutions = processExecutions.filter(isActiveExecution);
+    var activeExecutions = visibleExecutions(processExecutions);
 
     renderStepRail(process, activeExecutions, now);
     renderStatusSummary(processExecutions, activeExecutions, now, process);
@@ -810,6 +875,38 @@
     return stepFetchInFlight[pid];
   }
 
+  async function getAllExecutionsForStatus(status) {
+    var rows = [];
+    var cursor = null;
+    // The board intentionally fetches complete execution records: the Gantt view needs
+    // real step timestamps, unlike the lightweight hub preview. Pagination means a busy
+    // organisation is not silently truncated at the first page.
+    do {
+      var result = await window.CoreAPI.getExecutions(null, status, { limit: 100, cursor: cursor });
+      rows = rows.concat((result && result.executions) || []);
+      cursor = result && result.has_more ? result.next_cursor : null;
+    } while (cursor);
+    return rows;
+  }
+
+  async function loadDedicatedBoardData(requestId) {
+    if (!window.CoreAPI || typeof window.CoreAPI.getProcesses !== 'function' || typeof window.CoreAPI.getExecutions !== 'function') {
+      throw new Error('Production board API is unavailable');
+    }
+    var results = await Promise.all([
+      window.CoreAPI.getProcesses(),
+      getAllExecutionsForStatus('in_progress'),
+      getAllExecutionsForStatus('pending'),
+    ]);
+    if (requestId !== latestRequest) return false;
+    state.processes = ((results[0] && results[0].processes) || []).map(function (p) {
+      return { id: String(p.id), name: p.name || 'Untitled process', steps: Array.isArray(p.steps) ? p.steps : null };
+    });
+    state.executions = results[1].concat(results[2]);
+    state.throughput7d = ((window.__core2HubOverview || {}).workflows || {}).throughput_7d || null;
+    return true;
+  }
+
   async function loadData() {
     var panel = byId('core2-active-pipeline-grid');
     if (!panel) return;
@@ -817,6 +914,10 @@
     var requestId = ++latestRequest;
 
     try {
+      if (isDedicatedBoard()) {
+        var loaded = await loadDedicatedBoardData(requestId);
+        if (!loaded) return;
+      } else {
       var overview = window.__core2HubOverview;
       if (overview && overview.workflows) {
         // Reuse the /core hub's single overview call -- no second processes+executions fetch.
@@ -846,6 +947,7 @@
         state.throughput7d = null;
       } else {
         return;
+      }
       }
 
       var selectedStillExists = state.processes.some(function (process) {

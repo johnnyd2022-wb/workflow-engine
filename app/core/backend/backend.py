@@ -11,7 +11,18 @@ from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, send_from_directory, session
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+)
 from pydantic import ValidationError
 from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
@@ -76,6 +87,12 @@ from app.observability import get_logger
 from app.utils.config_loader import config
 
 logger = get_logger(__name__)
+
+
+def _product_available(feature: str) -> bool:
+    """Whether an optional product completed registration in this app instance."""
+    return bool(current_app.extensions.get("product_availability", {}).get(feature, False))
+
 
 # Guardrail: batch size caps row-lock duration under concurrent SELECT ... FOR UPDATE.
 MAX_WASTAGE_BATCH_ENTRIES = 100
@@ -650,6 +667,51 @@ def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
         )
 
 
+def _trace_step_summaries(items: list[dict], db_session, org_id: UUID) -> list[dict]:
+    """Return every producing operation represented by a traced inventory DAG.
+
+    An inventory item points at the execution step that produced it. Collecting those
+    pointers from the complete backward trace is more reliable than the old
+    ``previous_steps_data`` display projection and gives clients a compact operation
+    timeline without reimplementing DAG traversal from item JSON.
+    """
+    from sqlalchemy.orm import joinedload
+
+    source_step_ids = {uid for item in items if (uid := _parse_uuid(item.get("source_execution_step_id"))) is not None}
+    if not source_step_ids:
+        return []
+
+    traced_steps = (
+        db_session.query(ExecutionStep)
+        .join(Execution, ExecutionStep.execution_id == Execution.id)
+        .filter(Execution.org_id == org_id, ExecutionStep.id.in_(source_step_ids))
+        .options(joinedload(ExecutionStep.step))
+        .all()
+    )
+
+    summaries = [
+        {
+            "execution_step_id": str(step.id),
+            "execution_id": str(step.execution_id),
+            "step_name": step.step.name if step.step else None,
+            "step_number": step.step_number,
+            "completed_at": _to_iso_timestamp(step.completed_at),
+        }
+        for step in traced_steps
+    ]
+    # Completion time is the clearest ordering across branches/executions. Within one
+    # execution it naturally presents the familiar #1 → #N operation sequence.
+    summaries.sort(
+        key=lambda step: (
+            step["completed_at"] is None,
+            step["completed_at"] or "",
+            step["step_number"],
+            step["execution_step_id"],
+        )
+    )
+    return summaries
+
+
 def _to_iso_timestamp(ts) -> str | None:
     """Normalize a timestamp to ISO format string for consistent API output."""
     if ts is None:
@@ -735,7 +797,9 @@ def dashboard():
 @core_bp.route("/core/integrations", methods=["GET"])
 @requires_auth
 def integrations():
-    return redirect("/crm/configuration")
+    if _product_available("crm"):
+        return redirect("/crm/configuration")
+    return render_template("integrations/integrations.html", active_page="integrations")
 
 
 @core_bp.route("/core/settings", methods=["GET"])
@@ -2306,7 +2370,7 @@ def complete_step(execution_id: str, execution_step_id: str):
         # own platform registry. Core knows only how to verify its own operational facts
         # (such as an active evidence file), never which industry or framework requested
         # the constraint.
-        if config.compliant_enabled:
+        if _product_available("compliant"):
             from app.features.compliant.platform.workflow_rules import completion_constraints
 
             constraints = completion_constraints(db_session, org_id)
@@ -4434,6 +4498,7 @@ def trace_inventory_backward(inventory_item_id: str):
 
     # Attach step_data (including traced item itself, which is now in all_result_items).
     _hydrate_step_data(all_result_items, db_session, org_id)
+    trace_steps = _trace_step_summaries(all_result_items, db_session, org_id)
 
     # Add direct connections from every source item to traced item (for sourcemap execution grouping)
     traced_id_str = str(traced_item.id)
@@ -4467,6 +4532,10 @@ def trace_inventory_backward(inventory_item_id: str):
             "intermediates": intermediates,
             "all_items": all_result_items,
             "connections": connections,
+            # Complete, deduplicated operations for inventory-card provenance. This
+            # includes the traced item's producing step and every upstream operation,
+            # regardless of current inventory quantity.
+            "trace_steps": trace_steps,
         }
     ), 200
 
