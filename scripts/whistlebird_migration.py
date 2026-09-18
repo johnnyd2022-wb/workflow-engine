@@ -2244,6 +2244,7 @@ def build_import_verification(
     requested_org_name: str,
     manifest_path: Path | None,
     include_replay_ngs_purchases: bool = True,
+    np3_manifest_path: Path | None = None,
 ) -> dict[str, Any]:
     """Compare loaded counts against the sources and assert no legacy wording leaked.
 
@@ -2405,7 +2406,7 @@ def build_import_verification(
         for label, sql in leak_sql.items():
             wording_leaks[label] = target.execute(text(sql), params).scalar_one()
 
-    return {
+    report = {
         "raw_material_items": {"expected": sum(raw_material_sources.values()), "actual": actual_raw},
         "batch_executions": {
             name: {"expected": expected_by_workflow.get(name, 0), "actual": actual_by_workflow.get(name, 0)}
@@ -2416,6 +2417,17 @@ def build_import_verification(
         "date_mismatches": {"step_dates": step_date_mismatches, "steps_stamped_on_run_date": stamped_today},
         "wording_leaks": wording_leaks,
     }
+    if include_replay_ngs_purchases:
+        # NP3 evidence is only loaded by the API-replay path (scripts/whistlebird_np3.py);
+        # the ORM-direct rebuild has no NP3 phase, so it must not be checked against it.
+        from whistlebird_np3 import DEFAULT_NP3_MANIFEST, load_np3_manifest, verify_np3
+
+        np3_report = verify_np3(
+            target_url, requested_org_name, load_np3_manifest(np3_manifest_path or DEFAULT_NP3_MANIFEST)
+        )
+        report["date_mismatches"]["np3_record_dates"] = np3_report.pop("np3_date_mismatches")
+        report.update(np3_report)
+    return report
 
 
 def build_manifest_verification(manifest_path: Path, target_url: str, requested_org_name: str) -> dict[str, Any]:

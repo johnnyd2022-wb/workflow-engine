@@ -39,6 +39,7 @@ from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent))
 import whistlebird_migration as wm  # noqa: E402
+import whistlebird_np3 as np3  # noqa: E402
 from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
 
 
@@ -71,7 +72,12 @@ def _execution_date_ranges(events: list[ReplayEvent]) -> dict[str, tuple[date, d
     return {marker: (min(dates), max(dates)) for marker, dates in dates_by_marker.items()}
 
 
-def correct_timestamps(legacy_url: str, target_url: str, org_name: str) -> dict[str, int]:
+def correct_timestamps(
+    legacy_url: str,
+    target_url: str,
+    org_name: str,
+    np3_manifest_path: Path | None = np3.DEFAULT_NP3_MANIFEST,
+) -> dict[str, int]:
     events = build_timeline(legacy_url, Path(wm.DEFAULT_PRODUCTION_MANIFEST))
     exec_ranges = _execution_date_ranges(events)
 
@@ -173,6 +179,12 @@ def correct_timestamps(legacy_url: str, target_url: str, org_name: str) -> dict[
             counts["compliance_records"] += result.rowcount
 
     engine.dispose()
+    if np3_manifest_path:
+        # After the Core transaction commits: a manifest record that was never replayed
+        # raises here, and must not roll back the Core dates already corrected above.
+        counts["np3_records"] = np3.correct_np3_timestamps(
+            target_url, org_name, np3.load_np3_manifest(np3_manifest_path)
+        )
     return counts
 
 
@@ -181,6 +193,8 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--legacy-url", default=os.environ.get("WB_LEGACY_DATABASE_URL"))
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
     parser.add_argument("--org-name", default=wm.RESET_ORG_NAME)
+    parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
+    parser.add_argument("--skip-np3", action="store_true", help="Correct Core history only.")
     args = parser.parse_args()
     if not args.legacy_url or not args.target_url:
         parser.error("--legacy-url and --target-url are required")
@@ -191,7 +205,9 @@ def _arguments() -> argparse.Namespace:
 
 def main() -> int:
     args = _arguments()
-    result = correct_timestamps(args.legacy_url, args.target_url, args.org_name)
+    result = correct_timestamps(
+        args.legacy_url, args.target_url, args.org_name, None if args.skip_np3 else args.np3_manifest
+    )
     print(result)
     return 0
 

@@ -45,6 +45,7 @@ from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent))
 import whistlebird_migration as wm  # noqa: E402
+import whistlebird_np3 as np3  # noqa: E402
 from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
 
 CSRF_META_RE = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"')
@@ -103,6 +104,12 @@ class ReplayClient:
         response = self.session.post(f"{self.base_url}{path}", json=json_body, headers=self._headers(), timeout=60)
         if response.status_code not in (200, 201):
             raise ReplayRejectedError(f"POST {path} -> {response.status_code}: {response.text[:1000]}")
+        return response.json()
+
+    def put(self, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
+        response = self.session.put(f"{self.base_url}{path}", json=json_body, headers=self._headers(), timeout=60)
+        if response.status_code not in (200, 201):
+            raise ReplayRejectedError(f"PUT {path} -> {response.status_code}: {response.text[:1000]}")
         return response.json()
 
     def get(self, path: str) -> dict[str, Any]:
@@ -741,7 +748,11 @@ def run_replay(
     org_name: str,
     verify_tls: bool = True,
     limit: int | None = None,
-) -> dict[str, int]:
+    np3_manifest_path: Path | None = np3.DEFAULT_NP3_MANIFEST,
+) -> dict[str, Any]:
+    # Validate before the first request so a bad NP3 manifest fails now, not after the
+    # long Core replay has already run.
+    np3_manifest = np3.load_np3_manifest(np3_manifest_path) if np3_manifest_path else None
     events = build_timeline(legacy_url, production_manifest_path)
     if limit is not None:
         events = events[:limit]
@@ -777,6 +788,15 @@ def run_replay(
             counts["issued"] += 1
         if (index + 1) % 25 == 0:
             print(f"[{index + 1}/{len(events)}] {event.event_id} ({event.real_date})")
+
+    # NP3 evidence goes last: an `np3_execution_evidence_mode: required` profile (part of
+    # the manifest) would otherwise block the Core step completions above.
+    if np3_manifest is not None and limit is None:
+        np3_store = np3.Np3Store(target_url, org_id)
+        try:
+            counts["np3"] = np3.replay_np3(client, np3_store, np3_manifest)
+        finally:
+            np3_store.dispose()
     return counts
 
 
@@ -790,7 +810,14 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--admin-email", default=wm.DEFAULT_TEST_ADMIN_EMAIL)
     parser.add_argument("--admin-password-env", default="WHISTLEBIRD_TEST_ADMIN_PASSWORD")
     parser.add_argument("--org-name", default=wm.RESET_ORG_NAME)
-    parser.add_argument("--limit", type=int, default=None, help="Only issue the first N events (smoke-testing).")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Only issue the first N Core events (smoke-testing); skips the NP3 phase.",
+    )
+    parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
+    parser.add_argument("--skip-np3", action="store_true", help="Replay Core history only.")
     args = parser.parse_args()
     if not args.legacy_url or not args.target_url:
         parser.error("--legacy-url and --target-url are required")
@@ -818,6 +845,7 @@ def main() -> int:
         args.org_name,
         verify_tls=not args.insecure,
         limit=args.limit,
+        np3_manifest_path=None if args.skip_np3 else args.np3_manifest,
     )
     print(result)
     return 0
