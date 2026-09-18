@@ -186,3 +186,32 @@ The old `scripts/whistlebird_migration.py` `apply_*` functions remain as-is (use
 `--rebuild-whistlebird-test`'s bootstrap, and as the read-only source layer
 `build_timeline()` itself reads from) -- this stage adds a parallel, API-driven loading
 path rather than replacing the underlying data model.
+
+## Stage 7: 2026-09-18 -- maceration step-1 inputs declared on the process template
+
+Closes half of Stage 4's "known gap": `setup_product_workflows()` created every process's
+Maceration/Rhubarb maceration step with `inputs=[]` (never passed to
+`repository.add_step()`), so the process *definition* itself never declared what a batch
+consumes -- distinct from `execution_steps.actual_inputs`, which Stage 6's replay already
+populates per completed step. A user opening the process editor (or Johnny reviewing
+"process structure") saw no botanicals on step 1 at all, regardless of what a given
+execution's completed-step detail recorded.
+
+Added the founder-confirmed recipe from `docs/whistlebird-raw-material-source.json`
+(per-shot quantities, x2 per batch) as Wildflower/Solstice Maceration `inputs`, and the
+aged-base-VAT + rhubarb inputs for Rosella's Rhubarb maceration -- `requires_inventory_selection:
+true` for tracked botanical purchases and NGS, `false` for foraged ingredients never
+purchased as tracked inventory (same tier split as Stage 4). No quantity is fabricated
+where none is on record (rhubarb, the base VAT quantity).
+
+`setup_product_workflows()` only ever added missing steps and skipped a process whose
+step count already matched -- an already-created empty-inputs step could never pick up a
+later definition change. Added a repair path (`repository.update_step`) so this reaches
+existing rows; ran once against `whistlebird_test` (`inputs_repaired`: Wildflower/Solstice/
+Rosella gin).
+
+**Still open, unchanged from Stage 4:** linking a *specific* tracked-botanical purchase
+receipt to a *specific* historical VAT's `actual_inputs` (beyond the "inferred" manifest
+tier's already-linked entries) is a separate, larger exercise -- matching which purchase
+lot fed which batch is a business-judgement call, not something this template change
+attempts.
