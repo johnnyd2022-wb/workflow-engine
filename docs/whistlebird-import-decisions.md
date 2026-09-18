@@ -290,3 +290,73 @@ label batch, and Labelling consumes all of those WIP items before producing the 
 batch-numbered final-product outputs. This prevents the excess from a boundary-crossing
 VAT being stranded as unlabelled WIP while keeping the later FIFO sales drain aligned to
 the physical labels.
+
+## Stage 10: 2026-09-18 -- new sheet rows re-pulled, and real in-progress batches
+
+Re-pulled the live "Production!!" tab (3,122 rows) against the manifest's prior curation
+and found:
+
+- **VAT56 (Wildflower, complete):** distilled/filled ~2026-09-01 (row 2041 "Distilled
+  WF", row 2044 "Filling VAT56", neither dated separately -- derived). A new, clearly
+  labelled "Bottled VAT56" / "78.5 bottled" (rows 2123-2124) supersedes the unlabelled
+  "26 bottles" line the prior pull flagged as ambiguous -- the founder's later explicit
+  label with a different total is the authoritative figure. That row carries no date of
+  its own either; founder-confirmed 2026-09-17 (it sits right after VAT59's same-dated
+  fill block).
+- **VAT55/57/58/59 (Wildflower, genuinely in progress):** each distilled and filled, none
+  bottled as of this pull (VAT59's fill, 2026-09-17, is the most recent activity in the
+  whole tab). Founder's explicit instruction: import real in-progress work rather than
+  waiting for it to finish, and keep it updated as the sheet does.
+- **VAT52 stays excluded, unchanged** -- its two conflated sub-issues are a genuine
+  labelling ambiguity (see the Stage-preceding excluded[] entry), not simple in-progress
+  status, and need founder disambiguation rather than a pending marker.
+
+Importing 55/57/58/59 as merely "excluded, awaiting bottling" (the prior convention)
+would have meant three real, already-happened production steps per batch sitting nowhere
+in the target -- not what "record live progress and update as we go" means. This needed
+a real mechanism, not just more manifest rows:
+
+- **New `ProductionBatch.pending_steps` (a frozenset, defaulting empty)** marks the step
+  keys that haven't happened yet -- a manifest step spec of `{"pending": true}` instead
+  of a date/confidence. `_load_manifest` requires this to be a *suffix* of the product
+  line's step order (a step can't be done before one that precedes it) and raises loudly
+  if it isn't, rather than silently reordering. Pending steps need no date at all.
+- **`_batch_events` stops emitting `complete_step` events at the first pending step**,
+  leaving the execution created and every real step completed, exactly like a real user
+  mid-process -- `execution_steps` for the untouched tail simply don't exist yet in the
+  target, not "completed with a fabricated date."
+- **The ORM-direct `--rebuild-whistlebird-test` path has no pending-step awareness**
+  (`apply_production_batches` always completed every step, unconditionally) --
+  `zip(step_keys, exec_steps, strict=True)` would have marked an unfinished step
+  COMPLETED. Rather than teach that already-lesser, already-behind path (it's documented
+  elsewhere as missing dedicated-NGS purchases too) a second partial-completion mode, it
+  now skips a pending batch entirely, and `build_import_verification` was taught to
+  expect that skip only for that path's own check.
+- **Real bug caught by the first live run, not a review:** `_enrich_ingredient_codes`
+  rebuilt `ProductionBatch` field-by-field and silently dropped `pending_steps` for any
+  batch that picked up raw-material ingredient codes -- exactly VAT55/57/58/59 once their
+  own botanical purchases were added (below), so they wrongly completed bottling/
+  labelling in the first full-pipeline attempt. Fixed by using `dataclasses.replace`
+  instead of a manual field list, which structurally can't drop a field this way again.
+  Regression-tested (`test_enrich_ingredient_codes_preserves_pending_steps`).
+
+**Botanical stock was already exhausted for these batches**, independent of the pending-
+step work: `Cardamom pods`, `Green tea`, `Orange peel - dried`, `Hibiscus flowers`,
+`Dried mango slices`, and `Dried apple ring` are never bought in bulk -- every prior
+Wildflower VAT (27 through 53) already carries its own dedicated, exactly-sized
+`resolved_by_context` inferred purchase for each of these six, dated 3 days before that
+VAT's maceration (see e.g. `CP005`/`GRT003`'s `consumed_by`). VAT55/56/57/58/59 needed
+the same treatment -- added 30 more inferred records (6 ingredients x 5 batches,
+`CP015`-`CP019`, `GRT013`-`GRT017`, `OPD016`-`OPD020`, `HF017`-`HF021`, `DMS015`-`DMS019`,
+`DAS015`-`DAS019`), same quantities and suppliers as every prior entry, dated 3 days
+before each batch's own resolved maceration date. Checked a recent Alembics order
+(#28585, 2026-09-15) first in case real evidence existed -- it covered Juniper/
+Elderflower/Lemon Myrtle only, not these six, so `resolved_by_context` is correct, not a
+shortcut.
+
+**Verified against a full reset -> replay (684 events) -> timestamp-correction ->
+`--verify-import` cycle**, all counts exact: Wildflower batch_executions 43 (up from 38),
+`incomplete_batch_steps` 8 actual/8 expected (4 batches x bottling+labelling), raw_material_items
+238 (up from 208). VAT57's execution_steps directly checked in the target: exactly
+Maceration/Distilling/Aging rows, all COMPLETED, execution status IN_PROGRESS -- Bottling
+and Labelling don't exist as rows yet, not "completed with a fake date."

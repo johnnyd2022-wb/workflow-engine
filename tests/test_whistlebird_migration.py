@@ -332,6 +332,46 @@ def test_load_manifest_honours_an_explicit_exclude_flag(migration_module, tmp_pa
     assert excluded[0]["reason"] == "founder investigating"
 
 
+def test_load_manifest_marks_a_pending_step_without_requiring_a_date(migration_module, tmp_path):
+    in_progress = _solstice_batch(
+        steps={
+            "maceration": {"date": "2026-09-01", "confidence": "clean"},
+            "distilling": {"date": "2026-09-03", "confidence": "clean"},
+            "aging": {"date": "2026-09-08", "confidence": "clean"},
+            "bottling": {"pending": True},
+            "labelling": {"pending": True},
+        },
+        bottlings=[],
+    )
+    manifest_path = _write_manifest(tmp_path, [in_progress])
+
+    batches, excluded = migration_module._load_manifest(manifest_path)
+
+    assert not excluded
+    (batch,) = batches
+    assert batch.pending_steps == frozenset({"bottling", "labelling"})
+    assert "bottling" not in batch.steps
+    assert "labelling" not in batch.steps
+    assert batch.steps["distilling"].step_date == date(2026, 9, 3)
+    assert batch.bottlings == ()
+
+
+def test_load_manifest_rejects_a_pending_step_that_isnt_a_suffix(migration_module, tmp_path):
+    bad = _solstice_batch(
+        steps={
+            "maceration": {"date": "2026-09-01", "confidence": "clean"},
+            "distilling": {"pending": True},
+            "aging": {"date": "2026-09-08", "confidence": "clean"},
+            "bottling": {"date": None, "confidence": "derived"},
+            "labelling": {"date": None, "confidence": "derived"},
+        }
+    )
+    manifest_path = _write_manifest(tmp_path, [bad])
+
+    with pytest.raises(ValueError, match="pending steps must be a suffix"):
+        migration_module._load_manifest(manifest_path)
+
+
 def test_merge_batches_only_fills_missing_steps_on_a_prior_database_batch(migration_module, tmp_path):
     batch_step = migration_module.BatchStep
     production_batch = migration_module.ProductionBatch

@@ -7,6 +7,7 @@ silently reorder a 600+ event replay instead of loudly failing.
 """
 
 import sys
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -20,6 +21,7 @@ from whistlebird_replay_timeline import (  # noqa: E402
     ReplayEvent,
     _assign_flask_codes,
     _batch_events,
+    _enrich_ingredient_codes,
     _flask_ngs_and_water_l,
     _foraged_botanical_inputs,
     _ngs_allocations,
@@ -204,6 +206,43 @@ def test_bottling_and_labelling_share_batch_numbers_and_distilling_carries_flask
 def test_pre_cutoff_batch_does_not_invent_a_dedicated_ngs_purchase():
     batch = _wildflower_batch(NGS_LEGACY_POOL_CUTOFF.replace(day=1))
     assert _ngs_purchase_event(batch, batch.steps["maceration"].step_date) is None
+
+
+def test_enrich_ingredient_codes_preserves_pending_steps():
+    # Regression: _enrich_ingredient_codes used to rebuild ProductionBatch field-by-field
+    # and silently dropped pending_steps whenever a batch had raw-material codes attached
+    # -- a batch with real linked ingredients would wrongly complete its pending bottling/
+    # labelling steps. dataclasses.replace fixes this structurally.
+    batch = replace(
+        _wildflower_batch(NGS_LEGACY_POOL_CUTOFF),
+        pending_steps=frozenset({"bottling", "labelling"}),
+    )
+
+    (enriched,) = _enrich_ingredient_codes([batch], {batch.global_vat: ["CP015"]})
+
+    assert enriched.ingredient_codes == ("CP015",)
+    assert enriched.pending_steps == frozenset({"bottling", "labelling"})
+
+
+def test_batch_events_stop_before_the_first_pending_step():
+    batch = replace(
+        _wildflower_batch(NGS_LEGACY_POOL_CUTOFF),
+        pending_steps=frozenset({"bottling", "labelling"}),
+    )
+
+    events = _batch_events(batch, {}, {batch.global_vat: batch.marker}, {})
+
+    step_ids = [e.event_id for e in events if e.event_type == "complete_step"]
+    assert step_ids == [
+        f"step:{batch.marker}:maceration",
+        f"step:{batch.marker}:distilling",
+        f"step:{batch.marker}:aging",
+    ]
+    assert f"step:{batch.marker}:bottling" not in step_ids
+    assert f"step:{batch.marker}:labelling" not in step_ids
+    # The execution itself and the NGS shortfall purchase (aging is still completed, so
+    # its VAT-fill NGS is genuinely consumed) are unaffected by the truncation.
+    assert any(e.event_type == "create_execution" for e in events)
 
 
 def test_ngs_allocation_uses_only_dated_source_receipts_before_creating_shortfall():

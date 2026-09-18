@@ -5,7 +5,7 @@
     "tab_name": "Production!!",
     "gid": "1370312095"
   },
-  "outstanding_review": "Per-batch maceration and distillation dates for VAT28+ are 'derived' (inherited from the recorded VAT-fill/bottling date) except where a specific step date was recoverable from context (see notes on individual records). The Production!! tab's date column mixes literal dd/mm/yyyy strings with spreadsheet date serials that are sometimes day/month-swapped -- each serial in this manifest was resolved by chronological fit against its neighbours and, where available, an already founder-confirmed date (e.g. WB-022's VAT47 bottling), not by a single global format assumption. Six batches remain excluded: VAT52 (two distinct sub-issues, see excluded[] entry), VAT55, VAT57 (both awaiting their bottling row), and the still-unlabelled 'VAT56?' 26-bottle line. The Green Gold (gg01) trial output from VAT53 (row 2035) needs a script change (a sheet-sourced trial manifest section) before it can be imported at all -- tracked as a follow-up, not a curation gap. Rosella VAT26 (prior database, pre-Solstice) still needs founder confirmation that treating its RS01/RS02 flavour rows as the maceration step (no Solstice base to draw from that early) is the right call.",
+  "outstanding_review": "Per-batch maceration and distillation dates for VAT28+ are 'derived' (inherited from the recorded VAT-fill/bottling date) except where a specific step date was recoverable from context (see notes on individual records). The Production!! tab's date column mixes literal dd/mm/yyyy strings with spreadsheet date serials that are sometimes day/month-swapped -- each serial in this manifest was resolved by chronological fit against its neighbours and, where available, an already founder-confirmed date (e.g. WB-022's VAT47 bottling), not by a single global format assumption. 2026-09-18: VAT56 imported (see its own notes for the bottling-date resolution) -- its earlier unlabelled '26 bottles' line is superseded, not a separate batch. VAT57/58/59 remain genuinely IN-PROGRESS batches (VAT55 completed 2026-09-18, founder-confirmed bottling 2026-08-27, 78.5 bottles) (distilled and filled, not yet bottled) using the new pending-step mechanism (ProductionBatch.pending_steps, a manifest step spec of {'pending': true}) -- the API-replay path completes only the steps that have really happened and leaves bottling/labelling PENDING in the target, same as a real user mid-process; re-edit each record's bottling step once a real bottling row appears in the sheet, then re-run replay to complete it. Only the API-replay path (scripts/whistlebird_replay.py) supports this -- the ORM-direct --rebuild-whistlebird-test path skips a pending batch entirely rather than falsely complete it (see apply_production_batches). VAT52 remains excluded: two distinct sub-issues conflated under one number (see excluded[] entry), a genuine labelling ambiguity, not simple in-progress status -- needs founder disambiguation, not a pending marker. The Green Gold (gg01) trial output from VAT53 (row 2035) needs a script change (a sheet-sourced trial manifest section) before it can be imported at all -- tracked as a follow-up, not a curation gap. Rosella VAT26 (prior database, pre-Solstice) still needs founder confirmation that treating its RS01/RS02 flavour rows as the maceration step (no Solstice base to draw from that early) is the right call.",
   "records": [
     {
       "global_vat": 24,
@@ -824,6 +824,160 @@
       "notes": "WB-023: this Solstice fill is the base spirit for Rosella VAT48; it is not bottled as Solstice. Its aged VAT batch feeds the Rosella rhubarb maceration."
     },
     {
+      "global_vat": 56,
+      "batch_label": "VAT56",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-09-17",
+          "confidence": "resolved_by_context"
+        },
+        "labelling": {
+          "date": null,
+          "confidence": "derived"
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-09-17",
+          "bottles": "78.5",
+          "sheet_row": 2123
+        }
+      ],
+      "sheet_rows": "2044-2124",
+      "notes": "Distilled/filled ~2026-09-01 (row 2041 'Distilled WF', row 2044 'Filling VAT56' -- no per-VAT date recorded on either line, matching the VAT28+ derived-date convention). The bottling row itself (row 2123 'Bottled VAT56', row 2124 '78.5 bottled') carries no date at all; founder-confirmed 2026-09-18 as 2026-09-17, matching neighbouring VAT59's distilling/filling date it's positioned right after in the sheet. Supersedes the earlier unlabelled '26 bottles' line (right after this VAT's own fill block, row ~2060) that a prior pull flagged as ambiguous in outstanding_review -- the founder's later explicit 'Bottled VAT56' label with a different total (78.5) is the authoritative figure."
+    },
+    {
+      "global_vat": 55,
+      "batch_label": "VAT55",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": "2026-07-23",
+          "confidence": "clean"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "date": "2026-08-27",
+          "confidence": "clean"
+        },
+        "labelling": {
+          "pending": true
+        }
+      },
+      "bottlings": [
+        {
+          "date": "2026-08-27",
+          "bottles": "78.5"
+        }
+      ],
+      "sheet_rows": "2021-2035",
+      "notes": "Distilled 2026-07-23 (row 2021, 'distilling WF (VAT55)'); the fill block (rows 2023-2035) immediately follows with no separate date or explicit 'Filling VAT55' label -- treated as same-session, derived. Bottled 2026-08-27, 78.5 bottles (founder-confirmed 2026-09-18, not yet reflected in the Production!! sheet pull at that time). Labelling still pending."
+    },
+    {
+      "global_vat": 57,
+      "batch_label": "VAT57",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": "2026-09-03",
+          "confidence": "clean"
+        },
+        "aging": {
+          "date": "2026-09-08",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "pending": true
+        },
+        "labelling": {
+          "pending": true
+        }
+      },
+      "bottlings": [],
+      "sheet_rows": "2063-2080",
+      "notes": "Distilled 2026-09-03, stored in fridge (row 2063, 'Distilled WF (VAT57) - stored in fridge until 08/09/2026'); filled 2026-09-08 (row 2066 date, row 2067 'Filling VAT57'), matching the sheet's own fridge note. Not yet bottled as of the 2026-09-18 pull; in progress, not excluded."
+    },
+    {
+      "global_vat": 58,
+      "batch_label": "VAT58",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "aging": {
+          "date": "2026-09-13",
+          "confidence": "clean"
+        },
+        "bottling": {
+          "pending": true
+        },
+        "labelling": {
+          "pending": true
+        }
+      },
+      "bottlings": [],
+      "sheet_rows": "2086-2100",
+      "notes": "Distilled sometime between the preceding 2026-09-10 event and the 2026-09-13 fill date (row 2086, 'Distilled WF (Waiting on ethanol so storing in fridge over the weekend)' -- no date of its own); filled 2026-09-13 (row 2089 'Filling VAT58'). Not yet bottled as of the 2026-09-18 pull; in progress, not excluded."
+    },
+    {
+      "global_vat": 59,
+      "batch_label": "VAT59",
+      "product": "wildflower",
+      "steps": {
+        "maceration": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "distilling": {
+          "date": "2026-09-17",
+          "confidence": "clean"
+        },
+        "aging": {
+          "date": null,
+          "confidence": "derived"
+        },
+        "bottling": {
+          "pending": true
+        },
+        "labelling": {
+          "pending": true
+        }
+      },
+      "bottlings": [],
+      "sheet_rows": "2106-2118",
+      "notes": "Distilled 2026-09-17 (row 2106, 'Distilling WF (VAT59)'); filled same session (row 2107 'Filling VAT59', no separate date -- derived). Not yet bottled as of the 2026-09-18 pull (the most recent activity in the tab); in progress, not excluded."
+    },
+    {
       "global_vat": 1048,
       "batch_label": "VAT48",
       "product": "rosella",
@@ -1100,18 +1254,6 @@
     {
       "sheet_row": "1910-1917, 1940, 1985",
       "reason": "WB-029/WB-031 (narrowed 2026-09-11): VAT52 covers two unrelated events under one number. (1) An April 2026 'Distilled Wildflower (VAT52)' run (rows 1910-1917) with no fill or bottling recorded under VAT52 as Wildflower anywhere -- founder investigating whether it became VAT53's fill (row 1965), was blended as concentrate elsewhere, or is a stray. (2) A separate Solstice distill/fill/bottle chain (rows 1940-1985, still carries the founder's own '?') that is internally consistent but has no bottle count recorded anywhere near its row-1985 bottling. Excluded entirely until both are answered."
-    },
-    {
-      "sheet_row": 2019,
-      "reason": "VAT55: distilled and filled (row 2019, ~2026-07-23) but not yet bottled as of this pull. Re-import once a bottling row appears."
-    },
-    {
-      "sheet_row": 2058,
-      "reason": "An unlabelled '26 bottles' line sits right after VAT56's fill block (row 2042) with no 'Bottling VAT56' text and no VAT number given -- positionally it reads as VAT56's bottling, but that would mean bottling the same day as filling with no aging, unlike every other batch in this manifest. Excluded pending founder confirmation of the VAT number and date."
-    },
-    {
-      "sheet_row": 2061,
-      "reason": "VAT57: distilled (row 2061, ~2026-09-03) and filled after fridge storage (row 2065, ~2026-09-08, matching the sheet's own 'until 08/09/2026' note) but not yet bottled as of this pull. Re-import once a bottling row appears."
     }
   ]
 }
