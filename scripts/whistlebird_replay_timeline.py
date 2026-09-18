@@ -245,11 +245,7 @@ def _assign_flask_codes(batches: list[wm.ProductionBatch]) -> dict[str, tuple[st
     prefixes = {"wildflower": "WBWF", "solstice": "WBSS"}
     assignments: dict[str, tuple[str, str]] = {}
     for product_line, prefix in prefixes.items():
-        entries = [
-            (_resolved_step_dates(batch)[1], batch)
-            for batch in batches
-            if batch.product_line == product_line
-        ]
+        entries = [(_resolved_step_dates(batch)[1], batch) for batch in batches if batch.product_line == product_line]
         entries.sort(key=lambda entry: (entry[0], entry[1].global_vat))
         next_code = 1
         for _distillation_date, batch in entries:
@@ -300,6 +296,34 @@ def _resolved_step_dates(batch: wm.ProductionBatch) -> list[date]:
     raw_dates = [batch.steps[key].step_date if key in batch.steps else None for key in step_keys]
     resolved, _adjusted = wm._monotonic_step_dates(raw_dates)
     return resolved
+
+
+def manifest_ngs_receipts(raw_records: list[dict[str, Any]]) -> list[wm.RawMaterialRecord]:
+    """Real Neutral grain spirit receipts sourced from the raw-material manifest.
+
+    Southern Grain Spirits' full purchase history (2023-04-24 onward) lives in
+    ``docs/whistlebird-raw-material-source.json`` now, not the legacy ``purchases_gns``
+    table (see the manifest's own ``_comment``) -- this is what makes NGS pooling in
+    ``_ngs_allocations`` independent of legacy-DB access. ``source_id`` is unused by
+    that pool (only ``source_date``/``quantity``/``name`` are read), so it's a
+    placeholder rather than a real legacy row id.
+    """
+    return [
+        wm.RawMaterialRecord(
+            source_table="raw_material_manifest",
+            source_id=0,
+            source_date=date.fromisoformat(record["date"]),
+            name=record["ingredient"],
+            quantity=Decimal(str(record["quantity"])),
+            unit=record["unit"],
+            supplier=record.get("supplier"),
+            supplier_batch_number=record.get("supplier_batch_number"),
+            expiry_date=None,
+            extra_data={},
+        )
+        for record in raw_records
+        if record.get("ingredient") == "Neutral grain spirit"
+    ]
 
 
 def _ngs_allocations(
@@ -534,12 +558,18 @@ def build_timeline(
         legacy_raw_materials = wm._disambiguate_reused_supplier_batches(list(wm._raw_material_records(connection)))
     engine.dispose()
 
+    # Neutral grain spirit's full purchase history now lives in the raw-material
+    # manifest (see its _comment), not the legacy purchases_gns table -- drop it here
+    # so it's never double-purchased across both sources, and so NGS handling in this
+    # replay no longer depends on legacy-DB access at all.
+    legacy_raw_materials = [record for record in legacy_raw_materials if record.name != "Neutral grain spirit"]
+
     manifest_batches, _excluded = wm._load_manifest(production_manifest_path)
     merged = wm._merge_batches(legacy_batches, manifest_batches)
 
     raw_records, codes_by_vat, known_quantity_by_vat = _load_raw_material_manifest(raw_material_manifest_path)
     merged = _enrich_ingredient_codes(merged, codes_by_vat)
-    ngs_allocations = _ngs_allocations(merged, legacy_raw_materials)
+    ngs_allocations = _ngs_allocations(merged, manifest_ngs_receipts(raw_records))
 
     events: list[ReplayEvent] = []
 

@@ -332,3 +332,48 @@ See `docs/whistlebird-import-decisions.md`'s Stage 7 for the full writeup. Summa
   A live `consume-fifo` call for 600 Wildflower units correctly drained batch 1 (500)
   then 100 units of batch 2; the target was then reset and replayed again so no test
   consumption was left in what represents real, sales-free production history.
+
+## Real NGS receipts backfilled from source correspondence, 2026-09-18
+
+The nine real `purchases_gns` rows only covered orders through 2025-04-01; every
+Wildflower/Solstice VAT after that date was funded by a formula-sized synthetic
+shortfall receipt (see "Recipe and finished-stock accounting" above and the
+`reconcile replay raw stock` allocator work merged the same day). Read every
+Southern Grain Spirits order thread in the founder's Gmail and found eight further
+completed orders (invoiced, paid, dispatched) the legacy purchase register was
+missing, from 2025-06-18 through 2026-09-08 -- all 100 L at 96.4% ABV. Added them to
+`purchases_gns` (same `Purchase of GNS` convention as the existing nine), dated by
+each order's invoice-issue date (NZ local), since the existing rows' own date
+convention is inconsistent across payment/dispatch/receipt and this was the only
+anchor consistently present in every thread.
+
+Ran a full `--confirm-reset-whistlebird-test` -> replay (632 events) ->
+timestamp-correction -> `--verify-import` cycle on the live target. Result: every
+one of the 17 `Neutral grain spirit` inventory items now carries a real
+`supplier_batch_number` -- the real receipts fully cover demand through the present,
+so the allocator generated zero dedicated shortfall purchases this run (down from 24
+in the prior build). `--verify-import` reports exact matches on every count
+(batch executions, customs lodgements, raw-material items, date mismatches, wording
+leaks all clean).
+
+**Follow-up, same day:** those 17 rows only lived in the legacy `purchases_gns` table --
+not reproducible from this repo alone, and the founder wants this system to replace that
+legacy DB, not keep depending on it. Moved all 17 (the original 9 plus the 8 above) into
+`docs/whistlebird-raw-material-source.json` as `clean_records`, and taught
+`whistlebird_replay_timeline._ngs_allocations` to pool NGS receipts from there
+(`manifest_ngs_receipts`) instead of from `wm._raw_material_records`'s legacy-DB read --
+`build_timeline` now filters `purchases_gns` rows out of the legacy pool entirely so
+they're never double-purchased across both sources.  `build_import_verification` was
+updated to match (drops `purchases_gns` from its expected-count sources and pools NGS
+from the manifest too when `include_replay_ngs_purchases=True`). The ORM-direct
+`--rebuild-whistlebird-test` path is untouched and still reads `purchases_gns` directly --
+it's the lesser-preferred pathway already documented as missing the dedicated-NGS
+behaviour, not the one this independence was requested for.
+
+Re-ran the full reset -> replay -> timestamp-correction -> `--verify-import` cycle:
+identical result to the legacy-DB-sourced run (632 events, 17 real NGS receipts, zero
+synthetic shortfalls, 281.956 L remaining across all lots, every verify-import count
+exact) -- confirming the refactor is behaviour-preserving. Added
+`tests/test_whistlebird_replay_timeline.py::test_manifest_ngs_receipts_converts_only_ngs_records_and_ignores_other_ingredients`
+and `::test_ngs_allocation_pools_manifest_receipts_the_same_way_as_legacy_ones` to lock
+this in.

@@ -24,9 +24,17 @@ resolved `step_date`.
 | Source | Count | Target | Mapping |
 | --- | ---: | --- | --- |
 | `purchases_ingredients` | 57 | `inventory_items` (`raw_material`) + `ADD` movement | name, supplier, `ingredients_code`, `ingredients_expiry`; `ingredients_amount` → g. `purchase_date` = source date. |
-| `purchases_gns` | 9 | same | `gns_purchased_l` → L; ABV → `extra_data`. |
 | `purchases_empty_bottles` | 1 | same | `empty_bottles_stored` → units; `bottle_size_ml` → `extra_data`. |
 | `product_actions_create_premix` | 4 | same (`raw_material`) | `alcohol_volume` → L; ABV/LAL/`container_id` → `extra_data`. Dilution prep, not a production step. |
+
+Neutral grain spirit purchases (17, all of Southern Grain Spirits' real orders, 2023-04-24
+onward) no longer come from the legacy `purchases_gns` table -- as of 2026-09-18 they're
+`clean_records` in `docs/whistlebird-raw-material-source.json`, mapped the same way
+(`quantity` → L, `abv` folded into the record). This is the one raw-material source the
+API-replay path (`scripts/whistlebird_replay.py`) no longer needs legacy-DB access for;
+see that manifest's `_comment` and `whistlebird_replay_timeline.manifest_ngs_receipts`.
+The ORM-direct `--rebuild-whistlebird-test` path still reads `purchases_gns` directly and
+is unaffected by this change.
 
 Reused supplier batch codes get a ` (lot <id>)` suffix; the original code is kept in
 `extra_data.recorded_supplier_batch_number`.
