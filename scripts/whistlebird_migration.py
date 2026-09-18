@@ -108,26 +108,105 @@ WHISTLEBIRD_NZ_ALCOHOL_SETTINGS = {
 DERIVED_TIMEZONE = ZoneInfo("Pacific/Auckland")
 DERIVED_TIME = time(hour=12)
 
+
+# Step-1 (maceration) input lists: what each product's charge is built from, so the
+# process definition itself documents the recipe and drives inventory-selection prompts
+# at execution time -- the mechanism that lets a bottled product trace back to its source
+# botanical purchases. Quantities are the founder-confirmed per-shot recipe (2026-09-14/
+# -16), doubled per batch (two concentrate shots per VAT) -- see docs/whistlebird-raw-
+# material-source.json's recipe_wildflower_per_shot_g/recipe_solstice_per_shot_g and
+# docs/whistlebird-import-decisions.md "Stage 4". NGS/water are the flask-charge amounts
+# from scripts/whistlebird_replay_timeline.py's _flask_ngs_and_water_l() (identical for
+# both product lines; the larger VAT-fill dilution happens at a later step, not here) --
+# duplicated here rather than imported to avoid a circular import between the two
+# scripts; keep in sync if the founder revises the recipe.
+# requires_inventory_selection=False marks fresh/foraged ingredients the distillery has
+# never purchased as tracked inventory (per the founder, 2026-09-14) -- listed for a
+# complete recipe, but with nothing to select at execution time.
+def _tracked_input(name: str, quantity: str | None, unit: str) -> dict[str, Any]:
+    return {"name": name, "quantity": quantity, "unit": unit, "requires_inventory_selection": True}
+
+
+def _untracked_input(name: str, quantity: str | None, unit: str) -> dict[str, Any]:
+    return {"name": name, "quantity": quantity, "unit": unit, "requires_inventory_selection": False}
+
+
+_FLASK_NGS_INPUT = _tracked_input("Neutral grain spirit", "0.746", "L")
+_FLASK_WATER_INPUT = _untracked_input("Water", "2.854", "L")
+_WILDFLOWER_MACERATION_INPUTS = (
+    _tracked_input("Juniper Berries (Macedonian)", "59.4", "g"),
+    _tracked_input("Juniper Berries (Himalayan)", "48.6", "g"),
+    _tracked_input("Orris root", "30.6", "g"),
+    _tracked_input("Coriander seeds", "43.2", "g"),
+    _tracked_input("Whole nutmeg (organic)", "11", "g"),
+    _tracked_input("Orange peel - dried", "14.4", "g"),
+    _tracked_input("Hibiscus flowers", "18", "g"),
+    _tracked_input("Liquorice root", "5.4", "g"),
+    _tracked_input("Cardamom pods", "43.2", "g"),
+    _tracked_input("Persian black lime", "21.6", "g"),
+    _tracked_input("Sumac berries - ground", "7.2", "g"),
+    _tracked_input("Lemon myrtle", "14", "g"),
+    _tracked_input("Dried mango slices", "18", "g"),
+    _tracked_input("Dried apple ring", "36", "g"),
+    _tracked_input("Elderflower", "18", "g"),
+    _tracked_input("Green tea", "4", "bags"),
+    _FLASK_NGS_INPUT,
+    _FLASK_WATER_INPUT,
+    _untracked_input("Lemon juice", "34", "mL"),
+    _untracked_input("Grapefruit (pink) juice", "54", "mL"),
+    _untracked_input("Lemon peel", "3.0", "g"),
+)
+_SOLSTICE_MACERATION_INPUTS = (
+    _tracked_input("Juniper Berries (Macedonian)", "226.8", "g"),
+    _tracked_input("Juniper Berries (Himalayan)", "97.2", "g"),
+    _tracked_input("Whole nutmeg (organic)", "21.6", "g"),
+    _tracked_input("Cinnamon", "5.76", "g"),
+    _tracked_input("Liquorice root", "21.6", "g"),
+    _tracked_input("Szechuan pepper", "3.6", "g"),
+    _FLASK_NGS_INPUT,
+    _FLASK_WATER_INPUT,
+    _untracked_input("Kawakawa leaf", "8", "g"),
+    _untracked_input("Orange peel", "5.0", "g"),
+    _untracked_input("Orange juice", "108", "mL"),
+)
+# The rhubarb-maceration step consumes a whole aged Solstice VAT batch (an
+# inventory-selectable work-in-progress item, no fixed quantity -- see
+# docs/whistlebird-production-import-field-mapping.md's rosella_base_vat) plus rhubarb,
+# which -- like the other product lines' foraged ingredients -- the distillery has never
+# purchased as tracked inventory.
+_ROSELLA_MACERATION_INPUTS = (
+    _tracked_input("VAT batch", None, "L"),
+    _untracked_input("Rhubarb", None, "kg"),
+)
+
 # One workflow per product. Each production batch (one VAT) is a single execution that
 # walks these steps in order, every step stamped with its own real date. Steps are
-# (name, description, output_name, output_unit); an empty output_name means the step
-# records what happened but creates no inventory item of its own.
-_BOTANICAL_GIN_STEPS = (
-    ("Maceration", "Prep and steep the botanical charge", "", ""),
-    ("Distilling", "Distil the macerated charge to flavour spirit", "", ""),
-    ("Aging", "Fill the VAT and let the batch rest to strength", "VAT batch", "L"),
-    ("Bottling", "Bottle the rested VAT batch", "Bottled product", "units"),
-    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", ""),
+# (name, description, output_name, output_unit, inputs); an empty output_name means the
+# step records what happened but creates no inventory item of its own, and inputs is
+# only populated on the step that actually consumes raw material (maceration).
+_WILDFLOWER_STEPS = (
+    ("Maceration", "Prep and steep the botanical charge", "", "", _WILDFLOWER_MACERATION_INPUTS),
+    ("Distilling", "Distil the macerated charge to flavour spirit", "", "", ()),
+    ("Aging", "Fill the VAT and let the batch rest to strength", "VAT batch", "L", ()),
+    ("Bottling", "Bottle the rested VAT batch", "Bottled product", "units", ()),
+    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", "", ()),
+)
+_SOLSTICE_STEPS = (
+    ("Maceration", "Prep and steep the botanical charge", "", "", _SOLSTICE_MACERATION_INPUTS),
+    ("Distilling", "Distil the macerated charge to flavour spirit", "", "", ()),
+    ("Aging", "Fill the VAT and let the batch rest to strength", "VAT batch", "L", ()),
+    ("Bottling", "Bottle the rested VAT batch", "Bottled product", "units", ()),
+    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", "", ()),
 )
 _RHUBARB_GIN_STEPS = (
-    ("Rhubarb maceration", "Steep an aged base VAT batch on rhubarb", "VAT batch", "L"),
-    ("Aging", "Let the rhubarb batch rest before bottling", "", ""),
-    ("Bottling", "Bottle the rested batch", "Bottled product", "units"),
-    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", ""),
+    ("Rhubarb maceration", "Steep an aged base VAT batch on rhubarb", "VAT batch", "L", _ROSELLA_MACERATION_INPUTS),
+    ("Aging", "Let the rhubarb batch rest before bottling", "", "", ()),
+    ("Bottling", "Bottle the rested batch", "Bottled product", "units", ()),
+    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", "", ()),
 )
 _TRIAL_STEPS = (
-    ("Distilling", "Distil a trial recipe", "", ""),
-    ("Library stock", "Store the trial spirit as library stock", "Library stock", "mL"),
+    ("Distilling", "Distil a trial recipe", "", "", ()),
+    ("Library stock", "Store the trial spirit as library stock", "Library stock", "mL", ()),
 )
 WILDFLOWER_WORKFLOW = "Wildflower gin"
 SOLSTICE_WORKFLOW = "Solstice gin"
@@ -135,9 +214,9 @@ ROSELLA_WORKFLOW = "Rosella gin"
 GG_TRIAL_WORKFLOW = "GG gin trials"
 WB_TRIAL_WORKFLOW = "WB recipe trials"
 SGS_TRIAL_WORKFLOW = "SGS spirit trials"
-PRODUCT_WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str, str, str], ...]]] = {
-    WILDFLOWER_WORKFLOW: ("botanical_gin", _BOTANICAL_GIN_STEPS),
-    SOLSTICE_WORKFLOW: ("botanical_gin", _BOTANICAL_GIN_STEPS),
+PRODUCT_WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str, str, str, tuple], ...]]] = {
+    WILDFLOWER_WORKFLOW: ("botanical_gin", _WILDFLOWER_STEPS),
+    SOLSTICE_WORKFLOW: ("botanical_gin", _SOLSTICE_STEPS),
     ROSELLA_WORKFLOW: ("rhubarb_gin", _RHUBARB_GIN_STEPS),
     GG_TRIAL_WORKFLOW: ("trial", _TRIAL_STEPS),
     WB_TRIAL_WORKFLOW: ("trial", _TRIAL_STEPS),
@@ -979,7 +1058,14 @@ def build_traceability_dry_run(legacy_url: str) -> dict[str, Any]:
 
 
 def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[str, list[str]]:
-    """Create one workflow per product plus the recipe-trial workflows, each with its steps."""
+    """Create one workflow per product plus the recipe-trial workflows, each with its steps.
+
+    Idempotent on two axes: missing steps are added (``repaired``/``created``), and any
+    already-created step whose stored ``inputs`` is empty but the definition above now
+    specifies inputs gets repaired in place (``inputs_repaired``) -- this is how a
+    definition change (e.g. adding the maceration recipe) reaches steps a prior run of
+    this function already created with ``inputs=[]``.
+    """
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Workflow setup is only permitted for {RESET_ORG_NAME!r}")
 
@@ -993,18 +1079,23 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
     created: list[str] = []
     existing: list[str] = []
     repaired: list[str] = []
+    inputs_repaired: list[str] = []
     try:
         org = _enter_target_tenant_scope(scope, session, requested_org_name)
         repository = ProcessRepository(session)
         for name, (_shape, steps) in PRODUCT_WORKFLOWS.items():
             process = session.query(Process).filter(Process.org_id == org.id, Process.name == name).one_or_none()
             step_count = 0
+            existing_steps: list[Step] = []
             if process is not None:
-                step_count = session.query(Step).filter(Step.process_id == process.id).count()
+                existing_steps = (
+                    session.query(Step).filter(Step.process_id == process.id).order_by(Step.step_number).all()
+                )
+                step_count = len(existing_steps)
                 if step_count == len(steps):
                     existing.append(name)
-                    continue
-                repaired.append(name)
+                else:
+                    repaired.append(name)
             else:
                 process = repository.create_process(
                     org_id=org.id,
@@ -1014,8 +1105,18 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
                     is_draft=False,
                 )
                 created.append(name)
-            for index, (step_name, description, output_name, unit) in enumerate(steps, start=1):
+            for index, (step_name, description, output_name, unit, inputs) in enumerate(steps, start=1):
                 if step_count and index <= step_count:
+                    existing_step = existing_steps[index - 1]
+                    if inputs and not existing_step.inputs:
+                        repository.update_step(
+                            step_id=existing_step.id,
+                            process_id=process.id,
+                            org_id=org.id,
+                            inputs=list(inputs),
+                        )
+                        if name not in inputs_repaired:
+                            inputs_repaired.append(name)
                     continue
                 outputs = [{"id": str(uuid4()), "name": output_name, "unit": unit}] if output_name else []
                 repository.add_step(
@@ -1025,10 +1126,16 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
                     position=index * 1000,
                     name=step_name,
                     description=description,
+                    inputs=list(inputs),
                     outputs=outputs,
                     execution_prompts=[],
                 )
-        return {"created": created, "existing": existing, "repaired": repaired}
+        return {
+            "created": created,
+            "existing": existing,
+            "repaired": repaired,
+            "inputs_repaired": inputs_repaired,
+        }
     finally:
         scope.close()
         session.close()
