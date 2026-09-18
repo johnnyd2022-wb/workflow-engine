@@ -305,3 +305,30 @@ allocations:
   product-line final item with the identical recorded quantity. Historical breakages are
   already included in those bottle counts, so the replay does not invent separate
   wastage.
+
+## Label-batch numbering and FIFO sales drain added 2026-09-17/18
+
+See `docs/whistlebird-import-decisions.md`'s Stage 7 for the full writeup. Summary:
+
+- Whistlebird buys pre-printed label rolls of 500 -- bottles 1-500 ever labelled for a
+  product are "batch 1", 501-1000 "batch 2", etc., across VATs. Checked first (per
+  Johnny's request) whether the CRM module's existing `SalesTraceabilityConfig`
+  (`matching_strategy: fifo`, `matching_key: batch_id`) already implements this: it does
+  not -- it is a settings row with no draining engine behind it anywhere in the app.
+- `scripts/whistlebird_replay_timeline.py`'s `_assign_label_batches` computes the split
+  per product line from real labelling dates and bottle counts; `complete_step`
+  (`app/core/backend/backend.py`) now accepts a generic per-output `batch_number`,
+  stored on the created item's `extra_data`; `scripts/whistlebird_replay.py`'s labelling
+  branch posts one output per label batch a VAT's bottles fall into.
+- `InventoryRepository.consume_final_product_fifo` + `POST
+  /api/core/inventory/consume-fifo` (both new) drain a named final product oldest-batch
+  first, splitting across items at a boundary, refusing (no partial consumption) when
+  stock is short. This is the landing point for a future Xero-invoice sales sync -- not
+  built yet, and out of scope for this pass.
+- Verified against a full reset -> replay (654 events) -> timestamp-correction ->
+  `--verify-import` cycle on the live target, all counts exact (unchanged from Stage 6).
+  Batch totals: Wildflower 6 batches (five full 500s, one 413.5-bottle open batch),
+  Solstice 2 (one full 500, one 178.75-bottle open batch), Rosella 1 (162.5 bottles).
+  A live `consume-fifo` call for 600 Wildflower units correctly drained batch 1 (500)
+  then 100 units of batch 2; the target was then reset and replayed again so no test
+  consumption was left in what represents real, sales-free production history.

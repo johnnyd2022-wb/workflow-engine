@@ -214,6 +214,55 @@ def _purchase_event(record: dict[str, Any]) -> ReplayEvent:
     )
 
 
+# --- Label-batch numbering (sales FIFO groundwork) ------------------------------------
+#
+# Whistlebird buys pre-printed label rolls of 500 -- physically, the first 500 bottles of
+# a product ever labelled are "batch 1", the next 500 are "batch 2", and so on, regardless
+# of which VAT they came from. Founder request (2026-09-17): number every product line's
+# bottles this way at Labelling, so a future FIFO sales allocation (e.g. from Xero invoice
+# dates) can drain "batch 1" before "batch 2" the same way the physical labels were used.
+# See docs/whistlebird-import-decisions.md and app/core/db/repositories/inventory_repo.py's
+# consume_final_product_fifo, which is the thing that eventually drains these.
+LABEL_BATCH_SIZE = Decimal("500")
+
+
+def _assign_label_batches(
+    batches: list[wm.ProductionBatch], batch_size: Decimal = LABEL_BATCH_SIZE
+) -> dict[str, list[tuple[int, Decimal]]]:
+    """FIFO-number every product line's bottles into fixed-size label batches, in real
+    production order (each product line's own labelling dates, oldest first; global_vat
+    breaks ties on the same date). Returns {batch.marker: [(batch_number, bottle_count),
+    ...]} -- almost always one entry per batch, more when a VAT's own bottle run happens
+    to straddle a 500-bottle boundary.
+    """
+    by_product: dict[str, list[tuple[date, wm.ProductionBatch, Decimal]]] = defaultdict(list)
+    for batch in batches:
+        total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
+        if total_bottles <= 0:
+            continue
+        labelling_date = _resolved_step_dates(batch)[-1]
+        by_product[batch.product_line].append((labelling_date, batch, total_bottles))
+
+    assignment: dict[str, list[tuple[int, Decimal]]] = {}
+    for entries in by_product.values():
+        entries.sort(key=lambda entry: (entry[0], entry[1].global_vat))
+        cumulative = Decimal("0")
+        for _labelling_date, batch, total_bottles in entries:
+            splits: list[tuple[int, Decimal]] = []
+            remaining = total_bottles
+            position = cumulative
+            while remaining > 0:
+                batch_number = int(position // batch_size) + 1
+                room_in_batch = batch_size - (position % batch_size)
+                take = min(remaining, room_in_batch)
+                splits.append((batch_number, take))
+                position += take
+                remaining -= take
+            assignment[batch.marker] = splits
+            cumulative += total_bottles
+    return assignment
+
+
 def _resolved_step_dates(batch: wm.ProductionBatch) -> list[date]:
     step_keys = wm.RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else wm.BOTANICAL_GIN_STEP_KEYS
     raw_dates = [batch.steps[key].step_date if key in batch.steps else None for key in step_keys]
@@ -233,6 +282,7 @@ def _batch_events(
     purchase_event_by_code: dict[str, str],
     marker_by_vat: dict[int, str],
     known_quantities: dict[str, tuple[str, str]],
+    label_batches: dict[str, list[tuple[int, Decimal]]] | None = None,
 ) -> list[ReplayEvent]:
     step_keys = wm.RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else wm.BOTANICAL_GIN_STEP_KEYS
     resolved = _resolved_step_dates(batch)
@@ -286,6 +336,10 @@ def _batch_events(
             fill_ngs, fill_water = _vat_fill_ngs_and_water_l(batch.product_line)
             payload["ngs_quantity_l"] = str(fill_ngs)
             payload["other_material_inputs"] = [{"name": "Water", "quantity": str(fill_water), "unit": "L"}]
+        if key == "labelling" and label_batches:
+            splits = label_batches.get(batch.marker)
+            if splits:
+                payload["label_batches"] = [(number, str(quantity)) for number, quantity in splits]
         events.append(
             ReplayEvent(
                 event_id=step_id,
@@ -435,6 +489,7 @@ def build_timeline(
         purchase_event_by_code[record["code"]] = event.event_id
 
     marker_by_vat = {batch.global_vat: batch.marker for batch in merged}
+    label_batches = _assign_label_batches(merged)
     for batch in merged:
         events.extend(
             _batch_events(
@@ -442,6 +497,7 @@ def build_timeline(
                 purchase_event_by_code,
                 marker_by_vat,
                 known_quantity_by_vat.get(batch.global_vat, {}),
+                label_batches,
             )
         )
 

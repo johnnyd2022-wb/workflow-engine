@@ -2765,6 +2765,20 @@ def complete_step(execution_id: str, execution_step_id: str):
                             f"Invalid untracked_item_id for output '{output_name}'; skipping reconciliation."
                         )
 
+                # Optional: tag this specific output with a lot/label-batch number (e.g. a
+                # physical run of 500 pre-printed labels). Purely descriptive metadata --
+                # unlike supplier_batch_number, this is not unique per (org, name): several
+                # outputs across different steps/executions can and do share one batch
+                # number when a single physical batch spans multiple production runs.
+                batch_number_raw = output.get("batch_number")
+                if batch_number_raw is not None:
+                    try:
+                        extra_data["batch_number"] = int(batch_number_raw)
+                    except (TypeError, ValueError):
+                        execution_warnings.append(
+                            f"Output '{output_name}': ignoring non-integer batch_number {batch_number_raw!r}."
+                        )
+
                 # Store creation parameters for atomic commit
                 source_step_name = step_def.name if step_def else None
                 output_creations.append(
@@ -4216,6 +4230,34 @@ def adjust_inventory_item_quantity(item_id):
             "unit": item.unit,
         }
     ), 200
+
+
+@core_bp.route("/api/core/inventory/consume-fifo", methods=["POST"])
+@requires_auth
+def consume_final_product_fifo():
+    """Consume finished stock FIFO by label/lot batch number (oldest batch first).
+
+    Landing point for sales-driven consumption -- a future Xero invoice sync (or any
+    other sale-recording integration) calls this instead of touching a specific
+    inventory item directly, so it never has to know which physical batch a sale
+    actually drew from.
+    """
+    org_id = UUID(g.org_id)
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    quantity = data.get("quantity")
+    reference = data.get("reference")
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    if quantity is None or str(quantity).strip() == "":
+        return jsonify({"error": "quantity is required"}), 400
+
+    repo = InventoryRepository(db_session)
+    try:
+        consumed = repo.consume_final_product_fifo(org_id, name, str(quantity).strip(), reference=reference)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"name": name, "consumed": consumed}), 200
 
 
 @core_bp.route("/api/core/inventory/<item_id>", methods=["DELETE"])

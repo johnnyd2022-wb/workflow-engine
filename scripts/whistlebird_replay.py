@@ -471,13 +471,19 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
                 # netted into the recorded bottled-product count -- see the founder's
                 # 2026-09-16 note). Without this, labelling only ever consumed and never
                 # produced, so finished stock vanished from the UI entirely.
-                actual_outputs.append(
-                    {
-                        "name": f"{batch.product_line.capitalize()} - final product",
-                        "quantity": str(bottled_item["quantity"]),
-                        "unit": bottled_item["unit"],
-                    }
-                )
+                #
+                # One output per label batch this VAT's bottles fall into (almost always
+                # one; more when the run crosses a 500-bottle label-roll boundary) -- see
+                # whistlebird_replay_timeline._assign_label_batches. batch_number lands on
+                # the created item's extra_data (backend.py's complete_step) and is what
+                # InventoryRepository.consume_final_product_fifo later drains oldest-first.
+                label_batches = event.payload.get("label_batches") or [(None, bottled_item["quantity"])]
+                product_name = f"{batch.product_line.capitalize()} - final product"
+                for batch_number, quantity in label_batches:
+                    output = {"name": product_name, "quantity": str(quantity), "unit": bottled_item["unit"]}
+                    if batch_number is not None:
+                        output["batch_number"] = batch_number
+                    actual_outputs.append(output)
 
     elif trial is not None and step_key == "library_stock" and trial.library_ml:
         actual_outputs.append({"name": "Library stock", "quantity": str(trial.library_ml), "unit": "mL"})
