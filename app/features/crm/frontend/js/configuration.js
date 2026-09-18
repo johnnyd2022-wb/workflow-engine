@@ -23,6 +23,7 @@ function crmConfiguration() {
     mappingDraft: {
       product_key: '',
       xero_description_pattern: '',
+      match_type: 'exact',
       notes: '',
     },
 
@@ -190,12 +191,12 @@ function crmConfiguration() {
           biz_e_product_name: product.name,
           biz_e_source_output_id: product.source_output_id,
           xero_description_pattern: xero,
-          match_type: 'exact',
+          match_type: this.mappingDraft.match_type === 'contains' ? 'contains' : 'exact',
           notes: (this.mappingDraft.notes || '').trim() || null,
         };
         const { product_mapping } = await CRMAPI.createProductMapping(payload);
         this.mappings.unshift(product_mapping);
-        this.mappingDraft = { product_key: '', xero_description_pattern: '', notes: '' };
+        this.mappingDraft = { product_key: '', xero_description_pattern: '', match_type: 'exact', notes: '' };
       } catch (e) {
         this.error = e.message || 'Failed to create mapping.';
       } finally {
