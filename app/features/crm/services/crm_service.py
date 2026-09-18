@@ -953,45 +953,53 @@ class CRMService:
         return options
 
     def create_mapping(self, org_id: UUID, data: dict, user_id: UUID | None) -> dict:
+        return self.create_mappings(org_id, [data], user_id)[0]
+
+    def create_mappings(self, org_id: UUID, mappings_data: list[dict], user_id: UUID | None) -> list[dict]:
+        """Create a reviewed set of product mappings in one transaction."""
         from app.features.crm.models.product_mapping import ProductMapping
 
-        biz_name = (data.get("biz_e_product_name") or "").strip()
-        xero_pattern = (data.get("xero_description_pattern") or "").strip()
-        if not biz_name or not xero_pattern:
-            raise ValueError("biz_e_product_name and xero_description_pattern are required")
+        if not isinstance(mappings_data, list) or not mappings_data:
+            raise ValueError("At least one mapping is required")
+        if len(mappings_data) > 50:
+            raise ValueError("A maximum of 50 mappings may be saved at once")
 
-        existing = (
-            self.db.query(ProductMapping)
-            .filter(
-                ProductMapping.org_id == org_id,
-                ProductMapping.biz_e_product_name == biz_name,
-                ProductMapping.xero_description_pattern == xero_pattern,
-            )
-            .first()
-        )
-        if existing is not None:
+        prepared = [_prepare_mapping_data(data) for data in mappings_data]
+        keys = {(data["biz_e_product_name"], data["xero_description_pattern"]) for data in prepared}
+        if len(keys) != len(prepared):
+            raise ValueError("The review list contains duplicate mappings")
+
+        existing_keys = {
+            (mapping.biz_e_product_name, mapping.xero_description_pattern)
+            for mapping in (self.db.query(ProductMapping).filter(ProductMapping.org_id == org_id).all())
+        }
+        if keys & existing_keys:
             raise ValueError("This mapping already exists")
 
-        m = self.mapping_repo.create(
-            org_id=org_id,
-            biz_e_source_output_id=UUID(data["biz_e_source_output_id"]) if data.get("biz_e_source_output_id") else None,
-            biz_e_product_name=biz_name,
-            xero_description_pattern=xero_pattern,
-            match_type=data.get("match_type", "exact"),
-            notes=data.get("notes"),
-            created_by_user_id=user_id,
-        )
-        self.db.flush()  # populate m.id (client-side default) before event emission
-        self._emit_event(
-            org_id=org_id,
-            event_type="crm_product_mapping.created",
-            entity_type="crm_product_mapping",
-            entity_id=m.id,
-            payload=_mapping_event_snapshot(m),
-            actor_id=user_id,
-        )
+        mappings = [
+            self.mapping_repo.create(
+                org_id=org_id,
+                biz_e_source_output_id=data["biz_e_source_output_id"],
+                biz_e_product_name=data["biz_e_product_name"],
+                xero_description_pattern=data["xero_description_pattern"],
+                match_type=data["match_type"],
+                notes=data["notes"],
+                created_by_user_id=user_id,
+            )
+            for data in prepared
+        ]
+        self.db.flush()
+        for mapping in mappings:
+            self._emit_event(
+                org_id=org_id,
+                event_type="crm_product_mapping.created",
+                entity_type="crm_product_mapping",
+                entity_id=mapping.id,
+                payload=_mapping_event_snapshot(mapping),
+                actor_id=user_id,
+            )
         self.db.commit()
-        return _serialise_mapping(m)
+        return [_serialise_mapping(mapping) for mapping in mappings]
 
     def update_mapping(self, mapping_id: UUID, org_id: UUID, data: dict) -> dict | None:
         m = self.mapping_repo.get_by_id(mapping_id, org_id)
@@ -1087,6 +1095,35 @@ def _mapping_event_snapshot(mapping) -> dict[str, Any]:
         "match_type": mapping.match_type,
         "is_active": bool(mapping.is_active),
         "notes_length": len(mapping.notes or ""),
+    }
+
+
+def _prepare_mapping_data(data: dict) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("Each mapping must be an object")
+    biz_name = str(data.get("biz_e_product_name") or "").strip()
+    xero_pattern = str(data.get("xero_description_pattern") or "").strip()
+    if not biz_name or not xero_pattern:
+        raise ValueError("biz_e_product_name and xero_description_pattern are required")
+    if len(biz_name) > 500 or len(xero_pattern) > 500:
+        raise ValueError("Product names and Xero match phrases must be 500 characters or fewer")
+
+    match_type = str(data.get("match_type") or "exact").strip().lower()
+    if match_type not in {"exact", "contains", "alias"}:
+        raise ValueError("match_type must be exact, contains, or alias")
+
+    source_output_id = data.get("biz_e_source_output_id")
+    try:
+        source_output_id = UUID(str(source_output_id)) if source_output_id else None
+    except (TypeError, ValueError) as exc:
+        raise ValueError("biz_e_source_output_id must be a valid UUID") from exc
+    notes = data.get("notes")
+    return {
+        "biz_e_product_name": biz_name,
+        "biz_e_source_output_id": source_output_id,
+        "xero_description_pattern": xero_pattern,
+        "match_type": match_type,
+        "notes": str(notes).strip() if notes else None,
     }
 
 

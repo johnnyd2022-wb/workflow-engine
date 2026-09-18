@@ -120,11 +120,11 @@
       </div>
       <label style="display:inline-flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text-secondary,#6b7280);">
         <input type="checkbox" x-model="traceConfig.strict">
-        Require strict product mapping match before linking sales
+        Require an exact Xero match before linking sales
       </label>
-      <p style="margin:0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Strict matching only links sales when mapped product details line up exactly, reducing incorrect trace links.</p>
+      <p style="margin:0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Turn this off to use a manually configured “contains” mapping, such as <em>Wildflower</em>, across multiple Xero price variants.</p>
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);">Applies to newly synced sales only.</div>
+        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);">Applies on the next sync, including sales already imported into CRM.</div>
         <div style="display:flex; gap:8px; align-items:center;">
           <a href="/core/sourcemap" class="crm-btn crm-btn--secondary crm-btn--sm">Open Sourcemap</a>
           <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Traceability Settings</button>
@@ -188,13 +188,33 @@
           </select>
         </div>
         <div class="crm-form-group">
-          <label class="crm-form-label">Xero Line Item Description</label>
-          <select class="crm-form-select" x-model="mappingDraft.xero_description_pattern">
-            <option value="">Select Xero line item</option>
-            <template x-for="opt in lineItemOptions" :key="`${opt.description || ''}-${opt.item_code || ''}`">
-              <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
-            </template>
+          <label class="crm-form-label">Matching Rule</label>
+          <select class="crm-form-select" x-model="mappingDraft.match_type">
+            <option value="exact">Exact Xero line / item code</option>
+            <option value="contains">Xero line contains phrase</option>
           </select>
+        </div>
+        <div class="crm-form-group">
+          <label class="crm-form-label" x-text="mappingDraft.match_type === 'contains' ? 'Shared Xero phrase' : 'Xero Line Item Description'"></label>
+          <template x-if="mappingDraft.match_type === 'exact'">
+            <select class="crm-form-select" x-model="mappingDraft.xero_description_pattern">
+              <option value="">Select Xero line item</option>
+              <template x-for="opt in lineItemOptions" :key="opt.description || opt.item_code">
+                <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
+              </template>
+            </select>
+          </template>
+          <template x-if="mappingDraft.match_type === 'contains'">
+            <div>
+              <input class="crm-form-input" list="xero-line-item-options" x-model="mappingDraft.xero_description_pattern" placeholder="e.g. Wildflower">
+              <datalist id="xero-line-item-options">
+                <template x-for="opt in lineItemOptions" :key="opt.description || opt.item_code">
+                  <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
+                </template>
+              </datalist>
+              <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Use a distinctive shared phrase. Disable exact-only matching above before syncing.</p>
+            </div>
+          </template>
         </div>
       </div>
       <div class="crm-form-group">
@@ -202,11 +222,32 @@
         <input class="crm-form-input" x-model="mappingDraft.notes" placeholder="Internal note">
       </div>
       <div>
-        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="createMapping()" :disabled="savingMapping || !mappingDraft.product_key || !mappingDraft.xero_description_pattern">
-          <span x-text="savingMapping ? 'Saving…' : 'Add Mapping'"></span>
+        <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="queueMapping()" :disabled="!mappingDraft.product_key || !mappingDraft.xero_description_pattern">
+          Add to review
         </button>
       </div>
     </div>
+
+    <template x-if="pendingMappings.length > 0">
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border-default,#e5e7eb); background:rgba(19,181,234,.05);">
+        <div style="font-size:.8rem; font-weight:700; margin-bottom:8px;">Review before saving (<span x-text="pendingMappings.length"></span>)</div>
+        <div style="display:grid; gap:6px;">
+          <template x-for="(mapping, index) in pendingMappings" :key="`${mapping.biz_e_product_name}-${mapping.xero_description_pattern}`">
+            <div style="display:flex; align-items:center; gap:7px; flex-wrap:wrap; font-size:.8rem;">
+              <span x-text="mapping.biz_e_product_name"></span><span>→</span>
+              <span x-text="mapping.xero_description_pattern"></span>
+              <span class="crm-badge crm-badge--active" x-text="mapping.match_type"></span>
+              <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="removePendingMapping(index)">Remove</button>
+            </div>
+          </template>
+        </div>
+        <div style="margin-top:10px; display:flex; justify-content:flex-end;">
+          <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveMappings()" :disabled="savingMapping">
+            <span x-text="savingMapping ? 'Saving mappings…' : `Save ${pendingMappings.length} mapping${pendingMappings.length === 1 ? '' : 's'}`"></span>
+          </button>
+        </div>
+      </div>
+    </template>
 
     <template x-if="mappings.length === 0">
       <div class="crm-empty"><h3>No mappings yet</h3></div>
@@ -218,6 +259,7 @@
           <span class="crm-mapping-biz" x-text="m.biz_e_product_name"></span>
           <span class="crm-mapping-arrow">→</span>
           <span class="crm-mapping-xero" x-text="m.xero_description_pattern"></span>
+          <span class="crm-badge crm-badge--active" x-text="m.match_type || 'exact'"></span>
           <span class="crm-badge" :class="mappingStatusClass(m)" x-text="m.mapping_status || 'active'"></span>
           <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="deleteMapping(m.id)">Delete</button>
         </div>

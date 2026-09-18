@@ -186,6 +186,7 @@ window.CRMAPI = (function () {
   async function getProductMappings()         { return request('/product-mappings'); }
   async function getFinalProducts()           { return request('/final-products'); }
   async function createProductMapping(data)   { return request('/product-mappings', { method: 'POST', body: data }); }
+  async function createProductMappings(data)  { return request('/product-mappings/bulk', { method: 'POST', body: data }); }
   async function updateProductMapping(id, data){ return request(`/product-mappings/${id}`, { method: 'PUT', body: data }); }
   async function deleteProductMapping(id)     { return request(`/product-mappings/${id}`, { method: 'DELETE' }); }
 
@@ -196,6 +197,6 @@ window.CRMAPI = (function () {
     createNote, updateNote, deleteNote,
     getTasks, createTask, updateTask, deleteTask, getTaskLanes, createTaskLane, updateTaskLane, reorderTaskLanes, deleteTaskLane, assignTaskLane,
     getMonthlySales, getCustomerBreakdown, getRankings, getChurnRisk, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
-    getProductMappings, getFinalProducts, createProductMapping, updateProductMapping, deleteProductMapping,
+    getProductMappings, getFinalProducts, createProductMapping, createProductMappings, updateProductMapping, deleteProductMapping,
   };
 })();
