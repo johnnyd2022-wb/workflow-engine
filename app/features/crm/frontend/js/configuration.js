@@ -9,6 +9,7 @@ function crmConfiguration() {
     disconnecting: false,
     showDisconnectModal: false,
     mappings: [],
+    pendingMappings: [],
     finalProducts: [],
     lineItemOptions: [],
     traceConfig: {
@@ -181,24 +182,43 @@ function crmConfiguration() {
       return { name: name || '', source_output_id: source || null };
     },
 
-    async createMapping() {
+    queueMapping() {
       const product = this.parseProductKey();
       const xero = String(this.mappingDraft.xero_description_pattern || '').trim();
       if (!product.name || !xero) return;
+      const payload = {
+        biz_e_product_name: product.name,
+        biz_e_source_output_id: product.source_output_id,
+        xero_description_pattern: xero,
+        match_type: this.mappingDraft.match_type === 'contains' ? 'contains' : 'exact',
+        notes: (this.mappingDraft.notes || '').trim() || null,
+      };
+      const isDuplicate = this.pendingMappings.concat(this.mappings).some((mapping) =>
+        mapping.biz_e_product_name === payload.biz_e_product_name
+        && mapping.xero_description_pattern === payload.xero_description_pattern
+      );
+      if (isDuplicate) {
+        this.error = 'That mapping is already saved or in the review list.';
+        return;
+      }
+      this.error = null;
+      this.pendingMappings.push(payload);
+      this.mappingDraft = { product_key: '', xero_description_pattern: '', match_type: 'exact', notes: '' };
+    },
+
+    removePendingMapping(index) {
+      this.pendingMappings.splice(index, 1);
+    },
+
+    async saveMappings() {
+      if (this.savingMapping || this.pendingMappings.length === 0) return;
       this.savingMapping = true;
       try {
-        const payload = {
-          biz_e_product_name: product.name,
-          biz_e_source_output_id: product.source_output_id,
-          xero_description_pattern: xero,
-          match_type: this.mappingDraft.match_type === 'contains' ? 'contains' : 'exact',
-          notes: (this.mappingDraft.notes || '').trim() || null,
-        };
-        const { product_mapping } = await CRMAPI.createProductMapping(payload);
-        this.mappings.unshift(product_mapping);
-        this.mappingDraft = { product_key: '', xero_description_pattern: '', match_type: 'exact', notes: '' };
+        const { product_mappings } = await CRMAPI.createProductMappings({ mappings: this.pendingMappings });
+        this.mappings = [...(product_mappings || []), ...this.mappings];
+        this.pendingMappings = [];
       } catch (e) {
-        this.error = e.message || 'Failed to create mapping.';
+        this.error = e.message || 'Failed to save mappings.';
       } finally {
         this.savingMapping = false;
       }

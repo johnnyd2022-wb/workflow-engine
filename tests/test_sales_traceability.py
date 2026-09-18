@@ -14,6 +14,7 @@ from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement
 from app.core.db.models.organisation import Organisation
+from app.core.db.models.task_board_lane import TaskBoardLane  # noqa: F401 - registers CRM task FK target metadata
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.features.crm.models.product_mapping import ProductMapping
@@ -195,6 +196,30 @@ def test_reconcile_accepts_a_unique_contains_mapping_when_exact_only_is_disabled
     summary = SalesTraceabilityService(db).reconcile_org(sales_org.id)
     assert summary["allocated"] == 1
     assert _stock_by_batch(db, sales_org.id) == {1: Decimal("8.0000")}
+
+
+def test_reviewed_mappings_are_created_together_in_one_save(db, sales_org):
+    from app.features.crm.services.crm_service import CRMService
+
+    saved = CRMService(db).create_mappings(
+        sales_org.id,
+        [
+            {
+                "biz_e_product_name": "Wildflower - final product",
+                "xero_description_pattern": "Wildflower",
+                "match_type": "contains",
+            },
+            {
+                "biz_e_product_name": "Solstice - final product",
+                "xero_description_pattern": "Solstice",
+                "match_type": "contains",
+            },
+        ],
+        user_id=None,
+    )
+
+    assert [mapping["xero_description_pattern"] for mapping in saved] == ["Wildflower", "Solstice"]
+    assert db.query(ProductMapping).filter(ProductMapping.org_id == sales_org.id).count() == 2
 
 
 def test_invoice_sync_returns_fifo_reconciliation_summary(db, sales_org, monkeypatch):

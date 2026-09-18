@@ -662,6 +662,24 @@ def create_mapping():
         raise
 
 
+@api_bp.route("/api/crm/product-mappings/bulk", methods=["POST"])
+@requires_auth
+def create_mappings_bulk():
+    org_id = UUID(g.org_id)
+    data = request.get_json() or {}
+    try:
+        mappings = _crm_service().create_mappings(org_id, data.get("mappings"), UUID(g.user_id) if g.user_id else None)
+        return jsonify({"product_mappings": mappings}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        try:
+            db_session().rollback()
+        except Exception:
+            pass
+        raise
+
+
 @api_bp.route("/api/crm/product-mappings/<mapping_id>", methods=["PUT"])
 @requires_auth
 def update_mapping(mapping_id: str):
