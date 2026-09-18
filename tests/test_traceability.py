@@ -252,12 +252,19 @@ def _next_event_seq(db, org_id) -> int:
     )
 
 
-def _plant_step_completed_event(db, org_id, *, execution_id, item_id, role, quantity="2", unit="kg", when=None):
+def _plant_step_completed_event(
+    db, org_id, *, execution_id, item_id, role, quantity="2", unit="kg", when=None, execution_data=None
+):
     """Directly write an execution.step_completed EntityEvent -- this is test setup for
     TemporalDAGTracer, which reads entity_events, not a stand-in for EventWriter (platform
     layer, out of scope here). `role` is "consumed" or "produced", matching the payload
-    shapes TemporalDAGTracer.trace() reads (items_consumed / items_produced)."""
+    shapes TemporalDAGTracer.trace() reads (items_consumed / items_produced). `execution_data`
+    mirrors what ExecutionRepository.complete_step puts in the real event payload -- used to
+    exercise batch_id / custom_prompts node metadata."""
     key = "items_consumed" if role == "consumed" else "items_produced"
+    payload = {"execution_id": str(execution_id), key: [{"item_id": str(item_id), "quantity": quantity, "unit": unit}]}
+    if execution_data is not None:
+        payload["execution_data"] = execution_data
     ev = EntityEvent(
         org_id=org_id,
         seq=_next_event_seq(db, org_id),
@@ -266,7 +273,7 @@ def _plant_step_completed_event(db, org_id, *, execution_id, item_id, role, quan
         entity_id=execution_id,
         actor_type="user",
         actor_label="tracer_test@test.com",
-        payload={"execution_id": str(execution_id), key: [{"item_id": str(item_id), "quantity": quantity, "unit": unit}]},
+        payload=payload,
         created_at=when or datetime.now(UTC),
     )
     db.add(ev)
@@ -367,6 +374,73 @@ class TestTemporalDAGTracerUnit:
         assert len(timeline) == 6  # 1 step_completed + 5 quantity_adjusted, all on raw_id/exec_id nodes
         ats = [ev["at"] for ev in timeline]
         assert ats == sorted(ats), "timeline must be ordered oldest-first"
+
+    def test_produced_item_node_carries_batch_id_and_custom_prompts(self, db, org):
+        """The "Batch number" compliance/traceability prompt (and any other org-defined
+        prompt) already rides along in the step_completed event's execution_data -- non-root
+        nodes should surface it instead of always being state: None (AC17 covers `state`
+        specifically; batch_id/custom_prompts are new, separate fields)."""
+        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+
+        raw_id, exec_id, wip_id = uuid4(), uuid4(), uuid4()
+        now = datetime.now(UTC)
+        _plant_step_completed_event(db, org.id, execution_id=exec_id, item_id=raw_id, role="consumed", when=now)
+        _plant_step_completed_event(
+            db,
+            org.id,
+            execution_id=exec_id,
+            item_id=wip_id,
+            role="produced",
+            when=now,
+            execution_data={
+                "Batch number": "VAT55",
+                "Botanical origin": "Wairarapa rhubarb",
+                # completed_by/completed_by_email/completed_by_user_id/completed_at are all
+                # internal audit keys _split_temporal_prompts excludes -- they're already
+                # shown elsewhere (the "Completed by" row), not "custom prompt metadata".
+                "completed_by": "op@test.com",
+                "completed_by_email": "op@test.com",
+                "completed_by_user_id": str(uuid4()),
+                "completed_at": now.isoformat(),
+            },
+        )
+
+        tracer = TemporalDAGTracer(db, org.id, now + timedelta(minutes=1), max_depth=5)
+        result = tracer.trace(raw_id, "inventory_item")
+
+        by_id = {n["id"]: n for n in result["nodes"]}
+        wip_node = by_id[str(wip_id)]
+        assert wip_node["batch_id"] == "VAT55"
+        assert wip_node["custom_prompts"] == {"Botanical origin": "Wairarapa rhubarb"}
+        assert wip_node["state"] is None, "AC17: non-root state stays None; only new fields are added"
+
+        exec_node = by_id[str(exec_id)]
+        assert exec_node["batch_id"] == "VAT55"
+
+    def test_node_metadata_never_pulls_in_another_orgs_batch_id(self, db, org, other_org):
+        from app.core.backend.temporal_dag_tracer import TemporalDAGTracer
+
+        shared_exec_id = uuid4()
+        raw_id = uuid4()
+        foreign_wip_id = uuid4()
+        now = datetime.now(UTC)
+        _plant_step_completed_event(db, org.id, execution_id=shared_exec_id, item_id=raw_id, role="consumed", when=now)
+        _plant_step_completed_event(
+            db,
+            other_org.id,
+            execution_id=shared_exec_id,
+            item_id=foreign_wip_id,
+            role="produced",
+            when=now,
+            execution_data={"Batch number": "OTHER-ORG-BATCH"},
+        )
+
+        tracer = TemporalDAGTracer(db, org.id, now + timedelta(minutes=1), max_depth=5)
+        result = tracer.trace(raw_id, "inventory_item")
+
+        node_ids = {n["id"] for n in result["nodes"]}
+        assert str(foreign_wip_id) not in node_ids
+        assert all(n.get("batch_id") != "OTHER-ORG-BATCH" for n in result["nodes"])
 
 
 class TestSourcemapObjectsTenantScoping:
