@@ -136,6 +136,39 @@ Scope: `app/api/routes/auth_routes.py` (1501 lines, whole file), `app/core/secur
   comment at each of the 3 sites. Did not touch the rule itself or `.semgrep/rules/learned.yml`'s
   ownership beyond this — it belongs to the other audit's finding history.
 
+- F6 [open, P0 security] `app/api/routes/auth_routes.py:707` (`verify_two_factor`) — no
+  brute-force throttle on 2FA code entry. Recorded here on 2026-09-19 by a findings-sweep
+  run while answering findings-index item 5c84c42e; it was not produced by a security-audit
+  pass, so this audit has not triaged or graded it yet.
+  repro/evidence: `/auth/verify-2fa` carries no `@limiter.limit` (only `/auth/signup` and
+  `/auth/login` do, `auth_routes.py:159,256`) and no attempt counter: `failed_login_attempts`
+  and `lock_account` are only ever called from `/auth/login` (`auth_routes.py:378-459`),
+  `AuthService.verify_totp` is a bare `pyotp.TOTP.verify(token, valid_window=1)`
+  (`auth_service.py:188-193`), and the backup-code path has no counter either. Observed with
+  a throwaway test (not committed): after a correct-password login for a 2FA-enabled user,
+  130 wrong 6-digit codes to `/auth/verify-2fa` in one pending session returned 130 x 401 —
+  no 429, no lockout, `failed_login_attempts` still 0, `locked_until` still None.
+  impact: anyone who already holds a user's password can guess codes without limit for the
+  pending window (`PENDING_2FA_EXPIRY_MINUTES`, 5 min, `auth_routes.py:135`). `valid_window=1`
+  accepts about 3 of the 10^6 six-digit codes, so success chance per pending session is
+  roughly 3 x guesses / 10^6 (illustratively ~9% at 100 guesses/s for the full window; the
+  request rate is not measured). A fresh pending session needs a fresh `/auth/login`, which
+  is itself limited to 5/min per ip:email, so this bounds the number of sessions, not the
+  guesses inside each one.
+  patch: none. Not started because it needs a policy decision, not just code — should a 2FA
+  failure count toward the existing login lockout (a caller who knows the password could then
+  lock the owner out), or get its own counter that ends the pending session? What limit
+  values? The existing limiter key (`get_rate_limit_key`, ip:email taken from the JSON body)
+  does not fit, since `/auth/verify-2fa` carries no email and would degrade to IP-only.
+  Whatever is chosen must keep the fail-closed relaxation gate described under Escalations
+  below. Route to fix-bug with the repro above as the failing test first; do not encode the
+  current unthrottled behaviour in any test (`tests/test_replay_app_contract.py` does not).
+  tracking: this report's header verdict (`patched`, 2026-07-26) predates F6 and is left as
+  the audit wrote it. The findings index skips reports whose header verdict is closed, so F6
+  is tracked as item 4 under "Security findings requiring owner action" in
+  `docs/core-load-performance-design.md`. A security-audit pass should triage it and update
+  this report's verdict.
+
 ## Escalations (not self-fixed — reported per `.agents/autonomy.md`)
 
 - **`USE_RELAXED_AUTH_RATE_LIMITS` / `ENVIRONMENT=test`.** The relaxed 1000/min rate limit
