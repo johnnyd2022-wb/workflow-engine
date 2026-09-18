@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
@@ -188,20 +188,10 @@ def _enrich_ingredient_codes(
             enriched.append(batch)
             continue
         combined = tuple(sorted(set(batch.ingredient_codes) | set(extra_codes)))
-        enriched.append(
-            wm.ProductionBatch(
-                global_vat=batch.global_vat,
-                product_line=batch.product_line,
-                batch_label=batch.batch_label,
-                steps=batch.steps,
-                vat_volume_l=batch.vat_volume_l,
-                vat_abv=batch.vat_abv,
-                bottlings=batch.bottlings,
-                ingredient_codes=combined,
-                base_vat=batch.base_vat,
-                extra_data=batch.extra_data,
-            )
-        )
+        # dataclasses.replace (not a field-by-field reconstruction) so every other field
+        # -- including pending_steps -- passes through unchanged even as the dataclass
+        # grows new fields later; a manual field list silently drops whatever it forgets.
+        enriched.append(replace(batch, ingredient_codes=combined))
     return enriched
 
 
@@ -400,6 +390,12 @@ def _batch_events(
         events.append(ngs_purchase)
     prev_step_id = exec_id
     for index, key in enumerate(step_keys):
+        if key in batch.pending_steps:
+            # Real, still-in-progress work: this step and every step after it (a suffix,
+            # enforced by _load_manifest) haven't happened yet. Stop completing steps here
+            # -- the execution and everything already done stay real; the rest is left
+            # PENDING in the target, same as a real user mid-process.
+            break
         step_id = f"step:{batch.marker}:{key}"
         depends: list[str] = [prev_step_id]
         if key in ("maceration", "rhubarb_maceration"):

@@ -377,3 +377,19 @@ exact) -- confirming the refactor is behaviour-preserving. Added
 `tests/test_whistlebird_replay_timeline.py::test_manifest_ngs_receipts_converts_only_ngs_records_and_ignores_other_ingredients`
 and `::test_ngs_allocation_pools_manifest_receipts_the_same_way_as_legacy_ones` to lock
 this in.
+
+## Real in-progress batches (VAT55/56/57/58/59) and the pending-step mechanism, 2026-09-18
+
+See `docs/whistlebird-import-decisions.md`'s Stage 10 for the full writeup (what changed
+in the sheet, why the fix needed a real code change and not just more manifest rows, a
+real `_enrich_ingredient_codes` bug the first live run caught, and the botanical-stock
+backfill it also needed). Summary: `ProductionBatch.pending_steps` + a manifest step spec
+of `{"pending": true}` lets a batch be imported with only the steps that have really
+happened completed, leaving the rest genuinely PENDING in the target -- same as a real
+user mid-process. Only the API-replay path supports this; `--rebuild-whistlebird-test`
+skips a pending batch entirely rather than falsely complete it.
+
+Verified against a full reset -> replay (684 events) -> timestamp-correction ->
+`--verify-import` cycle, all counts exact. 63 whistlebird tests pass, including 5 new
+ones covering the pending-step parsing, the suffix-validation error, `_batch_events`
+truncation, and the `_enrich_ingredient_codes` regression.

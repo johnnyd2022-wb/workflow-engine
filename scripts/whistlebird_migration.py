@@ -425,6 +425,13 @@ class ProductionBatch:
     ingredient_codes: tuple[str, ...]
     base_vat: int | None
     extra_data: dict[str, Any]
+    # Step keys (a suffix of this product line's step order) that haven't happened yet in
+    # real life -- the batch is genuinely still in progress. The replay creates the
+    # execution and completes every step up to but not including the first of these,
+    # leaving the rest PENDING in the target, exactly like a real user mid-process. Empty
+    # for a batch that's already fully complete through its last step (every existing
+    # manifest record before 2026-09-18).
+    pending_steps: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def workflow_name(self) -> str:
@@ -924,6 +931,15 @@ def _load_manifest(manifest_path: Path) -> tuple[list[ProductionBatch], list[dic
     human-reviewed JSON file that a founder edits directly to correct a date, quantity, or
     link before rerunning. A step whose ``confidence`` is not in STEP_DATE_CONFIDENCE, or a
     batch flagged ``exclude``, is skipped by the apply action and reported by the dry run.
+
+    A step spec of ``{"pending": true}`` instead of a date/confidence marks real,
+    still-in-progress work: that step and every step after it in the product line's order
+    haven't happened yet, so no date is required for any of them and the replay only
+    completes the batch up to that point, leaving the rest genuinely PENDING in the
+    target (see ``ProductionBatch.pending_steps``). ``pending`` must be a *suffix* of the
+    step order -- an earlier step marked pending while a later one isn't is a curation
+    error (a step can't be done before one that precedes it) and raises loudly rather
+    than silently reordering anything.
     """
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     rosella_conversion_by_base_vat = {
@@ -946,8 +962,17 @@ def _load_manifest(manifest_path: Path) -> tuple[list[ProductionBatch], list[dic
         raw_steps = entry.get("steps", {})
         steps: dict[str, BatchStep] = {}
         unresolved: list[str] = []
+        pending: list[str] = []
         for key in step_keys:
             spec = raw_steps.get(key) or {}
+            if spec.get("pending"):
+                pending.append(key)
+                continue
+            if pending:
+                raise ValueError(
+                    f"manifest batch {label}: step {key!r} follows a pending step but isn't itself "
+                    "pending -- pending steps must be a suffix of the product line's step order"
+                )
             confidence = spec.get("confidence", "derived")
             iso = spec.get("date")
             step_date = date.fromisoformat(iso) if iso else None
@@ -979,6 +1004,7 @@ def _load_manifest(manifest_path: Path) -> tuple[list[ProductionBatch], list[dic
                 bottlings=bottlings,
                 ingredient_codes=(),
                 base_vat=entry.get("rosella_base_vat"),
+                pending_steps=frozenset(pending),
                 extra_data={
                     "sheet_rows": entry.get("sheet_rows"),
                     "notes": entry.get("notes"),
@@ -1589,6 +1615,15 @@ def apply_production_batches(
                 .first()
             )
             if already:
+                skipped += 1
+                continue
+            if batch.pending_steps:
+                # This ORM-direct path always completes every step unconditionally (no
+                # pending-step awareness) -- for a batch with real, still-in-progress
+                # work (e.g. distilled but not yet bottled) that would wrongly mark an
+                # unfinished step COMPLETED. Only the API-replay path
+                # (scripts/whistlebird_replay.py) supports leaving a batch partially
+                # complete; skip here rather than fabricate a false completion.
                 skipped += 1
                 continue
 
@@ -2248,7 +2283,16 @@ def build_import_verification(
     if manifest_path and manifest_path.exists():
         manifest_batches, _ = _load_manifest(manifest_path)
     batches = _merge_batches(legacy, manifest_batches)
-    expected_by_workflow = Counter(batch.workflow_name for batch in batches)
+    # The ORM-direct rebuild path (apply_production_batches, include_replay_ngs_purchases
+    # =False) has no pending-step awareness and skips a still-in-progress batch entirely
+    # rather than wrongly complete it -- so its verification should expect no execution
+    # for one at all. Only the API-replay path actually creates the execution and leaves
+    # its pending steps incomplete, so only its verification should expect either.
+    countable_batches = batches if include_replay_ngs_purchases else [b for b in batches if not b.pending_steps]
+    expected_by_workflow = Counter(batch.workflow_name for batch in countable_batches)
+    expected_incomplete_steps = (
+        sum(len(batch.pending_steps) for batch in batches) if include_replay_ngs_purchases else 0
+    )
 
     if include_replay_ngs_purchases:
         # The API replay first drains dated real NGS receipts and only creates a
@@ -2368,7 +2412,7 @@ def build_import_verification(
             for name in (WILDFLOWER_WORKFLOW, SOLSTICE_WORKFLOW, ROSELLA_WORKFLOW)
         },
         "customs_lodgements": {"expected": expected_lodgements, "actual": actual_lodgements},
-        "incomplete_batch_steps": {"expected": 0, "actual": incomplete_steps},
+        "incomplete_batch_steps": {"expected": expected_incomplete_steps, "actual": incomplete_steps},
         "date_mismatches": {"step_dates": step_date_mismatches, "steps_stamped_on_run_date": stamped_today},
         "wording_leaks": wording_leaks,
     }
