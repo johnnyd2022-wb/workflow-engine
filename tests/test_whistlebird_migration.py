@@ -86,6 +86,47 @@ def test_product_workflows_have_the_agreed_step_shape(migration_module):
     assert rosella_steps[0] == "Rhubarb maceration" and "Distilling" not in rosella_steps
 
 
+def test_only_the_maceration_step_declares_inputs(migration_module):
+    """Step 1 is where botanicals must be traceable -- every other step stays input-free."""
+    for _shape, steps in migration_module.PRODUCT_WORKFLOWS.values():
+        for index, step in enumerate(steps):
+            inputs = step[4]
+            if index == 0 and step[0] in ("Maceration", "Rhubarb maceration"):
+                assert inputs, f"{step[0]} must declare inputs so botanicals are traceable"
+            else:
+                assert inputs == (), f"{step[0]} (step {index + 1}) should not declare inputs"
+
+
+def test_maceration_inputs_cover_the_tracked_botanicals_and_dont_fabricate_quantities(migration_module):
+    wildflower = migration_module.PRODUCT_WORKFLOWS["Wildflower gin"][1][0][4]
+    solstice = migration_module.PRODUCT_WORKFLOWS["Solstice gin"][1][0][4]
+    rosella = migration_module.PRODUCT_WORKFLOWS["Rosella gin"][1][0][4]
+
+    wildflower_by_name = {i["name"]: i for i in wildflower}
+    assert wildflower_by_name["Juniper Berries (Macedonian)"]["requires_inventory_selection"] is True
+    assert wildflower_by_name["Juniper Berries (Macedonian)"]["quantity"] == "59.4"
+    assert wildflower_by_name["Lemon juice"]["requires_inventory_selection"] is False
+
+    solstice_by_name = {i["name"]: i for i in solstice}
+    assert solstice_by_name["Szechuan pepper"]["requires_inventory_selection"] is True
+    assert solstice_by_name["Kawakawa leaf"]["requires_inventory_selection"] is False
+
+    # Rosella's base VAT and rhubarb have no fixed per-batch quantity on record -- never
+    # fabricate one (WB-018's policy), the template only marks whether it's selectable.
+    rosella_by_name = {i["name"]: i for i in rosella}
+    assert rosella_by_name["VAT batch"]["requires_inventory_selection"] is True
+    assert rosella_by_name["VAT batch"]["quantity"] is None
+    assert rosella_by_name["Rhubarb"]["requires_inventory_selection"] is False
+    assert rosella_by_name["Rhubarb"]["quantity"] is None
+
+    # Every input must carry a name/unit and an explicit selectability flag -- the shape
+    # Step.inputs and the execution-recording UI both expect (app/core/db/models/step.py).
+    for inputs in (wildflower, solstice, rosella):
+        for item in inputs:
+            assert item["name"] and item["unit"]
+            assert isinstance(item["requires_inventory_selection"], bool)
+
+
 # --- raw-material disambiguation ---------------------------------------------
 
 
