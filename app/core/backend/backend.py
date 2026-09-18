@@ -4540,6 +4540,54 @@ def trace_inventory_backward(inventory_item_id: str):
     ), 200
 
 
+@core_bp.route("/api/core/inventory/trace-graph/<inventory_item_id>", methods=["GET"])
+@requires_auth
+def trace_inventory_to_sale_graph(inventory_item_id: str):
+    """Trace any inventory item from its source material through production to sales.
+
+    The graph is bidirectional around the selected item, then augmented with terminal
+    sales nodes using the persisted FIFO allocations. A sale edge therefore identifies
+    the exact labelled final-product batch that fulfilled the invoice line.
+    """
+    from app.core.backend.dagtraversal import trace_bidirectional, validate_item_uuid
+    from app.features.crm.services.sales_traceability_service import append_sales_to_dag
+
+    org_id = UUID(g.org_id)
+    item_uuid, err = validate_item_uuid(inventory_item_id)
+    if err or item_uuid is None:
+        return jsonify({"error": err or "Invalid inventory item ID"}), 400
+    traced_item = (
+        db_session.query(InventoryItem).filter(InventoryItem.id == item_uuid, InventoryItem.org_id == org_id).first()
+    )
+    if not traced_item:
+        _log_trace_access_denied(org_id, item_uuid)
+        return jsonify({"error": "Inventory item not found"}), 404
+
+    traced = trace_bidirectional(
+        org_id,
+        db_session,
+        item_uuid,
+        include_quantity_filter=False,
+        root_item_id=item_uuid,
+    )
+    inventory_by_id = {item["id"]: item for item in (traced["forward"]["items"] + traced["backward"]["items"])}
+    connections_by_key = {
+        (edge["from_id"], edge["to_id"], edge.get("execution_id") or ""): edge
+        for edge in (traced["forward"]["connections"] + traced["backward"]["connections"])
+    }
+    inventory_items = list(inventory_by_id.values())
+    _hydrate_step_data(inventory_items, db_session, org_id)
+    sale_nodes, sale_edges = append_sales_to_dag(db_session, org_id, set(inventory_by_id))
+
+    return jsonify(
+        {
+            "traced_item": inventory_by_id.get(str(item_uuid)),
+            "all_items": inventory_items + sale_nodes,
+            "connections": list(connections_by_key.values()) + sale_edges,
+        }
+    ), 200
+
+
 @core_bp.route("/api/core/execution-metadata", methods=["GET"])
 @requires_auth
 def get_execution_metadata():
