@@ -922,6 +922,11 @@ def _load_manifest(manifest_path: Path) -> tuple[list[ProductionBatch], list[dic
     batch flagged ``exclude``, is skipped by the apply action and reported by the dry run.
     """
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    rosella_conversion_by_base_vat = {
+        int(entry["rosella_base_vat"]): str(entry.get("batch_label") or entry["global_vat"])
+        for entry in payload.get("records", [])
+        if entry.get("product") == "rosella" and entry.get("rosella_base_vat") is not None and not entry.get("exclude")
+    }
     batches: list[ProductionBatch] = []
     excluded: list[dict[str, Any]] = list(payload.get("excluded", []))
     for entry in payload.get("records", []):
@@ -973,6 +978,12 @@ def _load_manifest(manifest_path: Path) -> tuple[list[ProductionBatch], list[dic
                 extra_data={
                     "sheet_rows": entry.get("sheet_rows"),
                     "notes": entry.get("notes"),
+                    # The Rosella record's required base-VAT reference is the
+                    # authoritative link.  `diverted_to` is useful annotation when
+                    # present, but older curated rows only describe the diversion in
+                    # notes and must still produce consumable VAT-batch WIP.
+                    "diverted_to": entry.get("diverted_to")
+                    or rosella_conversion_by_base_vat.get(global_vat),
                     "from_manifest": True,
                 },
             )
@@ -2485,6 +2496,11 @@ def _arguments() -> argparse.Namespace:
         help="Create the per-product and trial workflows only for whistlebird_test.",
     )
     parser.add_argument(
+        "--setup-compliant-nz-alcohol",
+        action="store_true",
+        help="Enable the required NZ-alcohol Compliant profile for whistlebird_test.",
+    )
+    parser.add_argument(
         "--apply-raw-materials",
         action="store_true",
         help="Load prior-database purchases as dated inventory only into whistlebird_test.",
@@ -2528,6 +2544,7 @@ def _arguments() -> argparse.Namespace:
         arguments.dry_run_production,
         arguments.dry_run_manifest,
         arguments.setup_workflows,
+        arguments.setup_compliant_nz_alcohol,
         arguments.apply_raw_materials,
         arguments.apply_batches,
         arguments.apply_trials,
@@ -2543,6 +2560,7 @@ def _arguments() -> argparse.Namespace:
         arguments.confirm_reset_whistlebird_test,
         arguments.sync_test_admin_password,
         arguments.setup_workflows,
+        arguments.setup_compliant_nz_alcohol,
         arguments.apply_raw_materials,
         arguments.apply_batches,
         arguments.apply_trials,
@@ -2604,6 +2622,8 @@ def main() -> int:
         report = sync_whistlebird_test_admin_password(arguments.target_url, arguments.org_name, arguments.admin_email)
     elif arguments.setup_workflows:
         report = setup_product_workflows(arguments.target_url, arguments.org_name)
+    elif arguments.setup_compliant_nz_alcohol:
+        report = ensure_compliant_nz_alcohol_setup(arguments.target_url, arguments.org_name)
     elif arguments.apply_raw_materials:
         report = apply_raw_material_inventory(arguments.legacy_url, arguments.target_url, arguments.org_name)
     elif arguments.apply_batches:

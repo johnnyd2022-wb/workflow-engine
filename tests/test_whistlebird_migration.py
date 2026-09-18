@@ -279,6 +279,27 @@ def test_load_manifest_parses_the_per_batch_shape(migration_module, tmp_path):
     assert batch.bottlings[0]["bottles"] == "56.5000"
 
 
+def test_manifest_marks_any_rosella_base_vat_as_diverted_wip(migration_module, tmp_path):
+    rosella = {
+        "global_vat": 1028,
+        "batch_label": "VAT28",
+        "product": "rosella",
+        "rosella_base_vat": 28,
+        "steps": {
+            "rhubarb_maceration": {"date": "2025-07-24", "confidence": "clean"},
+            "aging": {"date": "2025-07-24", "confidence": "derived"},
+            "bottling": {"date": "2025-07-24", "confidence": "derived"},
+            "labelling": {"date": "2025-07-24", "confidence": "derived"},
+        },
+        "bottlings": [],
+    }
+
+    batches, excluded = migration_module._load_manifest(_write_manifest(tmp_path, [_solstice_batch(), rosella]))
+
+    assert not excluded
+    assert batches[0].extra_data["diverted_to"] == "VAT28"
+
+
 def test_load_manifest_excludes_unresolved_step_confidence(migration_module, tmp_path):
     bad = _solstice_batch()
     bad["steps"]["bottling"] = {"date": "2025-07-23", "confidence": "unresolved"}

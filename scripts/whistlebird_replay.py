@@ -381,6 +381,13 @@ def _vat_batch_volume_l(batch: wm.ProductionBatch) -> str | None:
     return None  # caller falls back to the documented last-resort placeholder
 
 
+def _aging_output_name(batch: wm.ProductionBatch) -> str:
+    """Name aging WIP according to its documented next production use."""
+    if batch.product_line == "rosella" or batch.extra_data.get("diverted_to"):
+        return "VAT batch"
+    return "Aged Gin"
+
+
 def _execute_create_execution(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
     batch = event.payload.get("batch")
     trial = event.payload.get("trial")
@@ -483,14 +490,14 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
 
         if produces_vat:
             volume = _vat_batch_volume_l(batch) or "1"
-            output_name = "VAT batch" if is_rosella else "Aged Gin"
+            output_name = _aging_output_name(batch)
             actual_outputs.append({"name": output_name, "quantity": volume, "unit": "L"})
 
         if produces_bottles:
             vat_item = None
             for s in steps:
                 if s["step_number"] < step_number:
-                    output_name = "VAT batch" if is_rosella else "Aged Gin"
+                    output_name = _aging_output_name(batch)
                     candidate = _produced_item_for_step(store, s["id"], output_name)
                     if candidate:
                         vat_item = candidate
