@@ -234,6 +234,186 @@ class TestDAGTracerExtraDataEnrichment:
         assert result["id"] == str(item.id)
         assert isinstance(result["id"], str)
 
+    def test_item_to_dict_promotes_batch_id_and_custom_prompts_from_extra_data(self):
+        """Pure unit: batch_id/custom_prompts are read straight off extra_data (already split
+        by _split_trace_prompts before _item_to_dict is called) -- no DB needed."""
+        from unittest.mock import MagicMock
+
+        item = MagicMock()
+        item.id = uuid4()
+        item.name = "Bottled Rhubarb Gin"
+        item.quantity = "10"
+        item.unit = "L"
+        item.inventory_type = InventoryType.FINAL_PRODUCT.value
+        item.supplier = None
+        item.purchase_date = None
+        item.supplier_batch_number = None
+        item.expiry_date = None
+        item.source_execution_id = None
+        item.source_execution_step_id = None
+        item.source_step_name = None
+        item.created_at = None
+        extra_data = {"batch_id": "VAT55", "custom_prompts": {"Botanical origin": "Wairarapa rhubarb"}}
+        result = DAGTracer._item_to_dict(item, extra_data, None)
+        assert result["batch_id"] == "VAT55"
+        assert result["custom_prompts"] == {"Botanical origin": "Wairarapa rhubarb"}
+
+    def test_item_to_dict_batch_id_defaults_to_none_without_a_batch_prompt(self):
+        from unittest.mock import MagicMock
+
+        item = MagicMock()
+        item.id = uuid4()
+        item.name = "Raw material"
+        item.quantity = "5"
+        item.unit = "kg"
+        item.inventory_type = InventoryType.RAW_MATERIAL.value
+        item.supplier = None
+        item.purchase_date = None
+        item.supplier_batch_number = None
+        item.expiry_date = None
+        item.source_execution_id = None
+        item.source_execution_step_id = None
+        item.source_step_name = None
+        item.created_at = None
+        result = DAGTracer._item_to_dict(item, {}, None)
+        assert result["batch_id"] is None
+        assert result["custom_prompts"] == {}
+
+
+class TestSplitTracePrompts:
+    """Pure unit tests for _split_trace_prompts -- the "Batch number" / custom-prompt split
+    that create-process-modal.js's isBatchNumber and flows2-steps.js's
+    isTraceabilityOrSystemPrompt already use client-side to distinguish the reserved
+    compliance/traceability prompts from an org's own custom ones."""
+
+    def test_extracts_batch_number_case_insensitively(self):
+        from app.core.backend.dagtraversal import _split_trace_prompts
+
+        batch_id, custom = _split_trace_prompts({"Batch number": "VAT55"})
+        assert batch_id == "VAT55"
+        assert custom == {}
+
+    def test_separates_custom_prompts_from_batch_and_evidence(self):
+        from app.core.backend.dagtraversal import _split_trace_prompts
+
+        batch_id, custom = _split_trace_prompts(
+            {
+                "Batch number": "VAT55",
+                "Evidence": "file-ref-123",
+                "Botanical origin": "Wairarapa rhubarb",
+                "Operator notes": "Ran long by 10 minutes",
+            }
+        )
+        assert batch_id == "VAT55"
+        assert custom == {"Botanical origin": "Wairarapa rhubarb", "Operator notes": "Ran long by 10 minutes"}
+
+    def test_excludes_internal_audit_keys_from_custom_prompts(self):
+        from app.core.backend.dagtraversal import _split_trace_prompts
+
+        batch_id, custom = _split_trace_prompts(
+            {
+                "completed_by": "op@test.com",
+                "completed_by_email": "op@test.com",
+                "completed_by_user_id": str(uuid4()),
+                "completed_at": "2026-01-01",
+                "execution_errors": ["boom"],
+                "execution_warnings": ["careful"],
+            }
+        )
+        assert batch_id is None
+        assert custom == {}
+
+    def test_no_batch_prompt_configured_returns_none(self):
+        from app.core.backend.dagtraversal import _split_trace_prompts
+
+        batch_id, custom = _split_trace_prompts({"Operator notes": "All good"})
+        assert batch_id is None
+        assert custom == {"Operator notes": "All good"}
+
+    def test_empty_and_null_values_are_skipped(self):
+        from app.core.backend.dagtraversal import _split_trace_prompts
+
+        batch_id, custom = _split_trace_prompts({"Batch number": "", "Blank field": None, "Kept": "value"})
+        assert batch_id is None
+        assert custom == {"Kept": "value"}
+
+
+class TestDAGTracerBatchIdEndToEnd:
+    """Real DB: batch_id/custom_prompts flow end-to-end from ExecutionRepository.complete_step's
+    execution_data through _enrich_items_bulk, the same production write path build_linear_dag
+    uses (not a synthetic/mocked shortcut)."""
+
+    def test_enrich_items_bulk_surfaces_batch_id_and_custom_prompts_for_produced_item(self, db, synthetic_org):
+        from app.core.db.models.execution_step import ExecutionStep
+        from app.core.db.models.process import ProcessCategory
+        from app.core.db.repositories.execution_repo import ExecutionRepository
+        from app.core.db.repositories.inventory_repo import InventoryRepository
+        from app.core.db.repositories.process_repo import ProcessRepository
+
+        org_id = synthetic_org
+        process_repo = ProcessRepository(db)
+        inv_repo = InventoryRepository(db)
+        exec_repo = ExecutionRepository(db)
+
+        process = process_repo.create_process(
+            org_id=org_id,
+            name="Batch Id Test Process",
+            description="R1 -> W1",
+            category=ProcessCategory.MANUFACTURING,
+            is_draft=False,
+        )
+        process_repo.add_step(
+            process_id=process.id,
+            org_id=org_id,
+            step_number=1,
+            position=1000,
+            name="Step1",
+            inputs=[{"name": "R1", "quantity": 1, "unit": "kg"}],
+            outputs=[{"name": "W1", "quantity": 1, "unit": "kg"}],
+            execution_prompts=[{"label": "Batch number", "type": "text", "required": True}],
+        )
+        r1 = inv_repo.create_inventory_item(
+            org_id=org_id,
+            name="R1",
+            quantity="1",
+            unit="kg",
+            inventory_type=InventoryType.RAW_MATERIAL.value,
+            source_execution_id=None,
+            source_execution_step_id=None,
+        )
+        execution = exec_repo.create_execution(org_id=org_id, process_id=process.id)
+        exec_step = (
+            db.query(ExecutionStep)
+            .filter(ExecutionStep.execution_id == execution.id, ExecutionStep.step_number == 1)
+            .one()
+        )
+        exec_repo.complete_step(
+            execution_step_id=exec_step.id,
+            org_id=org_id,
+            actual_inputs=[{"name": "R1", "quantity": 1, "unit": "kg", "inventory_item_id": str(r1.id)}],
+            actual_outputs=[{"name": "W1", "quantity": 1, "unit": "kg"}],
+            execution_data={"Batch number": "VAT55", "Botanical origin": "Wairarapa rhubarb"},
+        )
+        w1 = inv_repo.create_inventory_item(
+            org_id=org_id,
+            name="W1",
+            quantity="1",
+            unit="kg",
+            inventory_type=InventoryType.WORK_IN_PROGRESS.value,
+            source_execution_id=execution.id,
+            source_execution_step_id=exec_step.id,
+        )
+
+        tracer = DAGTracer(org_id=org_id, session=db)
+        enriched = tracer._enrich_items_bulk([w1])
+        assert len(enriched) == 1
+        assert enriched[0]["batch_id"] == "VAT55"
+        assert enriched[0]["custom_prompts"] == {"Botanical origin": "Wairarapa rhubarb"}
+
+        # Raw material is untouched -- no source_execution_step_id, so no batch_id derived.
+        enriched_raw = tracer._enrich_items_bulk([r1])
+        assert enriched_raw[0]["batch_id"] is None
+
 
 class TestDAGTracerTraverse:
     """Tests for unified traverse() engine (real DB)."""

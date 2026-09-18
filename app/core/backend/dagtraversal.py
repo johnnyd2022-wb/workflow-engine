@@ -47,6 +47,49 @@ except ImportError:
 # Internal fields to exclude from execution_prompts
 _EXECUTION_PROMPTS_INTERNAL = {"completed_by_email", "completed_by_user_id", "completed_at"}
 
+# Reserved execution_prompts labels the process/step builder treats as system prompts
+# (create-process-modal.js's isBatchNumber / flows2-steps.js's isTraceabilityOrSystemPrompt),
+# not free-form user metadata. "Batch number" is promoted to its own `batch_id` trace field;
+# "Evidence" is surfaced elsewhere (execution evidence records), not as prompt metadata.
+_SYSTEM_PROMPT_LABELS = {"batch number", "evidence"}
+
+# Same audit/identity keys backend.py's _EXECUTION_DATA_TRACE_KEYS excludes from user
+# prompts. Deliberately not reusing the narrower, pre-existing _EXECUTION_PROMPTS_INTERNAL
+# above (which still gates the legacy execution_prompts field, unchanged) -- batch_id and
+# custom_prompts are new fields and should cleanly exclude completed_by/execution_errors/
+# execution_warnings too, not just repeat that field's known gap.
+_TRACE_METADATA_INTERNAL_KEYS = {
+    "completed_by",
+    "completed_by_email",
+    "completed_by_user_id",
+    "completed_at",
+    "execution_errors",
+    "execution_warnings",
+}
+
+
+def _split_trace_prompts(execution_data: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
+    """Split a completed step's raw execution_data into (batch_id, custom_prompts).
+
+    batch_id is the answer to the step's reserved "Batch number" prompt, if configured —
+    the same compliance/traceability convention the process builder already uses
+    (deriveTraceabilityModes in create-process-modal.js). custom_prompts is everything
+    else the org added via its own execution prompts, for display on trace nodes.
+    """
+    batch_id: str | None = None
+    custom_prompts: dict[str, Any] = {}
+    for key, value in execution_data.items():
+        if key in _TRACE_METADATA_INTERNAL_KEYS or value is None or value == "":
+            continue
+        label = key.strip().lower()
+        if label == "batch number":
+            batch_id = value
+        elif label in _SYSTEM_PROMPT_LABELS:
+            continue
+        else:
+            custom_prompts[key] = value
+    return batch_id, custom_prompts
+
 
 def _traverse_span_attrs(self, start_nodes: list[UUID], direction: str, *_, **kwargs) -> dict[str, Any]:
     return {
@@ -717,6 +760,12 @@ class DAGTracer:
                     match = next((o for o in step.actual_outputs if o.get("name") == item.name), None)
                     if match:
                         extra["variable_output"] = match
+            if step and step.execution_data and "batch_id" not in extra:
+                batch_id, custom_prompts = _split_trace_prompts(step.execution_data)
+                if batch_id:
+                    extra["batch_id"] = batch_id
+                if custom_prompts:
+                    extra["custom_prompts"] = custom_prompts
             process_name = None
             if item.source_execution_id:
                 ex = exec_by_id.get(item.source_execution_id)
@@ -750,6 +799,11 @@ class DAGTracer:
             "source_step_name": item.source_step_name,
             "process_name": process_name,
             "created_at": item.created_at.isoformat() if item.created_at else None,
+            # Production batch id, from the step's "Batch number" compliance/traceability
+            # prompt (see _split_trace_prompts) — distinct from supplier_batch_number,
+            # which is the raw-material supplier's own lot code.
+            "batch_id": extra_data.get("batch_id"),
+            "custom_prompts": extra_data.get("custom_prompts") or {},
             "extra_data": extra_data,
         }
 

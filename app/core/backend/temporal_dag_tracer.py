@@ -7,11 +7,44 @@ querying current mutable state. Used by the sourcemap temporal replay feature.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.observability import traced
+
+# Kept as a local copy rather than importing from dagtraversal.py — the two tracers are
+# siblings with no existing cross-import. Matches dagtraversal._TRACE_METADATA_INTERNAL_KEYS
+# / backend._EXECUTION_DATA_TRACE_KEYS exactly, so batch_id/custom_prompts mean the same
+# thing whether they came from the current-state trace or this temporal one.
+_TRACE_METADATA_INTERNAL_KEYS = {
+    "completed_by",
+    "completed_by_email",
+    "completed_by_user_id",
+    "completed_at",
+    "execution_errors",
+    "execution_warnings",
+}
+_SYSTEM_PROMPT_LABELS = {"batch number", "evidence"}
+
+
+def _split_temporal_prompts(execution_data: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
+    """Same "Batch number" / custom-prompt split as dagtraversal._split_trace_prompts,
+    applied to an execution.step_completed event's execution_data payload."""
+    batch_id: str | None = None
+    custom_prompts: dict[str, Any] = {}
+    for key, value in execution_data.items():
+        if key in _TRACE_METADATA_INTERNAL_KEYS or value is None or value == "":
+            continue
+        label = key.strip().lower()
+        if label == "batch number":
+            batch_id = value
+        elif label in _SYSTEM_PROMPT_LABELS:
+            continue
+        else:
+            custom_prompts[key] = value
+    return batch_id, custom_prompts
 
 
 class TemporalDAGTracer:
@@ -105,7 +138,8 @@ class TemporalDAGTracer:
         filtered_edges = [e for e in edges if e["from"] in connected and e["to"] in connected]
 
         root_state = self._snapshot_at(root_id)
-        nodes = self._build_node_list(connected, root_str, root_type, root_state)
+        node_metadata = self._collect_node_metadata(step_events)
+        nodes = self._build_node_list(connected, root_str, root_type, root_state, node_metadata)
 
         timeline = self._build_timeline(connected)
 
@@ -134,14 +168,75 @@ class TemporalDAGTracer:
         )
         return ev.payload if ev else None
 
+    def _collect_node_metadata(self, step_events: list) -> dict[str, dict[str, Any]]:
+        """Per-node batch_id/custom_prompts, keyed by item_id or execution_id, sourced from
+        the same execution.step_completed events already fetched to build edges — no extra
+        query. An execution node can accumulate metadata from more than one of its steps;
+        later (chronologically later, since step_events is created_at-ascending) non-empty
+        values win, matching the "last completed step" convention sourcemap.js already uses
+        for completed_by."""
+        metadata: dict[str, dict[str, Any]] = {}
+
+        def _merge(node_id: str, batch_id: str | None, custom_prompts: dict[str, Any]) -> None:
+            if not batch_id and not custom_prompts:
+                return
+            entry = metadata.setdefault(node_id, {})
+            if batch_id:
+                entry["batch_id"] = batch_id
+            if custom_prompts:
+                entry.setdefault("custom_prompts", {}).update(custom_prompts)
+
+        for ev in step_events:
+            p = ev.payload or {}
+            execution_data = p.get("execution_data") or {}
+            if not execution_data:
+                continue
+            batch_id, custom_prompts = _split_temporal_prompts(execution_data)
+            if not batch_id and not custom_prompts:
+                continue
+            exec_id = p.get("execution_id")
+            if exec_id:
+                _merge(str(exec_id), batch_id, custom_prompts)
+            for prod in p.get("items_produced") or []:
+                item_id = prod.get("item_id")
+                if item_id:
+                    _merge(str(item_id), batch_id, custom_prompts)
+        return metadata
+
     def _build_node_list(
-        self, connected: set[str], root_str: str, root_type: str, root_state: dict | None
+        self,
+        connected: set[str],
+        root_str: str,
+        root_type: str,
+        root_state: dict | None,
+        node_metadata: dict[str, dict[str, Any]] | None = None,
     ) -> list[dict]:
-        nodes: list[dict] = [{"id": root_str, "type": root_type, "is_root": True, "state": root_state}]
+        node_metadata = node_metadata or {}
+        root_meta = node_metadata.get(root_str, {})
+        nodes: list[dict] = [
+            {
+                "id": root_str,
+                "type": root_type,
+                "is_root": True,
+                "state": root_state,
+                "batch_id": root_meta.get("batch_id"),
+                "custom_prompts": root_meta.get("custom_prompts") or {},
+            }
+        ]
         for nid in connected:
             if nid == root_str:
                 continue
-            nodes.append({"id": nid, "type": None, "is_root": False, "state": None})
+            meta = node_metadata.get(nid, {})
+            nodes.append(
+                {
+                    "id": nid,
+                    "type": None,
+                    "is_root": False,
+                    "state": None,
+                    "batch_id": meta.get("batch_id"),
+                    "custom_prompts": meta.get("custom_prompts") or {},
+                }
+            )
         return nodes
 
     def _build_timeline(self, connected: set[str]) -> list[dict]:

@@ -903,7 +903,8 @@
     div.className = 'sm-impact-header';
 
     const typeClass = smTypeClass(tracedItem.inventory_type);
-    const batchText = tracedItem.supplier_batch_number ? `Batch ${tracedItem.supplier_batch_number}` : '';
+    const tracedBatch = tracedItem.batch_id || tracedItem.supplier_batch_number;
+    const batchText = tracedBatch ? `Batch ${tracedBatch}` : '';
 
     const uniqueProcesses = new Set(groups.map(g => g.processId).filter(Boolean)).size || groups.length;
     const execCount = groups.length;
@@ -1077,6 +1078,7 @@
     container.className = 'sm-tree-container';
 
     const rootType = smTypeClass(tracedItem.inventory_type);
+    const rootBatch = tracedItem.batch_id || tracedItem.supplier_batch_number;
     const rootDiv = document.createElement('div');
     rootDiv.className = 'sm-tree-root';
     // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
@@ -1084,7 +1086,7 @@
       <div class="sm-tree-node sm-tree-node--${rootType}${smIsCheckNeeded(tracedItem.id) ? ' sm-tree-node--check' : ''}">
         <span class="sm-type-badge sm-type-badge--${rootType}">${smTypeLabelShort(tracedItem.inventory_type)}</span>
         <span class="sm-tree-node__name">${smEsc(tracedItem.name || 'Unknown')}</span>
-        ${tracedItem.supplier_batch_number ? `<span class="sm-tree-node__meta">Batch: ${smEsc(tracedItem.supplier_batch_number)}</span>` : ''}
+        ${rootBatch ? `<span class="sm-tree-node__meta">Batch: ${smEsc(rootBatch)}</span>` : ''}
         ${tracedItem.quantity != null ? `<span class="sm-tree-node__meta">${smFmtQty(tracedItem.quantity)}${tracedItem.unit ? ' ' + smEsc(tracedItem.unit) : ''}</span>` : ''}
       </div>
     `;
@@ -1222,11 +1224,13 @@
   function smBuildTreeNode(item, type, isShared, ioTag) {
     const div = document.createElement('div');
     div.className = `sm-tree-node sm-tree-node--${type}${smIsCheckNeeded(item.id) ? ' sm-tree-node--check' : ''}`;
+    const nodeBatch = item.batch_id || item.supplier_batch_number;
     // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     div.innerHTML = `
       ${ioTag ? `<span class="sm-tl-io-tag sm-tl-io-tag--${ioTag}">${ioTag === 'in' ? 'In' : 'Out'}</span>` : ''}
       <span class="sm-type-badge sm-type-badge--${type}">${smTypeLabelShort(item.inventory_type)}</span>
       <span class="sm-tree-node__name">${smEsc(item.name || 'Unknown')}</span>
+      ${nodeBatch ? `<span class="sm-tree-node__meta">Batch: ${smEsc(nodeBatch)}</span>` : ''}
       ${item.quantity != null ? `<span class="sm-tree-node__meta">${smFmtQty(item.quantity)}${item.unit ? ' ' + smEsc(item.unit) : ''}</span>` : ''}
       ${isShared ? '<span class="sm-shared-pill">shared</span>' : ''}
       ${smIsCheckNeeded(item.id) ? '<span class="sm-check-pill">⚠ check</span>' : ''}
@@ -1322,7 +1326,11 @@
     const currentQty = item.quantity != null ? `${smFmtQty(item.quantity)}${item.unit ? ' ' + item.unit : ''}` : null;
     const displayQty = historicalQty !== null ? historicalQty : currentQty;
     const qty = displayQty;
-    const batch = item.supplier_batch_number ? `Batch ${item.supplier_batch_number}` : null;
+    // batch_id (production batch, from the step's "Batch number" compliance/traceability
+    // prompt) takes precedence over supplier_batch_number (raw-material supplier lot code)
+    // when both happen to be set on historical/imported data.
+    const displayBatch = item.batch_id || item.supplier_batch_number;
+    const batch = displayBatch ? `Batch ${displayBatch}` : null;
     const summary = [batch, displayQty].filter(Boolean).join(' · ');
 
     const pills = [];
@@ -1338,7 +1346,7 @@
     const rows = [];
     if (item.inventory_type) rows.push(['Type', smTypeLabel(item.inventory_type), false]);
     if (item.supplier) rows.push(['Supplier', item.supplier, false]);
-    if (item.supplier_batch_number) rows.push(['Batch number', item.supplier_batch_number, false]);
+    if (displayBatch) rows.push(['Batch number', displayBatch, false]);
     if (historicalQty !== null) {
       rows.push(['Recorded qty', historicalQty, false]);
       if (currentQty && currentQty !== historicalQty) rows.push(['Current stock', currentQty, false]);
@@ -1360,6 +1368,16 @@
 
     // Check reason
     if (checkReason) rows.push(['Check reason', checkReason, true]);
+
+    // Any other org-defined execution prompt answers for the step that produced this item
+    // (e.g. a custom compliance field) — everything except the reserved Batch number /
+    // Evidence prompts, which get their own dedicated treatment above / elsewhere.
+    const customPrompts = item.custom_prompts || (item.extra_data && item.extra_data.custom_prompts) || {};
+    Object.keys(customPrompts).forEach((label) => {
+      const value = customPrompts[label];
+      if (value === null || value === undefined || value === '') return;
+      rows.push([label, Array.isArray(value) ? value.join(', ') : value, false]);
+    });
 
     const detailGridHtml = rows.map(([label, value, isWarn]) =>
       `<dt class="sm-detail-label">${smEsc(label)}</dt>
@@ -1774,7 +1792,7 @@
         <td>${smEsc(item.name || '—')}</td>
         <td><span class="sm-type-badge sm-type-badge--${typeClass}">${smEsc(smTypeLabel(item.inventory_type))}</span></td>
         <td>${qty}</td>
-        <td>${smEsc(item.supplier_batch_number || '—')}</td>
+        <td>${smEsc(item.batch_id || item.supplier_batch_number || '—')}</td>
         <td>${smEsc(item.supplier || '—')}</td>
         <td>${smFmtDate(item.expiry_date)}</td>
       `;
