@@ -5,6 +5,7 @@ function crmConfiguration() {
     error: null,
     xero: { connected: false },
     syncing: false,
+    syncSummary: null,
     disconnecting: false,
     showDisconnectModal: false,
     mappings: [],
@@ -73,7 +74,12 @@ function crmConfiguration() {
       if (this.syncing) return;
       this.syncing = true;
       try {
-        await CRMAPI.triggerSync();
+        const result = await CRMAPI.triggerSync();
+        this.syncSummary = {
+          allocated: Number(result?.sales_allocated || 0),
+          unmapped: Number(result?.sales_unmapped || 0),
+          insufficientStock: Number(result?.sales_insufficient_stock || 0),
+        };
         this.xero = await CRMAPI.getXeroStatus();
       } catch (e) {
         this.error = e.message || 'Sync failed.';

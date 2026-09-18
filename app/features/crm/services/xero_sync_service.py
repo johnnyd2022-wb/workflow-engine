@@ -23,6 +23,9 @@ logger = get_logger(__name__)
 class SyncResult:
     contacts_synced: int = 0
     invoices_synced: int = 0
+    sales_allocated: int = 0
+    sales_unmapped: int = 0
+    sales_insufficient_stock: int = 0
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -85,6 +88,9 @@ class XeroSyncService:
                 ):
                     invoices_result = self._sync_invoices(api_client, org_id, tenant.xero_tenant_id, incremental=False)
                 result.invoices_synced = invoices_result.invoices_synced
+                result.sales_allocated = invoices_result.sales_allocated
+                result.sales_unmapped = invoices_result.sales_unmapped
+                result.sales_insufficient_stock = invoices_result.sales_insufficient_stock
                 result.errors.extend(invoices_result.errors)
             except XeroTokenExpiredError:
                 raise
@@ -135,6 +141,9 @@ class XeroSyncService:
                         api_client, org_id, tenant.xero_tenant_id, incremental=True, modified_after=modified_after
                     )
                 result.invoices_synced = r.invoices_synced
+                result.sales_allocated = r.sales_allocated
+                result.sales_unmapped = r.sales_unmapped
+                result.sales_insufficient_stock = r.sales_insufficient_stock
                 result.errors.extend(r.errors)
             except Exception as e:
                 logger.exception("xero_incremental_invoice_sync_failed", org_id=str(org_id))
@@ -304,6 +313,12 @@ class XeroSyncService:
                 logger.info("xero_sync_marked_deleted", org_id=str(org_id), deleted_count=deleted_count)
 
         self.db.flush()
+        from app.features.crm.services.sales_traceability_service import SalesTraceabilityService
+
+        allocation_summary = SalesTraceabilityService(self.db).reconcile_org(org_id)
+        result.sales_allocated = allocation_summary.get("allocated", 0)
+        result.sales_unmapped = allocation_summary.get("unmapped", 0)
+        result.sales_insufficient_stock = allocation_summary.get("insufficient_stock", 0)
         return result
 
     # ------------------------------------------------------------------
@@ -342,6 +357,9 @@ class XeroSyncService:
             "status": status,
             "contacts_synced": int(result.contacts_synced or 0),
             "invoices_synced": int(result.invoices_synced or 0),
+            "sales_allocated": int(result.sales_allocated or 0),
+            "sales_unmapped": int(result.sales_unmapped or 0),
+            "sales_insufficient_stock": int(result.sales_insufficient_stock or 0),
             "errors_count": len(result.errors),
         }
         if result.errors:
