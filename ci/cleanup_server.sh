@@ -21,8 +21,8 @@ if [ -f /tmp/flask.pid ]; then
   fi
   
   rm -f /tmp/flask.pid
+  rm -f /tmp/flask.base-url
   echo "✅ Flask server stopped"
 else
   echo "No Flask server PID file found, server may not have been running"
 fi
-

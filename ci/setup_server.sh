@@ -6,6 +6,14 @@ set -e
 
 echo "🚀 Setting up Flask application server..."
 
+APP_PORT="$(python3 -c "import configparser; config = configparser.ConfigParser(); config.read('app/config/test.ini'); print(config.getint('app', 'port'))")"
+case "$APP_PORT" in
+  ''|*[!0-9]*)
+    echo "❌ Could not read a numeric test app port from app/config/test.ini"
+    exit 1
+    ;;
+esac
+
 # Generate self-signed certificate for HTTPS (tests require HTTPS)
 echo "Generating self-signed SSL certificate..."
 mkdir -p app/tls
@@ -33,12 +41,13 @@ PYTHONPATH="$APP_DIR:${PYTHONPATH:-}" ENVIRONMENT=test uv run python -c "import 
 PYTHONPATH="$APP_DIR:${PYTHONPATH:-}" ENVIRONMENT=test uv run python -m app.main >> /tmp/flask.log 2>&1 &
 SERVER_PID=$!
 echo $SERVER_PID > /tmp/flask.pid
+printf 'https://localhost:%s\n' "$APP_PORT" > /tmp/flask.base-url
 echo "Flask server started with PID: $SERVER_PID"
 
 # Wait for server to be ready (check health endpoint)
 echo "Waiting for Flask server to start..."
 for i in {1..60}; do
-  if curl -k -f -s https://localhost:8005/auth/me > /dev/null 2>&1; then
+  if curl -k -f -s "https://localhost:$APP_PORT/healthcheck" > /dev/null 2>&1; then
     echo "✅ Flask server is ready!"
     exit 0
   fi
@@ -50,4 +59,3 @@ for i in {1..60}; do
   fi
   sleep 1
 done
-
