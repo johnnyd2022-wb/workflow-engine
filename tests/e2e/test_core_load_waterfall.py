@@ -124,6 +124,42 @@ def test_core_tabs_follow_browser_back_and_forward_without_reloading_data(logged
     assert sum(1 for c in calls if c == "executions" or c.startswith("executions?")) == 1, calls
 
 
+@pytest.mark.parametrize(
+    ("tab", "loaded_calls"),
+    [
+        ("inventory", lambda calls: sum(1 for c in calls if c == "inventory" or c.startswith("inventory?"))),
+        ("workflows", lambda calls: sum(1 for c in calls if c == "executions" or c.startswith("executions?"))),
+    ],
+)
+def test_core_detail_tabs_reload_after_boosted_return(logged_in_page, tab, loaded_calls):
+    """A swapped-in Core panel must not inherit the old panel's lazy-load cache."""
+    page = logged_in_page
+    calls = _core_api_calls(page)
+
+    page.goto("/core/dashboard")
+    page.wait_for_selector("[data-dashboard-root]")
+    _wait(page)
+
+    page.locator('a.nav-link[href="/core"]').click()
+    page.wait_for_selector(f'[data-core2-tab-target="{tab}"]')
+    _wait(page)
+    page.click(f'[data-core2-tab-target="{tab}"]')
+    _wait(page)
+    first_load_count = loaded_calls(calls)
+    assert first_load_count == 1, calls
+
+    page.locator('a.nav-link[href="/core/dashboard"]').click()
+    page.wait_for_selector("[data-dashboard-root]")
+    _wait(page)
+    page.locator('a.nav-link[href="/core"]').click()
+    page.wait_for_selector(f'[data-core2-tab-target="{tab}"]')
+    _wait(page)
+    page.click(f'[data-core2-tab-target="{tab}"]')
+    _wait(page)
+
+    assert loaded_calls(calls) == first_load_count + 1, calls
+
+
 def test_core_overview_is_deterministic_and_traceability_is_progressively_disclosed(logged_in_page):
     """A plain /core is an operational landing page, not the last browser's tab state."""
     page = logged_in_page
