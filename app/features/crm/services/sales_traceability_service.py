@@ -178,16 +178,29 @@ class SalesTraceabilityService:
         strict: bool,
     ) -> ProductMapping | None:
         values = [str(value).strip() for value in (line.description, line.item_code) if str(value or "").strip()]
-        matches = []
+        exact_matches = []
+        contains_matches = []
         for mapping in mappings:
             pattern = mapping.xero_description_pattern.strip()
             if not pattern:
                 continue
             exact = any(value.casefold() == pattern.casefold() for value in values)
-            contains = any(pattern.casefold() in value.casefold() for value in values)
-            if exact or (not strict and mapping.match_type in {"contains", "alias"} and contains):
-                matches.append(mapping)
-        return matches[0] if len(matches) == 1 else None
+            if exact and mapping.match_type in {"exact", "alias"}:
+                exact_matches.append(mapping)
+                continue
+            if (
+                not strict
+                and mapping.match_type in {"contains", "alias"}
+                and any(pattern.casefold() in value.casefold() for value in values)
+            ):
+                contains_matches.append(mapping)
+
+        # A precise product rule must take precedence over a broad phrase such as
+        # "Wildflower". Otherwise adding a partial rule would make existing exact
+        # mappings ambiguous instead of extending coverage to price variants.
+        if exact_matches:
+            return exact_matches[0] if len(exact_matches) == 1 else None
+        return contains_matches[0] if len(contains_matches) == 1 else None
 
 
 def _positive_quantity(raw: Any) -> Decimal | None:

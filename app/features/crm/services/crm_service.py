@@ -965,12 +965,14 @@ class CRMService:
             raise ValueError("A maximum of 50 mappings may be saved at once")
 
         prepared = [_prepare_mapping_data(data) for data in mappings_data]
-        keys = {(data["biz_e_product_name"], data["xero_description_pattern"]) for data in prepared}
+        keys = {
+            (data["biz_e_product_name"].casefold(), data["xero_description_pattern"].casefold()) for data in prepared
+        }
         if len(keys) != len(prepared):
             raise ValueError("The review list contains duplicate mappings")
 
         existing_keys = {
-            (mapping.biz_e_product_name, mapping.xero_description_pattern)
+            (mapping.biz_e_product_name.casefold(), mapping.xero_description_pattern.casefold())
             for mapping in (self.db.query(ProductMapping).filter(ProductMapping.org_id == org_id).all())
         }
         if keys & existing_keys:

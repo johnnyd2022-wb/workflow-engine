@@ -212,7 +212,8 @@
                   <option :value="opt.description || opt.item_code" x-text="opt.display_label"></option>
                 </template>
               </datalist>
-              <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Use a distinctive shared phrase. Disable exact-only matching above before syncing.</p>
+              <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Use a distinctive shared phrase, such as Wildflower, to cover Xero price variants.</p>
+              <p x-show="traceConfig.strict" x-cloak style="margin:4px 0 0; font-size:.74rem; color:#b45309;">Saving this mapping will enable partial matching for the next Xero sync.</p>
             </div>
           </template>
         </div>
@@ -221,9 +222,12 @@
         <label class="crm-form-label">Notes (optional)</label>
         <input class="crm-form-input" x-model="mappingDraft.notes" placeholder="Internal note">
       </div>
-      <div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="queueMapping()" :disabled="!mappingDraft.product_key || !mappingDraft.xero_description_pattern">
           Add to review
+        </button>
+        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveMappings()" :disabled="savingMapping || pendingMappings.length === 0">
+          <span x-text="savingMapping ? 'Saving mappings…' : 'Save mappings'"></span>
         </button>
       </div>
     </div>
@@ -241,11 +245,7 @@
             </div>
           </template>
         </div>
-        <div style="margin-top:10px; display:flex; justify-content:flex-end;">
-          <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveMappings()" :disabled="savingMapping">
-            <span x-text="savingMapping ? 'Saving mappings…' : `Save ${pendingMappings.length} mapping${pendingMappings.length === 1 ? '' : 's'}`"></span>
-          </button>
-        </div>
+        <p style="margin:10px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Review entries here, then use Save mappings above. Nothing is sent to the system until you save.</p>
       </div>
     </template>
 
@@ -261,7 +261,7 @@
           <span class="crm-mapping-xero" x-text="m.xero_description_pattern"></span>
           <span class="crm-badge crm-badge--active" x-text="m.match_type || 'exact'"></span>
           <span class="crm-badge" :class="mappingStatusClass(m)" x-text="m.mapping_status || 'active'"></span>
-          <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="deleteMapping(m.id)">Delete</button>
+          <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="openDeleteMappingModal(m)">Delete</button>
         </div>
       </template>
     </div>
@@ -282,6 +282,25 @@
         <button type="button" class="crm-btn crm-btn--secondary" @click="closeDisconnectModal()">Cancel</button>
         <button type="button" class="crm-btn crm-btn--primary" style="background:#ef4444; color:#fff;" @click="doDisconnect()" :disabled="disconnecting">
           <span x-text="disconnecting ? 'Disconnecting…' : 'Disconnect'"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crm-lane-sheet-overlay" x-show="showDeleteMappingModal" x-cloak @click.self="closeDeleteMappingModal()" style="display:flex;">
+    <div class="crm-lane-sheet" role="dialog" aria-modal="true" aria-labelledby="delete-mapping-title">
+      <div class="crm-lane-sheet__header">
+        <h3 class="crm-lane-sheet__title" id="delete-mapping-title">Delete product mapping?</h3>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeDeleteMappingModal()" :disabled="deletingMapping" aria-label="Close delete confirmation">&times;</button>
+      </div>
+      <div class="crm-lane-sheet__body">
+        <p style="margin:0; font-size:.84rem; color:var(--text-primary,#111827);" x-text="`${mappingToDelete?.biz_e_product_name || 'Final product'} → ${mappingToDelete?.xero_description_pattern || 'Xero line item'}`"></p>
+        <p style="margin:0; font-size:.84rem; color:var(--text-secondary,#6b7280);">This stops the mapping being used on future Xero syncs. It does not delete invoices or stock.</p>
+      </div>
+      <div class="crm-lane-sheet__footer">
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeDeleteMappingModal()" :disabled="deletingMapping">Cancel</button>
+        <button type="button" class="crm-btn crm-btn--primary" style="background:#ef4444; color:#fff;" @click="confirmDeleteMapping()" :disabled="deletingMapping">
+          <span x-text="deletingMapping ? 'Deleting…' : 'Delete mapping'"></span>
         </button>
       </div>
     </div>
