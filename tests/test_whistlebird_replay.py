@@ -1,6 +1,7 @@
 """Focused payload tests for the HTTP replay client, without issuing HTTP requests."""
 
 import sys
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -51,6 +52,13 @@ def _batch() -> wm.ProductionBatch:
         base_vat=None,
         extra_data={},
     )
+
+
+def test_replay_uses_vat_batch_wip_for_a_documented_rosella_diversion():
+    solstice_base = replace(_batch(), product_line="solstice", extra_data={"diverted_to": "Rosella VAT48"})
+
+    assert replay._aging_output_name(solstice_base) == "VAT batch"
+    assert replay._aging_output_name(_batch()) == "Aged Gin"
 
 
 def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypatch):
