@@ -27,6 +27,7 @@ from whistlebird_replay_timeline import (  # noqa: E402
     _vat_fill_ngs_and_water_l,
     count_dedicated_ngs_purchases,
     date_prioritised_topological_sort,
+    manifest_ngs_receipts,
 )
 
 
@@ -111,9 +112,7 @@ def test_tiebreak_on_identical_dates_is_deterministic_by_event_id():
     assert [e.event_id for e in ordered1] == [e.event_id for e in ordered2] == ["a", "m", "z"]
 
 
-def _wildflower_batch(
-    step_date: date, global_vat: int = 27, product_line: str = "wildflower"
-) -> wm.ProductionBatch:
+def _wildflower_batch(step_date: date, global_vat: int = 27, product_line: str = "wildflower") -> wm.ProductionBatch:
     return wm.ProductionBatch(
         global_vat=global_vat,
         product_line=product_line,
@@ -226,3 +225,57 @@ def test_ngs_allocation_uses_only_dated_source_receipts_before_creating_shortfal
         second.marker: (Decimal("26.072"), Decimal("0")),
     }
     assert count_dedicated_ngs_purchases([second, first], receipts) == 1
+
+
+def test_manifest_ngs_receipts_converts_only_ngs_records_and_ignores_other_ingredients():
+    raw_records = [
+        {
+            "code": "GNS-2023-04-24-1",
+            "ingredient": "Neutral grain spirit",
+            "quantity": 2,
+            "unit": "L",
+            "date": "2023-04-24",
+            "supplier": "Southern Grain Spirits",
+            "supplier_batch_number": "GNS-2023-04-24-1",
+        },
+        {
+            "code": "JBM004",
+            "ingredient": "Juniper Berries (Macedonian)",
+            "quantity": 1000,
+            "unit": "g",
+            "date": "2025-08-10",
+            "supplier": "Alembics",
+            "supplier_batch_number": "MJUN-PP440328",
+        },
+    ]
+
+    receipts = manifest_ngs_receipts(raw_records)
+
+    assert len(receipts) == 1
+    receipt = receipts[0]
+    assert receipt.name == "Neutral grain spirit"
+    assert receipt.source_date == date(2023, 4, 24)
+    assert receipt.quantity == Decimal("2")
+    assert receipt.unit == "L"
+    assert receipt.supplier == "Southern Grain Spirits"
+    assert receipt.supplier_batch_number == "GNS-2023-04-24-1"
+
+
+def test_ngs_allocation_pools_manifest_receipts_the_same_way_as_legacy_ones():
+    batch = _wildflower_batch(date(2025, 1, 20), global_vat=1)
+    raw_records = [
+        {
+            "code": "GNS-2025-01-05-1",
+            "ingredient": "Neutral grain spirit",
+            "quantity": 30,
+            "unit": "L",
+            "date": "2025-01-05",
+            "supplier": "Southern Grain Spirits",
+            "supplier_batch_number": "GNS-2025-01-05-1",
+        }
+    ]
+
+    allocations = _ngs_allocations([batch], manifest_ngs_receipts(raw_records))
+
+    # flask NGS (0.746) + VAT-fill NGS (25.326), same figures as the legacy-receipt test.
+    assert allocations == {batch.marker: (Decimal("26.072"), Decimal("0"))}

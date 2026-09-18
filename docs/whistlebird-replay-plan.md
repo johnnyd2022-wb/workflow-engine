@@ -355,3 +355,25 @@ so the allocator generated zero dedicated shortfall purchases this run (down fro
 in the prior build). `--verify-import` reports exact matches on every count
 (batch executions, customs lodgements, raw-material items, date mismatches, wording
 leaks all clean).
+
+**Follow-up, same day:** those 17 rows only lived in the legacy `purchases_gns` table --
+not reproducible from this repo alone, and the founder wants this system to replace that
+legacy DB, not keep depending on it. Moved all 17 (the original 9 plus the 8 above) into
+`docs/whistlebird-raw-material-source.json` as `clean_records`, and taught
+`whistlebird_replay_timeline._ngs_allocations` to pool NGS receipts from there
+(`manifest_ngs_receipts`) instead of from `wm._raw_material_records`'s legacy-DB read --
+`build_timeline` now filters `purchases_gns` rows out of the legacy pool entirely so
+they're never double-purchased across both sources.  `build_import_verification` was
+updated to match (drops `purchases_gns` from its expected-count sources and pools NGS
+from the manifest too when `include_replay_ngs_purchases=True`). The ORM-direct
+`--rebuild-whistlebird-test` path is untouched and still reads `purchases_gns` directly --
+it's the lesser-preferred pathway already documented as missing the dedicated-NGS
+behaviour, not the one this independence was requested for.
+
+Re-ran the full reset -> replay -> timestamp-correction -> `--verify-import` cycle:
+identical result to the legacy-DB-sourced run (632 events, 17 real NGS receipts, zero
+synthetic shortfalls, 281.956 L remaining across all lots, every verify-import count
+exact) -- confirming the refactor is behaviour-preserving. Added
+`tests/test_whistlebird_replay_timeline.py::test_manifest_ngs_receipts_converts_only_ngs_records_and_ignores_other_ingredients`
+and `::test_ngs_allocation_pools_manifest_receipts_the_same_way_as_legacy_ones` to lock
+this in.
