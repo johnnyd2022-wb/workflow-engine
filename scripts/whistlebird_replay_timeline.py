@@ -226,6 +226,30 @@ def _purchase_event(record: dict[str, Any]) -> ReplayEvent:
 LABEL_BATCH_SIZE = Decimal("500")
 
 
+def _assign_flask_codes(batches: list[wm.ProductionBatch]) -> dict[str, tuple[str, str]]:
+    """Allocate the two physical flask codes used by each Wildflower/Solstice VAT.
+
+    Codes are line-specific and advance in distillation-date order (with the global VAT
+    as a stable tie-breaker), rather than the arbitrary order in which the legacy and
+    sheet records happened to be loaded.  A process step represents both physical
+    flasks, so its required ``Flask code`` prompt receives the two codes as a pair.
+    """
+    prefixes = {"wildflower": "WBWF", "solstice": "WBSS"}
+    assignments: dict[str, tuple[str, str]] = {}
+    for product_line, prefix in prefixes.items():
+        entries = [
+            (_resolved_step_dates(batch)[1], batch)
+            for batch in batches
+            if batch.product_line == product_line
+        ]
+        entries.sort(key=lambda entry: (entry[0], entry[1].global_vat))
+        next_code = 1
+        for _distillation_date, batch in entries:
+            assignments[batch.marker] = (f"{prefix}{next_code:02d}", f"{prefix}{next_code + 1:02d}")
+            next_code += 2
+    return assignments
+
+
 def _assign_label_batches(
     batches: list[wm.ProductionBatch], batch_size: Decimal = LABEL_BATCH_SIZE
 ) -> dict[str, list[tuple[int, Decimal]]]:
@@ -283,6 +307,7 @@ def _batch_events(
     marker_by_vat: dict[int, str],
     known_quantities: dict[str, tuple[str, str]],
     label_batches: dict[str, list[tuple[int, Decimal]]] | None = None,
+    flask_codes: dict[str, tuple[str, str]] | None = None,
 ) -> list[ReplayEvent]:
     step_keys = wm.RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else wm.BOTANICAL_GIN_STEP_KEYS
     resolved = _resolved_step_dates(batch)
@@ -336,7 +361,9 @@ def _batch_events(
             fill_ngs, fill_water = _vat_fill_ngs_and_water_l(batch.product_line)
             payload["ngs_quantity_l"] = str(fill_ngs)
             payload["other_material_inputs"] = [{"name": "Water", "quantity": str(fill_water), "unit": "L"}]
-        if key == "labelling" and label_batches:
+        if key == "distilling" and flask_codes and batch.marker in flask_codes:
+            payload["flask_codes"] = flask_codes[batch.marker]
+        if key in ("bottling", "labelling") and label_batches:
             splits = label_batches.get(batch.marker)
             if splits:
                 payload["label_batches"] = [(number, str(quantity)) for number, quantity in splits]
@@ -490,6 +517,7 @@ def build_timeline(
 
     marker_by_vat = {batch.global_vat: batch.marker for batch in merged}
     label_batches = _assign_label_batches(merged)
+    flask_codes = _assign_flask_codes(merged)
     for batch in merged:
         events.extend(
             _batch_events(
@@ -498,6 +526,7 @@ def build_timeline(
                 marker_by_vat,
                 known_quantity_by_vat.get(batch.global_vat, {}),
                 label_batches,
+                flask_codes,
             )
         )
 

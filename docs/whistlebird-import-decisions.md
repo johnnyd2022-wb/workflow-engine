@@ -265,3 +265,28 @@ bottles, still filling batch 1) -- matching the previously-verified totals (2913
 correctly drained all of batch 1 (500) then 100 units of batch 2, confirmed against the
 DB, then the target was reset and replayed again from scratch so no test consumption
 was left sitting in what is supposed to be a real, sales-free production history.
+
+## Stage 9: 2026-09-18 -- explicit Wildflower/Solstice WIP chain and production prompts
+
+The Wildflower and Solstice workflow definitions now model the physical hand-off at
+every production stage: Maceration produces the two 1.8L / 20% ABV flasks (3.6L total),
+Distilling consumes that charge and produces 2.16L Gin concentrate, Aging consumes the
+concentrate plus its product-specific NGS/water fill and produces `Aged Gin`, Bottling
+consumes that aged spirit, and Labelling & packaging consumes bottled product to create
+the product-specific final stock. Process-template input references are resolved only
+after the preceding output UUID exists, so rerunning setup also repairs the previously
+created empty output/input/prompt fields without replacing populated historical data.
+
+The API replay now mirrors the same WIP chain rather than only recording the Aging and
+Bottling outputs. It records the required `VAT number` prompt on Aging from the global
+VAT, and assigns each Wildflower/Solstice distillation a deterministic pair of flask
+codes (`WBWF01`, `WBWF02`, ... / `WBSS01`, `WBSS02`, ...), ordered by that line's real
+distillation date with global VAT as the stable tie-breaker. A two-flask distillation is
+one execution step, so the pair is stored in its single `Flask code` text prompt.
+
+The existing 500-label-roll allocation now applies at both Bottling and Labelling &
+packaging: a VAT crossing a label-roll boundary emits one WIP bottled-product output per
+label batch, and Labelling consumes all of those WIP items before producing the matching
+batch-numbered final-product outputs. This prevents the excess from a boundary-crossing
+VAT being stranded as unlabelled WIP while keeping the later FIFO sales drain aligned to
+the physical labels.

@@ -18,6 +18,7 @@ import whistlebird_migration as wm  # noqa: E402
 from whistlebird_replay_timeline import (  # noqa: E402
     NGS_LEGACY_POOL_CUTOFF,
     ReplayEvent,
+    _assign_flask_codes,
     _batch_events,
     _flask_ngs_and_water_l,
     _foraged_botanical_inputs,
@@ -108,11 +109,13 @@ def test_tiebreak_on_identical_dates_is_deterministic_by_event_id():
     assert [e.event_id for e in ordered1] == [e.event_id for e in ordered2] == ["a", "m", "z"]
 
 
-def _wildflower_batch(step_date: date) -> wm.ProductionBatch:
+def _wildflower_batch(
+    step_date: date, global_vat: int = 27, product_line: str = "wildflower"
+) -> wm.ProductionBatch:
     return wm.ProductionBatch(
-        global_vat=27,
-        product_line="wildflower",
-        batch_label="VAT27",
+        global_vat=global_vat,
+        product_line=product_line,
+        batch_label=f"VAT{global_vat}",
         steps={
             "maceration": wm.BatchStep("maceration", step_date, "clean"),
             "distilling": wm.BatchStep("distilling", step_date, "clean"),
@@ -162,6 +165,38 @@ def test_post_cutoff_ngs_purchase_is_created_before_maceration_consumes_it():
     aging = next(event for event in events if event.event_id.endswith(":aging"))
     assert aging.payload["ngs_quantity_l"] == "25.326"
     assert aging.payload["other_material_inputs"] == [{"name": "Water", "quantity": "30.787", "unit": "L"}]
+
+
+def test_distillation_flask_codes_are_line_specific_and_follow_distillation_dates():
+    later_wildflower = _wildflower_batch(date(2025, 2, 2), global_vat=27)
+    earlier_wildflower = _wildflower_batch(date(2025, 2, 1), global_vat=28)
+    solstice = _wildflower_batch(date(2025, 2, 3), global_vat=29, product_line="solstice")
+
+    codes = _assign_flask_codes([later_wildflower, solstice, earlier_wildflower])
+
+    assert codes[earlier_wildflower.marker] == ("WBWF01", "WBWF02")
+    assert codes[later_wildflower.marker] == ("WBWF03", "WBWF04")
+    assert codes[solstice.marker] == ("WBSS01", "WBSS02")
+
+
+def test_bottling_and_labelling_share_batch_numbers_and_distilling_carries_flask_codes():
+    batch = _wildflower_batch(NGS_LEGACY_POOL_CUTOFF)
+    events = _batch_events(
+        batch,
+        {},
+        {batch.global_vat: batch.marker},
+        {},
+        {batch.marker: [(1, Decimal("60")), (2, Decimal("18.5"))]},
+        {batch.marker: ("WBWF01", "WBWF02")},
+    )
+
+    distilling = next(event for event in events if event.event_id.endswith(":distilling"))
+    bottling = next(event for event in events if event.event_id.endswith(":bottling"))
+    labelling = next(event for event in events if event.event_id.endswith(":labelling"))
+
+    assert distilling.payload["flask_codes"] == ("WBWF01", "WBWF02")
+    assert bottling.payload["label_batches"] == [(1, "60"), (2, "18.5")]
+    assert labelling.payload["label_batches"] == [(1, "60"), (2, "18.5")]
 
 
 def test_pre_cutoff_batch_does_not_invent_a_dedicated_ngs_purchase():

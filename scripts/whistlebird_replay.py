@@ -334,17 +334,27 @@ def _ingredient_inputs_for_step(
 
 
 def _produced_item_for_step(store: MarkerStore, execution_step_id: UUID, name: str) -> dict[str, Any] | None:
+    items = _produced_items_for_step(store, execution_step_id, name)
+    return items[0] if items else None
+
+
+def _produced_items_for_step(store: MarkerStore, execution_step_id: UUID, name: str) -> list[dict[str, Any]]:
+    """Return every item a step produced with this name.
+
+    Bottling can straddle a 500-label-roll boundary and therefore creates two
+    separately batch-numbered ``Bottled product`` items.  Labelling must consume both,
+    not silently select the first one and leave the rest stranded in WIP.
+    """
     with store._engine.connect() as conn:
-        row = conn.execute(
+        rows = conn.execute(
             text(
                 "SELECT id, name, unit, quantity FROM inventory_items "
-                "WHERE org_id = :org_id AND source_execution_step_id = :step_id AND name = :name LIMIT 1"
+                "WHERE org_id = :org_id AND source_execution_step_id = :step_id AND name = :name "
+                "ORDER BY created_at, id"
             ),
             {"org_id": str(store.org_id), "step_id": str(execution_step_id), "name": name},
-        ).first()
-        if row is None:
-            return None
-        return {"id": row[0], "name": row[1], "unit": row[2], "quantity": row[3]}
+        ).fetchall()
+        return [{"id": row[0], "name": row[1], "unit": row[2], "quantity": row[3]} for row in rows]
 
 
 def _consume_whole_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -425,6 +435,20 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
         for other_input in event.payload.get("other_material_inputs", []):
             actual_inputs.append(dict(other_input))
 
+        if step_key == "distilling":
+            for step in steps:
+                if step["step_number"] < step_number:
+                    maceration_item = _produced_item_for_step(store, step["id"], wm._MACERATION_OUTPUT_NAME)
+                    if maceration_item:
+                        actual_inputs.append(_consume_whole_item(maceration_item))
+
+        if step_key == "aging" and not is_rosella:
+            for step in steps:
+                if step["step_number"] < step_number:
+                    concentrate_item = _produced_item_for_step(store, step["id"], wm._DISTILLATE_OUTPUT_NAME)
+                    if concentrate_item:
+                        actual_inputs.append(_consume_whole_item(concentrate_item))
+
         if step_key == "rhubarb_maceration" and batch.base_vat is not None:
             base_execution_id = store.execution_id_for_global_vat(batch.base_vat)
             if base_execution_id is None:
@@ -439,15 +463,35 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
                 raise ReplayRejectedError(f"base VAT{batch.base_vat}'s VAT batch item was never produced")
             actual_inputs.append(_consume_whole_item(base_vat_item))
 
+        if step_key == "maceration":
+            actual_outputs.append(
+                {
+                    "name": wm._MACERATION_OUTPUT_NAME,
+                    "quantity": wm._MACERATION_OUTPUT_QUANTITY,
+                    "unit": wm._MACERATION_OUTPUT_UNIT,
+                }
+            )
+
+        if step_key == "distilling":
+            actual_outputs.append(
+                {
+                    "name": wm._DISTILLATE_OUTPUT_NAME,
+                    "quantity": wm._DISTILLATE_OUTPUT_QUANTITY,
+                    "unit": wm._DISTILLATE_OUTPUT_UNIT,
+                }
+            )
+
         if produces_vat:
             volume = _vat_batch_volume_l(batch) or "1"
-            actual_outputs.append({"name": "VAT batch", "quantity": volume, "unit": "L"})
+            output_name = "VAT batch" if is_rosella else "Aged Gin"
+            actual_outputs.append({"name": output_name, "quantity": volume, "unit": "L"})
 
         if produces_bottles:
             vat_item = None
             for s in steps:
                 if s["step_number"] < step_number:
-                    candidate = _produced_item_for_step(store, s["id"], "VAT batch")
+                    output_name = "VAT batch" if is_rosella else "Aged Gin"
+                    candidate = _produced_item_for_step(store, s["id"], output_name)
                     if candidate:
                         vat_item = candidate
             if vat_item is not None:
@@ -455,17 +499,23 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
             if batch.bottlings:
                 total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
                 if total_bottles > 0:
-                    actual_outputs.append({"name": "Bottled product", "quantity": str(total_bottles), "unit": "units"})
+                    # The same physical label-batch allocation must follow bottles
+                    # through both Bottling and Labelling.  Splitting here also keeps
+                    # a run crossing a 500-label boundary from becoming stranded WIP.
+                    label_batches = event.payload.get("label_batches") or [(None, str(total_bottles))]
+                    for batch_number, quantity in label_batches:
+                        output = {"name": "Bottled product", "quantity": str(quantity), "unit": "units"}
+                        if batch_number is not None:
+                            output["batch_number"] = batch_number
+                        actual_outputs.append(output)
 
         if step_key == "labelling":
-            bottled_item = None
+            bottled_items: list[dict[str, Any]] = []
             for s in steps:
                 if s["step_number"] < step_number:
-                    candidate = _produced_item_for_step(store, s["id"], "Bottled product")
-                    if candidate:
-                        bottled_item = candidate
-            if bottled_item is not None:
-                actual_inputs.append(_consume_whole_item(bottled_item))
+                    bottled_items.extend(_produced_items_for_step(store, s["id"], "Bottled product"))
+            if bottled_items:
+                actual_inputs.extend(_consume_whole_item(item) for item in bottled_items)
                 # Labelling is the terminal step: what goes on-hand as finished stock is
                 # exactly what came in as bottled product (breakages, if any, are already
                 # netted into the recorded bottled-product count -- see the founder's
@@ -477,10 +527,12 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
                 # whistlebird_replay_timeline._assign_label_batches. batch_number lands on
                 # the created item's extra_data (backend.py's complete_step) and is what
                 # InventoryRepository.consume_final_product_fifo later drains oldest-first.
-                label_batches = event.payload.get("label_batches") or [(None, bottled_item["quantity"])]
+                label_batches = event.payload.get("label_batches") or [
+                    (None, str(sum((Decimal(str(item["quantity"])) for item in bottled_items), Decimal("0"))))
+                ]
                 product_name = f"{batch.product_line.capitalize()} - final product"
                 for batch_number, quantity in label_batches:
-                    output = {"name": product_name, "quantity": str(quantity), "unit": bottled_item["unit"]}
+                    output = {"name": product_name, "quantity": str(quantity), "unit": bottled_items[0]["unit"]}
                     if batch_number is not None:
                         output["batch_number"] = batch_number
                     actual_outputs.append(output)
@@ -488,16 +540,24 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
     elif trial is not None and step_key == "library_stock" and trial.library_ml:
         actual_outputs.append({"name": "Library stock", "quantity": str(trial.library_ml), "unit": "mL"})
 
+    execution_data = {
+        "batch_ref": marker,
+        "batch_label": (batch.batch_label if batch else trial.label),
+        "global_vat": (batch.global_vat if batch else None),
+    }
+    if batch is not None and step_key == "aging" and batch.product_line != "rosella":
+        execution_data["VAT number"] = batch.global_vat
+    if batch is not None and step_key == "distilling":
+        flask_codes = event.payload.get("flask_codes")
+        if flask_codes:
+            execution_data["Flask code"] = ", ".join(flask_codes)
+
     client.post(
         f"/api/core/executions/{execution_id}/steps/{step_row['id']}/complete",
         {
             "actual_inputs": actual_inputs,
             "actual_outputs": actual_outputs,
-            "execution_data": {
-                "batch_ref": marker,
-                "batch_label": (batch.batch_label if batch else trial.label),
-                "global_vat": (batch.global_vat if batch else None),
-            },
+            "execution_data": execution_data,
         },
     )
     return True

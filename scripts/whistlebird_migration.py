@@ -179,34 +179,164 @@ _ROSELLA_MACERATION_INPUTS = (
     _untracked_input("Rhubarb", None, "kg"),
 )
 
+
+# Step outputs feeding the NEXT step as an input (2026-09-18 founder request): the
+# process template itself should show the DAG a bottle actually travels through, not
+# just Maceration's raw-material inputs. A "previous_output" input can't carry a real
+# source_output_id in this static tuple -- that UUID only exists once the step that owns
+# it has actually been created -- so this is a resolution marker setup_product_workflows()
+# expands into the real {name, source_output_id, ...} shape once it knows the preceding
+# step's freshly-created (or already-existing) output. Quantity is a fixed default only
+# where the founder's recipe fixes it (maceration/distilling); Aging's and Bottling's own
+# outputs genuinely vary per VAT/batch, so those consuming inputs default to None, same
+# as _ROSELLA_MACERATION_INPUTS's "VAT batch" above.
+def _previous_step_output_input(quantity: str | None, unit: str) -> dict[str, Any]:
+    return {
+        "quantity": quantity,
+        "unit": unit,
+        "requires_inventory_selection": True,
+        "_wire_previous_output": True,
+    }
+
+
+# Maceration produces two 1.8L, 20% ABV flasks (3.6L total); distilling collects 1.08L
+# of concentrate per flask (2.16L total) -- both fixed by the founder's recipe (see
+# whistlebird_replay_timeline._flask_ngs_and_water_l), identical for Wildflower/Solstice.
+_MACERATION_OUTPUT_NAME = "Maceration charge (2 x 1.8L, 20% ABV)"
+_MACERATION_OUTPUT_UNIT = "L"
+_MACERATION_OUTPUT_QUANTITY = "3.6"
+_DISTILLATE_OUTPUT_NAME = "Gin concentrate"
+_DISTILLATE_OUTPUT_UNIT = "L"
+_DISTILLATE_OUTPUT_QUANTITY = "2.16"
+
+# Aging's VAT-fill dilution -- founder recipe (2026-09-16), duplicated from
+# whistlebird_replay_timeline._vat_fill_ngs_and_water_l for the same reason the flask
+# NGS/water constants above are duplicated (avoiding a circular import).
+_WILDFLOWER_FILL_NGS_INPUT = _tracked_input("Neutral grain spirit", "25.326", "L")
+_WILDFLOWER_FILL_WATER_INPUT = _untracked_input("Water", "30.787", "L")
+_SOLSTICE_FILL_NGS_INPUT = _tracked_input("Neutral grain spirit", "17.776", "L")
+_SOLSTICE_FILL_WATER_INPUT = _untracked_input("Water", "25.064", "L")
+
+# Custom execution prompts (2026-09-18 founder request).
+_VAT_NUMBER_PROMPT = {"label": "VAT number", "type": "number", "unit": None, "required": True}
+_FLASK_CODE_PROMPT = {"label": "Flask code", "type": "text", "unit": None, "required": True}
+
 # One workflow per product. Each production batch (one VAT) is a single execution that
 # walks these steps in order, every step stamped with its own real date. Steps are
-# (name, description, output_name, output_unit, inputs); an empty output_name means the
-# step records what happened but creates no inventory item of its own, and inputs is
-# only populated on the step that actually consumes raw material (maceration).
+# (name, description, output_name, output_unit, inputs, execution_prompts); an empty
+# output_name means the step records what happened but creates no inventory item of its
+# own. Each step (2026-09-18 onward) declares its own output and, from Distilling
+# onward, an input wired to the immediately preceding step's output -- see
+# _previous_step_output_input -- so the process template shows the real DAG a bottle
+# travels through, not just Maceration's raw-material charge.
 _WILDFLOWER_STEPS = (
-    ("Maceration", "Prep and steep the botanical charge", "", "", _WILDFLOWER_MACERATION_INPUTS),
-    ("Distilling", "Distil the macerated charge to flavour spirit", "", "", ()),
-    ("Aging", "Fill the VAT and let the batch rest to strength", "VAT batch", "L", ()),
-    ("Bottling", "Bottle the rested VAT batch", "Bottled product", "units", ()),
-    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", "", ()),
+    (
+        "Maceration",
+        "Prep and steep the botanical charge",
+        _MACERATION_OUTPUT_NAME,
+        _MACERATION_OUTPUT_UNIT,
+        _WILDFLOWER_MACERATION_INPUTS,
+        (),
+    ),
+    (
+        "Distilling",
+        "Distil the macerated charge to flavour spirit",
+        _DISTILLATE_OUTPUT_NAME,
+        _DISTILLATE_OUTPUT_UNIT,
+        (_previous_step_output_input(_MACERATION_OUTPUT_QUANTITY, _MACERATION_OUTPUT_UNIT),),
+        (_FLASK_CODE_PROMPT,),
+    ),
+    (
+        "Aging",
+        "Fill the VAT and let the batch rest to strength",
+        "Aged Gin",
+        "L",
+        (
+            _previous_step_output_input(_DISTILLATE_OUTPUT_QUANTITY, _DISTILLATE_OUTPUT_UNIT),
+            _WILDFLOWER_FILL_NGS_INPUT,
+            _WILDFLOWER_FILL_WATER_INPUT,
+        ),
+        (_VAT_NUMBER_PROMPT,),
+    ),
+    (
+        "Bottling",
+        "Bottle the rested VAT batch",
+        "Bottled product",
+        "units",
+        (_previous_step_output_input(None, "L"),),
+        (),
+    ),
+    (
+        "Labelling & packaging",
+        "Heat-shrink, label and case the bottles",
+        "Wildflower - final product",
+        "units",
+        (_previous_step_output_input(None, "units"),),
+        (),
+    ),
 )
 _SOLSTICE_STEPS = (
-    ("Maceration", "Prep and steep the botanical charge", "", "", _SOLSTICE_MACERATION_INPUTS),
-    ("Distilling", "Distil the macerated charge to flavour spirit", "", "", ()),
-    ("Aging", "Fill the VAT and let the batch rest to strength", "VAT batch", "L", ()),
-    ("Bottling", "Bottle the rested VAT batch", "Bottled product", "units", ()),
-    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", "", ()),
+    (
+        "Maceration",
+        "Prep and steep the botanical charge",
+        _MACERATION_OUTPUT_NAME,
+        _MACERATION_OUTPUT_UNIT,
+        _SOLSTICE_MACERATION_INPUTS,
+        (),
+    ),
+    (
+        "Distilling",
+        "Distil the macerated charge to flavour spirit",
+        _DISTILLATE_OUTPUT_NAME,
+        _DISTILLATE_OUTPUT_UNIT,
+        (_previous_step_output_input(_MACERATION_OUTPUT_QUANTITY, _MACERATION_OUTPUT_UNIT),),
+        (_FLASK_CODE_PROMPT,),
+    ),
+    (
+        "Aging",
+        "Fill the VAT and let the batch rest to strength",
+        "Aged Gin",
+        "L",
+        (
+            _previous_step_output_input(_DISTILLATE_OUTPUT_QUANTITY, _DISTILLATE_OUTPUT_UNIT),
+            _SOLSTICE_FILL_NGS_INPUT,
+            _SOLSTICE_FILL_WATER_INPUT,
+        ),
+        (_VAT_NUMBER_PROMPT,),
+    ),
+    (
+        "Bottling",
+        "Bottle the rested VAT batch",
+        "Bottled product",
+        "units",
+        (_previous_step_output_input(None, "L"),),
+        (),
+    ),
+    (
+        "Labelling & packaging",
+        "Heat-shrink, label and case the bottles",
+        "Solstice - final product",
+        "units",
+        (_previous_step_output_input(None, "units"),),
+        (),
+    ),
 )
 _RHUBARB_GIN_STEPS = (
-    ("Rhubarb maceration", "Steep an aged base VAT batch on rhubarb", "VAT batch", "L", _ROSELLA_MACERATION_INPUTS),
-    ("Aging", "Let the rhubarb batch rest before bottling", "", "", ()),
-    ("Bottling", "Bottle the rested batch", "Bottled product", "units", ()),
-    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", "", ()),
+    (
+        "Rhubarb maceration",
+        "Steep an aged base VAT batch on rhubarb",
+        "VAT batch",
+        "L",
+        _ROSELLA_MACERATION_INPUTS,
+        (),
+    ),
+    ("Aging", "Let the rhubarb batch rest before bottling", "", "", (), ()),
+    ("Bottling", "Bottle the rested batch", "Bottled product", "units", (), ()),
+    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", "", (), ()),
 )
 _TRIAL_STEPS = (
-    ("Distilling", "Distil a trial recipe", "", "", ()),
-    ("Library stock", "Store the trial spirit as library stock", "Library stock", "mL", ()),
+    ("Distilling", "Distil a trial recipe", "", "", (), ()),
+    ("Library stock", "Store the trial spirit as library stock", "Library stock", "mL", (), ()),
 )
 WILDFLOWER_WORKFLOW = "Wildflower gin"
 SOLSTICE_WORKFLOW = "Solstice gin"
@@ -214,7 +344,7 @@ ROSELLA_WORKFLOW = "Rosella gin"
 GG_TRIAL_WORKFLOW = "GG gin trials"
 WB_TRIAL_WORKFLOW = "WB recipe trials"
 SGS_TRIAL_WORKFLOW = "SGS spirit trials"
-PRODUCT_WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str, str, str, tuple], ...]]] = {
+PRODUCT_WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str, str, str, tuple, tuple], ...]]] = {
     WILDFLOWER_WORKFLOW: ("botanical_gin", _WILDFLOWER_STEPS),
     SOLSTICE_WORKFLOW: ("botanical_gin", _SOLSTICE_STEPS),
     ROSELLA_WORKFLOW: ("rhubarb_gin", _RHUBARB_GIN_STEPS),
@@ -1057,14 +1187,40 @@ def build_traceability_dry_run(legacy_url: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------------------
 
 
+def _resolve_step_inputs(inputs: tuple[dict[str, Any], ...], previous_output: dict[str, str] | None) -> list[dict]:
+    """Expand any `_previous_step_output_input` marker into the real
+    {name, source_output_id, ...} shape the guided-input UI itself would produce for a
+    "previous_output"-type input, using the immediately preceding step's own output
+    (freshly created or already existing -- the caller resolves that either way)."""
+    resolved = []
+    for item in inputs:
+        if not item.get("_wire_previous_output"):
+            resolved.append(dict(item))
+            continue
+        if previous_output is None:
+            raise ValueError("step declares a previous-step-output input but the previous step has no output")
+        resolved.append(
+            {
+                "name": previous_output["name"],
+                "source_output_id": previous_output["id"],
+                "quantity": item["quantity"],
+                "unit": item.get("unit") or previous_output["unit"],
+                "requires_inventory_selection": True,
+                "is_variable": False,
+            }
+        )
+    return resolved
+
+
 def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[str, list[str]]:
     """Create one workflow per product plus the recipe-trial workflows, each with its steps.
 
-    Idempotent on two axes: missing steps are added (``repaired``/``created``), and any
-    already-created step whose stored ``inputs`` is empty but the definition above now
-    specifies inputs gets repaired in place (``inputs_repaired``) -- this is how a
-    definition change (e.g. adding the maceration recipe) reaches steps a prior run of
-    this function already created with ``inputs=[]``.
+    Idempotent on three axes: missing steps are added (``repaired``/``created``); an
+    already-created step whose stored ``inputs``/``outputs``/``execution_prompts`` is
+    empty but the definition above now specifies one gets repaired in place
+    (``inputs_repaired``) -- this is how a definition change (e.g. adding the maceration
+    recipe, or wiring a step's output into the next step's input) reaches steps a prior
+    run of this function already created with those fields empty.
     """
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Workflow setup is only permitted for {RESET_ORG_NAME!r}")
@@ -1105,18 +1261,39 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
                     is_draft=False,
                 )
                 created.append(name)
-            for index, (step_name, description, output_name, unit, inputs) in enumerate(steps, start=1):
+            previous_output: dict[str, str] | None = None
+            for index, (step_name, description, output_name, unit, inputs, execution_prompts) in enumerate(
+                steps, start=1
+            ):
+                resolved_inputs = _resolve_step_inputs(inputs, previous_output)
                 if step_count and index <= step_count:
                     existing_step = existing_steps[index - 1]
-                    if inputs and not existing_step.inputs:
+                    updates: dict[str, list] = {}
+                    if resolved_inputs and not existing_step.inputs:
+                        updates["inputs"] = resolved_inputs
+                    if output_name and not existing_step.outputs:
+                        updates["outputs"] = [{"id": str(uuid4()), "name": output_name, "unit": unit}]
+                    if execution_prompts and not existing_step.execution_prompts:
+                        updates["execution_prompts"] = list(execution_prompts)
+                    if updates:
                         repository.update_step(
                             step_id=existing_step.id,
                             process_id=process.id,
                             org_id=org.id,
-                            inputs=list(inputs),
+                            **updates,
                         )
                         if name not in inputs_repaired:
                             inputs_repaired.append(name)
+                    existing_outputs = updates.get("outputs", existing_step.outputs) or []
+                    previous_output = (
+                        {
+                            "id": existing_outputs[0]["id"],
+                            "name": existing_outputs[0]["name"],
+                            "unit": existing_outputs[0]["unit"],
+                        }
+                        if existing_outputs
+                        else None
+                    )
                     continue
                 outputs = [{"id": str(uuid4()), "name": output_name, "unit": unit}] if output_name else []
                 repository.add_step(
@@ -1126,9 +1303,14 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
                     position=index * 1000,
                     name=step_name,
                     description=description,
-                    inputs=list(inputs),
+                    inputs=resolved_inputs,
                     outputs=outputs,
-                    execution_prompts=[],
+                    execution_prompts=list(execution_prompts),
+                )
+                previous_output = (
+                    {"id": outputs[0]["id"], "name": outputs[0]["name"], "unit": outputs[0]["unit"]}
+                    if outputs
+                    else None
                 )
         return {
             "created": created,
