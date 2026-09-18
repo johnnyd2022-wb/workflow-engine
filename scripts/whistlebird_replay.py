@@ -454,6 +454,19 @@ def _consume_whole_item(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _batch_number_prompt_value(label_batches: list[tuple[int, str]] | None) -> str:
+    """Render the recorded label-batch allocation for the required step prompt.
+
+    Each individual output continues to receive its own integer ``batch_number``. A
+    single execution can straddle a physical 500-label roll, however, so the step-level
+    text prompt records all affected numbers. An unbottled VAT has no number to invent;
+    retain that source fact explicitly while satisfying the workflow's required prompt.
+    """
+    if label_batches:
+        return ", ".join(str(number) for number, _quantity in label_batches)
+    return "Not applicable — no bottled output recorded"
+
+
 def _vat_batch_volume_l(batch: wm.ProductionBatch) -> str | None:
     """Best-available real number, never a fabricated one. See the replay plan's
     "VAT-batch output volume" note for the fallback order and why."""
@@ -656,6 +669,8 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
         flask_codes = event.payload.get("flask_codes")
         if flask_codes:
             execution_data["Flask code"] = ", ".join(flask_codes)
+    if batch is not None and batch.product_line in ("wildflower", "solstice") and step_key in ("bottling", "labelling"):
+        execution_data["Batch number"] = _batch_number_prompt_value(event.payload.get("label_batches"))
 
     client.post(
         f"/api/core/executions/{execution_id}/steps/{step_row['id']}/complete",

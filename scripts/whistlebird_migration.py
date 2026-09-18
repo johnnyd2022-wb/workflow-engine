@@ -220,6 +220,10 @@ _SOLSTICE_FILL_WATER_INPUT = _untracked_input("Water", "25.064", "L")
 # Custom execution prompts (2026-09-18 founder request).
 _VAT_NUMBER_PROMPT = {"label": "VAT number", "type": "number", "unit": None, "required": True}
 _FLASK_CODE_PROMPT = {"label": "Flask code", "type": "text", "unit": None, "required": True}
+# A bottle run can cross a 500-label-roll boundary, so the replay records every
+# applicable number (for example, ``"1, 2"``) in this required text prompt and attaches
+# the individual number to each output item's metadata.
+_BATCH_NUMBER_PROMPT = {"label": "Batch number", "type": "text", "unit": None, "required": True}
 
 # One workflow per product. Each production batch (one VAT) is a single execution that
 # walks these steps in order, every step stamped with its own real date. Steps are
@@ -264,7 +268,7 @@ _WILDFLOWER_STEPS = (
         "Bottled product",
         "units",
         (_previous_step_output_input(None, "L"),),
-        (),
+        (_BATCH_NUMBER_PROMPT,),
     ),
     (
         "Labelling & packaging",
@@ -272,7 +276,7 @@ _WILDFLOWER_STEPS = (
         "Wildflower - final product",
         "units",
         (_previous_step_output_input(None, "units"),),
-        (),
+        (_BATCH_NUMBER_PROMPT,),
     ),
 )
 _SOLSTICE_STEPS = (
@@ -310,7 +314,7 @@ _SOLSTICE_STEPS = (
         "Bottled product",
         "units",
         (_previous_step_output_input(None, "L"),),
-        (),
+        (_BATCH_NUMBER_PROMPT,),
     ),
     (
         "Labelling & packaging",
@@ -318,7 +322,7 @@ _SOLSTICE_STEPS = (
         "Solstice - final product",
         "units",
         (_previous_step_output_input(None, "units"),),
-        (),
+        (_BATCH_NUMBER_PROMPT,),
     ),
 )
 _RHUBARB_GIN_STEPS = (
@@ -1222,15 +1226,43 @@ def _resolve_step_inputs(inputs: tuple[dict[str, Any], ...], previous_output: di
     return resolved
 
 
+def _merge_required_execution_prompts(existing: list[Any] | None, required: tuple[dict[str, Any], ...]) -> list[Any]:
+    """Ensure defined system prompts are present at their current requiredness.
+
+    Workflow setup is deliberately repair-safe: a later definition change must turn an
+    already-created optional Batch number prompt into the required one without erasing
+    any unrelated customer prompt on that step.
+    """
+    replacements = {str(prompt["label"]).strip().lower(): dict(prompt) for prompt in required}
+    merged: list[Any] = []
+    replaced_labels: set[str] = set()
+    for prompt in existing or []:
+        if not isinstance(prompt, dict):
+            merged.append(prompt)
+            continue
+        label = str(prompt.get("label") or "").strip().lower()
+        replacement = replacements.get(label)
+        if replacement is None:
+            merged.append(prompt)
+            continue
+        if label not in replaced_labels:
+            merged.append(replacement)
+            replaced_labels.add(label)
+    for label, prompt in replacements.items():
+        if label not in replaced_labels:
+            merged.append(prompt)
+    return merged
+
+
 def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[str, list[str]]:
     """Create one workflow per product plus the recipe-trial workflows, each with its steps.
 
     Idempotent on three axes: missing steps are added (``repaired``/``created``); an
     already-created step whose stored ``inputs``/``outputs``/``execution_prompts`` is
-    empty but the definition above now specifies one gets repaired in place
-    (``inputs_repaired``) -- this is how a definition change (e.g. adding the maceration
-    recipe, or wiring a step's output into the next step's input) reaches steps a prior
-    run of this function already created with those fields empty.
+    empty gets repaired in place; defined system prompts are also reconciled (without
+    overwriting unrelated prompts), so a Batch number prompt introduced as optional in
+    an older setup becomes required. This is how a definition change reaches steps a
+    prior run already created.
     """
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Workflow setup is only permitted for {RESET_ORG_NAME!r}")
@@ -1283,8 +1315,11 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
                         updates["inputs"] = resolved_inputs
                     if output_name and not existing_step.outputs:
                         updates["outputs"] = [{"id": str(uuid4()), "name": output_name, "unit": unit}]
-                    if execution_prompts and not existing_step.execution_prompts:
-                        updates["execution_prompts"] = list(execution_prompts)
+                    repaired_prompts = _merge_required_execution_prompts(
+                        existing_step.execution_prompts, execution_prompts
+                    )
+                    if repaired_prompts != (existing_step.execution_prompts or []):
+                        updates["execution_prompts"] = repaired_prompts
                     if updates:
                         repository.update_step(
                             step_id=existing_step.id,

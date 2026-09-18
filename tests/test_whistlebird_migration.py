@@ -146,7 +146,7 @@ def test_aging_has_the_vat_fill_ngs_and_water_inputs(migration_module):
         assert by_name["Water"]["requires_inventory_selection"] is False
 
 
-def test_aging_and_distilling_carry_the_agreed_custom_prompts(migration_module):
+def test_wildflower_and_solstice_carry_the_agreed_traceability_prompts(migration_module):
     for workflow_name in ("Wildflower gin", "Solstice gin"):
         _shape, steps = migration_module.PRODUCT_WORKFLOWS[workflow_name]
         by_name = {s[0]: s for s in steps}
@@ -156,8 +156,24 @@ def test_aging_and_distilling_carry_the_agreed_custom_prompts(migration_module):
         distilling_prompts = by_name["Distilling"][5]
         assert len(distilling_prompts) == 1
         assert distilling_prompts[0] == {"label": "Flask code", "type": "text", "unit": None, "required": True}
-        for other in ("Maceration", "Bottling", "Labelling & packaging"):
-            assert by_name[other][5] == (), f"{other} should not have a custom prompt"
+        expected_batch_prompt = {"label": "Batch number", "type": "text", "unit": None, "required": True}
+        assert by_name["Bottling"][5] == (expected_batch_prompt,)
+        assert by_name["Labelling & packaging"][5] == (expected_batch_prompt,)
+        assert by_name["Maceration"][5] == ()
+
+
+def test_required_prompt_repair_preserves_unrelated_prompts(migration_module):
+    existing = [
+        {"label": "Batch number", "type": "text", "unit": None, "required": False},
+        {"label": "Operator initials", "type": "text", "unit": None, "required": True},
+    ]
+
+    repaired = migration_module._merge_required_execution_prompts(existing, (migration_module._BATCH_NUMBER_PROMPT,))
+
+    assert repaired == [
+        {"label": "Batch number", "type": "text", "unit": None, "required": True},
+        {"label": "Operator initials", "type": "text", "unit": None, "required": True},
+    ]
 
 
 def test_resolve_step_inputs_expands_the_previous_output_marker(migration_module):
