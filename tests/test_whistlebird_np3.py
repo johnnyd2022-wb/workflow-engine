@@ -9,7 +9,7 @@ evidence, dates, staff link and profile.
 
 import copy
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -427,7 +427,9 @@ def test_snapshot_keeps_dates_already_set_in_the_manifest(db, np3_org):
     fresh = np3._snapshot_org(np3_org["url"], np3_org["name"], None, np3_org["admin_email"])
     kept = np3._snapshot_org(np3_org["url"], np3_org["name"], manifest, np3_org["admin_email"])
 
-    assert fresh["attestations"][0]["signed_on"] == date.today().isoformat()
+    # The snapshot dates rows in the org's local (NZ) day, not the runner's: CI is UTC, so
+    # date.today() is a day behind between 12:00 and 24:00 UTC.
+    assert fresh["attestations"][0]["signed_on"] == datetime.now(np3._LOCAL_TZ).date().isoformat()
     assert (kept["attestations"][0]["signed_on"], kept["attestations"][0]["due_date"]) == (SIGNED_ON, "2026-09-10")
 
 
