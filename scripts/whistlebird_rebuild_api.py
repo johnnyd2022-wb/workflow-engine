@@ -3,7 +3,7 @@
 Runs the documented API-replay path end to end (docs/whistlebird-replay-plan.md):
 
     ensure tenant -> sync admin password -> scoped reset -> workflows -> Compliant setup
-    -> replay (Core history, then NP3 evidence) -> timestamp pass -> verification
+    -> replay (Core history, then CRM mappings, then NP3 evidence) -> timestamp pass -> verification
 
 Requires the app running (`uv run workflow start`). Without --confirm-reset-whistlebird-test
 it is a read-only preflight and prints what it would do.
@@ -45,7 +45,7 @@ STEPS = (
     "scoped reset",
     "product workflows",
     "Compliant NZ-alcohol setup",
-    "replay Core history, then NP3 evidence",
+    "replay Core history, then CRM mappings, then NP3 evidence",
     "timestamp pass",
     "verify (Core counts, dates, wording, NP3)",
 )

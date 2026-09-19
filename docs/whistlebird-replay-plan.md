@@ -484,3 +484,35 @@ evidence) and a read-only smoke test of the CLI against `whistlebird_test`. The 
 `scripts/whistlebird_rebuild_api.py` run against `whistlebird_test` has NOT been done --
 rehearse it (snapshot, commit, rebuild, confirm `--verify-import` is clean) well before
 relying on it.
+
+## CRM product mappings and matching config, 2026-09-19
+
+The scoped reset deletes `product_mappings` and `crm_sales_traceability_config`. Neither is in
+the legacy database, so before this a rebuild silently lost every mapping (and the Xero
+connection), and none of the ~460 synced sale lines could allocate against stock until someone
+re-entered them by hand.
+
+`docs/whistlebird-crm-config-source.json` now holds them, and `scripts/whistlebird_crm.py`
+replays them through the real CRM API (`PUT /api/crm/traceability-config`, then
+`POST /api/crm/product-mappings/bulk`) after the Core history, before NP3:
+
+- **Config first.** Every mapping is "Xero line contains phrase", which never matches while
+  exact-only matching is on, so `strict_mapping: false` is replayed first, in the same order
+  the Configuration page uses. The manifest loader refuses a manifest that asks for a
+  contains/alias mapping with `strict_mapping: true`.
+- **Name-only mappings.** They carry no `biz_e_source_output_id`, exactly as created in the
+  UI, because output UUIDs change on every rebuild.
+- **Refuses a typo.** The replay reads `/api/crm/final-products` and stops before writing
+  anything if a mapping names a product the tenant does not have; the API would accept it and
+  it would simply never match.
+- **Resumable.** Mappings already present (name and phrase, ignoring case) are skipped.
+- **Verified.** `--verify-import` on the API-replay path reports
+  `crm_product_mappings_missing` and `crm_traceability_config_mismatch`, both expected 0. It
+  counts *missing* manifest mappings rather than comparing row totals, so a mapping added
+  later in the CRM does not fail a later verify. The ORM-direct rebuild does not load them.
+- Skip with `--skip-crm-config`.
+
+Reviewed mapping decisions: `Bin stock` -> Rosella (founder reviewed INV-0247/INV-0248 on
+2026-09-19: the generic "Whistlebird Gin - Bin stock" lines carry Rosella item code
+`WBRS01-4625`). Shipping and the generic `SAMPLE` minis are deliberately unmapped.
+

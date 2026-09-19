@@ -44,6 +44,7 @@ import urllib3
 from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent))
+import whistlebird_crm as crm  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
 from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
@@ -816,10 +817,12 @@ def run_replay(
     verify_tls: bool = True,
     limit: int | None = None,
     np3_manifest_path: Path | None = np3.DEFAULT_NP3_MANIFEST,
+    crm_manifest_path: Path | None = crm.DEFAULT_CRM_MANIFEST,
 ) -> dict[str, Any]:
     # Validate before the first request so a bad NP3 manifest fails now, not after the
     # long Core replay has already run.
     np3_manifest = np3.load_np3_manifest(np3_manifest_path) if np3_manifest_path else None
+    crm_manifest = crm.load_crm_manifest(crm_manifest_path) if crm_manifest_path else None
     events = build_timeline(legacy_url, production_manifest_path)
     if limit is not None:
         events = events[:limit]
@@ -856,6 +859,13 @@ def run_replay(
         if (index + 1) % 25 == 0:
             print(f"[{index + 1}/{len(events)}] {event.event_id} ({event.real_date})")
 
+    # CRM mappings need each final product to exist, so they follow the Core history.
+    if crm_manifest is not None and limit is None:
+        try:
+            counts["crm"] = crm.replay_crm_config(client, crm_manifest)
+        except crm.CrmReplayError as exc:
+            raise ReplayRejectedError(str(exc)) from exc
+
     # NP3 evidence goes last: an `np3_execution_evidence_mode: required` profile (part of
     # the manifest) would otherwise block the Core step completions above.
     if np3_manifest is not None and limit is None:
@@ -885,6 +895,8 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
     parser.add_argument("--skip-np3", action="store_true", help="Replay Core history only.")
+    parser.add_argument("--crm-manifest", type=Path, default=crm.DEFAULT_CRM_MANIFEST)
+    parser.add_argument("--skip-crm-config", action="store_true", help="Do not replay CRM product mappings/config.")
     args = parser.parse_args()
     if not args.legacy_url or not args.target_url:
         parser.error("--legacy-url and --target-url are required")
@@ -913,6 +925,7 @@ def main() -> int:
         verify_tls=not args.insecure,
         limit=args.limit,
         np3_manifest_path=None if args.skip_np3 else args.np3_manifest,
+        crm_manifest_path=None if args.skip_crm_config else args.crm_manifest,
     )
     print(result)
     return 0

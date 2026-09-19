@@ -48,6 +48,11 @@ is replayed by the API path too, from `docs/whistlebird-np3-evidence-source.json
 everything: `scripts/whistlebird_rebuild_api.py`. Snapshot NP3 evidence out of the database
 (`scripts/whistlebird_np3.py snapshot`) and commit it **before** any reset.
 
+**CRM product mappings and matching config** (which Xero lines draw down which final
+product) are replayed by the API path from `docs/whistlebird-crm-config-source.json`
+(`scripts/whistlebird_crm.py`), because the scoped reset deletes them. The Xero OAuth
+connection cannot be replayed: after a rebuild, reconnect Xero in the app and sync.
+
 ## Model
 
 **One workflow per product; one execution per VAT batch.** Each batch execution walks its
