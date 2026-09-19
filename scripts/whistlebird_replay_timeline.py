@@ -153,7 +153,7 @@ class ReplayEvent:
     """One API call the replay client will make, plus everything needed to order it."""
 
     event_id: str
-    event_type: str  # "create_execution" | "complete_step" | "create_inventory_item"
+    event_type: str  # "create_execution" | "complete_step" | "create_inventory_item" | "record_expiry_wastage"
     real_date: date
     depends_on: tuple[str, ...]
     payload: dict[str, Any] = field(default_factory=dict)
@@ -219,6 +219,36 @@ def _purchase_event(record: dict[str, Any]) -> ReplayEvent:
         depends_on=(),
         payload={"record": record, "marker": f"raw-{code}" if is_legacy else f"raw-manifest-{record['code']}"},
     )
+
+
+def _expiry_wastage_events(purchase_events: list[ReplayEvent], as_of_date: date) -> list[ReplayEvent]:
+    """Dispose remaining stock from each expired replayed receipt.
+
+    The quantity is deliberately resolved by the API client at execution time: preceding
+    recipe steps may already have consumed all or part of the receipt.  An expiry date
+    means the lot is unavailable *on* that date, so the date-prioritised ordering runs
+    this event before any otherwise-independent step on the same date.
+    """
+    events: list[ReplayEvent] = []
+    for purchase in purchase_events:
+        record = purchase.payload["record"]
+        raw_expiry = record.get("expiry_date")
+        if not raw_expiry:
+            continue
+        expiry_date = raw_expiry if isinstance(raw_expiry, date) else date.fromisoformat(str(raw_expiry))
+        if expiry_date > as_of_date:
+            continue
+        marker = purchase.payload["marker"]
+        events.append(
+            ReplayEvent(
+                event_id=f"expiry-wastage:{marker}",
+                event_type="record_expiry_wastage",
+                real_date=expiry_date,
+                depends_on=(purchase.event_id,),
+                payload={"marker": marker, "expiry_date": expiry_date},
+            )
+        )
+    return events
 
 
 def _split_legacy_generic_juniper_receipts(
@@ -645,6 +675,7 @@ def build_timeline(
     legacy_source: str | Path,
     production_manifest_path: Path,
     raw_material_manifest_path: Path = DEFAULT_RAW_MATERIAL_MANIFEST,
+    expiry_as_of_date: date | None = None,
 ) -> list[ReplayEvent]:
     """`legacy_source` is a snapshot JSON path (the default, committed) or a live-database URL."""
     with wm.open_legacy(legacy_source) as connection:
@@ -669,6 +700,7 @@ def build_timeline(
     ngs_allocations = _ngs_allocations(merged, manifest_ngs_receipts(raw_records))
 
     events: list[ReplayEvent] = []
+    purchase_events: list[ReplayEvent] = []
 
     purchase_event_by_code: dict[str, str] = {}
     for legacy_record in legacy_raw_materials:
@@ -696,12 +728,14 @@ def build_timeline(
             }
         )
         events.append(event)
+        purchase_events.append(event)
         code = legacy_record.extra_data.get("ingredient_code")
         if code:
             purchase_event_by_code[code] = event.event_id
     for record in raw_records:
         event = _purchase_event(record)
         events.append(event)
+        purchase_events.append(event)
         purchase_event_by_code[record["code"]] = event.event_id
 
     marker_by_vat = {batch.global_vat: batch.marker for batch in merged}
@@ -727,5 +761,6 @@ def build_timeline(
         events.extend(_trial_events(trial))
 
     events.extend(_customs_events(customs_rows))
+    events.extend(_expiry_wastage_events(purchase_events, expiry_as_of_date or date.today()))
 
     return date_prioritised_topological_sort(events)

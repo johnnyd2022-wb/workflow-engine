@@ -179,6 +179,31 @@ class MarkerStore:
             ).first()
             return {"id": row[0], "name": row[1], "unit": row[2], "quantity": row[3]} if row else None
 
+    def raw_material_for_code(self, code: str) -> dict[str, Any] | None:
+        """Return the source lot for one curated ingredient code, including on-hand quantity."""
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT id, name, unit, quantity FROM inventory_items "
+                    "WHERE org_id = :org_id AND inventory_type = 'raw_material' "
+                    "AND extra_data->>'ingredient_code' = :code ORDER BY created_at, id LIMIT 1"
+                ),
+                {"org_id": str(self.org_id), "code": code},
+            ).first()
+            return {"id": row[0], "name": row[1], "unit": row[2], "quantity": row[3]} if row else None
+
+    def expiry_wastage_recorded(self, marker: str) -> bool:
+        """Whether this source-lot expiry disposal was already accepted by the API."""
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT 1 FROM inventory_movements "
+                    "WHERE org_id = :org_id AND metadata->>'idempotency_key' = :key LIMIT 1"
+                ),
+                {"org_id": str(self.org_id), "key": f"whistlebird-expiry:{marker}"},
+            ).first()
+            return row is not None
+
     def existing_execution_id(self, marker: str) -> str | None:
         if marker in self._created_this_run:
             return self._created_this_run[marker]
@@ -383,8 +408,54 @@ def _execute_purchase(client: ReplayClient, store: MarkerStore, event: ReplayEve
     return True
 
 
+def _expiry_replacement_marker(event: ReplayEvent, material_key: str) -> str:
+    return f"expiry-replacement:{event.event_id}:{material_key}"
+
+
+def _create_expiry_replacement(
+    client: ReplayClient,
+    store: MarkerStore,
+    event: ReplayEvent,
+    name: str,
+    quantity: Decimal,
+    unit: str,
+    material_key: str,
+) -> dict[str, Any]:
+    """Create the minimum replacement lot needed after expired stock is unavailable.
+
+    The source registers do not identify a physical replacement receipt.  It is therefore
+    explicitly labelled as a replay replacement, while still using the normal inventory
+    API and carrying a stable marker so restarts neither duplicate stock nor conceal it.
+    """
+    marker = _expiry_replacement_marker(event, material_key)
+    item = store.raw_material_for_marker(marker)
+    if item is None:
+        client.post(
+            "/api/core/inventory",
+            {
+                "name": _canonical_material_display_name(name),
+                "quantity": str(quantity),
+                "unit": unit,
+                "inventory_type": "raw_material",
+                "supplier": "Expiry replacement",
+                "purchase_date": event.real_date.isoformat(),
+                "supplier_batch_number": f"replacement-{event.event_id}-{material_key}"[:255],
+                "source_method": "manual",
+                "metadata": {
+                    "import_ref": marker,
+                    "replay_replacement_date": event.real_date.isoformat(),
+                    "replay_replacement_reason": "expired stock unavailable for documented production",
+                },
+            },
+        )
+        item = store.raw_material_for_marker(marker)
+    if item is None or item["unit"] != unit or Decimal(str(item["quantity"])) < quantity:
+        raise ReplayRejectedError(f"replacement lot {marker!r} was not available after creation")
+    return item
+
+
 def _ingredient_inputs_for_step(
-    store: MarkerStore, known_input_quantities: dict[str, tuple[str, str]]
+    client: ReplayClient, store: MarkerStore, event: ReplayEvent, known_input_quantities: dict[str, tuple[str, str]]
 ) -> list[dict[str, Any]]:
     """Consume exactly the codes with a known per-batch amount (the inferred raw-material
     tier). Legacy-evidence and clean-tier codes are ordering-only, per the "real
@@ -394,18 +465,27 @@ def _ingredient_inputs_for_step(
     if not known_input_quantities:
         return []
     inputs = []
-    with store._engine.connect() as conn:
-        for code, (quantity, unit) in known_input_quantities.items():
-            row = conn.execute(
-                text(
-                    "SELECT id, name FROM inventory_items "
-                    "WHERE org_id = :org_id AND extra_data->>'ingredient_code' = :code LIMIT 1"
-                ),
-                {"org_id": str(store.org_id), "code": code},
-            ).first()
-            if row is None:
-                raise ReplayRejectedError(f"no inventory item carries ingredient_code={code!r} yet")
-            inputs.append({"inventory_item_id": str(row[0]), "name": row[1], "quantity": quantity, "unit": unit})
+    for code, (quantity, unit) in known_input_quantities.items():
+        required = Decimal(str(quantity))
+        source = store.raw_material_for_code(code)
+        if source is None or source["unit"] != unit:
+            raise ReplayRejectedError(f"no inventory item carries ingredient_code={code!r} in {unit}")
+        available = min(Decimal(str(source["quantity"])), required)
+        if available > 0:
+            inputs.append(
+                {"inventory_item_id": str(source["id"]), "name": source["name"], "quantity": str(available), "unit": unit}
+            )
+        shortfall = required - available
+        if shortfall > 0:
+            replacement = _create_expiry_replacement(client, store, event, source["name"], shortfall, unit, code)
+            inputs.append(
+                {
+                    "inventory_item_id": str(replacement["id"]),
+                    "name": replacement["name"],
+                    "quantity": str(shortfall),
+                    "unit": unit,
+                }
+            )
     return inputs
 
 
@@ -419,7 +499,7 @@ def _recipe_botanical_inputs(batch: wm.ProductionBatch) -> list[tuple[str, Decim
 
 
 def _recipe_fallback_inputs(
-    store: MarkerStore, batch: wm.ProductionBatch, precise_inputs: list[dict[str, Any]]
+    client: ReplayClient, store: MarkerStore, event: ReplayEvent, batch: wm.ProductionBatch, precise_inputs: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """Use the fixed VAT recipe for botanical amounts not precisely source-linked.
 
@@ -444,9 +524,17 @@ def _recipe_fallback_inputs(
             allocated, shortfall = store.consume_available_raw_material_up_to(name, remaining, unit)
             fallback.extend(allocated)
             if shortfall > 0:
-                # A recipe predates every matching receipt in the source database.  Keep
-                # its documented material use without falsely tying it to a later lot.
-                fallback.append({"name": name, "quantity": str(shortfall), "unit": unit})
+                replacement = _create_expiry_replacement(
+                    client, store, event, name, shortfall, unit, _canonical_material_name(name)
+                )
+                fallback.append(
+                    {
+                        "inventory_item_id": str(replacement["id"]),
+                        "name": replacement["name"],
+                        "quantity": str(shortfall),
+                        "unit": unit,
+                    }
+                )
     return fallback
 
 
@@ -581,10 +669,12 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
         produces_bottles = step_key == "bottling"
 
         if step_key in ("maceration", "rhubarb_maceration"):
-            precise_inputs = _ingredient_inputs_for_step(store, event.payload.get("known_input_quantities", {}))
+            precise_inputs = _ingredient_inputs_for_step(
+                client, store, event, event.payload.get("known_input_quantities", {})
+            )
             actual_inputs.extend(precise_inputs)
             if not is_rosella:
-                actual_inputs.extend(_recipe_fallback_inputs(store, batch, precise_inputs))
+                actual_inputs.extend(_recipe_fallback_inputs(client, store, event, batch, precise_inputs))
 
         # Neutral grain spirit (real inventory draw) and water/foraged botanicals ("other
         # materials" -- no inventory_item_id, matching the UI's "Other materials" input
@@ -758,6 +848,35 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
     return True
 
 
+def _execute_expiry_wastage(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
+    """Dispose whatever remains in one source lot on its recorded expiry date."""
+    marker = event.payload["marker"]
+    if store.expiry_wastage_recorded(marker):
+        return False
+    item = store.raw_material_for_marker(marker)
+    if item is None:
+        raise ReplayRejectedError(f"expiry disposal cannot find source lot {marker!r}")
+    quantity = Decimal(str(item["quantity"]))
+    if quantity <= 0:
+        return False
+    expiry_date = event.payload["expiry_date"]
+    expiry_text = expiry_date.isoformat() if hasattr(expiry_date, "isoformat") else str(expiry_date)
+    client.post(
+        "/api/core/inventory/wastage",
+        {
+            "entries": [
+                {
+                    "inventory_item_id": str(item["id"]),
+                    "quantity_wasted": str(quantity),
+                    "reason": f"Expired on {expiry_text}",
+                }
+            ],
+            "idempotency_key": f"whistlebird-expiry:{marker}",
+        },
+    )
+    return True
+
+
 def _execute_customs(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
     row = event.payload["row"]
     marker = f"customs-{row['id']}"
@@ -802,6 +921,7 @@ DISPATCH = {
     "create_inventory_item": _execute_purchase,
     "create_execution": _execute_create_execution,
     "complete_step": _execute_complete_step,
+    "record_expiry_wastage": _execute_expiry_wastage,
     "create_customs_lodgement": _execute_customs,
 }
 

@@ -547,3 +547,17 @@ clone the repository, start the app, run `scripts/whistlebird_rebuild_api.py`.
 - **Still outside version control by design.** The admin password (KeePassXC entry
   `workflow-engine/whistlebird_test`) and the app's own Xero/PostHog credentials.
 
+## Expired raw-material handling, 2026-09-19
+
+The API replay now schedules an idempotent wastage event for every raw-material receipt
+whose recorded expiry date has arrived. The event disposes only the quantity that remains
+after earlier documented use, through `POST /api/core/inventory/wastage`, with the
+expiry date as its historical timestamp. A lot is unavailable on its expiry date.
+
+When a documented recipe input is consequently short, the replay creates the minimum
+clearly labelled `Expiry replacement` raw-material receipt immediately before that step,
+then records the step against that replacement inventory item. These reconstructed
+receipts carry an `import_ref` and replay-replacement metadata, so they are resumable,
+auditable, and never presented as a supplier-sourced historical receipt. This means a
+rebuild has neither expired raw-material stock on hand nor a completed step linked to a
+lot used on or after its expiry date.

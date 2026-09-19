@@ -81,7 +81,14 @@ def correct_timestamps(
     exec_ranges = _execution_date_ranges(events)
 
     engine = create_engine(target_url)
-    counts = {"executions": 0, "execution_steps": 0, "inventory_items": 0, "compliance_records": 0}
+    counts = {
+        "executions": 0,
+        "execution_steps": 0,
+        "inventory_items": 0,
+        "replacement_inventory_items": 0,
+        "expiry_wastage": 0,
+        "compliance_records": 0,
+    }
     with engine.begin() as conn:
         row = conn.execute(text("SELECT id FROM organisations WHERE name = :name"), {"name": org_name}).first()
         if not row:
@@ -137,6 +144,29 @@ def correct_timestamps(
             )
             counts["inventory_items"] += result.rowcount
 
+        # Replacement receipts are generated only when an expired/source-short lot
+        # cannot meet a documented recipe demand.  They carry their real replay date
+        # as metadata because they are created immediately before the consuming step,
+        # rather than being a source-manifest purchase event.
+        replacement_rows = conn.execute(
+            text(
+                "SELECT id, extra_data->>'replay_replacement_date' FROM inventory_items "
+                "WHERE org_id = :org_id AND extra_data->>'replay_replacement_date' IS NOT NULL"
+            ),
+            {"org_id": org_id},
+        ).fetchall()
+        for item_id, raw_date in replacement_rows:
+            business_at = _business_at(date.fromisoformat(raw_date))
+            result = conn.execute(
+                text("UPDATE inventory_items SET created_at = :at, updated_at = :at WHERE id = :id"),
+                {"at": business_at, "id": item_id},
+            )
+            counts["replacement_inventory_items"] += result.rowcount
+            conn.execute(
+                text("UPDATE inventory_movements SET created_at = :at WHERE inventory_item_id = :id AND type = 'ADD'"),
+                {"at": business_at, "id": item_id},
+            )
+
         # Outputs the replay created (VAT batches, bottled product, trial library stock)
         # carry no purchase-manifest marker -- they're identified by which execution step
         # produced them, so backdate them to that step's own real date instead.
@@ -176,6 +206,30 @@ def correct_timestamps(
                 {"at": business_at, "org_id": org_id, "marker": marker},
             )
             counts["compliance_records"] += result.rowcount
+
+        for event in events:
+            if event.event_type != "record_expiry_wastage":
+                continue
+            business_at = _business_at(event.real_date)
+            key = f"whistlebird-expiry:{event.payload['marker']}"
+            result = conn.execute(
+                text(
+                    "UPDATE inventory_wastage iw SET recorded_at = :at, created_at = :at "
+                    "WHERE iw.org_id = :org_id AND iw.id IN ("
+                    "  SELECT source_wastage_id FROM inventory_movements "
+                    "  WHERE org_id = :org_id AND metadata->>'idempotency_key' = :key"
+                    ")"
+                ),
+                {"at": business_at, "org_id": org_id, "key": key},
+            )
+            counts["expiry_wastage"] += result.rowcount
+            conn.execute(
+                text(
+                    "UPDATE inventory_movements SET created_at = :at "
+                    "WHERE org_id = :org_id AND metadata->>'idempotency_key' = :key"
+                ),
+                {"at": business_at, "org_id": org_id, "key": key},
+            )
 
     engine.dispose()
     if np3_manifest_path:

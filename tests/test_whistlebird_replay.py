@@ -72,21 +72,65 @@ def test_replay_uses_canonical_recipe_fallback_and_dedicated_ngs():
     store = _Store()
     precise_inputs = [{"inventory_item_id": "cardamom", "name": "Cardamom pods", "quantity": "43.2", "unit": "g"}]
 
-    fallback = replay._recipe_fallback_inputs(store, batch, precise_inputs)
+    fallback = replay._recipe_fallback_inputs(
+        _Client(), store, ReplayEvent("step", "complete_step", date(2025, 4, 2), ()), batch, precise_inputs
+    )
 
     assert not any(item["name"] == "Cardamom pods" for item in fallback)
     assert any(item["name"] == "Juniper Berries (Macedonian)" for item in fallback)
 
 
-def test_replay_records_untracked_recipe_shortfall_without_backdating_a_purchase():
+def test_replay_replaces_recipe_shortfall_with_a_tracked_inventory_lot(monkeypatch):
     class _ShortfallStore:
         def consume_available_raw_material_up_to(self, _name, quantity, _unit):
             return [], quantity
 
-    fallback = replay._recipe_fallback_inputs(_ShortfallStore(), _batch(), [])
+        def raw_material_for_marker(self, _marker):
+            return {"id": "replacement-id", "name": "Juniper Berries (Macedonian)", "unit": "g", "quantity": "100"}
+
+    monkeypatch.setattr(replay, "_recipe_botanical_inputs", lambda _batch: [("Juniper Berries (Macedonian)", Decimal("59.4"), "g")])
+    fallback = replay._recipe_fallback_inputs(
+        _Client(), _ShortfallStore(), ReplayEvent("step", "complete_step", date(2025, 4, 2), ()), _batch(), []
+    )
 
     juniper = next(item for item in fallback if item["name"] == "Juniper Berries (Macedonian)")
-    assert juniper == {"name": "Juniper Berries (Macedonian)", "quantity": "59.4", "unit": "g"}
+    assert juniper == {
+        "inventory_item_id": "replacement-id",
+        "name": "Juniper Berries (Macedonian)",
+        "quantity": "59.4",
+        "unit": "g",
+    }
+
+
+def test_replay_records_remaining_expired_lot_as_idempotent_wastage():
+    class _ExpiryStore:
+        def expiry_wastage_recorded(self, _marker):
+            return False
+
+        def raw_material_for_marker(self, _marker):
+            return {"id": "expired-lot", "name": "Coriander seeds", "unit": "g", "quantity": "125"}
+
+    event = ReplayEvent(
+        "expiry-wastage:raw-legacy-purchases_ingredients-42",
+        "record_expiry_wastage",
+        date(2026, 1, 1),
+        (),
+        {"marker": "raw-legacy-purchases_ingredients-42", "expiry_date": date(2026, 1, 1)},
+    )
+    client = _Client()
+
+    assert replay._execute_expiry_wastage(client, _ExpiryStore(), event) is True
+    assert client.calls == [
+        (
+            "/api/core/inventory/wastage",
+            {
+                "entries": [
+                    {"inventory_item_id": "expired-lot", "quantity_wasted": "125", "reason": "Expired on 2026-01-01"}
+                ],
+                "idempotency_key": "whistlebird-expiry:raw-legacy-purchases_ingredients-42",
+            },
+        )
+    ]
 
 
 def test_replay_uses_physical_lot_quantity_without_changing_linked_consumption():
