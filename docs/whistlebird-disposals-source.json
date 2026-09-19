@@ -106,6 +106,14 @@
       "reason": "Expired 2025-07-01"
     },
     {
+      "lot": "raw-manifest-SBG002",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 392,
+      "unit": "g",
+      "date": "2025-07-29",
+      "reason": "Expired 2025-07-29"
+    },
+    {
       "lot": "raw-legacy-purchases_ingredients-42",
       "ingredient": "Coriander seeds",
       "quantity": 456.8,
@@ -176,6 +184,14 @@
       "unit": "g",
       "date": "2026-04-20",
       "reason": "Expired 2026-04-20"
+    },
+    {
+      "lot": "raw-manifest-SBG003",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 435.2,
+      "unit": "g",
+      "date": "2026-06-19",
+      "reason": "Expired 2026-06-19"
     },
     {
       "lot": "raw-legacy-purchases_ingredients-53",

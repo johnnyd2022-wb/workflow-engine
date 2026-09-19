@@ -6,7 +6,14 @@
       "quantity": 500,
       "unit": "g",
       "supplier": "Moore Wilson",
-      "basis": "founder 2026-09-19; the one legacy receipt (SBG001) was a 500 g bag"
+      "basis": "founder 2026-09-19; the one legacy receipt (SBG001) was a 500 g bag with a 285-day shelf life",
+      "shelf_life_days": 285,
+      "lot_label": {
+        "anchor_date": "2026-09-14",
+        "anchor_number": 392314,
+        "per_day": 17,
+        "note": "Moore Wilson lot numbers count up with time; anchored on the real lot 392314 (dried apple ring, 2026-09-14). Invented ids, in that style."
+      }
     },
     "Persian black lime": {
       "code_prefix": "PBL",
@@ -24,10 +31,10 @@
     },
     "Green tea": {
       "code_prefix": "GRT",
-      "quantity": 100,
+      "quantity": 20,
       "unit": "bags",
       "supplier": "Countdown / Woolworths",
-      "basis": "founder 2026-09-19: a 200 g box, taken as 100 bags at ~2 g a bag (recipe unit is bags) -- confirm"
+      "basis": "founder 2026-09-19: boxes of 20 bags; 2 bags per flask, so 4 per VAT"
     },
     "Szechuan pepper": {
       "code_prefix": "SZP",
@@ -728,13 +735,14 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": "SBG002",
+      "supplier_batch_number": "380465",
       "price_nzd": null,
       "source": "derived: modelled restock of one 500 g pack, bought when stock ran out; first needed by wildflower VAT13. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
       "first_needed_by": {
         "global_vat": 13,
         "product": "wildflower"
-      }
+      },
+      "expiry_date": "2025-07-29"
     },
     {
       "code": "OPD004",
@@ -756,7 +764,7 @@
     {
       "code": "GRT001",
       "ingredient": "Green tea",
-      "quantity": 100,
+      "quantity": 20,
       "unit": "bags",
       "date": "2025-04-14",
       "confidence": "resolved_by_context",
@@ -764,7 +772,7 @@
       "supplier_order_ref": null,
       "supplier_batch_number": "GRT001",
       "price_nzd": null,
-      "source": "derived: modelled restock of one 100 bags pack, bought when stock ran out; first needed by wildflower VAT23. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
+      "source": "derived: modelled restock of one 20 bags pack, bought when stock ran out; first needed by wildflower VAT23. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
       "first_needed_by": {
         "global_vat": 23,
         "product": "wildflower"
@@ -856,6 +864,41 @@
       }
     },
     {
+      "code": "GRT002",
+      "ingredient": "Green tea",
+      "quantity": 20,
+      "unit": "bags",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": "GRT002",
+      "price_nzd": null,
+      "source": "derived: modelled restock of one 20 bags pack, bought when stock ran out; first needed by wildflower VAT37. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
+      "first_needed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG003",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 500,
+      "unit": "g",
+      "date": "2025-09-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": "385990",
+      "price_nzd": null,
+      "source": "derived: modelled restock of one 500 g pack, bought when stock ran out; first needed by wildflower VAT37. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
+      "first_needed_by": {
+        "global_vat": 37,
+        "product": "wildflower"
+      },
+      "expiry_date": "2026-06-19"
+    },
+    {
       "code": "DAS021",
       "ingredient": "Dried apple ring",
       "quantity": 1000,
@@ -890,6 +933,23 @@
       }
     },
     {
+      "code": "GRT003",
+      "ingredient": "Green tea",
+      "quantity": 20,
+      "unit": "bags",
+      "date": "2026-01-03",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": "GRT003",
+      "price_nzd": null,
+      "source": "derived: modelled restock of one 20 bags pack, bought when stock ran out; first needed by wildflower VAT43. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
+      "first_needed_by": {
+        "global_vat": 43,
+        "product": "wildflower"
+      }
+    },
+    {
       "code": "CP022",
       "ingredient": "Cardamom pods",
       "quantity": 500,
@@ -903,6 +963,58 @@
       "source": "derived: modelled restock of one 500 g pack, bought when stock ran out; first needed by wildflower VAT47. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
       "first_needed_by": {
         "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG004",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 500,
+      "unit": "g",
+      "date": "2026-07-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": "391243",
+      "price_nzd": null,
+      "source": "derived: modelled restock of one 500 g pack, bought when stock ran out; first needed by wildflower VAT49. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
+      "first_needed_by": {
+        "global_vat": 49,
+        "product": "wildflower"
+      },
+      "expiry_date": "2027-04-24"
+    },
+    {
+      "code": "GRT004",
+      "ingredient": "Green tea",
+      "quantity": 20,
+      "unit": "bags",
+      "date": "2026-07-20",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": "GRT004",
+      "price_nzd": null,
+      "source": "derived: modelled restock of one 20 bags pack, bought when stock ran out; first needed by wildflower VAT55. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
+      "first_needed_by": {
+        "global_vat": 55,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "GRT005",
+      "ingredient": "Green tea",
+      "quantity": 20,
+      "unit": "bags",
+      "date": "2026-09-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Countdown / Woolworths",
+      "supplier_order_ref": null,
+      "supplier_batch_number": "GRT005",
+      "price_nzd": null,
+      "source": "derived: modelled restock of one 20 bags pack, bought when stock ran out; first needed by wildflower VAT59. No email/DB purchase evidence; drawn down FIFO by every later batch, not sized to one",
+      "first_needed_by": {
+        "global_vat": 59,
         "product": "wildflower"
       }
     }

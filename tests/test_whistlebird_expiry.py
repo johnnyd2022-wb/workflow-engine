@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -147,7 +148,7 @@ def test_the_modelled_restock_purchases_are_well_formed_and_uniquely_coded():
         assert record["confidence"] == "resolved_by_context"
         assert record["first_needed_by"]["global_vat"] and record["first_needed_by"]["product"]
         assert "consumed_by" not in record, "a restock is not pinned to the batch that first needed it"
-        assert record["supplier_batch_number"] == record["code"], "the source map traces a lot by its batch number"
+        assert record["supplier_batch_number"], "the source map traces a lot by its batch number"
         assert record["source"].startswith("derived:"), "curation is labelled in the manifest, never in loaded rows"
 
 
@@ -199,14 +200,14 @@ def test_every_maceration_event_reserves_every_pinned_lot_not_just_its_own():
 
 # --- real pack sizes, not per-batch sizes ------------------------------------------------------
 
-# Founder-confirmed 2026-09-19 (the four botanicals the old manifest sized to one batch's use).
+# Founder-confirmed 2026-09-19 (botanicals the old manifest sized to one batch's use). Green tea: boxes of 20 bags.
 FOUNDER_PACKS = {
     "Sumac berries - ground": (500, "g"),
     "Persian black lime": (500, "g"),
     "Dried mango slices": (1000, "g"),
     "Szechuan pepper": (500, "g"),
     "Orange peel - dried": (200, "g"),
-    "Green tea": (100, "bags"),
+    "Green tea": (20, "bags"),
 }
 
 
@@ -234,19 +235,26 @@ def test_every_modelled_purchase_is_a_whole_pack_never_a_batch_sized_lot():
 
 
 def test_a_pack_purchase_is_drawn_down_by_many_batches(sim):
-    """One purchase, many batches: the trace fans out from the lot, which is what a real purchase looks like."""
+    """One purchase, many batches: the trace fans out from the lot, which is what a real purchase looks like.
+
+    The one exception is a pack opened for the newest batch: nothing has come after it yet to draw it down.
+    """
     restocks = {
         f"raw-manifest-{r['code']}"
         for r in json.loads(DEFAULT_RAW_MATERIAL_MANIFEST.read_text(encoding="utf-8"))["inferred_records"]
         if "first_needed_by" in r
     }
     batches_by_lot: dict[str, set[str]] = {}
+    days_by_lot: dict[str, set[date]] = {}
     for use in sim.uses:
         batches_by_lot.setdefault(use.lot, set()).add(use.batch)
+        days_by_lot.setdefault(use.lot, set()).add(use.on)
+    newest_day = max(use.on for use in sim.uses)
 
     assert restocks <= set(sim.lots)
     for marker in restocks:
-        assert len(batches_by_lot.get(marker, ())) >= 2, f"{marker} feeds fewer than two batches"
+        if len(batches_by_lot.get(marker, ())) < 2:
+            assert days_by_lot.get(marker) == {newest_day}, f"{marker} feeds a single batch that is not the newest"
 
 
 def test_no_two_lots_of_one_material_share_a_supplier_batch_number():
@@ -276,19 +284,38 @@ def test_dried_orange_peel_is_stock_and_only_fresh_orange_peel_is_untracked():
     assert "Orange peel" in untracked
 
 
-def test_the_pack_restock_is_bought_once_when_stock_runs_out_and_covers_later_batches():
-    events = build_timeline(
-        legacy.DEFAULT_LEGACY_SNAPSHOT, wm.DEFAULT_PRODUCTION_MANIFEST, DEFAULT_RAW_MATERIAL_MANIFEST
-    )
-    sumac = [
-        e.payload["record"]
-        for e in events
-        if e.event_type == "create_inventory_item"
-        and replay._canonical_material_name(e.payload["record"].get("name") or e.payload["record"]["ingredient"])
-        == "sumac berries - ground"
+def _sumac_restocks() -> list[dict]:
+    payload = json.loads(DEFAULT_RAW_MATERIAL_MANIFEST.read_text(encoding="utf-8"))
+    return [
+        r for r in payload["inferred_records"] if "first_needed_by" in r and r["ingredient"] == "Sumac berries - ground"
     ]
 
-    assert sorted(Decimal(str(r.get("purchase_quantity", r["quantity"]))) for r in sumac) == [500, 500]
+
+def test_sumac_packs_expire_after_the_shelf_life_of_the_real_bag_and_are_bought_again():
+    restocks = _sumac_restocks()
+
+    assert len(restocks) >= 2, "one 500 g bag cannot last the two years of history"
+    for record in restocks:
+        bought = date.fromisoformat(record["date"])
+        assert date.fromisoformat(record["expiry_date"]) == bought + timedelta(days=285), record["code"]
+
+
+def test_sumac_packs_carry_supplier_batch_ids_that_look_like_real_lot_numbers():
+    restocks = sorted(_sumac_restocks(), key=lambda r: r["date"])
+    ids = [r["supplier_batch_number"] for r in restocks]
+
+    assert all(re.fullmatch(r"\d{6}", batch) for batch in ids), ids
+    assert all(batch != r["code"] for batch, r in zip(ids, restocks)), "not just the internal code"
+    assert ids == sorted(ids), "lot numbers count up with time, as a supplier's do"
+    assert len(set(ids)) == len(ids)
+
+
+def test_a_green_tea_box_is_twenty_bags_and_a_vat_uses_four():
+    pack = PACKS["green tea"]
+    per_vat = next(e for e in wm._WILDFLOWER_MACERATION_INPUTS if e["name"] == "Green tea")
+
+    assert (pack.quantity, pack.unit) == (Decimal(20), "bags")
+    assert Decimal(per_vat["quantity"]) == 4 and per_vat["unit"] == "bags", "2 bags per flask, 2 flasks per VAT"
 
 
 # --- the planner ---------------------------------------------------------------------------

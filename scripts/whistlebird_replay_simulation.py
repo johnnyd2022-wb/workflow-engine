@@ -265,6 +265,12 @@ class Pack:
     quantity: Decimal
     unit: str
     supplier: str | None
+    # A botanical with a known shelf life gets an expiry, so the pack is replaced (and any leftover
+    # written off) when it runs out of date instead of being used for ever.
+    shelf_life_days: int | None = None
+    # Supplier lot numbers that count up with time, anchored on one real lot, for a supplier whose
+    # lots look like that; otherwise a modelled lot's batch number is just its code.
+    lot_anchor: tuple[date, int, int] | None = None
 
 
 def load_restock_packs(manifest: Path | dict[str, Any]) -> dict[str, Pack]:
@@ -281,8 +287,21 @@ def load_restock_packs(manifest: Path | dict[str, Any]) -> dict[str, Pack]:
             quantity=quantity,
             unit=entry["unit"],
             supplier=entry.get("supplier"),
+            shelf_life_days=int(entry["shelf_life_days"]) if entry.get("shelf_life_days") else None,
+            lot_anchor=_lot_anchor(entry["lot_label"]) if entry.get("lot_label") else None,
         )
     return packs
+
+
+def _lot_anchor(label: dict[str, Any]) -> tuple[date, int, int]:
+    return date.fromisoformat(label["anchor_date"]), int(label["anchor_number"]), int(label["per_day"])
+
+
+def _supplier_batch_number(pack: Pack, code: str, purchased: date) -> str:
+    if pack.lot_anchor is None:
+        return code
+    anchor_date, anchor_number, per_day = pack.lot_anchor
+    return str(anchor_number + (purchased - anchor_date).days * per_day)
 
 
 def is_modelled_record(record: dict[str, Any], packs: dict[str, Pack]) -> bool:
@@ -340,19 +359,20 @@ def plan_restock(sim: Simulation, packs: dict[str, Pack]) -> list[dict[str, Any]
             )
         next_number[pack.prefix] += 1
         code = f"{pack.prefix}{next_number[pack.prefix]:03d}"
+        purchased = shortfall.on - timedelta(days=RESTOCK_LEAD_DAYS)
         records.append(
             {
                 "code": code,
                 "ingredient": pack.name,
                 "quantity": _number(pack.quantity),
                 "unit": pack.unit,
-                "date": (shortfall.on - timedelta(days=RESTOCK_LEAD_DAYS)).isoformat(),
+                "date": purchased.isoformat(),
                 "confidence": "resolved_by_context",
                 "supplier": pack.supplier,
                 "supplier_order_ref": None,
-                # Every manifest lot carries its own code as its batch number, so the source map can
-                # trace it by batch (docs commit d34ddaf0 did the same for the records it replaced).
-                "supplier_batch_number": code,
+                # Every manifest lot carries a batch number, so the source map can trace it by batch
+                # (docs commit d34ddaf0 gave the records it replaced their own code).
+                "supplier_batch_number": _supplier_batch_number(pack, code, purchased),
                 "price_nzd": None,
                 "source": (
                     f"derived: modelled restock of one {_number(pack.quantity)} {pack.unit} pack, bought when stock "
@@ -362,6 +382,8 @@ def plan_restock(sim: Simulation, packs: dict[str, Pack]) -> list[dict[str, Any]
                 "first_needed_by": {"global_vat": shortfall.global_vat, "product": shortfall.product_line},
             }
         )
+        if pack.shelf_life_days:
+            records[-1]["expiry_date"] = (purchased + timedelta(days=pack.shelf_life_days)).isoformat()
     return records
 
 
