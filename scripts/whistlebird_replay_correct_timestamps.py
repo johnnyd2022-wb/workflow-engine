@@ -21,7 +21,6 @@ the loaded data itself.
 
 Usage:
     uv run python scripts/whistlebird_replay_correct_timestamps.py \\
-        --legacy-url postgresql://wb_admin:whistlebird@localhost:5401/whistlebird_inventory \\
         --target-url postgresql://workflow_rw:...@localhost:8401/workflow-engine-test \\
         --org-name whistlebird_test
 """
@@ -38,6 +37,7 @@ from pathlib import Path
 from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent))
+import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
 from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
@@ -72,12 +72,12 @@ def _execution_date_ranges(events: list[ReplayEvent]) -> dict[str, tuple[date, d
 
 
 def correct_timestamps(
-    legacy_url: str,
+    legacy_source: str | Path,
     target_url: str,
     org_name: str,
     np3_manifest_path: Path | None = np3.DEFAULT_NP3_MANIFEST,
 ) -> dict[str, int]:
-    events = build_timeline(legacy_url, Path(wm.DEFAULT_PRODUCTION_MANIFEST))
+    events = build_timeline(legacy_source, Path(wm.DEFAULT_PRODUCTION_MANIFEST))
     exec_ranges = _execution_date_ranges(events)
 
     engine = create_engine(target_url)
@@ -189,14 +189,21 @@ def correct_timestamps(
 
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--legacy-url", default=os.environ.get("WB_LEGACY_DATABASE_URL"))
+    parser.add_argument(
+        "--legacy-url",
+        "--legacy-source",
+        dest="legacy_source",
+        default=legacy.DEFAULT_LEGACY_SNAPSHOT,
+        help="Where the prior inventory data comes from: a path to a snapshot JSON (default: the committed "
+        "docs/whistlebird-legacy-source.json) or a postgresql:// URL to read the live legacy database.",
+    )
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
     parser.add_argument("--org-name", default=wm.RESET_ORG_NAME)
     parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
     parser.add_argument("--skip-np3", action="store_true", help="Correct Core history only.")
     args = parser.parse_args()
-    if not args.legacy_url or not args.target_url:
-        parser.error("--legacy-url and --target-url are required")
+    if not args.target_url:
+        parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
     if args.org_name != wm.RESET_ORG_NAME:
         parser.error(f"--org-name must be exactly {wm.RESET_ORG_NAME!r}")
     return args
@@ -205,7 +212,7 @@ def _arguments() -> argparse.Namespace:
 def main() -> int:
     args = _arguments()
     result = correct_timestamps(
-        args.legacy_url, args.target_url, args.org_name, None if args.skip_np3 else args.np3_manifest
+        args.legacy_source, args.target_url, args.org_name, None if args.skip_np3 else args.np3_manifest
     )
     print(result)
     return 0

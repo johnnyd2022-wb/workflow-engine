@@ -5,8 +5,10 @@ import sys
 from pathlib import Path
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
+import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
 import whistlebird_rebuild_api as rebuild_api  # noqa: E402
@@ -44,7 +46,6 @@ def steps(monkeypatch, tmp_path):
 def _args(steps, *extra):
     return rebuild_api._arguments(
         [
-            "--legacy-url=postgresql://legacy",
             "--target-url=postgresql://target",
             f"--np3-manifest={steps['manifest']}",
             *extra,
@@ -113,3 +114,32 @@ def test_unreachable_app_blocks_the_reset(steps, monkeypatch):
 def test_only_the_test_tenant_is_accepted(steps):
     with pytest.raises(SystemExit):
         _args(steps, "--org-name=Some Other Org")
+
+
+def test_default_legacy_source_is_the_committed_snapshot_so_no_database_is_needed(steps):
+    args = _args(steps)
+
+    assert Path(args.legacy_source) == legacy.DEFAULT_LEGACY_SNAPSHOT
+    assert rebuild_api.preflight(args) == []
+
+
+def test_unusable_legacy_snapshot_blocks_the_reset(steps, tmp_path):
+    broken = tmp_path / "legacy.json"
+    broken.write_text('{"version": 1, "tables": {}}')
+
+    with pytest.raises(rebuild_api.RebuildRefusedError, match="legacy source unusable"):
+        rebuild_api.rebuild(_args(steps, f"--legacy-source={broken}", "--confirm-reset-whistlebird-test"))
+
+    assert steps["called"] == [], "a bad source must be found before anything destructive runs"
+
+
+def test_unreachable_legacy_database_blocks_the_reset(steps, monkeypatch):
+    def _refuse(*_a, **_k):
+        raise OperationalError("connect", {}, Exception("could not connect"))
+
+    monkeypatch.setattr(legacy, "open_legacy", _refuse)
+
+    with pytest.raises(rebuild_api.RebuildRefusedError, match="legacy source unusable"):
+        rebuild_api.rebuild(_args(steps, "--legacy-url=postgresql://nowhere/db", "--confirm-reset-whistlebird-test"))
+
+    assert steps["called"] == []

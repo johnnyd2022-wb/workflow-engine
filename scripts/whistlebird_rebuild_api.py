@@ -16,7 +16,6 @@ evidence would be gone. Override with --discard-unsnapshotted-np3 only when that
 intent.
 
     uv run python scripts/whistlebird_rebuild_api.py --base-url https://localhost:8005 --insecure \\
-        --legacy-url postgresql://wb_admin:whistlebird@localhost:5401/whistlebird_inventory \\
         --target-url postgresql://workflow_rw:...@localhost:8401/workflow-engine-test \\
         --confirm-reset-whistlebird-test
 """
@@ -32,8 +31,10 @@ from typing import Any
 
 import requests
 import urllib3
+from sqlalchemy.exc import SQLAlchemyError
 
 sys.path.insert(0, str(Path(__file__).parent))
+import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
 import whistlebird_replay as replay  # noqa: E402
@@ -73,6 +74,12 @@ def preflight(args: argparse.Namespace) -> list[str]:
     except np3.Np3ManifestError as exc:
         return [f"NP3 manifest invalid: {exc}"]
     problems: list[str] = []
+    try:
+        with legacy.open_legacy(args.legacy_source):
+            pass
+    except (legacy.LegacySnapshotError, OSError, SQLAlchemyError) as exc:
+        # Found here, before the reset: a legacy source that fails later would leave a wiped tenant.
+        problems.append(f"legacy source unusable ({args.legacy_source}): {type(exc).__name__}: {exc}")
     if not args.discard_unsnapshotted_np3:
         unsnapshotted = np3.np3_unsnapshotted(args.target_url, args.org_name, manifest)
         if unsnapshotted:
@@ -102,7 +109,7 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
     report["compliant_setup"] = wm.ensure_compliant_nz_alcohol_setup(args.target_url, args.org_name)
     report["replay"] = replay.run_replay(
         args.base_url,
-        args.legacy_url,
+        args.legacy_source,
         args.target_url,
         args.production_manifest,
         args.admin_email,
@@ -112,10 +119,10 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         np3_manifest_path=args.np3_manifest,
     )
     report["timestamps"] = correct.correct_timestamps(
-        args.legacy_url, args.target_url, args.org_name, np3_manifest_path=args.np3_manifest
+        args.legacy_source, args.target_url, args.org_name, np3_manifest_path=args.np3_manifest
     )
     report["verification"] = wm.build_import_verification(
-        args.legacy_url,
+        args.legacy_source,
         args.target_url,
         args.org_name,
         args.production_manifest,
@@ -129,7 +136,14 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base-url", default="https://localhost:8005")
     parser.add_argument("--insecure", action="store_true", help="Skip TLS verification (self-signed local certs).")
-    parser.add_argument("--legacy-url", default=os.environ.get("WB_LEGACY_DATABASE_URL"))
+    parser.add_argument(
+        "--legacy-url",
+        "--legacy-source",
+        dest="legacy_source",
+        default=legacy.DEFAULT_LEGACY_SNAPSHOT,
+        help="Where the prior inventory data comes from: a path to a snapshot JSON (default: the committed "
+        "docs/whistlebird-legacy-source.json) or a postgresql:// URL to read the live legacy database.",
+    )
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
     parser.add_argument("--production-manifest", type=Path, default=wm.DEFAULT_PRODUCTION_MANIFEST)
     parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
@@ -147,10 +161,8 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
         help="Proceed even though the database holds NP3 evidence the manifest lacks (it will be lost).",
     )
     args = parser.parse_args(argv)
-    if not args.legacy_url or not args.target_url:
-        parser.error(
-            "--legacy-url and --target-url are required (or set WB_LEGACY_DATABASE_URL / BIZE_MIGRATION_DATABASE_URL)"
-        )
+    if not args.target_url:
+        parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
     if args.org_name != wm.RESET_ORG_NAME:
         parser.error(f"--org-name must be exactly {wm.RESET_ORG_NAME!r}")
     args.admin_password = os.environ.get(args.admin_password_env)

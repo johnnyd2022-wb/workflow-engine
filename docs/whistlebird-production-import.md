@@ -29,9 +29,12 @@ users) and read from the same two sources below.
 `whistlebird_test` organisation in `workflow-engine-test` so the tool shows what the
 business has actually done, from two frozen sources:
 
-1. **The prior inventory database** (`WB_LEGACY_DATABASE_URL`, read-only). Covers
-   ingredient/GNS/bottle purchases, Wildflower batches VAT1–25, the first Rosella vat
-   (VAT26), the 2023–2025 recipe/distillation trials, and every Customs lodgement.
+1. **The prior inventory database**, committed as `docs/whistlebird-legacy-source.json`
+   (exported by `scripts/whistlebird_legacy.py`). Covers ingredient/GNS/bottle purchases,
+   Wildflower batches VAT1–25, the first Rosella vat (VAT26), the 2023–2025
+   recipe/distillation trials, and every Customs lodgement. The API replay reads this file,
+   so **a clone of the repository is enough to rebuild the org -- the old database does not
+   need to be running.** See "Legacy database snapshot" in `docs/whistlebird-replay-plan.md`.
 2. **A curated per-batch manifest** — `docs/whistlebird-production-sheet-source.json`,
    a human-reviewed snapshot of the founder's "Production!!" Google-Sheet tab. Covers the
    post-cutoff batches (Solstice VAT27+, later Wildflower, the Rosella-from-Solstice
@@ -103,6 +106,10 @@ whose marker already exists, so every action is re-runnable.
 ## Commands
 
 ```bash
+# The API replay (scripts/whistlebird_rebuild_api.py) needs none of the legacy variables below:
+# it reads docs/whistlebird-legacy-source.json. WB_LEGACY_DATABASE_URL is only for the older
+# ORM-direct path here (dry-runs, --rebuild-whistlebird-test), which still queries the live
+# database, and for re-exporting the snapshot.
 export WB_LEGACY_DATABASE_URL='postgresql://wb_admin:whistlebird@localhost:5401/whistlebird_inventory'
 export BIZE_MIGRATION_DATABASE_URL='postgresql://workflow_rw:<db password>@localhost:8401/workflow-engine-test'
 export WHISTLEBIRD_TEST_ADMIN_PASSWORD='<store in your password manager>'
