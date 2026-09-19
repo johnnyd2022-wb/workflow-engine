@@ -42,6 +42,12 @@ The data is treated as **live production history**: no row it writes carries the
 every written row is the only trace, and it exists purely so a scoped reset-and-replay is
 exact.
 
+**NP3 food-control evidence** (attestations, control logs, NP3 profile settings, staff)
+is replayed by the API path too, from `docs/whistlebird-np3-evidence-source.json` -- see
+"NP3 food-control evidence" in `docs/whistlebird-replay-plan.md`. One command rebuilds
+everything: `scripts/whistlebird_rebuild_api.py`. Snapshot NP3 evidence out of the database
+(`scripts/whistlebird_np3.py snapshot`) and commit it **before** any reset.
+
 ## Model
 
 **One workflow per product; one execution per VAT batch.** Each batch execution walks its

@@ -432,3 +432,55 @@ Verified against a full reset -> replay (684 events) -> timestamp-correction ->
 `--verify-import` cycle, all counts exact. 63 whistlebird tests pass, including 5 new
 ones covering the pending-step parsing, the suffix-validation error, `_batch_events`
 truncation, and the `_enrich_ingredient_codes` regression.
+
+## NP3 food-control evidence, 2026-09-19
+
+The NP3 evidence the business enters in the Compliant workspace (attestations, control
+logs, review intervals, NP3 profile settings, the staff the training/illness logs name)
+lives only in the database, and the scoped reset deletes `compliance_records`. It is now
+replayable the same two-pass way as the Core history. Code: `scripts/whistlebird_np3.py`;
+source of truth: `docs/whistlebird-np3-evidence-source.json`.
+
+**Workflow**
+
+1. Enter evidence in the app (text and selections only).
+2. `uv run python scripts/whistlebird_np3.py snapshot --target-url ...` writes it into the
+   manifest (`--dry-run` first to see what changes). Commit the JSON.
+3. `uv run python scripts/whistlebird_rebuild_api.py --base-url https://localhost:8005
+   --insecure --legacy-url ... --target-url ... --confirm-reset-whistlebird-test` rebuilds
+   everything: ensure tenant -> admin password -> scoped reset -> workflows -> Compliant
+   setup -> replay (Core, then NP3) -> timestamp pass -> verify. Without the confirm flag
+   it is a read-only preflight.
+
+**Decisions (founder, 2026-09-19)**
+
+- Text and selection evidence only. A record linking Core entities (`source_refs`) or an
+  uploaded evidence file is refused by the snapshot, never silently dropped.
+- Dates are set explicitly in the manifest (`signed_on`, `due_date` on an attestation; a
+  log's `event_date`). The NP3 routes stamp "now" and compute an attestation's due date
+  from today, so the timestamp pass sets `created_at`/`updated_at`/`due_date` from the
+  manifest. A snapshot keeps dates already in the manifest for unchanged records; a new
+  attestation takes today's date until edited.
+- UUIDs are not preserved. A log's employee is keyed by email, and staff are created
+  through `POST /org/users` (active, random discarded password -- nobody signs in as them)
+  before their logs are replayed.
+- Identity/idempotency is a content fingerprint (the routes build `details` server-side, so
+  no `import_ref` marker can ride along). Two identical entries in one manifest are
+  rejected.
+- The NP3 phase runs after every Core event, so an `np3_execution_evidence_mode: required`
+  profile in the manifest cannot block the Core step completions.
+
+**Safety guard.** Before anything destructive the rebuild validates the manifest and
+refuses to continue if the database holds NP3 evidence, staff or profile settings the
+manifest lacks (`--discard-unsnapshotted-np3` overrides). `--verify-import` now also
+checks NP3 record count, content, staff, profile and dates.
+
+**Derived NP3 evidence needs nothing stored.** Traceability, supplier and receiving
+evidence is projected live from the Core DAG once the Core replay has run.
+
+**Not yet exercised end to end.** Verified by tests against the real routes and DB on a
+throwaway org (replay, dating, snapshot round-trip, delete-and-replay reproduces the
+evidence) and a read-only smoke test of the CLI against `whistlebird_test`. The full
+`scripts/whistlebird_rebuild_api.py` run against `whistlebird_test` has NOT been done --
+rehearse it (snapshot, commit, rebuild, confirm `--verify-import` is clean) well before
+relying on it.
