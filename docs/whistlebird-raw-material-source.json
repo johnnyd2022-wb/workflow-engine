@@ -349,7 +349,7 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#26770",
-      "supplier_batch_number": null,
+      "supplier_batch_number": "JBM006",
       "price_nzd": 62,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -431,7 +431,7 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#27558",
-      "supplier_batch_number": null,
+      "supplier_batch_number": "JBH006",
       "price_nzd": 62,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -499,7 +499,7 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#27804",
-      "supplier_batch_number": null,
+      "supplier_batch_number": "JBM008",
       "price_nzd": 64,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -526,7 +526,7 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#27804",
-      "supplier_batch_number": null,
+      "supplier_batch_number": "EF004",
       "price_nzd": 82,
       "source": "email: jill@alembics.co.nz order confirmation"
     }
@@ -2927,7 +2927,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "DAR002",
       "price_nzd": null,
       "source": "derived: wildflower VAT4 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -2944,7 +2944,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "DAR003",
       "price_nzd": null,
       "source": "derived: wildflower VAT5 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -2961,7 +2961,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "DAR004",
       "price_nzd": null,
       "source": "derived: wildflower VAT6 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -2978,7 +2978,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "DAR005",
       "price_nzd": null,
       "source": "derived: wildflower VAT7 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -2995,7 +2995,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "DAR006",
       "price_nzd": null,
       "source": "derived: wildflower VAT8 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3012,7 +3012,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "DAR007",
       "price_nzd": null,
       "source": "derived: wildflower VAT9 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3029,7 +3029,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Alembics",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "ORR005",
       "price_nzd": null,
       "source": "derived: wildflower VAT9 maceration requirement; the 30.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3046,7 +3046,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "DAR008",
       "price_nzd": null,
       "source": "derived: wildflower VAT10 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3063,7 +3063,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Alembics",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "ORR006",
       "price_nzd": null,
       "source": "derived: wildflower VAT10 maceration requirement; the 30.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3080,7 +3080,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "DAR009",
       "price_nzd": null,
       "source": "derived: wildflower VAT11 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3097,7 +3097,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Alembics",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "ORR007",
       "price_nzd": null,
       "source": "derived: wildflower VAT11 maceration requirement; the 30.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3114,7 +3114,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "DAR010",
       "price_nzd": null,
       "source": "derived: wildflower VAT12 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3131,7 +3131,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Alembics",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "ORR008",
       "price_nzd": null,
       "source": "derived: wildflower VAT12 maceration requirement; the 30.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3148,7 +3148,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP020",
       "price_nzd": null,
       "source": "derived: wildflower VAT13 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3165,7 +3165,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG014",
       "price_nzd": null,
       "source": "derived: wildflower VAT13 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3182,7 +3182,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP021",
       "price_nzd": null,
       "source": "derived: wildflower VAT14 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3199,7 +3199,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG015",
       "price_nzd": null,
       "source": "derived: wildflower VAT14 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3216,7 +3216,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP022",
       "price_nzd": null,
       "source": "derived: wildflower VAT15 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3233,7 +3233,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG016",
       "price_nzd": null,
       "source": "derived: wildflower VAT15 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3250,7 +3250,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP023",
       "price_nzd": null,
       "source": "derived: wildflower VAT16 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3267,7 +3267,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG017",
       "price_nzd": null,
       "source": "derived: wildflower VAT16 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3284,7 +3284,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP024",
       "price_nzd": null,
       "source": "derived: wildflower VAT17 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3301,7 +3301,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG018",
       "price_nzd": null,
       "source": "derived: wildflower VAT17 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3318,7 +3318,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP025",
       "price_nzd": null,
       "source": "derived: wildflower VAT18 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3335,7 +3335,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG019",
       "price_nzd": null,
       "source": "derived: wildflower VAT18 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3352,7 +3352,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP026",
       "price_nzd": null,
       "source": "derived: wildflower VAT19 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3369,7 +3369,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG020",
       "price_nzd": null,
       "source": "derived: wildflower VAT19 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3386,7 +3386,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP027",
       "price_nzd": null,
       "source": "derived: wildflower VAT20 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3403,7 +3403,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG021",
       "price_nzd": null,
       "source": "derived: wildflower VAT20 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3420,7 +3420,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP028",
       "price_nzd": null,
       "source": "derived: wildflower VAT21 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3437,7 +3437,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG022",
       "price_nzd": null,
       "source": "derived: wildflower VAT21 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3454,7 +3454,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP029",
       "price_nzd": null,
       "source": "derived: wildflower VAT22 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3471,7 +3471,7 @@
       "confidence": "resolved_by_context",
       "supplier": "HB Malt Station",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "OPD021",
       "price_nzd": null,
       "source": "derived: wildflower VAT22 maceration requirement; the 2.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3488,7 +3488,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG023",
       "price_nzd": null,
       "source": "derived: wildflower VAT22 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3505,7 +3505,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP030",
       "price_nzd": null,
       "source": "derived: wildflower VAT23 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3522,7 +3522,7 @@
       "confidence": "resolved_by_context",
       "supplier": "HB Malt Station",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "OPD022",
       "price_nzd": null,
       "source": "derived: wildflower VAT23 maceration requirement; the 14.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3539,7 +3539,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG024",
       "price_nzd": null,
       "source": "derived: wildflower VAT23 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3556,7 +3556,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP031",
       "price_nzd": null,
       "source": "derived: wildflower VAT24 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3573,7 +3573,7 @@
       "confidence": "resolved_by_context",
       "supplier": "HB Malt Station",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "OPD023",
       "price_nzd": null,
       "source": "derived: wildflower VAT24 maceration requirement; the 14.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3590,7 +3590,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG025",
       "price_nzd": null,
       "source": "derived: wildflower VAT24 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3607,7 +3607,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP032",
       "price_nzd": null,
       "source": "derived: wildflower VAT25 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3624,7 +3624,7 @@
       "confidence": "resolved_by_context",
       "supplier": "HB Malt Station",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "OPD024",
       "price_nzd": null,
       "source": "derived: wildflower VAT25 maceration requirement; the 14.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3641,7 +3641,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG026",
       "price_nzd": null,
       "source": "derived: wildflower VAT25 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3658,7 +3658,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "CP033",
       "price_nzd": null,
       "source": "derived: wildflower VAT31 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3675,7 +3675,7 @@
       "confidence": "resolved_by_context",
       "supplier": "HB Malt Station",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "OPD025",
       "price_nzd": null,
       "source": "derived: wildflower VAT31 maceration requirement; the 14.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3692,7 +3692,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG027",
       "price_nzd": null,
       "source": "derived: wildflower VAT31 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3709,7 +3709,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Alembics",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "LM007",
       "price_nzd": null,
       "source": "derived: wildflower VAT46 maceration requirement; the 14 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3726,7 +3726,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Alembics",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "LM008",
       "price_nzd": null,
       "source": "derived: wildflower VAT47 maceration requirement; the 14 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3743,7 +3743,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "PBL016",
       "price_nzd": null,
       "source": "derived: wildflower VAT55 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3760,7 +3760,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG028",
       "price_nzd": null,
       "source": "derived: wildflower VAT55 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3777,7 +3777,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "PBL017",
       "price_nzd": null,
       "source": "derived: wildflower VAT57 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3794,7 +3794,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG029",
       "price_nzd": null,
       "source": "derived: wildflower VAT57 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3811,7 +3811,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "PBL018",
       "price_nzd": null,
       "source": "derived: wildflower VAT58 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3828,7 +3828,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG030",
       "price_nzd": null,
       "source": "derived: wildflower VAT58 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3845,7 +3845,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "PBL019",
       "price_nzd": null,
       "source": "derived: wildflower VAT56 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3862,7 +3862,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG031",
       "price_nzd": null,
       "source": "derived: wildflower VAT56 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3879,7 +3879,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "PBL020",
       "price_nzd": null,
       "source": "derived: wildflower VAT59 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
@@ -3896,7 +3896,7 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "SBG032",
       "price_nzd": null,
       "source": "derived: wildflower VAT59 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
       "consumed_by": {
