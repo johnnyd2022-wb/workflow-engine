@@ -358,7 +358,7 @@ _GREEN_GOLD_STEPS = (
         "Bottle the documented Green Gold diversion from aged Wildflower",
         "Green Gold - final product",
         "units",
-        (_tracked_input("Aged Wildflower gin", "41", "L"),),
+        (_tracked_input("Aged Wildflower gin", "35.875", "L"),),
         (),
     ),
 )
