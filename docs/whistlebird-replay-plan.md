@@ -625,3 +625,25 @@ lots (Juniper, Coriander) fanned out to 6-16 batches.
 - Dried orange peel is tracked stock. Only *fresh* orange peel (Solstice) is an untracked other material.
 - Rebuild preflight now fails a manifest whose packs are not bought, pointing at `plan --write`.
 
+## Replay audit-date completion, 2026-09-20
+
+The timestamp pass now dates the whole replay trail: process definitions/versions/steps,
+execution and inventory events plus their cached summaries, purchase audit-history JSON,
+customs/NP3 audit logs, wastage ledger rows, CRM configuration/mappings, and NP3 staff.
+It clears false completion dates left on in-progress executions and pending steps by
+the previous pass. Setup records without source dates use deterministic dependency
+anchors; see `docs/whistlebird-production-import.md`.
+
+The current source has 45 purchase-before-use dependency conflicts involving 23 receipts.
+Following the founder's choice, the source `purchase_date` stays as recorded while
+creation/audit timestamps move before first use. Actual FIFO links get a final check.
+VAT53's inferred September preparation/aging date also conflicted with the documented
+31 July Green Gold diversion; those prerequisite audit events move to 31 July in
+topological order, while the later Wildflower bottling keeps 1 September.
+
+Validation: 39 replay/rebuild unit tests passed, two NP3 route/database tests passed,
+and a rollback-only database exercise dated 569 of 575 currently present Core events
+and their linked audit rows. The six missing events are newer than the existing test
+tenant; a full rebuild is needed to apply the latest manifest. The existing tenant
+also holds a Xero connection, 381 synced invoices and 507 FIFO allocations, so no
+reset was run during this change.
