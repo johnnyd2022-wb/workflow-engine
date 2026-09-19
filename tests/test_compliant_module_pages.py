@@ -123,6 +123,7 @@ def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
     assert tabs.count('hx-boost="false"') == 4
     assert 'href="/compliant" hx-boost="false"' in sidebar
     assert 'href="/api/compliant/np3-audit?format=csv" hx-boost="false"' in audit
+    assert 'href="/api/compliant/np3-audit?format=pdf" hx-boost="false"' in audit
 
 
 def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeholders():

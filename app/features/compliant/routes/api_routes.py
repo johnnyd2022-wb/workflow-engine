@@ -10,7 +10,9 @@ from uuid import UUID
 from flask import Blueprint, Response, g, jsonify, render_template, request
 from sqlalchemy.exc import IntegrityError
 
+from app.core.backend.evidence.evidence_service import get_evidence_for_download
 from app.core.db import db_session
+from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
 from app.core.db.models.user import User, UserRole
 from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
@@ -18,6 +20,7 @@ from app.features.compliant.models import ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
 from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook, np3_log_template
 from app.features.compliant.modules.nz_alcohol.workflow_rules import validate_workflow_settings
+from app.features.compliant.np3_evidence_pdf import build_np3_evidence_register_pdf
 from app.features.compliant.platform.workflow_rules import workflow_context
 from app.features.compliant.service import ComplianceService, serialise_record
 from app.observability import get_logger
@@ -93,8 +96,37 @@ def np3_audit():
         audit = _service().np3_audit(_org_id())
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 409
-    if request.args.get("format") != "csv":
+    export_format = request.args.get("format")
+    if export_format not in {"csv", "pdf"}:
         return jsonify(audit), 200
+
+    if export_format == "pdf":
+        uploaded_evidence = []
+        evidence_rows = (
+            db_session.query(ExecutionEvidence)
+            .filter(
+                ExecutionEvidence.org_id == _org_id(),
+                ExecutionEvidence.evidence_status == EVIDENCE_STATUS_ACTIVE,
+            )
+            .order_by(ExecutionEvidence.created_at.asc(), ExecutionEvidence.id.asc())
+            .all()
+        )
+        for evidence in evidence_rows:
+            content, mime_type, file_name, error = get_evidence_for_download(evidence.id, _org_id())
+            uploaded_evidence.append(
+                {
+                    "file_name": file_name or evidence.file_name,
+                    "mime_type": mime_type or evidence.mime_type,
+                    "checksum_sha256": evidence.checksum_sha256,
+                    "content": content,
+                    "error": error,
+                }
+            )
+        return Response(
+            build_np3_evidence_register_pdf(audit, uploaded_evidence),
+            mimetype="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=np3-verification-evidence.pdf"},
+        )
 
     output = StringIO()
     writer = csv.writer(output)
