@@ -106,6 +106,14 @@
       "reason": "Expired 2025-07-01"
     },
     {
+      "lot": "raw-manifest-SBG002",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 392,
+      "unit": "g",
+      "date": "2025-07-29",
+      "reason": "Expired 2025-07-29"
+    },
+    {
       "lot": "raw-legacy-purchases_ingredients-42",
       "ingredient": "Coriander seeds",
       "quantity": 456.8,
@@ -124,7 +132,7 @@
     {
       "lot": "raw-legacy-purchases_ingredients-48",
       "ingredient": "Dried apple ring",
-      "quantity": 496,
+      "quantity": 1000,
       "unit": "g",
       "date": "2025-11-15",
       "reason": "Expired 2025-11-15"
@@ -132,18 +140,10 @@
     {
       "lot": "raw-legacy-purchases_ingredients-44",
       "ingredient": "Persian black lime",
-      "quantity": 300,
+      "quantity": 176,
       "unit": "g",
       "date": "2026-01-01",
       "reason": "Expired 2026-01-01"
-    },
-    {
-      "lot": "raw-legacy-purchases_ingredients-36",
-      "ingredient": "Persian black lime",
-      "quantity": 5.6,
-      "unit": "g",
-      "date": "2026-02-01",
-      "reason": "Expired 2026-02-01"
     },
     {
       "lot": "raw-legacy-purchases_ingredients-30",
@@ -180,10 +180,18 @@
     {
       "lot": "raw-legacy-purchases_ingredients-47",
       "ingredient": "Dried mango slices",
-      "quantity": 266,
+      "quantity": 104,
       "unit": "g",
       "date": "2026-04-20",
       "reason": "Expired 2026-04-20"
+    },
+    {
+      "lot": "raw-manifest-SBG003",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 435.2,
+      "unit": "g",
+      "date": "2026-06-19",
+      "reason": "Expired 2026-06-19"
     },
     {
       "lot": "raw-legacy-purchases_ingredients-53",

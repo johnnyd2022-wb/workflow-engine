@@ -164,15 +164,22 @@ def _load_raw_material_manifest(
 ) -> tuple[list[dict[str, Any]], dict[int, list[str]], dict[int, dict[str, tuple[str, str]]]]:
     """Return (all purchase records, {global_vat: [codes purchased for it]},
     {global_vat: {code: (quantity, unit)}} -- only for records with a known exact
-    per-batch amount, i.e. the inferred tier. See whistlebird-replay-plan.md's
+    per-batch amount, i.e. `consumed_by` records. See whistlebird-replay-plan.md's
     "real constraint that changes scope" note for why clean-tier/legacy codes never
     appear in the third return value.
+
+    A modelled pack restock names the batch that first needed it in `first_needed_by`: that
+    orders the purchase before the batch, but does not pin it, so later batches draw from the
+    same lot through the FIFO fallback and one purchase fans out across every batch it feeds.
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
     records = list(payload.get("clean_records", [])) + list(payload.get("inferred_records", []))
     codes_by_vat: dict[int, list[str]] = defaultdict(list)
     known_quantity_by_vat: dict[int, dict[str, tuple[str, str]]] = defaultdict(dict)
     for record in payload.get("inferred_records", []):
+        needed = record.get("first_needed_by")
+        if needed and "global_vat" in needed:
+            codes_by_vat[int(needed["global_vat"])].append(record["code"])
         consumed = record.get("consumed_by")
         if consumed and "global_vat" in consumed:
             vat = int(consumed["global_vat"])

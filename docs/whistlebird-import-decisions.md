@@ -340,6 +340,9 @@ a real mechanism, not just more manifest rows:
   instead of a manual field list, which structurally can't drop a field this way again.
   Regression-tested (`test_enrich_ingredient_codes_preserves_pending_steps`).
 
+> **Superseded 2026-09-19:** the per-batch, exactly-sized purchases described below were replaced by whole-pack
+> restocks that fan out across batches -- see `docs/whistlebird-replay-plan.md` "Real pack sizes".
+
 **Botanical stock was already exhausted for these batches**, independent of the pending-
 step work: `Cardamom pods`, `Green tea`, `Orange peel - dried`, `Hibiscus flowers`,
 `Dried mango slices`, and `Dried apple ring` are never bought in bulk -- every prior

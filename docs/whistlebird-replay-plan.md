@@ -566,7 +566,7 @@ came after the lot had expired** (up to 739 days), and 12 expired lots still hel
   every maceration event's `reserved_ingredient_codes`). The reservation was found the hard way: with
   expired lots skipped, an earlier batch's fallback moved on to a newer lot and emptied VAT53's pinned
   lots before VAT53 ran.
-- **Modelled restock purchases.** Skipping expired lots leaves the demand only they could have met
+- **Modelled restock purchases** *(sizing superseded 2026-09-19: see "Real pack sizes" below)*. Skipping expired lots leaves the demand only they could have met
   (1,384 g over 58 batch/ingredient pairs, mostly dried apple ring, cardamom, sumac, orris root). Each is
   a `resolved_by_context` purchase in `docs/whistlebird-raw-material-source.json`, in the existing
   style: sized to exactly that batch's shortfall, dated 3 days before its maceration, from the
@@ -588,3 +588,40 @@ came after the lot had expired** (up to 739 days), and 12 expired lots still hel
 - **Not evidence.** If the recorded expiry dates are conservative best-before dates and the herbs were
   in fact used past them, the modelled restock purchases replace a real (if late) use of an old lot.
   Correct the expiry at the source (the legacy snapshot) to undo that for a given lot.
+
+## Real pack sizes, not per-batch sizes, 2026-09-19
+
+The `whistlebird_test` source-map trace showed each botanical as dozens of tiny lots -- Sumac as 54 lots of
+at most 7.2 g -- instead of the bag actually bought. Two causes: the manifest held a `resolved_by_context`
+purchase per (batch, ingredient), sized to exactly that batch's use and *pinned* to it (`consumed_by`, and
+reserved from the FIFO fallback), so one lot traced to exactly one batch; and an intermediate replay
+(`192cdd01`) had also minted an `Expiry replacement` lot per step. The tracer was never at fault -- real
+lots (Juniper, Coriander) fanned out to 6-16 batches.
+
+- **`restock_packs`** in `docs/whistlebird-raw-material-source.json` is the size each botanical is really
+  bought in, with its supplier and code prefix: Sumac 500 g, Persian black lime 500 g, Dried mango 1 kg,
+  Szechuan pepper 500 g, Dried orange peel 200 g, Green tea 20 bags (a box; 2 bags per flask, 4 per VAT), Cardamom 500 g,
+  Hibiscus 500 g, Dried apple ring 1 kg, Orris root 500 g, Lemon myrtle 200 g. Founder-confirmed for the
+  first six; the rest are the size of every real receipt of that botanical (legacy rows and the VAT59
+  supplier lots).
+- **The planner buys a whole pack only when stock runs out.** `plan_restock` (in
+  `scripts/whistlebird_replay_simulation.py`) takes the earliest unbacked demand per ingredient, buys one
+  pack dated 3 days before it, and `plan --write` re-simulates until nothing is short. A recipe that
+  predates every receipt (before 2025-04-02, with no earlier lot) stays an unbacked "other material"
+  line, as before. A demand larger than one pack is an error, never a bigger lot.
+- **Restocks are ordered, not pinned.** `first_needed_by` puts the purchase before the batch that first
+  needs it; nothing reserves it, so every later batch draws it down FIFO and the trace shows one
+  purchase feeding many batches, then the sales mapped to them. Only the three VAT59 supplier lots
+  (real receipts) keep `consumed_by`.
+- **Result:** 301 lots become 126 -- 20 modelled pack purchases in place of ~200 per-batch ones -- and
+  each feeds 5-28 batches (the newest box, opened for the latest batch, feeds 1 so far). The timeline is
+  575 events (was 750).
+- **Sumac carries a shelf life and a real-looking lot number.** Its one real bag (SBG001) lasted 285 days,
+  so each modelled Sumac pack expires 285 days after purchase (`shelf_life_days`); the planner buys another
+  when it runs out of date and the leftover is written off through the disposals manifest, so no expired
+  Sumac is used or left in the tenant. Each pack has a six-digit supplier batch number that counts up with
+  time from the real Moore Wilson lot 392314 (`lot_label`) -- invented ids in that style, labelled `derived:`
+  in the manifest. Other modelled packs have no expiry (no evidence for one) and use their code.
+- Dried orange peel is tracked stock. Only *fresh* orange peel (Solstice) is an untracked other material.
+- Rebuild preflight now fails a manifest whose packs are not bought, pointing at `plan --write`.
+
