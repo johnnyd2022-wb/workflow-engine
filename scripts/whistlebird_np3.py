@@ -47,9 +47,9 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import create_engine, text
-from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent))
 import whistlebird_migration as wm  # noqa: E402
@@ -58,8 +58,10 @@ DEFAULT_NP3_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-np3-evi
 NP3_FRAMEWORK = "np3-food-control"
 REVIEW_INTERVALS = (1, 3, 6, 12)
 STAFF_ROLES = ("member", "admin")
-_MANIFEST_KEYS = {"profile", "staff", "attestations", "logs"}
+_MANIFEST_KEYS = {"profile", "staff", "annual_training", "attestations", "logs"}
 _PROFILE_KEYS = {"council_name", "trade_waste_consent_reference", "settings"}
+_ANNUAL_TRAINING_KEYS = {"dates", "topics"}
+_ANNUAL_TRAINING_TOPIC_KEYS = {"title", "np3_controls"}
 _ATTESTATION_KEYS = {
     "control_id",
     "signed_on",
@@ -134,6 +136,7 @@ class Np3Log:
 class Np3Staff:
     email: str
     role: str = "member"
+    name: str = ""
 
 
 @dataclass(frozen=True)
@@ -228,11 +231,14 @@ def parse_np3_manifest(data: dict[str, Any]) -> Np3Manifest:
         where = f"staff[{index}]"
         if not isinstance(item, dict) or not str(item.get("email") or "").strip():
             raise Np3ManifestError(f"{where}: email is required")
-        _unknown_keys(item, {"email", "role"}, where)
+        _unknown_keys(item, {"email", "role", "name"}, where)
         role = item.get("role", "member")
         if role not in STAFF_ROLES:
             raise Np3ManifestError(f"{where}: role must be one of {', '.join(STAFF_ROLES)}")
-        staff.append(Np3Staff(email=item["email"].strip().lower(), role=role))
+        name = str(item.get("name") or "").strip()
+        if len(name) > 120:
+            raise Np3ManifestError(f"{where}: name must be at most 120 characters")
+        staff.append(Np3Staff(email=item["email"].strip().lower(), role=role, name=name))
     emails = [member.email for member in staff]
     if len(set(emails)) != len(emails):
         raise Np3ManifestError("staff: duplicate email")
@@ -284,6 +290,59 @@ def parse_np3_manifest(data: dict[str, Any]) -> Np3Manifest:
         )
 
     logs: list[Np3Log] = []
+    annual_training = data.get("annual_training")
+    if annual_training is not None:
+        if not isinstance(annual_training, dict):
+            raise Np3ManifestError("annual_training must be an object")
+        _unknown_keys(annual_training, _ANNUAL_TRAINING_KEYS, "annual_training")
+        dates = annual_training.get("dates")
+        if not isinstance(dates, list) or not dates:
+            raise Np3ManifestError("annual_training.dates must be a non-empty list")
+        training_dates = [_require_date(value, f"annual_training.dates[{index}]") for index, value in enumerate(dates)]
+        if len(set(training_dates)) != len(training_dates):
+            raise Np3ManifestError("annual_training.dates must not contain duplicates")
+        topics = annual_training.get("topics")
+        if not isinstance(topics, list) or not topics:
+            raise Np3ManifestError("annual_training.topics must be a non-empty list")
+        training_topics: list[tuple[str, tuple[str, ...]]] = []
+        for index, item in enumerate(topics):
+            where = f"annual_training.topics[{index}]"
+            if not isinstance(item, dict):
+                raise Np3ManifestError(f"{where}: must be an object")
+            _unknown_keys(item, _ANNUAL_TRAINING_TOPIC_KEYS, where)
+            title = str(item.get("title") or "").strip()
+            control_ids = item.get("np3_controls")
+            if not title or len(title) > 1024:
+                raise Np3ManifestError(f"{where}: title is required and at most 1024 characters")
+            if (
+                not isinstance(control_ids, list)
+                or not control_ids
+                or not all(isinstance(control_id, str) and control_id in controls for control_id in control_ids)
+                or len(set(control_ids)) != len(control_ids)
+            ):
+                raise Np3ManifestError(f"{where}: np3_controls must be unique known NP3 controls")
+            training_topics.append((title, tuple(control_ids)))
+        for training_date in training_dates:
+            for member in staff:
+                for title, control_ids in training_topics:
+                    mapped_controls = ", ".join(control_ids)
+                    person = member.name or member.email
+                    logs.append(
+                        Np3Log(
+                            control_id="staff-competency",
+                            fields={
+                                "event_date": training_date.isoformat(),
+                                "employee_email": member.email,
+                                "training_topic": f"{title} (NP3 checks: {mapped_controls})",
+                                "competency_result": "observed-competent",
+                                "review_notes": (
+                                    "REVIEW PLACEHOLDER — training register records "
+                                    f"{person} as completed; confirm attendance and practical competency evidence."
+                                ),
+                            },
+                        )
+                    )
+
     for index, item in enumerate(data.get("logs") or []):
         where = f"logs[{index}]"
         if not isinstance(item, dict):
