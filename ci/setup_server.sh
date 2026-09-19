@@ -38,7 +38,11 @@ APP_DIR="$PROJECT_ROOT/app"
 echo "Setting PYTHONPATH to include: $APP_DIR"
 # Use uv run to ensure we use the virtual environment with all dependencies
 PYTHONPATH="$APP_DIR:${PYTHONPATH:-}" ENVIRONMENT=test uv run python -c "import sys; print('Python sys.path:', sys.path); import os; print('PYTHONPATH env:', os.environ.get('PYTHONPATH', 'NOT SET')); import sys; print('Can import features?', 'features' in [p.split('/')[-1] if '/' in p else p for p in sys.path])" >> /tmp/flask.log 2>&1
-PYTHONPATH="$APP_DIR:${PYTHONPATH:-}" ENVIRONMENT=test uv run python -m app.main >> /tmp/flask.log 2>&1 &
+# Start app.app, the composed app, NOT app.main: app.main is a bare create_app() with no
+# /healthcheck (or landing page / login modal), so the readiness probe below would 404 for
+# the full 60s and fail the job. app.app registers /healthcheck itself (app/app.py) and is
+# the same app the e2e conftest boots and `python app/app.py` runs.
+PYTHONPATH="$APP_DIR:${PYTHONPATH:-}" ENVIRONMENT=test uv run python -m app.app >> /tmp/flask.log 2>&1 &
 SERVER_PID=$!
 echo $SERVER_PID > /tmp/flask.pid
 printf 'https://localhost:%s\n' "$APP_PORT" > /tmp/flask.base-url

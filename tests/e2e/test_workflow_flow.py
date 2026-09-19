@@ -201,6 +201,71 @@ def test_run_execution_and_complete_a_step(logged_in_page: Page):
     assert_clean_page(page)
 
 
+def test_live_board_names_batches_and_never_renders_object_object(logged_in_page: Page):
+    """A batch with no recorded batch id must get a readable name on the live board.
+
+    Regression: the board fell back to `String(execution.event_summary)`, and the list API's
+    event_summary is a JSON object, so every unlabelled batch card, timeline row, aria-label
+    and the detail-sheet title read "[object Object]". Covers both a batch with no batch id
+    and one whose output carries a `batch_id`.
+    """
+    page = logged_in_page
+    pid = _create_process(page, f"E2E Board {uuid.uuid4().hex[:8]}", is_draft=True)
+    for number, step_name in ((1, "Macerate"), (2, "Distil")):
+        added = page.request.post(
+            f"/api/core/processes/{pid}/steps",
+            headers=csrf_headers(page),
+            data={"step_number": number, "name": step_name},
+        )
+        assert added.status in (200, 201), f"add step failed: {added.status} {added.text()}"
+
+    def start() -> str:
+        started = page.request.post("/api/core/executions", headers=csrf_headers(page), data={"process_id": pid})
+        assert started.status in (200, 201), f"start execution failed: {started.status} {started.text()}"
+        return started.json()["id"]
+
+    start()  # unlabelled: no step completed, so no output carries a batch id
+    labelled = start()
+    body = page.request.get(f"/api/core/executions/{labelled}/with-process").json()
+    first_step = sorted((body.get("execution", body))["execution_steps"], key=lambda st: st["step_number"])[0]
+    completed = page.request.post(
+        f"/api/core/executions/{labelled}/steps/{first_step['id']}/complete",
+        headers=csrf_headers(page),
+        data={
+            "actual_inputs": [],
+            "actual_outputs": [{"name": "Macerate", "quantity": 40, "unit": "L", "batch_id": "E2E-BATCH-0921"}],
+            "execution_data": {},
+        },
+    )
+    assert completed.status in (200, 201), f"complete step failed: {completed.status} {completed.text()[:300]}"
+
+    page.goto("/core/executions/live")
+    page.wait_for_load_state("networkidle")
+    page.select_option("#core2-active-process-select", value=pid)
+
+    cards = page.locator(".core2-active-card")
+    cards.first.wait_for()
+    assert cards.count() == 2, f"expected both batches on the board, got {cards.count()}"
+
+    titles = [t.strip() for t in page.locator(".core2-active-card-id").all_inner_texts()]
+    assert "E2E-BATCH-0921" in titles, f"labelled batch should use its batch id: {titles}"
+    assert any(t.startswith("Batch from ") for t in titles), f"unlabelled batch needs a readable name: {titles}"
+
+    page.click("[data-core2-active-view=timeline]")
+    page.locator(".core2-tl-row").first.wait_for()
+    page.click("[data-core2-active-view=pipeline]")
+    cards.filter(has_text="Batch from").first.click()
+    detail = page.locator("#core2-active-detail-overlay")
+    detail.wait_for(state="visible")
+    assert detail.locator("#core2-active-detail-id").inner_text().startswith("Batch from ")
+
+    # Aria-labels are part of the rendered surface too, so check the whole panel's HTML.
+    panel_html = page.locator("#core2-active-batches-panel").inner_html() + detail.inner_html()
+    for junk in ("[object Object]", "undefined", "Unassigned", "n/a"):
+        assert junk not in panel_html, f"live board leaked {junk!r}"
+    assert_clean_page(page)
+
+
 def test_create_process_without_name_is_rejected(logged_in_page: Page):
     """Unhappy path: no name → 400, nothing created."""
     page = logged_in_page

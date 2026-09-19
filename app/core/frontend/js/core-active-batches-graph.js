@@ -42,12 +42,30 @@
   function formatDateTime(raw) {
     var dt = toDate(raw);
     if (!dt) return 'Unknown';
-    return dt.toLocaleString('en-US', {
+    return dt.toLocaleString(undefined, {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
     });
+  }
+
+  // Only strings and numbers are displayable. Anything else (objects, arrays, null) must
+  // never reach String(): an object becomes the literal text "[object Object]" in the UI.
+  function scalarText(value) {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    return '';
+  }
+
+  function formatElapsed(ms) {
+    var mins = Math.floor(Math.max(0, Number(ms || 0)) / 60000);
+    if (mins < 1) return 'Just started';
+    return 'Started ' + formatDurationMs(ms) + ' ago';
+  }
+
+  function pluralise(count, singular, plural) {
+    return String(count) + ' ' + (count === 1 ? singular : (plural || singular + 's'));
   }
 
   function formatDurationMs(ms) {
@@ -88,53 +106,6 @@
     return null;
   }
 
-  function getLatestActivityAt(execution) {
-    var points = [];
-    var startedAt = toDate(execution && execution.started_at);
-    if (startedAt) points.push(startedAt.getTime());
-
-    (execution && execution.execution_steps ? execution.execution_steps : []).forEach(function (step) {
-      var started = toDate(step && step.started_at);
-      var completed = toDate(step && step.completed_at);
-      if (started) points.push(started.getTime());
-      if (completed) points.push(completed.getTime());
-    });
-
-    if (!points.length) return null;
-    return new Date(Math.max.apply(Math, points));
-  }
-
-  function getCurrentStepStartAt(execution) {
-    var currentStepNo = getCurrentStepNumber(execution);
-    if (!currentStepNo) return null;
-    var target = (execution && execution.execution_steps ? execution.execution_steps : []).find(function (step) {
-      return Number(step && step.step_number) === Number(currentStepNo);
-    });
-    if (!target) return null;
-    return toDate(target.started_at);
-  }
-
-  function classifyExecution(execution, now) {
-    var latest = getLatestActivityAt(execution);
-    var currentStart = getCurrentStepStartAt(execution);
-    var status = String(execution && execution.status || '').toLowerCase();
-
-    if (status === 'pending') {
-      return 'queued';
-    }
-
-    // Scheduling-based risk states are disabled for now.
-    if (latest && (now.getTime() - latest.getTime()) >= (24 * 3600 * 1000)) {
-      return 'track';
-    }
-
-    if (currentStart && (now.getTime() - currentStart.getTime()) >= (8 * 3600 * 1000)) {
-      return 'track';
-    }
-
-    return 'track';
-  }
-
   function stepColorClass(index) {
     var idx = Math.max(0, Number(index || 0)) % 5;
     return 'core2-tl-segment--step' + String(idx);
@@ -151,29 +122,45 @@
 
     for (var i = 0; i < outputs.length; i += 1) {
       var out = outputs[i];
-      var candidate = out.batch_id || out.batchId || out.lot_id || out.lotId || out.lot;
-      if (candidate) return String(candidate);
-    }
-
-    if (execution && execution.event_summary) {
-      var ev = String(execution.event_summary).trim();
-      if (ev) return ev;
+      var candidate = scalarText(out.batch_id || out.batchId || out.lot_id || out.lotId || out.lot);
+      if (candidate) return candidate;
     }
 
     return null;
   }
 
+  // Who started the batch. The list API's event_summary is an object
+  // ({created_by, created_at, steps_completed, ...}), so read the field, never the object.
+  function getStartedBy(execution) {
+    var summary = execution && execution.event_summary;
+    return summary && typeof summary === 'object' ? scalarText(summary.created_by) : '';
+  }
+
+  // A batch with no recorded batch/lot id still needs a name a person can recognise.
+  function getBatchTitle(execution) {
+    var label = extractBatchLabel(execution);
+    if (label) return label;
+    var startedAt = toDate(execution && execution.started_at) || toDate(execution && execution.created_at);
+    return startedAt ? 'Batch from ' + formatDateTime(startedAt) : 'Untitled batch';
+  }
+
+  // Most recent person to act on the batch, or '' when nobody is recorded yet.
   function getExecutionOperator(execution) {
-    if (execution && execution.completed_by) {
-      return String(execution.completed_by);
-    }
+    var done = scalarText(execution && execution.completed_by);
+    if (done) return done;
     var steps = sortSteps(execution && execution.execution_steps);
     for (var i = steps.length - 1; i >= 0; i -= 1) {
       var data = steps[i] && steps[i].execution_data ? steps[i].execution_data : null;
-      var op = data && (data.completed_by || data.completed_by_email || data.completed_by_user_id);
-      if (op) return String(op);
+      var op = data && (scalarText(data.completed_by) || scalarText(data.completed_by_email));
+      if (op) return op;
     }
-    return 'Unassigned';
+    return getStartedBy(execution);
+  }
+
+  function countCompletedSteps(execution) {
+    return (execution && execution.execution_steps ? execution.execution_steps : []).filter(function (step) {
+      return String(step && step.status || '').toLowerCase() === 'completed';
+    }).length;
   }
 
   function chooseDefaultProcessId(processes, executions) {
@@ -224,7 +211,8 @@
       if (!query) return true;
       var searchable = [
         execution.process_name,
-        extractBatchLabel(execution),
+        getBatchTitle(execution),
+        getStartedBy(execution),
         execution.current_step && execution.current_step.name,
       ].join(' ').toLowerCase();
       return searchable.indexOf(query) !== -1;
@@ -358,7 +346,7 @@
       return String(execution.status || '').toLowerCase() === 'pending';
     }).length);
     if (completed7dNode) completed7dNode.textContent = String(completed7d);
-    if (noteNode) noteNode.textContent = 'Showing ' + String(activeExecutions.length) + ' batch' + (activeExecutions.length === 1 ? '' : 'es') + ' for this workflow';
+    if (noteNode) noteNode.textContent = activeExecutions.length ? 'Showing ' + pluralise(activeExecutions.length, 'batch', 'batches') + ' for this workflow' : 'No batches match right now';
   }
 
   function renderPipeline(process, activeExecutions, now) {
@@ -387,16 +375,11 @@
 
       var startedAt = toDate(execution.started_at);
       var elapsedMs = startedAt ? (now.getTime() - startedAt.getTime()) : 0;
-      var status = classifyExecution(execution, now);
-      var batchLabel = extractBatchLabel(execution);
-      var currentStepName = execution.current_step && execution.current_step.name ? execution.current_step.name : 'Awaiting start';
 
       byStep[key].push({
         execution: execution,
-        status: status,
         elapsedMs: elapsedMs,
-        batchLabel: batchLabel,
-        currentStepName: currentStepName,
+        title: getBatchTitle(execution),
       });
     });
 
@@ -408,17 +391,21 @@
       });
 
       var cards = rows.map(function (row) {
-        var startedAt = formatDateTime(row.execution.started_at);
-        var operator = getExecutionOperator(row.execution);
-        var primaryLabel = row.batchLabel || startedAt;
+        var execution = row.execution;
+        var isReady = String(execution.status || '').toLowerCase() === 'pending';
+        var startedBy = getStartedBy(execution);
+        var done = countCompletedSteps(execution);
+        var progressPct = steps.length ? Math.min(100, Math.round((done / steps.length) * 100)) : 0;
+        var progressLabel = done + ' of ' + steps.length + ' steps done';
         return (
-          '<button type="button" class="core2-active-card" data-core2-execution-id="' + escapeHtml(String(row.execution.id || '')) + '" aria-label="Open batch details for ' + escapeHtml(primaryLabel) + '">' +
+          '<button type="button" class="core2-active-card" data-core2-execution-id="' + escapeHtml(String(execution.id || '')) + '" aria-label="Open details for ' + escapeHtml(row.title) + '">' +
             '<div class="core2-active-card-top">' +
-              '<p class="core2-active-card-id">' + escapeHtml(primaryLabel) + '</p>' +
-              '<p class="core2-active-card-time">' + escapeHtml(formatDurationMs(row.elapsedMs)) + '</p>' +
+              '<p class="core2-active-card-id">' + escapeHtml(row.title) + '</p>' +
+              '<span class="core2-active-card-status' + (isReady ? ' core2-active-card-status--ready' : '') + '">' + (isReady ? 'Ready to record' : 'In progress') + '</span>' +
             '</div>' +
-            '<p class="core2-active-card-name">' + escapeHtml(process.name || 'Process') + '</p>' +
-            '<p class="core2-active-card-sub">' + escapeHtml(row.currentStepName) + ' · ' + escapeHtml(operator) + '</p>' +
+            '<div class="core2-active-card-progress" role="img" aria-label="' + escapeHtml(progressLabel) + '"><span style="width:' + progressPct + '%"></span></div>' +
+            '<p class="core2-active-card-sub">' + escapeHtml(progressLabel) + '</p>' +
+            '<p class="core2-active-card-foot">' + escapeHtml(formatElapsed(row.elapsedMs)) + (startedBy ? ' &middot; by ' + escapeHtml(startedBy) : '') + '</p>' +
           '</button>'
         );
       }).join('');
@@ -514,7 +501,7 @@
       var bMs = bStart ? bStart.getTime() : 0;
       return aMs - bMs;
     }).map(function (execution) {
-      var batchLabel = extractBatchLabel(execution);
+      var batchTitle = getBatchTitle(execution);
       var executionSteps = sortSteps(execution.execution_steps || []);
       var startedAt = formatDateTime(execution.started_at);
       var operator = getExecutionOperator(execution);
@@ -522,7 +509,6 @@
       var currentStepName = (execution.current_step && execution.current_step.name)
         ? String(execution.current_step.name)
         : 'In progress';
-      var primaryLabel = batchLabel || startedAt;
       var executionStart = toDate(execution.started_at) || toDate(execution.created_at) || now;
 
       var cursorMs = executionStart.getTime();
@@ -586,10 +572,10 @@
       }).filter(Boolean).join('');
 
       return (
-        '<button type="button" class="core2-tl-row" data-core2-execution-id="' + escapeHtml(String(execution.id || '')) + '" aria-label="Open batch details for ' + escapeHtml(primaryLabel) + '">' +
+        '<button type="button" class="core2-tl-row" data-core2-execution-id="' + escapeHtml(String(execution.id || '')) + '" aria-label="Open details for ' + escapeHtml(batchTitle) + '">' +
           '<div class="core2-tl-left">' +
-            '<p class="core2-tl-batch-name">' + escapeHtml(primaryLabel) + '</p>' +
-            '<p class="core2-tl-batch-meta">' + escapeHtml(startedAt) + ' · ' + escapeHtml(operator) + ' · ' + escapeHtml(currentStepName) + '</p>' +
+            '<p class="core2-tl-batch-name">' + escapeHtml(batchTitle) + '</p>' +
+            '<p class="core2-tl-batch-meta">' + escapeHtml([currentStepName, 'started ' + startedAt, operator ? 'by ' + operator : ''].filter(Boolean).join(' · ')) + '</p>' +
           '</div>' +
           '<div class="core2-tl-right">' + gridLineHtml + segments + '</div>' +
         '</button>'
@@ -610,37 +596,43 @@
       return;
     }
 
+    var STATUS_LABELS = { completed: 'Done', ready: 'Current', in_progress: 'Current' };
     host.innerHTML = steps.map(function (step) {
       var stepName = step.step_name || ('Step ' + String(step.step_number || '?'));
-      var status = String(step.status || '').replace(/_/g, ' ');
-      var operator = (step.execution_data && (step.execution_data.completed_by || step.execution_data.completed_by_email || step.execution_data.completed_by_user_id)) || 'n/a';
-      var at = formatDateTime(step.completed_at || step.started_at);
+      var rawStatus = String(step.status || '').toLowerCase();
+      var isDone = rawStatus === 'completed';
+      var statusLabel = STATUS_LABELS[rawStatus] || 'Up next';
+      var statusClass = isDone ? 'done' : (STATUS_LABELS[rawStatus] ? 'current' : 'upcoming');
+      var data = step.execution_data || {};
+      var operator = scalarText(data.completed_by) || scalarText(data.completed_by_email);
       var outputs = Array.isArray(step.actual_outputs) ? step.actual_outputs : [];
+
+      var meta = [];
+      if (isDone && step.completed_at) meta.push('Completed ' + formatDateTime(step.completed_at));
+      if (isDone && operator) meta.push('by ' + operator);
+      if (!isDone && step.started_at) meta.push('Started ' + formatDateTime(step.started_at));
 
       var outputsHtml = outputs.length
         ? '<ul class="core2-active-detail-output-list">' + outputs.map(function (output) {
             if (!output || typeof output !== 'object') return '<li>Output recorded</li>';
-            var name = output.name || output.output_name || 'Output';
-            var qty = output.quantity != null ? String(output.quantity) : null;
-            var unit = output.unit || null;
-            var lot = output.batch_id || output.batchId || output.lot_id || output.lotId || output.lot || null;
+            var name = scalarText(output.name) || scalarText(output.output_name) || 'Output';
+            var qty = scalarText(output.quantity);
+            var unit = scalarText(output.unit);
+            var lot = scalarText(output.batch_id || output.batchId || output.lot_id || output.lotId || output.lot);
             var parts = [name];
-            if (qty || unit) {
-              parts.push((qty ? qty : '') + (unit ? (' ' + unit) : ''));
-            }
-            if (lot) {
-              parts.push('batch/lot: ' + String(lot));
-            }
+            if (qty || unit) parts.push((qty + ' ' + unit).trim());
+            if (lot) parts.push('batch ' + lot);
             return '<li>' + escapeHtml(parts.join(' · ')) + '</li>';
           }).join('') + '</ul>'
-        : '<p>No outputs recorded.</p>';
+        : '';
 
       return (
-        '<article class="core2-active-detail-step">' +
-          '<h4>Step ' + escapeHtml(String(step.step_number || '?')) + ' · ' + escapeHtml(stepName) + '</h4>' +
-          '<p>Status: ' + escapeHtml(status) + '</p>' +
-          '<p>Operator: ' + escapeHtml(String(operator)) + '</p>' +
-          '<p>Timestamp: ' + escapeHtml(at) + '</p>' +
+        '<article class="core2-active-detail-step core2-active-detail-step--' + statusClass + '">' +
+          '<div class="core2-active-detail-step-head">' +
+            '<h4>' + escapeHtml(String(step.step_number || '?')) + '. ' + escapeHtml(stepName) + '</h4>' +
+            '<span class="core2-active-detail-pill core2-active-detail-pill--' + statusClass + '">' + escapeHtml(statusLabel) + '</span>' +
+          '</div>' +
+          (meta.length ? '<p>' + escapeHtml(meta.join(' · ')) + '</p>' : '') +
           outputsHtml +
         '</article>'
       );
@@ -662,9 +654,17 @@
     var startedNode = byId('core2-active-detail-started');
     var actionNode = byId('core2-active-detail-next-step');
 
-    if (idNode) idNode.textContent = extractBatchLabel(execution) || formatDateTime(execution.started_at);
-    if (processNode) processNode.textContent = 'Process: ' + (process.name || 'Unknown process');
-    if (startedNode) startedNode.textContent = 'Started: ' + formatDateTime(execution.started_at);
+    var startedBy = getStartedBy(execution);
+    var done = countCompletedSteps(execution);
+    var total = sortSteps(execution.execution_steps).length;
+    if (idNode) idNode.textContent = getBatchTitle(execution);
+    if (processNode) processNode.textContent = process.name || 'Unknown process';
+    if (startedNode) {
+      startedNode.textContent = [
+        'Started ' + formatDateTime(execution.started_at) + (startedBy ? ' by ' + startedBy : ''),
+        total ? done + ' of ' + total + ' steps done' : '',
+      ].filter(Boolean).join(' · ');
+    }
     if (actionNode) {
       actionNode.href = '/core/flows/batches/start?id=' + encodeURIComponent(String(process.id)) + '&execution_id=' + encodeURIComponent(String(execution.id));
     }
@@ -843,6 +843,7 @@
         execution_steps: e.steps || [],
         total_steps: e.total_steps,
         progress: e.progress,
+        event_summary: e.event_summary,
       };
     });
     state.throughput7d = wf.throughput_7d || [];

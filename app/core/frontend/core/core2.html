@@ -355,9 +355,8 @@
               <div class="core2-active-details-body">
               <div class="core2-active-header-row">
                 <div class="core2-active-heading-wrap">
-                  <p class="core2-eyebrow">Production</p>
-                  <h2 id="core2-active-batches-title" class="spa-form-section-title">Active batches</h2>
-                  <p class="core2-active-subline">Live view of the work currently moving through production.</p>
+                  <h2 id="core2-active-batches-title" class="spa-form-section-title">Production board</h2>
+                  <p class="core2-active-subline">Every batch currently in production, grouped by the step it is at. Select a batch to see its history.</p>
                 </div>
                 <div class="core2-active-controls">
                   <label class="core2-active-control">
@@ -374,7 +373,7 @@
               </div>
               <div class="core2-active-filter-row" aria-label="Filter active batches">
                 <label class="core2-active-search-label" for="core2-active-search">Find a batch
-                  <input id="core2-active-search" type="search" class="spa-inp" placeholder="Search workflow or batch" autocomplete="off">
+                  <input id="core2-active-search" type="search" class="spa-inp" placeholder="Batch ID, step or person" autocomplete="off">
                 </label>
                 <div class="core2-active-status-filter" role="group" aria-label="Batch status">
                   <button type="button" class="core2-filter-chip is-active" data-core2-active-status="all" aria-pressed="true">All</button>
@@ -387,7 +386,7 @@
                 <div class="core2-active-status-metrics">
                   <span><strong data-core2-inflight-count>0</strong> active</span>
                   <span><strong data-core2-ready-count>0</strong> ready to record</span>
-                  <span><strong data-core2-completed7d-count>0</strong> finished this week</span>
+                  <span><strong data-core2-completed7d-count>0</strong> finished in the last 7 days</span>
                 </div>
                 <div class="core2-active-status-note">
                   <span data-core2-active-total-note>Showing 0 active batches</span>
@@ -405,7 +404,7 @@
               </div>
 
               <div class="core2-active-view" id="core2-active-timeline-view" hidden>
-                <p class="core2-active-timeline-help">Each bar shows the time a batch has spent in a production step. Select a row for the full batch record.</p>
+                <p class="core2-active-timeline-help">Each bar shows how long a batch spent in a production step. Select a row for the full batch record.</p>
                 <div class="core2-active-timeline" id="core2-active-timeline">
                   <p class="core2-active-batches-empty">Loading timeline...</p>
                 </div>
@@ -439,6 +438,7 @@
                 <p class="core2-active-detail-id" id="core2-active-detail-id">Execution</p>
                 <p class="core2-active-detail-meta" id="core2-active-detail-process">Process</p>
                 <p class="core2-active-detail-meta" id="core2-active-detail-started">Started</p>
+                <h4 class="core2-active-detail-heading">Steps</h4>
                 <div class="core2-active-detail-steps" id="core2-active-detail-steps">
                   <p class="core2-active-batches-empty">No step metadata available.</p>
                 </div>
