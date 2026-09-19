@@ -2281,6 +2281,7 @@ def build_import_verification(
     include_replay_ngs_purchases: bool = True,
     np3_manifest_path: Path | None = None,
     crm_manifest_path: Path | None = None,
+    disposals_manifest_path: Path | None = None,
 ) -> dict[str, Any]:
     """Compare loaded counts against the sources and assert no legacy wording leaked.
 
@@ -2483,6 +2484,18 @@ def build_import_verification(
 
         report.update(
             verify_crm(target_url, requested_org_name, load_crm_manifest(crm_manifest_path or DEFAULT_CRM_MANIFEST))
+        )
+
+        # Expired-stock disposals are also API-replay only; and no consumption may post-date its
+        # lot's expiry (the reason those disposals and the modelled restock purchases exist).
+        from whistlebird_disposals import DEFAULT_DISPOSALS_MANIFEST, load_disposals_manifest, verify_disposals
+
+        report.update(
+            verify_disposals(
+                target_url,
+                requested_org_name,
+                load_disposals_manifest(disposals_manifest_path or DEFAULT_DISPOSALS_MANIFEST),
+            )
         )
     return report
 

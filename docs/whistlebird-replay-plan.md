@@ -547,17 +547,37 @@ clone the repository, start the app, run `scripts/whistlebird_rebuild_api.py`.
 - **Still outside version control by design.** The admin password (KeePassXC entry
   `workflow-engine/whistlebird_test`) and the app's own Xero/PostHog credentials.
 
-## Expired raw-material handling, 2026-09-19
+## Expired ingredients: none used, expired stock written off, 2026-09-19
 
-The API replay now schedules an idempotent wastage event for every raw-material receipt
-whose recorded expiry date has arrived. The event disposes only the quantity that remains
-after earlier documented use, through `POST /api/core/inventory/wastage`, with the
-expiry date as its historical timestamp. A lot is unavailable on its expiry date.
+The old allocator drew botanical lots oldest-purchase-first and ignored both the lot's expiry and the
+date of the step. Against the recorded expiry dates, **139 uses across 20 lots and 14 ingredients
+came after the lot had expired** (up to 739 days), and 12 expired lots still held stock.
 
-When a documented recipe input is consequently short, the replay creates the minimum
-clearly labelled `Expiry replacement` raw-material receipt immediately before that step,
-then records the step against that replacement inventory item. These reconstructed
-receipts carry an `import_ref` and replay-replacement metadata, so they are resumable,
-auditable, and never presented as a supplier-sourced historical receipt. This means a
-rebuild has neither expired raw-material stock on hand nor a completed step linked to a
-lot used on or after its expiry date.
+- **Date-aware allocation.** `allocate_fifo_lots` (`scripts/whistlebird_replay.py`) skips a lot whose
+  expiry is *before* the step's business date; a lot is still usable on its expiry date. It also never
+  draws a lot pinned to a specific batch (an exact-quantity `resolved_by_context` purchase, listed in
+  every maceration event's `reserved_ingredient_codes`). The reservation was found the hard way: with
+  expired lots skipped, an earlier batch's fallback moved on to a newer lot and emptied VAT53's pinned
+  lots before VAT53 ran.
+- **Modelled restock purchases.** Skipping expired lots leaves the demand only they could have met
+  (1,384 g over 58 batch/ingredient pairs, mostly dried apple ring, cardamom, sumac, orris root). Each is
+  a `resolved_by_context` purchase in `docs/whistlebird-raw-material-source.json`, in the existing
+  style: sized to exactly that batch's shortfall, dated 3 days before its maceration, from the
+  ingredient's usual supplier, labelled `derived:` with no purchase evidence. They are modelled history,
+  not receipts. The 30 recipes that predate every receipt (and Green tea, which has no lots) are unchanged.
+- **Disposals.** `docs/whistlebird-disposals-source.json` lists the 25 lots left with stock once
+  nothing draws an expired lot (6.9 kg), each with the quantity the replay expects and a date (the later
+  of the lot's expiry and its last use, which is always the expiry now). `scripts/whistlebird_disposals.py`
+  replays them through the real wastage API after the Core history and refuses to dispose a quantity
+  other than the curated one; the timestamp pass then sets each recorded date. Lots expiring on or
+  before 2026-09-19 are included ("before they expire").
+- **Proven without a database.** `scripts/whistlebird_replay_simulation.py` runs the replay's own
+  functions against in-memory lots, driven by `build_timeline()`. With the old rules it reproduces the
+  live tenant exactly (139 late uses, 20 lots); with the new rules there are 0 late uses, 0 stock
+  errors and no expired-only gaps. `plan --write` regenerates the restock records and the disposals;
+  a test fails if either committed file is stale.
+- **Verified on rebuild.** `--verify-import` reports `expired_lot_uses`, `disposals_missing` and
+  `disposal_date_mismatches`, each expected 0.
+- **Not evidence.** If the recorded expiry dates are conservative best-before dates and the herbs were
+  in fact used past them, the modelled restock purchases replace a real (if late) use of an old lot.
+  Correct the expiry at the source (the legacy snapshot) to undo that for a given lot.

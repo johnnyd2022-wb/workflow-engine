@@ -153,7 +153,7 @@ class ReplayEvent:
     """One API call the replay client will make, plus everything needed to order it."""
 
     event_id: str
-    event_type: str  # "create_execution" | "complete_step" | "create_inventory_item" | "record_expiry_wastage"
+    event_type: str  # "create_execution" | "complete_step" | "create_inventory_item"
     real_date: date
     depends_on: tuple[str, ...]
     payload: dict[str, Any] = field(default_factory=dict)
@@ -221,36 +221,6 @@ def _purchase_event(record: dict[str, Any]) -> ReplayEvent:
     )
 
 
-def _expiry_wastage_events(purchase_events: list[ReplayEvent], as_of_date: date) -> list[ReplayEvent]:
-    """Dispose remaining stock from each expired replayed receipt.
-
-    The quantity is deliberately resolved by the API client at execution time: preceding
-    recipe steps may already have consumed all or part of the receipt.  An expiry date
-    means the lot is unavailable *on* that date, so the date-prioritised ordering runs
-    this event before any otherwise-independent step on the same date.
-    """
-    events: list[ReplayEvent] = []
-    for purchase in purchase_events:
-        record = purchase.payload["record"]
-        raw_expiry = record.get("expiry_date")
-        if not raw_expiry:
-            continue
-        expiry_date = raw_expiry if isinstance(raw_expiry, date) else date.fromisoformat(str(raw_expiry))
-        if expiry_date > as_of_date:
-            continue
-        marker = purchase.payload["marker"]
-        events.append(
-            ReplayEvent(
-                event_id=f"expiry-wastage:{marker}",
-                event_type="record_expiry_wastage",
-                real_date=expiry_date,
-                depends_on=(purchase.event_id,),
-                payload={"marker": marker, "expiry_date": expiry_date},
-            )
-        )
-    return events
-
-
 def _split_legacy_generic_juniper_receipts(
     records: list[wm.RawMaterialRecord], batches: list[wm.ProductionBatch]
 ) -> list[wm.RawMaterialRecord]:
@@ -266,9 +236,7 @@ def _split_legacy_generic_juniper_receipts(
         if batch.product_line not in {"wildflower", "solstice"}:
             continue
         recipe = (
-            wm._WILDFLOWER_MACERATION_INPUTS
-            if batch.product_line == "wildflower"
-            else wm._SOLSTICE_MACERATION_INPUTS
+            wm._WILDFLOWER_MACERATION_INPUTS if batch.product_line == "wildflower" else wm._SOLSTICE_MACERATION_INPUTS
         )
         for ingredient in recipe:
             if ingredient["name"] in demand:
@@ -466,6 +434,7 @@ def _batch_events(
     label_batches: dict[str, list[tuple[int, Decimal]]] | None = None,
     flask_codes: dict[str, tuple[str, str]] | None = None,
     ngs_allocation: tuple[Decimal, Decimal] | None = None,
+    reserved_codes: frozenset[str] = frozenset(),
 ) -> list[ReplayEvent]:
     step_keys = wm.RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else wm.BOTANICAL_GIN_STEP_KEYS
     resolved = _resolved_step_dates(batch)
@@ -512,6 +481,10 @@ def _batch_events(
             payload["known_input_quantities"] = {
                 code: known_quantities[code] for code in batch.ingredient_codes if code in known_quantities
             }
+            # Every exact-quantity purchase is reserved for its own batch; the FIFO fallback of
+            # any *other* batch must not draw it down first (so this is the global set, not this
+            # batch's own codes).
+            payload["reserved_ingredient_codes"] = reserved_codes
         ngs_needed = Decimal("0")
         if key == "maceration":
             # A post-cutoff batch's formula-sized NGS receipt is not just dated before
@@ -675,7 +648,6 @@ def build_timeline(
     legacy_source: str | Path,
     production_manifest_path: Path,
     raw_material_manifest_path: Path = DEFAULT_RAW_MATERIAL_MANIFEST,
-    expiry_as_of_date: date | None = None,
 ) -> list[ReplayEvent]:
     """`legacy_source` is a snapshot JSON path (the default, committed) or a live-database URL."""
     with wm.open_legacy(legacy_source) as connection:
@@ -700,7 +672,6 @@ def build_timeline(
     ngs_allocations = _ngs_allocations(merged, manifest_ngs_receipts(raw_records))
 
     events: list[ReplayEvent] = []
-    purchase_events: list[ReplayEvent] = []
 
     purchase_event_by_code: dict[str, str] = {}
     for legacy_record in legacy_raw_materials:
@@ -728,19 +699,18 @@ def build_timeline(
             }
         )
         events.append(event)
-        purchase_events.append(event)
         code = legacy_record.extra_data.get("ingredient_code")
         if code:
             purchase_event_by_code[code] = event.event_id
     for record in raw_records:
         event = _purchase_event(record)
         events.append(event)
-        purchase_events.append(event)
         purchase_event_by_code[record["code"]] = event.event_id
 
     marker_by_vat = {batch.global_vat: batch.marker for batch in merged}
     label_batches = _assign_label_batches(merged)
     flask_codes = _assign_flask_codes(merged)
+    reserved_codes = frozenset(code for codes in known_quantity_by_vat.values() for code in codes)
     for batch in merged:
         events.extend(
             _batch_events(
@@ -751,6 +721,7 @@ def build_timeline(
                 label_batches,
                 flask_codes,
                 ngs_allocations.get(batch.marker),
+                reserved_codes,
             )
         )
 
@@ -761,6 +732,5 @@ def build_timeline(
         events.extend(_trial_events(trial))
 
     events.extend(_customs_events(customs_rows))
-    events.extend(_expiry_wastage_events(purchase_events, expiry_as_of_date or date.today()))
 
     return date_prioritised_topological_sort(events)

@@ -22,7 +22,6 @@ from whistlebird_replay_timeline import (  # noqa: E402
     _assign_flask_codes,
     _batch_events,
     _enrich_ingredient_codes,
-    _expiry_wastage_events,
     _flask_ngs_and_water_l,
     _foraged_botanical_inputs,
     _green_gold_events,
@@ -78,26 +77,6 @@ def test_sorts_independent_events_purely_by_date():
     ]
     ordered = date_prioritised_topological_sort(events)
     assert [e.event_id for e in ordered] == ["a", "b", "c"]
-
-
-def test_expiry_wastage_runs_on_the_expiry_date_after_its_receipt():
-    purchase = ReplayEvent(
-        "purchase:COR001",
-        "create_inventory_item",
-        date(2025, 1, 1),
-        (),
-        {
-            "marker": "raw-manifest-COR001",
-            "record": {"expiry_date": "2025-02-01"},
-        },
-    )
-
-    events = _expiry_wastage_events([purchase], date(2025, 2, 1))
-
-    assert len(events) == 1
-    assert events[0].event_id == "expiry-wastage:raw-manifest-COR001"
-    assert events[0].depends_on == ("purchase:COR001",)
-    assert events[0].real_date == date(2025, 2, 1)
 
 
 def test_dependency_wins_over_a_later_dependent_date():

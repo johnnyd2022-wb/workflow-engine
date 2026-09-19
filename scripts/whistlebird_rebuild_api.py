@@ -3,7 +3,8 @@
 Runs the documented API-replay path end to end (docs/whistlebird-replay-plan.md):
 
     ensure tenant -> sync admin password -> scoped reset -> workflows -> Compliant setup
-    -> replay (Core history, then CRM mappings, then NP3 evidence) -> timestamp pass -> verification
+    -> replay (Core history, then expired-stock disposals, CRM mappings, NP3 evidence) -> timestamp pass
+    -> verification
 
 Requires the app running (`uv run workflow start`). Without --confirm-reset-whistlebird-test
 it is a read-only preflight and prints what it would do.
@@ -34,11 +35,14 @@ import urllib3
 from sqlalchemy.exc import SQLAlchemyError
 
 sys.path.insert(0, str(Path(__file__).parent))
+import whistlebird_crm as crm  # noqa: E402
+import whistlebird_disposals as disposals  # noqa: E402
 import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
 import whistlebird_replay as replay  # noqa: E402
 import whistlebird_replay_correct_timestamps as correct  # noqa: E402
+import whistlebird_replay_simulation as simulation  # noqa: E402
 
 STEPS = (
     "ensure tenant and admin",
@@ -46,7 +50,7 @@ STEPS = (
     "scoped reset",
     "product workflows",
     "Compliant NZ-alcohol setup",
-    "replay Core history, then CRM mappings, then NP3 evidence",
+    "replay Core history, then expired-stock disposals, CRM mappings, NP3 evidence",
     "timestamp pass",
     "verify (Core counts, dates, wording, NP3)",
 )
@@ -67,6 +71,25 @@ def server_reachable(base_url: str, verify_tls: bool) -> str | None:
     return None
 
 
+def check_replay_plan(args: argparse.Namespace) -> list[str]:
+    """Validate the curated manifests and prove the replay's stock allocation, before any reset.
+
+    A stale disposals manifest would otherwise only fail at the very end of a ~700-event replay,
+    after the tenant has already been wiped.
+    """
+    try:
+        crm.load_crm_manifest(args.crm_manifest)
+        listed = disposals.load_disposals_manifest(args.disposals_manifest)
+    except (crm.CrmManifestError, disposals.DisposalManifestError) as exc:
+        return [f"manifest invalid: {exc}"]
+    try:
+        return simulation.check_replay_plan(
+            args.legacy_source, args.production_manifest, simulation.DEFAULT_RAW_MATERIAL_MANIFEST, listed
+        )
+    except (legacy.LegacySnapshotError, OSError, SQLAlchemyError):
+        return []  # an unusable legacy source is reported by its own check below
+
+
 def preflight(args: argparse.Namespace) -> list[str]:
     """Read-only. Every reason the rebuild must not start; empty means safe to go."""
     try:
@@ -80,6 +103,7 @@ def preflight(args: argparse.Namespace) -> list[str]:
     except (legacy.LegacySnapshotError, OSError, SQLAlchemyError) as exc:
         # Found here, before the reset: a legacy source that fails later would leave a wiped tenant.
         problems.append(f"legacy source unusable ({args.legacy_source}): {type(exc).__name__}: {exc}")
+    problems.extend(check_replay_plan(args))
     if not args.discard_unsnapshotted_np3:
         unsnapshotted = np3.np3_unsnapshotted(args.target_url, args.org_name, manifest)
         if unsnapshotted:
@@ -117,9 +141,15 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         args.org_name,
         verify_tls=not args.insecure,
         np3_manifest_path=args.np3_manifest,
+        crm_manifest_path=args.crm_manifest,
+        disposals_manifest_path=args.disposals_manifest,
     )
     report["timestamps"] = correct.correct_timestamps(
-        args.legacy_source, args.target_url, args.org_name, np3_manifest_path=args.np3_manifest
+        args.legacy_source,
+        args.target_url,
+        args.org_name,
+        np3_manifest_path=args.np3_manifest,
+        disposals_manifest_path=args.disposals_manifest,
     )
     report["verification"] = wm.build_import_verification(
         args.legacy_source,
@@ -127,6 +157,8 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         args.org_name,
         args.production_manifest,
         np3_manifest_path=args.np3_manifest,
+        crm_manifest_path=args.crm_manifest,
+        disposals_manifest_path=args.disposals_manifest,
     )
     wm._require_matching_import(report["verification"], "API rebuild")
     return report
@@ -147,6 +179,8 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
     parser.add_argument("--production-manifest", type=Path, default=wm.DEFAULT_PRODUCTION_MANIFEST)
     parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
+    parser.add_argument("--crm-manifest", type=Path, default=crm.DEFAULT_CRM_MANIFEST)
+    parser.add_argument("--disposals-manifest", type=Path, default=disposals.DEFAULT_DISPOSALS_MANIFEST)
     parser.add_argument("--admin-email", default=wm.DEFAULT_TEST_ADMIN_EMAIL)
     parser.add_argument("--admin-password-env", default="WHISTLEBIRD_TEST_ADMIN_PASSWORD")
     parser.add_argument("--org-name", default=wm.RESET_ORG_NAME)

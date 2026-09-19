@@ -2917,6 +2917,992 @@
         "global_vat": 59,
         "product": "wildflower"
       }
+    },
+    {
+      "code": "DAR002",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2024-03-03",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT4 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 4,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAR003",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2024-03-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT5 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 5,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAR004",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2024-06-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT6 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 6,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAR005",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2024-06-13",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT7 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 7,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAR006",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2024-07-18",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT8 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 8,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAR007",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2024-08-02",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT9 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 9,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "ORR005",
+      "ingredient": "Orris root",
+      "quantity": 30.6,
+      "unit": "g",
+      "date": "2024-08-02",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT9 maceration requirement; the 30.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 9,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAR008",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2024-08-09",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT10 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 10,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "ORR006",
+      "ingredient": "Orris root",
+      "quantity": 30.6,
+      "unit": "g",
+      "date": "2024-08-09",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT10 maceration requirement; the 30.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 10,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAR009",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2024-08-31",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT11 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 11,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "ORR007",
+      "ingredient": "Orris root",
+      "quantity": 30.6,
+      "unit": "g",
+      "date": "2024-08-31",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT11 maceration requirement; the 30.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 11,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "DAR010",
+      "ingredient": "Dried apple ring",
+      "quantity": 36,
+      "unit": "g",
+      "date": "2024-09-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT12 maceration requirement; the 36 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 12,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "ORR008",
+      "ingredient": "Orris root",
+      "quantity": 30.6,
+      "unit": "g",
+      "date": "2024-09-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT12 maceration requirement; the 30.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 12,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP020",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2024-10-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT13 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 13,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG014",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2024-10-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT13 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 13,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP021",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2024-11-08",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT14 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 14,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG015",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2024-11-08",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT14 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 14,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP022",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2024-11-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT15 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 15,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG016",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2024-11-29",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT15 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 15,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP023",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2024-12-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT16 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 16,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG017",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2024-12-07",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT16 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 16,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP024",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2024-12-15",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT17 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 17,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG018",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2024-12-15",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT17 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 17,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP025",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-01-31",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT18 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 18,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG019",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-01-31",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT18 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 18,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP026",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT19 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 19,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG020",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-02-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT19 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 19,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP027",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-02-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT20 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 20,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG021",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-02-17",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT20 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 20,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP028",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-02-22",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT21 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 21,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG022",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-02-22",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT21 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 21,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP029",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-03-09",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT22 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 22,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD021",
+      "ingredient": "Orange peel - dried",
+      "quantity": 2.4,
+      "unit": "g",
+      "date": "2025-03-09",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT22 maceration requirement; the 2.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 22,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG023",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-03-09",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT22 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 22,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP030",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-04-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT23 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 23,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD022",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-04-14",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT23 maceration requirement; the 14.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 23,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG024",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-04-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT23 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 23,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP031",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-04-20",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT24 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 24,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD023",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-04-20",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT24 maceration requirement; the 14.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 24,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG025",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-04-20",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT24 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 24,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP032",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-04-20",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT25 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 25,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD024",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-04-20",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT25 maceration requirement; the 14.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 25,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG026",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-04-20",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT25 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 25,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "CP033",
+      "ingredient": "Cardamom pods",
+      "quantity": 43.2,
+      "unit": "g",
+      "date": "2025-05-05",
+      "confidence": "resolved_by_context",
+      "supplier": "Davis Trading",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT31 maceration requirement; the 43.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 31,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "OPD025",
+      "ingredient": "Orange peel - dried",
+      "quantity": 14.4,
+      "unit": "g",
+      "date": "2025-05-05",
+      "confidence": "resolved_by_context",
+      "supplier": "HB Malt Station",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT31 maceration requirement; the 14.4 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 31,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG027",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2025-05-05",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT31 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 31,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "LM007",
+      "ingredient": "Lemon myrtle",
+      "quantity": 14,
+      "unit": "g",
+      "date": "2026-03-16",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT46 maceration requirement; the 14 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 46,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "LM008",
+      "ingredient": "Lemon myrtle",
+      "quantity": 14,
+      "unit": "g",
+      "date": "2026-05-04",
+      "confidence": "resolved_by_context",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT47 maceration requirement; the 14 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 47,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL016",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-07-20",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT55 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 55,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG028",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-07-20",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT55 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 55,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL017",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-08-31",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT57 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 57,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG029",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-08-31",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT57 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 57,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL018",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-09-10",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT58 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 58,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG030",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-09-10",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT58 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 58,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL019",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-09-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT56 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 56,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG031",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-09-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT56 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 56,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "PBL020",
+      "ingredient": "Persian black lime",
+      "quantity": 21.6,
+      "unit": "g",
+      "date": "2026-09-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT59 maceration requirement; the 21.6 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 59,
+        "product": "wildflower"
+      }
+    },
+    {
+      "code": "SBG032",
+      "ingredient": "Sumac berries - ground",
+      "quantity": 7.2,
+      "unit": "g",
+      "date": "2026-09-14",
+      "confidence": "resolved_by_context",
+      "supplier": "Moore Wilson",
+      "supplier_order_ref": null,
+      "supplier_batch_number": null,
+      "price_nzd": null,
+      "source": "derived: wildflower VAT59 maceration requirement; the 7.2 g that only lots already past their recorded expiry could have supplied is modelled as a fresh purchase, no email/DB purchase evidence",
+      "consumed_by": {
+        "global_vat": 59,
+        "product": "wildflower"
+      }
     }
   ],
   "excluded": []
