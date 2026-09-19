@@ -482,6 +482,20 @@ def _consume_whole_item(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _consume_item_quantity(item: dict[str, Any], quantity: Decimal) -> dict[str, Any]:
+    """Record a source-evidenced partial draw without consuming the VAT remainder."""
+    if quantity <= 0 or Decimal(str(item["quantity"])) < quantity:
+        raise ReplayRejectedError(
+            f"inventory item {item['id']} cannot supply {quantity} {item['unit']} (available {item['quantity']})"
+        )
+    return {
+        "inventory_item_id": str(item["id"]),
+        "name": item["name"],
+        "quantity": str(quantity),
+        "unit": item["unit"],
+    }
+
+
 def _batch_number_prompt_value(label_batches: list[tuple[int, str]] | None) -> str:
     """Render the recorded label-batch allocation for the required step prompt.
 
@@ -520,10 +534,14 @@ def _aging_output_name(batch: wm.ProductionBatch) -> str:
 def _execute_create_execution(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
     batch = event.payload.get("batch")
     trial = event.payload.get("trial")
-    marker = batch.marker if batch else trial.marker
+    green_gold = event.payload.get("green_gold")
+    record = batch or trial or green_gold
+    if record is None:
+        raise ReplayRejectedError(f"{event.event_id} has no replay record")
+    marker = record.marker
     if store.existing_execution_id(marker):
         return False
-    workflow_name = batch.workflow_name if batch else trial.workflow_name
+    workflow_name = record.workflow_name
     process_id = store.process_id_for_workflow(workflow_name)
     response = client.post("/api/core/executions", {"process_id": str(process_id)})
     store.note_created_execution(marker, response["id"])
@@ -533,7 +551,11 @@ def _execute_create_execution(client: ReplayClient, store: MarkerStore, event: R
 def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: ReplayEvent) -> bool:
     batch = event.payload.get("batch")
     trial = event.payload.get("trial")
-    marker = batch.marker if batch else trial.marker
+    green_gold = event.payload.get("green_gold")
+    record = batch or trial or green_gold
+    if record is None:
+        raise ReplayRejectedError(f"{event.event_id} has no replay record")
+    marker = record.marker
     step_key = event.payload["step_key"]
     step_index = event.payload["step_index"]
     step_number = step_index + 1
@@ -683,14 +705,38 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
                         output["batch_number"] = batch_number
                     actual_outputs.append(output)
 
+    elif green_gold is not None:
+        source_execution_id = store.execution_id_for_global_vat(green_gold.source_vat)
+        if source_execution_id is None:
+            raise ReplayRejectedError(f"{marker} needs source VAT{green_gold.source_vat}, which was never loaded")
+        source_item = None
+        for source_step in store.execution_steps(source_execution_id):
+            candidate = _produced_item_for_step(store, source_step["id"], "Aged Gin")
+            if candidate is not None:
+                source_item = candidate
+        if source_item is None:
+            raise ReplayRejectedError(f"VAT{green_gold.source_vat} has no aged Wildflower output to divert")
+        actual_inputs.append(_consume_item_quantity(source_item, green_gold.source_quantity_l))
+        actual_outputs.append(
+            {"name": "Green Gold - final product", "quantity": str(green_gold.bottles), "unit": "units"}
+        )
+
     elif trial is not None and step_key == "library_stock" and trial.library_ml:
         actual_outputs.append({"name": "Library stock", "quantity": str(trial.library_ml), "unit": "mL"})
 
     execution_data = {
         "batch_ref": marker,
-        "batch_label": (batch.batch_label if batch else trial.label),
+        "batch_label": (batch.batch_label if batch else trial.label if trial else green_gold.batch_label),
         "global_vat": (batch.global_vat if batch else None),
     }
+    if green_gold is not None:
+        execution_data.update(
+            {
+                "source_vat": green_gold.source_vat,
+                "source_quantity_l": str(green_gold.source_quantity_l),
+                "bottle_size_ml": str(green_gold.bottle_size_ml),
+            }
+        )
     if batch is not None and step_key == "aging" and batch.product_line != "rosella":
         execution_data["VAT number"] = batch.global_vat
     if batch is not None and step_key == "distilling":

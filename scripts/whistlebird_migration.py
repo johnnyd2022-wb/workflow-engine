@@ -351,9 +351,20 @@ _TRIAL_STEPS = (
     ("Distilling", "Distil a trial recipe", "", "", (), ()),
     ("Library stock", "Store the trial spirit as library stock", "Library stock", "mL", (), ()),
 )
+_GREEN_GOLD_STEPS = (
+    (
+        "Green Gold bottling",
+        "Bottle the documented Green Gold diversion from aged Wildflower",
+        "Green Gold - final product",
+        "units",
+        (_tracked_input("Aged Wildflower gin", "41", "L"),),
+        (),
+    ),
+)
 WILDFLOWER_WORKFLOW = "Wildflower gin"
 SOLSTICE_WORKFLOW = "Solstice gin"
 ROSELLA_WORKFLOW = "Rosella gin"
+GREEN_GOLD_WORKFLOW = "Green Gold gin"
 GG_TRIAL_WORKFLOW = "GG gin trials"
 WB_TRIAL_WORKFLOW = "WB recipe trials"
 SGS_TRIAL_WORKFLOW = "SGS spirit trials"
@@ -361,6 +372,7 @@ PRODUCT_WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str, str, str, tuple, t
     WILDFLOWER_WORKFLOW: ("botanical_gin", _WILDFLOWER_STEPS),
     SOLSTICE_WORKFLOW: ("botanical_gin", _SOLSTICE_STEPS),
     ROSELLA_WORKFLOW: ("rhubarb_gin", _RHUBARB_GIN_STEPS),
+    GREEN_GOLD_WORKFLOW: ("green_gold", _GREEN_GOLD_STEPS),
     GG_TRIAL_WORKFLOW: ("trial", _TRIAL_STEPS),
     WB_TRIAL_WORKFLOW: ("trial", _TRIAL_STEPS),
     SGS_TRIAL_WORKFLOW: ("trial", _TRIAL_STEPS),
@@ -468,6 +480,28 @@ class TrialRecord:
     @property
     def marker(self) -> str:
         return f"trial-{self.source_table}-{self.source_id}"
+
+
+@dataclass(frozen=True)
+class GreenGoldRecord:
+    """A documented final-product diversion from an aged Wildflower VAT."""
+
+    source_vat: int
+    source_date: date
+    source_quantity_l: Decimal
+    bottles: Decimal
+    bottle_size_ml: Decimal
+    batch_label: str
+    source_table: str
+    source_id: int
+
+    @property
+    def marker(self) -> str:
+        return f"green-gold-{self.batch_label.lower()}"
+
+    @property
+    def workflow_name(self) -> str:
+        return GREEN_GOLD_WORKFLOW
 
 
 def _identifier(value: str) -> str:
@@ -1027,6 +1061,41 @@ def _load_manifest(manifest_path: Path) -> tuple[list[ProductionBatch], list[dic
             )
         )
     return batches, excluded
+
+
+def _load_green_gold_records(manifest_path: Path) -> list[GreenGoldRecord]:
+    """Load the explicitly documented Green Gold diversion records.
+
+    Green Gold is not a new Wildflower distillation: the source sheet records a later
+    draw from an already-aged Wildflower VAT.  Keep it separate from
+    ``ProductionBatch`` so the replay never invents maceration, distillation, or aging
+    events that the source does not contain.
+    """
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    records: list[GreenGoldRecord] = []
+    for entry in payload.get("green_gold_records", []):
+        source_ref = entry.get("source_ref") or {}
+        source_table = str(source_ref.get("table") or PRODUCTION_SOURCE_TABLE)
+        source_id = int(source_ref["id"])
+        source_vat = int(entry["source_vat"])
+        source_quantity_l = _decimal(entry["source_quantity_l"], "source_quantity_l", source_table, source_id)
+        bottles = _decimal(entry["bottles"], "bottles", source_table, source_id)
+        bottle_size_ml = _decimal(entry["bottle_size_ml"], "bottle_size_ml", source_table, source_id)
+        if source_quantity_l <= 0 or bottles <= 0 or bottle_size_ml <= 0:
+            raise ValueError(f"Green Gold {source_table}:{source_id} requires positive quantities")
+        records.append(
+            GreenGoldRecord(
+                source_vat=source_vat,
+                source_date=date.fromisoformat(str(entry["date"])),
+                source_quantity_l=source_quantity_l,
+                bottles=bottles,
+                bottle_size_ml=bottle_size_ml,
+                batch_label=str(entry["batch_label"]),
+                source_table=source_table,
+                source_id=source_id,
+            )
+        )
+    return records
 
 
 def _merge_batches(legacy: dict[int, ProductionBatch], manifest: list[ProductionBatch]) -> list[ProductionBatch]:
@@ -2247,6 +2316,21 @@ def _require_matching_import(report: dict[str, Any], report_name: str) -> None:
 # --------------------------------------------------------------------------------------
 
 
+def _expected_workflow_executions(
+    batches: list[ProductionBatch], green_gold_records: list[GreenGoldRecord], api_replay: bool
+) -> Counter:
+    """Executions each product workflow should hold after a load.
+
+    Only the API-replay path creates pending (in-progress) batches and Green Gold
+    diversions; the ORM-direct rebuild skips both, so it must not be held to them.
+    """
+    countable = batches if api_replay else [b for b in batches if not b.pending_steps]
+    expected = Counter(batch.workflow_name for batch in countable)
+    if api_replay and green_gold_records:
+        expected[GREEN_GOLD_WORKFLOW] += len(green_gold_records)
+    return expected
+
+
 def build_import_verification(
     legacy_url: str,
     target_url: str,
@@ -2305,8 +2389,8 @@ def build_import_verification(
     # rather than wrongly complete it -- so its verification should expect no execution
     # for one at all. Only the API-replay path actually creates the execution and leaves
     # its pending steps incomplete, so only its verification should expect either.
-    countable_batches = batches if include_replay_ngs_purchases else [b for b in batches if not b.pending_steps]
-    expected_by_workflow = Counter(batch.workflow_name for batch in countable_batches)
+    green_gold_records = _load_green_gold_records(manifest_path) if manifest_path and manifest_path.exists() else []
+    expected_by_workflow = _expected_workflow_executions(batches, green_gold_records, include_replay_ngs_purchases)
     expected_incomplete_steps = (
         sum(len(batch.pending_steps) for batch in batches) if include_replay_ngs_purchases else 0
     )
@@ -2430,7 +2514,7 @@ def build_import_verification(
         "raw_material_items": {"expected": sum(raw_material_sources.values()), "actual": actual_raw},
         "batch_executions": {
             name: {"expected": expected_by_workflow.get(name, 0), "actual": actual_by_workflow.get(name, 0)}
-            for name in (WILDFLOWER_WORKFLOW, SOLSTICE_WORKFLOW, ROSELLA_WORKFLOW)
+            for name in (WILDFLOWER_WORKFLOW, SOLSTICE_WORKFLOW, ROSELLA_WORKFLOW, GREEN_GOLD_WORKFLOW)
         },
         "customs_lodgements": {"expected": expected_lodgements, "actual": actual_lodgements},
         "incomplete_batch_steps": {"expected": expected_incomplete_steps, "actual": incomplete_steps},

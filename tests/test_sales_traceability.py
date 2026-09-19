@@ -227,6 +227,55 @@ def test_reconcile_contains_mapping_ignores_letter_case(db, sales_org, pattern, 
     assert _stock_by_batch(db, sales_org.id) == {1: Decimal("8.0000")}
 
 
+def test_reconcile_counts_a_paid_line_and_its_free_promo_line_as_one_combined_quantity(db, sales_org):
+    """Xero records "11 + 1" as a paid line (11) plus a $0 promo line (1); together they take 12."""
+    product = "Rosella - final product"
+    InventoryRepository(db).create_inventory_item(
+        sales_org.id,
+        name=product,
+        quantity="20",
+        unit="units",
+        inventory_type="final_product",
+        extra_data={"batch_number": 1},
+    )
+    _add_mapping(db, sales_org.id, product=product, pattern="Rosella", match_type="contains")
+    db.add(SalesTraceabilityConfig(org_id=sales_org.id, matching_strategy="fifo", strict_mapping=False))
+    invoice = XeroInvoice(
+        org_id=sales_org.id,
+        xero_invoice_id="xero-rosella-deal",
+        xero_tenant_id="test-tenant",
+        invoice_type="ACCREC",
+        status="PAID",
+        date=date(2026, 4, 7),
+    )
+    db.add(invoice)
+    db.flush()
+    for position, (description, quantity) in enumerate(
+        [
+            ("Whistlebird Rosella 700ml - x1", "11"),
+            ("Whistlebird Rosella 700ml - x1 (11 + 1 deal)", "1"),
+            ("SAMPLE", "4"),
+        ],
+        start=1,
+    ):
+        db.add(
+            XeroInvoiceLineItem(
+                org_id=sales_org.id,
+                invoice_id=invoice.id,
+                xero_line_item_id=f"xero-rosella-deal-line-{position}",
+                description=description,
+                quantity=Decimal(quantity),
+            )
+        )
+    db.commit()
+
+    summary = SalesTraceabilityService(db).reconcile_org(sales_org.id)
+
+    assert summary["allocated"] == 2
+    assert summary["unmapped"] == 1, "the generic SAMPLE minis stay outside product FIFO"
+    assert _stock_by_batch(db, sales_org.id) == {1: Decimal("8.0000")}
+
+
 def test_reconcile_prefers_an_exact_mapping_over_a_broad_contains_mapping(db, sales_org):
     product = "Wildflower - final product"
     InventoryRepository(db).create_inventory_item(

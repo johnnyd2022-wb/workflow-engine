@@ -558,6 +558,37 @@ def _trial_events(trial: wm.TrialRecord) -> list[ReplayEvent]:
     return events
 
 
+def _green_gold_events(record: wm.GreenGoldRecord, marker_by_vat: dict[int, str]) -> list[ReplayEvent]:
+    """Replay the documented diversion from aged Wildflower into Green Gold.
+
+    The Green Gold run is dependent on VAT53's aged output, not on its later
+    Wildflower bottling.  That permits the 41L partial consumption on 31 July and
+    leaves the 21-bottle Wildflower remainder to be bottled on 1 September.
+    """
+    source_marker = marker_by_vat.get(record.source_vat)
+    if source_marker is None:
+        raise ValueError(f"Green Gold {record.marker} needs source VAT{record.source_vat}, which was never loaded")
+    source_step_id = f"step:{source_marker}:aging"
+    exec_id = f"green-gold-exec:{record.marker}"
+    step_id = f"green-gold-step:{record.marker}:bottling"
+    return [
+        ReplayEvent(
+            event_id=exec_id,
+            event_type="create_execution",
+            real_date=record.source_date,
+            depends_on=(source_step_id,),
+            payload={"green_gold": record},
+        ),
+        ReplayEvent(
+            event_id=step_id,
+            event_type="complete_step",
+            real_date=record.source_date,
+            depends_on=(exec_id,),
+            payload={"green_gold": record, "step_key": "bottling", "step_index": 0},
+        ),
+    ]
+
+
 def _customs_events(rows: list[dict[str, Any]]) -> list[ReplayEvent]:
     events = []
     for row in rows:
@@ -631,6 +662,7 @@ def build_timeline(
     legacy_raw_materials = [record for record in legacy_raw_materials if record.name != "Neutral grain spirit"]
 
     manifest_batches, _excluded = wm._load_manifest(production_manifest_path)
+    green_gold_records = wm._load_green_gold_records(production_manifest_path)
     merged = wm._merge_batches(legacy_batches, manifest_batches)
 
     raw_records, codes_by_vat, known_quantity_by_vat = _load_raw_material_manifest(raw_material_manifest_path)
@@ -689,6 +721,9 @@ def build_timeline(
                 ngs_allocations.get(batch.marker),
             )
         )
+
+    for record in green_gold_records:
+        events.extend(_green_gold_events(record, marker_by_vat))
 
     for trial in trials:
         events.extend(_trial_events(trial))

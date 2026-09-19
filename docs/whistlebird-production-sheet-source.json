@@ -5,7 +5,7 @@
     "tab_name": "Production!!",
     "gid": "1370312095"
   },
-  "outstanding_review": "Per-batch maceration and distillation dates for VAT28+ are 'derived' (inherited from the recorded VAT-fill/bottling date) except where a specific step date was recoverable from context (see notes on individual records). The Production!! tab's date column mixes literal dd/mm/yyyy strings with spreadsheet date serials that are sometimes day/month-swapped -- each serial in this manifest was resolved by chronological fit against its neighbours and, where available, an already founder-confirmed date (e.g. WB-022's VAT47 bottling), not by a single global format assumption. 2026-09-18: VAT56 imported (see its own notes for the bottling-date resolution) -- its earlier unlabelled '26 bottles' line is superseded, not a separate batch. VAT57/58/59 remain genuinely IN-PROGRESS batches (VAT55 completed 2026-09-18, founder-confirmed bottling 2026-08-27, 78.5 bottles) (distilled and filled, not yet bottled) using the new pending-step mechanism (ProductionBatch.pending_steps, a manifest step spec of {'pending': true}) -- the API-replay path completes only the steps that have really happened and leaves bottling/labelling PENDING in the target, same as a real user mid-process; re-edit each record's bottling step once a real bottling row appears in the sheet, then re-run replay to complete it. Only the API-replay path (scripts/whistlebird_replay.py) supports this -- the ORM-direct --rebuild-whistlebird-test path skips a pending batch entirely rather than falsely complete it (see apply_production_batches). VAT52 remains excluded: two distinct sub-issues conflated under one number (see excluded[] entry), a genuine labelling ambiguity, not simple in-progress status -- needs founder disambiguation, not a pending marker. The Green Gold (gg01) trial output from VAT53 (row 2035) needs a script change (a sheet-sourced trial manifest section) before it can be imported at all -- tracked as a follow-up, not a curation gap. Rosella VAT26 (prior database, pre-Solstice) still needs founder confirmation that treating its RS01/RS02 flavour rows as the maceration step (no Solstice base to draw from that early) is the right call.",
+  "outstanding_review": "Per-batch maceration and distillation dates for VAT28+ are 'derived' (inherited from the recorded VAT-fill/bottling date) except where a specific step date was recoverable from context (see notes on individual records). The Production!! tab's date column mixes literal dd/mm/yyyy strings with spreadsheet date serials that are sometimes day/month-swapped -- each serial in this manifest was resolved by chronological fit against its neighbours and, where available, an already founder-confirmed date (e.g. WB-022's VAT47 bottling), not by a single global format assumption. 2026-09-18: VAT56 imported (see its own notes for the bottling-date resolution) -- its earlier unlabelled '26 bottles' line is superseded, not a separate batch. VAT57/58/59 remain genuinely IN-PROGRESS batches (VAT55 completed 2026-09-18, founder-confirmed bottling 2026-08-27, 78.5 bottles) (distilled and filled, not yet bottled) using the new pending-step mechanism (ProductionBatch.pending_steps, a manifest step spec of {'pending': true}) -- the API-replay path completes only the steps that have really happened and leaves bottling/labelling PENDING in the target, same as a real user mid-process; re-edit each record's bottling step once a real bottling row appears in the sheet, then re-run replay to complete it. Only the API-replay path (scripts/whistlebird_replay.py) supports this -- the ORM-direct --rebuild-whistlebird-test path skips a pending batch entirely rather than falsely complete it (see apply_production_batches). VAT52 remains excluded: two distinct sub-issues conflated under one number (see excluded[] entry), a genuine labelling ambiguity, not simple in-progress status -- needs founder disambiguation, not a pending marker. Green Gold (gg01) is a separately recorded final-product diversion from aged Wildflower VAT53: row 2035 (2026-07-31) records 41L becoming 144 x 500ml bottles; the remaining 21 Wildflower bottles are row 2040. Rosella VAT26 (prior database, pre-Solstice) still needs founder confirmation that treating its RS01/RS02 flavour rows as the maceration step (no Solstice base to draw from that early) is the right call.",
   "records": [
     {
       "global_vat": 24,
@@ -1180,6 +1180,7 @@
       "global_vat": 53,
       "batch_label": "VAT53",
       "product": "wildflower",
+      "vat_volume_l": "55.7",
       "steps": {
         "maceration": {
           "date": null,
@@ -1209,7 +1210,7 @@
           "sheet_row": 2040
         }
       ],
-      "notes": "Row 2035 (2026-07-31) records 41L drawn from this VAT to make 144x500ml 'Green Gold (gg01)' trial bottles before the 21-bottle Wildflower 'remains' bottling recorded here. The Green Gold trial output is NOT represented in this manifest or import: trials are only sourced from the legacy database by apply_trial_batches / _trial_records, and this manifest has no equivalent mechanism for a sheet-sourced trial yet. Needs a follow-up script change to add a sheet-trial section before Green Gold can be imported."
+      "notes": "Row 2035 (2026-07-31) records 41L drawn from this VAT to make 144x500ml Green Gold (gg01) before the 21-bottle Wildflower remains bottling recorded here. The 55.7L aged-VAT volume is the documented 41L diversion plus 21 x 700ml remaining Wildflower bottles."
     },
     {
       "global_vat": 54,
@@ -1244,6 +1245,20 @@
           "sheet_row": 2081
         }
       ]
+    }
+  ],
+  "green_gold_records": [
+    {
+      "batch_label": "GG01",
+      "date": "2026-07-31",
+      "source_vat": 53,
+      "source_quantity_l": "41",
+      "bottles": "144",
+      "bottle_size_ml": "500",
+      "source_ref": {
+        "table": "production_sheet",
+        "id": 2035
+      }
     }
   ],
   "excluded": [

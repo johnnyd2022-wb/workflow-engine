@@ -27,12 +27,12 @@ Status values: `open`, `resolved`, `accepted limitation`, `blocked`.
 - **An unlabelled 26-bottle line** (row 2058, positionally reads as VAT56) has no VAT
   number or "Bottling" text in the source — needs founder confirmation before it can be
   curated. See the manifest's `excluded` entry for the full reasoning.
-- **Green Gold (gg01) trial output** (row 2035: 41L drawn from VAT53 to make 144x500ml
-  bottles) uses the already-provisioned `GG gin trials` workflow but has no import path
-  yet — `apply_trial_batches`/`_trial_records` only reads trials from the legacy
-  database, and the sheet manifest has no equivalent section. Needs a script change
-  (a sheet-sourced trial manifest, mirroring how `records`/`excluded` work for batches)
-  before it can be imported; tracked here as a follow-up, not folded into this pass.
+- **Green Gold (gg01)** (row 2035: 41L of aged Wildflower drawn from VAT53 to make
+  144x500ml bottles) is modelled as its own one-step `Green Gold gin` final-product
+  workflow, not a trial: the sheet manifest's `green_gold_records` section feeds the API
+  replay, which consumes 41L from VAT53's aged-Wildflower output and produces 144
+  `Green Gold - final product` units. Implemented in code; not yet replayed into
+  `whistlebird_test` (see WB-037).
 
 ## Findings register
 
@@ -85,7 +85,7 @@ Status values: `open`, `resolved`, `accepted limitation`, `blocked`.
 | WB-034 | resolved | Direct query of the legacy v1 database (`whistlebird_db_test` container, `whistlebird_inventory` DB — the actual `WB_LEGACY_DATABASE_URL` source, not `whistlebird_test`) confirms two things relevant to WB-030: (1) legacy `product_actions_flavor_vat` tops out at id 26 (`WBRS26`) — the legacy system never had a VAT27+ at all, so the sheet's global-counter convention (Rosella=26, Solstice=27+) already existed in the old app, not invented by the sheet. (2) legacy `product_actions_bottling` (27 rows, IDs sequential 1–27, no ID gaps) jumps straight from `WBWF22` to `WBWF25` — **VAT23 and VAT24 were distilled/filled in the legacy system but their bottling was never logged there at all**, a genuine pre-existing gap, not a sheet artefact. | Corroborates WB-030: VAT23's and VAT24's sheet bottling mentions (both 77 units) are two separate real events filling a real legacy gap — confirmed by the founder (see WB-030) and imported. Minor unrelated note: legacy `product_actions_flavors` has a harmless row-ID gap (id 3 missing, jumps 2→4) but every flavour-batch code (WF01–WF50, RS01–RS02) is present and sequential — looks like a deleted/cancelled row, not a lost batch; no action needed. |
 | WB-035 | resolved | Row 2015–2017 ("Bottling WF (VAT49)," 2026-07-16) initially had no recorded bottle count anywhere nearby. | Founder confirmed (2026-09-11): 78 bottles. The sheet was independently updated to show the same figure ("78 bottles," row 2017) before this was re-verified — doubly confirmed. Imported as VAT49. |
 | WB-036 | open | An unlabelled "26 bottles" line (row 2058) sits immediately after VAT56's fill block (row 2042, filled ~2026-09-01) with no "Bottling VAT56" text and no VAT number anywhere nearby. Positionally it reads as VAT56's bottling, but every other batch in the manifest ages for at least ~2 weeks between fill and bottling — same-day fill-to-bottle would be a first. | Founder review needed: is this VAT56's bottling, and if so what's the real date (same-day, or does it belong to a later, undated event)? Excluded from the manifest pending confirmation. |
-| WB-037 | open | Row 2035 ("31/07/2026 — Created Green Gold (gg01) - VAT53") records 41L drawn from VAT53 to produce 144x500ml "Green Gold" trial bottles, before VAT53's own 21-bottle Wildflower "remains" bottling (row 2040, 2026-09-01). The `GG gin trials` workflow already exists (`GG_TRIAL_WORKFLOW` in `scripts/whistlebird_migration.py`), but `apply_trial_batches`/`_trial_records` only ever reads trials from the legacy database — there is no manifest-driven path for a sheet-sourced trial. | Needs a script change: add a sheet-trial section to the manifest (analogous to `records`/`excluded` for batches) and a loader that feeds it into `apply_trial_batches`, referencing VAT53 as the consumed input the same way `rosella_base_vat` references a base VAT today. Not folded into this pass — VAT53's own bottling is imported; the Green Gold output is not. |
+| WB-037 | open | Row 2035 ("31/07/2026 — Created Green Gold (gg01) - VAT53") records 41L drawn from VAT53 to produce 144x500ml "Green Gold" bottles, before VAT53's own 21-bottle Wildflower "remains" bottling (row 2040, 2026-09-01). | Implemented in code: `green_gold_records` manifest section, `Green Gold gin` workflow, replay/timeline events, timestamp-correction and `--verify-import` support (API-replay path only; the ORM-direct rebuild does not load it). **Still to do:** replay into `whistlebird_test`, run timestamp correction and `--verify-import` (expects 1 Green Gold gin execution), then map Xero "Green Gold" lines to `Green Gold - final product`. Caveat for founder: VAT53's maceration/distilling/aging dates are derived from its 2026-09-01 bottling date, yet Green Gold drew aged spirit from it on 2026-07-31 — VAT53's earlier step dates likely need correcting. |
 
 ## Stage 3: 2026-09-11 follow-up (VAT23/49-54, sheet re-pull)
 
@@ -95,8 +95,8 @@ steps). Seven new executions loaded: VAT23 (WB-030), VAT49 (WB-035), VAT50 (WB-0
 VAT51 + VAT1051/Rosella (WB-031, Rosella side), VAT53, VAT54. Still excluded: VAT52
 (WB-029/WB-031, two sub-issues), VAT55 and VAT57 (not yet bottled), the unlabelled
 26-bottle line (WB-036), and Rosella VAT26's early-method confirmation (unchanged from
-the 2026-09-07 rebuild). Green Gold (gg01) trial output tracked as WB-037, needs a
-script change before it can be imported at all.
+the 2026-09-07 rebuild). Green Gold (gg01) is tracked as WB-037; it has since been implemented in code
+(see above) and awaits a replay.
 
 ## Stage 4: 2026-09-14 -- raw-material (botanical) purchase reconstruction
 
