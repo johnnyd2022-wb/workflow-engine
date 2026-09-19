@@ -478,6 +478,13 @@ checks NP3 record count, content, staff, profile and dates.
 **Derived NP3 evidence needs nothing stored.** Traceability, supplier and receiving
 evidence is projected live from the Core DAG once the Core replay has run.
 
+The committed `whistlebird-np3-evidence-source.json` now carries the supplied annual
+training register as a declarative schedule. The replay expands its nine line items for
+Johnny Dempsey and Nikolai (Niko) Scott on 1 February 2024, 2025 and 2026, with each
+entry naming the mapped NP3 check(s). The remaining check attestations and operational
+logs are explicitly marked `REVIEW PLACEHOLDER` so they are visible for review and are
+not mistaken for verified evidence.
+
 **Not yet exercised end to end.** Verified by tests against the real routes and DB on a
 throwaway org (replay, dating, snapshot round-trip, delete-and-replay reproduces the
 evidence) and a read-only smoke test of the CLI against `whistlebird_test`. The full
