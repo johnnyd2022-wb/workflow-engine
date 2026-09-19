@@ -1,0 +1,38 @@
+{
+  "_comment": "CRM sales-traceability configuration for the whistlebird_test tenant, replayed through the real API by scripts/whistlebird_crm.py after the Core history (see docs/whistlebird-replay-plan.md). The scoped reset deletes product_mappings and crm_sales_traceability_config, and neither is recoverable from the legacy database, so they live here. The Xero OAuth connection cannot be replayed: reconnect it in the app after a rebuild, then sync. Mappings are name-only (no biz_e_source_output_id), exactly as created in the CRM UI, because output UUIDs change on every rebuild.",
+  "traceability_config": {
+    "matching_strategy": "fifo",
+    "manual_review_days": 7,
+    "strict_mapping": false,
+    "task_done_archive_days": 7,
+    "revenue_baseline_target_mtd": null
+  },
+  "product_mappings": [
+    {
+      "biz_e_product_name": "Wildflower - final product",
+      "xero_description_pattern": "Wildflower",
+      "match_type": "contains"
+    },
+    {
+      "biz_e_product_name": "Solstice - final product",
+      "xero_description_pattern": "Solstice",
+      "match_type": "contains"
+    },
+    {
+      "biz_e_product_name": "Rosella - final product",
+      "xero_description_pattern": "Rosella",
+      "match_type": "contains"
+    },
+    {
+      "biz_e_product_name": "Rosella - final product",
+      "xero_description_pattern": "Bin stock",
+      "match_type": "contains",
+      "notes": "Founder reviewed INV-0247 and INV-0248 (2026-09-19): the generic 'Whistlebird Gin - Bin stock' lines, item code WBRS01-4625, are Rosella."
+    },
+    {
+      "biz_e_product_name": "Green Gold - final product",
+      "xero_description_pattern": "Green Gold",
+      "match_type": "contains"
+    }
+  ]
+}

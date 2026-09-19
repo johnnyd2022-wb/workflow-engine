@@ -2338,6 +2338,7 @@ def build_import_verification(
     manifest_path: Path | None,
     include_replay_ngs_purchases: bool = True,
     np3_manifest_path: Path | None = None,
+    crm_manifest_path: Path | None = None,
 ) -> dict[str, Any]:
     """Compare loaded counts against the sources and assert no legacy wording leaked.
 
@@ -2531,6 +2532,14 @@ def build_import_verification(
         )
         report["date_mismatches"]["np3_record_dates"] = np3_report.pop("np3_date_mismatches")
         report.update(np3_report)
+
+        # Likewise CRM mappings/config are only loaded by the API-replay path
+        # (scripts/whistlebird_crm.py); the ORM-direct rebuild never creates them.
+        from whistlebird_crm import DEFAULT_CRM_MANIFEST, load_crm_manifest, verify_crm
+
+        report.update(
+            verify_crm(target_url, requested_org_name, load_crm_manifest(crm_manifest_path or DEFAULT_CRM_MANIFEST))
+        )
     return report
 
 
