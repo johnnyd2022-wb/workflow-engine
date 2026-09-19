@@ -447,7 +447,7 @@ source of truth: `docs/whistlebird-np3-evidence-source.json`.
 2. `uv run python scripts/whistlebird_np3.py snapshot --target-url ...` writes it into the
    manifest (`--dry-run` first to see what changes). Commit the JSON.
 3. `uv run python scripts/whistlebird_rebuild_api.py --base-url https://localhost:8005
-   --insecure --legacy-url ... --target-url ... --confirm-reset-whistlebird-test` rebuilds
+   --insecure --target-url ... --confirm-reset-whistlebird-test` rebuilds
    everything: ensure tenant -> admin password -> scoped reset -> workflows -> Compliant
    setup -> replay (Core, then NP3) -> timestamp pass -> verify. Without the confirm flag
    it is a read-only preflight.
@@ -515,4 +515,35 @@ replays them through the real CRM API (`PUT /api/crm/traceability-config`, then
 Reviewed mapping decisions: `Bin stock` -> Rosella (founder reviewed INV-0247/INV-0248 on
 2026-09-19: the generic "Whistlebird Gin - Bin stock" lines carry Rosella item code
 `WBRS01-4625`). Shipping and the generic `SAMPLE` minis are deliberately unmapped.
+
+## Legacy database snapshot, 2026-09-19
+
+The replay used to read twelve tables straight from the prior inventory database
+(`whistlebird_inventory` on :5401), so it could only run where that database was also running.
+Those rows now live in `docs/whistlebird-legacy-source.json` and the replay reads the file:
+clone the repository, start the app, run `scripts/whistlebird_rebuild_api.py`.
+
+- **What is stored.** Exactly the rows *and columns* the loaders read (12 tables, ~234 rows);
+  `uid`, `action` and the like are not exported. `LEGACY_TABLES` in `scripts/whistlebird_legacy.py`
+  is the single registry that drives both the export and every loader, so there is no SQL to
+  keep in sync. Values round-trip exactly (dates ISO, integers stay integers, floats as
+  recorded), and one row is written per line so a git diff shows which rows changed.
+- **Same result as the database.** The timeline built from the file is identical, event for event
+  and payload for payload, to the one built from the live database (692 events), and
+  `--verify-import` produces an identical report with zero mismatches against the loaded tenant.
+- **Purchases from 2025-05-13 onward** are not in the old database; they were always curated in
+  `docs/whistlebird-raw-material-source.json`.
+- **Refreshing it.** `uv run python scripts/whistlebird_legacy.py snapshot --legacy-url <url>`
+  rewrites the file; `verify --legacy-url <url>` reports any row that differs (including an
+  integer that became a float, since the loaders format values with `str()`). Commit the JSON.
+- **Live database still works.** Pass `--legacy-url postgresql://...` to the replay, timestamp
+  pass or rebuild to read the live database instead of the file.
+- **The rebuild checks the source before it deletes anything.** Its preflight loads the snapshot
+  (or connects to the URL) first, so an unreadable source stops the run instead of leaving a
+  wiped tenant.
+- **Not converted.** The older ORM-direct path (`--dry-run-core`, `--dry-run-production`,
+  `--rebuild-whistlebird-test`) runs aggregate SQL and `SHOW TimeZone` against the live
+  database and still needs `WB_LEGACY_DATABASE_URL`.
+- **Still outside version control by design.** The admin password (KeePassXC entry
+  `workflow-engine/whistlebird_test`) and the app's own Xero/PostHog credentials.
 

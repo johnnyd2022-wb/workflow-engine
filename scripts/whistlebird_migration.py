@@ -35,6 +35,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.orm import sessionmaker
+from whistlebird_legacy import LegacySnapshot, legacy_rows, open_legacy
 
 IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]*$")
 LEGACY_TABLES = (
@@ -633,10 +634,8 @@ def _monotonic_step_dates(raw_dates: list[date | None]) -> tuple[list[date], lis
 # --------------------------------------------------------------------------------------
 
 
-def _raw_material_records(connection: Connection) -> Iterator[RawMaterialRecord]:
-    for row in connection.execute(
-        text("SELECT id, date, supplier, gns_purchased_l, abv FROM purchases_gns ORDER BY id")
-    ).mappings():
+def _raw_material_records(connection: Connection | LegacySnapshot) -> Iterator[RawMaterialRecord]:
+    for row in legacy_rows(connection, "purchases_gns"):
         source_id = row["id"]
         source_date = _required_date(row["date"], "purchases_gns", source_id)
         yield RawMaterialRecord(
@@ -652,9 +651,7 @@ def _raw_material_records(connection: Connection) -> Iterator[RawMaterialRecord]
             extra_data={"gns_abv_percent": str(row["abv"] or "")},
         )
 
-    for row in connection.execute(
-        text("SELECT id, date, supplier, bottle_size_ml, empty_bottles_stored FROM purchases_empty_bottles ORDER BY id")
-    ).mappings():
+    for row in legacy_rows(connection, "purchases_empty_bottles"):
         source_id = row["id"]
         source_date = _required_date(row["date"], "purchases_empty_bottles", source_id)
         bottle_size = _decimal(row["bottle_size_ml"], "bottle_size_ml", "purchases_empty_bottles", source_id)
@@ -673,15 +670,7 @@ def _raw_material_records(connection: Connection) -> Iterator[RawMaterialRecord]
             extra_data={"bottle_size_ml": str(bottle_size)},
         )
 
-    for row in connection.execute(
-        text(
-            """
-            SELECT id, date, supplier, ingredients, ingredients_amount, ingredients_code, ingredients_expiry
-            FROM purchases_ingredients
-            ORDER BY id
-            """
-        )
-    ).mappings():
+    for row in legacy_rows(connection, "purchases_ingredients"):
         source_id = row["id"]
         source_date = _required_date(row["date"], "purchases_ingredients", source_id)
         ingredient_name = _optional_text(row["ingredients"])
@@ -704,12 +693,7 @@ def _raw_material_records(connection: Connection) -> Iterator[RawMaterialRecord]
             extra_data={"ingredient_code": _optional_text(row["ingredients_code"]) or ""},
         )
 
-    for row in connection.execute(
-        text(
-            "SELECT id, date, notes, alcohol_volume, alcohol_abv, lal, container_id "
-            "FROM product_actions_create_premix ORDER BY id"
-        )
-    ).mappings():
+    for row in legacy_rows(connection, "product_actions_create_premix"):
         source_id = row["id"]
         source_date = _required_date(row["date"], "product_actions_create_premix", source_id)
         yield RawMaterialRecord(
@@ -755,28 +739,16 @@ def _disambiguate_reused_supplier_batches(records: list[RawMaterialRecord]) -> l
     return disambiguated
 
 
-def _customs_lodgement_rows(connection: Connection) -> list[dict[str, Any]]:
-    return list(
-        connection.execute(
-            text(
-                """
-                SELECT id, date, date_period, lodged_volume, lodged_abv, lal, bottles
-                FROM customs_lodgements
-                ORDER BY id
-                """
-            )
-        ).mappings()
-    )
+def _customs_lodgement_rows(connection: Connection | LegacySnapshot) -> list[dict[str, Any]]:
+    return legacy_rows(connection, "customs_lodgements")
 
 
-def _legacy_batches(connection: Connection) -> dict[int, ProductionBatch]:
+def _legacy_batches(connection: Connection | LegacySnapshot) -> dict[int, ProductionBatch]:
     """Assemble one ProductionBatch per VAT from the prior database's flavour/vat/bottling rows."""
     flavour_dates: dict[str, list[date]] = defaultdict(list)
     flavour_codes_seen: dict[str, str] = {}
     flavour_ingredients: dict[str, list[str]] = defaultdict(list)
-    for row in connection.execute(
-        text("SELECT id, date, flavor_code, flavor_batch, ingredient_codes FROM product_actions_flavors ORDER BY id")
-    ).mappings():
+    for row in legacy_rows(connection, "product_actions_flavors"):
         fb = _optional_text(row["flavor_batch"])
         if not fb:
             continue
@@ -787,15 +759,7 @@ def _legacy_batches(connection: Connection) -> dict[int, ProductionBatch]:
         flavour_ingredients[fb].extend(_legacy_list(row["ingredient_codes"]))
 
     bottlings: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in connection.execute(
-        text(
-            """
-            SELECT id, date, bottles_stored, abv, bottle_size_ml, vat_batch, bottle_batch
-            FROM product_actions_bottling
-            ORDER BY date, id
-            """
-        )
-    ).mappings():
+    for row in legacy_rows(connection, "product_actions_bottling"):
         vb = _optional_text(row["vat_batch"])
         if not vb:
             continue
@@ -815,9 +779,7 @@ def _legacy_batches(connection: Connection) -> dict[int, ProductionBatch]:
         )
 
     batches: dict[int, ProductionBatch] = {}
-    for row in connection.execute(
-        text("SELECT id, date, abv, vat_batch, volume_amount, flavor_batch FROM product_actions_flavor_vat ORDER BY id")
-    ).mappings():
+    for row in legacy_rows(connection, "product_actions_flavor_vat"):
         vat_id = row["id"]
         vat_batch = _optional_text(row["vat_batch"]) or f"VAT{vat_id}"
         fill_date = _required_date(row["date"], "product_actions_flavor_vat", vat_id)
@@ -863,14 +825,9 @@ def _legacy_batches(connection: Connection) -> dict[int, ProductionBatch]:
     return batches
 
 
-def _trial_records(connection: Connection) -> Iterator[TrialRecord]:
+def _trial_records(connection: Connection | LegacySnapshot) -> Iterator[TrialRecord]:
     consumed_by_code: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in connection.execute(
-        text(
-            "SELECT id, date, flavor_code, number_of_bottles, abv, bottle_size_ml "
-            "FROM product_actions_samples_consumed ORDER BY id"
-        )
-    ).mappings():
+    for row in legacy_rows(connection, "product_actions_samples_consumed"):
         code = _optional_text(row["flavor_code"]) or ""
         consumed_by_code[code].append(
             {
@@ -882,12 +839,7 @@ def _trial_records(connection: Connection) -> Iterator[TrialRecord]:
             }
         )
 
-    for row in connection.execute(
-        text(
-            "SELECT id, date, flavor_code, flavor_stored_ml, clearing_amount, clearing_abv "
-            "FROM product_actions_flavor_experiments ORDER BY id"
-        )
-    ).mappings():
+    for row in legacy_rows(connection, "product_actions_flavor_experiments"):
         source_id = row["id"]
         code = _optional_text(row["flavor_code"]) or f"experiment-{source_id}"
         workflow = GG_TRIAL_WORKFLOW if code.upper().startswith("GG") else WB_TRIAL_WORKFLOW
@@ -907,12 +859,7 @@ def _trial_records(connection: Connection) -> Iterator[TrialRecord]:
             extra_data={"recipe_code": code, "clearing_abv_percent": str(row["clearing_abv"] or "")},
         )
 
-    for row in connection.execute(
-        text(
-            "SELECT id, date, experiment_id, alcohol_yield_l, alcohol_yield_abv, alcohol_used_l, lal, notes "
-            "FROM product_actions_distillation_experiments ORDER BY id"
-        )
-    ).mappings():
+    for row in legacy_rows(connection, "product_actions_distillation_experiments"):
         source_id = row["id"]
         label = _optional_text(row["experiment_id"]) or f"X{source_id}"
         yield_l = _optional_decimal(
@@ -936,12 +883,7 @@ def _trial_records(connection: Connection) -> Iterator[TrialRecord]:
             },
         )
 
-    for row in connection.execute(
-        text(
-            "SELECT id, date, flavor_code, number_of_bottles, abv, bottle_size_ml "
-            "FROM product_actions_samples_created ORDER BY id"
-        )
-    ).mappings():
+    for row in legacy_rows(connection, "product_actions_samples_created"):
         source_id = row["id"]
         code = _optional_text(row["flavor_code"]) or f"sample-{source_id}"
         bottles = _optional_decimal(
@@ -1483,7 +1425,7 @@ def apply_raw_material_inventory(legacy_url: str, target_url: str, requested_org
     from app.core.db.models.inventory_wastage import InventoryWastage  # noqa: F401 - resolves ORM relationship
     from app.core.db.repositories.inventory_repo import InventoryRepository
 
-    with create_engine(legacy_url).connect() as legacy_connection:
+    with open_legacy(legacy_url) as legacy_connection:
         records = _disambiguate_reused_supplier_batches(list(_raw_material_records(legacy_connection)))
 
     engine = create_engine(target_url)
@@ -1555,7 +1497,7 @@ def apply_customs_lodgements(legacy_url: str, target_url: str, requested_org_nam
 
     from app.features.compliant.models.compliance_record import ComplianceRecord
 
-    with create_engine(legacy_url).connect() as legacy_connection:
+    with open_legacy(legacy_url) as legacy_connection:
         lodgements = _customs_lodgement_rows(legacy_connection)
 
     engine = create_engine(target_url)
@@ -1655,7 +1597,7 @@ def apply_production_batches(
     from app.core.db.repositories.execution_repo import ExecutionRepository
     from app.core.db.repositories.inventory_repo import InventoryRepository
 
-    with create_engine(legacy_url).connect() as legacy_connection:
+    with open_legacy(legacy_url) as legacy_connection:
         legacy = _legacy_batches(legacy_connection)
     manifest_batches: list[ProductionBatch] = []
     if manifest_path and manifest_path.exists():
@@ -1933,7 +1875,7 @@ def apply_trial_batches(legacy_url: str, target_url: str, requested_org_name: st
     from app.core.db.repositories.execution_repo import ExecutionRepository
     from app.core.db.repositories.inventory_repo import InventoryRepository
 
-    with create_engine(legacy_url).connect() as legacy_connection:
+    with open_legacy(legacy_url) as legacy_connection:
         trials = list(_trial_records(legacy_connection))
 
     engine = create_engine(target_url)
@@ -2353,9 +2295,9 @@ def build_import_verification(
         raise ValueError(f"Verification is only permitted for {RESET_ORG_NAME!r}")
 
     generic_juniper_receipts = 0
-    with create_engine(legacy_url).connect() as source:
+    with open_legacy(legacy_url) as source:
         raw_material_sources = {
-            table: source.execute(text(f"SELECT count(*) FROM {_identifier(table)}")).scalar_one()
+            table: len(legacy_rows(source, table))
             for table in (
                 "purchases_gns",
                 "purchases_empty_bottles",
@@ -2363,16 +2305,18 @@ def build_import_verification(
                 "product_actions_create_premix",
             )
         }
-        expected_lodgements = source.execute(text("SELECT count(*) FROM customs_lodgements")).scalar_one()
-        zero_quantity_legacy_ingredients = source.execute(
-            text("SELECT count(*) FROM purchases_ingredients WHERE ingredients_amount <= 0")
-        ).scalar_one()
-        generic_juniper_receipts = source.execute(
-            text(
-                "SELECT count(*) FROM purchases_ingredients "
-                "WHERE lower(trim(ingredients)) = 'juniper berries' AND ingredients_amount > 0"
-            )
-        ).scalar_one()
+        expected_lodgements = len(legacy_rows(source, "customs_lodgements"))
+        ingredient_rows = legacy_rows(source, "purchases_ingredients")
+        zero_quantity_legacy_ingredients = sum(
+            1 for row in ingredient_rows if row["ingredients_amount"] is not None and row["ingredients_amount"] <= 0
+        )
+        generic_juniper_receipts = sum(
+            1
+            for row in ingredient_rows
+            if (row["ingredients"] or "").strip(" ").lower() == "juniper berries"
+            and row["ingredients_amount"] is not None
+            and row["ingredients_amount"] > 0
+        )
         legacy = _legacy_batches(source)
     raw_material_manifest_path = Path(__file__).parents[1] / "docs" / "whistlebird-raw-material-source.json"
     if raw_material_manifest_path.exists():

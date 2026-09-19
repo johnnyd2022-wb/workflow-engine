@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Any
 
 import whistlebird_migration as wm
-from sqlalchemy import create_engine
 
 DEFAULT_RAW_MATERIAL_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-raw-material-source.json"
 
@@ -643,17 +642,16 @@ def date_prioritised_topological_sort(events: list[ReplayEvent]) -> list[ReplayE
 
 
 def build_timeline(
-    legacy_url: str,
+    legacy_source: str | Path,
     production_manifest_path: Path,
     raw_material_manifest_path: Path = DEFAULT_RAW_MATERIAL_MANIFEST,
 ) -> list[ReplayEvent]:
-    engine = create_engine(legacy_url)
-    with engine.connect() as connection:
+    """`legacy_source` is a snapshot JSON path (the default, committed) or a live-database URL."""
+    with wm.open_legacy(legacy_source) as connection:
         legacy_batches = wm._legacy_batches(connection)
         trials = list(wm._trial_records(connection))
         customs_rows = wm._customs_lodgement_rows(connection)
         legacy_raw_materials = wm._disambiguate_reused_supplier_batches(list(wm._raw_material_records(connection)))
-    engine.dispose()
 
     # Neutral grain spirit's full purchase history now lives in the raw-material
     # manifest (see its _comment), not the legacy purchases_gns table -- drop it here

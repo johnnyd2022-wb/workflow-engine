@@ -17,7 +17,6 @@ the JSON manifests, never in the loaded data itself.
 Usage:
     uv run python scripts/whistlebird_replay.py \\
         --base-url http://localhost:8001 \\
-        --legacy-url postgresql://wb_admin:whistlebird@localhost:5401/whistlebird_inventory \\
         --target-url postgresql://workflow_rw:...@localhost:8401/workflow-engine-test \\
         --admin-email whistlebird_test_admin@whistlebird.test \\
         --admin-password-env WHISTLEBIRD_TEST_ADMIN_PASSWORD
@@ -45,6 +44,7 @@ from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent))
 import whistlebird_crm as crm  # noqa: E402
+import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
 from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
@@ -808,7 +808,7 @@ DISPATCH = {
 
 def run_replay(
     base_url: str,
-    legacy_url: str,
+    legacy_source: str | Path,
     target_url: str,
     production_manifest_path: Path,
     admin_email: str,
@@ -823,7 +823,7 @@ def run_replay(
     # long Core replay has already run.
     np3_manifest = np3.load_np3_manifest(np3_manifest_path) if np3_manifest_path else None
     crm_manifest = crm.load_crm_manifest(crm_manifest_path) if crm_manifest_path else None
-    events = build_timeline(legacy_url, production_manifest_path)
+    events = build_timeline(legacy_source, production_manifest_path)
     if limit is not None:
         events = events[:limit]
 
@@ -881,7 +881,14 @@ def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="https://localhost:8001")
     parser.add_argument("--insecure", action="store_true", help="Skip TLS verification (self-signed local certs).")
-    parser.add_argument("--legacy-url", default=os.environ.get("WB_LEGACY_DATABASE_URL"))
+    parser.add_argument(
+        "--legacy-url",
+        "--legacy-source",
+        dest="legacy_source",
+        default=legacy.DEFAULT_LEGACY_SNAPSHOT,
+        help="Where the prior inventory data comes from: a path to a snapshot JSON (default: the committed "
+        "docs/whistlebird-legacy-source.json) or a postgresql:// URL to read the live legacy database.",
+    )
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
     parser.add_argument("--production-manifest", type=Path, default=wm.DEFAULT_PRODUCTION_MANIFEST)
     parser.add_argument("--admin-email", default=wm.DEFAULT_TEST_ADMIN_EMAIL)
@@ -898,8 +905,8 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--crm-manifest", type=Path, default=crm.DEFAULT_CRM_MANIFEST)
     parser.add_argument("--skip-crm-config", action="store_true", help="Do not replay CRM product mappings/config.")
     args = parser.parse_args()
-    if not args.legacy_url or not args.target_url:
-        parser.error("--legacy-url and --target-url are required")
+    if not args.target_url:
+        parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
     args.admin_password = os.environ.get(args.admin_password_env)
     if not args.admin_password:
         # Same KeePassXC entry wm.sync_whistlebird_test_admin_password() keeps the
@@ -916,7 +923,7 @@ def main() -> int:
     args = _arguments()
     result = run_replay(
         args.base_url,
-        args.legacy_url,
+        args.legacy_source,
         args.target_url,
         args.production_manifest,
         args.admin_email,
