@@ -236,9 +236,7 @@ def _split_legacy_generic_juniper_receipts(
         if batch.product_line not in {"wildflower", "solstice"}:
             continue
         recipe = (
-            wm._WILDFLOWER_MACERATION_INPUTS
-            if batch.product_line == "wildflower"
-            else wm._SOLSTICE_MACERATION_INPUTS
+            wm._WILDFLOWER_MACERATION_INPUTS if batch.product_line == "wildflower" else wm._SOLSTICE_MACERATION_INPUTS
         )
         for ingredient in recipe:
             if ingredient["name"] in demand:
@@ -436,6 +434,7 @@ def _batch_events(
     label_batches: dict[str, list[tuple[int, Decimal]]] | None = None,
     flask_codes: dict[str, tuple[str, str]] | None = None,
     ngs_allocation: tuple[Decimal, Decimal] | None = None,
+    reserved_codes: frozenset[str] = frozenset(),
 ) -> list[ReplayEvent]:
     step_keys = wm.RHUBARB_GIN_STEP_KEYS if batch.product_line == "rosella" else wm.BOTANICAL_GIN_STEP_KEYS
     resolved = _resolved_step_dates(batch)
@@ -482,6 +481,10 @@ def _batch_events(
             payload["known_input_quantities"] = {
                 code: known_quantities[code] for code in batch.ingredient_codes if code in known_quantities
             }
+            # Every exact-quantity purchase is reserved for its own batch; the FIFO fallback of
+            # any *other* batch must not draw it down first (so this is the global set, not this
+            # batch's own codes).
+            payload["reserved_ingredient_codes"] = reserved_codes
         ngs_needed = Decimal("0")
         if key == "maceration":
             # A post-cutoff batch's formula-sized NGS receipt is not just dated before
@@ -707,6 +710,7 @@ def build_timeline(
     marker_by_vat = {batch.global_vat: batch.marker for batch in merged}
     label_batches = _assign_label_batches(merged)
     flask_codes = _assign_flask_codes(merged)
+    reserved_codes = frozenset(code for codes in known_quantity_by_vat.values() for code in codes)
     for batch in merged:
         events.extend(
             _batch_events(
@@ -717,6 +721,7 @@ def build_timeline(
                 label_batches,
                 flask_codes,
                 ngs_allocations.get(batch.marker),
+                reserved_codes,
             )
         )
 

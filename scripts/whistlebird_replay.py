@@ -33,6 +33,7 @@ import argparse
 import os
 import re
 import sys
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,7 @@ from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent))
 import whistlebird_crm as crm  # noqa: E402
+import whistlebird_disposals as disposals  # noqa: E402
 import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
@@ -81,6 +83,44 @@ def _canonical_material_name(name: str) -> str:
 def _canonical_material_display_name(name: str) -> str:
     """Return the stable inventory label for a recipe botanical receipt."""
     return _CANONICAL_MATERIAL_DISPLAY_NAMES.get(_canonical_material_name(name), name)
+
+
+def allocate_fifo_lots(
+    lots: list[dict[str, Any]],
+    name: str,
+    quantity_needed: Decimal,
+    unit: str,
+    as_of: date | None = None,
+    reserved_codes: frozenset[str] = frozenset(),
+) -> tuple[list[dict[str, Any]], Decimal]:
+    """Draw `quantity_needed` of a canonical-name material from lots already in FIFO order.
+
+    A lot whose expiry is *before* `as_of` is skipped: expiry is a best-before date, so a lot may
+    be used on that day but not after it. Without `as_of` nothing is skipped. A lot whose
+    `ingredient_code` is in `reserved_codes` is pinned to one specific batch (an exact-quantity
+    curated purchase) and is never drawn here, or a batch that runs earlier could empty it. Shared by the
+    database-backed store and the in-memory simulation so the two cannot disagree.
+    Returns the allocations and any quantity no eligible lot could supply.
+    """
+    remaining = Decimal(str(quantity_needed))
+    consumed: list[dict[str, Any]] = []
+    canonical_name = _canonical_material_name(name)
+    for lot in lots:
+        if remaining <= 0:
+            break
+        if lot["unit"] != unit or _canonical_material_name(lot["name"]) != canonical_name:
+            continue
+        if lot.get("ingredient_code") in reserved_codes:
+            continue
+        expiry = lot.get("expiry_date")
+        if as_of is not None and expiry is not None and expiry < as_of:
+            continue
+        take = min(Decimal(str(lot["quantity"])), remaining)
+        if take <= 0:
+            continue
+        consumed.append({"inventory_item_id": str(lot["id"]), "name": lot["name"], "quantity": str(take), "unit": unit})
+        remaining -= take
+    return consumed, remaining
 
 
 class ReplayClient:
@@ -260,14 +300,16 @@ class MarkerStore:
             ).first()
             return str(row[0]) if row else None
 
-    def consume_available_raw_material(self, name: str, quantity_needed: Decimal, unit: str) -> list[dict[str, Any]]:
+    def consume_available_raw_material(
+        self, name: str, quantity_needed: Decimal, unit: str, as_of: date | None = None
+    ) -> list[dict[str, Any]]:
         """Greedily consume canonical-name-matched raw material FIFO lots.
 
         Receipt display names remain faithful to their sources, while allocation ignores
         harmless spelling/case variants such as ``Macedonia``/``Macedonian``.  This makes
         a destroy-and-replay run allocate the same historical recipe quantities every time.
         """
-        consumed, remaining = self.consume_available_raw_material_up_to(name, quantity_needed, unit)
+        consumed, remaining = self.consume_available_raw_material_up_to(name, quantity_needed, unit, as_of)
         if remaining > 0:
             raise ReplayRejectedError(
                 f"not enough {name!r} stock to consume {quantity_needed} {unit} (short by {remaining} {unit})"
@@ -275,33 +317,51 @@ class MarkerStore:
         return consumed
 
     def consume_available_raw_material_up_to(
-        self, name: str, quantity_needed: Decimal, unit: str
+        self,
+        name: str,
+        quantity_needed: Decimal,
+        unit: str,
+        as_of: date | None = None,
+        reserved_codes: frozenset[str] = frozenset(),
     ) -> tuple[list[dict[str, Any]], Decimal]:
-        """Return canonical FIFO consumption plus any source-evidenced shortfall."""
-        remaining = Decimal(str(quantity_needed))
-        consumed: list[dict[str, Any]] = []
-        canonical_name = _canonical_material_name(name)
+        """Return canonical FIFO consumption plus any source-evidenced shortfall.
+
+        `as_of` is the business date of the consuming step; lots already expired on it are skipped.
+        """
         with self._engine.connect() as conn:
             rows = conn.execute(
                 text(
-                    "SELECT id, name, unit, quantity FROM inventory_items "
+                    "SELECT id, name, unit, quantity, expiry_date, extra_data->>'ingredient_code' FROM inventory_items "
                     "WHERE org_id = :org_id AND inventory_type = 'raw_material' "
                     "AND quantity > 0 ORDER BY purchase_date ASC NULLS LAST, created_at ASC"
                 ),
                 {"org_id": str(self.org_id)},
             ).fetchall()
-        for row in rows:
-            if remaining <= 0:
-                break
-            if row[2] != unit or _canonical_material_name(row[1]) != canonical_name:
-                continue
-            available = Decimal(str(row[3]))
-            take = min(available, remaining)
-            if take <= 0:
-                continue
-            consumed.append({"inventory_item_id": str(row[0]), "name": row[1], "quantity": str(take), "unit": unit})
-            remaining -= take
-        return consumed, remaining
+        lots = [
+            {"id": r[0], "name": r[1], "unit": r[2], "quantity": r[3], "expiry_date": r[4], "ingredient_code": r[5]}
+            for r in rows
+        ]
+        return allocate_fifo_lots(lots, name, quantity_needed, unit, as_of, reserved_codes)
+
+    def wastage_recorded_for_item(self, item_id: Any) -> bool:
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT 1 FROM inventory_wastage WHERE org_id = :org_id AND inventory_item_id = :item LIMIT 1"),
+                {"org_id": str(self.org_id), "item": str(item_id)},
+            ).first()
+        return row is not None
+
+    def raw_material_for_ingredient_code(self, code: str) -> tuple[Any, str] | None:
+        """(id, name) of the lot pinned to this ingredient code, if it exists yet."""
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT id, name FROM inventory_items "
+                    "WHERE org_id = :org_id AND extra_data->>'ingredient_code' = :code LIMIT 1"
+                ),
+                {"org_id": str(self.org_id), "code": code},
+            ).first()
+        return (row[0], row[1]) if row else None
 
     def consume_marked_raw_material(self, marker: str, quantity_needed: Decimal, unit: str) -> list[dict[str, Any]]:
         item = self.raw_material_for_marker(marker)
@@ -394,18 +454,11 @@ def _ingredient_inputs_for_step(
     if not known_input_quantities:
         return []
     inputs = []
-    with store._engine.connect() as conn:
-        for code, (quantity, unit) in known_input_quantities.items():
-            row = conn.execute(
-                text(
-                    "SELECT id, name FROM inventory_items "
-                    "WHERE org_id = :org_id AND extra_data->>'ingredient_code' = :code LIMIT 1"
-                ),
-                {"org_id": str(store.org_id), "code": code},
-            ).first()
-            if row is None:
-                raise ReplayRejectedError(f"no inventory item carries ingredient_code={code!r} yet")
-            inputs.append({"inventory_item_id": str(row[0]), "name": row[1], "quantity": quantity, "unit": unit})
+    for code, (quantity, unit) in known_input_quantities.items():
+        lot = store.raw_material_for_ingredient_code(code)
+        if lot is None:
+            raise ReplayRejectedError(f"no inventory item carries ingredient_code={code!r} yet")
+        inputs.append({"inventory_item_id": str(lot[0]), "name": lot[1], "quantity": quantity, "unit": unit})
     return inputs
 
 
@@ -419,7 +472,11 @@ def _recipe_botanical_inputs(batch: wm.ProductionBatch) -> list[tuple[str, Decim
 
 
 def _recipe_fallback_inputs(
-    store: MarkerStore, batch: wm.ProductionBatch, precise_inputs: list[dict[str, Any]]
+    store: MarkerStore,
+    batch: wm.ProductionBatch,
+    precise_inputs: list[dict[str, Any]],
+    as_of: date | None = None,
+    reserved_codes: frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Use the fixed VAT recipe for botanical amounts not precisely source-linked.
 
@@ -441,7 +498,9 @@ def _recipe_fallback_inputs(
             )
         remaining = recipe_quantity - known_quantity
         if remaining > 0:
-            allocated, shortfall = store.consume_available_raw_material_up_to(name, remaining, unit)
+            allocated, shortfall = store.consume_available_raw_material_up_to(
+                name, remaining, unit, as_of, reserved_codes
+            )
             fallback.extend(allocated)
             if shortfall > 0:
                 # A recipe predates every matching receipt in the source database.  Keep
@@ -584,7 +643,15 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
             precise_inputs = _ingredient_inputs_for_step(store, event.payload.get("known_input_quantities", {}))
             actual_inputs.extend(precise_inputs)
             if not is_rosella:
-                actual_inputs.extend(_recipe_fallback_inputs(store, batch, precise_inputs))
+                actual_inputs.extend(
+                    _recipe_fallback_inputs(
+                        store,
+                        batch,
+                        precise_inputs,
+                        event.real_date,
+                        event.payload.get("reserved_ingredient_codes", frozenset()),
+                    )
+                )
 
         # Neutral grain spirit (real inventory draw) and water/foraged botanicals ("other
         # materials" -- no inventory_item_id, matching the UI's "Other materials" input
@@ -818,11 +885,13 @@ def run_replay(
     limit: int | None = None,
     np3_manifest_path: Path | None = np3.DEFAULT_NP3_MANIFEST,
     crm_manifest_path: Path | None = crm.DEFAULT_CRM_MANIFEST,
+    disposals_manifest_path: Path | None = disposals.DEFAULT_DISPOSALS_MANIFEST,
 ) -> dict[str, Any]:
     # Validate before the first request so a bad NP3 manifest fails now, not after the
     # long Core replay has already run.
     np3_manifest = np3.load_np3_manifest(np3_manifest_path) if np3_manifest_path else None
     crm_manifest = crm.load_crm_manifest(crm_manifest_path) if crm_manifest_path else None
+    disposal_list = disposals.load_disposals_manifest(disposals_manifest_path) if disposals_manifest_path else None
     events = build_timeline(legacy_source, production_manifest_path)
     if limit is not None:
         events = events[:limit]
@@ -858,6 +927,14 @@ def run_replay(
             counts["issued"] += 1
         if (index + 1) % 25 == 0:
             print(f"[{index + 1}/{len(events)}] {event.event_id} ({event.real_date})")
+
+    # Expired stock is written off only after every consumption has happened, so the wastage
+    # API sees each lot's true remainder.
+    if disposal_list is not None and limit is None:
+        try:
+            counts["disposals"] = disposals.replay_disposals(client, store, disposal_list)
+        except disposals.DisposalReplayError as exc:
+            raise ReplayRejectedError(str(exc)) from exc
 
     # CRM mappings need each final product to exist, so they follow the Core history.
     if crm_manifest is not None and limit is None:
@@ -904,6 +981,8 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--skip-np3", action="store_true", help="Replay Core history only.")
     parser.add_argument("--crm-manifest", type=Path, default=crm.DEFAULT_CRM_MANIFEST)
     parser.add_argument("--skip-crm-config", action="store_true", help="Do not replay CRM product mappings/config.")
+    parser.add_argument("--disposals-manifest", type=Path, default=disposals.DEFAULT_DISPOSALS_MANIFEST)
+    parser.add_argument("--skip-disposals", action="store_true", help="Do not dispose of expired stock.")
     args = parser.parse_args()
     if not args.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
@@ -933,6 +1012,7 @@ def main() -> int:
         limit=args.limit,
         np3_manifest_path=None if args.skip_np3 else args.np3_manifest,
         crm_manifest_path=None if args.skip_crm_config else args.crm_manifest,
+        disposals_manifest_path=None if args.skip_disposals else args.disposals_manifest,
     )
     print(result)
     return 0

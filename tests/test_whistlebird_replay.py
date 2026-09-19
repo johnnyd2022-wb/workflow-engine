@@ -34,7 +34,7 @@ class _Store:
     def consume_available_raw_material(self, name, quantity, unit):
         return [{"inventory_item_id": "ngs-id", "name": name, "quantity": str(quantity), "unit": unit}]
 
-    def consume_available_raw_material_up_to(self, name, quantity, unit):
+    def consume_available_raw_material_up_to(self, name, quantity, unit, as_of=None, reserved_codes=frozenset()):
         return self.consume_available_raw_material(name, quantity, unit), Decimal("0")
 
     def consume_marked_raw_material(self, marker, quantity, unit):
@@ -80,7 +80,7 @@ def test_replay_uses_canonical_recipe_fallback_and_dedicated_ngs():
 
 def test_replay_records_untracked_recipe_shortfall_without_backdating_a_purchase():
     class _ShortfallStore:
-        def consume_available_raw_material_up_to(self, _name, quantity, _unit):
+        def consume_available_raw_material_up_to(self, _name, quantity, _unit, _as_of=None, _reserved=frozenset()):
             return [], quantity
 
     fallback = replay._recipe_fallback_inputs(_ShortfallStore(), _batch(), [])

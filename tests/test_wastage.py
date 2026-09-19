@@ -14,6 +14,7 @@ from Batch 2.
 
 import threading
 import time
+from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
@@ -743,3 +744,70 @@ def test_wastage_route_rejects_bad_quantity_without_writing(db, app_client, org,
     assert _quantity_of(item.id) == Decimal("10"), f"{why!r} deducted despite being rejected"
     assert db.query(InventoryWastage).filter(InventoryWastage.inventory_item_id == item.id).count() == 0
     assert db.query(InventoryMovement).filter(InventoryMovement.inventory_item_id == item.id).count() == 0
+
+
+# --- the Whistlebird replay's expired-stock disposal, against the real route and store ----------
+
+
+def _replay_scripts():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
+    import whistlebird_disposals as disposals
+    import whistlebird_replay as replay
+
+    return disposals, replay
+
+
+class _FlaskClient:
+    """Adapts the Flask test client to the ReplayClient interface the replay calls."""
+
+    def __init__(self, app_client):
+        self.app_client = app_client
+        self.calls = 0
+
+    def post(self, path, body):
+        self.calls += 1
+        response = self.app_client.post(path, json=body)
+        assert response.status_code in (200, 201), response.data
+        return response.get_json()
+
+
+def test_replays_expired_stock_disposal_is_accepted_by_the_real_route_and_is_resumable(db, app_client, org):
+    disposals, replay = _replay_scripts()
+    marker = f"raw-legacy-purchases_ingredients-{uuid4().hex[:8]}"
+    item = InventoryItemFactory(
+        org_id=org.id, name="Sumac berries - ground", quantity="276.8", unit="g", extra_data={"import_ref": marker}
+    )
+    db.commit()
+    store = replay.MarkerStore(db.get_bind().url.render_as_string(hide_password=False), org.id)
+    curated = (
+        disposals.Disposal(
+            lot=marker,
+            ingredient="Sumac berries - ground",
+            quantity=Decimal("276.8"),
+            unit="g",
+            on=date(2024, 9, 8),
+            reason="Expired 2024-09-08",
+        ),
+    )
+    client = _FlaskClient(app_client)
+
+    first = disposals.replay_disposals(client, store, curated)
+
+    assert first == {"disposed": 1, "skipped": 0}
+    db.expire_all()
+    assert _quantity_of(item.id) == Decimal("0"), "the whole remaining lot is written off"
+    wastage = db.query(InventoryWastage).filter(InventoryWastage.inventory_item_id == item.id).one()
+    assert wastage.reason == "Expired 2024-09-08"
+    assert Decimal(wastage.quantity_wasted) == Decimal("276.8")
+    movement = db.query(InventoryMovement).filter(InventoryMovement.inventory_item_id == item.id).one()
+    assert movement.movement_type == "WASTAGE" and movement.source_wastage_id == wastage.id
+
+    second = disposals.replay_disposals(client, store, curated)
+
+    assert second == {"disposed": 0, "skipped": 1}, "a re-run finds the write-off and does nothing"
+    assert client.calls == 1
+    db.expire_all()
+    assert db.query(InventoryWastage).filter(InventoryWastage.inventory_item_id == item.id).count() == 1
