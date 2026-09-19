@@ -198,6 +198,35 @@ def test_reconcile_accepts_a_unique_contains_mapping_when_exact_only_is_disabled
     assert _stock_by_batch(db, sales_org.id) == {1: Decimal("8.0000")}
 
 
+@pytest.mark.parametrize(
+    ("pattern", "description"),
+    [
+        ("Wildflower", "Whistlebird Gin 44% - wildflower - 700ml trade"),
+        ("wildflower", "Whistlebird Gin 44% - WILDFLOWER - 700ml trade"),
+        ("WiLdFlOwEr", "Whistlebird Gin 44% - Wildflower - 700ml trade"),
+    ],
+)
+def test_reconcile_contains_mapping_ignores_letter_case(db, sales_org, pattern, description):
+    product = "Wildflower - final product"
+    InventoryRepository(db).create_inventory_item(
+        sales_org.id,
+        name=product,
+        quantity="10",
+        unit="units",
+        inventory_type="final_product",
+        extra_data={"batch_number": 1},
+    )
+    _add_mapping(db, sales_org.id, product=product, pattern=pattern, match_type="contains")
+    db.add(SalesTraceabilityConfig(org_id=sales_org.id, matching_strategy="fifo", strict_mapping=False))
+    db.commit()
+    _add_sale(db, sales_org.id, invoice_id="xero-case-variant", description=description, quantity="2")
+
+    summary = SalesTraceabilityService(db).reconcile_org(sales_org.id)
+
+    assert summary["allocated"] == 1
+    assert _stock_by_batch(db, sales_org.id) == {1: Decimal("8.0000")}
+
+
 def test_reconcile_prefers_an_exact_mapping_over_a_broad_contains_mapping(db, sales_org):
     product = "Wildflower - final product"
     InventoryRepository(db).create_inventory_item(

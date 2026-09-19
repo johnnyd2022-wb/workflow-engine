@@ -226,10 +226,11 @@
         <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="queueMapping()" :disabled="!mappingDraft.product_key || !mappingDraft.xero_description_pattern">
           Add to review
         </button>
-        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveMappings()" :disabled="savingMapping || pendingMappings.length === 0">
+        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveMappings()" :disabled="savingMapping || !canSaveMappings">
           <span x-text="savingMapping ? 'Saving mappings…' : 'Save mappings'"></span>
         </button>
       </div>
+      <p x-show="mappingError" x-cloak role="alert" style="margin:0; font-size:.8rem; color:#b91c1c;" x-text="mappingError"></p>
     </div>
 
     <template x-if="pendingMappings.length > 0">
@@ -245,7 +246,7 @@
             </div>
           </template>
         </div>
-        <p style="margin:10px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Review entries here, then use Save mappings above. Nothing is sent to the system until you save.</p>
+        <p style="margin:10px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Add several mappings to review, then use Save mappings above. Nothing is sent to the system until you save. Phrases match Xero lines regardless of upper or lower case.</p>
       </div>
     </template>
 

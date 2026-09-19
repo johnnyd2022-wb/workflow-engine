@@ -24,6 +24,7 @@ function crmConfiguration() {
       revenue_baseline_target_mtd: '',
     },
     savingMapping: false,
+    mappingError: null,
     mappingDraft: {
       product_key: '',
       xero_description_pattern: '',
@@ -187,10 +188,26 @@ function crmConfiguration() {
       return { name: name || '', source_output_id: source || null };
     },
 
+    get draftIsComplete() {
+      return Boolean(this.mappingDraft.product_key && String(this.mappingDraft.xero_description_pattern || '').trim());
+    },
+
+    get canSaveMappings() {
+      return this.pendingMappings.length > 0 || this.draftIsComplete;
+    },
+
+    // Xero phrases match case-insensitively on the server, so duplicates are judged the same way here.
+    isDuplicateMapping(payload) {
+      const key = (mapping) =>
+        `${mapping.biz_e_product_name}\u0000${String(mapping.xero_description_pattern || '').trim().toLocaleLowerCase()}`;
+      const wanted = key(payload);
+      return this.pendingMappings.concat(this.mappings).some((mapping) => key(mapping) === wanted);
+    },
+
     queueMapping() {
       const product = this.parseProductKey();
       const xero = String(this.mappingDraft.xero_description_pattern || '').trim();
-      if (!product.name || !xero) return;
+      if (!product.name || !xero) return false;
       const payload = {
         biz_e_product_name: product.name,
         biz_e_source_output_id: product.source_output_id,
@@ -198,17 +215,14 @@ function crmConfiguration() {
         match_type: this.mappingDraft.match_type === 'contains' ? 'contains' : 'exact',
         notes: (this.mappingDraft.notes || '').trim() || null,
       };
-      const isDuplicate = this.pendingMappings.concat(this.mappings).some((mapping) =>
-        mapping.biz_e_product_name === payload.biz_e_product_name
-        && mapping.xero_description_pattern === payload.xero_description_pattern
-      );
-      if (isDuplicate) {
-        this.error = 'That mapping is already saved or in the review list.';
-        return;
+      if (this.isDuplicateMapping(payload)) {
+        this.mappingError = 'That mapping is already saved or in the review list.';
+        return false;
       }
-      this.error = null;
+      this.mappingError = null;
       this.pendingMappings.push(payload);
       this.mappingDraft = { product_key: '', xero_description_pattern: '', match_type: 'exact', notes: '' };
+      return true;
     },
 
     removePendingMapping(index) {
@@ -216,8 +230,12 @@ function crmConfiguration() {
     },
 
     async saveMappings() {
-      if (this.savingMapping || this.pendingMappings.length === 0) return;
+      if (this.savingMapping) return;
+      // A completed but un-queued form counts as intent to save: queue it rather than ignore the click.
+      if (this.draftIsComplete && !this.queueMapping()) return;
+      if (this.pendingMappings.length === 0) return;
       this.savingMapping = true;
+      this.mappingError = null;
       try {
         const needsPartialMatching = this.pendingMappings.some((mapping) => mapping.match_type === 'contains');
         if (needsPartialMatching && this.traceConfig.strict) {
@@ -226,6 +244,7 @@ function crmConfiguration() {
           const configured = await this.saveTraceConfig();
           if (!configured) {
             this.traceConfig.strict = strictBeforeSave;
+            this.mappingError = this.error;
             return;
           }
         }
@@ -233,7 +252,7 @@ function crmConfiguration() {
         this.mappings = [...(product_mappings || []), ...this.mappings];
         this.pendingMappings = [];
       } catch (e) {
-        this.error = e.message || 'Failed to save mappings.';
+        this.mappingError = e.message || 'Failed to save mappings.';
       } finally {
         this.savingMapping = false;
       }
