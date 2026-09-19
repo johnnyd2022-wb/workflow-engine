@@ -331,7 +331,11 @@ def _execute_purchase(client: ReplayClient, store: MarkerStore, event: ReplayEve
     if store.existing_inventory_item_id(marker):
         return False
     name = record.get("name") or record.get("ingredient")
-    quantity = record.get("quantity")
+    # Context-resolved records keep ``quantity`` as the exact amount consumed by
+    # their linked VAT.  When a physical supplier lot has subsequently been
+    # identified, ``purchase_quantity`` records the actual receipt without
+    # changing that historical consumption.
+    quantity = record.get("purchase_quantity", record.get("quantity"))
     unit = record.get("unit")
     supplier = record.get("supplier")
     purchase_date = record["date"] if isinstance(record["date"], str) else record["date"].isoformat()

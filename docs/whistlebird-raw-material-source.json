@@ -1,5 +1,5 @@
 {
-  "_comment": "Curated raw-material purchase manifest for scripts/whistlebird_migration.py. 'clean' records are real order-confirmation emails, imported as dated receipts without allocation to a specific consuming batch (same policy as legacy raw materials, WB-018): botanicals from jill@alembics.co.nz (post-legacy-cutoff, 2025-05-13 onward) and, since 2026-09-18, every Neutral grain spirit receipt ever bought from spirits@southerngrainspirits.co.nz (2023-04-24 onward -- superseding the legacy purchases_gns table as the sole NGS source; see whistlebird_replay_timeline._ngs_allocations, which pools these instead of reading purchases_gns, so the replay no longer needs legacy-DB access for NGS). 'resolved_by_context' records have no email or database purchase evidence -- each is sized to exactly the named batch's own 2x-multiplied recipe requirement and dated 3 days before that batch's maceration date; supplier per the founder's 2026-09-14 supplier list (updated same day to add Szechuan pepper -> Davis Trading and Green tea -> Countdown/Woolworths), not verified against a receipt. Founder-confirmed 2026-09-14: each distillation runs two multi-shot concentrates into one VAT, so real per-batch consumption is 2x the founder's stated per-shot recipe quantity.",
+  "_comment": "Curated raw-material purchase manifest for scripts/whistlebird_migration.py. 'clean' records are real order-confirmation emails, imported as dated receipts without allocation to a specific consuming batch (same policy as legacy raw materials, WB-018): botanicals from jill@alembics.co.nz (post-legacy-cutoff, 2025-05-13 onward) and, since 2026-09-18, every Neutral grain spirit receipt ever bought from spirits@southerngrainspirits.co.nz (2023-04-24 onward -- superseding the legacy purchases_gns table as the sole NGS source; see whistlebird_replay_timeline._ngs_allocations, which pools these instead of reading purchases_gns, so the replay no longer needs legacy-DB access for NGS). 'resolved_by_context' records have no email or database purchase evidence -- each is sized to exactly the named batch's own 2x-multiplied recipe requirement and dated 3 days before that batch's maceration date; supplier per the founder's 2026-09-14 supplier list (updated same day to add Szechuan pepper -> Davis Trading and Green tea -> Countdown/Woolworths), not verified against a receipt. Where a later physical lot label establishes the full receipt, `purchase_quantity` is the quantity created in inventory while `quantity` remains the exact amount consumed by the named VAT. Founder-confirmed 2026-09-14: each distillation runs two multi-shot concentrates into one VAT, so real per-batch consumption is 2x the founder's stated per-shot recipe quantity.",
   "excluded_from_recipe": "Fresh/foraged items never tracked as purchases, per founder (2026-09-14): Wildflower's Lemon juice, Grapefruit (pink) juice, Lemon peel; Solstice's Kawakawa leaf, fresh orange peel, fresh orange juice.",
   "recipe_wildflower_per_shot_g": {
     "JBM": 29.7,
@@ -375,7 +375,8 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#26770",
-      "supplier_batch_number": "LIQ-B401600-LR005",
+      "supplier_batch_number": "LIQRO-B441043",
+      "expiry_date": "2029-02-20",
       "price_nzd": 35,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -389,6 +390,7 @@
       "supplier": "Alembics",
       "supplier_order_ref": "#26770",
       "supplier_batch_number": "ELDO-C61",
+      "expiry_date": "2028-06-29",
       "price_nzd": 132,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -401,7 +403,8 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#26930",
-      "supplier_batch_number": "P458403-1",
+      "supplier_batch_number": "P458403",
+      "expiry_date": "2029-05-26",
       "price_nzd": 84,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -415,6 +418,7 @@
       "supplier": "Alembics",
       "supplier_order_ref": "#27558",
       "supplier_batch_number": "MJUN-P459777",
+      "expiry_date": "2029-06-27",
       "price_nzd": 64,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -440,9 +444,24 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#27558",
-      "supplier_batch_number": "ICOR-SS433991-2",
+      "supplier_batch_number": "ICOR-SS22433991",
+      "expiry_date": "2026-09-19",
       "price_nzd": 16,
       "source": "email: jill@alembics.co.nz order confirmation"
+    },
+    {
+      "code": "COR006",
+      "ingredient": "Coriander seeds",
+      "quantity": 1000,
+      "unit": "g",
+      "date": "2026-09-15",
+      "confidence": "supplier_lot_label",
+      "supplier": "Alembics",
+      "supplier_order_ref": null,
+      "supplier_batch_number": "ICOR-SS45719",
+      "expiry_date": "2027-10-12",
+      "price_nzd": null,
+      "source": "supplier lot label: date positioned after the 2026-expiry lot and before the next replay event"
     },
     {
       "code": "CIN003",
@@ -466,7 +485,8 @@
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#27804",
-      "supplier_batch_number": null,
+      "supplier_batch_number": "HJUN-P4561012",
+      "expiry_date": "2027-07-19",
       "price_nzd": 62,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -486,13 +506,14 @@
     {
       "code": "LM006",
       "ingredient": "Lemon myrtle",
-      "quantity": 100,
+      "quantity": 200,
       "unit": "g",
       "date": "2026-06-11",
       "confidence": "clean",
       "supplier": "Alembics",
       "supplier_order_ref": "#27804",
-      "supplier_batch_number": "L230201B-NC",
+      "supplier_batch_number": "LMO-01526AN",
+      "expiry_date": "2029-07-29",
       "price_nzd": 72,
       "source": "email: jill@alembics.co.nz order confirmation"
     },
@@ -2458,9 +2479,11 @@
       "confidence": "resolved_by_context",
       "supplier": "Davis Trading",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "393456",
+      "expiry_date": "2027-11-30",
+      "purchase_quantity": 500,
       "price_nzd": null,
-      "source": "derived: wildflower VAT59 maceration requirement, no email/DB purchase evidence",
+      "source": "supplier lot label; VAT59 consumption date remains derived because no purchase email is available",
       "consumed_by": {
         "global_vat": 59,
         "product": "wildflower"
@@ -2713,9 +2736,11 @@
       "confidence": "resolved_by_context",
       "supplier": "Alembics",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "HIB-P436692",
+      "expiry_date": "2028-12-03",
+      "purchase_quantity": 500,
       "price_nzd": null,
-      "source": "derived: wildflower VAT59 maceration requirement, no email/DB purchase evidence",
+      "source": "supplier lot label; VAT59 consumption date remains derived because no purchase email is available",
       "consumed_by": {
         "global_vat": 59,
         "product": "wildflower"
@@ -2883,9 +2908,11 @@
       "confidence": "resolved_by_context",
       "supplier": "Moore Wilson",
       "supplier_order_ref": null,
-      "supplier_batch_number": null,
+      "supplier_batch_number": "392314",
+      "expiry_date": "2026-10-15",
+      "purchase_quantity": 1000,
       "price_nzd": null,
-      "source": "derived: wildflower VAT59 maceration requirement, no email/DB purchase evidence",
+      "source": "supplier lot label; VAT59 consumption date remains derived because no purchase email is available",
       "consumed_by": {
         "global_vat": 59,
         "product": "wildflower"
