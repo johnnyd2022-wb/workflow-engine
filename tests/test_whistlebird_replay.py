@@ -121,6 +121,29 @@ def test_replay_uses_physical_lot_quantity_without_changing_linked_consumption()
     assert event.payload["record"]["quantity"] == 43.2
 
 
+def test_replay_canonicalises_legacy_botanical_display_names():
+    class _PurchaseStore:
+        def existing_inventory_item_id(self, _marker):
+            return None
+
+    event = ReplayEvent(
+        event_id="purchase:legacy-purchases_ingredients-42",
+        event_type="create_inventory_item",
+        real_date=date(2024, 12, 5),
+        depends_on=(),
+        payload={
+            "marker": "raw-legacy-purchases_ingredients-42",
+            "record": {"name": "coriander seeds", "quantity": 1000, "unit": "g", "date": "2024-12-05"},
+        },
+    )
+    client = _Client()
+
+    assert replay._execute_purchase(client, _PurchaseStore(), event) is True
+    payload = client.calls[0][1]
+    assert payload["name"] == "Coriander seeds"
+    assert payload["metadata"]["source_material_name"] == "coriander seeds"
+
+
 def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypatch):
     batch = _batch()
     events = _batch_events(
