@@ -9,7 +9,7 @@ evidence, dates, staff link and profile.
 
 import copy
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -88,6 +88,12 @@ def _manifest(**overrides):
 def test_committed_manifest_is_valid():
     manifest = np3.load_np3_manifest()
 
+    assert len(manifest.attestations) == 38
+    assert len(manifest.logs) == 71
+    training = [record for record in manifest.logs if record.control_id == "staff-competency"]
+    assert len(training) == 54  # 2 staff x 9 supplied register items x 3 annual dates
+    assert {record.event_date.isoformat() for record in training} == {"2024-02-01", "2025-02-01", "2026-02-01"}
+    assert {member.name for member in manifest.staff} == {"Johnny Dempsey", "Nikolai (Niko) Scott"}
     assert manifest.record_count == len(manifest.attestations) + len(manifest.logs)
 
 
@@ -355,6 +361,24 @@ def test_manifest_is_accepted_by_the_real_routes_and_dated_explicitly(db, np3_or
     assert follow_up.status == "open" and follow_up.created_on == date(2026, 2, 20)
 
 
+def test_committed_manifest_replays_all_review_placeholders(db, np3_org):
+    manifest = np3.load_np3_manifest()
+
+    counts = _replay(np3_org, manifest)
+    updated = np3.correct_np3_timestamps(np3_org["url"], np3_org["name"], manifest)
+    report = np3.verify_np3(np3_org["url"], np3_org["name"], manifest)
+
+    assert counts == {"staff": 2, "profile": 1, "attestations": 38, "logs": 71, "skipped": 0}
+    assert updated == 109
+    assert report == {
+        "np3_record_count": {"expected": 109, "actual": 109},
+        "np3_record_content": {"expected": 109, "actual": 109},
+        "np3_staff": {"expected": 2, "actual": 2},
+        "np3_profile": {"expected": 1, "actual": 1},
+        "np3_date_mismatches": 0,
+    }
+
+
 def test_replay_is_idempotent(db, np3_org):
     manifest = np3.parse_np3_manifest(_manifest())
     _replay(np3_org, manifest)
@@ -403,7 +427,9 @@ def test_snapshot_keeps_dates_already_set_in_the_manifest(db, np3_org):
     fresh = np3._snapshot_org(np3_org["url"], np3_org["name"], None, np3_org["admin_email"])
     kept = np3._snapshot_org(np3_org["url"], np3_org["name"], manifest, np3_org["admin_email"])
 
-    assert fresh["attestations"][0]["signed_on"] == date.today().isoformat()
+    # The snapshot dates rows in the org's local (NZ) day, not the runner's: CI is UTC, so
+    # date.today() is a day behind between 12:00 and 24:00 UTC.
+    assert fresh["attestations"][0]["signed_on"] == datetime.now(np3._LOCAL_TZ).date().isoformat()
     assert (kept["attestations"][0]["signed_on"], kept["attestations"][0]["due_date"]) == (SIGNED_ON, "2026-09-10")
 
 

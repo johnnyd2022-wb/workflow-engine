@@ -200,6 +200,39 @@ def test_np3_check_attestation_is_signed_and_scheduled(db, flask_app):
         db.commit()
 
 
+def test_np3_register_pdf_download_contains_audit_answers(db, flask_app):
+    org, client = _admin_client(db, flask_app)
+    try:
+        assert (
+            client.put(
+                "/api/compliant/profile", json={"enabled": True, "settings": {"food_control_programme": "np3"}}
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/api/compliant/np3-audit/attestations",
+                json={
+                    "control_id": "registration-scope",
+                    "how_we_meet": "The scope register is reviewed before every verification.",
+                    "confirmed": True,
+                    "review_interval_months": 6,
+                },
+            ).status_code
+            == 201
+        )
+
+        response = client.get("/api/compliant/np3-audit?format=pdf")
+
+        assert response.status_code == 200
+        assert response.mimetype == "application/pdf"
+        assert response.data.startswith(b"%PDF-")
+        assert "np3-verification-evidence.pdf" in response.headers["Content-Disposition"]
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
 def test_np3_review_reminder_handles_month_end():
     assert _add_months(date(2026, 8, 31), 6) == date(2027, 2, 28)
 
