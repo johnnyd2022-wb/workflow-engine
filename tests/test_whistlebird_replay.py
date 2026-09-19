@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_replay as replay  # noqa: E402
-from whistlebird_replay_timeline import _batch_events  # noqa: E402
+from whistlebird_replay_timeline import ReplayEvent, _batch_events  # noqa: E402
 
 
 class _Client:
@@ -87,6 +87,38 @@ def test_replay_records_untracked_recipe_shortfall_without_backdating_a_purchase
 
     juniper = next(item for item in fallback if item["name"] == "Juniper Berries (Macedonian)")
     assert juniper == {"name": "Juniper Berries (Macedonian)", "quantity": "59.4", "unit": "g"}
+
+
+def test_replay_uses_physical_lot_quantity_without_changing_linked_consumption():
+    class _PurchaseStore:
+        def existing_inventory_item_id(self, _marker):
+            return None
+
+    event = ReplayEvent(
+        event_id="purchase:CP019",
+        event_type="create_inventory_item",
+        real_date=date(2026, 9, 14),
+        depends_on=(),
+        payload={
+            "marker": "raw-manifest-CP019",
+            "record": {
+                "code": "CP019",
+                "ingredient": "Cardamom pods",
+                "quantity": 43.2,
+                "purchase_quantity": 500,
+                "unit": "g",
+                "date": "2026-09-14",
+                "supplier": "Davis Trading",
+                "supplier_batch_number": "393456",
+                "expiry_date": "2027-11-30",
+            },
+        },
+    )
+    client = _Client()
+
+    assert replay._execute_purchase(client, _PurchaseStore(), event) is True
+    assert client.calls[0][1]["quantity"] == "500"
+    assert event.payload["record"]["quantity"] == 43.2
 
 
 def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypatch):
