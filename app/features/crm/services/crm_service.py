@@ -869,6 +869,8 @@ class CRMService:
         )
         top_products = self.invoice_repo.top_products(org_id, limit=200)
         top_customers = self.invoice_repo.customer_sales_breakdown(org_id, top_n=200)
+        product_sales_summary = self.invoice_repo.product_sales_summary(org_id)
+        authorised_customer_count = self.invoice_repo.authorised_customer_count(org_id)
         top_customers_by_product = self.invoice_repo.top_customers_by_product(org_id, limit_products=50)
 
         tasks = self.task_repo.list_for_org(org_id)
@@ -900,7 +902,9 @@ class CRMService:
             "outstanding_invoice_count": outstanding["invoice_count"],
             "revenue_vs_last_month_pct": revenue_vs_last_month_pct,
             "top_products": top_products,
+            "product_sales_summary": product_sales_summary,
             "top_customers": top_customers,
+            "authorised_customer_count": authorised_customer_count,
             "top_customers_by_product": top_customers_by_product,
             "monthly_trend": monthly_trend,
             "open_tasks": [_serialise_task(task, db=self.db) for task in open_tasks],

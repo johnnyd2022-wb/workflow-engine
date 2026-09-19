@@ -354,6 +354,27 @@ class XeroInvoiceRepository:
             for row in rows
         ]
 
+    def product_sales_summary(self, org_id: UUID) -> dict:
+        """Totals for every authorised customer-sales line, independent of a ranked view."""
+        row = (
+            self.db.query(
+                func.sum(XeroInvoiceLineItem.quantity).label("total_qty"),
+                func.sum(XeroInvoiceLineItem.line_amount).label("total_revenue"),
+            )
+            .join(XeroInvoice, XeroInvoiceLineItem.invoice_id == XeroInvoice.id)
+            .filter(
+                XeroInvoice.org_id == org_id,
+                XeroInvoiceLineItem.org_id == org_id,
+                XeroInvoice.invoice_type == "ACCREC",
+                XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
+            )
+            .one()
+        )
+        return {
+            "total_qty": float(row.total_qty or 0),
+            "total_revenue": float(row.total_revenue or 0),
+        }
+
     def monthly_sales_totals(self, org_id: UUID, months: int = 12) -> list[dict]:
         """Return monthly invoice totals for AUTHORISED/PAID invoices (ACCREC only)."""
         rows = (
@@ -534,6 +555,19 @@ class XeroInvoiceRepository:
             }
             for row in rows
         ]
+
+    def authorised_customer_count(self, org_id: UUID) -> int:
+        """Count distinct customers with an authorised (including subsequently paid) sale."""
+        count = (
+            self.db.query(func.count(func.distinct(XeroInvoice.contact_id)))
+            .filter(
+                XeroInvoice.org_id == org_id,
+                XeroInvoice.invoice_type == "ACCREC",
+                XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
+            )
+            .scalar()
+        )
+        return int(count or 0)
 
     def top_customers_by_product(
         self,
