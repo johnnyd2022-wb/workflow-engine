@@ -12,6 +12,9 @@ Coverage:
 from __future__ import annotations
 
 import json
+from datetime import date
+from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -19,9 +22,12 @@ import pytest
 from app.core.db import db_session
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.organisation import Organisation
+from app.core.db.models.task_board_lane import TaskBoardLane  # noqa: F401 - registers CRM task FK target metadata
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # ─────────────────────────────────────────────
 # Fixtures
@@ -35,6 +41,115 @@ def _latest_event(db, org_id, event_type: str) -> EntityEvent | None:
         .order_by(EntityEvent.created_at.desc())
         .first()
     )
+
+
+def test_overview_sales_summaries_cover_all_authorised_sales(db, org):
+    """Footer summaries must not inherit the configurable Top-N display limit."""
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+    from app.features.crm.services.crm_service import CRMService
+
+    contacts = []
+    try:
+        for name in ("Authorised customer", "Paid customer", "Draft customer"):
+            contact = XeroContact(
+                org_id=org.id,
+                xero_contact_id=f"summary-contact-{uuid4()}",
+                xero_tenant_id="summary-tenant",
+                name=name,
+            )
+            db.add(contact)
+            contacts.append(contact)
+        db.flush()
+
+        def add_invoice(contact, *, status, invoice_type, description, quantity, amount):
+            invoice = XeroInvoice(
+                org_id=org.id,
+                xero_invoice_id=f"summary-invoice-{uuid4()}",
+                xero_tenant_id="summary-tenant",
+                contact_id=contact.id,
+                invoice_type=invoice_type,
+                status=status,
+                date=date.today(),
+                total=amount,
+            )
+            db.add(invoice)
+            db.flush()
+            db.add(
+                XeroInvoiceLineItem(
+                    org_id=org.id,
+                    invoice_id=invoice.id,
+                    description=description,
+                    quantity=quantity,
+                    line_amount=amount,
+                )
+            )
+
+        add_invoice(
+            contacts[0],
+            status="AUTHORISED",
+            invoice_type="ACCREC",
+            description="Wildflower Gin",
+            quantity=Decimal("3"),
+            amount=Decimal("300"),
+        )
+        add_invoice(
+            contacts[0],
+            status="PAID",
+            invoice_type="ACCREC",
+            description="Wildflower Gin",
+            quantity=Decimal("2"),
+            amount=Decimal("200"),
+        )
+        add_invoice(
+            contacts[1],
+            status="PAID",
+            invoice_type="ACCREC",
+            description="Tonic Water",
+            quantity=Decimal("4"),
+            amount=Decimal("40"),
+        )
+        add_invoice(
+            contacts[2],
+            status="DRAFT",
+            invoice_type="ACCREC",
+            description="Draft-only product",
+            quantity=Decimal("99"),
+            amount=Decimal("9900"),
+        )
+        add_invoice(
+            contacts[2],
+            status="AUTHORISED",
+            invoice_type="ACCPAY",
+            description="Supplier purchase",
+            quantity=Decimal("50"),
+            amount=Decimal("500"),
+        )
+        db.commit()
+
+        overview = CRMService(db).get_overview(org.id)
+
+        assert overview["product_sales_summary"] == {"total_qty": 9.0, "total_revenue": 540.0}
+        assert overview["authorised_customer_count"] == 2
+        assert {row["description"] for row in overview["top_products"]} == {"Wildflower Gin", "Tonic Water"}
+    finally:
+        db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.org_id == org.id).delete(synchronize_session=False)
+        db.query(XeroInvoice).filter(XeroInvoice.org_id == org.id).delete(synchronize_session=False)
+        db.query(XeroContact).filter(XeroContact.org_id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_overview_invoice_download_uses_the_pdf_endpoint():
+    overview_js = (REPO_ROOT / "app/features/crm/frontend/js/overview.js").read_text(encoding="utf-8")
+    overview_template = (REPO_ROOT / "app/features/crm/frontend/templates/crm/overview.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "CRMAPI.invoicePdfUrl(invoiceId)" in overview_js
+    assert "application/json;charset=utf-8" not in overview_js
+    assert '@click.stop="viewInvoice(inv)"' in overview_template
+    assert "Download PDF" in overview_template
 
 
 @pytest.fixture()

@@ -167,6 +167,16 @@
                       </tr>
                     </template>
                   </tbody>
+                  <tfoot>
+                    <tr style="border-top:2px solid var(--border-default,#e5e7eb); background:var(--surface-subtle,rgba(0,0,0,.03));">
+                      <td>
+                        <div style="font-size:.82rem; font-weight:800;">All authorised sales</div>
+                        <div style="font-size:.72rem; color:var(--text-secondary,#6b7280);">Total across every product, not just the rows shown above</div>
+                      </td>
+                      <td style="text-align:right; font-size:.82rem; font-weight:800;" x-text="formatNumber(overview.product_sales_summary?.total_qty || 0)"></td>
+                      <td style="text-align:right; font-size:.82rem; font-weight:800; color:var(--crm-teal);" x-text="formatCurrency2(overview.product_sales_summary?.total_revenue || 0)"></td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </template>
@@ -191,6 +201,13 @@
                       </tr>
                     </template>
                   </tbody>
+                  <tfoot>
+                    <tr style="border-top:2px solid var(--border-default,#e5e7eb); background:var(--surface-subtle,rgba(0,0,0,.03));">
+                      <td style="font-size:.82rem; font-weight:800;">Customers with authorised Xero orders</td>
+                      <td style="text-align:right; font-size:.82rem; font-weight:800;" x-text="formatNumber(overview.authorised_customer_count || 0)"></td>
+                      <td style="text-align:right; font-size:.76rem; color:var(--text-secondary,#6b7280);">All customers</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </template>
@@ -425,8 +442,10 @@
                 </tbody>
               </table>
               <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
-                <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click.stop="toggleModalInvoice(inv.id)">View</button>
-                <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click.stop="downloadInvoice(inv)">Download</button>
+                <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click.stop="viewInvoice(inv)">View</button>
+                <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click.stop="downloadInvoice(inv)" :disabled="invoiceDownloadId === inv.id">
+                  <span x-text="invoiceDownloadId === inv.id ? 'Downloading…' : 'Download PDF'"></span>
+                </button>
               </div>
             </div>
           </div>

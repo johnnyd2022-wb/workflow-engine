@@ -24,6 +24,7 @@ function crmOverview() {
     invoiceModalLoading: false,
     invoiceModalInvoices: [],
     openModalInvoiceId: null,
+    invoiceDownloadId: null,
     chartData: [],
     chartMode: 'bar',
     taskColumns: [
@@ -153,6 +154,7 @@ function crmOverview() {
       this.showInvoiceModal = false;
       this.invoiceModalInvoices = [];
       this.openModalInvoiceId = null;
+      this.invoiceDownloadId = null;
     },
 
     toggleModalInvoice(id) {
@@ -797,27 +799,57 @@ function crmOverview() {
       }[s] || 'crm-badge--draft';
     },
 
-    downloadInvoice(inv) {
-      if (!inv) return;
-      const payload = {
-        invoice_number: inv.invoice_number,
-        date: inv.date,
-        due_date: inv.due_date,
-        status: inv.status,
-        currency_code: inv.currency_code,
-        sub_total: inv.sub_total,
-        total_tax: inv.total_tax,
-        total: inv.total,
-        line_items: inv.line_items || [],
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${inv.invoice_number || inv.id || 'invoice'}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
+    async viewInvoice(inv) {
+      if (!inv?.id) return;
+      try {
+        const data = await CRMAPI.getInvoiceViewUrl(inv.id);
+        const url = data?.view_url;
+        if (!url) throw new Error('Xero did not return an online invoice URL.');
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch (e) {
+        this.error = e.message || 'Failed to open invoice in Xero.';
+      }
+    },
+
+    async downloadInvoice(inv) {
+      if (!inv?.id || this.invoiceDownloadId) return;
+      this.invoiceDownloadId = inv.id;
+      try {
+        const blob = await this.fetchInvoicePdfBlob(inv.id);
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = `${inv.invoice_number || inv.id || 'invoice'}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objectUrl);
+      } catch (e) {
+        this.error = e.message || 'Failed to download invoice PDF.';
+      } finally {
+        this.invoiceDownloadId = null;
+      }
+    },
+
+    async fetchInvoicePdfBlob(invoiceId) {
+      const res = await fetch(CRMAPI.invoicePdfUrl(invoiceId), { credentials: 'same-origin' });
+      if (!res.ok) {
+        let msg = `Failed to load invoice PDF (HTTP ${res.status}).`;
+        try {
+          const data = await res.json();
+          msg = data?.message || data?.error || msg;
+        } catch (_) {}
+        throw new Error(msg);
+      }
+      const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+      const blob = await res.blob();
+      if (contentType.includes('application/pdf')) return blob;
+      let msg = 'Xero did not return a PDF for this invoice.';
+      try {
+        const data = JSON.parse(await blob.text());
+        msg = data?.message || data?.error || msg;
+      } catch (_) {}
+      throw new Error(msg);
     },
 
     drawWrappedXAxisLabel(ctx, text, centerX, topY, maxWidth, lineHeight, maxLines) {
