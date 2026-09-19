@@ -64,7 +64,7 @@ def test_the_replay_timeline_builds_from_the_repository_alone_with_no_database()
     events = build_timeline(legacy.DEFAULT_LEGACY_SNAPSHOT, PRODUCTION_MANIFEST)
 
     ids = [event.event_id for event in events]
-    assert len(ids) == len(set(ids)) > 600
+    assert len(ids) == len(set(ids)) > 500, "the full history: ~90 executions' steps plus every purchase"
     known = set(ids)
     assert not [(e.event_id, d) for e in events for d in e.depends_on if d not in known], "unresolved dependency"
     assert any(event_id.startswith("green-gold-step:") for event_id in ids), "manifest-sourced events are present"

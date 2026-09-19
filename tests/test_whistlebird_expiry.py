@@ -32,6 +32,7 @@ from whistlebird_replay_timeline import DEFAULT_RAW_MATERIAL_MANIFEST, build_tim
 
 THROUGH = date(2026, 9, 19)
 NZ = ZoneInfo("Pacific/Auckland")
+PACKS = simulation.load_restock_packs(DEFAULT_RAW_MATERIAL_MANIFEST)
 
 
 # --- the allocator ----------------------------------------------------------------------
@@ -137,14 +138,16 @@ def test_no_recipe_demand_is_left_unbacked_only_because_its_lots_had_expired(sim
 
 def test_the_modelled_restock_purchases_are_well_formed_and_uniquely_coded():
     payload = json.loads(DEFAULT_RAW_MATERIAL_MANIFEST.read_text(encoding="utf-8"))
-    modelled = [r for r in payload["inferred_records"] if "past their recorded expiry" in (r.get("source") or "")]
+    restocks = [r for r in payload["inferred_records"] if "first_needed_by" in r]
 
-    assert modelled, "the restock purchases are in the manifest"
+    assert restocks, "the restock purchases are in the manifest"
     codes = [r["code"] for r in payload["clean_records"] + payload["inferred_records"]]
-    assert len(codes) == len(set(codes)), "ingredient codes pin a lot to a batch, so must be unique"
-    for record in modelled:
+    assert len(codes) == len(set(codes)), "ingredient codes identify a lot, so must be unique"
+    for record in restocks:
         assert record["confidence"] == "resolved_by_context"
-        assert record["consumed_by"]["global_vat"] and record["consumed_by"]["product"]
+        assert record["first_needed_by"]["global_vat"] and record["first_needed_by"]["product"]
+        assert "consumed_by" not in record, "a restock is not pinned to the batch that first needed it"
+        assert record["supplier_batch_number"] == record["code"], "the source map traces a lot by its batch number"
         assert record["source"].startswith("derived:"), "curation is labelled in the manifest, never in loaded rows"
 
 
@@ -171,7 +174,7 @@ def test_no_disposal_precedes_the_lots_expiry_or_its_last_use(sim):
 
 def test_the_committed_manifests_are_exactly_what_the_planner_would_produce_now(sim):
     """A stale manifest (allocation changed, plan not re-run) shows up here rather than in a rebuild."""
-    assert simulation.plan_restock(sim) == []
+    assert simulation.plan_restock(sim, PACKS) == []
     committed = json.loads(simulation.DEFAULT_DISPOSALS_MANIFEST.read_text(encoding="utf-8"))["disposals"]
     assert simulation.plan_disposals(sim, THROUGH) == committed
 
@@ -189,9 +192,205 @@ def test_every_maceration_event_reserves_every_pinned_lot_not_just_its_own():
 
     assert len(reserved) == 1, "one global set, identical on every maceration"
     (codes,) = reserved
-    assert {"PBL015", "SBG013"} <= codes, "VAT53's lots must be reserved from VAT55, which macerates earlier"
-    own = next(e for e in macerations if e.payload["batch"].global_vat == 53).payload["known_input_quantities"]
-    assert set(own) <= codes
+    assert codes == {"CP019", "HF021", "DAS019"}, "only the VAT59 supplier lots, which are real receipts, stay pinned"
+    own = next(e for e in macerations if e.payload["batch"].global_vat == 59).payload["known_input_quantities"]
+    assert set(own) == codes
+
+
+# --- real pack sizes, not per-batch sizes ------------------------------------------------------
+
+# Founder-confirmed 2026-09-19 (the four botanicals the old manifest sized to one batch's use).
+FOUNDER_PACKS = {
+    "Sumac berries - ground": (500, "g"),
+    "Persian black lime": (500, "g"),
+    "Dried mango slices": (1000, "g"),
+    "Szechuan pepper": (500, "g"),
+    "Orange peel - dried": (200, "g"),
+    "Green tea": (100, "bags"),
+}
+
+
+def test_the_pack_sizes_are_the_ones_the_founder_confirmed():
+    for name, (quantity, unit) in FOUNDER_PACKS.items():
+        pack = PACKS[replay._canonical_material_name(name)]
+        assert (pack.quantity, pack.unit) == (Decimal(quantity), unit), name
+
+
+def test_every_modelled_purchase_is_a_whole_pack_never_a_batch_sized_lot():
+    payload = json.loads(DEFAULT_RAW_MATERIAL_MANIFEST.read_text(encoding="utf-8"))
+    restocks = [r for r in payload["inferred_records"] if "first_needed_by" in r]
+
+    for record in restocks:
+        pack = PACKS[replay._canonical_material_name(record["ingredient"])]
+        assert (Decimal(str(record["quantity"])), record["unit"]) == (pack.quantity, pack.unit), record["code"]
+    per_batch = [
+        r
+        for r in payload["inferred_records"]
+        if "consumed_by" in r
+        and "purchase_quantity" not in r
+        and replay._canonical_material_name(r["ingredient"]) in PACKS
+    ]
+    assert per_batch == [], "no lot of a packed botanical is sized to a single batch's use"
+
+
+def test_a_pack_purchase_is_drawn_down_by_many_batches(sim):
+    """One purchase, many batches: the trace fans out from the lot, which is what a real purchase looks like."""
+    restocks = {
+        f"raw-manifest-{r['code']}"
+        for r in json.loads(DEFAULT_RAW_MATERIAL_MANIFEST.read_text(encoding="utf-8"))["inferred_records"]
+        if "first_needed_by" in r
+    }
+    batches_by_lot: dict[str, set[str]] = {}
+    for use in sim.uses:
+        batches_by_lot.setdefault(use.lot, set()).add(use.batch)
+
+    assert restocks <= set(sim.lots)
+    for marker in restocks:
+        assert len(batches_by_lot.get(marker, ())) >= 2, f"{marker} feeds fewer than two batches"
+
+
+def test_no_two_lots_of_one_material_share_a_supplier_batch_number():
+    """inventory_items is unique on (org, name, supplier_batch_number); a clash would only fail mid-rebuild."""
+    events = build_timeline(
+        legacy.DEFAULT_LEGACY_SNAPSHOT, wm.DEFAULT_PRODUCTION_MANIFEST, DEFAULT_RAW_MATERIAL_MANIFEST
+    )
+    keys = [
+        (
+            replay._canonical_material_display_name(
+                e.payload["record"].get("name") or e.payload["record"]["ingredient"]
+            ),
+            e.payload["record"]["supplier_batch_number"],
+        )
+        for e in events
+        if e.event_type == "create_inventory_item" and e.payload["record"].get("supplier_batch_number")
+    ]
+
+    assert len(keys) == len(set(keys))
+
+
+def test_dried_orange_peel_is_stock_and_only_fresh_orange_peel_is_untracked():
+    tracked = {e["name"] for e in wm._WILDFLOWER_MACERATION_INPUTS if e["requires_inventory_selection"]}
+    untracked = {e["name"] for e in wm._SOLSTICE_MACERATION_INPUTS if not e["requires_inventory_selection"]}
+
+    assert "Orange peel - dried" in tracked
+    assert "Orange peel" in untracked
+
+
+def test_the_pack_restock_is_bought_once_when_stock_runs_out_and_covers_later_batches():
+    events = build_timeline(
+        legacy.DEFAULT_LEGACY_SNAPSHOT, wm.DEFAULT_PRODUCTION_MANIFEST, DEFAULT_RAW_MATERIAL_MANIFEST
+    )
+    sumac = [
+        e.payload["record"]
+        for e in events
+        if e.event_type == "create_inventory_item"
+        and replay._canonical_material_name(e.payload["record"].get("name") or e.payload["record"]["ingredient"])
+        == "sumac berries - ground"
+    ]
+
+    assert sorted(Decimal(str(r.get("purchase_quantity", r["quantity"]))) for r in sumac) == [500, 500]
+
+
+# --- the planner ---------------------------------------------------------------------------
+
+
+def _short(on, name="Sumac berries - ground", quantity="7.2", unit="g", vat=29, batch="wildflower-vat29"):
+    return simulation.Shortfall(on, batch, name, Decimal(quantity), unit, vat, "wildflower")
+
+
+def _sim_with(*shortfalls, lots=()):
+    sim = simulation.Simulation()
+    sim.shortfalls.extend(shortfalls)
+    for lot in lots:
+        sim.lots[lot.marker] = lot
+    return sim
+
+
+def _old_lot(name="Sumac berries - ground", purchased=date(2024, 1, 1), code="SBG001"):
+    return simulation.SimLot("raw-old", name, "g", Decimal("0"), purchased, None, code, "Moore Wilson", 0)
+
+
+def test_the_planner_buys_one_whole_pack_for_the_earliest_shortfall_only():
+    sim = _sim_with(_short(date(2025, 7, 17)), _short(date(2025, 9, 1), vat=36, batch="wildflower-vat36"))
+
+    (record,) = simulation.plan_restock(sim, PACKS)
+
+    assert (record["ingredient"], record["quantity"], record["unit"]) == ("Sumac berries - ground", 500, "g")
+    assert record["date"] == "2025-07-14", "three days before the step that needed it"
+    assert record["first_needed_by"] == {"global_vat": 29, "product": "wildflower"}
+    assert "consumed_by" not in record
+    assert record["code"] == "SBG001"
+
+
+def test_codes_continue_after_the_highest_code_already_in_use():
+    sim = _sim_with(_short(date(2025, 7, 17)), lots=[_old_lot(code="SBG007")])
+
+    (record,) = simulation.plan_restock(sim, PACKS)
+
+    assert record["code"] == "SBG008"
+
+
+def test_a_recipe_that_predates_every_receipt_is_left_unbacked_not_restocked():
+    sim = _sim_with(_short(date(2024, 1, 22)))
+
+    assert simulation.plan_restock(sim, PACKS) == []
+
+
+def test_a_recipe_after_an_earlier_receipt_ran_out_is_restocked_even_before_the_legacy_cutoff():
+    sim = _sim_with(_short(date(2024, 6, 1)), lots=[_old_lot()])
+
+    (record,) = simulation.plan_restock(sim, PACKS)
+
+    assert record["date"] == "2024-05-29"
+
+
+def test_an_ingredient_without_a_pack_size_is_never_restocked():
+    assert simulation.plan_restock(_sim_with(_short(date(2025, 9, 1), name="Liquorice root")), PACKS) == []
+
+
+@pytest.mark.parametrize(
+    ("shortfall", "message"),
+    [
+        (_short(date(2025, 9, 1), quantity="501"), "more than one 500 g pack"),
+        (_short(date(2025, 9, 1), unit="kg"), "sized in g"),
+    ],
+)
+def test_the_planner_refuses_a_demand_a_single_pack_cannot_meet(shortfall, message):
+    with pytest.raises(ValueError, match=message):
+        simulation.plan_restock(_sim_with(shortfall), PACKS)
+
+
+def test_the_planner_owns_restocks_and_per_batch_stand_ins_but_never_a_real_receipt():
+    per_batch = {"ingredient": "Sumac berries - ground", "consumed_by": {"global_vat": 29}}
+    real_receipt = {**per_batch, "ingredient": "Cardamom pods", "purchase_quantity": 500}
+
+    assert simulation.is_modelled_record({"ingredient": "Sumac berries - ground", "first_needed_by": {}}, PACKS)
+    assert simulation.is_modelled_record(per_batch, PACKS)
+    assert not simulation.is_modelled_record(real_receipt, PACKS)
+    assert not simulation.is_modelled_record({"ingredient": "Coriander seeds"}, PACKS)
+
+
+def test_a_restock_orders_its_purchase_before_the_batch_without_pinning_it(tmp_path):
+    from whistlebird_replay_timeline import _load_raw_material_manifest
+
+    path = tmp_path / "raw.json"
+    path.write_text(
+        json.dumps(
+            {
+                "clean_records": [],
+                "inferred_records": [
+                    {"code": "SBG002", "quantity": 500, "unit": "g", "first_needed_by": {"global_vat": 29}},
+                    {"code": "CP019", "quantity": 43.2, "unit": "g", "consumed_by": {"global_vat": 59}},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _records, codes_by_vat, known = _load_raw_material_manifest(path)
+
+    assert codes_by_vat == {29: ["SBG002"], 59: ["CP019"]}
+    assert known == {59: {"CP019": ("43.2", "g")}}, "only the exact-quantity receipt is pinned"
 
 
 # --- the manifest --------------------------------------------------------------------------
