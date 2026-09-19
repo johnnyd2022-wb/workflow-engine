@@ -437,6 +437,20 @@ def test_curated_manifest_in_docs_loads_and_every_step_is_resolved(migration_mod
 # --- tenant guards ---------------------------------------------------------------
 
 
+def test_scoped_reset_deletes_dependent_tenant_data_before_its_parents(migration_module):
+    """A deterministic replay cannot leave tenant-local references to old stock/cases."""
+    reset_tables = migration_module.RESET_TABLES
+
+    assert reset_tables.index("crm_sales_fifo_allocations") < reset_tables.index("xero_invoices")
+    assert reset_tables.index("crm_sales_fifo_allocations") < reset_tables.index("inventory_items")
+    assert reset_tables.index("core_tasks") < reset_tables.index("task_board_lanes")
+    assert reset_tables.index("operational_case_events") < reset_tables.index("operational_case_links")
+    assert reset_tables.index("operational_case_links") < reset_tables.index("operational_cases")
+    assert reset_tables.index("operational_case_events") < reset_tables.index("entity_events")
+    assert "core_task_configs" in reset_tables
+    assert "system_findings_cache" in reset_tables
+
+
 @pytest.mark.parametrize(
     "call",
     [
