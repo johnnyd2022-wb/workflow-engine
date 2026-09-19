@@ -37,6 +37,7 @@ from pathlib import Path
 from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent))
+import whistlebird_disposals as disposals  # noqa: E402
 import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
@@ -76,6 +77,7 @@ def correct_timestamps(
     target_url: str,
     org_name: str,
     np3_manifest_path: Path | None = np3.DEFAULT_NP3_MANIFEST,
+    disposals_manifest_path: Path | None = disposals.DEFAULT_DISPOSALS_MANIFEST,
 ) -> dict[str, int]:
     events = build_timeline(legacy_source, Path(wm.DEFAULT_PRODUCTION_MANIFEST))
     exec_ranges = _execution_date_ranges(events)
@@ -178,6 +180,10 @@ def correct_timestamps(
             counts["compliance_records"] += result.rowcount
 
     engine.dispose()
+    if disposals_manifest_path:
+        counts["wastage_records"] = disposals.correct_disposal_timestamps(
+            target_url, org_name, disposals.load_disposals_manifest(disposals_manifest_path), _business_at
+        )
     if np3_manifest_path:
         # After the Core transaction commits: a manifest record that was never replayed
         # raises here, and must not roll back the Core dates already corrected above.

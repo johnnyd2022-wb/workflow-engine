@@ -13,6 +13,8 @@ import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
 import whistlebird_rebuild_api as rebuild_api  # noqa: E402
 
+_REAL_CHECK_REPLAY_PLAN = rebuild_api.check_replay_plan
+
 
 @pytest.fixture
 def steps(monkeypatch, tmp_path):
@@ -30,6 +32,8 @@ def steps(monkeypatch, tmp_path):
     manifest.write_text(json.dumps({"profile": None, "staff": [], "attestations": [], "logs": []}))
     monkeypatch.setenv("WHISTLEBIRD_TEST_ADMIN_PASSWORD", "not-a-real-password")
     monkeypatch.setattr(rebuild_api, "server_reachable", lambda *_a, **_k: None)
+    # The real plan check runs the whole replay allocation in memory; it has its own tests below.
+    monkeypatch.setattr(rebuild_api, "check_replay_plan", lambda *_a, **_k: [])
     monkeypatch.setattr(np3, "np3_unsnapshotted", lambda *_a, **_k: [])
     monkeypatch.setattr(wm, "ensure_target_org_admin", record("tenant"))
     monkeypatch.setattr(wm, "sync_whistlebird_test_admin_password", record("password"))
@@ -141,5 +145,34 @@ def test_unreachable_legacy_database_blocks_the_reset(steps, monkeypatch):
 
     with pytest.raises(rebuild_api.RebuildRefusedError, match="legacy source unusable"):
         rebuild_api.rebuild(_args(steps, "--legacy-url=postgresql://nowhere/db", "--confirm-reset-whistlebird-test"))
+
+    assert steps["called"] == []
+
+
+def test_committed_manifests_pass_the_pre_reset_replay_plan_check(steps):
+    assert _REAL_CHECK_REPLAY_PLAN(_args(steps)) == []
+
+
+def test_a_stale_disposals_manifest_blocks_the_reset_before_anything_is_deleted(steps, monkeypatch, tmp_path):
+    stale = json.loads(rebuild_api.disposals.DEFAULT_DISPOSALS_MANIFEST.read_text(encoding="utf-8"))
+    stale["disposals"][0]["quantity"] = stale["disposals"][0]["quantity"] + 1
+    path = tmp_path / "disposals.json"
+    path.write_text(json.dumps(stale), encoding="utf-8")
+    monkeypatch.setattr(rebuild_api, "check_replay_plan", _REAL_CHECK_REPLAY_PLAN)
+
+    with pytest.raises(rebuild_api.RebuildRefusedError, match="would hold"):
+        rebuild_api.rebuild(_args(steps, f"--disposals-manifest={path}", "--confirm-reset-whistlebird-test"))
+
+    assert steps["called"] == [], "found in preflight, not after the tenant has been wiped"
+
+
+@pytest.mark.parametrize("flag", ["--disposals-manifest", "--crm-manifest"])
+def test_a_malformed_curated_manifest_blocks_the_reset(steps, monkeypatch, tmp_path, flag):
+    path = tmp_path / "broken.json"
+    path.write_text("{not json", encoding="utf-8")
+    monkeypatch.setattr(rebuild_api, "check_replay_plan", _REAL_CHECK_REPLAY_PLAN)
+
+    with pytest.raises(rebuild_api.RebuildRefusedError, match="manifest invalid"):
+        rebuild_api.rebuild(_args(steps, f"{flag}={path}", "--confirm-reset-whistlebird-test"))
 
     assert steps["called"] == []

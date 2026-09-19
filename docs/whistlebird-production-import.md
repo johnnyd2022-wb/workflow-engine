@@ -51,6 +51,11 @@ is replayed by the API path too, from `docs/whistlebird-np3-evidence-source.json
 everything: `scripts/whistlebird_rebuild_api.py`. Snapshot NP3 evidence out of the database
 (`scripts/whistlebird_np3.py snapshot`) and commit it **before** any reset.
 
+**Expired stock**: the replay never draws a lot after its expiry date; the demand only expired lots
+could have met is covered by modelled `resolved_by_context` purchases in the raw-material manifest, and
+lots left with stock once expired are written off from `docs/whistlebird-disposals-source.json` through
+the real wastage API. See "Expired ingredients" in `docs/whistlebird-replay-plan.md`.
+
 **CRM product mappings and matching config** (which Xero lines draw down which final
 product) are replayed by the API path from `docs/whistlebird-crm-config-source.json`
 (`scripts/whistlebird_crm.py`), because the scoped reset deletes them. The Xero OAuth
