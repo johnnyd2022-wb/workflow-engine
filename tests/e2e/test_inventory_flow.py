@@ -385,3 +385,108 @@ def test_wastage_idempotent_replay_does_not_double_deduct(logged_in_page: Page):
     assert mismatched.status == 409, f"expected 409, got {mismatched.status}: {mismatched.text()}"
     assert mismatched.json()["error_code"] == "IDEMPOTENCY_PAYLOAD_MISMATCH"
     assert _item_quantity(page, item_id) == "15", "mismatched replay deducted"
+
+
+def _create_lot(page, name: str, quantity, **fields) -> str:
+    resp = page.request.post(
+        "/api/core/inventory",
+        headers=csrf_headers(page),
+        data={"name": name, "quantity": quantity, "unit": "kg", "inventory_type": "raw_material", **fields},
+    )
+    assert resp.status in (200, 201), f"create lot failed: {resp.status} {resp.text()}"
+    return resp.json()["id"]
+
+
+def test_live_inventory_consolidates_lots_and_drills_into_a_lot(logged_in_page: Page):
+    """Lots of the same item are one card with the summed stock; a lot opens its detail.
+
+    Covers the live inventory page: one card per item (not one per lot) showing the total
+    across lots and the lot count, the card opening a list of lots that carry tags (type,
+    and the workflow when one is linked), a lot showing supplier / batch / dates / process /
+    barcode plus its audit history, and a one-lot item opening straight on its lot.
+    """
+    page = logged_in_page
+    tag = uuid.uuid4().hex[:8]
+    name = f"E2E Juniper {tag}"
+    workflow = f"E2E Gin {tag}"
+
+    _create_lot(
+        page,
+        name,
+        10,
+        supplier="Alpha Botanicals",
+        supplier_batch_number=f"A-{tag}",
+        purchase_date="2026-08-01",
+        expiry_date="2027-01-31",
+        metadata={"producing_process_name": workflow},
+    )
+    _create_lot(
+        page,
+        name,
+        7.5,
+        supplier="Beta Growers",
+        supplier_batch_number=f"B-{tag}",
+        purchase_date="2026-09-01",
+        expiry_date="2027-06-30",
+    )
+    solo_name = f"E2E Solo {tag}"
+    _create_lot(page, solo_name, 3, supplier="Gamma Co", supplier_batch_number=f"G-{tag}")
+
+    page.goto("/core/inventory/live")
+    page.wait_for_load_state("networkidle")
+    page.locator("#core2-inv-search").fill(tag)
+
+    cards = page.locator(".core2-inv-card")
+    expect(cards).to_have_count(2)
+    card = cards.filter(has_text=name)
+    expect(card).to_have_count(1)
+    expect(card.locator(".core2-inv-card__qty")).to_have_text("17.5 kg")
+    expect(card.locator(".core2-inv-card__count")).to_have_text("2 lots in stock")
+    expect(card.locator(".core2-live-inv__pill").first).to_have_text("Raw")
+    expect(page.locator("#core2-inv-result-count")).to_contain_text("2 items")
+
+    sheet = page.locator("#core2-inv-sheet-overlay")
+    card.click()
+    expect(sheet).to_be_visible()
+    expect(page.locator("#core2-inv-sheet-title")).to_have_text(name)
+    expect(page.locator("#core2-inv-sheet-sub")).to_contain_text("17.5 kg in stock across 2 lots")
+    lots = sheet.locator(".core2-inv-lot")
+    expect(lots).to_have_count(2)
+    expect(sheet.locator("#core2-inv-sheet-back")).to_be_hidden()
+
+    # Earliest expiry first; only the lot linked to a workflow carries the workflow tag.
+    expect(lots.nth(0)).to_contain_text(f"Batch A-{tag}")
+    expect(lots.nth(0).locator(".core2-live-inv__pill--workflow")).to_have_text(workflow)
+    expect(lots.nth(1)).to_contain_text(f"Batch B-{tag}")
+    expect(lots.nth(1).locator(".core2-live-inv__pill--workflow")).to_have_count(0)
+
+    lots.nth(0).click()
+    detail = sheet.locator(".core2-inv-detail")
+    expect(detail).to_be_visible()
+    fields = {
+        k.strip(): v.strip()
+        for k, v in zip(detail.locator("dt").all_inner_texts(), detail.locator("dd").all_inner_texts(), strict=True)
+    }
+    assert list(fields) == ["Supplier", "Supplier batch", "Purchase date", "Expiry", "Process", "Barcode"]
+    assert fields["Supplier"] == "Alpha Botanicals"
+    assert fields["Supplier batch"] == f"A-{tag}"
+    assert fields["Process"] == workflow
+    assert fields["Purchase date"] != "—" and fields["Expiry"] != "—"
+    expect(detail.locator(".core2-inv-detail__heading")).to_have_text("Audit history")
+    history = detail.locator(".core2-inv-detail__history")
+    expect(history).not_to_contain_text("Loading")
+
+    # Back returns to the lot list; Escape closes the sheet.
+    sheet.locator("#core2-inv-sheet-back").click()
+    expect(sheet.locator(".core2-inv-lot")).to_have_count(2)
+    page.keyboard.press("Escape")
+    expect(sheet).to_be_hidden()
+
+    # One lot: no list to go back to, so the card opens straight on the lot.
+    cards.filter(has_text=solo_name).click()
+    expect(sheet.locator(".core2-inv-detail")).to_be_visible()
+    expect(sheet.locator("#core2-inv-sheet-back")).to_be_hidden()
+    expect(sheet.locator(".core2-inv-detail dd").nth(1)).to_have_text(f"G-{tag}")
+    sheet.locator("#core2-inv-sheet-close").click()
+    expect(sheet).to_be_hidden()
+    assert_clean_page(page)
