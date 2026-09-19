@@ -150,6 +150,8 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         args.org_name,
         np3_manifest_path=args.np3_manifest,
         disposals_manifest_path=args.disposals_manifest,
+        production_manifest_path=args.production_manifest,
+        crm_manifest_path=args.crm_manifest,
     )
     report["verification"] = wm.build_import_verification(
         args.legacy_source,

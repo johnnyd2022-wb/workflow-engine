@@ -44,7 +44,7 @@ import os
 import secrets
 import sys
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -653,6 +653,54 @@ def correct_np3_timestamps(target_url: str, org_name: str, manifest: Np3Manifest
                     ),
                     log_updates,
                 )
+            for entry in (*attestation_updates, *log_updates):
+                conn.execute(
+                    text(
+                        "UPDATE audit_logs SET timestamp = :at WHERE org_id = :org "
+                        "AND entity = 'compliance_record' AND action = 'create' AND entity_id = :id"
+                    ),
+                    entry,
+                )
+            evidence_days = [record.signed_on for record in manifest.attestations]
+            evidence_days.extend(record.event_date for record in manifest.logs)
+            if evidence_days:
+                # The manifest has no staff/profile setup date. Place those setup
+                # actions before the earliest evidence they made possible.
+                setup_at = wm._derived_timestamp(min(evidence_days) - timedelta(days=1))
+                if manifest.profile is not None:
+                    conn.execute(
+                        text(
+                            "UPDATE compliance_profiles SET created_at = LEAST(created_at, :at), updated_at = :at "
+                            "WHERE org_id = :org AND industry_module = 'nz_alcohol'"
+                        ),
+                        {"at": setup_at, "org": org_id},
+                    )
+                    conn.execute(
+                        text(
+                            "UPDATE audit_logs SET timestamp = :at WHERE org_id = :org "
+                            "AND entity = 'compliance_profile' AND action = 'update' "
+                            "AND entity_id IN (SELECT id FROM compliance_profiles WHERE org_id = :org)"
+                        ),
+                        {"at": setup_at, "org": org_id},
+                    )
+                for member in manifest.staff:
+                    user_row = conn.execute(
+                        text("SELECT id FROM users WHERE org_id = :org AND lower(email) = lower(:email)"),
+                        {"org": org_id, "email": member.email},
+                    ).one_or_none()
+                    if user_row is None:
+                        raise RuntimeError(f"NP3 staff member {member.email} was not replayed; cannot date it")
+                    conn.execute(
+                        text("UPDATE users SET created_at = :at WHERE org_id = :org AND id = :id"),
+                        {"at": setup_at, "org": org_id, "id": user_row[0]},
+                    )
+                    conn.execute(
+                        text(
+                            "UPDATE audit_logs SET timestamp = :at WHERE org_id = :org "
+                            "AND entity = 'user' AND action = 'create' AND entity_id = :id"
+                        ),
+                        {"at": setup_at, "org": org_id, "id": user_row[0]},
+                    )
             updated = len(attestation_updates) + len(log_updates)
     finally:
         engine.dispose()

@@ -355,10 +355,43 @@ def test_manifest_is_accepted_by_the_real_routes_and_dated_explicitly(db, np3_or
     }
     attestation = rows[("registration-scope", "attestation")]
     assert (attestation.created_on, attestation.due_date) == (date(2026, 3, 10), date(2026, 9, 10))
+    attestation_audit_date = db.execute(
+        text(
+            "SELECT (a.timestamp AT TIME ZONE 'Pacific/Auckland')::date "
+            "FROM audit_logs a JOIN compliance_records r ON r.id = a.entity_id "
+            "WHERE a.org_id = :o AND a.entity = 'compliance_record' AND a.action = 'create' "
+            "AND r.control_id = 'registration-scope'"
+        ),
+        {"o": np3_org["org"].id},
+    ).scalar_one()
+    assert attestation_audit_date == attestation.created_on
     training = rows[("staff-competency", "competency")]
     assert training.created_on == date(2026, 2, 2) and training.owner_user_id is not None
     follow_up = rows[("cleaning-and-hygiene", "reading")]
     assert follow_up.status == "open" and follow_up.created_on == date(2026, 2, 20)
+    staff_date = db.execute(
+        text(
+            "SELECT (created_at AT TIME ZONE 'Pacific/Auckland')::date FROM users WHERE org_id = :o AND email = :email"
+        ),
+        {"o": np3_org["org"].id, "email": STAFF_EMAIL},
+    ).scalar_one()
+    audit_date = db.execute(
+        text(
+            "SELECT DISTINCT (timestamp AT TIME ZONE 'Pacific/Auckland')::date FROM audit_logs "
+            "WHERE org_id = :o AND entity = 'user' AND action = 'create' "
+            "AND entity_id = (SELECT id FROM users WHERE email = :email)"
+        ),
+        {"o": np3_org["org"].id, "email": STAFF_EMAIL},
+    ).scalar_one()
+    assert staff_date == audit_date == date(2026, 2, 1)
+    profile_audit_date = db.execute(
+        text(
+            "SELECT DISTINCT (timestamp AT TIME ZONE 'Pacific/Auckland')::date FROM audit_logs "
+            "WHERE org_id = :o AND entity = 'compliance_profile' AND action = 'update'"
+        ),
+        {"o": np3_org["org"].id},
+    ).scalar_one()
+    assert profile_audit_date == date(2026, 2, 1)
 
 
 def test_committed_manifest_replays_all_review_placeholders(db, np3_org):

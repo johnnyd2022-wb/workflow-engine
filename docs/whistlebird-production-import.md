@@ -25,6 +25,37 @@ different in one specific way — read this before touching either.
 Both paths are safe to run against `whistlebird_test` (guarded the same way, preserve
 users) and read from the same two sources below.
 
+### API replay audit dates
+
+`scripts/whistlebird_rebuild_api.py` runs the timestamp pass automatically after
+the HTTP replay. The pass dates process definitions and versions before their first
+execution, execution creation and completed steps, purchased and produced inventory,
+inventory consumption events, wastage and ledger rows, customs audit logs, CRM mappings,
+and the Core event summaries. Pending steps keep a null completion date. NP3 records
+and their audit logs use the signed/event dates in their manifest; NP3 staff creation
+is placed before the earliest evidence. The live API has no backdating option.
+
+Source dates with no time use noon Pacific/Auckland; events on one day receive
+deterministic seconds in replay order. Where a source receipt date is *later* than the
+first batch that depends on it, the source `purchase_date` stays unchanged while the
+purchase creation/audit timestamp moves to the day before that use. The pass also checks
+the actual FIFO consumption links and moves an audit timestamp before consumption if
+needed. This is the explicit exception to matching `purchase_date` exactly, chosen
+because those source dates cannot also show the ingredient arriving first.
+The same dependency rule places VAT53's inferred preparation/aging audit events before
+its documented Green Gold diversion on 2026-07-31; VAT53's recorded Wildflower
+bottling remains dated 2026-09-01.
+
+Workflow creation is anchored one day before that workflow's first execution. CRM
+mappings are anchored just after their first matching finished product; the CRM
+configuration precedes the first mapping. Compliant setup predates the first replayed
+event. These setup dates have no independent historical date in the manifests.
+
+To validate the Core correction against a populated test tenant without keeping
+changes, run `uv run python scripts/whistlebird_replay_correct_timestamps.py
+--target-url "$BIZE_MIGRATION_DATABASE_URL" --dry-run`. The full rebuild uses the
+same correction with the production, CRM, NP3 and disposal manifests it replayed.
+
 `scripts/whistlebird_migration.py` loads Whistlebird's real production history into a
 `whistlebird_test` organisation in `workflow-engine-test` so the tool shows what the
 business has actually done, from two frozen sources:
