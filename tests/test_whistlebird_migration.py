@@ -111,7 +111,7 @@ def test_rosella_green_gold_and_trial_workflows_have_only_their_documented_input
 
     green_gold = migration_module.PRODUCT_WORKFLOWS["Green Gold gin"][1]
     assert green_gold[0][4] == (
-        {"name": "Aged Wildflower gin", "quantity": "41", "unit": "L", "requires_inventory_selection": True},
+        {"name": "Aged Wildflower gin", "quantity": "35.875", "unit": "L", "requires_inventory_selection": True},
     )
     assert green_gold[0][2:4] == ("Green Gold - final product", "units")
 
@@ -451,8 +451,8 @@ def test_curated_manifest_includes_the_documented_green_gold_vat53_diversion(mig
     assert record.workflow_name == "Green Gold gin"
     assert record.source_vat == 53
     assert record.source_date == date(2026, 7, 31)
-    assert record.source_quantity_l == migration_module.Decimal("41")
-    assert record.bottles == migration_module.Decimal("144")
+    assert record.source_quantity_l == migration_module.Decimal("35.875")
+    assert record.bottles == migration_module.Decimal("126")
     assert record.bottle_size_ml == migration_module.Decimal("500")
 
 
