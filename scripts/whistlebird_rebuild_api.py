@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import whistlebird_crm as crm  # noqa: E402
 import whistlebird_disposals as disposals  # noqa: E402
 import whistlebird_legacy as legacy  # noqa: E402
+import whistlebird_lot_details as lot_details  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
 import whistlebird_replay as replay  # noqa: E402
@@ -52,6 +53,7 @@ STEPS = (
     "Compliant NZ-alcohol setup",
     "replay Core history, then expired-stock disposals, CRM mappings, NP3 evidence",
     "timestamp pass",
+    "lot details pass",
     "verify (Core counts, dates, wording, NP3)",
 )
 
@@ -153,6 +155,7 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         production_manifest_path=args.production_manifest,
         crm_manifest_path=args.crm_manifest,
     )
+    report["lot_details"] = lot_details.apply_lot_details(args.target_url, args.org_name)
     report["verification"] = wm.build_import_verification(
         args.legacy_source,
         args.target_url,
