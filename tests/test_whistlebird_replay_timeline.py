@@ -24,6 +24,7 @@ from whistlebird_replay_timeline import (  # noqa: E402
     _enrich_ingredient_codes,
     _flask_ngs_and_water_l,
     _foraged_botanical_inputs,
+    _green_gold_events,
     _ngs_allocations,
     _ngs_purchase_event,
     _split_legacy_generic_juniper_receipts,
@@ -227,6 +228,25 @@ def test_bottling_and_labelling_share_batch_numbers_and_distilling_carries_flask
     assert distilling.payload["flask_codes"] == ("WBWF01", "WBWF02")
     assert bottling.payload["label_batches"] == [(1, "60"), (2, "18.5")]
     assert labelling.payload["label_batches"] == [(1, "60"), (2, "18.5")]
+
+
+def test_green_gold_diversion_waits_for_aged_vat53_and_precedes_its_remainder_bottling():
+    record = wm.GreenGoldRecord(
+        source_vat=53,
+        source_date=date(2026, 7, 31),
+        source_quantity_l=Decimal("41"),
+        bottles=Decimal("144"),
+        bottle_size_ml=Decimal("500"),
+        batch_label="GG01",
+        source_table="production_sheet",
+        source_id=2035,
+    )
+    events = _green_gold_events(record, {53: "wildflower-vat53"})
+
+    assert events[0].event_id == "green-gold-exec:green-gold-gg01"
+    assert events[0].depends_on == ("step:wildflower-vat53:aging",)
+    assert events[1].depends_on == (events[0].event_id,)
+    assert events[1].payload["green_gold"].bottles == Decimal("144")
 
 
 def test_pre_cutoff_batch_does_not_invent_a_dedicated_ngs_purchase():

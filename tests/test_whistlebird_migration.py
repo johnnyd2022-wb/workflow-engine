@@ -76,6 +76,7 @@ def test_product_workflows_have_the_agreed_step_shape(migration_module):
         "Wildflower gin": 5,
         "Solstice gin": 5,
         "Rosella gin": 4,
+        "Green Gold gin": 1,
         "GG gin trials": 2,
         "WB recipe trials": 2,
         "SGS spirit trials": 2,
@@ -96,15 +97,23 @@ def test_wildflower_and_solstice_declare_inputs_on_every_step(migration_module):
             assert step[4], f"{workflow_name}'s {step[0]!r} step should declare inputs"
 
 
-def test_rosella_and_trial_workflows_still_only_declare_inputs_on_their_first_step(migration_module):
+def test_rosella_green_gold_and_trial_workflows_have_only_their_documented_inputs(migration_module):
     """Unchanged by the 2026-09-18 chaining request, which was scoped to Wildflower/Solstice only."""
-    for workflow_name in ("Rosella gin", "GG gin trials", "WB recipe trials", "SGS spirit trials"):
+    for workflow_name in ("Rosella gin", "Green Gold gin", "GG gin trials", "WB recipe trials", "SGS spirit trials"):
         _shape, steps = migration_module.PRODUCT_WORKFLOWS[workflow_name]
         for index, step in enumerate(steps):
             if index == 0 and step[0] == "Rhubarb maceration":
                 assert step[4], "Rhubarb maceration must declare inputs so botanicals are traceable"
+            elif workflow_name == "Green Gold gin":
+                assert step[4], "Green Gold bottling must declare its aged-Wildflower source"
             else:
                 assert step[4] == (), f"{step[0]} (step {index + 1}) should not declare inputs"
+
+    green_gold = migration_module.PRODUCT_WORKFLOWS["Green Gold gin"][1]
+    assert green_gold[0][4] == (
+        {"name": "Aged Wildflower gin", "quantity": "41", "unit": "L", "requires_inventory_selection": True},
+    )
+    assert green_gold[0][2:4] == ("Green Gold - final product", "units")
 
 
 def test_wildflower_and_solstice_declare_an_output_on_every_step(migration_module):
@@ -432,6 +441,39 @@ def test_curated_manifest_in_docs_loads_and_every_step_is_resolved(migration_mod
     for batch in batches:
         for step in batch.steps.values():
             assert step.confidence in migration_module.STEP_DATE_CONFIDENCE
+
+
+def test_curated_manifest_includes_the_documented_green_gold_vat53_diversion(migration_module):
+    manifest_path = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
+    (record,) = migration_module._load_green_gold_records(manifest_path)
+
+    assert record.marker == "green-gold-gg01"
+    assert record.workflow_name == "Green Gold gin"
+    assert record.source_vat == 53
+    assert record.source_date == date(2026, 7, 31)
+    assert record.source_quantity_l == migration_module.Decimal("41")
+    assert record.bottles == migration_module.Decimal("144")
+    assert record.bottle_size_ml == migration_module.Decimal("500")
+
+
+def _stub_batch(workflow_name, pending=()):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(workflow_name=workflow_name, pending_steps=frozenset(pending))
+
+
+def test_expected_executions_count_green_gold_only_on_the_api_replay_path(migration_module):
+    manifest_path = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
+    records = migration_module._load_green_gold_records(manifest_path)
+    batches = [_stub_batch("Wildflower gin"), _stub_batch("Wildflower gin", pending=("bottling",))]
+
+    api_replay = migration_module._expected_workflow_executions(batches, records, api_replay=True)
+    orm_direct = migration_module._expected_workflow_executions(batches, records, api_replay=False)
+
+    assert api_replay["Green Gold gin"] == 1, "the API replay loads the documented VAT53 diversion"
+    assert api_replay["Wildflower gin"] == 2, "the API replay also loads the in-progress batch"
+    assert orm_direct["Green Gold gin"] == 0, "the ORM-direct rebuild has no Green Gold path"
+    assert orm_direct["Wildflower gin"] == 1, "the ORM-direct rebuild skips the in-progress batch"
 
 
 # --- tenant guards ---------------------------------------------------------------

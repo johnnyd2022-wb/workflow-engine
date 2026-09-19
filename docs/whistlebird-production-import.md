@@ -135,5 +135,6 @@ date formats — spreadsheet date serials sometimes day/month-swapped — and se
 self-contradictions; each is resolved by chronological fit against its neighbours, not a
 single global format assumption. VAT27 and all prior-DB batches (VAT1–26, trials) already
 have real per-step dates. Five batches remain excluded pending founder confirmation
-(VAT52, VAT55, VAT57, and an unlabelled bottling line) and the Green Gold trial output
-needs a script change before it can be imported at all — see the decisions log.
+(VAT52, VAT55, VAT57, and an unlabelled bottling line). Green Gold (gg01) is loaded
+by the API replay from the manifest's `green_gold_records` section as a `Green Gold gin`
+final-product workflow (aged Wildflower from VAT53 → 144 bottles) — see the decisions log.

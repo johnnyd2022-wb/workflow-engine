@@ -53,9 +53,8 @@ def _marker_of(event: ReplayEvent) -> str | None:
     if event.event_type == "create_inventory_item":
         return event.payload["marker"]
     if event.event_type in ("create_execution", "complete_step"):
-        batch = event.payload.get("batch")
-        trial = event.payload.get("trial")
-        return batch.marker if batch else trial.marker
+        record = event.payload.get("batch") or event.payload.get("trial") or event.payload.get("green_gold")
+        return record.marker
     if event.event_type == "create_customs_lodgement":
         return f"customs-{event.payload['row']['id']}"
     return None

@@ -209,5 +209,48 @@ def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypat
     assert payloads["labelling"]["execution_data"]["Batch number"] == "1, 2"
 
 
+def test_replay_converts_the_documented_vat53_draw_into_green_gold(monkeypatch):
+    record = wm.GreenGoldRecord(
+        source_vat=53,
+        source_date=date(2026, 7, 31),
+        source_quantity_l=Decimal("41"),
+        bottles=Decimal("144"),
+        bottle_size_ml=Decimal("500"),
+        batch_label="GG01",
+        source_table="production_sheet",
+        source_id=2035,
+    )
+    event = ReplayEvent(
+        event_id="green-gold-step:green-gold-gg01:bottling",
+        event_type="complete_step",
+        real_date=record.source_date,
+        depends_on=(),
+        payload={"green_gold": record, "step_key": "bottling", "step_index": 0},
+    )
+
+    class GreenGoldStore(_Store):
+        def execution_id_for_global_vat(self, vat):
+            assert vat == 53
+            return "vat53-execution"
+
+    monkeypatch.setattr(
+        replay,
+        "_produced_item_for_step",
+        lambda _store, _step_id, name: {"id": "vat53-aged", "name": name, "quantity": "55.7", "unit": "L"}
+        if name == "Aged Gin"
+        else None,
+    )
+    client = _Client()
+
+    assert replay._execute_complete_step(client, GreenGoldStore(), event) is True
+    payload = client.calls[0][1]
+    assert payload["actual_inputs"] == [
+        {"inventory_item_id": "vat53-aged", "name": "Aged Gin", "quantity": "41", "unit": "L"}
+    ]
+    assert payload["actual_outputs"] == [{"name": "Green Gold - final product", "quantity": "144", "unit": "units"}]
+    assert payload["execution_data"]["source_vat"] == 53
+    assert payload["execution_data"]["bottle_size_ml"] == "500"
+
+
 def test_replay_marks_unbottled_vat_as_not_applicable_for_required_batch_prompt():
     assert replay._batch_number_prompt_value(None) == "Not applicable — no bottled output recorded"
