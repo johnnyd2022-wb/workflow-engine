@@ -62,10 +62,24 @@ _MATERIAL_NAME_ALIASES = {
     "juniper berries (macedonia)": "juniper berries (macedonian)",
 }
 
+# Recipe input names are the tenant's canonical display names. Legacy receipts use
+# lower-case source labels while the curated manifest uses these names; inventory must
+# not create a second botanical merely because source capitalization differs.
+_CANONICAL_MATERIAL_DISPLAY_NAMES = {
+    " ".join(entry["name"].lower().split()): entry["name"]
+    for recipe in (wm._WILDFLOWER_MACERATION_INPUTS, wm._SOLSTICE_MACERATION_INPUTS)
+    for entry in recipe
+}
+
 
 def _canonical_material_name(name: str) -> str:
     normalized = " ".join(name.lower().split())
     return _MATERIAL_NAME_ALIASES.get(normalized, normalized)
+
+
+def _canonical_material_display_name(name: str) -> str:
+    """Return the stable inventory label for a recipe botanical receipt."""
+    return _CANONICAL_MATERIAL_DISPLAY_NAMES.get(_canonical_material_name(name), name)
 
 
 class ReplayClient:
@@ -330,7 +344,8 @@ def _execute_purchase(client: ReplayClient, store: MarkerStore, event: ReplayEve
     marker = event.payload["marker"]
     if store.existing_inventory_item_id(marker):
         return False
-    name = record.get("name") or record.get("ingredient")
+    source_name = record.get("name") or record.get("ingredient")
+    name = _canonical_material_display_name(source_name)
     # Context-resolved records keep ``quantity`` as the exact amount consumed by
     # their linked VAT.  When a physical supplier lot has subsequently been
     # identified, ``purchase_quantity`` records the actual receipt without
@@ -344,6 +359,8 @@ def _execute_purchase(client: ReplayClient, store: MarkerStore, event: ReplayEve
         expiry_date = expiry_date.isoformat()
     supplier_batch_number = record.get("supplier_batch_number")
     extra_data = dict(record.get("extra_data") or {})
+    if source_name and source_name != name:
+        extra_data.setdefault("source_material_name", source_name)
     code = record.get("code")
     if code:
         extra_data.setdefault("ingredient_code", code)

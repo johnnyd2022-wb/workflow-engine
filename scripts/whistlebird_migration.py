@@ -2258,6 +2258,7 @@ def build_import_verification(
     if requested_org_name != RESET_ORG_NAME:
         raise ValueError(f"Verification is only permitted for {RESET_ORG_NAME!r}")
 
+    generic_juniper_receipts = 0
     with create_engine(legacy_url).connect() as source:
         raw_material_sources = {
             table: source.execute(text(f"SELECT count(*) FROM {_identifier(table)}")).scalar_one()
@@ -2271,6 +2272,12 @@ def build_import_verification(
         expected_lodgements = source.execute(text("SELECT count(*) FROM customs_lodgements")).scalar_one()
         zero_quantity_legacy_ingredients = source.execute(
             text("SELECT count(*) FROM purchases_ingredients WHERE ingredients_amount <= 0")
+        ).scalar_one()
+        generic_juniper_receipts = source.execute(
+            text(
+                "SELECT count(*) FROM purchases_ingredients "
+                "WHERE lower(trim(ingredients)) = 'juniper berries' AND ingredients_amount > 0"
+            )
         ).scalar_one()
         legacy = _legacy_batches(source)
     raw_material_manifest_path = Path(__file__).parents[1] / "docs" / "whistlebird-raw-material-source.json"
@@ -2296,6 +2303,10 @@ def build_import_verification(
     )
 
     if include_replay_ngs_purchases:
+        # The API replay replaces each origin-unspecified legacy Juniper receipt with
+        # Macedonian and Himalayan components, preserving its total quantity but adding
+        # one inventory row per source receipt. The ORM-direct path does not do this.
+        raw_material_sources["generic_juniper_components"] = generic_juniper_receipts
         # The API replay first drains dated real NGS receipts and only creates a
         # deterministic receipt for the remaining shortfall of a batch's fixed recipe.
         # Those real receipts now live in the raw-material manifest, not legacy

@@ -41,6 +41,16 @@ DEFAULT_RAW_MATERIAL_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebir
 # correct for contraction, after that reading was taken).
 _NGS_STOCK_ABV = Decimal("0.964")  # purchases_gns.abv -- every legacy NGS purchase is 96.4%
 _QUANT3 = Decimal("0.001")
+_QUANT4 = Decimal("0.0001")
+
+# The legacy purchase register records four Juniper receipts without an origin.  The
+# product recipes, however, have always called for the Macedonian and Himalayan
+# botanicals separately.  Do not expose a third, generic Juniper stock identity just
+# because that older source omitted its origin: split those receipts deterministically
+# in the same ratio as the founder-confirmed recipe demand across the replayed batches.
+# The original receipt name and the allocation basis remain attached as metadata.
+_GENERIC_JUNIPER_NAME = "juniper berries"
+_JUNIPER_VARIANTS = ("Juniper Berries (Macedonian)", "Juniper Berries (Himalayan)")
 
 # Retained for compatibility with the original fixture tests.  The production allocator
 # now uses every dated legacy receipt before creating a deterministic shortfall receipt.
@@ -210,6 +220,66 @@ def _purchase_event(record: dict[str, Any]) -> ReplayEvent:
         depends_on=(),
         payload={"record": record, "marker": f"raw-{code}" if is_legacy else f"raw-manifest-{record['code']}"},
     )
+
+
+def _split_legacy_generic_juniper_receipts(
+    records: list[wm.RawMaterialRecord], batches: list[wm.ProductionBatch]
+) -> list[wm.RawMaterialRecord]:
+    """Replace origin-unspecified legacy Juniper with the two recipe botanicals.
+
+    The old receipts establish a real total quantity but cannot evidence which of the
+    two Juniper origins each gram belonged to. The only defensible deterministic basis
+    is the known quantity demanded by the replayed Wildflower and Solstice recipes.
+    This allocation is recorded in metadata rather than presented as source evidence.
+    """
+    demand = {variant: Decimal("0") for variant in _JUNIPER_VARIANTS}
+    for batch in batches:
+        if batch.product_line not in {"wildflower", "solstice"}:
+            continue
+        recipe = (
+            wm._WILDFLOWER_MACERATION_INPUTS
+            if batch.product_line == "wildflower"
+            else wm._SOLSTICE_MACERATION_INPUTS
+        )
+        for ingredient in recipe:
+            if ingredient["name"] in demand:
+                demand[ingredient["name"]] += Decimal(str(ingredient["quantity"]))
+
+    total_demand = sum(demand.values(), Decimal("0"))
+    if total_demand <= 0:
+        raise ValueError("cannot split generic Juniper without recipe demand")
+
+    transformed: list[wm.RawMaterialRecord] = []
+    for record in records:
+        if " ".join(record.name.lower().split()) != _GENERIC_JUNIPER_NAME:
+            transformed.append(record)
+            continue
+
+        # Round the first component to the stored inventory precision and give the
+        # exact remainder to the second, preserving every source receipt total.
+        macedonian = (record.quantity * demand[_JUNIPER_VARIANTS[0]] / total_demand).quantize(_QUANT4)
+        components = (
+            (_JUNIPER_VARIANTS[0], macedonian),
+            (_JUNIPER_VARIANTS[1], record.quantity - macedonian),
+        )
+        for variant, quantity in components:
+            if quantity <= 0:
+                continue
+            extra_data = {
+                **record.extra_data,
+                "source_material_name": record.name,
+                "origin_allocation": "proportional_to_founder_confirmed_recipe_demand",
+            }
+            transformed.append(
+                replace(
+                    record,
+                    source_id=f"{record.source_id}-{variant.rsplit(' ', 1)[-1].strip('()').lower()}",
+                    name=variant,
+                    quantity=quantity,
+                    extra_data=extra_data,
+                )
+            )
+    return transformed
 
 
 # --- Label-batch numbering (sales FIFO groundwork) ------------------------------------
@@ -565,6 +635,7 @@ def build_timeline(
 
     raw_records, codes_by_vat, known_quantity_by_vat = _load_raw_material_manifest(raw_material_manifest_path)
     merged = _enrich_ingredient_codes(merged, codes_by_vat)
+    legacy_raw_materials = _split_legacy_generic_juniper_receipts(legacy_raw_materials, merged)
     ngs_allocations = _ngs_allocations(merged, manifest_ngs_receipts(raw_records))
 
     events: list[ReplayEvent] = []

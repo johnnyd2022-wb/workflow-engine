@@ -26,11 +26,37 @@ from whistlebird_replay_timeline import (  # noqa: E402
     _foraged_botanical_inputs,
     _ngs_allocations,
     _ngs_purchase_event,
+    _split_legacy_generic_juniper_receipts,
     _vat_fill_ngs_and_water_l,
     count_dedicated_ngs_purchases,
     date_prioritised_topological_sort,
     manifest_ngs_receipts,
 )
+
+
+def test_splits_legacy_generic_juniper_into_the_two_recipe_origins():
+    record = wm.RawMaterialRecord(
+        source_table="purchases_ingredients",
+        source_id=1,
+        source_date=date(2023, 11, 29),
+        name="juniper berries",
+        quantity=Decimal("500"),
+        unit="g",
+        supplier="Davis Trading",
+        supplier_batch_number="JB001",
+        expiry_date=None,
+        extra_data={},
+    )
+    batches = [
+        _wildflower_batch(date(2024, 1, 1), product_line="wildflower"),
+        _wildflower_batch(date(2024, 1, 2), product_line="solstice"),
+    ]
+
+    split = _split_legacy_generic_juniper_receipts([record], batches)
+
+    assert [row.name for row in split] == ["Juniper Berries (Macedonian)", "Juniper Berries (Himalayan)"]
+    assert sum((row.quantity for row in split), Decimal("0")) == Decimal("500")
+    assert all(row.extra_data["source_material_name"] == "juniper berries" for row in split)
 
 
 def _event(event_id: str, real_date: str, depends_on: tuple[str, ...] = ()) -> ReplayEvent:
