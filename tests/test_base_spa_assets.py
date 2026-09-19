@@ -18,6 +18,16 @@ def test_shared_spa_uses_the_crm_static_endpoint():
     base_spa = (REPO_ROOT / "app/core/frontend/shared/base_spa.html").read_text(encoding="utf-8")
 
     assert "url_for('crm.serve_crm_css', filename='crm.css')" in base_spa
+    for filename in (
+        "crm-api.js",
+        "overview.js",
+        "customers.js",
+        "customer-detail.js",
+        "tasks-calendar.js",
+        "configuration.js",
+        "integrations.js",
+    ):
+        assert f"url_for('crm.serve_crm_js', filename='{filename}')" in base_spa
     assert base_spa.count("{% if crm_enabled %}") >= 2
 
 
