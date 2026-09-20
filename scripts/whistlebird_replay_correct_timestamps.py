@@ -15,6 +15,7 @@ import os
 import sys
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -663,19 +664,25 @@ def correct_timestamps(
                 moved_purchase_markers.add(item[2])
 
             for disposal in disposal_list:
-                item_id = _one(
+                item_id, quantity = _one(
                     conn,
-                    "SELECT id FROM inventory_items WHERE org_id = :org AND extra_data->>'import_ref' = :marker",
+                    "SELECT id, quantity FROM inventory_items WHERE org_id = :org "
+                    "AND extra_data->>'import_ref' = :marker",
                     {"org": org_id, "marker": disposal.lot},
                     f"disposal lot {disposal.lot}",
-                )[0]
+                )
                 at = _business_at(disposal.on)
-                wastage_id = _one(
-                    conn,
-                    "SELECT id FROM inventory_wastage WHERE org_id = :org AND inventory_item_id = :id",
+                wastage_id = conn.execute(
+                    text("SELECT id FROM inventory_wastage WHERE org_id = :org AND inventory_item_id = :id"),
                     {"org": org_id, "id": item_id},
-                    f"wastage for {disposal.lot}",
-                )[0]
+                ).scalar()
+                if wastage_id is None:
+                    # The API can consume a planned disposal lot completely. There
+                    # is then no wastage timestamp to backdate, but any remaining
+                    # stock is a replay failure and must not be silently ignored.
+                    if Decimal(str(quantity)) != 0:
+                        raise RuntimeError(f"disposal lot {disposal.lot} still holds stock but has no wastage record")
+                    continue
                 counts["wastage_records"] += conn.execute(
                     text(
                         "UPDATE inventory_wastage SET recorded_at = :at, created_at = :at "
