@@ -127,7 +127,8 @@ def load_disposals_manifest(path: Path = DEFAULT_DISPOSALS_MANIFEST) -> tuple[Di
 
 def replay_disposals(client: Any, store: Any, disposals: tuple[Disposal, ...]) -> dict[str, int]:
     """Dispose of each listed lot through the real wastage API. Resumable: a lot that already has a
-    wastage record is skipped. Runs after every Core event, so all consumption has already happened."""
+    wastage record, or that has since been fully consumed, is skipped. Runs after every Core event,
+    so all consumption has already happened."""
     counts = {"disposed": 0, "skipped": 0}
     for disposal in disposals:
         lot = store.raw_material_for_marker(disposal.lot)
@@ -139,6 +140,13 @@ def replay_disposals(client: Any, store: Any, disposals: tuple[Disposal, ...]) -
         if lot["unit"] != disposal.unit:
             raise DisposalReplayError(f"{disposal.lot}: unit is {lot['unit']!r}, manifest says {disposal.unit!r}")
         held = Decimal(str(lot["quantity"]))
+        # The planner records the expected post-replay remainder, but the API's
+        # historical allocation can legitimately consume the same lot completely.
+        # A zero balance is already clean: do not invent a wastage event for stock
+        # that no longer exists, and continue to later lots that do need writing off.
+        if held == 0:
+            counts["skipped"] += 1
+            continue
         if held != disposal.quantity:
             raise DisposalReplayError(
                 f"{disposal.lot} ({disposal.ingredient}) holds {held} {lot['unit']} but the manifest expects "
@@ -222,7 +230,7 @@ def verify_disposals(target_url: str, org_name: str, disposals: tuple[Disposal, 
     """Read-only checks, each reported as a count that should be zero:
 
     * `expired_lot_uses`: consumptions dated after the consumed lot's expiry -- the point of all this;
-    * `disposals_missing`: manifest lots with no wastage record, or still holding stock;
+    * `disposals_missing`: manifest lots still holding stock without a wastage record;
     * `disposal_date_mismatches`: wastage recorded on a date other than the manifest's.
     """
     from sqlalchemy import create_engine, text
@@ -255,7 +263,15 @@ def verify_disposals(target_url: str, org_name: str, disposals: tuple[Disposal, 
                     ),
                     {"org_id": org_id, "marker": disposal.lot},
                 ).first()
-                if row is None or row[1] is None or Decimal(str(row[0])) != 0:
+                if row is None:
+                    missing += 1
+                elif Decimal(str(row[0])) == 0:
+                    # A fully consumed lot needs no disposal record. If one does
+                    # exist, it still must carry the curated business date.
+                    if row[1] is not None and row[1].astimezone(_LOCAL_TZ).date() != disposal.on:
+                        mismatched += 1
+                    continue
+                elif row[1] is None:
                     missing += 1
                 elif row[1].astimezone(_LOCAL_TZ).date() != disposal.on:
                     mismatched += 1

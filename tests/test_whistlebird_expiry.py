@@ -523,6 +523,15 @@ def test_replay_is_resumable_a_lot_already_written_off_is_skipped():
     assert client.calls == []
 
 
+def test_replay_skips_a_disposal_lot_that_the_api_already_consumed():
+    client = _Client()
+
+    counts = disposals.replay_disposals(client, _Store({_disposal().lot: _lot_row("0")}), (_disposal(),))
+
+    assert counts == {"disposed": 0, "skipped": 1}
+    assert client.calls == []
+
+
 def test_replay_refuses_to_dispose_a_different_quantity_than_was_curated():
     client = _Client()
 
@@ -646,6 +655,15 @@ def test_verify_is_clean_after_a_correct_write_off_and_flags_a_missing_one_and_a
     assert flagged["disposals_missing"]["actual"] == 1, "the untouched lot still holds stock"
     assert flagged["disposal_date_mismatches"]["actual"] == 1, "the other was written off on the wrong date"
     assert untouched is not None
+
+
+def test_verify_accepts_an_expired_lot_that_was_fully_consumed(db, org):
+    consumed = _lot_in_db(db, org, "raw-test-consumed", "0")
+
+    result = disposals.verify_disposals(_url(db), org.name, (_disposal(lot="raw-test-consumed"),))
+
+    assert result["disposals_missing"] == {"expected": 0, "actual": 0}
+    assert consumed is not None
 
 
 def test_verify_counts_no_expired_use_when_nothing_has_been_consumed(db, org):
