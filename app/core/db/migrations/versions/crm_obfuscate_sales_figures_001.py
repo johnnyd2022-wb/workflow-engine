@@ -1,7 +1,7 @@
 """Add tenant CRM sales-figure obfuscation preference.
 
 Revision ID: crm_obfuscate_sales_figures_001
-Revises: crm_revenue_baseline_target_001
+Revises: crm_sales_fifo_allocations_001
 Create Date: 2026-09-20
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "crm_obfuscate_sales_figures_001"
-down_revision: str | None = "crm_revenue_baseline_target_001"
+down_revision: str | None = "crm_sales_fifo_allocations_001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
