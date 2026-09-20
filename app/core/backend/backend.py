@@ -6049,6 +6049,9 @@ def _human_summary(ev) -> str:
         base = f"{qty} {unit} consumed".strip()
         if step:
             base += f" in '{step}'"
+        process = p.get("process_name")
+        if process:
+            base += f" · {process}"
         return base
 
     if et == "inventory_item.produced":
@@ -6058,6 +6061,9 @@ def _human_summary(ev) -> str:
         base = f"{qty} {unit} produced".strip()
         if step:
             base += f" by '{step}'"
+        process = p.get("process_name")
+        if process:
+            base += f" · {process}"
         return base
 
     if et == "inventory_item.wasted":

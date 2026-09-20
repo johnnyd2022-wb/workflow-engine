@@ -1680,6 +1680,17 @@
 
         card.appendChild(el('div', 'core2-inv-card__name', g.name));
         card.appendChild(el('div', 'core2-inv-card__qty', totalText));
+        // Live inventory is deliberately lot-grouped, but expiry belongs on the
+        // collapsed card too: otherwise a supplied expiry is only visible after an
+        // operator happens to open the right item.  Lots are FEFO-sorted above.
+        const earliestExpiry = g.lots.find(function (lot) { return !!lot.expiry_date; });
+        if (earliestExpiry) {
+          card.appendChild(el(
+            'div',
+            'core2-inv-card__meta core2-inv-card__meta--muted',
+            (g.lots.length > 1 ? 'Earliest expiry ' : 'Expires ') + fmtDate(earliestExpiry.expiry_date)
+          ));
+        }
         if (g.lots.length > 1) {
           card.appendChild(el('div', 'core2-inv-card__count', plural(g.lots.length, 'lot') + ' in stock'));
         } else {

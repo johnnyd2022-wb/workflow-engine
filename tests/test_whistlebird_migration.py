@@ -76,7 +76,7 @@ def test_product_workflows_have_the_agreed_step_shape(migration_module):
         "Wildflower gin": 5,
         "Solstice gin": 5,
         "Rosella gin": 4,
-        "Green Gold gin": 1,
+        "Green Gold Gin Liqueur": 1,
         "GG gin trials": 2,
         "WB recipe trials": 2,
         "SGS spirit trials": 2,
@@ -97,22 +97,29 @@ def test_wildflower_and_solstice_declare_inputs_on_every_step(migration_module):
             assert step[4], f"{workflow_name}'s {step[0]!r} step should declare inputs"
 
 
-def test_rosella_green_gold_and_trial_workflows_have_only_their_documented_inputs(migration_module):
-    """Unchanged by the 2026-09-18 chaining request, which was scoped to Wildflower/Solstice only."""
-    for workflow_name in ("Rosella gin", "Green Gold gin", "GG gin trials", "WB recipe trials", "SGS spirit trials"):
+def test_rosella_and_green_gold_workflows_declare_documented_chains(migration_module):
+    for workflow_name in ("Rosella gin", "Green Gold Gin Liqueur", "GG gin trials", "WB recipe trials", "SGS spirit trials"):
         _shape, steps = migration_module.PRODUCT_WORKFLOWS[workflow_name]
         for index, step in enumerate(steps):
             if index == 0 and step[0] == "Rhubarb maceration":
                 assert step[4], "Rhubarb maceration must declare inputs so botanicals are traceable"
-            elif workflow_name == "Green Gold gin":
+            elif workflow_name == "Green Gold Gin Liqueur":
                 assert step[4], "Green Gold bottling must declare its aged-Wildflower source"
-            else:
+            elif workflow_name in ("GG gin trials", "WB recipe trials", "SGS spirit trials"):
                 assert step[4] == (), f"{step[0]} (step {index + 1}) should not declare inputs"
 
-    green_gold = migration_module.PRODUCT_WORKFLOWS["Green Gold gin"][1]
-    assert green_gold[0][4] == (
-        {"name": "Aged Wildflower gin", "quantity": "35.875", "unit": "L", "requires_inventory_selection": True},
-    )
+    rosella = migration_module.PRODUCT_WORKFLOWS["Rosella gin"][1]
+    assert [step[2] for step in rosella] == ["VAT batch", "Aged Rosella", "Bottled product", "Rosella - final product"]
+    assert all(step[4] for step in rosella)
+    assert rosella[0][5] == rosella[1][5] == (migration_module._VAT_BATCH_PROMPT,)
+    assert rosella[2][5] == rosella[3][5] == (migration_module._BATCH_NUMBER_PROMPT,)
+
+    green_gold = migration_module.PRODUCT_WORKFLOWS["Green Gold Gin Liqueur"][1]
+    assert {row["name"] for row in green_gold[0][4]} == {
+        "Aged Wildflower gin", "Kawakawa", "Honey", "Sugar", "Water"
+    }
+    assert all(row["quantity"] is None for row in green_gold[0][4])
+    assert green_gold[0][5] == (migration_module._BATCH_NUMBER_PROMPT,)
     assert green_gold[0][2:4] == ("Green Gold - final product", "units")
 
 
@@ -448,7 +455,7 @@ def test_curated_manifest_includes_the_documented_green_gold_vat53_diversion(mig
     (record,) = migration_module._load_green_gold_records(manifest_path)
 
     assert record.marker == "green-gold-gg01"
-    assert record.workflow_name == "Green Gold gin"
+    assert record.workflow_name == "Green Gold Gin Liqueur"
     assert record.source_vat == 53
     assert record.source_date == date(2026, 7, 31)
     assert record.source_quantity_l == migration_module.Decimal("35.875")
@@ -470,9 +477,9 @@ def test_expected_executions_count_green_gold_only_on_the_api_replay_path(migrat
     api_replay = migration_module._expected_workflow_executions(batches, records, api_replay=True)
     orm_direct = migration_module._expected_workflow_executions(batches, records, api_replay=False)
 
-    assert api_replay["Green Gold gin"] == 1, "the API replay loads the documented VAT53 diversion"
+    assert api_replay["Green Gold Gin Liqueur"] == 1, "the API replay loads the documented VAT53 diversion"
     assert api_replay["Wildflower gin"] == 2, "the API replay also loads the in-progress batch"
-    assert orm_direct["Green Gold gin"] == 0, "the ORM-direct rebuild has no Green Gold path"
+    assert orm_direct["Green Gold Gin Liqueur"] == 0, "the ORM-direct rebuild has no Green Gold path"
     assert orm_direct["Wildflower gin"] == 1, "the ORM-direct rebuild skips the in-progress batch"
 
 

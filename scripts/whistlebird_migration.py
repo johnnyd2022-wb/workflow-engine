@@ -229,6 +229,10 @@ _SOLSTICE_FILL_WATER_INPUT = _untracked_input("Water", "25.064", "L")
 
 # Custom execution prompts (2026-09-18 founder request).
 _VAT_NUMBER_PROMPT = {"label": "VAT number", "type": "number", "unit": None, "required": True}
+# Rosella's conversion is identified by the physical VAT batch at both the rhubarb
+# maceration and aging hand-off.  Keep that evidence as a required execution value,
+# rather than hiding it in the free-form batch label the replay uses internally.
+_VAT_BATCH_PROMPT = {"label": "VAT batch", "type": "text", "unit": None, "required": True}
 _FLASK_CODE_PROMPT = {"label": "Flask code", "type": "text", "unit": None, "required": True}
 # A bottle run can cross a 500-label-roll boundary, so the replay records every
 # applicable number (for example, ``"1, 2"``) in this required text prompt and attaches
@@ -342,11 +346,32 @@ _RHUBARB_GIN_STEPS = (
         "VAT batch",
         "L",
         _ROSELLA_MACERATION_INPUTS,
-        (),
+        (_VAT_BATCH_PROMPT,),
     ),
-    ("Aging", "Let the rhubarb batch rest before bottling", "", "", (), ()),
-    ("Bottling", "Bottle the rested batch", "Bottled product", "units", (), ()),
-    ("Labelling & packaging", "Heat-shrink, label and case the bottles", "", "", (), ()),
+    (
+        "Aging",
+        "Let the rhubarb batch rest before bottling",
+        "Aged Rosella",
+        "L",
+        (_previous_step_output_input(None, "L"),),
+        (_VAT_BATCH_PROMPT,),
+    ),
+    (
+        "Bottling",
+        "Bottle the rested batch",
+        "Bottled product",
+        "units",
+        (_previous_step_output_input(None, "L"),),
+        (_BATCH_NUMBER_PROMPT,),
+    ),
+    (
+        "Labelling & packaging",
+        "Heat-shrink, label and case the bottles",
+        "Rosella - final product",
+        "units",
+        (_previous_step_output_input(None, "units"),),
+        (_BATCH_NUMBER_PROMPT,),
+    ),
 )
 _TRIAL_STEPS = (
     ("Distilling", "Distil a trial recipe", "", "", (), ()),
@@ -354,18 +379,24 @@ _TRIAL_STEPS = (
 )
 _GREEN_GOLD_STEPS = (
     (
-        "Green Gold bottling",
+        "Green Gold liqueur bottling",
         "Bottle the documented Green Gold diversion from aged Wildflower",
         "Green Gold - final product",
         "units",
-        (_tracked_input("Aged Wildflower gin", "35.875", "L"),),
-        (),
+        (
+            _tracked_input("Aged Wildflower gin", None, "L"),
+            _untracked_input("Kawakawa", None, "g"),
+            _untracked_input("Honey", None, "g"),
+            _untracked_input("Sugar", None, "g"),
+            _untracked_input("Water", None, "L"),
+        ),
+        (_BATCH_NUMBER_PROMPT,),
     ),
 )
 WILDFLOWER_WORKFLOW = "Wildflower gin"
 SOLSTICE_WORKFLOW = "Solstice gin"
 ROSELLA_WORKFLOW = "Rosella gin"
-GREEN_GOLD_WORKFLOW = "Green Gold gin"
+GREEN_GOLD_WORKFLOW = "Green Gold Gin Liqueur"
 GG_TRIAL_WORKFLOW = "GG gin trials"
 WB_TRIAL_WORKFLOW = "WB recipe trials"
 SGS_TRIAL_WORKFLOW = "SGS spirit trials"
@@ -1327,6 +1358,20 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
     try:
         org = _enter_target_tenant_scope(scope, session, requested_org_name)
         repository = ProcessRepository(session)
+        # Keep an existing replay tenant on the renamed workflow rather than creating
+        # a second Green Gold process next to historical executions.
+        legacy_green_gold = (
+            session.query(Process)
+            .filter(Process.org_id == org.id, Process.name == "Green Gold gin")
+            .one_or_none()
+        )
+        if legacy_green_gold is not None and (
+            session.query(Process)
+            .filter(Process.org_id == org.id, Process.name == GREEN_GOLD_WORKFLOW)
+            .one_or_none()
+            is None
+        ):
+            repository.update_process(legacy_green_gold.id, org.id, name=GREEN_GOLD_WORKFLOW)
         for name, (_shape, steps) in PRODUCT_WORKFLOWS.items():
             process = session.query(Process).filter(Process.org_id == org.id, Process.name == name).one_or_none()
             step_count = 0
@@ -1356,11 +1401,15 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
                 resolved_inputs = _resolve_step_inputs(inputs, previous_output)
                 if step_count and index <= step_count:
                     existing_step = existing_steps[index - 1]
-                    updates: dict[str, list] = {}
-                    if resolved_inputs and not existing_step.inputs:
+                    updates: dict[str, Any] = {}
+                    if resolved_inputs and resolved_inputs != (existing_step.inputs or []):
                         updates["inputs"] = resolved_inputs
                     if output_name and not existing_step.outputs:
                         updates["outputs"] = [{"id": str(uuid4()), "name": output_name, "unit": unit}]
+                    if existing_step.name != step_name:
+                        updates["name"] = step_name
+                    if existing_step.description != description:
+                        updates["description"] = description
                     repaired_prompts = _merge_required_execution_prompts(
                         existing_step.execution_prompts, execution_prompts
                     )
