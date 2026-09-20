@@ -22,7 +22,7 @@
   let tracedItemBatch = '';
   let lastTraceResult = null;
   let temporalAsOf = ''; // ISO date string for temporal replay; '' = live
-  let currentView = 'timeline';       // 'timeline' | 'map' | 'table'
+  let currentView = 'timeline';       // 'timeline' | 'map' | 'table' | 'recall'
   let currentBrowseTab = 'inventory'; // 'inventory' | 'batches' | 'suppliers' | 'operators' | 'activity'
   let showWastage = false;
   let currentFindingsTab = 'all';
@@ -151,6 +151,8 @@
     area.innerHTML = '';
 
     smSetControlsVisible(false);
+    const recallWrap = document.getElementById('sm-recall-wrap');
+    if (recallWrap) recallWrap.style.display = 'none';
 
     const container = document.createElement('div');
     container.className = 'sm-browse';
@@ -846,6 +848,8 @@
     smHideSearchClear();
     smRenderBrowseGrid();
     smClearTable();
+    const recallWrap = document.getElementById('sm-recall-wrap');
+    if (recallWrap) { recallWrap.style.display = 'none'; recallWrap.innerHTML = ''; }
   }
 
   /* ── Show/hide controls bar ─────────────────────────────── */
@@ -894,8 +898,14 @@
       area.appendChild(smRenderTimeline(groups, sharedSourceIds));
     } else if (currentView === 'map') {
       area.appendChild(smRenderMap(groups, tracedItem, sharedSourceIds));
+    } else if (currentView === 'recall') {
+      const recallWrap = document.getElementById('sm-recall-wrap');
+      if (recallWrap) {
+        recallWrap.style.display = 'block';
+        smRenderRecall(recallWrap, tracedItem, groups, sales);
+      }
     }
-    if (currentView !== 'table' && sales.length) area.appendChild(smBuildSalesTerminal(sales));
+    if (currentView !== 'table' && currentView !== 'recall' && sales.length) area.appendChild(smBuildSalesTerminal(sales));
 
     if (currentView === 'table') smUpdateTraceTable(allItems, connections, tracedItem.id);
   }
@@ -1776,7 +1786,7 @@
     section.className = 'sm-sales-terminal';
     const heading = document.createElement('div');
     heading.className = 'sm-sales-terminal__heading';
-    heading.textContent = 'Sales linked by FIFO';
+    heading.textContent = 'Sales';
     section.appendChild(heading);
     sales.forEach(sale => {
       const row = document.createElement('div');
@@ -1792,6 +1802,93 @@
       section.appendChild(row);
     });
     return section;
+  }
+
+  /* Recall is deliberately tabular: one row per production execution, grouped by
+     workflow, so an auditor can follow the selected lot through its actual hand-offs
+     and then see every linked customer sale without reading a graph. */
+  function smRenderRecall(wrap, root, groups, sales) {
+    wrap.innerHTML = '';
+    const metadata = [
+      ['Supplier batch', root.supplier_batch_number],
+      ['Internal batch', root.batch_id || (root.extra_data || {}).batch_number],
+      ['Purchase date', root.purchase_date ? smFmtDate(root.purchase_date) : null],
+      ['Expiry', root.expiry_date ? smFmtDate(root.expiry_date) : null],
+    ];
+    Object.entries(root.extra_data || {}).forEach(([key, value]) => {
+      if (['inventory_audit_history', 'execution_trace', 'variable_inputs', 'variable_output'].includes(key)) return;
+      if (value != null && typeof value !== 'object') metadata.push([key.replace(/_/g, ' '), String(value)]);
+    });
+    const meta = document.createElement('section');
+    meta.className = 'sm-recall-meta';
+    meta.innerHTML = `<h2>Recall details</h2><dl>${metadata.filter(([, value]) => value).map(([label, value]) =>
+      `<div><dt>${smEsc(label)}</dt><dd>${smEsc(value)}</dd></div>`).join('') || '<div><dd>No additional lot metadata recorded.</dd></div>'}</dl>`;
+    wrap.appendChild(meta);
+
+    const byWorkflow = new Map();
+    groups.forEach(group => {
+      const name = group.processName || 'Unknown workflow';
+      if (!byWorkflow.has(name)) byWorkflow.set(name, []);
+      byWorkflow.get(name).push(group);
+    });
+    byWorkflow.forEach((workflowGroups, workflow) => {
+      const stepNames = [...new Set(workflowGroups.flatMap(group => group.steps.map(step => step.stepName).filter(Boolean)))];
+      const section = document.createElement('section');
+      section.className = 'sm-recall-workflow';
+      const heading = document.createElement('h2');
+      heading.textContent = workflow;
+      section.appendChild(heading);
+      const table = document.createElement('table');
+      table.className = 'sm-table sm-recall-table';
+      table.innerHTML = `<thead><tr><th>Trace</th>${stepNames.map(name => `<th>${smEsc(name)}</th>`).join('')}</tr></thead><tbody>${workflowGroups.map(group => {
+        const trace = group.executionId || 'Recorded execution';
+        const cells = stepNames.map(name => {
+          const step = group.steps.find(candidate => candidate.stepName === name);
+          if (!step) return '<td>—</td>';
+          const outputs = step.tos.map(item => `${item.name}${item.batch_id || item.supplier_batch_number ? ' · ' + (item.batch_id || item.supplier_batch_number) : ''}`).join(', ');
+          const when = step.tos[0]?.step_data?.completed_at;
+          return `<td>${smEsc(outputs || 'Recorded')}<small>${smEsc(when ? smFmtDate(when) : '')}</small></td>`;
+        }).join('');
+        return `<tr><td>${smEsc(trace)}</td>${cells}</tr>`;
+      }).join('')}</tbody>`;
+      section.appendChild(table);
+      wrap.appendChild(section);
+    });
+
+    const salesSection = document.createElement('section');
+    salesSection.className = 'sm-recall-workflow sm-recall-sales';
+    const salesHeading = document.createElement('h2');
+    salesHeading.textContent = 'Linked sales';
+    salesSection.appendChild(salesHeading);
+    if (!sales.length) {
+      const empty = document.createElement('p');
+      empty.textContent = 'No linked sales recorded.';
+      salesSection.appendChild(empty);
+    } else {
+      const salesTable = document.createElement('table');
+      salesTable.className = 'sm-table';
+      const head = salesTable.createTHead().insertRow();
+      ['Invoice', 'Store / customer', 'Date', 'Product'].forEach(label => {
+        const cell = document.createElement('th');
+        cell.textContent = label;
+        head.appendChild(cell);
+      });
+      const body = salesTable.createTBody();
+      sales.forEach(sale => {
+        const row = body.insertRow();
+        [
+          sale.invoice_number || sale.xero_invoice_id || '—',
+          sale.customer_name || sale.store_name || '—',
+          sale.sale_date ? smFmtDate(sale.sale_date) : '—',
+          sale.name || '—',
+        ].forEach(value => {
+          const cell = row.insertCell();
+          cell.textContent = value;
+        });
+      });
+      salesSection.appendChild(salesTable);
+    }
+    wrap.appendChild(salesSection);
   }
 
   /* Compact tree table: each material appears once, nested under its producing step. */
@@ -2103,7 +2200,7 @@
 
   /* ── Controls binding ───────────────────────────────────── */
   function smBindControls() {
-    // View toggle: timeline | map | table
+    // View toggle: timeline | map | table | recall
     document.querySelectorAll('.sm-view-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const view = btn.dataset.view;
@@ -2116,9 +2213,11 @@
 
         const flowArea = document.getElementById('sm-trace-area');
         const tableWrap = document.getElementById('sm-table-wrap');
+        const recallWrap = document.getElementById('sm-recall-wrap');
 
         if (view === 'table') {
           if (flowArea) flowArea.style.display = 'none';
+          if (recallWrap) recallWrap.style.display = 'none';
           if (lastTraceResult && (lastTraceResult.all_items || []).length) {
             const root = lastTraceResult.traced_item || lastTraceResult.raw_material;
             smUpdateTraceTable(lastTraceResult.all_items || [], lastTraceResult.connections || [], root ? root.id : tracedItemId);
@@ -2128,6 +2227,7 @@
         } else {
           if (flowArea) flowArea.style.display = '';
           if (tableWrap) tableWrap.style.display = 'none';
+          if (recallWrap) recallWrap.style.display = 'none';
 
           if (lastTraceResult) smRenderTrace(lastTraceResult);
           else smRenderBrowseGrid();

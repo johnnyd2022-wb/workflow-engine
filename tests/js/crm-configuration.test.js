@@ -143,3 +143,14 @@ test('a successful save clears any earlier mapping error', async () => {
 
   assert.equal(page.mappingError, null);
 });
+
+test('saving configuration sends the tenant sales-figure obfuscation preference', async () => {
+  const { page, calls } = makePage();
+  page.traceConfig.obfuscate_sales_figures = true;
+
+  await page.saveTraceConfig();
+
+  assert.equal(calls.traceConfig.length, 1);
+  assert.equal(calls.traceConfig[0].obfuscate_sales_figures, true);
+  assert.equal(page.traceConfig.obfuscate_sales_figures, true);
+});

@@ -1242,6 +1242,13 @@ def build_np3_audit_rows(
                 for record in sorted(matched, key=lambda record: record.created_at, reverse=True)
                 if (getattr(record, "details", None) or {}).get("np3_log_type") == (log_template or {}).get("key")
             ]
+            # A log's employee is evidence about the person trained/observed.  It is
+            # distinct from the account that happened to enter the record.
+            staff_names = {str(member["id"]): member["name"] for member in (staff or [])}
+            for entry in log_entries:
+                employee_id = entry["fields"].get("employee_user_id")
+                if employee_id:
+                    entry["employee_name"] = staff_names.get(str(employee_id), "Former team member")
             staff_actions: list[dict[str, Any]] = []
             if log_template and log_template.get("roster_driven"):
                 trained_user_ids = {

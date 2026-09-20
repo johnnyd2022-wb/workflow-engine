@@ -316,6 +316,7 @@ class CRMService:
                 "strict_mapping": True,
                 "task_done_archive_days": 7,
                 "revenue_baseline_target_mtd": None,
+                "obfuscate_sales_figures": False,
             }
         return {
             "matching_strategy": row.matching_strategy,
@@ -326,6 +327,7 @@ class CRMService:
             "revenue_baseline_target_mtd": float(row.revenue_baseline_target_mtd)
             if getattr(row, "revenue_baseline_target_mtd", None) is not None
             else None,
+            "obfuscate_sales_figures": bool(getattr(row, "obfuscate_sales_figures", False)),
         }
 
     def update_traceability_config(self, org_id: UUID, data: dict) -> dict:
@@ -345,6 +347,7 @@ class CRMService:
             revenue_baseline_target_mtd = round(float(revenue_baseline_target_mtd), 2)
             if revenue_baseline_target_mtd < 0:
                 raise ValueError("revenue_baseline_target_mtd must be >= 0")
+        obfuscate_sales_figures = bool(data.get("obfuscate_sales_figures", before["obfuscate_sales_figures"]))
         row = self.traceability_repo.upsert(
             org_id=org_id,
             matching_strategy=strategy,
@@ -353,6 +356,7 @@ class CRMService:
             strict_mapping=strict_mapping,
             task_done_archive_days=task_done_archive_days,
             revenue_baseline_target_mtd=revenue_baseline_target_mtd,
+            obfuscate_sales_figures=obfuscate_sales_figures,
         )
         self.db.flush()  # populate row.id (client-side default) when upsert inserted a new row
         updated = {
@@ -364,6 +368,7 @@ class CRMService:
             "revenue_baseline_target_mtd": float(row.revenue_baseline_target_mtd)
             if getattr(row, "revenue_baseline_target_mtd", None) is not None
             else None,
+            "obfuscate_sales_figures": bool(getattr(row, "obfuscate_sales_figures", False)),
         }
         self._emit_event(
             org_id=org_id,

@@ -835,6 +835,16 @@ html[data-spa-theme="dark"] .sm-temporal-banner { background: rgba(120,53,15,0.2
 
 .sm-table tr:last-child td { border-bottom: none; }
 
+.sm-recall-wrap { margin-bottom: 24px; }
+.sm-recall-meta, .sm-recall-workflow { margin-bottom: 18px; }
+.sm-recall-meta h2, .sm-recall-workflow h2 { font-size: 15px; margin: 0 0 8px; color: var(--text-primary, #111827); }
+.sm-recall-meta { padding: 14px; border: 1.5px solid var(--border-default, #e5e7eb); border-radius: 10px; background: var(--bg-card, #fff); }
+.sm-recall-meta dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 16px; margin: 0; }
+.sm-recall-meta dt { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary, #6b7280); }
+.sm-recall-meta dd { margin: 2px 0 0; font-size: 13px; color: var(--text-primary, #111827); overflow-wrap: anywhere; }
+.sm-recall-table td small { display: block; margin-top: 3px; color: var(--text-secondary, #6b7280); }
+.sm-recall-sales { padding-top: 14px; border-top: 2px solid #a7f3d0; }
+
 .sm-trace-row__item,
 .sm-trace-row__step,
 .sm-trace-row__sale {

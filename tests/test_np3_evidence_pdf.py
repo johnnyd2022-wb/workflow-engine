@@ -75,6 +75,17 @@ def test_register_pdf_orders_checks_and_includes_recorded_answers_and_images():
     assert "cleaning-photo.png" in text
 
 
+def test_register_pdf_flows_multiple_checks_together_and_numbers_pages_globally():
+    output = build_np3_evidence_register_pdf(_audit(), [])
+    reader = PdfReader(BytesIO(output))
+
+    assert len(reader.pages) == 2  # cover + compact evidence pages, not one page/check
+    assert "Page 1" in (reader.pages[0].extract_text() or "")
+    assert "Page 2" in (reader.pages[1].extract_text() or "")
+    assert "Keep records" in (reader.pages[1].extract_text() or "")
+    assert "Trace and recall" in (reader.pages[1].extract_text() or "")
+
+
 def test_register_pdf_appends_uploaded_pdf_and_embeds_non_renderable_upload():
     output = build_np3_evidence_register_pdf(
         _audit(),

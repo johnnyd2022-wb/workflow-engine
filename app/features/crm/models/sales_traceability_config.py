@@ -24,6 +24,9 @@ class SalesTraceabilityConfig(TenantScoped, Base):
     strict_mapping = Column(Boolean, nullable=False, default=True)
     task_done_archive_days = Column(Integer, nullable=False, default=7)
     revenue_baseline_target_mtd = Column(Numeric(12, 2), nullable=True)
+    # Tenant preference: obscures figures in the CRM overview without altering the
+    # underlying operational/sales records used for traceability and reporting.
+    obfuscate_sales_figures = Column(Boolean, nullable=False, default=False)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
