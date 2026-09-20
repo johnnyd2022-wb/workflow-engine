@@ -223,10 +223,10 @@ The design above was implemented in five commits on this branch.
 
 ### Measured
 
-Direct repo-call timing of the overview against the real `whistlebird_test` org
+Direct repo-call timing of the overview against the real `Whistlebird Ltd` org
 (252 executions, 243 inventory items), cold: **9 DB queries, ~73 ms wall**. Flat in query
 count regardless of history — contrast `/api/core/system-findings` on the same org
-(~100 queries per the `budgets.json` note). `EXPLAIN` on `whistlebird_test` confirms the
+(~100 queries per the `budgets.json` note). `EXPLAIN` on `Whistlebird Ltd` confirms the
 keyset list queries do an index-ordered scan with **no Sort node** after the migration.
 `tests/e2e/test_core_load_waterfall.py` (real browser) confirms initial `/core` makes
 exactly one `hub/overview` call and no `inventory` / `executions` /

@@ -1,5 +1,5 @@
 {
-  "_comment": "CRM sales-traceability configuration for the whistlebird_test tenant, replayed through the real API by scripts/whistlebird_crm.py after the Core history (see docs/whistlebird-replay-plan.md). The scoped reset deletes product_mappings and crm_sales_traceability_config, and neither is recoverable from the legacy database, so they live here. The Xero OAuth connection cannot be replayed: reconnect it in the app after a rebuild, then sync. Mappings are name-only (no biz_e_source_output_id), exactly as created in the CRM UI, because output UUIDs change on every rebuild.",
+  "_comment": "CRM sales-traceability configuration for the Whistlebird Ltd tenant, replayed through the real API by scripts/whistlebird_crm.py after the Core history (see docs/whistlebird-replay-plan.md). The scoped reset deletes product_mappings and crm_sales_traceability_config, and neither is recoverable from the legacy database, so they live here. The Xero OAuth connection cannot be replayed: reconnect it in the app after a rebuild, then sync. Mappings are name-only (no biz_e_source_output_id), exactly as created in the CRM UI, because output UUIDs change on every rebuild.",
   "traceability_config": {
     "matching_strategy": "fifo",
     "manual_review_days": 7,

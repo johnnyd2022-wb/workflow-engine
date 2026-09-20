@@ -2,7 +2,7 @@
 
 ## Two loading paths (as of 2026-09-15)
 
-There are now two ways to load `whistlebird_test`, and they produce data that looks
+There are now two ways to load `Whistlebird Ltd`, and they produce data that looks
 different in one specific way — read this before touching either.
 
 1. **`scripts/whistlebird_migration.py`** (documented below) — writes directly at the
@@ -22,7 +22,7 @@ different in one specific way — read this before touching either.
    JSON manifests, never in the data itself. This is the preferred path going forward,
    including for resetting/populating a demo tenant.
 
-Both paths are safe to run against `whistlebird_test` (guarded the same way, preserve
+Both paths are safe to run against `Whistlebird Ltd` (guarded the same way, preserve
 users) and read from the same two sources below.
 
 ### API replay audit dates
@@ -57,7 +57,7 @@ changes, run `uv run python scripts/whistlebird_replay_correct_timestamps.py
 same correction with the production, CRM, NP3 and disposal manifests it replayed.
 
 `scripts/whistlebird_migration.py` loads Whistlebird's real production history into a
-`whistlebird_test` organisation in `workflow-engine-test` so the tool shows what the
+`Whistlebird Ltd` organisation in `workflow-engine-test` so the tool shows what the
 business has actually done, from two frozen sources:
 
 1. **The prior inventory database**, committed as `docs/whistlebird-legacy-source.json`
@@ -162,7 +162,7 @@ uv run python scripts/whistlebird_migration.py --rebuild-whistlebird-test
 
 Individual apply actions (`--setup-workflows`, `--apply-raw-materials`, `--apply-batches`,
 `--apply-trials`, `--apply-customs-lodgements`) exist for iterating. Every write action
-refuses any `--org-name` except `whistlebird_test`; `--confirm-reset-whistlebird-test`
+refuses any `--org-name` except `Whistlebird Ltd`; `--confirm-reset-whistlebird-test`
 deletes only that tenant's loaded data and preserves its org, users and 2FA.
 
 ## Non-negotiable rules
@@ -172,7 +172,7 @@ deletes only that tenant's loaded data and preserves its org, users and 2FA.
 - A target timestamp derived from a source `DATE` is set to **12:00 Pacific/Auckland**.
 - No step date, quantity, or bottle count is fabricated: unknowns are `derived`/`None`
   and flagged, or the batch is excluded (see `docs/whistlebird-import-decisions.md`).
-- Reset is guarded by the exact `whistlebird_test` name and its explicit flag.
+- Reset is guarded by the exact `Whistlebird Ltd` name and its explicit flag.
 
 ## Outstanding review
 

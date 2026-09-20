@@ -2,7 +2,7 @@
 
 ## Scope and method
 
-This review used the rebuilt `whistlebird_test` tenant, rather than empty demo data.
+This review used the rebuilt `Whistlebird Ltd` tenant, rather than empty demo data.
 The tenant contains 12 imported product workflows, 138 historical production executions,
 948 production links, 67 receipt records, 13 customs records, and 38 stage-two records.
 The reviewer signed in through the production-shaped TLS test deployment and inspected the

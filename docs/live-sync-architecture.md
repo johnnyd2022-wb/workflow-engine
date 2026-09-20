@@ -162,7 +162,7 @@ mutation burst is one refetch.
   small, and needs `system_findings` / `producing_step_name` / ready-date fields the
   compact view omits. (The pre-!191 767 ms was a query problem, fixed there, not payload.)
 
-Measured (`whistlebird_test`): flows2 initial load **5 calls / 34 KB** (was `inventory`
+Measured (`Whistlebird Ltd`): flows2 initial load **5 calls / 34 KB** (was `inventory`
 4 KB + `executions` 3 KB + more), with **no executions list and no inventory** until a
 tab is opened. Badge is correct from a 17-byte `count` call.
 

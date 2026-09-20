@@ -512,21 +512,21 @@ def test_scoped_reset_deletes_dependent_tenant_data_before_its_parents(migration
         lambda m: m.ensure_compliant_nz_alcohol_setup("postgresql://unused", "another_tenant"),
     ],
 )
-def test_write_actions_reject_any_tenant_except_whistlebird_test(migration_module, call):
+def test_write_actions_reject_any_tenant_except_whistlebird_org(migration_module, call):
     with pytest.raises(ValueError, match="only permitted"):
         call(migration_module)
 
 
-def test_tenant_setup_rejects_any_tenant_except_whistlebird_test(migration_module):
+def test_tenant_setup_rejects_any_tenant_except_whistlebird_org(migration_module):
     with pytest.raises(ValueError, match="only permitted"):
         migration_module.ensure_target_org_admin(
             "postgresql://unused", "another_tenant", "admin@example.test", "not-used"
         )
 
 
-def test_bootstrap_rejects_any_tenant_except_whistlebird_test(migration_module, tmp_path):
+def test_bootstrap_rejects_any_tenant_except_whistlebird_org(migration_module, tmp_path):
     with pytest.raises(ValueError, match="only permitted"):
-        migration_module.bootstrap_whistlebird_test(
+        migration_module.bootstrap_whistlebird(
             "postgresql://unused",
             "postgresql://unused",
             "another_tenant",
@@ -590,7 +590,7 @@ def test_bootstrap_runs_preflight_then_scoped_replay_then_verify(migration_modul
         migration_module, "ensure_target_org_admin", record("ensure", {"org_created": True, "admin_created": True})
     )
     monkeypatch.setattr(
-        migration_module, "sync_whistlebird_test_admin_password", record("password_sync", {"synced": True})
+        migration_module, "sync_whistlebird_admin_password", record("password_sync", {"synced": True})
     )
     monkeypatch.setattr(migration_module, "reset_target_org", record("reset", {"deleted_rows": {}}))
     monkeypatch.setattr(migration_module, "setup_product_workflows", record("workflows", {}))
@@ -606,8 +606,8 @@ def test_bootstrap_runs_preflight_then_scoped_replay_then_verify(migration_modul
         record("compliant", {"feature_key": "compliant", "active": True}),
     )
 
-    migration_module.bootstrap_whistlebird_test(
-        "legacy-url", "target-url", "whistlebird_test", "admin@example.test", "safe-password", tmp_path / "m.json"
+    migration_module.bootstrap_whistlebird(
+        "legacy-url", "target-url", "Whistlebird Ltd", "admin@example.test", "safe-password", tmp_path / "m.json"
     )
 
     assert calls == [
@@ -662,7 +662,7 @@ def test_arguments_reject_ambiguous_actions(migration_module, monkeypatch):
 
 
 def test_arguments_reject_wrong_tenant_before_any_database_work(migration_module, monkeypatch):
-    monkeypatch.setenv("WHISTLEBIRD_TEST_ADMIN_PASSWORD", "not-a-real-password")
+    monkeypatch.setenv("WHISTLEBIRD_ADMIN_PASSWORD", "not-a-real-password")
     monkeypatch.setattr(
         sys,
         "argv",
@@ -670,7 +670,7 @@ def test_arguments_reject_wrong_tenant_before_any_database_work(migration_module
             "whistlebird_migration.py",
             "--target-url",
             "postgresql://unused",
-            "--ensure-test-tenant",
+            "--ensure-whistlebird-org",
             "--org-name",
             "another_tenant",
         ],

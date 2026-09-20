@@ -1,4 +1,4 @@
-"""Apply curated dates to the whistlebird_test API replay, including its audit trail.
+"""Apply curated dates to the Whistlebird Ltd API replay, including its audit trail.
 
 Internal reset/import tooling only. The live API continues to record request time.
 Run after a complete replay (or use whistlebird_rebuild_api.py, which runs this pass).
@@ -320,8 +320,8 @@ def correct_timestamps(
     crm_manifest_path: Path | None = crm.DEFAULT_CRM_MANIFEST,
     dry_run: bool = False,
 ) -> dict[str, int]:
-    if org_name != wm.RESET_ORG_NAME:
-        raise ValueError(f"timestamp correction is only permitted for {wm.RESET_ORG_NAME!r}")
+    if org_name != wm.WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"timestamp correction is only permitted for {wm.WHISTLEBIRD_ORG_NAME!r}")
     events = build_timeline(legacy_source, Path(production_manifest_path))
     times = _event_times(events)
     moved_purchase_events = _purchase_audit_days(events)
@@ -739,7 +739,7 @@ def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--legacy-url", "--legacy-source", dest="legacy_source", default=legacy.DEFAULT_LEGACY_SNAPSHOT)
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
-    parser.add_argument("--org-name", default=wm.RESET_ORG_NAME)
+    parser.add_argument("--org-name", default=wm.WHISTLEBIRD_ORG_NAME)
     parser.add_argument("--production-manifest", type=Path, default=wm.DEFAULT_PRODUCTION_MANIFEST)
     parser.add_argument("--crm-manifest", type=Path, default=crm.DEFAULT_CRM_MANIFEST)
     parser.add_argument("--skip-crm-config", action="store_true")
@@ -751,8 +751,8 @@ def _arguments() -> argparse.Namespace:
     args = parser.parse_args()
     if not args.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
-    if args.org_name != wm.RESET_ORG_NAME:
-        parser.error(f"--org-name must be exactly {wm.RESET_ORG_NAME!r}")
+    if args.org_name != wm.WHISTLEBIRD_ORG_NAME:
+        parser.error(f"--org-name must be exactly {wm.WHISTLEBIRD_ORG_NAME!r}")
     return args
 
 

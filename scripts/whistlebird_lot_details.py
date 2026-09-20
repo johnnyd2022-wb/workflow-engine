@@ -1,4 +1,4 @@
-"""Give every whistlebird_test inventory lot the batch code and process link its own history proves.
+"""Give every Whistlebird Ltd inventory lot the batch code and process link its own history proves.
 
 The Live Inventory page reads a lot's `supplier_batch_number`, `expiry_date` and process name off
 the inventory item itself. The replay recorded the underlying facts elsewhere, so the page showed
@@ -236,8 +236,8 @@ def apply_plan(conn: Connection, org_id: UUID, plan: LotDetailsPlan) -> None:
 
 
 def _require_test_tenant(org_name: str) -> None:
-    if org_name != wm.RESET_ORG_NAME:
-        raise LotDetailsError(f"lot details may only be written for {wm.RESET_ORG_NAME!r}, not {org_name!r}")
+    if org_name != wm.WHISTLEBIRD_ORG_NAME:
+        raise LotDetailsError(f"lot details may only be written for {wm.WHISTLEBIRD_ORG_NAME!r}, not {org_name!r}")
 
 
 def plan_for_target(target_url: str, org_name: str) -> LotDetailsPlan:
@@ -302,7 +302,7 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("plan", "apply", "verify"))
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
-    parser.add_argument("--org-name", default=wm.RESET_ORG_NAME)
+    parser.add_argument("--org-name", default=wm.WHISTLEBIRD_ORG_NAME)
     args = parser.parse_args(argv)
     if not args.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")

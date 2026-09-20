@@ -1,4 +1,4 @@
-"""Replayable CRM sales-traceability configuration for whistlebird_test.
+"""Replayable CRM sales-traceability configuration for Whistlebird Ltd.
 
 The scoped reset deletes `product_mappings` and `crm_sales_traceability_config`, and neither
 can be recovered from the legacy database. This module keeps them in version control

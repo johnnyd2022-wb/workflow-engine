@@ -1,4 +1,4 @@
-"""One command: rebuild whistlebird_test from version control through the real API.
+"""One command: rebuild Whistlebird Ltd from version control through the real API.
 
 Runs the documented API-replay path end to end (docs/whistlebird-replay-plan.md):
 
@@ -6,7 +6,7 @@ Runs the documented API-replay path end to end (docs/whistlebird-replay-plan.md)
     -> replay (Core history, then expired-stock disposals, CRM mappings, NP3 evidence) -> timestamp pass
     -> verification
 
-Requires the app running (`uv run workflow start`). Without --confirm-reset-whistlebird-test
+Requires the app running (`uv run workflow start`). Without --confirm-reset-whistlebird-ltd
 it is a read-only preflight and prints what it would do.
 
 Before anything destructive it (1) validates the NP3 manifest and (2) refuses to continue
@@ -18,7 +18,7 @@ intent.
 
     uv run python scripts/whistlebird_rebuild_api.py --base-url https://localhost:8005 --insecure \\
         --target-url postgresql://workflow_rw:...@localhost:8401/workflow-engine-test \\
-        --confirm-reset-whistlebird-test
+        --confirm-reset-whistlebird-ltd
 """
 
 from __future__ import annotations
@@ -124,12 +124,12 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
     problems = preflight(args)
     if problems:
         raise RebuildRefusedError("\n  ".join(["refusing to rebuild:", *problems]))
-    if not args.confirm_reset_whistlebird_test:
+    if not args.confirm_reset_whistlebird:
         return {"dry_run": True, "would_run": list(STEPS), "preflight": "ok"}
 
     report: dict[str, Any] = {}
     report["tenant"] = wm.ensure_target_org_admin(args.target_url, args.org_name, args.admin_email, args.admin_password)
-    report["password_sync"] = wm.sync_whistlebird_test_admin_password(args.target_url, args.org_name, args.admin_email)
+    report["password_sync"] = wm.sync_whistlebird_admin_password(args.target_url, args.org_name, args.admin_email)
     report["reset"] = wm.reset_target_org(args.target_url, args.org_name)
     report["workflows"] = wm.setup_product_workflows(args.target_url, args.org_name)
     report["compliant_setup"] = wm.ensure_compliant_nz_alcohol_setup(args.target_url, args.org_name)
@@ -186,11 +186,12 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
     parser.add_argument("--crm-manifest", type=Path, default=crm.DEFAULT_CRM_MANIFEST)
     parser.add_argument("--disposals-manifest", type=Path, default=disposals.DEFAULT_DISPOSALS_MANIFEST)
-    parser.add_argument("--admin-email", default=wm.DEFAULT_TEST_ADMIN_EMAIL)
-    parser.add_argument("--admin-password-env", default="WHISTLEBIRD_TEST_ADMIN_PASSWORD")
-    parser.add_argument("--org-name", default=wm.RESET_ORG_NAME)
+    parser.add_argument("--admin-email", default=wm.DEFAULT_ADMIN_EMAIL)
+    parser.add_argument("--admin-password-env", default="WHISTLEBIRD_ADMIN_PASSWORD")
+    parser.add_argument("--org-name", default=wm.WHISTLEBIRD_ORG_NAME)
     parser.add_argument(
-        "--confirm-reset-whistlebird-test",
+        "--confirm-reset-whistlebird-ltd",
+        dest="confirm_reset_whistlebird",
         action="store_true",
         help="Actually reset and rebuild. Without it, only the read-only preflight runs.",
     )
@@ -202,12 +203,12 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if not args.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
-    if args.org_name != wm.RESET_ORG_NAME:
-        parser.error(f"--org-name must be exactly {wm.RESET_ORG_NAME!r}")
+    if args.org_name != wm.WHISTLEBIRD_ORG_NAME:
+        parser.error(f"--org-name must be exactly {wm.WHISTLEBIRD_ORG_NAME!r}")
     args.admin_password = os.environ.get(args.admin_password_env)
-    if not args.admin_password and args.confirm_reset_whistlebird_test:
+    if not args.admin_password and args.confirm_reset_whistlebird:
         try:
-            args.admin_password = wm._keepass_password(wm.WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY)
+            args.admin_password = wm._keepass_password(wm.WHISTLEBIRD_ADMIN_KEEPASS_ENTRY)
         except ValueError as exc:
             parser.error(f"{args.admin_password_env} is not set and KeePassXC fallback failed: {exc}")
     return args
