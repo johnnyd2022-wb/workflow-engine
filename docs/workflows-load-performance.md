@@ -43,7 +43,7 @@ then deduped by name. Fixed: both remaining calls use `?view=compact` and the re
 
 ## Methodology
 
-Measured with Playwright against `whistlebird_test` (252 execs, 243 items, 12 processes,
+Measured with Playwright against `Whistlebird Ltd` (252 execs, 243 items, 12 processes,
 48 expired raw materials), logged in as a real user, wall time to `networkidle`, per-call
 timing + bytes captured from the network. Dev server on `:8005`.
 
@@ -79,7 +79,7 @@ is already lean.
 
 ### 1. Slim the `system-findings` banner payload — `[x]` (commit: system_findings_cache `_banner_finding_data`)
 
-**Done.** `/api/core/system-findings` 405 KB → 24 KB on `whistlebird_test` (~17x), on
+**Done.** `/api/core/system-findings` 405 KB → 24 KB on `Whistlebird Ltd` (~17x), on
 every authenticated page (the sidebar notification badge in `base_spa.html` fetches it on
 `DOMContentLoaded` **and** every `htmx:afterOnLoad`). `_banner_finding_data` projects the
 `expired_materials` finding's `data` to the fields the banner / badge / Notifications page
@@ -152,7 +152,7 @@ sub-parts below only if it's still slow:
 
 **Before:** 767 ms for ~4 KB (≈15 rows).
 
-**Approach.** Profile `list_inventory` with `process_id` set against `whistlebird_test`
+**Approach.** Profile `list_inventory` with `process_id` set against `Whistlebird Ltd`
 (SQLAlchemy query counter + `EXPLAIN`). Likely causes, in order of probability:
 - the producing-step / execution / process batch-load block runs even for a 15-row
   result and isn't `process_id`-narrowed;

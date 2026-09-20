@@ -15,7 +15,7 @@ live inventory (`/core/inventory/live`) and active batches (`/core/executions/li
 
 ## Evidence reviewed
 
-- The rebuilt `whistlebird_test` tenant has 12 imported workflows, 138 historical
+- The rebuilt `Whistlebird Ltd` tenant has 12 imported workflows, 138 historical
   executions, 948 production links, 67 receipt records, and 38 curated sheet records.
 - The initial hub is already protected by Playwright request-waterfall tests: it makes one
   compact overview call and defers inventory and execution history until a tab is selected.
@@ -41,7 +41,7 @@ live inventory (`/core/inventory/live`) and active batches (`/core/executions/li
 4. Scope every standalone tenant-aware migration ORM operation to the organisation supplied
    to it explicitly. The pre-scope target lookup is an auditable `unscoped()` exception;
    all tenant work runs in `tenant_scope(org.id)`. This preserves the global tenant filter
-   and removes misleading `tenant_filter.no_context` warnings. `whistlebird_test` is the
+   and removes misleading `tenant_filter.no_context` warnings. `Whistlebird Ltd` is the
    disposable real-data validation fixture, not a product-specific frontend behaviour.
 5. Resolve the Dashboard mobile follow-up without concealing a signal. Biz-E currently
    distinguishes only `ADMIN` and `MEMBER`, not named operating roles, and both roles need
@@ -68,7 +68,7 @@ live inventory (`/core/inventory/live`) and active batches (`/core/executions/li
 - Extend Core Playwright coverage for deterministic `/core`, keyboard tabs, disclosure
   behaviour, Back/Forward, and the original lazy-load request contract.
 - Add migration scope regression coverage and run the deterministic bootstrap against the
-  disposable `whistlebird_test` tenant before hand-off.
+  disposable `Whistlebird Ltd` tenant before hand-off.
 
 ## Dashboard control-tower implementation
 

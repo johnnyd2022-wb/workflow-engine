@@ -81,5 +81,5 @@ production-history load (sales/CRM reconcile from Xero; snapshots would double-c
 ## Repeatable reset
 
 `scripts/whistlebird_migration.py --confirm-reset-whistlebird-test` deletes tenant-scoped
-Core/CRM/Compliant data for the exact `whistlebird_test` org, preserves the org, admin
+Core/CRM/Compliant data for the exact `Whistlebird Ltd` org, preserves the org, admin
 users, trusted devices and 2FA, and verifies every reset table is empty before committing.

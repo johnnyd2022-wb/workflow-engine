@@ -1,4 +1,4 @@
-"""Replayable disposal of expired raw-material stock for whistlebird_test.
+"""Replayable disposal of expired raw-material stock for Whistlebird Ltd.
 
 Expired stock left on the shelf should be written off, not sit in inventory as if it were usable.
 `docs/whistlebird-disposals-source.json` lists each lot to dispose of; this module replays them

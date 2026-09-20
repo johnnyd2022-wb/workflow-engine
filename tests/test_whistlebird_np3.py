@@ -1,8 +1,8 @@
-"""NP3 evidence replay for whistlebird_test (scripts/whistlebird_np3.py).
+"""NP3 evidence replay for Whistlebird Ltd (scripts/whistlebird_np3.py).
 
 Pure tests cover manifest validation and content identity. The integration tests drive the
 REAL Compliant/org routes through Flask's test client against the real test database, on a
-throwaway org -- never on `whistlebird_test` -- so a manifest the replay would send is
+throwaway org -- never on `Whistlebird Ltd` -- so a manifest the replay would send is
 proven acceptable to the routes, and a delete-and-replay is proven to reproduce the
 evidence, dates, staff link and profile.
 """
@@ -274,7 +274,7 @@ class _FlaskClient:
 
 
 def _setup_baseline(client):
-    """What `--setup-compliant-nz-alcohol` gives whistlebird_test before any replay."""
+    """What `--setup-compliant-nz-alcohol` gives Whistlebird Ltd before any replay."""
     client.put(
         "/api/compliant/profile",
         {"enabled": True, "industry_module": "nz_alcohol", "settings": np3.wm.WHISTLEBIRD_NZ_ALCOHOL_SETTINGS},

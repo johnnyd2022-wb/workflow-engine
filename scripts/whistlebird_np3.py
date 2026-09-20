@@ -1,4 +1,4 @@
-"""Replayable NP3 food-control evidence for whistlebird_test.
+"""Replayable NP3 food-control evidence for Whistlebird Ltd.
 
 The NP3 evidence a business enters in the Compliant workspace (attestations, control
 logs, review intervals, the NP3 profile settings, the staff the training/illness logs
@@ -769,7 +769,7 @@ def verify_np3(target_url: str, org_name: str, manifest: Np3Manifest) -> dict[st
 
 
 def np3_unsnapshotted(
-    target_url: str, org_name: str, manifest: Np3Manifest, admin_email: str = wm.DEFAULT_TEST_ADMIN_EMAIL
+    target_url: str, org_name: str, manifest: Np3Manifest, admin_email: str = wm.DEFAULT_ADMIN_EMAIL
 ) -> list[str]:
     """Human-readable reasons a reset would lose NP3 evidence the manifest does not hold.
     Empty when the org is absent (nothing to lose) or the manifest already covers it."""
@@ -816,9 +816,9 @@ def snapshot_np3(target_url: str, org_name: str, existing: Np3Manifest | None = 
     its `signed_on`/`due_date`. New attestations take the date they were signed in the
     database (today) -- edit `signed_on` in the JSON to the date you want.
     """
-    if org_name != wm.RESET_ORG_NAME:
-        raise ValueError(f"Snapshot is only permitted for {wm.RESET_ORG_NAME!r}")
-    return _snapshot_org(target_url, org_name, existing, wm.DEFAULT_TEST_ADMIN_EMAIL)
+    if org_name != wm.WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Snapshot is only permitted for {wm.WHISTLEBIRD_ORG_NAME!r}")
+    return _snapshot_org(target_url, org_name, existing, wm.DEFAULT_ADMIN_EMAIL)
 
 
 def _snapshot_org(target_url: str, org_name: str, existing: Np3Manifest | None, admin_email: str) -> dict[str, Any]:
@@ -908,12 +908,12 @@ def _arguments() -> argparse.Namespace:
     snap = sub.add_parser("snapshot", help="Write the org's NP3 evidence from the database into the manifest.")
     snap.add_argument("--manifest", type=Path, default=DEFAULT_NP3_MANIFEST)
     snap.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
-    snap.add_argument("--org-name", default=wm.RESET_ORG_NAME)
+    snap.add_argument("--org-name", default=wm.WHISTLEBIRD_ORG_NAME)
     snap.add_argument("--dry-run", action="store_true", help="Print what would change; write nothing.")
     check = sub.add_parser("verify", help="Compare the database against the manifest, read-only.")
     check.add_argument("--manifest", type=Path, default=DEFAULT_NP3_MANIFEST)
     check.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
-    check.add_argument("--org-name", default=wm.RESET_ORG_NAME)
+    check.add_argument("--org-name", default=wm.WHISTLEBIRD_ORG_NAME)
     args = parser.parse_args()
     if args.command != "validate" and not args.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")

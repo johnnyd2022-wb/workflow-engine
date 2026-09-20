@@ -1,4 +1,4 @@
-"""Replay whistlebird_test's curated history through the real application API.
+"""Replay Whistlebird Ltd's curated history through the real application API.
 
 Every event from `whistlebird_replay_timeline.build_timeline()` is issued as a real HTTP
 request against a running instance of this app -- the same route, auth, validation, and
@@ -18,8 +18,8 @@ Usage:
     uv run python scripts/whistlebird_replay.py \\
         --base-url http://localhost:8001 \\
         --target-url postgresql://workflow_rw:...@localhost:8401/workflow-engine-test \\
-        --admin-email whistlebird_test_admin@whistlebird.test \\
-        --admin-password-env WHISTLEBIRD_TEST_ADMIN_PASSWORD
+        --admin-email johnny@whistlebird.co.nz \\
+        --admin-password-env WHISTLEBIRD_ADMIN_PASSWORD
 
 Resumable: before issuing any event, the script checks the target database directly
 (read-only) for a row already carrying that event's marker, and skips it. Re-running
@@ -920,13 +920,13 @@ def run_replay(
     # Keep the account's actual password in sync with KeePass before every run, rather
     # than trusting whatever it was last set to -- self-healing, so it never silently
     # drifts out from under whoever needs to log in and check on this tenant by hand.
-    wm.sync_whistlebird_test_admin_password(target_url, org_name, admin_email)
+    wm.sync_whistlebird_admin_password(target_url, org_name, admin_email)
 
     engine = create_engine(target_url)
     with engine.connect() as conn:
         row = conn.execute(text("SELECT id FROM organisations WHERE name = :name"), {"name": org_name}).first()
         if not row:
-            raise ReplayRejectedError(f"org {org_name!r} does not exist -- run --ensure-test-tenant first")
+            raise ReplayRejectedError(f"org {org_name!r} does not exist -- run --ensure-whistlebird-org first")
         org_id = row[0]
     engine.dispose()
 
@@ -989,9 +989,9 @@ def _arguments() -> argparse.Namespace:
     )
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
     parser.add_argument("--production-manifest", type=Path, default=wm.DEFAULT_PRODUCTION_MANIFEST)
-    parser.add_argument("--admin-email", default=wm.DEFAULT_TEST_ADMIN_EMAIL)
-    parser.add_argument("--admin-password-env", default="WHISTLEBIRD_TEST_ADMIN_PASSWORD")
-    parser.add_argument("--org-name", default=wm.RESET_ORG_NAME)
+    parser.add_argument("--admin-email", default=wm.DEFAULT_ADMIN_EMAIL)
+    parser.add_argument("--admin-password-env", default="WHISTLEBIRD_ADMIN_PASSWORD")
+    parser.add_argument("--org-name", default=wm.WHISTLEBIRD_ORG_NAME)
     parser.add_argument(
         "--limit",
         type=int,
@@ -1009,11 +1009,11 @@ def _arguments() -> argparse.Namespace:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
     args.admin_password = os.environ.get(args.admin_password_env)
     if not args.admin_password:
-        # Same KeePassXC entry wm.sync_whistlebird_test_admin_password() keeps the
+        # Same KeePassXC entry wm.sync_whistlebird_admin_password() keeps the
         # account synced with -- the env var remains a valid override, it's just no
         # longer required for local use.
         try:
-            args.admin_password = wm._keepass_password(wm.WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY)
+            args.admin_password = wm._keepass_password(wm.WHISTLEBIRD_ADMIN_KEEPASS_ENTRY)
         except ValueError as e:
             parser.error(f"{args.admin_password_env} is not set and KeePassXC fallback failed: {e}")
     return args

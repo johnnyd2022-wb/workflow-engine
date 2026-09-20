@@ -3,7 +3,7 @@
 
 The default/profile and dry-run actions are read-only and produce aggregate-only reports:
 no contacts, email addresses, free-text notes, product names, or credentials are emitted.
-Every write action is restricted to the exact disposable ``whistlebird_test`` tenant. The
+Every write action is restricted to the exact disposable ``Whistlebird Ltd`` tenant. The
 rebuild action preflights, replays, and verifies the complete reviewed load in one command.
 
 The load models production the way it actually happens: one workflow per product
@@ -106,8 +106,8 @@ RESET_TABLES = (
     "entity_event_summaries",
     "entity_events",
 )
-RESET_ORG_NAME = "whistlebird_test"
-DEFAULT_TEST_ADMIN_EMAIL = "whistlebird_test_admin@whistlebird.test"
+WHISTLEBIRD_ORG_NAME = "Whistlebird Ltd"
+DEFAULT_ADMIN_EMAIL = "johnny@whistlebird.co.nz"
 
 # These are the repeatable shelf-life assumptions used only where the historic
 # purchase register did not retain an expiry.  The curated raw-material manifest
@@ -142,7 +142,9 @@ def replay_expiry_date(name: str, received_on: date) -> date:
         return received_on + timedelta(days=_REPLAY_SHELF_LIFE_DAYS[name])
     except KeyError as exc:
         raise ValueError(f"No replay expiry policy is defined for {name!r}") from exc
-WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY = "workflow-engine/whistlebird_test"
+# This password entry predates the tenant promotion and remains the source of
+# truth until its KeePassXC record is deliberately renamed.
+WHISTLEBIRD_ADMIN_KEEPASS_ENTRY = "workflow-engine/whistlebird_test"
 DEFAULT_PRODUCTION_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
 WHISTLEBIRD_NZ_ALCOHOL_SETTINGS = {
     "alcohol_product_types": ["spirits"],
@@ -1308,7 +1310,7 @@ def build_traceability_dry_run(legacy_url: str) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------------------
-# Writers (scoped to whistlebird_test)
+# Writers (scoped to Whistlebird Ltd)
 # --------------------------------------------------------------------------------------
 
 
@@ -1375,8 +1377,8 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
     an older setup becomes required. This is how a definition change reaches steps a
     prior run already created.
     """
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Workflow setup is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Workflow setup is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     from app.core.db.models.process import Process, ProcessCategory
     from app.core.db.models.step import Step
@@ -1500,8 +1502,8 @@ def setup_product_workflows(target_url: str, requested_org_name: str) -> dict[st
 
 def apply_raw_material_inventory(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, int]:
     """Load purchase rows as dated raw-material inventory items and additions -- no workflow."""
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Raw-material load is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Raw-material load is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
@@ -1575,8 +1577,8 @@ def apply_raw_material_inventory(legacy_url: str, target_url: str, requested_org
 
 def apply_customs_lodgements(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, int]:
     """Load Customs lodgement rows as NZ-alcohol compliance records with their real periods."""
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Customs load is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Customs load is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     from app.features.compliant.models.compliance_record import ComplianceRecord
 
@@ -1670,8 +1672,8 @@ def apply_production_batches(
     legacy_url: str, target_url: str, requested_org_name: str, manifest_path: Path | None
 ) -> dict[str, int]:
     """Build one multi-step execution per VAT batch, every step stamped with its real date."""
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Batch load is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Batch load is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
@@ -1949,8 +1951,8 @@ def apply_production_batches(
 
 def apply_trial_batches(legacy_url: str, target_url: str, requested_org_name: str) -> dict[str, int]:
     """Load recipe/distillation trials as a distilling step feeding library stock."""
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Trial load is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Trial load is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
@@ -2099,8 +2101,8 @@ def reset_target_org(target_url: str, requested_org_name: str) -> dict[str, Any]
     This is intentionally constrained to the single agreed test tenant. Do not generalise
     the confirmation flag or call this function for an arbitrary organisation.
     """
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Reset is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Reset is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     with create_engine(target_url).begin() as connection:
         org_rows = connection.execute(
@@ -2139,14 +2141,14 @@ def ensure_target_org_admin(
     supplied password is used only for a newly-created account and is never included in
     the report.
     """
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Tenant setup is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Tenant setup is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     normalized_email = admin_email.lower().strip()
     if not normalized_email or "@" not in normalized_email:
-        raise ValueError("A valid test-admin email address is required")
+        raise ValueError("A valid admin email address is required")
     if not admin_password:
-        raise ValueError("A non-empty test-admin password is required")
+        raise ValueError("A non-empty admin password is required")
 
     from app.core.db.models.organisation import Organisation, OrganisationStatus
     from app.core.db.models.user import User, UserRole
@@ -2165,7 +2167,7 @@ def ensure_target_org_admin(
             with unscoped():
                 existing_email_owner = session.query(User).filter(User.email == normalized_email).one_or_none()
             if existing_email_owner is not None:
-                raise ValueError("The requested test-admin email is already assigned to another user")
+                raise ValueError("The requested admin email is already assigned to another user")
             org = Organisation(name=requested_org_name, status=OrganisationStatus.ACTIVE)
             session.add(org)
             session.flush()
@@ -2177,7 +2179,7 @@ def ensure_target_org_admin(
             with unscoped():
                 existing_email_owner = session.query(User).filter(User.email == normalized_email).one_or_none()
             if existing_email_owner is not None:
-                raise ValueError("The requested test-admin email is already assigned to another user")
+                raise ValueError("The requested admin email is already assigned to another user")
             session.add(
                 User(
                     org_id=org.id,
@@ -2189,7 +2191,7 @@ def ensure_target_org_admin(
             )
             admin_created = True
         elif not admin.is_active or admin.role != UserRole.ADMIN:
-            raise ValueError("The deterministic test-admin account is not an active administrator")
+            raise ValueError("The deterministic admin account is not an active administrator")
 
         session.commit()
         return {"org_created": org_created, "admin_created": admin_created}
@@ -2220,10 +2222,10 @@ def _keepass_password(entry_name: str) -> str:
     return password
 
 
-def sync_whistlebird_test_admin_password(
-    target_url: str, requested_org_name: str, admin_email: str = DEFAULT_TEST_ADMIN_EMAIL
+def sync_whistlebird_admin_password(
+    target_url: str, requested_org_name: str, admin_email: str = DEFAULT_ADMIN_EMAIL
 ) -> dict[str, bool]:
-    """Reset the deterministic test admin's password to match the KeePassXC entry
+    """Reset the deterministic administrator's password to match the KeePassXC entry
     `workflow-engine/whistlebird_test` -- the single source of truth for this one
     disposable account's credential from now on.
 
@@ -2233,10 +2235,10 @@ def sync_whistlebird_test_admin_password(
     account, so its password never again silently drifts out of sync with what the
     founder has actually set in KeePass.
     """
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Password sync is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Password sync is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
-    password = _keepass_password(WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY)
+    password = _keepass_password(WHISTLEBIRD_ADMIN_KEEPASS_ENTRY)
 
     from app.core.db.models.user import User
     from app.core.security.auth_service import AuthService
@@ -2249,7 +2251,7 @@ def sync_whistlebird_test_admin_password(
         with unscoped():
             user = session.query(User).filter(User.email == normalized_email).one_or_none()
         if user is None:
-            raise ValueError(f"test admin {admin_email!r} does not exist yet -- run --ensure-test-tenant first")
+            raise ValueError(f"administrator {admin_email!r} does not exist yet -- run --ensure-whistlebird-org first")
         user.password_hash = AuthService.hash_password(password)
         session.commit()
         return {"synced": True}
@@ -2263,8 +2265,8 @@ def sync_whistlebird_test_admin_password(
 
 def ensure_compliant_nz_alcohol_setup(target_url: str, requested_org_name: str) -> dict[str, bool | str]:
     """Set up the documented Compliant NZ-alcohol tier for the Whistlebird test tenant."""
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Compliant NZ-alcohol setup is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Compliant NZ-alcohol setup is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     # Importing InventoryMovement through the compliance/repository path configures its
     # relationship to InventoryWastage. The app factory imports both at startup, but
@@ -2371,12 +2373,12 @@ def build_import_verification(
     `include_replay_ngs_purchases` defaults to True because `--verify-import` (its main
     real-world caller) checks a target populated by the preferred API-replay path
     (`scripts/whistlebird_replay.py`), which buys dedicated per-batch NGS on top of the
-    sources below. `bootstrap_whistlebird_test` -- the older ORM-direct path, which never
+    sources below. `bootstrap_whistlebird` -- the older ORM-direct path, which never
     creates those purchases -- passes False so its own internal verification isn't broken
     by counting stock it doesn't produce.
     """
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Verification is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Verification is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     generic_juniper_receipts = 0
     with open_legacy(legacy_url) as source:
@@ -2584,8 +2586,8 @@ def build_import_verification(
 
 
 def build_manifest_verification(manifest_path: Path, target_url: str, requested_org_name: str) -> dict[str, Any]:
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Verification is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Verification is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
     batches, excluded = _load_manifest(manifest_path)
     expected = Counter(b.product_line for b in batches)
     with create_engine(target_url).connect() as target:
@@ -2616,7 +2618,7 @@ def build_manifest_verification(manifest_path: Path, target_url: str, requested_
 # --------------------------------------------------------------------------------------
 
 
-def bootstrap_whistlebird_test(
+def bootstrap_whistlebird(
     legacy_url: str,
     target_url: str,
     requested_org_name: str,
@@ -2630,8 +2632,8 @@ def bootstrap_whistlebird_test(
     operation is the existing exact-name reset, which preserves tenant users and rejects
     every other organisation name.
     """
-    if requested_org_name != RESET_ORG_NAME:
-        raise ValueError(f"Bootstrap is only permitted for {RESET_ORG_NAME!r}")
+    if requested_org_name != WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"Bootstrap is only permitted for {WHISTLEBIRD_ORG_NAME!r}")
 
     preflight = {
         "core": build_core_dry_run(legacy_url),
@@ -2639,7 +2641,7 @@ def bootstrap_whistlebird_test(
         "manifest": build_manifest_dry_run(manifest_path),
     }
     setup = ensure_target_org_admin(target_url, requested_org_name, admin_email, admin_password)
-    password_sync = sync_whistlebird_test_admin_password(target_url, requested_org_name, admin_email)
+    password_sync = sync_whistlebird_admin_password(target_url, requested_org_name, admin_email)
     reset = reset_target_org(target_url, requested_org_name)
     workflows = setup_product_workflows(target_url, requested_org_name)
     raw_materials = apply_raw_material_inventory(legacy_url, target_url, requested_org_name)
@@ -2682,17 +2684,17 @@ def _arguments() -> argparse.Namespace:
         default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"),
         help="Target SQLAlchemy URL (or set BIZE_MIGRATION_DATABASE_URL).",
     )
-    parser.add_argument("--org-name", default="whistlebird_test", help="Requested target tenant name.")
+    parser.add_argument("--org-name", default=WHISTLEBIRD_ORG_NAME, help="Requested target tenant name.")
     parser.add_argument("--output", type=Path, help="Optional JSON report path; stdout is always written.")
     parser.add_argument(
         "--admin-email",
-        default=DEFAULT_TEST_ADMIN_EMAIL,
-        help="Test-admin email used only by --ensure-test-tenant / --rebuild-whistlebird-test.",
+        default=DEFAULT_ADMIN_EMAIL,
+        help="Test-admin email used only by --ensure-whistlebird-org / --rebuild-whistlebird-ltd.",
     )
     parser.add_argument(
         "--admin-password-env",
-        default="WHISTLEBIRD_TEST_ADMIN_PASSWORD",
-        help="Environment-variable name holding the test-admin password (never printed).",
+        default="WHISTLEBIRD_ADMIN_PASSWORD",
+        help="Environment-variable name holding the admin password (never printed).",
     )
     parser.add_argument(
         "--sheet-manifest",
@@ -2700,27 +2702,29 @@ def _arguments() -> argparse.Namespace:
         help="Path to the curated per-batch production manifest JSON (docs/whistlebird-production-sheet-source.json).",
     )
     parser.add_argument(
-        "--ensure-test-tenant",
+        "--ensure-whistlebird-org",
         action="store_true",
-        help="Create only whistlebird_test and its deterministic test-admin account if absent.",
+        help="Create only Whistlebird Ltd and its deterministic admin account if absent.",
     )
     parser.add_argument(
-        "--rebuild-whistlebird-test",
+        "--rebuild-whistlebird-ltd",
+        dest="rebuild_whistlebird",
         action="store_true",
-        help="Preflight, create whistlebird_test if needed, reset its data, replay the full load, "
+        help="Preflight, create Whistlebird Ltd if needed, reset its data, replay the full load, "
         "and require matching verification.",
     )
     parser.add_argument(
-        "--confirm-reset-whistlebird-test",
+        "--confirm-reset-whistlebird-ltd",
+        dest="confirm_reset_whistlebird",
         action="store_true",
-        help="Delete loaded data only for the whistlebird_test tenant; preserves its users.",
+        help="Delete loaded data only for the Whistlebird Ltd tenant; preserves its users.",
     )
     parser.add_argument(
-        "--sync-test-admin-password",
+        "--sync-admin-password",
         action="store_true",
-        help="Reset the deterministic test admin's password to match the KeePassXC entry "
-        f"{WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY!r} (also runs automatically as part of "
-        "--rebuild-whistlebird-test).",
+        help="Reset the deterministic administrator's password to match the KeePassXC entry "
+        f"{WHISTLEBIRD_ADMIN_KEEPASS_ENTRY!r} (also runs automatically as part of "
+        "--rebuild-whistlebird-ltd).",
     )
     parser.add_argument(
         "--dry-run-core",
@@ -2745,32 +2749,32 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument(
         "--setup-workflows",
         action="store_true",
-        help="Create the per-product and trial workflows only for whistlebird_test.",
+        help="Create the per-product and trial workflows only for Whistlebird Ltd.",
     )
     parser.add_argument(
         "--setup-compliant-nz-alcohol",
         action="store_true",
-        help="Enable the required NZ-alcohol Compliant profile for whistlebird_test.",
+        help="Enable the required NZ-alcohol Compliant profile for Whistlebird Ltd.",
     )
     parser.add_argument(
         "--apply-raw-materials",
         action="store_true",
-        help="Load prior-database purchases as dated inventory only into whistlebird_test.",
+        help="Load prior-database purchases as dated inventory only into Whistlebird Ltd.",
     )
     parser.add_argument(
         "--apply-batches",
         action="store_true",
-        help="Build one multi-step execution per VAT batch into whistlebird_test.",
+        help="Build one multi-step execution per VAT batch into Whistlebird Ltd.",
     )
     parser.add_argument(
         "--apply-trials",
         action="store_true",
-        help="Load recipe/distillation trials into whistlebird_test.",
+        help="Load recipe/distillation trials into Whistlebird Ltd.",
     )
     parser.add_argument(
         "--apply-customs-lodgements",
         action="store_true",
-        help="Load Customs lodgements as NZ-alcohol compliance records into whistlebird_test.",
+        help="Load Customs lodgements as NZ-alcohol compliance records into Whistlebird Ltd.",
     )
     parser.add_argument(
         "--verify-import",
@@ -2787,10 +2791,10 @@ def _arguments() -> argparse.Namespace:
     if not arguments.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
     actions = (
-        arguments.ensure_test_tenant,
-        arguments.rebuild_whistlebird_test,
-        arguments.confirm_reset_whistlebird_test,
-        arguments.sync_test_admin_password,
+        arguments.ensure_whistlebird_org,
+        arguments.rebuild_whistlebird,
+        arguments.confirm_reset_whistlebird,
+        arguments.sync_admin_password,
         arguments.dry_run_core,
         arguments.dry_run_traceability,
         arguments.dry_run_production,
@@ -2807,10 +2811,10 @@ def _arguments() -> argparse.Namespace:
     if sum(bool(a) for a in actions) > 1:
         parser.error("Specify only one action per invocation")
     target_scoped = (
-        arguments.ensure_test_tenant,
-        arguments.rebuild_whistlebird_test,
-        arguments.confirm_reset_whistlebird_test,
-        arguments.sync_test_admin_password,
+        arguments.ensure_whistlebird_org,
+        arguments.rebuild_whistlebird,
+        arguments.confirm_reset_whistlebird,
+        arguments.sync_admin_password,
         arguments.setup_workflows,
         arguments.setup_compliant_nz_alcohol,
         arguments.apply_raw_materials,
@@ -2820,23 +2824,23 @@ def _arguments() -> argparse.Namespace:
         arguments.verify_import,
         arguments.verify_manifest,
     )
-    if any(target_scoped) and arguments.org_name != RESET_ORG_NAME:
-        parser.error(f"--org-name must be exactly {RESET_ORG_NAME!r} for this action")
+    if any(target_scoped) and arguments.org_name != WHISTLEBIRD_ORG_NAME:
+        parser.error(f"--org-name must be exactly {WHISTLEBIRD_ORG_NAME!r} for this action")
     arguments.admin_password = os.environ.get(arguments.admin_password_env)
-    if (arguments.ensure_test_tenant or arguments.rebuild_whistlebird_test) and not arguments.admin_password:
-        # Falls back to the same KeePassXC entry the deterministic test admin's password
-        # is kept in sync with (sync_whistlebird_test_admin_password) -- the env var
+    if (arguments.ensure_whistlebird_org or arguments.rebuild_whistlebird) and not arguments.admin_password:
+        # Falls back to the same KeePassXC entry the deterministic administrator's password
+        # is kept in sync with (sync_whistlebird_admin_password) -- the env var
         # remains a valid override (e.g. CI), it's just no longer required for local use.
         try:
-            arguments.admin_password = _keepass_password(WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY)
+            arguments.admin_password = _keepass_password(WHISTLEBIRD_ADMIN_KEEPASS_ENTRY)
         except ValueError as e:
             parser.error(f"{arguments.admin_password_env} is not set and KeePassXC fallback failed: {e}")
     if not arguments.sheet_manifest and (
-        arguments.rebuild_whistlebird_test or arguments.dry_run_manifest or arguments.verify_manifest
+        arguments.rebuild_whistlebird or arguments.dry_run_manifest or arguments.verify_manifest
     ):
         arguments.sheet_manifest = DEFAULT_PRODUCTION_MANIFEST
     needs_legacy = (
-        arguments.rebuild_whistlebird_test
+        arguments.rebuild_whistlebird
         or arguments.dry_run_core
         or arguments.dry_run_traceability
         or arguments.dry_run_production
@@ -2855,8 +2859,8 @@ def _arguments() -> argparse.Namespace:
 def main() -> int:
     arguments = _arguments()
     manifest = arguments.sheet_manifest or DEFAULT_PRODUCTION_MANIFEST
-    if arguments.rebuild_whistlebird_test:
-        report = bootstrap_whistlebird_test(
+    if arguments.rebuild_whistlebird:
+        report = bootstrap_whistlebird(
             arguments.legacy_url,
             arguments.target_url,
             arguments.org_name,
@@ -2864,14 +2868,14 @@ def main() -> int:
             arguments.admin_password,
             arguments.sheet_manifest,
         )
-    elif arguments.ensure_test_tenant:
+    elif arguments.ensure_whistlebird_org:
         report = ensure_target_org_admin(
             arguments.target_url, arguments.org_name, arguments.admin_email, arguments.admin_password
         )
-    elif arguments.confirm_reset_whistlebird_test:
+    elif arguments.confirm_reset_whistlebird:
         report = reset_target_org(arguments.target_url, arguments.org_name)
-    elif arguments.sync_test_admin_password:
-        report = sync_whistlebird_test_admin_password(arguments.target_url, arguments.org_name, arguments.admin_email)
+    elif arguments.sync_admin_password:
+        report = sync_whistlebird_admin_password(arguments.target_url, arguments.org_name, arguments.admin_email)
     elif arguments.setup_workflows:
         report = setup_product_workflows(arguments.target_url, arguments.org_name)
     elif arguments.setup_compliant_nz_alcohol:

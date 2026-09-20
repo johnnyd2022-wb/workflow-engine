@@ -1,6 +1,6 @@
 # Whistlebird API-replay framework — execution plan
 
-Working doc for building a replayable, API-driven loader for `whistlebird_test`, per
+Working doc for building a replayable, API-driven loader for `Whistlebird Ltd`, per
 Johnny's direction on 2026-09-14. This file is the durable source of truth for this
 build across however many sessions it takes — update the checklist as work lands, don't
 just report progress in chat.
@@ -26,7 +26,7 @@ layer and manually stamps `date_confidence`/`timestamp_policy` markers into
    never something exposed to the live app.
 3. **No "derived" language anywhere in the loaded data.** `date_confidence`,
    `timestamp_policy: derived_noon_pacific_auckland`, and similar internal-curation
-   markers must not appear in anything written to `whistlebird_test` going forward. The
+   markers must not appear in anything written to `Whistlebird Ltd` going forward. The
    curation trail (how we know a date is right) stays in `docs/whistlebird-import-*.md`
    and the JSON manifests — never in `execution_data`/`extra_data` on a live row. This
    is a record of truth, not a migration-tracking artifact.
@@ -487,8 +487,8 @@ not mistaken for verified evidence.
 
 **Not yet exercised end to end.** Verified by tests against the real routes and DB on a
 throwaway org (replay, dating, snapshot round-trip, delete-and-replay reproduces the
-evidence) and a read-only smoke test of the CLI against `whistlebird_test`. The full
-`scripts/whistlebird_rebuild_api.py` run against `whistlebird_test` has NOT been done --
+evidence) and a read-only smoke test of the CLI against `Whistlebird Ltd`. The full
+`scripts/whistlebird_rebuild_api.py` run against `Whistlebird Ltd` has NOT been done --
 rehearse it (snapshot, commit, rebuild, confirm `--verify-import` is clean) well before
 relying on it.
 
@@ -552,7 +552,7 @@ clone the repository, start the app, run `scripts/whistlebird_rebuild_api.py`.
   `--rebuild-whistlebird-test`) runs aggregate SQL and `SHOW TimeZone` against the live
   database and still needs `WB_LEGACY_DATABASE_URL`.
 - **Still outside version control by design.** The admin password (KeePassXC entry
-  `workflow-engine/whistlebird_test`) and the app's own Xero/PostHog credentials.
+  `workflow-engine/Whistlebird Ltd`) and the app's own Xero/PostHog credentials.
 
 ## Expired ingredients: none used, expired stock written off, 2026-09-19
 
@@ -591,7 +591,7 @@ came after the lot had expired** (up to 739 days), and 12 expired lots still hel
 
 ## Real pack sizes, not per-batch sizes, 2026-09-19
 
-The `whistlebird_test` source-map trace showed each botanical as dozens of tiny lots -- Sumac as 54 lots of
+The `Whistlebird Ltd` source-map trace showed each botanical as dozens of tiny lots -- Sumac as 54 lots of
 at most 7.2 g -- instead of the bag actually bought. Two causes: the manifest held a `resolved_by_context`
 purchase per (batch, ingredient), sized to exactly that batch's use and *pinned* to it (`consumed_by`, and
 reserved from the FIFO fallback), so one lot traced to exactly one batch; and an intermediate replay

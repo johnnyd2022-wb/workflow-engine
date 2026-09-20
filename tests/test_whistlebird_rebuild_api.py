@@ -30,13 +30,13 @@ def steps(monkeypatch, tmp_path):
 
     manifest = tmp_path / "np3.json"
     manifest.write_text(json.dumps({"profile": None, "staff": [], "attestations": [], "logs": []}))
-    monkeypatch.setenv("WHISTLEBIRD_TEST_ADMIN_PASSWORD", "not-a-real-password")
+    monkeypatch.setenv("WHISTLEBIRD_ADMIN_PASSWORD", "not-a-real-password")
     monkeypatch.setattr(rebuild_api, "server_reachable", lambda *_a, **_k: None)
     # The real plan check runs the whole replay allocation in memory; it has its own tests below.
     monkeypatch.setattr(rebuild_api, "check_replay_plan", lambda *_a, **_k: [])
     monkeypatch.setattr(np3, "np3_unsnapshotted", lambda *_a, **_k: [])
     monkeypatch.setattr(wm, "ensure_target_org_admin", record("tenant"))
-    monkeypatch.setattr(wm, "sync_whistlebird_test_admin_password", record("password"))
+    monkeypatch.setattr(wm, "sync_whistlebird_admin_password", record("password"))
     monkeypatch.setattr(wm, "reset_target_org", record("reset"))
     monkeypatch.setattr(wm, "setup_product_workflows", record("workflows"))
     monkeypatch.setattr(wm, "ensure_compliant_nz_alcohol_setup", record("compliant"))
@@ -66,7 +66,7 @@ def test_without_the_confirm_flag_nothing_runs(steps):
 
 
 def test_confirmed_rebuild_runs_the_documented_path_in_order(steps):
-    rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-test"))
+    rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-ltd"))
 
     assert steps["called"] == [
         "tenant",
@@ -86,7 +86,7 @@ def test_unsnapshotted_np3_evidence_blocks_the_reset(steps, monkeypatch):
     monkeypatch.setattr(np3, "np3_unsnapshotted", lambda *_a, **_k: ["staff-competency: attestation not in manifest"])
 
     with pytest.raises(rebuild_api.RebuildRefusedError, match="would delete NP3 evidence"):
-        rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-test"))
+        rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-ltd"))
 
     assert steps["called"] == []
 
@@ -94,7 +94,7 @@ def test_unsnapshotted_np3_evidence_blocks_the_reset(steps, monkeypatch):
 def test_discarding_unsnapshotted_evidence_must_be_explicit(steps, monkeypatch):
     monkeypatch.setattr(np3, "np3_unsnapshotted", lambda *_a, **_k: ["staff-competency: attestation not in manifest"])
 
-    rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-test", "--discard-unsnapshotted-np3"))
+    rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-ltd", "--discard-unsnapshotted-np3"))
 
     assert "reset" in steps["called"]
 
@@ -103,7 +103,7 @@ def test_invalid_manifest_blocks_the_reset(steps):
     steps["manifest"].write_text(json.dumps({"attestations": [{"control_id": "nope"}]}))
 
     with pytest.raises(rebuild_api.RebuildRefusedError, match="NP3 manifest invalid"):
-        rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-test"))
+        rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-ltd"))
 
     assert steps["called"] == []
 
@@ -112,7 +112,7 @@ def test_unreachable_app_blocks_the_reset(steps, monkeypatch):
     monkeypatch.setattr(rebuild_api, "server_reachable", lambda *_a, **_k: "app not reachable")
 
     with pytest.raises(rebuild_api.RebuildRefusedError, match="app not reachable"):
-        rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-test"))
+        rebuild_api.rebuild(_args(steps, "--confirm-reset-whistlebird-ltd"))
 
     assert steps["called"] == []
 
@@ -134,7 +134,7 @@ def test_unusable_legacy_snapshot_blocks_the_reset(steps, tmp_path):
     broken.write_text('{"version": 1, "tables": {}}')
 
     with pytest.raises(rebuild_api.RebuildRefusedError, match="legacy source unusable"):
-        rebuild_api.rebuild(_args(steps, f"--legacy-source={broken}", "--confirm-reset-whistlebird-test"))
+        rebuild_api.rebuild(_args(steps, f"--legacy-source={broken}", "--confirm-reset-whistlebird-ltd"))
 
     assert steps["called"] == [], "a bad source must be found before anything destructive runs"
 
@@ -146,7 +146,7 @@ def test_unreachable_legacy_database_blocks_the_reset(steps, monkeypatch):
     monkeypatch.setattr(legacy, "open_legacy", _refuse)
 
     with pytest.raises(rebuild_api.RebuildRefusedError, match="legacy source unusable"):
-        rebuild_api.rebuild(_args(steps, "--legacy-url=postgresql://nowhere/db", "--confirm-reset-whistlebird-test"))
+        rebuild_api.rebuild(_args(steps, "--legacy-url=postgresql://nowhere/db", "--confirm-reset-whistlebird-ltd"))
 
     assert steps["called"] == []
 
@@ -163,7 +163,7 @@ def test_a_stale_disposals_manifest_blocks_the_reset_before_anything_is_deleted(
     monkeypatch.setattr(rebuild_api, "check_replay_plan", _REAL_CHECK_REPLAY_PLAN)
 
     with pytest.raises(rebuild_api.RebuildRefusedError, match="would hold"):
-        rebuild_api.rebuild(_args(steps, f"--disposals-manifest={path}", "--confirm-reset-whistlebird-test"))
+        rebuild_api.rebuild(_args(steps, f"--disposals-manifest={path}", "--confirm-reset-whistlebird-ltd"))
 
     assert steps["called"] == [], "found in preflight, not after the tenant has been wiped"
 
@@ -175,6 +175,6 @@ def test_a_malformed_curated_manifest_blocks_the_reset(steps, monkeypatch, tmp_p
     monkeypatch.setattr(rebuild_api, "check_replay_plan", _REAL_CHECK_REPLAY_PLAN)
 
     with pytest.raises(rebuild_api.RebuildRefusedError, match="manifest invalid"):
-        rebuild_api.rebuild(_args(steps, f"{flag}={path}", "--confirm-reset-whistlebird-test"))
+        rebuild_api.rebuild(_args(steps, f"{flag}={path}", "--confirm-reset-whistlebird-ltd"))
 
     assert steps["called"] == []
