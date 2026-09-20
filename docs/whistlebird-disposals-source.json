@@ -82,12 +82,36 @@
       "reason": "Expired 2025-02-01"
     },
     {
+      "lot": "raw-manifest-DAS020",
+      "ingredient": "Dried apple ring",
+      "quantity": 352,
+      "unit": "g",
+      "date": "2025-03-03",
+      "reason": "Expired 2025-03-03"
+    },
+    {
+      "lot": "raw-manifest-GNS-2023-04-24-1",
+      "ingredient": "Neutral grain spirit",
+      "quantity": 2,
+      "unit": "L",
+      "date": "2025-04-23",
+      "reason": "Expired 2025-04-23"
+    },
+    {
       "lot": "raw-legacy-purchases_ingredients-32",
       "ingredient": "Coriander seeds",
       "quantity": 179.2,
       "unit": "g",
       "date": "2025-05-24",
       "reason": "Expired 2025-05-24"
+    },
+    {
+      "lot": "raw-manifest-GNS-2023-06-08-2",
+      "ingredient": "Neutral grain spirit",
+      "quantity": 10,
+      "unit": "L",
+      "date": "2025-06-07",
+      "reason": "Expired 2025-06-07"
     },
     {
       "lot": "raw-legacy-purchases_ingredients-31",
@@ -114,6 +138,14 @@
       "reason": "Expired 2025-07-29"
     },
     {
+      "lot": "raw-manifest-GNS-2023-08-04-3",
+      "ingredient": "Neutral grain spirit",
+      "quantity": 20,
+      "unit": "L",
+      "date": "2025-08-03",
+      "reason": "Expired 2025-08-03"
+    },
+    {
       "lot": "raw-legacy-purchases_ingredients-42",
       "ingredient": "Coriander seeds",
       "quantity": 456.8,
@@ -132,7 +164,7 @@
     {
       "lot": "raw-legacy-purchases_ingredients-48",
       "ingredient": "Dried apple ring",
-      "quantity": 1000,
+      "quantity": 676,
       "unit": "g",
       "date": "2025-11-15",
       "reason": "Expired 2025-11-15"
@@ -144,6 +176,14 @@
       "unit": "g",
       "date": "2026-01-01",
       "reason": "Expired 2026-01-01"
+    },
+    {
+      "lot": "raw-manifest-GNS-2024-01-22-4",
+      "ingredient": "Neutral grain spirit",
+      "quantity": 200,
+      "unit": "L",
+      "date": "2026-01-21",
+      "reason": "Expired 2026-01-21"
     },
     {
       "lot": "raw-legacy-purchases_ingredients-30",
@@ -186,12 +226,36 @@
       "reason": "Expired 2026-04-20"
     },
     {
+      "lot": "raw-manifest-GNS-2024-06-16-5",
+      "ingredient": "Neutral grain spirit",
+      "quantity": 100,
+      "unit": "L",
+      "date": "2026-06-16",
+      "reason": "Expired 2026-06-16"
+    },
+    {
       "lot": "raw-manifest-SBG003",
       "ingredient": "Sumac berries - ground",
       "quantity": 435.2,
       "unit": "g",
       "date": "2026-06-19",
       "reason": "Expired 2026-06-19"
+    },
+    {
+      "lot": "raw-manifest-CIN002",
+      "ingredient": "Cinnamon",
+      "quantity": 0.12,
+      "unit": "g",
+      "date": "2026-08-10",
+      "reason": "Expired 2026-08-10"
+    },
+    {
+      "lot": "raw-manifest-GNS-2024-08-19-6",
+      "ingredient": "Neutral grain spirit",
+      "quantity": 100,
+      "unit": "L",
+      "date": "2026-08-19",
+      "reason": "Expired 2026-08-19"
     },
     {
       "lot": "raw-legacy-purchases_ingredients-53",

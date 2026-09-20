@@ -21,6 +21,7 @@ from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, Execut
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
+from app.core.db.models.organisation import Organisation
 from app.core.db.models.step import Step
 from app.core.db.models.user import User
 from app.features.compliant.models import AlcoholProductProfile, ComplianceProfile, ComplianceRecord, ComplianceReport
@@ -846,6 +847,8 @@ class ComplianceService:
         )
         return _iso(
             {
+                "org_name": self.session.query(Organisation.name).filter(Organisation.id == org_id).scalar()
+                or "Organisation",
                 "verification": {
                     "date": settings.get("np3_verification_date"),
                     "verifier": settings.get("np3_verifier_name"),

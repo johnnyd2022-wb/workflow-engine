@@ -143,7 +143,9 @@ def _ngs_purchase_event(
         "date": (governing_date - timedelta(days=3)).isoformat(),
         "supplier": "Southern Grain Spirits",
         "supplier_batch_number": None,
-        "expiry_date": None,
+        "expiry_date": wm.replay_expiry_date(
+            "Neutral grain spirit", governing_date - timedelta(days=3)
+        ).isoformat(),
     }
     return _purchase_event(record)
 
@@ -382,7 +384,11 @@ def manifest_ngs_receipts(raw_records: list[dict[str, Any]]) -> list[wm.RawMater
             unit=record["unit"],
             supplier=record.get("supplier"),
             supplier_batch_number=record.get("supplier_batch_number"),
-            expiry_date=None,
+            expiry_date=(
+                date.fromisoformat(record["expiry_date"])
+                if record.get("expiry_date")
+                else wm.replay_expiry_date("Neutral grain spirit", date.fromisoformat(record["date"]))
+            ),
             extra_data={},
         )
         for record in raw_records

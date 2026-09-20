@@ -26,7 +26,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -108,6 +108,40 @@ RESET_TABLES = (
 )
 RESET_ORG_NAME = "whistlebird_test"
 DEFAULT_TEST_ADMIN_EMAIL = "whistlebird_test_admin@whistlebird.test"
+
+# These are the repeatable shelf-life assumptions used only where the historic
+# purchase register did not retain an expiry.  The curated raw-material manifest
+# carries an explicit expiry for every one of its receipts; this map covers the
+# three legacy-only receipt types and protects an import from a live legacy source
+# that still has a blank expiry field.
+_REPLAY_SHELF_LIFE_DAYS = {
+    "Neutral grain spirit": 730,
+    "Empty bottles (700 mL)": 3650,
+    "Premix dilution solution": 730,
+    "Cardamom pods": 730,
+    "Cinnamon": 365,
+    "Dried apple ring": 365,
+    "Dried mango slices": 365,
+    "Elderflower": 730,
+    "Green tea": 730,
+    "Juniper Berries (Himalayan)": 730,
+    "Juniper Berries (Macedonian)": 1095,
+    "Lemon myrtle": 730,
+    "Liquorice root": 730,
+    "Orange peel - dried": 730,
+    "Orris root": 1095,
+    "Persian black lime": 730,
+    "Szechuan pepper": 730,
+    "Whole nutmeg (organic)": 730,
+}
+
+
+def replay_expiry_date(name: str, received_on: date) -> date:
+    """Return the documented fallback expiry for a receipt missing one."""
+    try:
+        return received_on + timedelta(days=_REPLAY_SHELF_LIFE_DAYS[name])
+    except KeyError as exc:
+        raise ValueError(f"No replay expiry policy is defined for {name!r}") from exc
 WHISTLEBIRD_TEST_ADMIN_KEEPASS_ENTRY = "workflow-engine/whistlebird_test"
 DEFAULT_PRODUCTION_MANIFEST = Path(__file__).parents[1] / "docs" / "whistlebird-production-sheet-source.json"
 WHISTLEBIRD_NZ_ALCOHOL_SETTINGS = {
@@ -678,7 +712,7 @@ def _raw_material_records(connection: Connection | LegacySnapshot) -> Iterator[R
             unit="L",
             supplier=_optional_text(row["supplier"]),
             supplier_batch_number=f"GNS-{source_date.isoformat()}-{source_id}",
-            expiry_date=None,
+            expiry_date=replay_expiry_date("Neutral grain spirit", source_date),
             extra_data={"gns_abv_percent": str(row["abv"] or "")},
         )
 
@@ -697,7 +731,7 @@ def _raw_material_records(connection: Connection | LegacySnapshot) -> Iterator[R
             unit="units",
             supplier=_optional_text(row["supplier"]),
             supplier_batch_number=f"BOTTLES-{source_date.isoformat()}-{source_id}",
-            expiry_date=None,
+            expiry_date=replay_expiry_date(f"Empty bottles ({_decimal_label(bottle_size)} mL)", source_date),
             extra_data={"bottle_size_ml": str(bottle_size)},
         )
 
@@ -720,7 +754,7 @@ def _raw_material_records(connection: Connection | LegacySnapshot) -> Iterator[R
             supplier=_optional_text(row["supplier"]),
             supplier_batch_number=_optional_text(row["ingredients_code"])
             or f"ING-{source_date.isoformat()}-{source_id}",
-            expiry_date=expiry_date,
+            expiry_date=expiry_date or replay_expiry_date(ingredient_name, source_date),
             extra_data={"ingredient_code": _optional_text(row["ingredients_code"]) or ""},
         )
 
@@ -736,7 +770,7 @@ def _raw_material_records(connection: Connection | LegacySnapshot) -> Iterator[R
             unit="L",
             supplier=None,
             supplier_batch_number=f"PREMIX-{_optional_text(row['container_id']) or source_id}",
-            expiry_date=None,
+            expiry_date=replay_expiry_date("Premix dilution solution", source_date),
             extra_data={
                 "container_id": _optional_text(row["container_id"]) or "",
                 "abv_percent": str(row["alcohol_abv"] or ""),
