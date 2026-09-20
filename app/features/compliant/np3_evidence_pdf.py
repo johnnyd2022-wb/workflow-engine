@@ -7,7 +7,7 @@ active session), and preserves the same category/check order as the NP3 workspac
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from html import escape
 from io import BytesIO
 from typing import Any
@@ -34,6 +34,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             fontSize=25,
             leading=31,
             textColor=colors.HexColor("#123f3a"),
+            alignment=TA_CENTER,
         ),
         "subtitle": ParagraphStyle(
             "NP3RegisterSubtitle",
@@ -97,6 +98,21 @@ def _styles() -> dict[str, ParagraphStyle]:
             textColor=colors.HexColor("#5d6778"),
             spaceAfter=4,
         ),
+        "table": ParagraphStyle(
+            "NP3RegisterTable",
+            parent=styles["Normal"],
+            fontSize=7.3,
+            leading=9,
+            textColor=colors.HexColor("#27364a"),
+        ),
+        "table_header": ParagraphStyle(
+            "NP3RegisterTableHeader",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=7.3,
+            leading=9,
+            textColor=colors.HexColor("#123f3a"),
+        ),
     }
 
 
@@ -115,7 +131,7 @@ def _header_footer(canvas, document) -> None:
     canvas.line(18 * mm, 13 * mm, _PAGE_WIDTH - 18 * mm, 13 * mm)
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(colors.HexColor("#5d6778"))
-    canvas.drawString(18 * mm, 8.5 * mm, "NP3 evidence register")
+    canvas.drawString(18 * mm, 8.5 * mm, "NP3 register")
     canvas.drawRightString(_PAGE_WIDTH - 18 * mm, 8.5 * mm, f"Page {document.page}")
     canvas.restoreState()
 
@@ -129,7 +145,7 @@ def _segment_with_footer(story: list[Any], page_offset: int = 0) -> bytes:
         rightMargin=18 * mm,
         topMargin=18 * mm,
         bottomMargin=18 * mm,
-        title="NP3 evidence register",
+        title="NP3 register",
         author="Workflow Engine",
     )
     def numbered_footer(canvas, doc) -> None:
@@ -148,42 +164,112 @@ def _append_document(writer: PdfWriter, story: list[Any]) -> None:
     writer.append(BytesIO(_segment_with_footer(story, len(writer.pages))))
 
 
+def _date_only(value: Any) -> str:
+    """Render a log date without exposing an irrelevant submission timestamp."""
+    if isinstance(value, (date, datetime)):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).date().isoformat()
+        except ValueError:
+            try:
+                return date.fromisoformat(value).isoformat()
+            except ValueError:
+                return value
+    return "Not recorded"
+
+
+def _table_cell(value: Any, styles: dict[str, ParagraphStyle], *, header: bool = False) -> Paragraph:
+    return Paragraph(_text(value), styles["table_header" if header else "table"])
+
+
+def _log_table(
+    story: list[Any], headers: list[str], records: list[list[Any]], widths: list[float], styles: dict[str, ParagraphStyle]
+) -> None:
+    data = [[_table_cell(header, styles, header=True) for header in headers]]
+    data.extend([_table_cell(value, styles) for value in record] for record in records)
+    table = Table(data, colWidths=widths, repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f1ef")),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#c9d8d5")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(table)
+
+
+def _employee_log_answers(story: list[Any], row: dict[str, Any], styles: dict[str, ParagraphStyle]) -> bool:
+    """Render roster log records using the employee selected in the evidence itself."""
+    control_id = row.get("control_id")
+    if control_id not in {"staff-competency", "health-and-sickness"}:
+        return False
+    entries = row.get("log_entries") or []
+    if not entries:
+        story.append(Paragraph("No employee log entries have been recorded for this check yet.", styles["muted"]))
+        return True
+
+    if control_id == "staff-competency":
+        grouped: dict[tuple[str, str], dict[str, list[str]]] = {}
+        for entry in entries:
+            fields = entry.get("fields") or {}
+            employee = entry.get("employee_name") or "Not recorded"
+            event_date = _date_only(fields.get("event_date"))
+            group = grouped.setdefault(
+                (employee, event_date), {"topics": [], "results": [], "notes": []}
+            )
+            for key, target in (("training_topic", "topics"), ("competency_result", "results"), ("review_notes", "notes")):
+                value = fields.get(key)
+                if value and str(value) not in group[target]:
+                    group[target].append(str(value))
+        records = [
+            [employee, event_date, "; ".join(values["topics"]) or "Not recorded", "; ".join(values["results"]) or "Not recorded", "; ".join(values["notes"])]
+            for (employee, event_date), values in grouped.items()
+        ]
+        _log_table(
+            story,
+            ["Employee", "Date", "Training / task", "Competency", "Notes"],
+            records,
+            [28 * mm, 20 * mm, 57 * mm, 32 * mm, 33 * mm],
+            styles,
+        )
+        return True
+
+    records = []
+    for entry in entries:
+        fields = entry.get("fields") or {}
+        records.append(
+            [
+                entry.get("employee_name") or "Not recorded",
+                _date_only(fields.get("event_date")),
+                fields.get("food_safety_decision") or "Not recorded",
+                _date_only(fields.get("return_review_date")) if fields.get("return_review_date") else "Not recorded",
+                fields.get("manager_notes") or "",
+            ]
+        )
+    _log_table(
+        story,
+        ["Employee", "Date", "Decision", "Return review", "Notes"],
+        records,
+        [30 * mm, 20 * mm, 43 * mm, 42 * mm, 35 * mm],
+        styles,
+    )
+    return True
+
+
 def _answers(story: list[Any], row: dict[str, Any], styles: dict[str, ParagraphStyle]) -> None:
     history = row.get("history") or []
     story.append(Paragraph("Recorded answers", styles["label"]))
+    if _employee_log_answers(story, row, styles):
+        return
     if not history:
         story.append(Paragraph("No user response has been recorded for this check yet.", styles["muted"]))
-        return
-    if row.get("control_id") == "staff-competency":
-        data = [["Employee", "Date", "Training / task", "Competency", "Notes"]]
-        for event in history:
-            fields = event.get("evidence_fields") or {}
-            data.append(
-                [
-                    event.get("employee_name") or fields.get("employee_name") or fields.get("employee_email") or "Not recorded",
-                    fields.get("event_date") or event.get("created_at") or "Not recorded",
-                    fields.get("training_topic") or "Not recorded",
-                    fields.get("competency_result") or "Not recorded",
-                    fields.get("review_notes") or "",
-                ]
-            )
-        table = Table(data, colWidths=[30 * mm, 25 * mm, 43 * mm, 35 * mm, 37 * mm], repeatRows=1)
-        table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f1ef")),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#123f3a")),
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-                    ("LEADING", (0, 0), (-1, -1), 9),
-                    ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#c9d8d5")),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("TOPPADDING", (0, 0), (-1, -1), 4),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ]
-            )
-        )
-        story.append(table)
         return
     for event in history:
         title = event.get("title") or "Recorded response"
@@ -247,15 +333,14 @@ def build_np3_evidence_register_pdf(audit: dict[str, Any], uploaded_evidence: li
     cover = [
         Paragraph("● biz-e", styles["brand"]),
         Paragraph("Production control for manufacturing teams", styles["muted"]),
-        Spacer(1, 34 * mm),
-        Paragraph("NP3 evidence register", styles["title"]),
+        Spacer(1, 82 * mm),
+        Paragraph("NP3 register", styles["title"]),
         Spacer(1, 6 * mm),
         Paragraph("Verification evidence, answers and supporting files", styles["subtitle"]),
         Spacer(1, 18 * mm),
         Paragraph(_text(f"Prepared {datetime.now(UTC).strftime('%d %B %Y, %H:%M UTC')}"), styles["subtitle"]),
+        Paragraph(_text(f"Organisation: {audit.get('org_name') or 'Not recorded'}"), styles["subtitle"]),
         Paragraph(_text(f"Verification date: {verification.get('date') or 'Not set'}"), styles["subtitle"]),
-        Paragraph(_text(f"Verifier: {verification.get('verifier') or 'Not recorded'}"), styles["subtitle"]),
-        Paragraph(_text(f"Location: {verification.get('location') or 'Not recorded'}"), styles["subtitle"]),
     ]
     _append_document(writer, cover)
 
@@ -270,6 +355,7 @@ def build_np3_evidence_register_pdf(audit: dict[str, Any], uploaded_evidence: li
         _paragraph(story, f"Current status: {str(row.get('state') or '').title()}", styles["muted"])
         _answers(story, row, styles)
         _core_evidence(story, row, styles)
+        story.append(Spacer(1, 6 * mm))
         if row.get("control_id") == _DOCUMENTATION_CONTROL:
             for evidence in uploaded_evidence:
                 mime_type = (evidence.get("mime_type") or "").lower()

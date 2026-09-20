@@ -1809,6 +1809,14 @@
      and then see every linked customer sale without reading a graph. */
   function smRenderRecall(wrap, root, groups, sales) {
     wrap.innerHTML = '';
+    // Import and correlation fields are useful to the importer, but do not
+    // identify a physical lot to a customer or auditor. Keep them out of the
+    // recall view rather than exposing internal implementation identifiers.
+    const internalMetadataKeys = new Set([
+      'inventory_audit_history', 'execution_trace', 'variable_inputs', 'variable_output',
+      'import_ref', 'producing_process_id', 'trade_id',
+      'supplier_batch_number_disambiguated',
+    ]);
     const metadata = [
       ['Supplier batch', root.supplier_batch_number],
       ['Internal batch', root.batch_id || (root.extra_data || {}).batch_number],
@@ -1816,7 +1824,7 @@
       ['Expiry', root.expiry_date ? smFmtDate(root.expiry_date) : null],
     ];
     Object.entries(root.extra_data || {}).forEach(([key, value]) => {
-      if (['inventory_audit_history', 'execution_trace', 'variable_inputs', 'variable_output'].includes(key)) return;
+      if (internalMetadataKeys.has(key)) return;
       if (value != null && typeof value !== 'object') metadata.push([key.replace(/_/g, ' '), String(value)]);
     });
     const meta = document.createElement('section');
