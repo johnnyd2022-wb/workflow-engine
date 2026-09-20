@@ -213,7 +213,7 @@ def test_replay_converts_the_documented_vat53_draw_into_green_gold(monkeypatch):
     record = wm.GreenGoldRecord(
         source_vat=53,
         source_date=date(2026, 7, 31),
-        source_quantity_l=Decimal("35.875"),
+        source_quantity_l=Decimal("41"),
         bottles=Decimal("126"),
         bottle_size_ml=Decimal("500"),
         batch_label="GG01",
@@ -245,7 +245,7 @@ def test_replay_converts_the_documented_vat53_draw_into_green_gold(monkeypatch):
     assert replay._execute_complete_step(client, GreenGoldStore(), event) is True
     payload = client.calls[0][1]
     assert payload["actual_inputs"] == [
-        {"inventory_item_id": "vat53-aged", "name": "Aged Gin", "quantity": "35.875", "unit": "L"}
+        {"inventory_item_id": "vat53-aged", "name": "Aged Gin", "quantity": "41", "unit": "L"}
     ]
     assert payload["actual_outputs"] == [{"name": "Green Gold - final product", "quantity": "126", "unit": "units"}]
     assert payload["execution_data"]["source_vat"] == 53

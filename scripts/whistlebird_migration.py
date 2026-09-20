@@ -31,11 +31,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.orm import sessionmaker
 from whistlebird_legacy import LegacySnapshot, legacy_rows, open_legacy
+from zoneinfo import ZoneInfo
 
 IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]*$")
 LEGACY_TABLES = (
@@ -358,7 +358,7 @@ _GREEN_GOLD_STEPS = (
         "Bottle the documented Green Gold diversion from aged Wildflower",
         "Green Gold - final product",
         "units",
-        (_tracked_input("Aged Wildflower gin", "35.875", "L"),),
+        (_tracked_input("Aged Wildflower gin", "41", "L"),),
         (),
     ),
 )

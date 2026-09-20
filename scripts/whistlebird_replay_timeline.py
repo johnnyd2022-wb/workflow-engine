@@ -571,8 +571,8 @@ def _green_gold_events(record: wm.GreenGoldRecord, marker_by_vat: dict[int, str]
     """Replay the documented diversion from aged Wildflower into Green Gold.
 
     The Green Gold run is dependent on VAT53's aged output, not on its later
-    Wildflower bottling.  That permits the 35.875L partial consumption on 31 July
-    and leaves the 28.3214-bottle Wildflower remainder to be bottled on 1 September.
+    Wildflower bottling. That permits the source-recorded 41L partial consumption on
+    31 July and leaves the recorded 21-bottle Wildflower remainder for 1 September.
     """
     source_marker = marker_by_vat.get(record.source_vat)
     if source_marker is None:

@@ -185,4 +185,4 @@ single global format assumption. VAT27 and all prior-DB batches (VAT1–26, tria
 have real per-step dates. Five batches remain excluded pending founder confirmation
 (VAT52, VAT55, VAT57, and an unlabelled bottling line). Green Gold (gg01) is loaded
 by the API replay from the manifest's `green_gold_records` section as a `Green Gold gin`
-final-product workflow (aged Wildflower from VAT53 → 126 bottles, founder-corrected from the sheet's 144; the remaining VAT53 stock is modelled as 28.3214 Wildflower bottles) — see the decisions log.
+final-product workflow (aged Wildflower from VAT53 → 126 bottles, founder-corrected from the sheet's 144; its source-recorded 41L draw and VAT53's 21-bottle remainder are retained) — see the decisions log.
