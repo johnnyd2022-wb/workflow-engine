@@ -5,7 +5,7 @@ the inventory item itself. The replay recorded the underlying facts elsewhere, s
 "No batch number" and "Process: —" for lots the Source Map and the consumption history describe
 perfectly well:
 
-* **Produced lots** (bottled product, finished gin, VAT batches, trial library stock). The
+* **On-hand produced lots** (bottled product, finished gin, VAT batches, trial library stock). The
   production batch lives on the completing step (`execution_data.batch_label`, e.g. ``VAT56``) and
   a labelled lot's pre-printed label-roll number lives in `extra_data.batch_number`. Neither is the
   lot's `supplier_batch_number`, which is the one first-class batch column and the only one the page
@@ -13,12 +13,12 @@ perfectly well:
   production batch alone where there is no label roll. The label roll number is not unique per
   product (one roll spans several VATs), while `(org, name, supplier_batch_number)` is, so the
   production batch is what keeps two lots of the same product apart.
-* **Raw-material lots.** Consumption events already name the process that used a lot, but the lot
-  carries no link of its own. This pass tags each lot with `extra_data.producing_process_name`
+* **Raw-material lots.** Consumption events already name the process that used a specific lot, but
+  the lot carries no link of its own. This pass tags it with `extra_data.producing_process_name`
   (and `producing_process_id` when exactly one process applies) -- the same tag the app's "Add
   missing input" flow puts on stock created for a process, and the one the API turns into
-  `process_name` -- from the processes that declare the material as a step input plus every process
-  that actually consumed the lot.
+  `process_name`. A process merely declaring an ingredient does not prove that it used this lot, so
+  it is not used as evidence.
 
 Expiry is deliberately *not* touched here: `expiry_date` is written verbatim from the curated
 sources when a lot is purchased (`whistlebird_replay._execute_purchase`), and every source expiry
@@ -53,7 +53,6 @@ from sqlalchemy.engine import Connection
 
 sys.path.insert(0, str(Path(__file__).parent))
 import whistlebird_migration as wm  # noqa: E402
-import whistlebird_replay as replay  # noqa: E402
 
 _PRODUCED_TYPES = ("work_in_progress", "final_product")
 _PROCESS_KEYS = ("producing_process_id", "producing_process_name")
@@ -112,33 +111,11 @@ def production_lot_code(batch_label: str | None, label_batch: Any) -> str | None
     return label or None
 
 
-def _material_key(name: str) -> str:
-    return replay._canonical_material_name(name)
-
-
 def _org_id(conn: Connection, org_name: str) -> UUID:
     org_id = conn.execute(text("SELECT id FROM organisations WHERE name = :name"), {"name": org_name}).scalar()
     if org_id is None:
         raise LotDetailsError(f"organisation {org_name!r} does not exist")
     return org_id
-
-
-def _declared_processes(conn: Connection, org_id: UUID) -> dict[str, dict[UUID, str]]:
-    """Canonical material name -> {process id: process name} for every declared step input."""
-    declared: dict[str, dict[UUID, str]] = defaultdict(dict)
-    rows = conn.execute(
-        text(
-            "SELECT p.id, p.name, s.inputs FROM processes p JOIN steps s ON s.process_id = p.id "
-            "WHERE p.org_id = :org_id"
-        ),
-        {"org_id": org_id},
-    ).all()
-    for process_id, process_name, inputs in rows:
-        for entry in inputs or []:
-            name = entry.get("name") if isinstance(entry, dict) else None
-            if name:
-                declared[_material_key(name)][process_id] = process_name
-    return declared
 
 
 def _consuming_processes(conn: Connection, org_id: UUID) -> dict[UUID, dict[UUID, str]]:
@@ -158,9 +135,9 @@ def _consuming_processes(conn: Connection, org_id: UUID) -> dict[UUID, dict[UUID
     return consumers
 
 
-def _linked_processes(name: str, item_id: UUID, declared: dict, consumers: dict) -> tuple[tuple[UUID, str], ...]:
-    merged = {**declared.get(_material_key(name), {}), **consumers.get(item_id, {})}
-    return tuple(sorted(merged.items(), key=lambda pair: (pair[1], str(pair[0]))))
+def _linked_processes(item_id: UUID, consumers: dict[UUID, dict[UUID, str]]) -> tuple[tuple[UUID, str], ...]:
+    """Only a consumption event proves that a particular raw-material lot belongs to a process."""
+    return tuple(sorted(consumers.get(item_id, {}).items(), key=lambda pair: (pair[1], str(pair[0]))))
 
 
 def _current_tag(extra_data: dict[str, Any] | None) -> dict[str, Any]:
@@ -168,7 +145,6 @@ def _current_tag(extra_data: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def plan_lot_details(conn: Connection, org_id: UUID) -> LotDetailsPlan:
-    declared = _declared_processes(conn, org_id)
     consumers = _consuming_processes(conn, org_id)
 
     raw_rows = conn.execute(
@@ -181,7 +157,7 @@ def plan_lot_details(conn: Connection, org_id: UUID) -> LotDetailsPlan:
     process_changes: list[ProcessTagChange] = []
     unlinked: list[str] = []
     for item_id, name, extra_data in raw_rows:
-        processes = _linked_processes(name, item_id, declared, consumers)
+        processes = _linked_processes(item_id, consumers)
         if not processes:
             unlinked.append(name)
             continue
@@ -194,7 +170,8 @@ def plan_lot_details(conn: Connection, org_id: UUID) -> LotDetailsPlan:
             "SELECT i.id, i.name, i.supplier_batch_number, i.extra_data, s.execution_data ->> 'batch_label' "
             "FROM inventory_items i "
             "LEFT JOIN execution_steps s ON s.id = i.source_execution_step_id AND s.org_id = i.org_id "
-            "WHERE i.org_id = :org_id AND i.inventory_type = ANY(:types) ORDER BY i.name, i.created_at, i.id"
+            "WHERE i.org_id = :org_id AND i.inventory_type = ANY(:types) AND i.quantity > 0 "
+            "ORDER BY i.name, i.created_at, i.id"
         ),
         {"org_id": org_id, "types": list(_PRODUCED_TYPES)},
     ).all()
