@@ -753,6 +753,15 @@ class TestCRMEvents:
         assert event.payload["matching_strategy"] == "hybrid"
         assert event.diff["matching_strategy"]["after"] == "hybrid"
 
+    def test_traceability_config_persists_sales_figure_obfuscation(self, db, org):
+        from app.features.crm.services.crm_service import CRMService
+
+        svc = CRMService(db)
+        updated = svc.update_traceability_config(org.id, {"obfuscate_sales_figures": True})
+
+        assert updated["obfuscate_sales_figures"] is True
+        assert svc.get_traceability_config(org.id)["obfuscate_sales_figures"] is True
+
     def test_product_mapping_lifecycle_emits_events(self, db, org, user):
         from uuid import UUID as _UUID
 

@@ -168,6 +168,11 @@
           </p>
         </div>
       </div>
+      <label style="display:inline-flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text-secondary,#6b7280);">
+        <input type="checkbox" x-model="traceConfig.obfuscate_sales_figures">
+        Obfuscate monetary figures on the CRM overview
+      </label>
+      <p style="margin:0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Overview currency values are replaced with *****. This does not change source records or traceability data.</p>
       <div style="display:flex; justify-content:flex-end;">
         <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Revenue Settings</button>
       </div>

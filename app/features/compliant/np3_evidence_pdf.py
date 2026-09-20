@@ -18,7 +18,7 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 _PAGE_WIDTH, _PAGE_HEIGHT = A4
 _DOCUMENTATION_CONTROL = "documentation-record-keeping"
@@ -42,6 +42,14 @@ def _styles() -> dict[str, ParagraphStyle]:
             leading=15,
             textColor=colors.HexColor("#52606d"),
             alignment=TA_CENTER,
+        ),
+        "brand": ParagraphStyle(
+            "NP3RegisterBrand",
+            parent=styles["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=13,
+            leading=16,
+            textColor=colors.HexColor("#123f3a"),
         ),
         "section": ParagraphStyle(
             "NP3RegisterSection",
@@ -112,7 +120,7 @@ def _header_footer(canvas, document) -> None:
     canvas.restoreState()
 
 
-def _segment_with_footer(story: list[Any]) -> bytes:
+def _segment_with_footer(story: list[Any], page_offset: int = 0) -> bytes:
     buffer = BytesIO()
     document = SimpleDocTemplate(
         buffer,
@@ -124,12 +132,20 @@ def _segment_with_footer(story: list[Any]) -> bytes:
         title="NP3 evidence register",
         author="Workflow Engine",
     )
-    document.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    def numbered_footer(canvas, doc) -> None:
+        original_page = doc.page
+        doc.page = original_page + page_offset
+        try:
+            _header_footer(canvas, doc)
+        finally:
+            doc.page = original_page
+
+    document.build(story, onFirstPage=numbered_footer, onLaterPages=numbered_footer)
     return buffer.getvalue()
 
 
 def _append_document(writer: PdfWriter, story: list[Any]) -> None:
-    writer.append(BytesIO(_segment_with_footer(story)))
+    writer.append(BytesIO(_segment_with_footer(story, len(writer.pages))))
 
 
 def _answers(story: list[Any], row: dict[str, Any], styles: dict[str, ParagraphStyle]) -> None:
@@ -137,6 +153,37 @@ def _answers(story: list[Any], row: dict[str, Any], styles: dict[str, ParagraphS
     story.append(Paragraph("Recorded answers", styles["label"]))
     if not history:
         story.append(Paragraph("No user response has been recorded for this check yet.", styles["muted"]))
+        return
+    if row.get("control_id") == "staff-competency":
+        data = [["Employee", "Date", "Training / task", "Competency", "Notes"]]
+        for event in history:
+            fields = event.get("evidence_fields") or {}
+            data.append(
+                [
+                    event.get("employee_name") or fields.get("employee_name") or fields.get("employee_email") or "Not recorded",
+                    fields.get("event_date") or event.get("created_at") or "Not recorded",
+                    fields.get("training_topic") or "Not recorded",
+                    fields.get("competency_result") or "Not recorded",
+                    fields.get("review_notes") or "",
+                ]
+            )
+        table = Table(data, colWidths=[30 * mm, 25 * mm, 43 * mm, 35 * mm, 37 * mm], repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f1ef")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#123f3a")),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+                    ("LEADING", (0, 0), (-1, -1), 9),
+                    ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#c9d8d5")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        story.append(table)
         return
     for event in history:
         title = event.get("title") or "Recorded response"
@@ -198,7 +245,9 @@ def build_np3_evidence_register_pdf(audit: dict[str, Any], uploaded_evidence: li
     writer = PdfWriter()
     verification = audit.get("verification") or {}
     cover = [
-        Spacer(1, 45 * mm),
+        Paragraph("● biz-e", styles["brand"]),
+        Paragraph("Production control for manufacturing teams", styles["muted"]),
+        Spacer(1, 34 * mm),
         Paragraph("NP3 evidence register", styles["title"]),
         Spacer(1, 6 * mm),
         Paragraph("Verification evidence, answers and supporting files", styles["subtitle"]),
@@ -211,8 +260,8 @@ def build_np3_evidence_register_pdf(audit: dict[str, Any], uploaded_evidence: li
     _append_document(writer, cover)
 
     category = None
+    story: list[Any] = []
     for row in audit.get("rows") or []:
-        story: list[Any] = []
         if row.get("category") != category:
             category = row.get("category")
             story.extend([Paragraph(_text(category), styles["section"]), Spacer(1, 2 * mm)])
@@ -257,8 +306,8 @@ def build_np3_evidence_register_pdf(audit: dict[str, Any], uploaded_evidence: li
                             ),
                         )
                 writer.add_attachment(evidence["file_name"], content)
-        if story:
-            _append_document(writer, story)
+    if story:
+        _append_document(writer, story)
 
     output = BytesIO()
     writer.write(output)

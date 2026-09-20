@@ -401,6 +401,7 @@ class ExecutionRepository:
 
             # --- Event emission with causal chain ---
             step_name = execution_step.step.name if execution_step.step else f"Step {execution_step.step_number}"
+            process_name = execution.process.name if execution.process else None
             items_consumed = _extract_consumed(actual_inputs or [])
             items_produced = _extract_produced(actual_outputs or [])
             evidence_ids = (execution_data or {}).get("evidence_ids", [])
@@ -446,6 +447,7 @@ class ExecutionRepository:
                                 "execution_step_id": str(execution_step.id),
                                 "step_name": step_name,
                                 "process_id": str(execution.process_id),
+                                "process_name": process_name,
                             },
                             causation_id=step_event.id,
                         )
@@ -471,6 +473,8 @@ class ExecutionRepository:
                                 "execution_id": str(execution.id),
                                 "execution_step_id": str(execution_step.id),
                                 "step_name": step_name,
+                                "process_id": str(execution.process_id),
+                                "process_name": process_name,
                             },
                             causation_id=step_event.id,
                         )

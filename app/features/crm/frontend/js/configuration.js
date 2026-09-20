@@ -22,6 +22,7 @@ function crmConfiguration() {
       strict: true,
       task_done_archive_days: 7,
       revenue_baseline_target_mtd: '',
+      obfuscate_sales_figures: false,
     },
     savingMapping: false,
     mappingError: null,
@@ -56,6 +57,7 @@ function crmConfiguration() {
           task_done_archive_days: Number(traceCfg?.task_done_archive_days || 7),
           revenue_baseline_target_mtd:
             traceCfg?.revenue_baseline_target_mtd == null ? '' : Number(traceCfg.revenue_baseline_target_mtd),
+          obfuscate_sales_figures: traceCfg?.obfuscate_sales_figures === true,
         };
       } catch (e) {
         this.error = e.message || 'Failed to load configuration.';
@@ -161,6 +163,7 @@ function crmConfiguration() {
             this.traceConfig.revenue_baseline_target_mtd === '' || this.traceConfig.revenue_baseline_target_mtd == null
               ? null
               : Number(this.traceConfig.revenue_baseline_target_mtd),
+          obfuscate_sales_figures: this.traceConfig.obfuscate_sales_figures === true,
         });
         this.traceConfig.mode = saved?.matching_strategy || this.traceConfig.mode;
         this.traceConfig.key = saved?.matching_key || 'batch_id';
@@ -169,6 +172,7 @@ function crmConfiguration() {
         this.traceConfig.task_done_archive_days = Number(saved?.task_done_archive_days || this.traceConfig.task_done_archive_days);
         this.traceConfig.revenue_baseline_target_mtd =
           saved?.revenue_baseline_target_mtd == null ? '' : Number(saved.revenue_baseline_target_mtd);
+        this.traceConfig.obfuscate_sales_figures = saved?.obfuscate_sales_figures === true;
         return true;
       } catch (e) {
         this.error = e.message || 'Failed to save traceability settings.';

@@ -35,6 +35,7 @@ function crmOverview() {
     draggedTaskId: null,
     dragSuppressUntil: 0,
     expandedTaskId: null,
+    obfuscateSalesFigures: false,
 
     widgetLayout: [],
     draggingWidgetId: null,
@@ -67,13 +68,15 @@ function crmOverview() {
     async init() {
       CRMAPI.ensureBackButton('/crm', true);
       try {
-        const [overview, monthly, users] = await Promise.all([
+        const [overview, monthly, users, traceCfg] = await Promise.all([
           CRMAPI.getOverview(),
           CRMAPI.getMonthlySales(24),
           CRMAPI.getOrgUsers(),
+          CRMAPI.getTraceabilityConfig(),
         ]);
         this.overview = overview || {};
         this.operators = users?.users || [];
+        this.obfuscateSalesFigures = traceCfg?.obfuscate_sales_figures === true;
         this.allMonthlySales = (monthly?.monthly_sales || []).slice().sort((a, b) => String(a.month || '').localeCompare(String(b.month || '')));
         this.setDefaultDateRange();
         this.refreshChart();
@@ -756,12 +759,14 @@ function crmOverview() {
     },
 
     shortCurrency(value) {
+      if (this.obfuscateSalesFigures) return '*****';
       if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
       if (value >= 1000) return `$${(value / 1000).toFixed(0)}k`;
       return `$${Number(value || 0).toFixed(0)}`;
     },
 
     formatCurrency2(value) {
+      if (this.obfuscateSalesFigures) return '*****';
       if (value == null) return '—';
       return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
     },
@@ -777,6 +782,7 @@ function crmOverview() {
     },
 
     formatInvoiceCurrency(value, code = 'NZD') {
+      if (this.obfuscateSalesFigures) return '*****';
       if (value == null) return '—';
       return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: code || 'NZD', minimumFractionDigits: 2 }).format(value);
     },

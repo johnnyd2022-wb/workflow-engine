@@ -685,6 +685,13 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
                     if concentrate_item:
                         actual_inputs.append(_consume_whole_item(concentrate_item))
 
+        if step_key == "aging" and is_rosella:
+            for step in steps:
+                if step["step_number"] < step_number:
+                    vat_item = _produced_item_for_step(store, step["id"], "VAT batch")
+                    if vat_item:
+                        actual_inputs.append(_consume_whole_item(vat_item))
+
         if step_key == "rhubarb_maceration" and batch.base_vat is not None:
             base_execution_id = store.execution_id_for_global_vat(batch.base_vat)
             if base_execution_id is None:
@@ -722,11 +729,15 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
             output_name = _aging_output_name(batch)
             actual_outputs.append({"name": output_name, "quantity": volume, "unit": "L"})
 
+        if step_key == "aging" and is_rosella:
+            volume = _vat_batch_volume_l(batch) or "1"
+            actual_outputs.append({"name": "Aged Rosella", "quantity": volume, "unit": "L"})
+
         if produces_bottles:
             vat_item = None
             for s in steps:
                 if s["step_number"] < step_number:
-                    output_name = _aging_output_name(batch)
+                    output_name = "Aged Rosella" if is_rosella else _aging_output_name(batch)
                     candidate = _produced_item_for_step(store, s["id"], output_name)
                     if candidate:
                         vat_item = candidate
@@ -785,6 +796,10 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
         if source_item is None:
             raise ReplayRejectedError(f"VAT{green_gold.source_vat} has no aged Wildflower output to divert")
         actual_inputs.append(_consume_item_quantity(source_item, green_gold.source_quantity_l))
+        # The source ledger records the aged Wildflower draw and finished bottles, but
+        # not measured liqueur additions.  The workflow therefore leaves Kawakawa,
+        # honey, sugar and water as variable, non-stock inputs for an operator to
+        # quantify on future executions; the historical replay never invents values.
         actual_outputs.append(
             {"name": "Green Gold - final product", "quantity": str(green_gold.bottles), "unit": "units"}
         )
@@ -807,12 +822,18 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
         )
     if batch is not None and step_key == "aging" and batch.product_line != "rosella":
         execution_data["VAT number"] = batch.global_vat
+    if batch is not None and batch.product_line == "rosella" and step_key in ("rhubarb_maceration", "aging"):
+        execution_data["VAT batch"] = batch.batch_label
     if batch is not None and step_key == "distilling":
         flask_codes = event.payload.get("flask_codes")
         if flask_codes:
             execution_data["Flask code"] = ", ".join(flask_codes)
     if batch is not None and batch.product_line in ("wildflower", "solstice") and step_key in ("bottling", "labelling"):
         execution_data["Batch number"] = _batch_number_prompt_value(event.payload.get("label_batches"))
+    if batch is not None and batch.product_line == "rosella" and step_key in ("bottling", "labelling"):
+        execution_data["Batch number"] = _batch_number_prompt_value(event.payload.get("label_batches"))
+    if green_gold is not None:
+        execution_data["Batch number"] = green_gold.batch_label
 
     client.post(
         f"/api/core/executions/{execution_id}/steps/{step_row['id']}/complete",

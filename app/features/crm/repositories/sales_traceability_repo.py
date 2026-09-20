@@ -24,6 +24,7 @@ class SalesTraceabilityConfigRepository:
         strict_mapping: bool = True,
         task_done_archive_days: int = 7,
         revenue_baseline_target_mtd=None,
+        obfuscate_sales_figures: bool = False,
     ) -> SalesTraceabilityConfig:
         row = self.get_for_org(org_id)
         if row is None:
@@ -35,6 +36,7 @@ class SalesTraceabilityConfigRepository:
                 strict_mapping=strict_mapping,
                 task_done_archive_days=task_done_archive_days,
                 revenue_baseline_target_mtd=revenue_baseline_target_mtd,
+                obfuscate_sales_figures=obfuscate_sales_figures,
             )
             self.db.add(row)
             return row
@@ -44,4 +46,5 @@ class SalesTraceabilityConfigRepository:
         row.strict_mapping = strict_mapping
         row.task_done_archive_days = task_done_archive_days
         row.revenue_baseline_target_mtd = revenue_baseline_target_mtd
+        row.obfuscate_sales_figures = obfuscate_sales_figures
         return row
