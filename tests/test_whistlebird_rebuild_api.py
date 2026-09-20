@@ -42,6 +42,7 @@ def steps(monkeypatch, tmp_path):
     monkeypatch.setattr(wm, "ensure_compliant_nz_alcohol_setup", record("compliant"))
     monkeypatch.setattr(rebuild_api.replay, "run_replay", record("replay"))
     monkeypatch.setattr(rebuild_api.correct, "correct_timestamps", record("timestamps"))
+    monkeypatch.setattr(rebuild_api.lot_details, "apply_lot_details", record("lot_details"))
     monkeypatch.setattr(wm, "build_import_verification", record("verify"))
     monkeypatch.setattr(wm, "_require_matching_import", record("require"))
     return {"called": called, "manifest": manifest}
@@ -75,6 +76,7 @@ def test_confirmed_rebuild_runs_the_documented_path_in_order(steps):
         "compliant",
         "replay",
         "timestamps",
+        "lot_details",
         "verify",
         "require",
     ]
