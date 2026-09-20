@@ -1821,8 +1821,29 @@
     });
     const meta = document.createElement('section');
     meta.className = 'sm-recall-meta';
-    meta.innerHTML = `<h2>Recall details</h2><dl>${metadata.filter(([, value]) => value).map(([label, value]) =>
-      `<div><dt>${smEsc(label)}</dt><dd>${smEsc(value)}</dd></div>`).join('') || '<div><dd>No additional lot metadata recorded.</dd></div>'}</dl>`;
+    const metaHeading = document.createElement('h2');
+    metaHeading.textContent = 'Recall details';
+    meta.appendChild(metaHeading);
+    const metaList = document.createElement('dl');
+    const recordedMetadata = metadata.filter(([, value]) => value);
+    if (!recordedMetadata.length) {
+      const empty = document.createElement('div');
+      const emptyValue = document.createElement('dd');
+      emptyValue.textContent = 'No additional lot metadata recorded.';
+      empty.appendChild(emptyValue);
+      metaList.appendChild(empty);
+    } else {
+      recordedMetadata.forEach(([label, value]) => {
+        const entry = document.createElement('div');
+        const term = document.createElement('dt');
+        term.textContent = label;
+        const detail = document.createElement('dd');
+        detail.textContent = value;
+        entry.append(term, detail);
+        metaList.appendChild(entry);
+      });
+    }
+    meta.appendChild(metaList);
     wrap.appendChild(meta);
 
     const byWorkflow = new Map();
@@ -1840,17 +1861,40 @@
       section.appendChild(heading);
       const table = document.createElement('table');
       table.className = 'sm-table sm-recall-table';
-      table.innerHTML = `<thead><tr><th>Trace</th>${stepNames.map(name => `<th>${smEsc(name)}</th>`).join('')}</tr></thead><tbody>${workflowGroups.map(group => {
+      const head = table.createTHead().insertRow();
+      ['Trace', ...stepNames].forEach(label => {
+        const cell = document.createElement('th');
+        cell.textContent = label;
+        head.appendChild(cell);
+      });
+      const body = table.createTBody();
+      workflowGroups.forEach(group => {
         const trace = group.executionId || 'Recorded execution';
-        const cells = stepNames.map(name => {
+        const row = body.insertRow();
+        const traceCell = row.insertCell();
+        traceCell.textContent = trace;
+        stepNames.forEach(name => {
           const step = group.steps.find(candidate => candidate.stepName === name);
-          if (!step) return '<td>—</td>';
-          const outputs = step.tos.map(item => `${item.name}${item.batch_id || item.supplier_batch_number ? ' · ' + (item.batch_id || item.supplier_batch_number) : ''}`).join(', ');
+          const cell = row.insertCell();
+          if (!step) {
+            cell.textContent = '—';
+            return;
+          }
+          const outputs = step.tos.map(item => {
+            const batch = item.batch_id || item.supplier_batch_number;
+            return item.name + (batch ? ' · ' + batch : '');
+          }).join(', ');
+          const output = document.createElement('span');
+          output.textContent = outputs || 'Recorded';
+          cell.appendChild(output);
           const when = step.tos[0]?.step_data?.completed_at;
-          return `<td>${smEsc(outputs || 'Recorded')}<small>${smEsc(when ? smFmtDate(when) : '')}</small></td>`;
-        }).join('');
-        return `<tr><td>${smEsc(trace)}</td>${cells}</tr>`;
-      }).join('')}</tbody>`;
+          if (when) {
+            const timestamp = document.createElement('small');
+            timestamp.textContent = smFmtDate(when);
+            cell.appendChild(timestamp);
+          }
+        });
+      });
       section.appendChild(table);
       wrap.appendChild(section);
     });
