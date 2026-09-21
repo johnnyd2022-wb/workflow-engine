@@ -44,6 +44,7 @@ import whistlebird_np3 as np3  # noqa: E402
 import whistlebird_replay as replay  # noqa: E402
 import whistlebird_replay_correct_timestamps as correct  # noqa: E402
 import whistlebird_replay_simulation as simulation  # noqa: E402
+import whistlebird_trace_dates as trace_dates  # noqa: E402
 
 STEPS = (
     "ensure tenant and admin",
@@ -54,6 +55,7 @@ STEPS = (
     "replay Core history, then expired-stock disposals, CRM mappings, NP3 evidence",
     "timestamp pass",
     "lot details pass",
+    "trace dates pass",
     "verify (Core counts, dates, wording, NP3)",
 )
 
@@ -156,6 +158,7 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         crm_manifest_path=args.crm_manifest,
     )
     report["lot_details"] = lot_details.apply_lot_details(args.target_url, args.org_name)
+    report["trace_dates"] = trace_dates.apply_trace_dates(args.target_url, args.org_name)
     report["verification"] = wm.build_import_verification(
         args.legacy_source,
         args.target_url,

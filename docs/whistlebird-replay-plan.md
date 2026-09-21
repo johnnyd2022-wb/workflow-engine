@@ -654,3 +654,24 @@ and their linked audit rows. The six missing events are newer than the existing 
 tenant; a full rebuild is needed to apply the latest manifest. The existing tenant
 also holds a Xero connection, 381 synced invoices and 507 FIFO allocations, so no
 reset was run during this change.
+
+## Trace dates pass, 2026-09-22
+
+The timestamp pass leaves three things stamped with the day the tenant was rebuilt, and the
+audit list and batch sheets showed that day as the date of the action:
+
+- `extra_data.execution_trace.completed_at` on every produced lot (and the copies of it in the
+  lot's events);
+- `process_version_date` on `execution.created` events;
+- the FIFO sales draws (`sales_fifo_consumption`) a Xero sync makes after the rebuild, stamped at
+  sync time.
+
+`scripts/whistlebird_trace_dates.py` sets them from the facts the tenant already holds: the
+completing step's date, the process version's date, and the Xero invoice date. A sale draw is never
+dated before its lot existed or before that lot's previous draw, so a lot's quantity history stays in
+order (on the current tenant 497 of 507 draws land within a day of their invoice, none more than 11
+days). It runs at the end of `whistlebird_rebuild_api.py`, and on its own it is idempotent, so re-run
+it after every Xero sync (`apply`, then `verify`, which plans the pass and rolls back).
+
+This is replay tooling for `Whistlebird Ltd` only (the org name is checked). The application is
+unchanged: real actions are still stamped when they happen.
