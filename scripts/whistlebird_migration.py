@@ -108,6 +108,7 @@ RESET_TABLES = (
 )
 WHISTLEBIRD_ORG_NAME = "Whistlebird Ltd"
 DEFAULT_ADMIN_EMAIL = "johnny@whistlebird.co.nz"
+DEFAULT_ADMIN_NAME = ("Johnny", "Dempsey")  # shown instead of the login email
 
 # These are the repeatable shelf-life assumptions used only where the historic
 # purchase register did not retain an expiry.  The curated raw-material manifest
@@ -2187,11 +2188,15 @@ def ensure_target_org_admin(
                     password_hash=AuthService.hash_password(admin_password),
                     role=UserRole.ADMIN,
                     is_active=True,
+                    **_admin_name(normalized_email),
                 )
             )
             admin_created = True
         elif not admin.is_active or admin.role != UserRole.ADMIN:
             raise ValueError("The deterministic admin account is not an active administrator")
+        elif not (admin.first_name or admin.last_name):
+            for field, value in _admin_name(normalized_email).items():
+                setattr(admin, field, value)
 
         session.commit()
         return {"org_created": org_created, "admin_created": admin_created}
@@ -2202,6 +2207,13 @@ def ensure_target_org_admin(
         scope.close()
         session.close()
         engine.dispose()
+
+
+def _admin_name(email: str) -> dict[str, str]:
+    """The Whistlebird admin login is Johnny; give it his name so people see it, not the email."""
+    if email != DEFAULT_ADMIN_EMAIL:
+        return {}
+    return {"first_name": DEFAULT_ADMIN_NAME[0], "last_name": DEFAULT_ADMIN_NAME[1]}
 
 
 def _keepass_password(entry_name: str) -> str:

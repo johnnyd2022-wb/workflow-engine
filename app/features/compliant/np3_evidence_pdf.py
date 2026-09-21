@@ -148,6 +148,7 @@ def _segment_with_footer(story: list[Any], page_offset: int = 0) -> bytes:
         title="NP3 register",
         author="Workflow Engine",
     )
+
     def numbered_footer(canvas, doc) -> None:
         original_page = doc.page
         doc.page = original_page + page_offset
@@ -216,27 +217,18 @@ def _employee_log_answers(story: list[Any], row: dict[str, Any], styles: dict[st
         return True
 
     if control_id == "staff-competency":
-        grouped: dict[tuple[str, str], dict[str, list[str]]] = {}
-        for entry in entries:
-            fields = entry.get("fields") or {}
-            employee = entry.get("employee_name") or "Not recorded"
-            event_date = _date_only(fields.get("event_date"))
-            group = grouped.setdefault(
-                (employee, event_date), {"topics": [], "results": [], "notes": []}
-            )
-            for key, target in (("training_topic", "topics"), ("competency_result", "results"), ("review_notes", "notes")):
-                value = fields.get(key)
-                if value and str(value) not in group[target]:
-                    group[target].append(str(value))
-        records = [
-            [employee, event_date, "; ".join(values["topics"]) or "Not recorded", "; ".join(values["results"]) or "Not recorded", "; ".join(values["notes"])]
-            for (employee, event_date), values in grouped.items()
-        ]
+        matrix = row.get("training_matrix") or {"people": [], "rows": []}
+        people = matrix["people"]
+        first = 70 * mm
+        rest = (180 * mm - first) / max(len(people), 1)
         _log_table(
             story,
-            ["Employee", "Date", "Training / task", "Competency", "Notes"],
-            records,
-            [28 * mm, 20 * mm, 57 * mm, 32 * mm, 33 * mm],
+            ["Training category", *people],
+            [
+                [item["label"], *[", ".join(_date_only(value) for value in values) or "—" for values in item["dates"]]]
+                for item in matrix["rows"]
+            ],
+            [first, *[rest] * len(people)],
             styles,
         )
         return True

@@ -60,8 +60,7 @@ REVIEW_INTERVALS = (1, 3, 6, 12)
 STAFF_ROLES = ("member", "admin")
 _MANIFEST_KEYS = {"profile", "staff", "annual_training", "attestations", "logs"}
 _PROFILE_KEYS = {"council_name", "trade_waste_consent_reference", "settings"}
-_ANNUAL_TRAINING_KEYS = {"dates", "topics"}
-_ANNUAL_TRAINING_TOPIC_KEYS = {"title", "np3_controls"}
+_ANNUAL_TRAINING_KEYS = {"dates", "categories"}
 _ATTESTATION_KEYS = {
     "control_id",
     "signed_on",
@@ -213,7 +212,11 @@ def parse_np3_manifest(data: dict[str, Any]) -> Np3Manifest:
     """Validate against what the real routes accept, so a bad manifest fails before any
     destructive step rather than as a rejected request halfway through a replay."""
     from app.features.compliant.modules.nz_alcohol.catalogue import framework_by_slug
-    from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook, np3_log_template
+    from app.features.compliant.modules.nz_alcohol.np3_audit import (
+        NP3_TRAINING_CATEGORIES,
+        evidence_playbook,
+        np3_log_template,
+    )
 
     if not isinstance(data, dict):
         raise Np3ManifestError("manifest must be a JSON object")
@@ -301,44 +304,30 @@ def parse_np3_manifest(data: dict[str, Any]) -> Np3Manifest:
         training_dates = [_require_date(value, f"annual_training.dates[{index}]") for index, value in enumerate(dates)]
         if len(set(training_dates)) != len(training_dates):
             raise Np3ManifestError("annual_training.dates must not contain duplicates")
-        topics = annual_training.get("topics")
-        if not isinstance(topics, list) or not topics:
-            raise Np3ManifestError("annual_training.topics must be a non-empty list")
-        training_topics: list[tuple[str, tuple[str, ...]]] = []
-        for index, item in enumerate(topics):
-            where = f"annual_training.topics[{index}]"
-            if not isinstance(item, dict):
-                raise Np3ManifestError(f"{where}: must be an object")
-            _unknown_keys(item, _ANNUAL_TRAINING_TOPIC_KEYS, where)
-            title = str(item.get("title") or "").strip()
-            control_ids = item.get("np3_controls")
-            if not title or len(title) > 1024:
-                raise Np3ManifestError(f"{where}: title is required and at most 1024 characters")
-            if (
-                not isinstance(control_ids, list)
-                or not control_ids
-                or not all(isinstance(control_id, str) and control_id in controls for control_id in control_ids)
-                or len(set(control_ids)) != len(control_ids)
-            ):
-                raise Np3ManifestError(f"{where}: np3_controls must be unique known NP3 controls")
-            training_topics.append((title, tuple(control_ids)))
+        categories = annual_training.get("categories")
+        known_categories = {key for key, _label, _controls in NP3_TRAINING_CATEGORIES}
+        if (
+            not isinstance(categories, list)
+            or not categories
+            or not all(isinstance(key, str) and key in known_categories for key in categories)
+            or len(set(categories)) != len(categories)
+        ):
+            raise Np3ManifestError(
+                f"annual_training.categories must be unique training categories ({', '.join(sorted(known_categories))})"
+            )
+        for member in staff:
+            if not member.name:
+                raise Np3ManifestError(f"staff {member.email}: name is required to record training against a person")
         for training_date in training_dates:
             for member in staff:
-                for title, control_ids in training_topics:
-                    mapped_controls = ", ".join(control_ids)
-                    person = member.name or member.email
+                for category in categories:
                     logs.append(
                         Np3Log(
                             control_id="staff-competency",
                             fields={
                                 "event_date": training_date.isoformat(),
-                                "employee_email": member.email,
-                                "training_topic": f"{title} (NP3 checks: {mapped_controls})",
-                                "competency_result": "observed-competent",
-                                "review_notes": (
-                                    "REVIEW PLACEHOLDER — training register records "
-                                    f"{person} as completed; confirm attendance and practical competency evidence."
-                                ),
+                                "employee_name": member.name,
+                                "training_topic": category,
                             },
                         )
                     )
@@ -444,10 +433,22 @@ class Np3Store:
     def users(self) -> list[dict[str, Any]]:
         with self._engine.connect() as conn:
             rows = conn.execute(
-                text("SELECT id, lower(email), role, is_active FROM users WHERE org_id = :org ORDER BY lower(email)"),
+                text(
+                    "SELECT id, lower(email), role, is_active, first_name, last_name "
+                    "FROM users WHERE org_id = :org ORDER BY lower(email)"
+                ),
                 {"org": self.org_id},
             ).all()
-        return [{"id": str(r[0]), "email": r[1], "role": str(r[2]).lower(), "is_active": r[3]} for r in rows]
+        return [
+            {
+                "id": str(r[0]),
+                "email": r[1],
+                "role": str(r[2]).lower(),
+                "is_active": r[3],
+                "name": " ".join(part for part in (r[4], r[5]) if part),
+            }
+            for r in rows
+        ]
 
     def profile(self) -> dict[str, Any] | None:
         with self._engine.connect() as conn:
@@ -661,6 +662,19 @@ def correct_np3_timestamps(target_url: str, org_name: str, manifest: Np3Manifest
                     ),
                     entry,
                 )
+            for member in manifest.staff:
+                if not member.name:
+                    continue
+                first_name, _, last_name = member.name.partition(" ")
+                named = conn.execute(
+                    text(
+                        "UPDATE users SET first_name = :first, last_name = :last "
+                        "WHERE org_id = :org AND lower(email) = lower(:email)"
+                    ),
+                    {"first": first_name, "last": last_name or None, "org": org_id, "email": member.email},
+                )
+                if named.rowcount != 1:
+                    raise RuntimeError(f"NP3 staff member {member.email} was not replayed; cannot name them")
             evidence_days = [record.signed_on for record in manifest.attestations]
             evidence_days.extend(record.event_date for record in manifest.logs)
             if evidence_days:
@@ -758,7 +772,13 @@ def verify_np3(target_url: str, org_name: str, manifest: Np3Manifest) -> dict[st
         date_mismatches += int(wrong)
     expected_profile = _expected_profile(manifest)
     profile_matches = profile is not None and all(profile[key] == expected_profile[key] for key in expected_profile)
-    staff_present = sum(1 for member in manifest.staff if member.email in users and users[member.email]["is_active"])
+    staff_present = sum(
+        1
+        for member in manifest.staff
+        if member.email in users
+        and users[member.email]["is_active"]
+        and (not member.name or users[member.email]["name"] == member.name)
+    )
     return {
         "np3_record_count": {"expected": manifest.record_count, "actual": len(records)},
         "np3_record_content": {"expected": manifest.record_count, "actual": present},
@@ -870,7 +890,11 @@ def _snapshot_org(target_url: str, org_name: str, existing: Np3Manifest | None, 
     attestations.sort(key=lambda e: (e["control_id"], e["signed_on"], e["how_we_meet"]))
     logs.sort(key=lambda e: (e["control_id"], e["fields"].get("event_date", ""), json.dumps(e["fields"])))
 
-    seeded = [{"email": user["email"], "role": user["role"]} for user in users if user["email"] != admin_email]
+    seeded = [
+        {"email": user["email"], "role": user["role"], **({"name": user["name"]} if user["name"] else {})}
+        for user in users
+        if user["email"] != admin_email
+    ]
     inactive = [user["email"] for user in users if not user["is_active"] and user["email"] != admin_email]
     if inactive:
         raise Np3SnapshotError(f"inactive users cannot be replayed: {', '.join(inactive)}")

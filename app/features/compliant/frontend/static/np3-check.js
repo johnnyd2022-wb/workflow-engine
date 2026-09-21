@@ -261,7 +261,7 @@
     return section;
   }
 
-  function logInput(field, staff) {
+  function logInput(field, staff, names) {
     var control;
     if (field.type === 'textarea') {
       control = document.createElement('textarea');
@@ -284,11 +284,62 @@
     } else {
       control = document.createElement('input');
       control.type = field.type === 'date' ? 'date' : 'text';
+      if (field.type === 'person') {
+        var listId = 'np3-people-' + field.key;
+        var suggestions = document.createElement('datalist');
+        suggestions.id = listId;
+        (names || []).forEach(function (name) {
+          var item = document.createElement('option');
+          item.value = name;
+          suggestions.appendChild(item);
+        });
+        var stale = document.getElementById(listId);
+        if (stale) stale.remove();
+        root.appendChild(suggestions);
+        control.setAttribute('list', listId);
+        control.autocomplete = 'off';
+      }
     }
     control.name = field.key;
     control.maxLength = 4000;
     if (field.required) control.required = true;
     return control;
+  }
+
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function shortDate(iso) {
+    var parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    if (!parts) return '—';
+    return Number(parts[3]) + ' ' + MONTHS[Number(parts[2]) - 1] + ' ' + parts[1];
+  }
+
+  function trainingTable(matrix) {
+    var wrap = document.createElement('div');
+    wrap.className = 'np3-training-table';
+    if (!matrix.people.length) {
+      wrap.appendChild(text('p', 'No training recorded yet. Add the first record below.'));
+      return wrap;
+    }
+    var table = document.createElement('table');
+    var head = document.createElement('tr');
+    head.appendChild(text('th', 'Training category'));
+    matrix.people.forEach(function (name) { head.appendChild(text('th', name)); });
+    var thead = document.createElement('thead');
+    thead.appendChild(head);
+    table.appendChild(thead);
+    var body = document.createElement('tbody');
+    matrix.rows.forEach(function (row) {
+      var tr = document.createElement('tr');
+      tr.appendChild(text('th', row.label));
+      row.dates.forEach(function (dates) {
+        tr.appendChild(text('td', dates.length ? dates.map(shortDate).join(', ') : '—'));
+      });
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+    wrap.appendChild(text('p', 'Dates each person completed the training, newest first.', 'np3-field__help'));
+    wrap.appendChild(table);
+    return wrap;
   }
 
   function logBook(check, staff) {
@@ -297,17 +348,8 @@
     var section = card('BUILT-IN REGISTER', template.title, 'np3-logbook');
     section.appendChild(text('p', template.description));
 
-    var staffActions = check.staff_actions || [];
-    if (staffActions.length) {
-      var prompt = document.createElement('div');
-      prompt.className = 'np3-logbook__prompt';
-      prompt.appendChild(text('strong', staffActions.length + ' active team member' + (staffActions.length === 1 ? '' : 's') + ' need an entry'));
-      var names = staffActions.map(function (action) { return action.name; }).join(', ');
-      prompt.appendChild(text('p', 'Add a training and competency record for: ' + names + '.'));
-      section.appendChild(prompt);
-    }
-
     var entries = check.log_entries || [];
+    var matrix = check.training_matrix;
     var register = document.createElement('details');
     register.className = 'np3-logbook__entries';
     register.open = !!entries.length;
@@ -335,13 +377,22 @@
       registerBody.appendChild(list);
     }
     register.appendChild(registerBody);
-    section.appendChild(register);
+    if (matrix) section.appendChild(trainingTable(matrix));
+    else section.appendChild(register);
+
+    // Suggest people already on the register, plus team members with a real name.
+    var personNames = (matrix ? matrix.people.slice() : []);
+    (staff || []).forEach(function (person) {
+      if (person.name && person.name.indexOf('@') === -1 && personNames.indexOf(person.name) === -1) {
+        personNames.push(person.name);
+      }
+    });
 
     var form = document.createElement('form');
     form.className = 'np3-logbook__form';
     var controls = {};
     (template.fields || []).forEach(function (field) {
-      var input = logInput(field, staff);
+      var input = logInput(field, staff, personNames);
       var help = field.required ? 'Required for this record.' : 'Optional supporting detail.';
       form.appendChild(reviewField(field.label, help, '', input));
       controls[field.key] = input;

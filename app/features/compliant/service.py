@@ -783,28 +783,12 @@ class ComplianceService:
             for row in unique_rows
             if row.get("review_due_date") and today <= row["review_due_date"] <= today + timedelta(days=30)
         ]
-        staff_actions = [
-            {"control_id": row["control_id"], "topic": row["topic"]} | action
-            for row in unique_rows
-            for action in row.get("staff_actions", [])
-        ]
         guidance_actions = [row for row in unique_rows if row["guidance_update_required"]]
         remediation_rows = [
             row for row in unique_rows if any(event["status"] in {"open", "failed"} for event in row["history"])
         ]
         work_queue = (
             [
-                {
-                    "kind": "staff-training",
-                    "severity": "attention",
-                    "control_id": action["control_id"],
-                    "title": f"Record training and competency for {action['name']}",
-                    "description": action["reason"],
-                    "person": action["name"],
-                }
-                for action in staff_actions
-            ]
-            + [
                 {
                     "kind": "overdue-review",
                     "severity": "overdue",
@@ -875,7 +859,6 @@ class ComplianceService:
                     "needs_evidence": counts["missing"],
                     "overdue": len(overdue_rows),
                     "due_soon": len(due_soon_rows),
-                    "staff_actions": len(staff_actions),
                     "open_remediation": len(remediation_rows),
                 },
                 "work_queue": work_queue,

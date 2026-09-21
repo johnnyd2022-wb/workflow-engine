@@ -54,12 +54,11 @@ MANIFEST = {
     ],
     "logs": [
         {
-            "control_id": "staff-competency",
+            "control_id": "health-and-sickness",
             "fields": {
                 "event_date": "2026-02-02",
                 "employee_email": STAFF_EMAIL,
-                "training_topic": "Allergen changeover",
-                "competency_result": "observed-competent",
+                "food_safety_decision": "cleared",
             },
         },
         {
@@ -89,12 +88,34 @@ def test_committed_manifest_is_valid():
     manifest = np3.load_np3_manifest()
 
     assert len(manifest.attestations) == 38
-    assert len(manifest.logs) == 71
+    assert len(manifest.logs) == 60
     training = [record for record in manifest.logs if record.control_id == "staff-competency"]
     assert len(training) == 54  # 2 staff x 9 supplied register items x 3 annual dates
-    assert {record.event_date.isoformat() for record in training} == {"2024-02-01", "2025-02-01", "2026-02-01"}
-    assert {member.name for member in manifest.staff} == {"Johnny Dempsey", "Nikolai (Niko) Scott"}
+    assert {record.event_date.isoformat() for record in training} == {"2024-02-02", "2025-02-02", "2026-02-02"}
+    assert {member.name for member in manifest.staff} == {"Johnny Dempsey", "Nikolai Scott"}
+    assert {record.fields["employee_name"] for record in training} == {"Johnny Dempsey", "Nikolai Scott"}
     assert manifest.record_count == len(manifest.attestations) + len(manifest.logs)
+
+
+def test_annual_training_expands_to_category_person_and_date_and_needs_human_names():
+    data = _manifest(
+        staff=[{"email": STAFF_EMAIL, "name": "Pat Packer"}],
+        annual_training={"dates": ["2026-02-01"], "categories": ["hand-washing-clean-clothing"]},
+        logs=[],
+    )
+
+    training = np3.parse_np3_manifest(data).logs
+
+    assert [record.fields for record in training] == [
+        {"event_date": "2026-02-01", "employee_name": "Pat Packer", "training_topic": "hand-washing-clean-clothing"}
+    ]
+    data["staff"] = [{"email": STAFF_EMAIL}]
+    with pytest.raises(np3.Np3ManifestError, match="name is required"):
+        np3.parse_np3_manifest(data)
+    data["staff"] = [{"email": STAFF_EMAIL, "name": "Pat Packer"}]
+    data["annual_training"]["categories"] = ["not-a-category"]
+    with pytest.raises(np3.Np3ManifestError, match="training categories"):
+        np3.parse_np3_manifest(data)
 
 
 def test_valid_manifest_parses_and_defaults_the_due_date_to_the_review_interval():
@@ -125,8 +146,8 @@ def test_month_arithmetic_matches_the_attestation_route():
         (lambda d: d["attestations"][0].update(evidence_fields={"nope": "x"}), "evidence_fields do not match"),
         (lambda d: d["attestations"].append(copy.deepcopy(d["attestations"][0])), "identical content"),
         (lambda d: d["logs"][0]["fields"].update(employee_email="stranger@x.test"), "not listed under staff"),
-        (lambda d: d["logs"][0]["fields"].pop("training_topic"), "is required"),
-        (lambda d: d["logs"][0]["fields"].update(competency_result="great"), "invalid option"),
+        (lambda d: d["logs"][0]["fields"].pop("food_safety_decision"), "is required"),
+        (lambda d: d["logs"][0]["fields"].update(food_safety_decision="great"), "invalid option"),
         (lambda d: d["logs"][0]["fields"].update(employee_user_id=str(uuid4())), "do not match"),
         (lambda d: d["logs"][1]["fields"].pop("corrective_action"), "needs its corrective action"),
         (lambda d: d["logs"][1].update(control_id="registration-scope"), "no built-in NP3 log"),
@@ -205,7 +226,7 @@ def test_replay_orders_staff_then_profile_then_attestations_then_logs_and_links_
         ("POST", "/org/users"),
         ("PUT", "/api/compliant/profile"),
         ("POST", "/api/compliant/np3-audit/attestations"),
-        ("POST", "/api/compliant/np3-audit/checks/staff-competency/logs"),
+        ("POST", "/api/compliant/np3-audit/checks/health-and-sickness/logs"),
         ("POST", "/api/compliant/np3-audit/checks/cleaning-and-hygiene/logs"),
     ]
     assert counts == {"staff": 1, "profile": 1, "attestations": 1, "logs": 2, "skipped": 0}
@@ -365,7 +386,7 @@ def test_manifest_is_accepted_by_the_real_routes_and_dated_explicitly(db, np3_or
         {"o": np3_org["org"].id},
     ).scalar_one()
     assert attestation_audit_date == attestation.created_on
-    training = rows[("staff-competency", "competency")]
+    training = rows[("health-and-sickness", "incident")]
     assert training.created_on == date(2026, 2, 2) and training.owner_user_id is not None
     follow_up = rows[("cleaning-and-hygiene", "reading")]
     assert follow_up.status == "open" and follow_up.created_on == date(2026, 2, 20)
@@ -401,11 +422,11 @@ def test_committed_manifest_replays_all_review_placeholders(db, np3_org):
     updated = np3.correct_np3_timestamps(np3_org["url"], np3_org["name"], manifest)
     report = np3.verify_np3(np3_org["url"], np3_org["name"], manifest)
 
-    assert counts == {"staff": 2, "profile": 1, "attestations": 38, "logs": 71, "skipped": 0}
-    assert updated == 109
+    assert counts == {"staff": 2, "profile": 1, "attestations": 38, "logs": 60, "skipped": 0}
+    assert updated == 98
     assert report == {
-        "np3_record_count": {"expected": 109, "actual": 109},
-        "np3_record_content": {"expected": 109, "actual": 109},
+        "np3_record_count": {"expected": 98, "actual": 98},
+        "np3_record_content": {"expected": 98, "actual": 98},
         "np3_staff": {"expected": 2, "actual": 2},
         "np3_profile": {"expected": 1, "actual": 1},
         "np3_date_mismatches": 0,
