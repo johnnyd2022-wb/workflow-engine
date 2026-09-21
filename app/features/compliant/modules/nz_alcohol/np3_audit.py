@@ -104,8 +104,6 @@ def _log_template(
     description: str,
     record_type: str,
     fields: tuple[dict[str, Any], ...],
-    *,
-    roster_driven: bool = False,
 ) -> dict[str, Any]:
     """Describe an audit-ready operational register the product can maintain itself.
 
@@ -117,34 +115,60 @@ def _log_template(
         "title": title,
         "description": description,
         "record_type": record_type,
-        "roster_driven": roster_driven,
         "fields": list(fields),
     }
 
 
+# (key, label, NP3 checks the training supports). The key is what a log entry stores.
+NP3_TRAINING_CATEGORIES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("hand-washing-clean-clothing", "Hand washing and wearing clean clothing", ("personal-hygiene",)),
+    ("keeping-away-when-sick", "Keeping away from food when sick", ("health-and-sickness",)),
+    ("keeping-foods-separate", "Keeping foods separate in the food preparation area", ("cross-contamination",)),
+    ("cleaning-and-sanitising", "Cleaning and sanitising", ("cleaning-and-hygiene",)),
+    (
+        "cross-contamination-protocols",
+        "Cross contamination protocols",
+        ("cross-contamination", "allergen-management", "biological-hazards"),
+    ),
+    (
+        "sourcing-receiving-tracing",
+        "Sourcing, receiving and tracing food",
+        ("suppliers-and-purchasing", "receiving-food", "trace-and-recall"),
+    ),
+    (
+        "process-step-risk-checks",
+        "Checking that process steps are managing risks",
+        ("time-temperature-processing", "biological-hazards", "chemical-hazards", "physical-hazards"),
+    ),
+    (
+        "when-something-goes-wrong",
+        "What to do if something goes wrong",
+        ("corrective-actions", "unsafe-unsuitable-food"),
+    ),
+    (
+        "equipment-set-up-and-operation",
+        "Training how to set up and operate equipment safely",
+        ("equipment-design", "calibration", "maintenance"),
+    ),
+)
+
 NP3_LOG_TEMPLATES: dict[str, dict[str, Any]] = {
     "staff-competency": _log_template(
         "staff_training",
-        "Staff training and competency register",
-        "One entry per person and competency review. The system shows active team members who still need an entry.",
+        "Staff training register",
+        "Record each training category completed, by whom and when. The table lists every date completed for each person.",
         "competency",
         (
-            {"key": "event_date", "label": "Training or review date", "type": "date", "required": True},
-            {"key": "employee_user_id", "label": "Employee", "type": "user", "required": True},
-            {"key": "training_topic", "label": "Training, procedure or task", "type": "text", "required": True},
             {
-                "key": "competency_result",
-                "label": "Competency confirmation",
+                "key": "training_topic",
+                "label": "Training category",
                 "type": "select",
                 "required": True,
-                "options": (
-                    ("observed-competent", "Observed competent"),
-                    ("refresher-needed", "Refresher or follow-up needed"),
-                ),
+                "options": tuple((key, label) for key, label, _controls in NP3_TRAINING_CATEGORIES),
             },
-            {"key": "review_notes", "label": "Supervisor notes", "type": "textarea", "required": False},
+            {"key": "employee_name", "label": "Person", "type": "person", "required": True},
+            {"key": "event_date", "label": "Training date", "type": "date", "required": True},
         ),
-        roster_driven=True,
     ),
     "health-and-sickness": _log_template(
         "health_exclusion",
@@ -560,14 +584,6 @@ NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
             "detail": "Supplier, supplier batch and purchase date are reused from inventory. The receiving log adds only the condition/temperature and accept, hold or reject decision.",
             "workspace_url": "/core/inventory/add/manual",
             "workspace_label": "Add or review inventory",
-        },
-    ),
-    "staff-competency": (
-        {
-            "title": "Organisation people roster",
-            "detail": "Every active Core user appears in the competency work queue until a per-person record is added. New starters are detected automatically.",
-            "workspace_url": "/org/users",
-            "workspace_label": "Open organisation users",
         },
     ),
     "health-and-sickness": (
@@ -1191,6 +1207,57 @@ def _log_entry(record: Any) -> dict[str, Any]:
     }
 
 
+def _person_key(name: str) -> str:
+    return " ".join(name.split()).casefold()
+
+
+def _training_category_key(topic: str) -> str:
+    """Map a stored topic to a category key. Entries from before the category dropdown
+    hold the title (plus an "(NP3 checks: ...)" suffix), so match those too; anything
+    else keeps its own text so it still shows up rather than disappearing."""
+    for key, label, _controls in NP3_TRAINING_CATEGORIES:
+        if topic == key or topic == label or topic.startswith(f"{label} ("):
+            return key
+    return topic
+
+
+def build_training_matrix(log_entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """One row per training category, one column per person, each cell every completion date (newest first)."""
+    people: dict[str, str] = {}
+    completed: dict[tuple[str, str], set[str]] = {}
+    extra_topics: dict[str, None] = {}
+    known = {key for key, _label, _controls in NP3_TRAINING_CATEGORIES}
+    for entry in log_entries:
+        fields = entry.get("fields") or {}
+        person = entry.get("employee_name")
+        topic = fields.get("training_topic")
+        event_date = fields.get("event_date")
+        if not (person and topic and event_date):
+            continue
+        category = _training_category_key(topic)
+        if category not in known:
+            extra_topics.setdefault(category)
+        person_key = _person_key(person)
+        people.setdefault(person_key, " ".join(person.split()))
+        completed.setdefault((category, person_key), set()).add(event_date)
+    ordered = sorted(people)
+    rows = [(key, label, list(controls)) for key, label, controls in NP3_TRAINING_CATEGORIES] + [
+        (topic, topic, []) for topic in extra_topics
+    ]
+    return {
+        "people": [people[key] for key in ordered],
+        "rows": [
+            {
+                "key": key,
+                "label": label,
+                "controls": controls,
+                "dates": [sorted(completed.get((key, person_key), ()), reverse=True) for person_key in ordered],
+            }
+            for key, label, controls in rows
+        ],
+    }
+
+
 def build_np3_audit_rows(
     records: list[Any],
     derived_evidence: list[dict[str, Any]] | None = None,
@@ -1247,25 +1314,15 @@ def build_np3_audit_rows(
             staff_names = {str(member["id"]): member["name"] for member in (staff or [])}
             for entry in log_entries:
                 employee_id = entry["fields"].get("employee_user_id")
-                if employee_id:
+                if entry["fields"].get("employee_name"):
+                    entry["employee_name"] = entry["fields"]["employee_name"]
+                elif employee_id:
                     entry["employee_name"] = staff_names.get(str(employee_id), "Former team member")
-            staff_actions: list[dict[str, Any]] = []
-            if log_template and log_template.get("roster_driven"):
-                trained_user_ids = {
-                    str(entry["fields"].get("employee_user_id"))
-                    for entry in log_entries
-                    if entry["fields"].get("employee_user_id") and entry["status"] == "complete"
-                }
-                staff_actions = [
-                    {
-                        "user_id": member["id"],
-                        "name": member["name"],
-                        "created_at": member.get("created_at"),
-                        "reason": "No training and competency entry has been recorded for this active user.",
-                    }
-                    for member in (staff or [])
-                    if str(member["id"]) not in trained_user_ids
-                ]
+            # The training register records people by name, not by user account, so it is
+            # not checked against the roster of system accounts.
+            training_matrix = (
+                build_training_matrix(log_entries) if (log_template or {}).get("key") == "staff_training" else None
+            )
             rows.append(
                 {
                     "category": category,
@@ -1294,7 +1351,7 @@ def build_np3_audit_rows(
                     "derived_evidence": derived,
                     "log_template": log_template,
                     "log_entries": log_entries,
-                    "staff_actions": staff_actions,
+                    "training_matrix": training_matrix,
                     "history": [
                         {
                             "title": record.title,
@@ -1323,11 +1380,6 @@ _GUIDED_GROUPS = {
         "overdue",
         "{n} NP3 reviews are overdue",
         "The scheduled sign-off has passed. Review the evidence and create a fresh attestation for each.",
-    ),
-    "staff-training": (
-        "staff",
-        "{n} team members need training records",
-        "Each active user needs a training and competency entry on the staff register.",
     ),
     "guidance-update": (
         "attention",

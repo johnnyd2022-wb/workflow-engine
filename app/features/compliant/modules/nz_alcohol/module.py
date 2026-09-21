@@ -93,11 +93,8 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
         else None
     )
     critical_actions = [action for action in queue if action["severity"] in {"attention", "overdue"}]
-    training_actions = [action for action in queue if action["kind"] == "staff-training"]
     if np3_alert:
         message = np3_alert["description"]
-    elif training_actions:
-        message = f"{len(training_actions)} active staff member(s) need NP3 training and competency records"
     elif any(action["kind"] == "overdue-review" for action in critical_actions):
         message = "An NP3 evidence review is overdue"
     elif any(action["kind"] == "guidance-update" for action in critical_actions):

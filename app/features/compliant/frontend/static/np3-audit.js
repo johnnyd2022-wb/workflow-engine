@@ -55,7 +55,6 @@
     if (activeFilter === 'attention') return row.state === 'attention' || row.state === 'missing';
     if (activeFilter === 'overdue') return isOverdue(row);
     if (activeFilter === 'due-soon') return isDueSoon(row);
-    if (activeFilter === 'staff') return Boolean((row.staff_actions || []).length);
     if (activeFilter === 'remediation') return Boolean(row.open_remediation);
     return true;
   }
@@ -110,9 +109,6 @@
     detail.appendChild(text('p', row.requirement_summary || 'Review this NP3 requirement and its evidence.'));
     detail.appendChild(text('p', 'MPI section: ' + (row.source_reference || (row.evidence_playbook || {}).section || 'National Programme 3 guidance'), 'np3-guidance-reference'));
     if (row.guidance_update) detail.appendChild(text('p', row.guidance_update, 'np3-guidance-alert'));
-    if ((row.staff_actions || []).length) {
-      detail.appendChild(text('p', row.staff_actions.length + ' active team member' + (row.staff_actions.length === 1 ? '' : 's') + ' needs a training/competency entry.', 'np3-guidance-alert'));
-    }
     detail.appendChild(guidance(row));
     var open = document.createElement('a');
     open.className = 'np3-download np3-open-check';

@@ -19,7 +19,7 @@ def test_queue_is_sorted_overdue_then_attention_then_due_soon_and_stable_within_
         _item("due-soon-review", "due-soon", "a"),
         _item("open-remediation", "attention", "b"),
         _item("overdue-review", "overdue", "c"),
-        _item("staff-training", "attention", "d"),
+        _item("guidance-update", "attention", "d"),
     ]
 
     assert [i["control_id"] for i in prioritise_work_queue(queue)] == ["c", "b", "d", "a"]
@@ -42,12 +42,12 @@ def test_a_single_item_keeps_its_own_title_and_opens_its_check():
     assert (step["count"], step["opens"], step["control_id"]) == (1, "check", "delegation")
 
 
-def test_several_people_on_one_control_open_that_check_rather_than_the_register():
-    queue = [_item("staff-training", "attention", "staff-competency", person=name) for name in ("A", "B")]
+def test_several_items_on_one_control_open_that_check_rather_than_the_register():
+    queue = [_item("open-remediation", "attention", "staff-competency") for _ in range(2)]
 
     (step,) = build_guided_steps(queue)
 
-    assert step["title"] == "2 team members need training records"
+    assert step["title"] == "2 open records need follow-up"
     assert step["opens"] == "check"
 
 
@@ -57,7 +57,6 @@ def test_only_the_top_three_kinds_are_shown_most_urgent_first():
         _item("guidance-update", "attention", "b"),
         _item("open-remediation", "attention", "c"),
         _item("overdue-review", "overdue", "d"),
-        _item("staff-training", "attention", "e"),
     ]
 
     assert [s["kind"] for s in build_guided_steps(queue)] == ["overdue-review", "guidance-update", "open-remediation"]
