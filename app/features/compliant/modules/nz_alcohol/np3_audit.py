@@ -1313,3 +1313,72 @@ def build_np3_audit_rows(
                 }
             )
     return rows
+
+
+GUIDED_STEP_LIMIT = 3
+_SEVERITY_RANK = {"overdue": 0, "attention": 1, "due-soon": 2}
+# kind -> (health-card filter that opens the matching register view, plural title, description)
+_GUIDED_GROUPS = {
+    "overdue-review": (
+        "overdue",
+        "{n} NP3 reviews are overdue",
+        "The scheduled sign-off has passed. Review the evidence and create a fresh attestation for each.",
+    ),
+    "staff-training": (
+        "staff",
+        "{n} team members need training records",
+        "Each active user needs a training and competency entry on the staff register.",
+    ),
+    "guidance-update": (
+        "attention",
+        "{n} checks changed under new NP3 guidance",
+        "The official guidance changed after the last sign-off. Reconfirm each check.",
+    ),
+    "open-remediation": (
+        "remediation",
+        "{n} open records need follow-up",
+        "Logged deviations, incidents or corrective actions that are still open.",
+    ),
+    "due-soon-review": (
+        "due-soon",
+        "{n} reviews are due soon",
+        "Review the current evidence before each scheduled sign-off date.",
+    ),
+}
+
+
+def prioritise_work_queue(queue: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Most urgent first: overdue, then attention, then due soon. Stable within a severity."""
+    return sorted(queue, key=lambda item: _SEVERITY_RANK.get(item["severity"], len(_SEVERITY_RANK)))
+
+
+def build_guided_steps(queue: list[dict[str, Any]], limit: int = GUIDED_STEP_LIMIT) -> list[dict[str, Any]]:
+    """The few next steps worth showing: one row per kind of work, most urgent first.
+
+    The full queue stays available for notifications and the register's own filters; this
+    is the short list that guides. A row covering a single check opens that check; a row
+    covering several opens the register filtered to that kind of work.
+    """
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for item in prioritise_work_queue(queue):
+        groups.setdefault(item["kind"], []).append(item)
+    steps = []
+    for kind, items in list(groups.items())[:limit]:
+        first = items[0]
+        filter_key, title, description = _GUIDED_GROUPS.get(kind, ("attention", "{n} NP3 actions", ""))
+        single_check = len({item["control_id"] for item in items}) == 1
+        step = {
+            "kind": kind,
+            "severity": first["severity"],
+            "count": len(items),
+            "control_id": first["control_id"],
+            "category_key": first.get("category_key"),
+            "filter": filter_key,
+            "opens": "check" if single_check else "register",
+        }
+        if len(items) == 1:
+            step |= {"title": first["title"], "description": first["description"]}
+        else:
+            step |= {"title": title.format(n=len(items)), "description": description}
+        steps.append(step)
+    return steps
