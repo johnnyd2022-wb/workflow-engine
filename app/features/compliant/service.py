@@ -38,7 +38,9 @@ from app.features.compliant.modules.nz_alcohol.live_evidence import derive_np3_c
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
     NP3_AUDIT_CATEGORIES,
     PREPARATION_ITEMS,
+    build_guided_steps,
     build_np3_audit_rows,
+    prioritise_work_queue,
 )
 from app.features.crm.models.product_mapping import ProductMapping
 
@@ -845,6 +847,10 @@ class ComplianceService:
                 for row in due_soon_rows
             ]
         )
+        category_by_control = {row["control_id"]: row["category_key"] for row in unique_rows}
+        work_queue = prioritise_work_queue(
+            [{**item, "category_key": category_by_control[item["control_id"]]} for item in work_queue]
+        )
         return _iso(
             {
                 "org_name": self.session.query(Organisation.name).filter(Organisation.id == org_id).scalar()
@@ -873,6 +879,7 @@ class ComplianceService:
                     "open_remediation": len(remediation_rows),
                 },
                 "work_queue": work_queue,
+                "guided_steps": build_guided_steps(work_queue),
                 "configuration_required": not bool(profile and profile.enabled),
                 "core_evidence": (
                     self.data_coverage(org_id, records=records) | {"live_np3_evidence": live_summary}

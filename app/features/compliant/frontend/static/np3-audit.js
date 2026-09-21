@@ -218,19 +218,37 @@
     healthCards.appendChild(healthCard('due-soon', health.due_soon || 0, 'Due soon'));
     healthCards.appendChild(healthCard('remediation', health.open_remediation || 0, 'Open remediation'));
   }
+  // Shows the few steps worth doing first, prepared server-side as `guided_steps`. The
+  // full list lives in the category tabs and health filters, so it is not repeated here.
+  function openRegisterView(step) {
+    activeFilter = step.filter || 'all';
+    if (step.category_key) activeCategory = step.category_key;
+    searchQuery = '';
+    if (checkSearch) checkSearch.value = '';
+    render();
+    categoryRoot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   function renderQueue() {
     clear(queueItems);
-    var items = audit.work_queue || [];
-    queue.hidden = !items.length;
-    items.forEach(function (item) {
-      var link = document.createElement('a');
-      link.className = 'np3-work-queue__item np3-work-queue__item--' + (item.severity || 'attention');
-      link.href = '/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(item.control_id);
-      link.setAttribute('hx-boost', 'false');
-      link.appendChild(text('strong', item.title));
-      link.appendChild(text('span', item.description));
-      link.appendChild(text('small', 'Open check →'));
-      queueItems.appendChild(link);
+    var steps = audit.guided_steps || [];
+    queue.hidden = !steps.length;
+    steps.forEach(function (step) {
+      var opensCheck = step.opens === 'check';
+      var item;
+      if (opensCheck) {
+        item = document.createElement('a');
+        item.href = '/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(step.control_id);
+        item.setAttribute('hx-boost', 'false');
+      } else {
+        item = document.createElement('button');
+        item.type = 'button';
+        item.addEventListener('click', function () { openRegisterView(step); });
+      }
+      item.className = 'np3-work-queue__item np3-work-queue__item--' + (step.severity || 'attention');
+      item.appendChild(text('strong', step.title));
+      item.appendChild(text('span', step.description));
+      item.appendChild(text('small', opensCheck ? 'Open check →' : 'Show in register →'));
+      queueItems.appendChild(item);
     });
   }
   function renderCoreStats() {
