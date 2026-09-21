@@ -28,7 +28,14 @@ from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
-from app.core.backend import changes_feed, corechecks, inventory_upload_routes, reconciliation_routes, tasks
+from app.core.backend import (
+    changes_feed,
+    corechecks,
+    inventory_upload_routes,
+    reconciliation_routes,
+    suppliers,
+    tasks,
+)
 from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.complete_step_payload import (
     MAX_COMPLETE_STEP_CONTENT_LENGTH,
@@ -3948,6 +3955,7 @@ inventory_upload_routes.register_routes(core_bp)
 evidence_routes.register_routes(core_bp)
 process_docs_routes.register_routes(core_bp)
 tasks.register_routes(core_bp)
+suppliers.register_routes(core_bp)
 demo_data_routes.register_routes(core_bp)
 
 
@@ -6178,6 +6186,17 @@ def _human_summary(ev) -> str:
         step = p.get("step_name", "step")
         title = p.get("doc_title", "document")
         return f"SOP document '{title}' removed from step '{step}'"
+
+    if et in ("supplier.created", "supplier.updated", "supplier.deleted"):
+        name = p.get("name", "")
+        label = f" {name!r}" if name else ""
+        if et == "supplier.created":
+            source = " (from inventory)" if p.get("source") == "inventory" else ""
+            return f"Supplier{label} added{source}"
+        if et == "supplier.deleted":
+            return f"Supplier{label} deleted"
+        changed = ", ".join(key.replace("_", " ") for key in d) or "details"
+        return f"Supplier{label} updated — {changed}"
 
     if et == "user.created":
         return f"Account created — {p.get('email', '')}"
