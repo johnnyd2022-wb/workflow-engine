@@ -101,3 +101,33 @@ def test_register_pdf_appends_uploaded_pdf_and_embeds_non_renderable_upload():
     assert "Original uploaded PDF evidence" in text
     assert "instrument-export.bin" in text
     assert len(reader.pages) >= 5
+
+
+def test_staff_training_is_one_row_per_person_per_date_with_names_and_competency():
+    def entry(person, day, topic):
+        return {
+            "employee_name": person,
+            "fields": {"event_date": day, "employee_name": person, "training_topic": topic},
+        }
+
+    audit = _audit()
+    audit["rows"][0].update(
+        control_id="staff-competency",
+        topic="Competency in management",
+        log_entries=[
+            entry("Nikolai Scott", "2026-02-02", "cleaning-and-sanitising"),
+            entry("Johnny Dempsey", "2025-02-02", "hand-washing-clean-clothing"),
+            entry("Johnny Dempsey", "2026-02-02", "cleaning-and-sanitising"),
+            entry("Johnny Dempsey", "2026-02-02", "hand-washing-clean-clothing"),
+        ],
+    )
+
+    text = "\n".join(
+        page.extract_text() for page in PdfReader(BytesIO(build_np3_evidence_register_pdf(audit, []))).pages
+    )
+
+    assert text.count("Johnny Dempsey") == 2  # one row per date, not one per training
+    assert "Hand washing and wearing clean clothing; Cleaning and sanitising" in text.replace("\n", " ")
+    assert "hand-washing-clean-clothing" not in text  # readable names, not stored keys
+    assert text.count("Competent") >= 3
+    assert text.index("Johnny Dempsey") < text.index("Nikolai Scott")

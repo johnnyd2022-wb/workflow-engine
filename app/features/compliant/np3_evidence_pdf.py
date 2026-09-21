@@ -20,6 +20,14 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from app.features.compliant.modules.nz_alcohol.np3_audit import (
+    NP3_TRAINING_CATEGORIES,
+    training_category_key,
+    training_category_label,
+)
+
+_LEGACY_COMPETENCY = {"observed-competent": "Competent", "refresher-needed": "Refresher needed"}
+
 _PAGE_WIDTH, _PAGE_HEIGHT = A4
 _DOCUMENTATION_CONTROL = "documentation-record-keeping"
 
@@ -217,18 +225,45 @@ def _employee_log_answers(story: list[Any], row: dict[str, Any], styles: dict[st
         return True
 
     if control_id == "staff-competency":
-        matrix = row.get("training_matrix") or {"people": [], "rows": []}
-        people = matrix["people"]
-        first = 70 * mm
-        rest = (180 * mm - first) / max(len(people), 1)
+        # One row per person per training date, listing what they completed that day.
+        order = {key: index for index, (key, _label, _controls) in enumerate(NP3_TRAINING_CATEGORIES)}
+        grouped: dict[tuple[str, str], dict[str, Any]] = {}
+        for entry in entries:
+            fields = entry.get("fields") or {}
+            employee = entry.get("employee_name") or "Not recorded"
+            event_date = _date_only(fields.get("event_date"))
+            group = grouped.setdefault((employee, event_date), {"topics": {}, "results": [], "notes": []})
+            topic = fields.get("training_topic")
+            if topic:
+                key = training_category_key(topic)
+                group["topics"][key] = training_category_label(topic)
+            # Entries written before the register was simplified may still carry these.
+            result = _LEGACY_COMPETENCY.get(fields.get("competency_result", ""), "Competent")
+            if result not in group["results"]:
+                group["results"].append(result)
+            if fields.get("review_notes") and fields["review_notes"] not in group["notes"]:
+                group["notes"].append(fields["review_notes"])
+        records = [
+            [
+                employee,
+                event_date,
+                "; ".join(
+                    label for _key, label in sorted(group["topics"].items(), key=lambda t: (order.get(t[0], 99), t[1]))
+                )
+                or "Not recorded",
+                "; ".join(group["results"]),
+                "; ".join(group["notes"]),
+            ]
+            for (employee, event_date), group in grouped.items()
+        ]
+        # Newest first within each person.
+        records.sort(key=lambda record: record[1], reverse=True)
+        records.sort(key=lambda record: record[0].casefold())
         _log_table(
             story,
-            ["Training category", *people],
-            [
-                [item["label"], *[", ".join(_date_only(value) for value in values) or "—" for values in item["dates"]]]
-                for item in matrix["rows"]
-            ],
-            [first, *[rest] * len(people)],
+            ["Employee", "Date", "Training / task", "Competency", "Notes"],
+            records,
+            [28 * mm, 20 * mm, 78 * mm, 24 * mm, 30 * mm],
             styles,
         )
         return True
