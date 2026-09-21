@@ -853,6 +853,15 @@ html[data-spa-theme="dark"] .sm-temporal-banner { background: rgba(120,53,15,0.2
 .sm-recall-sales .sm-table { background: #fff; border-color: #a7f3d0; }
 .sm-recall-sales .sm-table th { color: #065f46; background: #d1fae5; }
 .sm-recall-sales .sm-table td { border-color: #d1fae5; color: #065f46; }
+.sm-recall-sales__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.sm-recall-sales__header h2 { margin: 0; }
+.sm-recall-sales__note { margin: 0 0 8px; font-size: 13px; color: #065f46; }
+.sm-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: #065f46; }
+.sm-switch__input { appearance: none; -webkit-appearance: none; position: relative; width: 36px; height: 20px; margin: 0; border-radius: 999px; background: #9ca3af; cursor: pointer; transition: background .15s; }
+.sm-switch__input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.sm-switch__input:checked { background: #059669; }
+.sm-switch__input:checked::after { transform: translateX(16px); }
+.sm-switch__input:focus-visible { outline: 2px solid #065f46; outline-offset: 2px; }
 
 .sm-trace-row__item,
 .sm-trace-row__step,
