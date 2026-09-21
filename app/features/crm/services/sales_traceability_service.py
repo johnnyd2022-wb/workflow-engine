@@ -215,6 +215,21 @@ def _line_reference(invoice_id: str, line_key: str) -> str:
     return f"xero:{invoice_id}:{line_key}"
 
 
+def _contact_address(contact: XeroContact | None) -> str | None:
+    """One line from the contact's recorded addresses, preferring the street address."""
+    addresses = [a for a in (contact.addresses if contact else None) or [] if isinstance(a, dict)]
+    addresses.sort(key=lambda a: {"STREET": 0, "POBOX": 1}.get(str(a.get("type") or "").upper(), 2))
+    for address in addresses:
+        parts = [
+            str(address.get(key)).strip()
+            for key in ("line1", "line2", "city", "region", "postal_code", "country")
+            if address.get(key) and str(address.get(key)).strip()
+        ]
+        if parts:
+            return ", ".join(parts)
+    return None
+
+
 def append_sales_to_dag(
     db: Session,
     org_id: UUID,
@@ -304,6 +319,16 @@ def append_sales_to_dag(
                 "invoice_number": invoice.invoice_number if invoice else None,
                 "invoice_status": invoice.status if invoice else None,
                 "customer_name": contact.name if contact else None,
+                # Profile details for recall mode, which contacts each unique customer once.
+                "customer_id": str(contact.id) if contact else None,
+                "customer_primary_contact": (
+                    " ".join(part for part in (contact.first_name, contact.last_name) if part) or None
+                    if contact
+                    else None
+                ),
+                "customer_email": contact.email_address if contact else None,
+                "customer_phone": contact.phone_number if contact else None,
+                "customer_address": _contact_address(contact),
                 "item_code": line.item_code if line else None,
                 "xero_invoice_id": invoice_external_id,
                 "xero_line_key": line_key,

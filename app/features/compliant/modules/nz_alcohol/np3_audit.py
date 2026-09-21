@@ -440,7 +440,12 @@ NP3_LOG_TEMPLATES: dict[str, dict[str, Any]] = {
             {"key": "event_date", "label": "Check date", "type": "date", "required": True},
             {"key": "product_or_label", "label": "Retail product or label", "type": "text", "required": True},
             {"key": "label_artwork_version", "label": "Label/artwork version", "type": "text", "required": True},
-            {"key": "label_requirements_checked", "label": "Requirements checked", "type": "textarea", "required": True},
+            {
+                "key": "label_requirements_checked",
+                "label": "Requirements checked",
+                "type": "textarea",
+                "required": True,
+            },
             {
                 "key": "pre_visit_submission",
                 "label": "Current label pack status",
@@ -1211,7 +1216,7 @@ def _person_key(name: str) -> str:
     return " ".join(name.split()).casefold()
 
 
-def _training_category_key(topic: str) -> str:
+def training_category_key(topic: str) -> str:
     """Map a stored topic to a category key. Entries from before the category dropdown
     hold the title (plus an "(NP3 checks: ...)" suffix), so match those too; anything
     else keeps its own text so it still shows up rather than disappearing."""
@@ -1219,6 +1224,12 @@ def _training_category_key(topic: str) -> str:
         if topic == key or topic == label or topic.startswith(f"{label} ("):
             return key
     return topic
+
+
+def training_category_label(topic: str) -> str:
+    """The readable name for a stored topic (a category key, or older free text)."""
+    key = training_category_key(topic)
+    return next((label for category, label, _controls in NP3_TRAINING_CATEGORIES if category == key), topic)
 
 
 def build_training_matrix(log_entries: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1234,7 +1245,7 @@ def build_training_matrix(log_entries: list[dict[str, Any]]) -> dict[str, Any]:
         event_date = fields.get("event_date")
         if not (person and topic and event_date):
             continue
-        category = _training_category_key(topic)
+        category = training_category_key(topic)
         if category not in known:
             extra_topics.setdefault(category)
         person_key = _person_key(person)

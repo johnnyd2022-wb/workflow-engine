@@ -43,6 +43,7 @@ def steps(monkeypatch, tmp_path):
     monkeypatch.setattr(rebuild_api.replay, "run_replay", record("replay"))
     monkeypatch.setattr(rebuild_api.correct, "correct_timestamps", record("timestamps"))
     monkeypatch.setattr(rebuild_api.lot_details, "apply_lot_details", record("lot_details"))
+    monkeypatch.setattr(rebuild_api.trace_dates, "apply_trace_dates", record("trace_dates"))
     monkeypatch.setattr(wm, "build_import_verification", record("verify"))
     monkeypatch.setattr(wm, "_require_matching_import", record("require"))
     return {"called": called, "manifest": manifest}
@@ -77,6 +78,7 @@ def test_confirmed_rebuild_runs_the_documented_path_in_order(steps):
         "replay",
         "timestamps",
         "lot_details",
+        "trace_dates",
         "verify",
         "require",
     ]

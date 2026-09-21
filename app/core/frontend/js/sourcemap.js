@@ -23,6 +23,7 @@
   let lastTraceResult = null;
   let temporalAsOf = ''; // ISO date string for temporal replay; '' = live
   let currentView = 'timeline';       // 'timeline' | 'map' | 'table' | 'recall'
+  let recallMode = false;             // recall tab: unique customers instead of every linked sale
   let currentBrowseTab = 'inventory'; // 'inventory' | 'batches' | 'suppliers' | 'operators' | 'activity'
   let showWastage = false;
   let currentFindingsTab = 'all';
@@ -1907,40 +1908,121 @@
       wrap.appendChild(section);
     });
 
-    const salesSection = document.createElement('section');
-    salesSection.className = 'sm-recall-workflow sm-recall-sales';
-    const salesHeading = document.createElement('h2');
-    salesHeading.textContent = 'Linked sales';
-    salesSection.appendChild(salesHeading);
+    wrap.appendChild(smBuildRecallSales(sales));
+  }
+
+  /* Linked sales: the standard invoice-line table, or (recall mode) each unique
+     customer once with the contact details recorded on their profile. */
+  function smBuildRecallSales(sales) {
+    const section = document.createElement('section');
+    section.className = 'sm-recall-workflow sm-recall-sales';
+    const header = document.createElement('div');
+    header.className = 'sm-recall-sales__header';
+    const heading = document.createElement('h2');
+    heading.textContent = 'Linked sales';
+    header.appendChild(heading);
+    section.appendChild(header);
     if (!sales.length) {
       const empty = document.createElement('p');
       empty.textContent = 'No linked sales recorded.';
-      salesSection.appendChild(empty);
-    } else {
-      const salesTable = document.createElement('table');
-      salesTable.className = 'sm-table';
-      const head = salesTable.createTHead().insertRow();
-      ['Invoice', 'Store / customer', 'Date', 'Product'].forEach(label => {
-        const cell = document.createElement('th');
-        cell.textContent = label;
-        head.appendChild(cell);
-      });
-      const body = salesTable.createTBody();
-      sales.forEach(sale => {
-        const row = body.insertRow();
-        [
-          sale.invoice_number || sale.xero_invoice_id || '—',
-          sale.customer_name || sale.store_name || '—',
-          sale.sale_date ? smFmtDate(sale.sale_date) : '—',
-          sale.name || '—',
-        ].forEach(value => {
-          const cell = row.insertCell();
-          cell.textContent = value;
-        });
-      });
-      salesSection.appendChild(salesTable);
+      section.appendChild(empty);
+      return section;
     }
-    wrap.appendChild(salesSection);
+
+    const label = document.createElement('label');
+    label.className = 'sm-switch';
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.className = 'sm-switch__input';
+    toggle.setAttribute('role', 'switch');
+    toggle.checked = recallMode;
+    const labelText = document.createElement('span');
+    labelText.textContent = 'Recall mode';
+    label.append(toggle, labelText);
+    header.appendChild(label);
+
+    const content = document.createElement('div');
+    section.appendChild(content);
+    const render = () => {
+      content.replaceChildren(recallMode ? smBuildRecallCustomers(sales) : smBuildLinkedSalesTable(sales));
+    };
+    toggle.addEventListener('change', () => {
+      recallMode = toggle.checked;
+      render();
+    });
+    render();
+    return section;
+  }
+
+  function smBuildLinkedSalesTable(sales) {
+    const salesTable = document.createElement('table');
+    salesTable.className = 'sm-table';
+    const head = salesTable.createTHead().insertRow();
+    ['Invoice', 'Store / customer', 'Date', 'Product'].forEach(label => {
+      const cell = document.createElement('th');
+      cell.textContent = label;
+      head.appendChild(cell);
+    });
+    const body = salesTable.createTBody();
+    sales.forEach(sale => {
+      const row = body.insertRow();
+      [
+        sale.invoice_number || sale.xero_invoice_id || '—',
+        sale.customer_name || sale.store_name || '—',
+        sale.sale_date ? smFmtDate(sale.sale_date) : '—',
+        sale.name || '—',
+      ].forEach(value => {
+        const cell = row.insertCell();
+        cell.textContent = value;
+      });
+    });
+    return salesTable;
+  }
+
+  /* One entry per customer, however many invoice lines they bought. Sales with no
+     customer on record are kept together as one entry rather than dropped. */
+  function smUniqueCustomers(sales) {
+    const byKey = new Map();
+    sales.forEach(sale => {
+      const name = (sale.customer_name || sale.store_name || '').trim();
+      const key = sale.customer_id || (name ? 'name:' + name.toLowerCase() : 'unknown');
+      if (!byKey.has(key)) {
+        byKey.set(key, { name: name || 'Customer not recorded', primary: '', phone: '', email: '', address: '' });
+      }
+      const customer = byKey.get(key);
+      customer.primary = customer.primary || sale.customer_primary_contact || '';
+      customer.phone = customer.phone || sale.customer_phone || '';
+      customer.email = customer.email || sale.customer_email || '';
+      customer.address = customer.address || sale.customer_address || '';
+    });
+    return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function smBuildRecallCustomers(sales) {
+    const customers = smUniqueCustomers(sales);
+    const wrap = document.createElement('div');
+    const note = document.createElement('p');
+    note.className = 'sm-recall-sales__note';
+    note.textContent = customers.length + ' unique customer' + (customers.length === 1 ? '' : 's') +
+      ' across ' + sales.length + ' linked sale' + (sales.length === 1 ? '' : 's') + '.';
+    wrap.appendChild(note);
+    const table = document.createElement('table');
+    table.className = 'sm-table';
+    const head = table.createTHead().insertRow();
+    ['Customer', 'Primary contact', 'Phone', 'Email', 'Address'].forEach(label => {
+      const cell = document.createElement('th');
+      cell.textContent = label;
+      head.appendChild(cell);
+    });
+    const body = table.createTBody();
+    customers.forEach(customer => {
+      const row = body.insertRow();
+      [customer.name, customer.primary, customer.phone, customer.email, customer.address].forEach(value => {
+        row.insertCell().textContent = value || '—';
+      });
+    });
+    wrap.appendChild(table);
+    return wrap;
   }
 
   /* Compact tree table: each material appears once, nested under its producing step. */
