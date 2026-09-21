@@ -446,8 +446,10 @@ source of truth: `docs/whistlebird-np3-evidence-source.json`.
 1. Enter evidence in the app (text and selections only).
 2. `uv run python scripts/whistlebird_np3.py snapshot --target-url ...` writes it into the
    manifest (`--dry-run` first to see what changes). Commit the JSON.
-3. `uv run python scripts/whistlebird_rebuild_api.py --base-url https://localhost:8005
-   --insecure --target-url ... --confirm-reset-whistlebird-test` rebuilds
+3. `scripts/replay_whistlebird.sh --confirm` derives the local target database
+   connection and rebuilds Whistlebird Ltd through the API. Use
+   `--discard-unsnapshotted-np3` only when intentionally replacing NP3 evidence
+   that has not been snapshotted into the committed manifest. It rebuilds
    everything: ensure tenant -> admin password -> scoped reset -> workflows -> Compliant
    setup -> replay (Core, then NP3) -> timestamp pass -> verify. Without the confirm flag
    it is a read-only preflight.
