@@ -165,6 +165,17 @@
                   </span>
                 </a>
                 </div>
+                <div class="core2-suppliers" aria-labelledby="core2-suppliers-title">
+                  <div class="core2-suppliers__intro">
+                    <h3 id="core2-suppliers-title" class="spa-form-section-title">Suppliers</h3>
+                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Keep contact details for the businesses you buy from.</p>
+                  </div>
+                  <div class="core2-suppliers__actions">
+                    <button type="button" class="btn btn-primary" data-supplier-add>Add new supplier</button>
+                    <button type="button" class="btn btn-secondary" data-supplier-view>View suppliers</button>
+                  </div>
+                  <dialog class="core2-suppliers-dialog" data-core2-suppliers-dialog aria-labelledby="core2-suppliers-dialog-title"></dialog>
+                </div>
               </section>
               </div>
           </div>
@@ -479,6 +490,7 @@
   </script>
   {% include 'shared/execution_modal_stack_scripts.html' %}
   <script src="{{ url_for('core.serve_core_js', filename='add-inventory-reconciliation.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='core-suppliers.js') }}"></script>
   <script>
     {
     // Global variable for notification timeout

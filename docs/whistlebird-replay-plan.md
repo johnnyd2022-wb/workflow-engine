@@ -675,3 +675,26 @@ it after every Xero sync (`apply`, then `verify`, which plans the pass and rolls
 
 This is replay tooling for `Whistlebird Ltd` only (the org name is checked). The application is
 unchanged: real actions are still stamped when they happen.
+
+## Suppliers, 2026-09-22
+
+Core now has a per-organisation suppliers address book (Inventory tab, below "Open live
+inventory"): add, view, edit and delete, and import the supplier names already on inventory items.
+Every create, edit and delete writes an audit event and audit-log row with the supplier's details
+and what changed.
+
+`docs/whistlebird-suppliers-source.json` holds Whistlebird's nine suppliers, named exactly as the
+`supplier` text on the inventory lots so "import from inventory" never adds a duplicate. Details
+come from each business's own website; a field a business does not publish (Davis Trading's and HB
+Malt Station's email, HB Malt Station's phone, JingBo's street address) is left empty, not guessed.
+No supplier has a main contact.
+
+`scripts/whistlebird_suppliers.py` replays the manifest through the real API after the Core history
+(`whistlebird_replay.py`), and the rebuild then dates each supplier's creation and audit entries to
+the first purchase from them (their earliest inventory lot) and verifies that every inventory
+supplier has a record. It is also runnable alone and idempotent, so it can populate an existing
+tenant without a reset:
+
+    uv run python scripts/whistlebird_suppliers.py apply --base-url https://localhost:8005 --insecure
+
+Dating is replay tooling for `Whistlebird Ltd` only; in the app a supplier action is stamped when it happens.

@@ -1862,7 +1862,21 @@
       byWorkflow.get(name).push(group);
     });
     byWorkflow.forEach((workflowGroups, workflow) => {
-      const stepNames = [...new Set(workflowGroups.flatMap(group => group.steps.map(step => step.stepName).filter(Boolean)))];
+      // Columns follow the workflow's own step order, so the terminal step is on the far
+      // right. Step numbers come from the execution; a step with none keeps its arrival order.
+      const stepNumberOf = (group, name) => {
+        const recorded = ((group.exec && group.exec.execution_steps) || []).find(step => step.step_name === name);
+        return recorded && recorded.step_number != null ? Number(recorded.step_number) : null;
+      };
+      const firstNumber = new Map();
+      workflowGroups.forEach(group => group.steps.forEach(step => {
+        const number = stepNumberOf(group, step.stepName);
+        if (number != null) firstNumber.set(step.stepName, Math.min(firstNumber.get(step.stepName) ?? Infinity, number));
+      }));
+      const stepNames = [...new Set(workflowGroups.flatMap(group => group.steps.map(step => step.stepName).filter(Boolean)))]
+        .sort((a, b) => (firstNumber.get(a) ?? Infinity) - (firstNumber.get(b) ?? Infinity));
+      const terminalStep = stepNames[stepNames.length - 1];
+      const batchCodeOf = item => item.batch_id || item.supplier_batch_number;
       const section = document.createElement('section');
       section.className = 'sm-recall-workflow';
       const heading = document.createElement('h2');
@@ -1871,17 +1885,18 @@
       const table = document.createElement('table');
       table.className = 'sm-table sm-recall-table';
       const head = table.createTHead().insertRow();
-      ['Trace', ...stepNames].forEach(label => {
+      ['Batch code', ...stepNames].forEach(label => {
         const cell = document.createElement('th');
         cell.textContent = label;
         head.appendChild(cell);
       });
       const body = table.createTBody();
       workflowGroups.forEach(group => {
-        const trace = group.executionId || 'Recorded execution';
         const row = body.insertRow();
-        const traceCell = row.insertCell();
-        traceCell.textContent = trace;
+        // The batch code identifies the finished lot, so read it from the terminal step first.
+        const terminal = group.steps.find(candidate => candidate.stepName === terminalStep);
+        const codes = [...new Set((terminal ? terminal.tos : group.steps.flatMap(step => step.tos)).map(batchCodeOf).filter(Boolean))];
+        row.insertCell().textContent = codes.join(', ') || '—';
         stepNames.forEach(name => {
           const step = group.steps.find(candidate => candidate.stepName === name);
           const cell = row.insertCell();
@@ -1889,10 +1904,7 @@
             cell.textContent = '—';
             return;
           }
-          const outputs = step.tos.map(item => {
-            const batch = item.batch_id || item.supplier_batch_number;
-            return item.name + (batch ? ' · ' + batch : '');
-          }).join(', ');
+          const outputs = [...new Set(step.tos.map(item => item.name).filter(Boolean))].join(', ');
           const output = document.createElement('span');
           output.textContent = outputs || 'Recorded';
           cell.appendChild(output);

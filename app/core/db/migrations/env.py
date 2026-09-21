@@ -22,6 +22,7 @@ from app.core.db.models.feature_subscription import FeatureSubscription
 from app.core.db.models.core_task import CoreTask
 from app.core.db.models.core_task_config import CoreTaskConfig
 from app.core.db.models.task_board_lane import TaskBoardLane
+from app.core.db.models.supplier import Supplier
 from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.process_version import ProcessVersion
 from app.features.crm.models.xero_tenant import XeroTenant

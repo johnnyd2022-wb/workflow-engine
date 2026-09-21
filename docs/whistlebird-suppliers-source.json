@@ -1,0 +1,13 @@
+{
+  "suppliers": [
+    {"name": "Alembics", "phone": "+64 274 777 826", "email": "info@alembics.co.nz", "address": "13 Moa Avenue, Oneroa, Waiheke Island, Auckland", "notes": "Imports copper stills and supplies botanicals. Details from alembics.co.nz and thealembicslab.com."},
+    {"name": "Davis Trading", "phone": "(04) 568 2009", "address": "20 Te Puni Street, Petone, Lower Hutt 5012", "notes": "Wellington branch of Davis Food Ingredients (Davis Trading Ltd). No email published; enquiries via davis.nz contact form."},
+    {"name": "Moore Wilson", "phone": "04 384 9906", "email": "taste@moorewilsons.co.nz", "address": "Corner of Tory Street and College Street, Te Aro, Wellington 6011", "notes": "Moore Wilson's Wellington (Tory Street) store. Details from moorewilsons.co.nz."},
+    {"name": "Southern Grain Spirits", "phone": "+64 3 327 6389", "email": "spirits@southerngrainspirits.co.nz", "address": "9A Peraki Street, Kaiapoi, Canterbury", "notes": "Kaiapoi Distillery. Postal address PO Box 81, Kaiapoi, Canterbury."},
+    {"name": "HB Malt Station", "address": "30 Pembroke Street, Taradale, Napier 4112", "notes": "Online brewing and distilling supplies; pickup by arrangement. No phone or email published; enquiries via hbmalt.co.nz contact form."},
+    {"name": "Countdown / Woolworths", "phone": "09 275 2788", "address": "80 Favona Road, Mangere, Auckland", "notes": "Supermarket purchases. Contact details are Woolworths NZ's support office, not a store."},
+    {"name": "Hauraki Homebrew", "phone": "(09) 442 5070", "email": "haurakihomebrew@gmail.com", "address": "11D Piermark Drive, Rosedale, Albany, Auckland 0632", "notes": "Details from haurakihomebrew.co.nz."},
+    {"name": "JingBo Bottles", "phone": "+86 530 6567666", "email": "sales@jbtopglass.com", "notes": "Glass bottle manufacturer in China; no street address published. WhatsApp +86 17553021134 (jingbobottles.com). Email from sister site jbtopglass.com."},
+    {"name": "Sagrada Wellbeing", "phone": "022 385 8172", "email": "sagradawellbeing@gmail.com", "address": "Athenree, Waihi Beach, Bay of Plenty (by arrangement only)", "notes": "Details from sagradawellbeing.co.nz. Street address not published."}
+  ]
+}

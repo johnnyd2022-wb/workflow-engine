@@ -49,6 +49,7 @@ import whistlebird_disposals as disposals  # noqa: E402
 import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
+import whistlebird_suppliers as suppliers  # noqa: E402
 from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
 
 CSRF_META_RE = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"')
@@ -907,12 +908,14 @@ def run_replay(
     np3_manifest_path: Path | None = np3.DEFAULT_NP3_MANIFEST,
     crm_manifest_path: Path | None = crm.DEFAULT_CRM_MANIFEST,
     disposals_manifest_path: Path | None = disposals.DEFAULT_DISPOSALS_MANIFEST,
+    suppliers_manifest_path: Path | None = suppliers.DEFAULT_SUPPLIERS_MANIFEST,
 ) -> dict[str, Any]:
     # Validate before the first request so a bad NP3 manifest fails now, not after the
     # long Core replay has already run.
     np3_manifest = np3.load_np3_manifest(np3_manifest_path) if np3_manifest_path else None
     crm_manifest = crm.load_crm_manifest(crm_manifest_path) if crm_manifest_path else None
     disposal_list = disposals.load_disposals_manifest(disposals_manifest_path) if disposals_manifest_path else None
+    supplier_list = suppliers.load_suppliers_manifest(suppliers_manifest_path) if suppliers_manifest_path else None
     events = build_timeline(legacy_source, production_manifest_path)
     if limit is not None:
         events = events[:limit]
@@ -963,6 +966,10 @@ def run_replay(
             counts["crm"] = crm.replay_crm_config(client, crm_manifest)
         except crm.CrmReplayError as exc:
             raise ReplayRejectedError(str(exc)) from exc
+
+    # Suppliers are the address book for the names on the inventory the replay just created.
+    if supplier_list is not None and limit is None:
+        counts["suppliers"] = suppliers.replay_suppliers(client, supplier_list)
 
     # NP3 evidence goes last: an `np3_execution_evidence_mode: required` profile (part of
     # the manifest) would otherwise block the Core step completions above.

@@ -44,6 +44,7 @@ import whistlebird_np3 as np3  # noqa: E402
 import whistlebird_replay as replay  # noqa: E402
 import whistlebird_replay_correct_timestamps as correct  # noqa: E402
 import whistlebird_replay_simulation as simulation  # noqa: E402
+import whistlebird_suppliers as suppliers  # noqa: E402
 import whistlebird_trace_dates as trace_dates  # noqa: E402
 
 STEPS = (
@@ -56,6 +57,7 @@ STEPS = (
     "timestamp pass",
     "lot details pass",
     "trace dates pass",
+    "suppliers dating pass",
     "verify (Core counts, dates, wording, NP3)",
 )
 
@@ -84,7 +86,8 @@ def check_replay_plan(args: argparse.Namespace) -> list[str]:
     try:
         crm.load_crm_manifest(args.crm_manifest)
         listed = disposals.load_disposals_manifest(args.disposals_manifest)
-    except (crm.CrmManifestError, disposals.DisposalManifestError) as exc:
+        suppliers.load_suppliers_manifest(args.suppliers_manifest)
+    except (crm.CrmManifestError, disposals.DisposalManifestError, suppliers.SuppliersManifestError) as exc:
         return [f"manifest invalid: {exc}"]
     try:
         return simulation.check_replay_plan(
@@ -147,6 +150,7 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         np3_manifest_path=args.np3_manifest,
         crm_manifest_path=args.crm_manifest,
         disposals_manifest_path=args.disposals_manifest,
+        suppliers_manifest_path=args.suppliers_manifest,
     )
     report["timestamps"] = correct.correct_timestamps(
         args.legacy_source,
@@ -159,6 +163,11 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
     )
     report["lot_details"] = lot_details.apply_lot_details(args.target_url, args.org_name)
     report["trace_dates"] = trace_dates.apply_trace_dates(args.target_url, args.org_name)
+    report["suppliers_dated"] = suppliers.date_suppliers(args.target_url, args.org_name)
+    report["suppliers_verification"] = suppliers.verify_suppliers(
+        args.target_url, args.org_name, suppliers.load_suppliers_manifest(args.suppliers_manifest)
+    )
+    wm._require_matching_import(report["suppliers_verification"], "suppliers")
     report["verification"] = wm.build_import_verification(
         args.legacy_source,
         args.target_url,
@@ -188,6 +197,7 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--production-manifest", type=Path, default=wm.DEFAULT_PRODUCTION_MANIFEST)
     parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
     parser.add_argument("--crm-manifest", type=Path, default=crm.DEFAULT_CRM_MANIFEST)
+    parser.add_argument("--suppliers-manifest", type=Path, default=suppliers.DEFAULT_SUPPLIERS_MANIFEST)
     parser.add_argument("--disposals-manifest", type=Path, default=disposals.DEFAULT_DISPOSALS_MANIFEST)
     parser.add_argument("--admin-email", default=wm.DEFAULT_ADMIN_EMAIL)
     parser.add_argument("--admin-password-env", default="WHISTLEBIRD_ADMIN_PASSWORD")
