@@ -166,16 +166,28 @@
                 </a>
                 </div>
                 <div class="core2-suppliers" aria-labelledby="core2-suppliers-title">
-                  <div class="core2-suppliers__intro">
-                    <h3 id="core2-suppliers-title" class="spa-form-section-title">Suppliers</h3>
-                    <p class="page-subtitle" style="margin-top: 4px; margin-bottom: 0;">Keep contact details for the businesses you buy from.</p>
-                  </div>
-                  <div class="core2-suppliers__actions">
-                    <button type="button" class="btn btn-primary" data-supplier-add>Add new supplier</button>
-                    <a href="/core/suppliers" class="btn btn-secondary">View suppliers</a>
+                  <h3 id="core2-suppliers-title" class="core2-eyebrow core2-suppliers__label">Suppliers</h3>
+                  <div class="core2-hub-card-stack">
+                    <button type="button" class="core2-hub-card" data-supplier-add aria-labelledby="core2-supplier-add-title">
+                      <span class="core2-hub-card__icon" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21v-1a6 6 0 0 1 6-6h1"></path><path d="M18 15v6"></path><path d="M15 18h6"></path></svg>
+                      </span>
+                      <span class="core2-hub-card__text">
+                        <span id="core2-supplier-add-title" class="spa-form-section-title">Add new supplier</span>
+                        <span class="page-subtitle">Save the contact details for a business you buy from.</span>
+                      </span>
+                    </button>
+                    <a href="/core/suppliers" class="core2-hub-card" aria-labelledby="core2-supplier-view-title">
+                      <span class="core2-hub-card__icon" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path></svg>
+                      </span>
+                      <span class="core2-hub-card__text">
+                        <span id="core2-supplier-view-title" class="spa-form-section-title">View suppliers</span>
+                        <span class="page-subtitle">Search, filter and edit your supplier list.</span>
+                      </span>
+                    </a>
                   </div>
                   <p class="core2-suppliers__status" data-suppliers-hub-status role="status" aria-live="polite" hidden></p>
-                  <dialog class="core2-suppliers-dialog" data-core2-suppliers-dialog aria-labelledby="core2-suppliers-dialog-title"></dialog>
                 </div>
               </section>
               </div>

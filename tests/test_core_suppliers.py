@@ -153,6 +153,10 @@ def test_supplier_routes_require_login_and_round_trip_json(db, flask_app):
         register = client.get("/core/suppliers")
         assert register.status_code == 200
         assert b"data-suppliers-page" in register.data and b"core-suppliers-page.js" in register.data
+        # Boosted navigation swaps only #page-content, so the page's scripts must sit inside it: in the
+        # scripts block they never run and the table stays empty until a full refresh.
+        html = register.data.decode()
+        assert html.index('id="page-content"') < html.index("core-suppliers-page.js") < html.rindex("</main>")
     finally:
         db.rollback()
         db.query(AuditLog).filter(AuditLog.org_id == org.id).delete(synchronize_session=False)

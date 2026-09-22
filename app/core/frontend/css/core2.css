@@ -3176,17 +3176,11 @@ body.core2-sheet-open {
 
 /* Suppliers (Core inventory tab) */
 .core2-suppliers { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-default, #e5e7eb); }
-.core2-suppliers__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-.core2-suppliers__actions a.btn { text-decoration: none; }
+.core2-suppliers__label { margin: 0 0 10px; }
+.core2-suppliers .core2-hub-card__text > span { display: block; }
+.core2-suppliers .core2-hub-card__text .page-subtitle { margin-top: 4px; }
+.core2-suppliers-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .core2-suppliers__status { margin: 12px 0 0; padding: 8px 12px; border-radius: 8px; background: rgba(16, 185, 129, 0.12); }
-.core2-suppliers-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--border-default, #e5e7eb); border-radius: 12px; background: var(--bg-card, #fff); color: var(--text-primary, #111827); }
-.core2-suppliers-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
-.core2-suppliers-dialog__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-default, #e5e7eb); }
-.core2-suppliers-dialog__header h2 { margin: 0; }
-.core2-suppliers-dialog__body { padding: 16px 20px 20px; }
-.core2-suppliers-dialog__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
-.core2-suppliers-form .core2-suppliers-dialog__actions { margin: 16px 0 0; }
-.core2-suppliers-dialog__status { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: rgba(16, 185, 129, 0.12); }
-.core2-suppliers-dialog__status--error { background: rgba(239, 68, 68, 0.12); }
+.core2-suppliers-form__error { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: rgba(239, 68, 68, 0.12); }
 .core2-suppliers-form__field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
 .core2-suppliers-form__field input, .core2-suppliers-form__field textarea { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--border-default, #d1d5db); border-radius: 8px; background: var(--bg-input, transparent); color: inherit; }
