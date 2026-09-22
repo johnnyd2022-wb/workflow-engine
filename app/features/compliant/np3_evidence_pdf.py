@@ -18,7 +18,7 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
     NP3_TRAINING_CATEGORIES,
@@ -193,7 +193,11 @@ def _table_cell(value: Any, styles: dict[str, ParagraphStyle], *, header: bool =
 
 
 def _log_table(
-    story: list[Any], headers: list[str], records: list[list[Any]], widths: list[float], styles: dict[str, ParagraphStyle]
+    story: list[Any],
+    headers: list[str],
+    records: list[list[Any]],
+    widths: list[float],
+    styles: dict[str, ParagraphStyle],
 ) -> None:
     data = [[_table_cell(header, styles, header=True) for header in headers]]
     data.extend([_table_cell(value, styles) for value in record] for record in records)
@@ -376,6 +380,10 @@ def build_np3_evidence_register_pdf(audit: dict[str, Any], uploaded_evidence: li
     for row in audit.get("rows") or []:
         if row.get("category") != category:
             category = row.get("category")
+            # Only break when continuing an open segment -- `story` is already empty right after
+            # an uploaded PDF forced a segment split, and that split already starts a fresh page.
+            if story:
+                story.append(PageBreak())
             story.extend([Paragraph(_text(category), styles["section"]), Spacer(1, 2 * mm)])
         story.append(Paragraph(_text(row.get("topic")), styles["check"]))
         _paragraph(story, row.get("requirement_summary"), styles["body"])

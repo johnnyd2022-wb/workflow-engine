@@ -28,9 +28,16 @@ def _audit():
                         "evidence_fields": {"review_result": "No gaps found"},
                     }
                 ],
-                "derived_evidence": [
-                    {"title": "Active Core evidence", "detail": "Evidence file retained in Core."}
-                ],
+                "derived_evidence": [{"title": "Active Core evidence", "detail": "Evidence file retained in Core."}],
+            },
+            {
+                "category": "Documentation and record keeping",
+                "control_id": "delegation",
+                "topic": "Delegation",
+                "requirement_summary": "Record who is delegated.",
+                "state": "ready",
+                "history": [],
+                "derived_evidence": [],
             },
             {
                 "category": "Traceability",
@@ -75,23 +82,38 @@ def test_register_pdf_orders_checks_and_includes_recorded_answers_and_images():
     assert "cleaning-photo.png" in text
 
 
-def test_register_pdf_flows_multiple_checks_together_and_numbers_pages_globally():
+def test_register_pdf_flows_checks_in_one_section_together_but_breaks_page_between_sections():
     output = build_np3_evidence_register_pdf(_audit(), [])
     reader = PdfReader(BytesIO(output))
 
-    assert len(reader.pages) == 2  # cover + compact evidence pages, not one page/check
+    # cover, "Documentation and record keeping" (2 checks, compact -- not one page each),
+    # then a fresh page for "Traceability".
+    assert len(reader.pages) == 3
     assert "Page 1" in (reader.pages[0].extract_text() or "")
     assert "Page 2" in (reader.pages[1].extract_text() or "")
-    assert "Keep records" in (reader.pages[1].extract_text() or "")
-    assert "Trace and recall" in (reader.pages[1].extract_text() or "")
+    assert "Page 3" in (reader.pages[2].extract_text() or "")
+    same_section_page = reader.pages[1].extract_text() or ""
+    assert "Keep records" in same_section_page and "Delegation" in same_section_page
+    assert "Trace and recall" in (reader.pages[2].extract_text() or "")
+    assert "Trace and recall" not in same_section_page  # a new category starts its own page
 
 
 def test_register_pdf_appends_uploaded_pdf_and_embeds_non_renderable_upload():
     output = build_np3_evidence_register_pdf(
         _audit(),
         [
-            {"file_name": "supplier-certificate.pdf", "mime_type": "application/pdf", "content": _pdf(), "checksum_sha256": "b" * 64},
-            {"file_name": "instrument-export.bin", "mime_type": "application/octet-stream", "content": b"binary evidence", "checksum_sha256": "c" * 64},
+            {
+                "file_name": "supplier-certificate.pdf",
+                "mime_type": "application/pdf",
+                "content": _pdf(),
+                "checksum_sha256": "b" * 64,
+            },
+            {
+                "file_name": "instrument-export.bin",
+                "mime_type": "application/octet-stream",
+                "content": b"binary evidence",
+                "checksum_sha256": "c" * 64,
+            },
         ],
     )
 
