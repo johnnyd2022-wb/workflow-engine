@@ -176,6 +176,31 @@ def replay_recent_batches(
     return counts
 
 
+def expected_verification_contribution(
+    batches: tuple[RecentBatch, ...],
+) -> tuple[dict[str, int], int, list[str]]:
+    """What an API replay of these batches adds on top of the historical-import baseline
+    that `whistlebird_migration.build_import_verification` otherwise checks against:
+    one execution per batch, its still-pending steps counted as incomplete, and its
+    markers -- so the date-drift check doesn't mistake a batch's real, correctly-today
+    completion timestamp for the backdating bug it exists to catch (recent batches are
+    never run through the timestamp-correction pass; see this module's docstring).
+
+    Only maceration is supported today (`_SUPPORTED_STEPS`), so every batch's pending
+    count is "all steps except maceration" -- this falls out of the workflow's real step
+    list rather than assuming a fixed shape, so it keeps working once a later step is.
+    """
+    workflow_counts: dict[str, int] = {}
+    incomplete_steps = 0
+    markers: list[str] = []
+    for batch in batches:
+        workflow_counts[batch.workflow] = workflow_counts.get(batch.workflow, 0) + 1
+        total_steps = len(wm.PRODUCT_WORKFLOWS[batch.workflow][1])
+        incomplete_steps += total_steps - len(batch.steps_completed)
+        markers.append(batch.marker)
+    return workflow_counts, incomplete_steps, markers
+
+
 def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("validate", "apply"))

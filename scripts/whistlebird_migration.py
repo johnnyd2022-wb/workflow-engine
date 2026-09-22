@@ -2379,6 +2379,7 @@ def build_import_verification(
     np3_manifest_path: Path | None = None,
     crm_manifest_path: Path | None = None,
     disposals_manifest_path: Path | None = None,
+    recent_batches_manifest_path: Path | None = None,
 ) -> dict[str, Any]:
     """Compare loaded counts against the sources and assert no legacy wording leaked.
 
@@ -2438,6 +2439,25 @@ def build_import_verification(
         sum(len(batch.pending_steps) for batch in batches) if include_replay_ngs_purchases else 0
     )
 
+    # Recent (still in-progress) batches are a second, separate source on top of the
+    # historical timeline above -- like green_gold_records, only the API-replay path
+    # creates them, so only its verification should expect them.
+    recent_batch_markers: list[str] = []
+    if include_replay_ngs_purchases:
+        from whistlebird_recent_batches import (
+            DEFAULT_RECENT_BATCHES_MANIFEST,
+            expected_verification_contribution,
+            load_recent_batches_manifest,
+        )
+
+        recent_batches = load_recent_batches_manifest(recent_batches_manifest_path or DEFAULT_RECENT_BATCHES_MANIFEST)
+        workflow_counts, incomplete_from_recent, recent_batch_markers = expected_verification_contribution(
+            recent_batches
+        )
+        for workflow_name, count in workflow_counts.items():
+            expected_by_workflow[workflow_name] = expected_by_workflow.get(workflow_name, 0) + count
+        expected_incomplete_steps += incomplete_from_recent
+
     if include_replay_ngs_purchases:
         # The API replay replaces each origin-unspecified legacy Juniper receipt with
         # Macedonian and Himalayan components, preserving its total quantity but adding
@@ -2467,7 +2487,12 @@ def build_import_verification(
         ).scalar_one_or_none()
         if org_id is None:
             raise ValueError(f"Target organisation {requested_org_name!r} does not exist")
-        params = {"org_id": org_id, "names": list(PRODUCT_WORKFLOWS), "key": IMPORT_MARKER_KEY}
+        params = {
+            "org_id": org_id,
+            "names": list(PRODUCT_WORKFLOWS),
+            "key": IMPORT_MARKER_KEY,
+            "recent_batch_markers": recent_batch_markers,
+        }
         actual_raw = target.execute(
             text(
                 """
@@ -2532,6 +2557,7 @@ def build_import_verification(
                 WHERE e.org_id = :org_id
                   AND (es.completed_at AT TIME ZONE 'Pacific/Auckland')::date
                       = (now() AT TIME ZONE 'Pacific/Auckland')::date
+                  AND NOT (COALESCE(es.execution_data ->> 'batch_ref', '') = ANY(:recent_batch_markers))
                 """
             ),
             params,

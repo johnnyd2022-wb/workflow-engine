@@ -184,6 +184,7 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         np3_manifest_path=args.np3_manifest,
         crm_manifest_path=args.crm_manifest,
         disposals_manifest_path=args.disposals_manifest,
+        recent_batches_manifest_path=args.recent_batches_manifest,
     )
     wm._require_matching_import(report["verification"], "API rebuild")
     return report
