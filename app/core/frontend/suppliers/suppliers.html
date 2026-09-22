@@ -5,20 +5,32 @@
 {% block content %}
 <main class="sup-shell" data-suppliers-page aria-busy="true">
   <nav class="sup-breadcrumb" aria-label="Core location"><a href="/core" hx-boost="false">Core</a><span aria-hidden="true">/</span><a href="/core?tab=inventory" hx-boost="false">Inventory</a><span aria-hidden="true">/</span><strong>Suppliers</strong></nav>
-  <header class="sup-hero">
-    <div>
-      <p class="sup-eyebrow">INVENTORY / SUPPLIERS</p>
-      <p>Contact details for the businesses you buy from. Keep them current so a recall can reach every supplier.</p>
-    </div>
-    <div class="sup-hero__actions">
-      <button type="button" class="sup-btn sup-btn--primary" data-supplier-add>Add new supplier</button>
-      <button type="button" class="sup-btn sup-btn--light" data-suppliers-import title="Add a supplier for each supplier name on your inventory items that is not in this list yet. Existing suppliers and inventory are not changed.">Import from inventory</button>
-    </div>
-  </header>
   <p class="sup-message" data-suppliers-message role="status" aria-live="polite" hidden></p>
   <section class="sup-panel" aria-label="Supplier overview">
     <p class="sup-eyebrow">SUPPLIER OVERVIEW</p>
     <div class="sup-cards" data-suppliers-cards aria-live="polite"></div>
+  </section>
+  <section class="core2-workspace-container core2-action-container sup-actions" aria-label="Supplier actions">
+    <div class="core2-hub-card-stack">
+      <button type="button" class="core2-hub-card" data-supplier-add aria-labelledby="sup-add-title">
+        <span class="core2-hub-card__icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21v-1a6 6 0 0 1 6-6h1"></path><path d="M18 15v6"></path><path d="M15 18h6"></path></svg>
+        </span>
+        <span class="core2-hub-card__text">
+          <span id="sup-add-title" class="spa-form-section-title">Add new supplier</span>
+          <span class="page-subtitle">Save the contact details for a business you buy from.</span>
+        </span>
+      </button>
+      <button type="button" class="core2-hub-card" data-suppliers-import aria-labelledby="sup-import-title" title="Add a supplier for each supplier name on your inventory items that is not in this list yet. Existing suppliers and inventory are not changed.">
+        <span class="core2-hub-card__icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
+        </span>
+        <span class="core2-hub-card__text">
+          <span id="sup-import-title" class="spa-form-section-title">Import from inventory</span>
+          <span class="page-subtitle">Add a supplier for each name on your inventory that isn't listed yet.</span>
+        </span>
+      </button>
+    </div>
   </section>
   <section class="sup-panel sup-register" aria-label="Suppliers">
     <div class="sup-toolbar">
@@ -32,8 +44,11 @@
     <div class="sup-table-wrap" data-suppliers-table></div>
   </section>
 </main>
-{# Inside the content block on purpose: boosted navigation swaps only #page-content, so scripts placed in
-   the scripts block (outside it) never run and the page would stay empty until a full refresh. #}
-<script src="{{ url_for('core.serve_core_js', filename='core-suppliers.js') }}"></script>
-<script src="{{ url_for('core.serve_core_js', filename='core-suppliers-page.js') }}"></script>
+{# Inside the content block, deferred, on purpose: boosted navigation swaps only #page-content, so a
+   script in the scripts block never runs on a boosted visit and the page stays empty until a full
+   refresh. `defer` matters too: these tags sit before core-api.js (loaded later in base_spa.html), so
+   without it this page's first load() call would run -- and call window.CoreAPI -- before core-api.js
+   has defined it. #}
+<script src="{{ url_for('core.serve_core_js', filename='core-suppliers.js') }}" defer></script>
+<script src="{{ url_for('core.serve_core_js', filename='core-suppliers-page.js') }}" defer></script>
 {% endblock %}
