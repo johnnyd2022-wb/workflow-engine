@@ -88,15 +88,20 @@
           del: document.getElementById('flows2-manage-delete'),
           edit: document.getElementById('flows2-manage-edit'),
           draft: document.getElementById('flows2-manage-draft'),
+          fifo: document.getElementById('flows2-manage-fifo'),
         };
       }
 
       function syncDraftMenuLabel() {
         var els = getEls();
-        if (!els.draft) return;
         // currentProcess is a page-level variable populated by loadProcessData()
         var isDraft = !!(typeof currentProcess !== 'undefined' && currentProcess && currentProcess.is_draft);
-        els.draft.textContent = isDraft ? 'Set workflow to ready' : 'Set workflow to draft';
+        if (els.draft) els.draft.textContent = isDraft ? 'Set workflow to ready' : 'Set workflow to draft';
+        if (els.fifo) {
+          var fifoOn = !!(typeof currentProcess !== 'undefined' && currentProcess && currentProcess.settings
+            && currentProcess.settings.fifo_auto_select);
+          els.fifo.textContent = fifoOn ? 'Turn off FIFO auto-select' : 'Turn on FIFO auto-select';
+        }
       }
 
       function openMenu() {
@@ -176,6 +181,36 @@
             await CoreAPI.updateProcess(processId, { is_draft: nextIsDraft }, expected);
             if (typeof loadProcessData === 'function') await loadProcessData();
             syncDraftMenuLabel();
+          } catch (err) {
+            if (typeof CoreAPI !== 'undefined' && CoreAPI.isStaleWrite && CoreAPI.isStaleWrite(err)) {
+              if (typeof showNotification === 'function') {
+                showNotification('warning', 'Changed elsewhere', 'Someone else updated this process. Showing the latest.');
+              }
+              if (typeof loadProcessData === 'function') await loadProcessData();
+              syncDraftMenuLabel();
+              return;
+            }
+            console.error(err);
+          }
+        });
+      }
+      if (els.fifo) {
+        els.fifo.addEventListener('click', async function (e) {
+          e.preventDefault();
+          closeMenu();
+          if (!processId) return;
+          try {
+            var currentlyOn = !!(typeof currentProcess !== 'undefined' && currentProcess && currentProcess.settings
+              && currentProcess.settings.fifo_auto_select);
+            var expected = (typeof currentProcess !== 'undefined' && currentProcess) ? currentProcess.updated_at : undefined;
+            await CoreAPI.updateProcess(processId, { settings: { fifo_auto_select: !currentlyOn } }, expected);
+            if (typeof loadProcessData === 'function') await loadProcessData();
+            syncDraftMenuLabel();
+            if (typeof showNotification === 'function') {
+              showNotification('success', 'Saved', !currentlyOn
+                ? 'New executions will suggest the oldest in-stock lot for each material.'
+                : 'FIFO auto-select turned off.');
+            }
           } catch (err) {
             if (typeof CoreAPI !== 'undefined' && CoreAPI.isStaleWrite && CoreAPI.isStaleWrite(err)) {
               if (typeof showNotification === 'function') {

@@ -50,6 +50,12 @@
     var prettyLabel = ctx.prettyLabel;
     var convertUnit = ctx.convertUnit;
     var orgUsersMap = ctx.orgUsersMap;
+    // Workflow setting (Process.settings.fifo_auto_select): pre-suggest the oldest in-stock
+    // lot for each material, same convention as scripts/whistlebird_replay.py's FIFO draws
+    // (purchase_date ascending, nulls last, then created_at). Never auto-confirms -- it only
+    // sets the row's pending pick, exactly like a single card click, so Confirm is still a
+    // deliberate action and picking a different lot instead remains one click away.
+    var fifoAutoSelect = !!ctx.fifoAutoSelect;
     if (!variableInputs || !variableInputs.length || !inputsContainer) return;
       variableInputs.forEach((input, inputIdx) => {
         const inputSection = document.createElement('div');
@@ -1065,6 +1071,25 @@
         // Row activation
         firstRow.addEventListener('click', function() { setActiveRow(firstRow); });
         setActiveRow(firstRow);
+
+        if (fifoAutoSelect && !hiddenInput.value && !firstRow.getAttribute('data-pending-inv-id')) {
+          var fifoCandidate = (allInventory || [])
+            .filter(function (candidate) {
+              return (candidate.inventory_type || 'raw_material') === 'raw_material'
+                && nameMatchesExact(candidate.name)
+                && parseFloat(candidate.quantity) > 0;
+            })
+            .sort(function (a, b) {
+              var aDate = a.purchase_date || '';
+              var bDate = b.purchase_date || '';
+              if (aDate !== bDate) return (aDate || '\uffff').localeCompare(bDate || '\uffff');
+              return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+            })[0];
+          if (fifoCandidate) {
+            firstRow.setAttribute('data-pending-inv-id', String(fifoCandidate.id));
+            renderPickerCards(pickerState.activeType, pickerState.q);
+          }
+        }
 
         // Always start with neutral borders (avoid stale validation styles).
         inputSection.querySelectorAll('.execute-quantity-input').forEach(function(inp) {

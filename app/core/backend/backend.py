@@ -1547,25 +1547,21 @@ def create_process():
             return jsonify({"error": f"Invalid category: {category_str}"}), 400
 
     is_draft = data.get("is_draft", False)
+    settings, settings_error = _validate_process_settings(data.get("settings"))
+    if settings_error:
+        return jsonify({"error": settings_error}), 400
 
     repo = ProcessRepository(db_session)
     try:
         process = repo.create_process(
-            org_id=org_id, name=name, description=description, category=category, is_draft=is_draft
+            org_id=org_id,
+            name=name,
+            description=description,
+            category=category,
+            is_draft=is_draft,
+            settings=settings,
         )
-        return (
-            jsonify(
-                {
-                    "id": str(process.id),
-                    "name": process.name,
-                    "description": process.description,
-                    "category": process.category.value if process.category else None,
-                    "is_draft": process.is_draft,
-                    "created_at": process.created_at.isoformat() if process.created_at else None,
-                }
-            ),
-            201,
-        )
+        return jsonify(_serialize_process(process)), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception:
@@ -1592,6 +1588,23 @@ def _serialize_step(step) -> dict:
     }
 
 
+_PROCESS_SETTINGS_KEYS = {"fifo_auto_select"}
+
+
+def _validate_process_settings(raw: Any) -> tuple[dict, str | None]:
+    """`({}, None)` when absent; `(cleaned, None)` when valid; `({}, error)` otherwise."""
+    if raw is None:
+        return {}, None
+    if not isinstance(raw, dict):
+        return {}, "settings must be an object"
+    unknown = sorted(set(raw) - _PROCESS_SETTINGS_KEYS)
+    if unknown:
+        return {}, f"settings: unknown key(s) {', '.join(unknown)}"
+    if "fifo_auto_select" in raw and not isinstance(raw["fifo_auto_select"], bool):
+        return {}, "settings.fifo_auto_select must be true or false"
+    return raw, None
+
+
 def _serialize_process(process, *, with_steps: bool = False) -> dict:
     out = {
         "id": str(process.id),
@@ -1599,6 +1612,7 @@ def _serialize_process(process, *, with_steps: bool = False) -> dict:
         "description": process.description,
         "category": process.category.value if process.category else None,
         "is_draft": process.is_draft,
+        "settings": process.settings or {},
         "created_at": _iso(getattr(process, "created_at", None)),
         "updated_at": _iso(getattr(process, "updated_at", None)),
     }
@@ -1650,6 +1664,9 @@ def update_process(process_id: str):
     description = data.get("description")
     category_str = data.get("category")
     is_draft = data.get("is_draft")  # Extract is_draft from request
+    settings, settings_error = _validate_process_settings(data.get("settings"))
+    if settings_error:
+        return jsonify({"error": settings_error}), 400
 
     category = None
     if category_str:
@@ -1667,6 +1684,7 @@ def update_process(process_id: str):
             description=description,
             category=category,
             is_draft=is_draft,  # Pass is_draft to repository
+            settings=settings or None,
             if_match=_if_match_token(),
         )
 

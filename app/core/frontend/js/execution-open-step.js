@@ -315,6 +315,7 @@
         prettyLabel: prettyLabel,
         convertUnit: convertUnit,
         orgUsersMap: orgUsersMap,
+        fifoAutoSelect: !!(processData && processData.settings && processData.settings.fifo_auto_select),
       });
     }
 
