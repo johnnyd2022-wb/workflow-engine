@@ -104,13 +104,21 @@ class ProcessRepository:
         description: str | None = None,
         category: ProcessCategory | None = None,
         is_draft: bool = False,
+        settings: dict | None = None,
     ) -> Process:
         """Create a new process"""
         with start_span(
             "process.create",
             attributes={"org_id": str(org_id), "category": category.value if category else None},
         ):
-            process = Process(org_id=org_id, name=name, description=description, category=category, is_draft=is_draft)
+            process = Process(
+                org_id=org_id,
+                name=name,
+                description=description,
+                category=category,
+                is_draft=is_draft,
+                settings=settings or {},
+            )
             self.db.add(process)
             self.db.flush()
             _ = process.id
@@ -163,6 +171,7 @@ class ProcessRepository:
         description: str | None = None,
         category: ProcessCategory | None = None,
         is_draft: bool | None = None,
+        settings: dict | None = None,
         if_match: str | None = None,
     ) -> Process | str | None:
         """Update process (must belong to org).
@@ -210,6 +219,13 @@ class ProcessRepository:
             if is_draft is not None and is_draft != process.is_draft:
                 diff["is_draft"] = {"before": process.is_draft, "after": is_draft}
                 process.is_draft = is_draft
+            if settings is not None:
+                # Merge, not replace: a caller setting one toggle must not silently drop
+                # another it doesn't know about.
+                merged = {**(process.settings or {}), **settings}
+                if merged != (process.settings or {}):
+                    diff["settings"] = {"before": process.settings, "after": merged}
+                    process.settings = merged
 
             if not diff:
                 if if_match is not None:

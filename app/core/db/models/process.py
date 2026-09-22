@@ -4,7 +4,7 @@ import enum
 import uuid
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.db.models.models import Base
@@ -32,6 +32,11 @@ class Process(TenantScoped, Base):
     description = Column(String(1000), nullable=True)
     category = Column(Enum(ProcessCategory, name="process_category"), nullable=True)
     is_draft = Column(Boolean, nullable=False, default=False, index=True)
+    # Per-workflow behaviour toggles (currently just fifo_auto_select -- see
+    # execution-render-inputs.js). Kept as a small open JSON object, matching the
+    # settings-column pattern used for compliance profiles and CRM config, rather than
+    # a dedicated column per toggle.
+    settings = Column(JSONB, nullable=False, default=dict, server_default="{}")
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 

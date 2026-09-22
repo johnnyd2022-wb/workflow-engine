@@ -197,6 +197,65 @@ def test_ac3_update_process_noop_returns_200_without_new_version(authed_client, 
 
 
 # --------------------------------------------------------------------------------------
+# Process.settings (fifo_auto_select) -- the workflow-level FIFO auto-suggest toggle
+# --------------------------------------------------------------------------------------
+
+
+def test_settings_defaults_to_empty_and_round_trips_through_create(authed_client):
+    bare = _create_process(authed_client)
+    assert bare["settings"] == {}
+
+    with_setting = _create_process(authed_client, settings={"fifo_auto_select": True})
+    assert with_setting["settings"] == {"fifo_auto_select": True}
+
+
+def test_create_process_rejects_invalid_settings(authed_client):
+    resp = authed_client.post(
+        "/api/core/processes", json={"name": "x", "settings": {"fifo_auto_select": "yes"}}
+    )
+    assert resp.status_code == 400
+    assert "fifo_auto_select" in resp.get_json()["error"]
+
+    resp = authed_client.post("/api/core/processes", json={"name": "x", "settings": {"unknown_key": 1}})
+    assert resp.status_code == 400
+    assert "unknown" in resp.get_json()["error"].lower()
+
+    resp = authed_client.post("/api/core/processes", json={"name": "x", "settings": "not-an-object"})
+    assert resp.status_code == 400
+
+
+def test_update_process_settings_merges_rather_than_replaces(authed_client, db):
+    pid = _create_process(authed_client, settings={"fifo_auto_select": True})["id"]
+    version_count_before = db.query(ProcessVersion).filter(ProcessVersion.process_id == pid).count()
+
+    # An update that doesn't mention settings at all must leave the existing value alone.
+    resp = authed_client.put(f"/api/core/processes/{pid}", json={"description": "unrelated change"})
+    assert resp.status_code == 200, resp.data
+    assert resp.get_json()["settings"] == {"fifo_auto_select": True}
+
+    resp = authed_client.put(f"/api/core/processes/{pid}", json={"settings": {"fifo_auto_select": False}})
+    assert resp.status_code == 200, resp.data
+    assert resp.get_json()["settings"] == {"fifo_auto_select": False}
+
+    # Setting the same value again is a genuine no-op: no new ProcessVersion.
+    version_count_after_real_change = db.query(ProcessVersion).filter(ProcessVersion.process_id == pid).count()
+    resp = authed_client.put(f"/api/core/processes/{pid}", json={"settings": {"fifo_auto_select": False}})
+    assert resp.status_code == 200
+    assert (
+        db.query(ProcessVersion).filter(ProcessVersion.process_id == pid).count()
+        == version_count_after_real_change
+        > version_count_before
+    )
+
+
+def test_update_process_rejects_invalid_settings(authed_client):
+    pid = _create_process(authed_client)["id"]
+    resp = authed_client.put(f"/api/core/processes/{pid}", json={"settings": {"fifo_auto_select": 1}})
+    assert resp.status_code == 400
+    assert "fifo_auto_select" in resp.get_json()["error"]
+
+
+# --------------------------------------------------------------------------------------
 # AC4: delete_process
 # --------------------------------------------------------------------------------------
 
