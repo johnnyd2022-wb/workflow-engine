@@ -5,12 +5,13 @@
   root.dataset.boundCompliant = '1';
 
   var state = { overview: null };
-  var evidenceWorkspace = root.dataset.compliantSurface === 'evidence';
+  // The only remaining generic record form is Customs (NP3 evidence is per-check, its own workspace).
+  var CUSTOMS_FRAMEWORK = 'customs-alcohol';
+  var evidenceWorkspace = root.dataset.compliantSurface === 'customs';
   var errorEl = root.querySelector('[data-compliant-error]');
   var frameworkRoot = root.querySelector('[data-frameworks]');
   var summaryEl = root.querySelector('[data-compliant-summary]');
   var readinessEl = root.querySelector('[data-readiness]');
-  var frameworkSelect = root.querySelector('[data-framework-select]');
   var controlSelect = root.querySelector('[data-control-select]');
   var captureGuidance = root.querySelector('[data-capture-guidance]');
   var declaredLalField = root.querySelector('[data-declared-lal-field]');
@@ -41,24 +42,19 @@
     submit.textContent = submitting ? 'Saving…' : submit.dataset.defaultLabel;
   }
 
+  function customsFramework() {
+    return (state.overview.frameworks || []).find(function (item) { return item.slug === CUSTOMS_FRAMEWORK; });
+  }
   function populateControls() {
-    clear(frameworkSelect); clear(controlSelect);
-    (state.overview.frameworks || []).forEach(function (framework) {
-      frameworkSelect.appendChild(option(framework.slug, framework.name));
-    });
-    function renderControls() {
-      clear(controlSelect);
-      var framework = (state.overview.frameworks || []).find(function (item) { return item.slug === frameworkSelect.value; });
-      if (!framework) return;
-      framework.controls.forEach(function (control) { controlSelect.appendChild(option(control.control_id, control.control_id.replace(/-/g, ' '))); });
-      renderCaptureGuidance();
-    }
-    frameworkSelect.onchange = renderControls;
+    clear(controlSelect);
+    var framework = customsFramework();
+    if (!framework) return;
+    framework.controls.forEach(function (control) { controlSelect.appendChild(option(control.control_id, control.control_id.replace(/-/g, ' '))); });
     controlSelect.onchange = renderCaptureGuidance;
-    renderControls();
+    renderCaptureGuidance();
   }
   function renderCaptureGuidance() {
-    var framework = (state.overview.frameworks || []).find(function (item) { return item.slug === frameworkSelect.value; });
+    var framework = customsFramework();
     var control = framework && framework.controls.find(function (item) { return item.control_id === controlSelect.value; });
     if (!control) { captureGuidance.textContent = ''; declaredLalField.hidden = true; return; }
     var capture = control.capture || {}; var needs = [];
@@ -120,20 +116,22 @@
       metrics.appendChild(moduleMetric(health.needsAttention, 'need attention', 'attention'));
       metrics.appendChild(moduleMetric(health.overdue, 'overdue', 'overdue'));
       card.appendChild(metrics);
+      // Only these two have a workspace: NP3 evidence is per-check, Customs keeps the generic
+      // record form. Any other framework in the catalogue has no capture page yet.
       var destination = framework.slug === 'np3-food-control'
         ? '/compliant/nz-alcohol/food-safety'
-        : '/compliant/nz-alcohol/evidence?framework=' + encodeURIComponent(framework.slug);
-      var link = document.createElement('a'); link.href = destination; link.setAttribute('hx-boost', 'false');
-      link.className = 'compliant-framework-summary__link';
-      link.textContent = framework.slug === 'np3-food-control' ? 'Open NP3' : 'Open evidence';
-      card.appendChild(link);
+        : framework.slug === CUSTOMS_FRAMEWORK ? '/compliant/nz-alcohol/customs' : null;
+      if (destination) {
+        var link = document.createElement('a'); link.href = destination; link.setAttribute('hx-boost', 'false');
+        link.className = 'compliant-framework-summary__link';
+        link.textContent = framework.slug === 'np3-food-control' ? 'Open NP3' : 'Open Customs';
+        card.appendChild(link);
+      }
       target.appendChild(card);
     });
   }
   function textElement(tag, value, className) { var el = document.createElement(tag); el.textContent = value; if (className) el.className = className; return el; }
-  function selectControl(frameworkSlug, controlId) {
-    frameworkSelect.value = frameworkSlug;
-    frameworkSelect.dispatchEvent(new Event('change'));
+  function selectControl(controlId) {
     controlSelect.value = controlId;
     controlSelect.dispatchEvent(new Event('change'));
   }
@@ -189,12 +187,8 @@
     renderProductSuggestions(reconciliation);
     renderExistingEvidence(overview.core_proof_candidates || []);
     populateControls();
-    var params = new URLSearchParams(window.location.search);
-    if (params.get('framework')) {
-      frameworkSelect.value = params.get('framework');
-      frameworkSelect.dispatchEvent(new Event('change'));
-      if (params.get('control')) selectControl(params.get('framework'), params.get('control'));
-    }
+    var control = new URLSearchParams(window.location.search).get('control');
+    if (control) selectControl(control);
   }
   async function load() {
     root.setAttribute('aria-busy', 'true');
@@ -209,7 +203,7 @@
       // Evidence lists are independent: load them together without delaying the
       // mapping and record workspace behind serial requests.
       var supportingRequests = Promise.allSettled([
-        api('/api/compliant/records'),
+        api('/api/compliant/records?framework=' + encodeURIComponent(CUSTOMS_FRAMEWORK)),
         api('/api/compliant/alcohol-products'),
       ]);
       state.overview = await overviewRequest;
