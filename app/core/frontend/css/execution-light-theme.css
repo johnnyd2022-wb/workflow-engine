@@ -28,11 +28,17 @@
   --border-light: #e6ecef;
 
   --primary: #175c52;
+  --primary-dark: #0d6c6a;
   --success: #18703c;
   --warning: #9b4b00;
   --error: #a23421;
   --danger: #a23421;
   --info: #175c52;
+
+  /* .btn-primary's glow (styles2.css) is var(--shadow-primary) -- override so it's
+     teal-tinted, not the site default's blue, to match the solid teal fill below. */
+  --shadow-primary: 0 4px 16px rgba(13, 108, 106, 0.25);
+  --shadow-primary-lg: 0 8px 24px rgba(13, 108, 106, 0.3);
 
   --radius-md: 8px;
   --radius-lg: 16px;

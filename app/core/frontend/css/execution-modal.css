@@ -277,3 +277,84 @@
   border-color: var(--error, #ef4444);
   color: #b91c1c;
 }
+
+/* --- FIFO auto-select summary table (execution-render-inputs.js) --------- */
+/* One compact table for every material FIFO found stock for, instead of each
+   material's full picker section sitting open -- see the "instead of leaving every
+   material's full section open" comment where this is built. Bounded height + sticky
+   header keeps a step with many materials on one screen without losing any rows. */
+.exec-fifo-summary {
+  margin: 0 0 20px 0;
+  padding: 16px;
+  border: 1px solid var(--border-default, #e5e7eb);
+  border-radius: var(--radius-lg, 16px);
+  background: var(--bg-card, #fff);
+}
+.exec-fifo-summary__intro {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary, #6b7280);
+}
+.exec-fifo-summary__table-wrap {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border-light, #e5e7eb);
+  border-radius: var(--radius-md, 10px);
+}
+.exec-fifo-summary__table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.exec-fifo-summary__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-secondary, #f9fafb);
+  text-align: left;
+  padding: 8px 10px;
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280);
+  border-bottom: 1px solid var(--border-default, #e5e7eb);
+  white-space: nowrap;
+}
+.exec-fifo-summary__table tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-light, #f3f4f6);
+  color: var(--text-primary, #111827);
+  white-space: nowrap;
+}
+.exec-fifo-summary__table tbody tr:last-child td {
+  border-bottom: none;
+}
+.exec-fifo-summary__table tbody tr:hover {
+  background: var(--bg-secondary, #f9fafb);
+}
+.exec-fifo-summary__action-cell {
+  text-align: right;
+}
+.exec-fifo-summary__change {
+  border: 1px solid var(--border-default, #e5e7eb);
+  background: var(--bg-secondary, #f3f4f6);
+  color: var(--text-secondary, #6b7280);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.exec-fifo-summary__change:hover {
+  color: var(--text-primary, #111827);
+  border-color: var(--primary, #2563eb);
+}
+.exec-fifo-summary__confirmed {
+  color: var(--success, #18703c);
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.exec-fifo-summary__confirm-all {
+  margin-top: 14px;
+  width: 100%;
+}
