@@ -679,7 +679,9 @@ unchanged: real actions are still stamped when they happen.
 ## Suppliers, 2026-09-22
 
 Core now has a per-organisation suppliers address book (Inventory tab, below "Open live
-inventory"): add, view, edit and delete, and import the supplier names already on inventory items.
+inventory"): add, edit and delete, and import the supplier names already on inventory items. "View
+suppliers" opens a dedicated page (`/core/suppliers`) styled like the NP3 page: status cards that
+filter the register, a search box and the table.
 Every create, edit and delete writes an audit event and audit-log row with the supplier's details
 and what changed.
 

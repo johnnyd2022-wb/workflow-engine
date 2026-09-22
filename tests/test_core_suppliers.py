@@ -149,6 +149,10 @@ def test_supplier_routes_require_login_and_round_trip_json(db, flask_app):
         assert client.delete(f"/api/core/suppliers/{supplier_id}").status_code == 404
         page = client.get("/core")
         assert page.status_code == 200 and b"data-supplier-add" in page.data and b"core-suppliers.js" in page.data
+        assert b'href="/core/suppliers"' in page.data  # "View suppliers" is a link to the page, not a modal
+        register = client.get("/core/suppliers")
+        assert register.status_code == 200
+        assert b"data-suppliers-page" in register.data and b"core-suppliers-page.js" in register.data
     finally:
         db.rollback()
         db.query(AuditLog).filter(AuditLog.org_id == org.id).delete(synchronize_session=False)

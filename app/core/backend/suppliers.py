@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from flask import g, jsonify, request
+from flask import g, jsonify, render_template, request
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -199,6 +199,12 @@ def register_routes(bp) -> None:
 
     def actor_id() -> UUID | None:
         return UUID(g.user_id) if g.user_id else None
+
+    @bp.route("/core/suppliers", methods=["GET"])
+    @requires_auth
+    def suppliers_page():
+        """The suppliers register: status cards, search and table."""
+        return render_template("suppliers/suppliers.html", active_page="core")
 
     @bp.route("/api/core/suppliers", methods=["GET"])
     @requires_auth

@@ -1,9 +1,8 @@
-/* Suppliers on the Core inventory tab: add, view, edit, delete, and pull in the suppliers
-   already named on inventory items. One delegated listener, so it survives HTMX navigation. */
+/* Supplier add/edit form, shared by the Core inventory tab and the Suppliers page.
+   Exposes window.CoreSuppliers.openForm(supplier | null, onSaved). One delegated listener, so it
+   survives HTMX navigation. */
 (function () {
   'use strict';
-  if (window.__core2SuppliersBound) return;
-  window.__core2SuppliersBound = true;
 
   var FIELDS = [
     { key: 'name', label: 'Supplier name', required: true, max: 255 },
@@ -26,72 +25,18 @@
     node.addEventListener('click', onClick);
     return node;
   }
-  function api(path, options) { return window.CoreAPI.request('/suppliers' + path, options || {}); }
   function dialog() { return document.querySelector('[data-core2-suppliers-dialog]'); }
 
-  function open(title, body) {
+  function openForm(supplier, onSaved) {
     var box = dialog();
-    if (!box) return null;
+    if (!box) return;
+    var editing = !!supplier;
     box.replaceChildren();
     var header = el('div', 'core2-suppliers-dialog__header');
-    var heading = el('h2', 'spa-form-section-title', title);
+    var heading = el('h2', 'spa-form-section-title', editing ? 'Edit supplier' : 'Add new supplier');
     heading.id = 'core2-suppliers-dialog-title';
-    header.appendChild(heading);
-    header.appendChild(button('Close', 'btn-secondary', function () { box.close(); }));
-    box.append(header, body);
-    if (!box.open) box.showModal();
-    return box;
-  }
+    header.append(heading, button('Close', 'btn-secondary', function () { box.close(); }));
 
-  function status(message, isError) {
-    var node = el('p', 'core2-suppliers-dialog__status' + (isError ? ' core2-suppliers-dialog__status--error' : ''), message || '');
-    node.setAttribute('role', isError ? 'alert' : 'status');
-    node.hidden = !message;
-    return node;
-  }
-
-  async function showList(message, isError) {
-    var body = el('div', 'core2-suppliers-dialog__body');
-    var suppliers = [];
-    try {
-      suppliers = (await api('')).suppliers || [];
-    } catch (err) {
-      message = err.message;
-      isError = true;
-    }
-    var actions = el('div', 'core2-suppliers-dialog__actions');
-    actions.appendChild(button('Add new supplier', 'btn-primary', function () { showForm(null); }));
-    actions.appendChild(button('Import from inventory', 'btn-secondary', importFromInventory));
-    body.append(actions, status(message, isError));
-
-    if (!suppliers.length) {
-      body.appendChild(el('p', '', 'No suppliers yet. Add one, or import the suppliers already named on your inventory items.'));
-    } else {
-      var table = el('table', 'core2-suppliers-table');
-      var head = table.createTHead().insertRow();
-      ['Supplier', 'Contact', 'Phone', 'Email', 'Address', 'Notes', ''].forEach(function (label) {
-        head.appendChild(el('th', '', label));
-      });
-      var rows = table.createTBody();
-      suppliers.forEach(function (supplier) {
-        var row = rows.insertRow();
-        ['name', 'contact_name', 'phone', 'email', 'address', 'notes'].forEach(function (key) {
-          row.insertCell().textContent = supplier[key] || '—';
-        });
-        var cell = row.insertCell();
-        cell.className = 'core2-suppliers-table__actions';
-        cell.appendChild(button('Edit', 'btn-secondary', function () { showForm(supplier); }));
-        cell.appendChild(button('Delete', 'btn-secondary', function () { remove(supplier); }));
-      });
-      var scroller = el('div', 'core2-suppliers-table-wrap');
-      scroller.appendChild(table);
-      body.appendChild(scroller);
-    }
-    open('Suppliers', body);
-  }
-
-  function showForm(supplier) {
-    var editing = !!supplier;
     var form = el('form', 'core2-suppliers-dialog__body core2-suppliers-form');
     var inputs = {};
     FIELDS.forEach(function (field) {
@@ -106,12 +51,14 @@
       form.appendChild(label);
       inputs[field.key] = input;
     });
-    var message = status('');
+    var message = el('p', 'core2-suppliers-dialog__status core2-suppliers-dialog__status--error');
+    message.setAttribute('role', 'alert');
+    message.hidden = true;
     form.appendChild(message);
     var actions = el('div', 'core2-suppliers-dialog__actions');
     var save = el('button', 'btn btn-primary', editing ? 'Save changes' : 'Add supplier');
     save.type = 'submit';
-    actions.append(save, button('Back to suppliers', 'btn-secondary', function () { showList(); }));
+    actions.append(save, button('Cancel', 'btn-secondary', function () { box.close(); }));
     form.appendChild(actions);
     form.addEventListener('submit', async function (event) {
       event.preventDefault();
@@ -119,47 +66,41 @@
       FIELDS.forEach(function (field) { payload[field.key] = inputs[field.key].value; });
       save.disabled = true;
       try {
-        await api(editing ? '/' + encodeURIComponent(supplier.id) : '', {
+        var result = await window.CoreAPI.request('/suppliers' + (editing ? '/' + encodeURIComponent(supplier.id) : ''), {
           method: editing ? 'PUT' : 'POST',
           body: payload,
         });
-        await showList((editing ? 'Saved ' : 'Added ') + payload.name.trim() + '.');
+        box.close();
+        if (onSaved) onSaved(result.supplier, editing);
       } catch (err) {
         message.textContent = err.message;
-        message.className = 'core2-suppliers-dialog__status core2-suppliers-dialog__status--error';
         message.hidden = false;
         save.disabled = false;
       }
     });
-    open(editing ? 'Edit supplier' : 'Add new supplier', form);
+    box.append(header, form);
+    if (!box.open) box.showModal();
     inputs.name.focus();
   }
 
-  async function remove(supplier) {
-    if (!window.confirm('Delete ' + supplier.name + '? This is recorded in the audit log.')) return;
-    try {
-      await api('/' + encodeURIComponent(supplier.id), { method: 'DELETE' });
-      await showList('Deleted ' + supplier.name + '.');
-    } catch (err) {
-      await showList(err.message, true);
-    }
-  }
+  window.CoreSuppliers = { openForm: openForm };
 
-  async function importFromInventory() {
-    try {
-      var result = await api('/import-from-inventory', { method: 'POST', body: {} });
-      var created = result.created || [];
-      await showList(created.length
-        ? 'Added ' + created.length + ' from inventory: ' + created.join(', ') + '.'
-        : 'Every supplier named on your inventory is already here.');
-    } catch (err) {
-      await showList(err.message, true);
-    }
-  }
-
+  // The inventory tab's "Add new supplier" button; the Suppliers page wires its own.
+  if (window.__core2SuppliersBound) return;
+  window.__core2SuppliersBound = true;
   document.addEventListener('click', function (event) {
     if (!(event.target instanceof Element)) return;
-    if (event.target.closest('[data-supplier-add]')) showForm(null);
-    else if (event.target.closest('[data-supplier-view]')) showList();
+    var add = event.target.closest('[data-supplier-add]');
+    if (!add || document.querySelector('[data-suppliers-page]')) return;
+    openForm(null, function (supplier) {
+      var status = document.querySelector('[data-suppliers-hub-status]');
+      if (!status) return;
+      status.replaceChildren(document.createTextNode('Added ' + supplier.name + '. '));
+      var link = document.createElement('a');
+      link.href = '/core/suppliers';
+      link.textContent = 'View suppliers';
+      status.appendChild(link);
+      status.hidden = false;
+    });
   });
 })();
