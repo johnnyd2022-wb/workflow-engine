@@ -242,6 +242,12 @@
         const pickerTabs = Array.prototype.slice.call(inputSection.querySelectorAll('.flow-mode-segment'));
         let rowIndex = 0;
         var rowInputApi = {};
+        // Which row of THIS material is being edited. Deliberately local, not on the shared
+        // `ses` session object: with one such per-material closure per step input, a shared
+        // field meant every material's confirm/click handlers fought over one pointer, so
+        // confirming botanical A could silently apply to (and then lock) botanical B's row,
+        // leaving every later material's "Confirm input" a no-op.
+        var materialActiveRow = null;
         if (!ses.inputStateByKey) ses.inputStateByKey = new Map();
 
         function normalizeInventoryTabType(inv) {
@@ -252,7 +258,7 @@
         }
         function renderPickerCards(activeType, q) {
           if (!pickerCards) return;
-          var activeRow = ses.editingInputRow;
+          var activeRow = materialActiveRow;
           var selectedId = '';
           try {
             var sel = activeRow ? activeRow.querySelector('.execute-inventory-select') : null;
@@ -501,7 +507,7 @@
               ev.preventDefault();
               ev.stopPropagation();
               var invId = confirmBtn.getAttribute('data-inv-id') || '';
-              var targetRow = ses.editingInputRow || (rowsContainer && rowsContainer.firstElementChild);
+              var targetRow = materialActiveRow || (rowsContainer && rowsContainer.firstElementChild);
               if (!targetRow) return;
               var locked = targetRow.getAttribute('data-selection-locked') === 'true';
               var selNow = targetRow.querySelector('.execute-inventory-select');
@@ -518,7 +524,7 @@
             if (!btn) return;
             ev.preventDefault();
             var invId = btn.getAttribute('data-inv-id') || '';
-            var targetRow = ses.editingInputRow || (rowsContainer && rowsContainer.firstElementChild);
+            var targetRow = materialActiveRow || (rowsContainer && rowsContainer.firstElementChild);
             if (!targetRow) return;
             // If already confirmed for this row, don't allow changing unless they add another input row.
             var locked = targetRow.getAttribute('data-selection-locked') === 'true';
@@ -822,7 +828,7 @@
         // Always-on card picker: clicking a row makes it active; clicking a card assigns selection to the active row.
         function setActiveRow(rowEl) {
           if (!rowEl) return;
-          ses.editingInputRow = rowEl;
+          materialActiveRow = rowEl;
           inputSection.querySelectorAll('.execute-input-row').forEach(function(r) {
             r.classList.toggle('execute-input-row--active', r === rowEl);
           });
@@ -898,7 +904,7 @@
               toggleInventoryCardDetails(id);
               return;
             }
-            setRowSelection(ses.editingInputRow || firstRow, id);
+            setRowSelection(materialActiveRow || firstRow, id);
           };
           return card;
         }
@@ -915,7 +921,7 @@
           var searchEl = dropdown ? dropdown.querySelector('.execute-addanother-search') : null;
           if (!cardsContainer || !searchEl) return;
           var searchVal = (searchEl.value || '').trim().toLowerCase();
-          var selectedElsewhere = ses.editingInputRow ? getSelectedInventoryIdsExcludingRow(ses.editingInputRow) : new Set();
+          var selectedElsewhere = materialActiveRow ? getSelectedInventoryIdsExcludingRow(materialActiveRow) : new Set();
           var children = cardsContainer.children;
           for (var i = 0; i < children.length; i++) {
             var el = children[i];
@@ -1009,7 +1015,7 @@
           noneCard.dataset.inventoryId = '';
           noneCard.style.cssText = 'padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;';
           noneCard.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px;">— None —</span>';
-          noneCard.onclick = function(e) { e.stopPropagation(); setRowSelection(ses.editingInputRow || rowEl, ''); };
+          noneCard.onclick = function(e) { e.stopPropagation(); setRowSelection(materialActiveRow || rowEl, ''); };
           cardsContainer.appendChild(noneCard);
           if (isFirstRow) {
             sortedInventory.forEach(function(inv) {

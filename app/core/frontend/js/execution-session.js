@@ -12,7 +12,9 @@
   function emptySession() {
     return {
       inputStateByKey: new Map(),
-      editingInputRow: null,
+      // No shared "editing row" field on purpose: each material's own input section in
+      // execution-render-inputs.js tracks its own active row locally now, after a shared
+      // one here caused one material's confirm click to silently apply to another's row.
       inventoryForSubmit: null,
       closeInventoryDropdown: null,
       pendingEvidenceFilesByStepId: new Map(),

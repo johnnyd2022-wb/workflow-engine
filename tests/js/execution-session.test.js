@@ -43,5 +43,8 @@ test('new session has expected shape', () => {
   assert.ok(s.inputStateByKey instanceof Map);
   assert.ok(s.pendingEvidenceFilesByStepId instanceof Map);
   assert.ok(s.evidenceByStepId instanceof Map);
-  assert.equal(s.editingInputRow, null);
+  // No shared "editing row" field: each material's own input section tracks its active
+  // row locally now (execution-render-inputs.js) -- a shared one here caused one
+  // material's confirm click to silently apply to another's row.
+  assert.equal('editingInputRow' in s, false);
 });
