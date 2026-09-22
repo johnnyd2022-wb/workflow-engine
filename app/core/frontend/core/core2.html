@@ -489,6 +489,12 @@
           </div>
           {% endif %}
         </div>
+{# Inside the content block, deferred, on purpose: boosted navigation swaps only #page-content, so
+   a script in the scripts block below never runs on a boosted visit to /core -- only a full refresh
+   would load it. `defer` matters here too: this tag now sits before core-api.js (loaded later in
+   base_spa.html), so without it the script would run -- and, on the Suppliers page, call
+   window.CoreAPI -- before core-api.js has defined it. #}
+<script src="{{ url_for('core.serve_core_js', filename='core-suppliers.js') }}" defer></script>
 {% endblock %}
 
 {% block scripts %}
@@ -503,7 +509,6 @@
   </script>
   {% include 'shared/execution_modal_stack_scripts.html' %}
   <script src="{{ url_for('core.serve_core_js', filename='add-inventory-reconciliation.js') }}"></script>
-  <script src="{{ url_for('core.serve_core_js', filename='core-suppliers.js') }}"></script>
   <script>
     {
     // Global variable for notification timeout
