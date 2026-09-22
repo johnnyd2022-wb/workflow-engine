@@ -49,6 +49,7 @@ import whistlebird_disposals as disposals  # noqa: E402
 import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
+import whistlebird_recent_batches as recent_batches  # noqa: E402
 import whistlebird_suppliers as suppliers  # noqa: E402
 from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
 
@@ -909,6 +910,7 @@ def run_replay(
     crm_manifest_path: Path | None = crm.DEFAULT_CRM_MANIFEST,
     disposals_manifest_path: Path | None = disposals.DEFAULT_DISPOSALS_MANIFEST,
     suppliers_manifest_path: Path | None = suppliers.DEFAULT_SUPPLIERS_MANIFEST,
+    recent_batches_manifest_path: Path | None = recent_batches.DEFAULT_RECENT_BATCHES_MANIFEST,
 ) -> dict[str, Any]:
     # Validate before the first request so a bad NP3 manifest fails now, not after the
     # long Core replay has already run.
@@ -916,6 +918,11 @@ def run_replay(
     crm_manifest = crm.load_crm_manifest(crm_manifest_path) if crm_manifest_path else None
     disposal_list = disposals.load_disposals_manifest(disposals_manifest_path) if disposals_manifest_path else None
     supplier_list = suppliers.load_suppliers_manifest(suppliers_manifest_path) if suppliers_manifest_path else None
+    recent_batch_list = (
+        recent_batches.load_recent_batches_manifest(recent_batches_manifest_path)
+        if recent_batches_manifest_path
+        else None
+    )
     events = build_timeline(legacy_source, production_manifest_path)
     if limit is not None:
         events = events[:limit]
@@ -970,6 +977,11 @@ def run_replay(
     # Suppliers are the address book for the names on the inventory the replay just created.
     if supplier_list is not None and limit is None:
         counts["suppliers"] = suppliers.replay_suppliers(client, supplier_list)
+
+    # Recent real batches draw from whatever stock the Core replay above just created, so
+    # they run after it -- but leave NP3 last, since it can otherwise block Core step completions.
+    if recent_batch_list is not None and limit is None:
+        counts["recent_batches"] = recent_batches.replay_recent_batches(client, store, recent_batch_list)
 
     # NP3 evidence goes last: an `np3_execution_evidence_mode: required` profile (part of
     # the manifest) would otherwise block the Core step completions above.

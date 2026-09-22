@@ -41,6 +41,7 @@ import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_lot_details as lot_details  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
+import whistlebird_recent_batches as recent_batches  # noqa: E402
 import whistlebird_replay as replay  # noqa: E402
 import whistlebird_replay_correct_timestamps as correct  # noqa: E402
 import whistlebird_replay_simulation as simulation  # noqa: E402
@@ -53,7 +54,7 @@ STEPS = (
     "scoped reset",
     "product workflows",
     "Compliant NZ-alcohol setup",
-    "replay Core history, then expired-stock disposals, CRM mappings, NP3 evidence",
+    "replay Core history, then expired-stock disposals, CRM mappings, recent batches, NP3 evidence",
     "timestamp pass",
     "lot details pass",
     "trace dates pass",
@@ -87,7 +88,13 @@ def check_replay_plan(args: argparse.Namespace) -> list[str]:
         crm.load_crm_manifest(args.crm_manifest)
         listed = disposals.load_disposals_manifest(args.disposals_manifest)
         suppliers.load_suppliers_manifest(args.suppliers_manifest)
-    except (crm.CrmManifestError, disposals.DisposalManifestError, suppliers.SuppliersManifestError) as exc:
+        recent_batches.load_recent_batches_manifest(args.recent_batches_manifest)
+    except (
+        crm.CrmManifestError,
+        disposals.DisposalManifestError,
+        suppliers.SuppliersManifestError,
+        recent_batches.RecentBatchesError,
+    ) as exc:
         return [f"manifest invalid: {exc}"]
     try:
         return simulation.check_replay_plan(
@@ -151,6 +158,7 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         crm_manifest_path=args.crm_manifest,
         disposals_manifest_path=args.disposals_manifest,
         suppliers_manifest_path=args.suppliers_manifest,
+        recent_batches_manifest_path=args.recent_batches_manifest,
     )
     report["timestamps"] = correct.correct_timestamps(
         args.legacy_source,
@@ -198,6 +206,7 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
     parser.add_argument("--crm-manifest", type=Path, default=crm.DEFAULT_CRM_MANIFEST)
     parser.add_argument("--suppliers-manifest", type=Path, default=suppliers.DEFAULT_SUPPLIERS_MANIFEST)
+    parser.add_argument("--recent-batches-manifest", type=Path, default=recent_batches.DEFAULT_RECENT_BATCHES_MANIFEST)
     parser.add_argument("--disposals-manifest", type=Path, default=disposals.DEFAULT_DISPOSALS_MANIFEST)
     parser.add_argument("--admin-email", default=wm.DEFAULT_ADMIN_EMAIL)
     parser.add_argument("--admin-password-env", default="WHISTLEBIRD_ADMIN_PASSWORD")
