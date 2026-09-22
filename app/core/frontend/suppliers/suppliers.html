@@ -12,7 +12,7 @@
     </div>
     <div class="sup-hero__actions">
       <button type="button" class="sup-btn sup-btn--primary" data-supplier-add>Add new supplier</button>
-      <button type="button" class="sup-btn sup-btn--light" data-suppliers-import>Import from inventory</button>
+      <button type="button" class="sup-btn sup-btn--light" data-suppliers-import title="Add a supplier for each supplier name on your inventory items that is not in this list yet. Existing suppliers and inventory are not changed.">Import from inventory</button>
     </div>
   </header>
   <p class="sup-message" data-suppliers-message role="status" aria-live="polite" hidden></p>
@@ -31,10 +31,9 @@
     <p class="sup-count" data-suppliers-count aria-live="polite"></p>
     <div class="sup-table-wrap" data-suppliers-table></div>
   </section>
-  <dialog class="core2-suppliers-dialog" data-core2-suppliers-dialog aria-labelledby="core2-suppliers-dialog-title"></dialog>
 </main>
-{% endblock %}
-{% block scripts %}
+{# Inside the content block on purpose: boosted navigation swaps only #page-content, so scripts placed in
+   the scripts block (outside it) never run and the page would stay empty until a full refresh. #}
 <script src="{{ url_for('core.serve_core_js', filename='core-suppliers.js') }}"></script>
 <script src="{{ url_for('core.serve_core_js', filename='core-suppliers-page.js') }}"></script>
 {% endblock %}
