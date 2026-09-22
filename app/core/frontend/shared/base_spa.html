@@ -25,6 +25,10 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='execution-modal.css') }}">
   {# Execute-step page: scoped to .batch-start-spa so safe to load globally (needed for HTMX swaps). #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batch-start.css') }}">
+  {# Executions get Compliant/NP3/CRM's light card styling regardless of the site-wide dark/light
+     toggle -- scoped to #execute-step-modal.exec-modal so it's inert everywhere else. Loaded last
+     of the execution sheets so its token overrides win. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='execution-light-theme.css') }}">
   {# Process wizard step content: .flow-mode-segmented + step 4 styles. Loaded globally so HTMX #page-content swaps don't need to re-inject them. #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='create-process-step-content.css') }}">
   {# Add-inventory manual: rules use :has(.add-inventory-manual-root); must be global for HTMX #page-content swaps. #}
