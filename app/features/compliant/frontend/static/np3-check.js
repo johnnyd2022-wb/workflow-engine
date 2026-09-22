@@ -460,22 +460,23 @@
     root.querySelector('[data-np3-check-next-review]').textContent = latest && latest.due_date
       ? 'Next review: ' + latest.due_date : 'No signed review yet';
 
+    // Top to bottom: guidance and the review reminder side by side (read this before you act),
+    // then one full-width place to act (sign off, plus the built-in register when this check has
+    // one), then the supporting Core evidence, then the full audit trail.
     var workspace = root.querySelector('[data-np3-check-workspace]');
     clear(workspace);
+    var topRow = document.createElement('div');
+    topRow.className = 'np3-check-top-row';
+    topRow.appendChild(guidance(check));
+    topRow.appendChild(schedule(check));
+
     var primary = document.createElement('div');
     primary.className = 'np3-check-workspace__primary';
     primary.appendChild(reviewForm(check));
     var log = logBook(check, payload.available_staff || []);
     if (log) primary.appendChild(log);
-    primary.appendChild(history(check));
-    var context = document.createElement('aside');
-    context.className = 'np3-check-workspace__context';
-    context.setAttribute('aria-label', 'Check guidance and settings');
-    context.appendChild(guidance(check));
-    context.appendChild(connectedEvidence(check));
-    context.appendChild(schedule(check));
-    workspace.appendChild(primary);
-    workspace.appendChild(context);
+
+    workspace.append(topRow, primary, connectedEvidence(check), history(check));
   }
 
   async function load() {
