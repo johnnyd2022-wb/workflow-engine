@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from flask import Blueprint, g, redirect, render_template
+from flask import Blueprint, g, redirect, render_template, request
 
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
@@ -51,9 +51,21 @@ def nz_alcohol_dashboard():
 
 @page_bp.route("/compliant/nz-alcohol/evidence", methods=["GET"])
 @requires_auth
-def nz_alcohol_evidence_register():
-    """Fallback evidence and product-mapping workspace for non-NP3 controls."""
-    return render_template("compliant/evidence_register.html", **_nz_alcohol_template_context(active_compliant_tab="evidence"))
+def legacy_nz_alcohol_evidence():
+    """Historic URL: NP3 evidence now lives per-check, so this page is Customs-only."""
+    query = f"?{request.query_string.decode()}" if request.query_string else ""
+    return redirect(f"/compliant/nz-alcohol/customs{query}", code=302)
+
+
+@page_bp.route("/compliant/nz-alcohol/customs", methods=["GET"])
+@requires_auth
+def nz_alcohol_customs_workspace():
+    """Customs alcohol reconciliation: product mapping and Customs record-keeping evidence.
+
+    NP3 food-safety evidence is recorded per check in its own workspace (np3_check.html) and
+    does not use this generic record form.
+    """
+    return render_template("compliant/customs.html", **_nz_alcohol_template_context(active_compliant_tab="customs"))
 
 
 @page_bp.route("/compliant/nz-alcohol/np3-audit", methods=["GET"])

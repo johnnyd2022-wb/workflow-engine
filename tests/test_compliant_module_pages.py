@@ -149,10 +149,10 @@ def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeho
     assert _food_safety_programme({"food_control_programme": "np2"}) == "np2"
     assert _food_safety_programme({"food_control_programme": "unexpected"}) == "np3"
     assert 'href="/compliant/nz-alcohol/food-safety"' in tabs
-    assert 'href="/compliant/nz-alcohol/evidence"' in tabs
+    assert 'href="/compliant/nz-alcohol/customs"' in tabs
     assert "food_control_programme|upper" in tabs
     assert 'route("/compliant/nz-alcohol/food-safety"' in routes
-    assert 'route("/compliant/nz-alcohol/evidence"' in routes
+    assert 'route("/compliant/nz-alcohol/customs"' in routes
     assert "updateFoodSafetyTab" in configuration
     assert "support is coming soon" in placeholder
 

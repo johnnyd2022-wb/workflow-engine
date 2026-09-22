@@ -103,8 +103,8 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     dashboard = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "dashboard.html"
     ).read_text(encoding="utf-8")
-    evidence_register = (
-        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "evidence_register.html"
+    customs_workspace = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "customs.html"
     ).read_text(encoding="utf-8")
     dashboard_script = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.js"
@@ -117,8 +117,8 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     ).read_text(encoding="utf-8")
 
     assert "data-evidence-control-heading" not in dashboard
-    assert "data-evidence-control-heading" in evidence_register
-    assert "review_interval_months" in evidence_register
+    assert "data-evidence-control-heading" in customs_workspace
+    assert "review_interval_months" in customs_workspace
     assert "evidence_coverage" in dashboard_script
     assert "compliant-framework-summary" in dashboard_script
     assert "summary_health" in dashboard_script
