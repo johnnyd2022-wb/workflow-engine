@@ -1,0 +1,108 @@
+/**
+ * Executions get the same light, card-based look as Compliant/NP3/CRM (white cards,
+ * teal accent, Inter), independent of the app's site-wide dark/light toggle.
+ *
+ * Scope: #execute-step-modal.exec-modal covers BOTH the popup (start-execution modal)
+ * and the inline record-step page (.batch-start-spa) -- it's the same root element in
+ * either mode, just rendered differently (see execution-modal.css). Almost everything
+ * downstream (execution-render-inputs.js and friends, exec-picker-* in
+ * execution-modal.css, batch-start.css) already reads these same design-token custom
+ * properties, so re-declaring their VALUES here converts the whole execution surface
+ * without touching that layout code.
+ *
+ * Palette lifted directly from app/features/compliant/frontend/static/compliant.css
+ * (the module-card / np3-detail-card family) so this isn't a new, fourth palette.
+ */
+
+#execute-step-modal.exec-modal {
+  --bg-app: #f7f9fa;
+  --bg-card: #ffffff;
+  --bg-secondary: #fbfcfd;
+  --bg-elevated: #ffffff;
+
+  --text-primary: #172033;
+  --text-secondary: #5d6778;
+  --text-tertiary: #758794;
+
+  --border-default: #dce4e9;
+  --border-light: #e6ecef;
+
+  --primary: #175c52;
+  --success: #18703c;
+  --warning: #9b4b00;
+  --error: #a23421;
+  --danger: #a23421;
+  --info: #175c52;
+
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 18px;
+
+  --shadow-sm: 0 2px 8px rgba(18, 46, 66, 0.05);
+  --shadow-md: 0 6px 22px rgba(18, 46, 66, 0.04);
+  --shadow-lg: 0 10px 25px rgba(18, 46, 66, 0.08);
+
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  color: var(--text-primary);
+}
+
+/* Popup mode: give the panel the same white-card treatment as a compliant module card. */
+#execute-step-modal.exec-modal .exec-modal__panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 70px rgba(18, 46, 66, 0.16);
+}
+
+/* Category tabs (raw/intermediate/final): compliant uses a light tint for the active
+   tab, not a solid fill -- match that rather than letting --primary paint a solid block. */
+#execute-step-modal.exec-modal .flow-mode-segmented {
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: #fff;
+  padding: 3px;
+}
+#execute-step-modal.exec-modal .flow-mode-segment {
+  color: var(--text-secondary);
+  border-radius: 7px;
+}
+#execute-step-modal.exec-modal .flow-mode-segment--active {
+  background: #e7f3f1 !important;
+  color: var(--primary) !important;
+}
+
+/* Buttons: compliant's solid action-button shade (darker than the --primary text/border
+   accent) so CTAs read as buttons, not just teal text. */
+#execute-step-modal.exec-modal .btn-primary,
+#execute-step-modal.exec-modal .exec-picker-confirm-btn {
+  background: #0d6c6a;
+  border-color: #0d6c6a;
+  color: #fff;
+}
+#execute-step-modal.exec-modal .btn-primary:hover,
+#execute-step-modal.exec-modal .exec-picker-confirm-btn:hover {
+  background: #095856;
+  border-color: #095856;
+}
+
+/* Record-step page chrome that hardcodes dark-mode colours outside this scope's tokens
+   (base_spa.html defaults the whole site to data-spa-theme="dark") -- force these back
+   to the light equivalents so the sticky bar / confirm sheet don't stay black. */
+html[data-spa-theme="dark"] .batch-start-spa .batch-start-record-bar {
+  background: var(--bg-app, #f7f9fa);
+  border-top-color: var(--border-default, #dce4e9);
+}
+html[data-spa-theme="dark"] .batch-start-spa .batch-record-confirm__backdrop {
+  background: rgba(15, 23, 42, 0.48);
+}
+html[data-spa-theme="dark"] .batch-start-spa .batch-record-confirm__sheet {
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #172033);
+  box-shadow: 0 -12px 48px rgba(18, 46, 66, 0.14);
+}
+html[data-spa-theme="dark"] .batch-start-spa .batch-record-confirm__text {
+  color: var(--text-secondary, #5d6778);
+}
+html[data-spa-theme="dark"] .batch-start-spa .process-flow-wizard__more.flow-wizard-example-disclosure {
+  border-bottom-color: var(--border-default, #dce4e9);
+}
