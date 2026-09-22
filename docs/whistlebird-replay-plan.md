@@ -700,3 +700,30 @@ tenant without a reset:
     uv run python scripts/whistlebird_suppliers.py apply --base-url https://localhost:8005 --insecure
 
 Dating is replay tooling for `Whistlebird Ltd` only; in the app a supplier action is stamped when it happens.
+
+## Recent batches (real, in-progress production), 2026-09-22
+
+The historical timeline (`whistlebird_replay_timeline.py`) replays batches that already
+finished every step, per the founder's spreadsheet. A batch that started recently and has
+NOT finished every step yet -- a maceration put on tonight, whose distilling/aging/bottling
+genuinely haven't happened -- doesn't fit that model: it has no known outcome to derive
+dates from, and it must draw its tracked ingredients from whatever real stock the tenant
+currently holds, not a historical purchase ledger.
+
+`scripts/whistlebird_recent_batches.py` + `docs/whistlebird-recent-batches-source.json` cover
+this. Only the maceration step is supported so far, on Wildflower or Solstice (the recipe
+already defined in `whistlebird_migration.py`); it draws every tracked ingredient FIFO
+(oldest `purchase_date` first) via `MarkerStore.consume_available_raw_material` -- the same
+read-only live-inventory lookup the historical replay itself uses for its NGS shortfall
+draws. Idempotent via the same `execution_data->>'batch_ref'` marker convention as the
+historical replay, so a rebuild replays a given batch's maceration exactly once. Unlike
+NP3/CRM/suppliers, it is never dated by the timestamp-correction pass -- it's a real event
+happening now, so it keeps the timestamp the API call itself stamps.
+
+First entry: a Solstice maceration put on the night of 2026-09-22, applied to the live
+tenant and verified (226.8g Macedonian juniper from lot JBM006, 97.2g Himalayan juniper from
+lot PO786MAR22-1-JBH005, 21.6g nutmeg, 5.76g cinnamon, 21.6g liquorice root, 3.6g Szechuan
+pepper, 0.746L NGS from lot GNS-2026-06-03-16 -- all drawn from real stock; the execution is
+`IN_PROGRESS`, Distilling now `READY`). Extending this to later steps (distilling, aging,
+bottling) as the founder actually performs them is a deliberate follow-up, not something
+this script should guess at -- `load_recent_batches_manifest` refuses any other step name.

@@ -1,0 +1,12 @@
+{
+  "_comment": "Real, currently-in-progress production batches -- distinct from docs/whistlebird-production-sheet-source.json, which is the founder's historical spreadsheet of batches that have already finished every step. An entry here started recently and has NOT finished every step yet: it draws its tracked ingredients from whatever real stock the live tenant currently holds (FIFO, oldest purchase_date first), not from a historical purchase ledger, since these ARE that stock. Only the maceration step is supported today; extending to distilling/aging/bottling is a deliberate follow-up. See scripts/whistlebird_recent_batches.py.",
+  "batches": [
+    {
+      "marker": "solstice-2026-09-22-maceration",
+      "product_line": "solstice",
+      "started": "2026-09-22",
+      "steps_completed": ["maceration"],
+      "note": "Founder-confirmed (2026-09-22): maceration put on tonight for a new Solstice batch. VAT number is chosen later, at Aging."
+    }
+  ]
+}
