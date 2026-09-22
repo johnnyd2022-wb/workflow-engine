@@ -56,6 +56,10 @@
     // sets the row's pending pick, exactly like a single card click, so Confirm is still a
     // deliberate action and picking a different lot instead remains one click away.
     var fifoAutoSelect = !!ctx.fifoAutoSelect;
+    // One entry per material FIFO actually found stock for, in variableInputs order --
+    // built while each material's own section renders (below), consumed once after the
+    // loop to build the compact summary table in place of showing every section open.
+    var fifoSummaryRows = [];
     if (!variableInputs || !variableInputs.length || !inputsContainer) return;
       variableInputs.forEach((input, inputIdx) => {
         const inputSection = document.createElement('div');
@@ -1088,6 +1092,14 @@
           if (fifoCandidate) {
             firstRow.setAttribute('data-pending-inv-id', String(fifoCandidate.id));
             renderPickerCards(pickerState.activeType, pickerState.q);
+            fifoSummaryRows.push({
+              inputSection: inputSection,
+              firstRow: firstRow,
+              inv: fifoCandidate,
+              materialName: input.name || '',
+              expectedQty: input.quantity,
+              expectedUnit: input.unit || ''
+            });
           }
         }
 
@@ -1166,6 +1178,131 @@
         inputsContainer.appendChild(inputSection);
       });
 
+    // FIFO summary table: one row per material FIFO found stock for, instead of leaving
+    // every material's full section open (which is what made this feel like scrolling
+    // through every option in stock for every item). Each row's own section is kept
+    // fully intact underneath, just hidden -- "Change" reveals it exactly as it would
+    // have rendered without FIFO, and "Confirm all" clicks each row's own, already-
+    // rendered Confirm button, so this never re-implements the confirm/lock logic
+    // (execution-inventory-picker-view.js) that the earlier cross-material bug lived in.
+    if (fifoAutoSelect && fifoSummaryRows.length) {
+      function fmtSummaryDate(raw) {
+        if (!raw) return '—';
+        try {
+          return new Date(raw).toLocaleDateString();
+        } catch (e) {
+          return String(raw);
+        }
+      }
+
+      var fifoBox = document.createElement('div');
+      fifoBox.className = 'exec-fifo-summary';
+
+      var fifoIntro = document.createElement('p');
+      fifoIntro.className = 'exec-fifo-summary__intro';
+      fifoIntro.textContent =
+        'FIFO auto-selected the oldest in-stock lot for ' +
+        (fifoSummaryRows.length === 1 ? 'this material' : 'each material') +
+        ' below. Review and confirm all at once, or change a single row first.';
+      fifoBox.appendChild(fifoIntro);
+
+      var fifoTableWrap = document.createElement('div');
+      fifoTableWrap.className = 'exec-fifo-summary__table-wrap';
+      var table = document.createElement('table');
+      table.className = 'exec-fifo-summary__table';
+      table.innerHTML =
+        '<thead><tr><th>Item</th><th>Supplier</th><th>Batch</th><th>Purchased</th><th>Expiry</th><th>Qty</th><th></th></tr></thead>';
+      var tbody = document.createElement('tbody');
+      table.appendChild(tbody);
+      fifoTableWrap.appendChild(table);
+      fifoBox.appendChild(fifoTableWrap);
+
+      var confirmAllBtn = document.createElement('button');
+      confirmAllBtn.type = 'button';
+      confirmAllBtn.className = 'btn btn-primary exec-fifo-summary__confirm-all';
+      fifoBox.appendChild(confirmAllBtn);
+
+      function pendingRows() {
+        return fifoSummaryRows.filter(function (row) {
+          return row.firstRow.getAttribute('data-selection-locked') !== 'true' && !row.removed;
+        });
+      }
+      function refreshConfirmAllButton() {
+        var pending = pendingRows();
+        if (!pending.length) {
+          confirmAllBtn.style.display = 'none';
+          return;
+        }
+        confirmAllBtn.style.display = '';
+        confirmAllBtn.textContent = 'Confirm all (' + pending.length + ')';
+      }
+      function markRowChanged(row) {
+        row.removed = true;
+        row.inputSection.style.display = '';
+        if (row.tr && row.tr.parentNode) row.tr.parentNode.removeChild(row.tr);
+        if (!tbody.children.length) fifoBox.style.display = 'none';
+        refreshConfirmAllButton();
+        try {
+          row.inputSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) {}
+      }
+      function markRowConfirmed(row) {
+        if (!row.actionCell) return;
+        row.actionCell.textContent = '';
+        var check = document.createElement('span');
+        check.className = 'exec-fifo-summary__confirmed';
+        check.textContent = '✓ Confirmed';
+        row.actionCell.appendChild(check);
+      }
+
+      fifoSummaryRows.forEach(function (row) {
+        row.inputSection.style.display = 'none';
+        var tr = document.createElement('tr');
+        row.tr = tr;
+
+        [
+          row.materialName,
+          row.inv.supplier || '—',
+          row.inv.supplier_batch_number || row.inv.batch_number || row.inv.lot_number || '—',
+          fmtSummaryDate(row.inv.purchase_date),
+          fmtSummaryDate(row.inv.expiry_date),
+          (row.expectedQty != null ? row.expectedQty : '') + ' ' + (row.expectedUnit || '')
+        ].forEach(function (text) {
+          var td = document.createElement('td');
+          td.textContent = text;
+          tr.appendChild(td);
+        });
+
+        var tdAction = document.createElement('td');
+        tdAction.className = 'exec-fifo-summary__action-cell';
+        var changeBtn = document.createElement('button');
+        changeBtn.type = 'button';
+        changeBtn.className = 'exec-fifo-summary__change';
+        changeBtn.textContent = 'Change';
+        changeBtn.addEventListener('click', function () {
+          markRowChanged(row);
+        });
+        tdAction.appendChild(changeBtn);
+        tr.appendChild(tdAction);
+        row.actionCell = tdAction;
+
+        tbody.appendChild(tr);
+      });
+
+      confirmAllBtn.addEventListener('click', function () {
+        pendingRows().forEach(function (row) {
+          var btn = row.inputSection.querySelector('[data-action="confirm-input"]');
+          if (btn) btn.click();
+          if (row.firstRow.getAttribute('data-selection-locked') === 'true') {
+            markRowConfirmed(row);
+          }
+        });
+        refreshConfirmAllButton();
+      });
+
+      refreshConfirmAllButton();
+      inputsContainer.insertBefore(fifoBox, inputsContainer.firstChild);
+    }
   }
 
   /**
