@@ -3,84 +3,943 @@
     "council_name": null,
     "trade_waste_consent_reference": null,
     "settings": {
-      "food_control_programme": "np3",
-      "np3_execution_evidence_mode": "required",
-      "np3_review_interval_months": 12,
+      "np3_verifier_name": null,
+      "trade_waste_council": null,
+      "liquor_licence_types": [],
+      "trade_waste_required": false,
       "alcohol_product_types": [
         "spirits"
       ],
+      "np3_verification_date": "2026-09-23",
+      "food_control_programme": "np3",
+      "liquor_licence_due_date": null,
+      "liquor_licence_reference": null,
       "require_core_source_refs": true,
-      "trade_waste_required": false
+      "np3_verification_location": null,
+      "np3_check_review_intervals": {},
+      "np3_review_interval_months": 12,
+      "np3_execution_evidence_mode": "required"
     }
   },
   "staff": [
-    {"email": "johnny.dempsey@whistlebird.test", "name": "Johnny Dempsey", "role": "admin"},
-    {"email": "nikolai.scott@whistlebird.test", "name": "Nikolai Scott", "role": "member"}
+    {
+      "email": "johnny.dempsey@whistlebird.test",
+      "role": "admin",
+      "name": "Johnny Dempsey"
+    },
+    {
+      "email": "nikolai.scott@whistlebird.test",
+      "role": "member",
+      "name": "Nikolai Scott"
+    }
   ],
-  "annual_training": {
-    "dates": [
-      "2024-02-02",
-      "2025-02-02",
-      "2026-02-02"
-    ],
-    "categories": [
-      "hand-washing-clean-clothing",
-      "keeping-away-when-sick",
-      "keeping-foods-separate",
-      "cleaning-and-sanitising",
-      "cross-contamination-protocols",
-      "sourcing-receiving-tracing",
-      "process-step-risk-checks",
-      "when-something-goes-wrong",
-      "equipment-set-up-and-operation"
-    ]
-  },
   "attestations": [
-    {"control_id": "registration-scope", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "This system stores all records for Whistlebird and actively follows requirements for NP3 compliance.", "evidence_fields": {"last_scope_review": "2026-02-01"}},
-    {"control_id": "corrective-actions", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "We have not had to do this but we can quickly and effectively isolate affected products and stop processes. Our internal system flags non compliant processes which has been tailored towards the alcohol industry so we get a live record and signal of non compliance.", "evidence_fields": {"close_out_date": "2026-02-01"}},
-    {"control_id": "trace-and-recall", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Our internal system was built to trace everything. We integrate with Xero and map batch IDs to sales records so we can see full lineage from source ingredient through to all stores that have taken our stock.", "evidence_fields": {"mock_recall_date": "2026-02-01", "trace_result": "Batch IDs are mapped to Xero sales records, giving full lineage from source ingredient to every store that has taken stock"}},
-    {"control_id": "documentation-record-keeping", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "This system has routine checks that flag when reviews are done which is set per check. We have not had any issues since we have always used in house systems like this to prevent issues and there are only 2 of us that own and operate this so it's easy to stay on top of.", "evidence_fields": {"record_register_location": "Compliant NP3 register and Core execution evidence", "retention_check_date": "2026-02-01"}},
-    {"control_id": "staff-competency", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Staff training and competency is recorded in the training register on this check: each training category is logged per person with the date it was completed, and the register table shows the latest date for each person.", "evidence_reference": "Whistlebird annual NP3 training register", "evidence_fields": {"training_register_reference": "Staff training register on this check (training category, person and date)", "last_training_review": "2026-02-01"}},
-    {"control_id": "delegation", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Both of us perform all duties in the business. We are both across cross contamination and hygiene protocols and stay away if sick - since we are part time we do not have set 'days' for work.", "evidence_fields": {"responsible_person": "Johnny Dempsey", "delegation_reference": "Both owner-operators perform all duties"}},
-    {"control_id": "operator-verification", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Areas for improvement from last verification noted and actioned - obtained first aid kit and completed recall simulation.", "evidence_fields": {"follow_up_status": "Areas for improvement from last verification noted and actioned: first aid kit obtained and recall simulation completed"}},
-    {"control_id": "personal-hygiene", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Staff follow cross contamination and hygiene protocols, handwashing, wear clean clothes and wear new and clean gloves when handling food.", "evidence_reference": "Whistlebird annual NP3 training register", "evidence_fields": {"hygiene_procedure": "Hand washing and clean clothing procedure", "observation_date": "2026-02-01"}},
-    {"control_id": "health-and-sickness", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "We stay away from work if we are sick, since there are only 2 of us this is easy to manage and this system flags on every check now when they are up for review which prompts us to re-evaluate if our processes are still fit for purpose.", "evidence_reference": "Whistlebird annual NP3 training register and illness register", "evidence_fields": {"illness_procedure": "Keeping away from food when sick procedure", "last_health_review": "2026-02-01"}},
-    {"control_id": "food-standards-composition", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "We only use raw ingredients in our products, none of which are allergens.", "evidence_fields": {"product_or_recipe": "Whistlebird spirit recipes"}},
-    {"control_id": "food-standards-microbiological", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Chemicals and food are stored in separate contained containers. Food is stored in air tight containers individually per ingredient to avoid cross contamination. Food processing areas are cleaned before food processing is done and food handling is done with new and clean gloves and we wear clean clothing to reduce the chance of issues here."},
-    {"control_id": "time-temperature-processing", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "We distill our Gin above 78°C for a couple of hours per distillation, this is well above the minimum time at temperature to avoid issues.", "evidence_fields": {"process_step": "Spirit production process", "critical_limit": "Distillation above 78°C for a couple of hours per distillation"}},
-    {"control_id": "cross-contamination", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Staff follow cross contamination and hygiene protocols, handwashing, wear clean clothes and wear new and clean gloves when handling food.", "evidence_reference": "Whistlebird annual NP3 training register", "evidence_fields": {"control_method": "Keeping foods separate in the food preparation area"}},
-    {"control_id": "equipment-design", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Our equipment was selected to fit into a small scale operation and we opted for glassware because it's easy to clean. All equipment is washed in the sink with dishwashing liquid and scrubbing like you would home dishes.", "evidence_fields": {"equipment_or_area": "Production equipment and food-contact surfaces", "suitability_check": "Glassware chosen because it is easy to clean; equipment washed with dishwashing liquid and scrubbing"}},
-    {"control_id": "suppliers-and-purchasing", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Supplier provided inventory is recorded in our internal system. This records batch numbers, received dates and expiry dates and allows us to get source to sale tracing.", "evidence_fields": {"supplier_name": "Whistlebird ingredient suppliers"}},
-    {"control_id": "receiving-food", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Food received is inspected upon arrival for damage or being dirty, is recorded in our internal system with supplier, batch numbers, dates and expiry dates.", "evidence_fields": {"receiving_log": "Core inventory receipts plus NP3 receiving log", "last_delivery_check": "2026-02-01"}},
-    {"control_id": "allergen-management", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "We only use raw ingredients, none of which are on the allergen lists.", "evidence_fields": {"allergen_matrix": "Raw ingredients only; none are on the allergen lists"}},
-    {"control_id": "cooking-poultry", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "N/A", "evidence_fields": {"critical_limit": "Not applicable — no poultry is cooked", "batch_log": "Not applicable — confirm on annual scope review"}},
-    {"control_id": "defrosting-reheating", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "N/A", "evidence_fields": {"method": "Not applicable — no defrosting or reheating process", "log_reference": "Not applicable — confirm on annual scope review"}},
-    {"control_id": "storage-stock-rotation", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "All received botanicals are stored in individual clean, air tight glass containers. This is to prevent cross contamination and keep for as long as possible. Our internal system has the supplier, batch numbers and expiry dates so we are flagged immediately if anything were to be expired or coming up to expired ahead of time which we dispose of the ingredient and replace with fresh food.", "evidence_reference": "Core inventory and expired-stock disposal records", "evidence_fields": {"storage_area": "Ingredient and finished-product storage", "check_reference": "Core inventory stock-rotation review"}},
-    {"control_id": "cooling-freezing", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "N/A", "evidence_fields": {"critical_limit": "Not applicable — no cooling or freezing control used", "log_reference": "Not applicable — confirm on annual scope review"}},
-    {"control_id": "display-temperature", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "N/A", "evidence_fields": {"display_area": "Not applicable — no temperature-controlled display", "log_reference": "Not applicable — confirm on annual scope review"}},
-    {"control_id": "calibration", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Only one piece of equipment is routinely calibrated which is our Anton Paar Easy Dens used to ABV check our products. We keep a small sample of pure ethanol (96.4%) which is lab tested and we use this as our control and then measure our own internal products.", "evidence_fields": {"device_id": "Anton Paar Easy Dens (ABV measurement)", "calibration_reference": "Compared against a lab-tested 96.4% ethanol control sample", "next_due_date": "2027-02-01"}},
-    {"control_id": "transporting-food", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "N/A, our spirits are good in their bottles and have heatshrinks to show tampering for customers.", "evidence_fields": {"transport_method": "Sealed bottles with tamper-evident heat shrink"}},
-    {"control_id": "food-labelling-advertising", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Labels sent prior to verification. Labels contain pregnancy warnings, label strength of product (abv) and standard drinks, name and address of business and batch numbers.", "evidence_fields": {"label_requirements_check": "Labels carry pregnancy warning, ABV, standard drinks, business name and address, and batch number", "pre_visit_submission_reference": "Labels sent to the verifier prior to verification"}},
-    {"control_id": "biological-hazards", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Biological hazards include chemicals and sickness in our environment. Chemicals are stored in a separate container (food is stored in airtight glass containers). If we are sick, we just don't turn up for a few days and ensure we are not coming into the building while sick. We also wear clean clothing, and wear clean gloves when dealing with food, following cross contamination protocols.", "evidence_fields": {"hazard": "Chemicals and sickness in the environment", "control_verification": "Chemicals stored separately; sick staff stay away; clean clothing and gloves; cross contamination protocols"}},
-    {"control_id": "water-activity-control", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "N/A", "evidence_fields": {"applicability": "Not applicable — no dried or concentrated food process", "method": "Not applicable", "result_reference": "Not applicable — confirm on annual scope review"}},
-    {"control_id": "acidification-fermentation-control", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "N/A", "evidence_fields": {"applicability": "Not applicable — no acidification or fermentation safety control", "method": "Not applicable", "result_reference": "Not applicable — confirm on annual scope review"}},
-    {"control_id": "chemical-hazards", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Chemicals are stored in a separate container (food is stored in airtight glass containers). We also wear clean clothing, and wear clean gloves when dealing with food, following cross contamination protocols.", "evidence_fields": {"hazard": "Cleaning and maintenance chemicals", "control_verification": "Chemicals stored in separate containers from food (food in airtight glass containers)"}},
-    {"control_id": "physical-hazards", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "We have had broken bottles which we dispose of by wrapping in thick cardboard and put in the bin which goes out with our home bins since we take all rubbish off site to our homes.", "evidence_fields": {"hazard": "Foreign matter from equipment or packaging", "control_verification": "Bottles inspected during manufacturing; broken bottles wrapped in thick cardboard and removed off site"}},
-    {"control_id": "importing-food", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "N/A", "evidence_fields": {"import_reference": "Not applicable unless importing food", "clearance_reference": "Not applicable — confirm before importing"}},
-    {"control_id": "cleaning-and-hygiene", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "All benches are cleaned and then sanitised using Star San before any food handling is done and end of every shift. We leave Star San for at least a minute before using the space. Toilets are cleaned daily and floors mopped often or when needed. Rubbish is removed every shift.", "evidence_reference": "Whistlebird annual NP3 training register and cleaning log", "evidence_fields": {"cleaning_schedule": "Benches cleaned and sanitised with Star San before food handling and at end of every shift; toilets cleaned daily; floors mopped often; rubbish removed every shift", "area_or_equipment": "Production and food-contact areas", "verification_date": "2026-02-01"}},
-    {"control_id": "pest-animal-control", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Rodent traps are set. We inspect food packaging for any signs of pests.", "evidence_fields": {"pest_control_reference": "Rodent traps set; food packaging inspected for signs of pests", "last_inspection": "2026-02-01"}},
-    {"control_id": "waste-management", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Rubbish is removed every shift. Waste from our distillations is small enough that I take it home and put it in our compost since it's all natural botanicals and the alcohol is all gone.", "evidence_fields": {"waste_control": "Rubbish removed every shift; small volumes of botanical distillation waste composted at home once the alcohol is gone"}},
-    {"control_id": "premises-services", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Spaces of the premise have been curated for specific uses e.g. we are close to kitchen taps for cooling when running the still and have adequate bench space that is easy to clean and sanitise for most operations.", "evidence_fields": {"area_or_service": "Production premises and essential services", "condition_check": "New solid concrete structure with dedicated spaces and easy-to-clean benches"}},
-    {"control_id": "water-supply", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "We use the Petone Aquifer as our water supply which the council monitor and test.", "evidence_fields": {"water_source_type": "Council-monitored supply", "water_source": "Petone Aquifer", "water_assurance": "Council monitors and tests the supply", "storage_container_provenance": "Not applicable unless water is stored in a repurposed container"}},
-    {"control_id": "maintenance", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "Our physical premise is a new solid concrete structure. Our equipment is in good working order and is tuned for our operations.", "evidence_fields": {"asset_or_area": "Production equipment and premises", "maintenance_reference": "Equipment in good working order and tuned for operations"}},
-    {"control_id": "unsafe-unsuitable-food", "signed_on": "2026-02-01", "due_date": "2027-02-01", "review_interval_months": 12, "how_we_meet": "We have had couriers break our products on deliveries. They dispose of the product and we invoice them for the cost of the product. Physical hazard is the main concern with what we manufacture and we inspect all bottles during manufacturing processes.", "evidence_fields": {"affected_product": "Bottles broken in courier delivery", "disposition": "Courier disposes of the product and is invoiced for its cost"}}
+    {
+      "control_id": "acidification-fermentation-control",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "N/A",
+      "evidence_fields": {
+        "applicability": "Not applicable — no acidification or fermentation safety control",
+        "method": "Not applicable",
+        "result_reference": "Not applicable — confirm on annual scope review"
+      }
+    },
+    {
+      "control_id": "allergen-management",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "We only use raw ingredients, none of which are on the allergen lists.",
+      "evidence_fields": {
+        "allergen_matrix": "Raw ingredients only; none are on the allergen lists"
+      }
+    },
+    {
+      "control_id": "biological-hazards",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Biological hazards include chemicals and sickness in our environment. Chemicals are stored in a separate container (food is stored in airtight glass containers). If we are sick, we just don't turn up for a few days and ensure we are not coming into the building while sick. We also wear clean clothing, and wear clean gloves when dealing with food, following cross contamination protocols.",
+      "evidence_fields": {
+        "control_verification": "Chemicals stored separately; sick staff stay away; clean clothing and gloves; cross contamination protocols",
+        "hazard": "Chemicals and sickness in the environment"
+      }
+    },
+    {
+      "control_id": "calibration",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Only one piece of equipment is routinely calibrated which is our Anton Paar Easy Dens used to ABV check our products. We keep a small sample of pure ethanol (96.4%) which is lab tested and we use this as our control and then measure our own internal products.",
+      "evidence_fields": {
+        "calibration_reference": "Compared against a lab-tested 96.4% ethanol control sample",
+        "device_id": "Anton Paar Easy Dens (ABV measurement)",
+        "next_due_date": "2027-02-01"
+      }
+    },
+    {
+      "control_id": "chemical-hazards",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Chemicals are stored in a separate container (food is stored in airtight glass containers). We also wear clean clothing, and wear clean gloves when dealing with food, following cross contamination protocols.",
+      "evidence_fields": {
+        "control_verification": "Chemicals stored in separate containers from food (food in airtight glass containers)",
+        "hazard": "Cleaning and maintenance chemicals"
+      }
+    },
+    {
+      "control_id": "cleaning-and-hygiene",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "All benches are cleaned and then sanitised using Star San before any food handling is done and end of every shift. We leave Star San for at least a minute before using the space. Toilets are cleaned daily and floors mopped often or when needed. Rubbish is removed every shift.",
+      "evidence_reference": "Whistlebird annual NP3 training register and cleaning log",
+      "evidence_fields": {
+        "area_or_equipment": "Production and food-contact areas",
+        "cleaning_schedule": "Benches cleaned and sanitised with Star San before food handling and at end of every shift; toilets cleaned daily; floors mopped often; rubbish removed every shift",
+        "verification_date": "2026-02-01"
+      }
+    },
+    {
+      "control_id": "cooking-poultry",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "N/A",
+      "evidence_fields": {
+        "batch_log": "Not applicable — confirm on annual scope review",
+        "critical_limit": "Not applicable — no poultry is cooked"
+      }
+    },
+    {
+      "control_id": "cooling-freezing",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "N/A",
+      "evidence_fields": {
+        "critical_limit": "Not applicable — no cooling or freezing control used",
+        "log_reference": "Not applicable — confirm on annual scope review"
+      }
+    },
+    {
+      "control_id": "corrective-actions",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "We have not had to do this but we can quickly and effectively isolate affected products and stop processes. Our internal system flags non compliant processes which has been tailored towards the alcohol industry so we get a live record and signal of non compliance.",
+      "evidence_fields": {
+        "close_out_date": "2026-02-01"
+      }
+    },
+    {
+      "control_id": "cross-contamination",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Staff follow cross contamination and hygiene protocols, handwashing, wear clean clothes and wear new and clean gloves when handling food.",
+      "evidence_reference": "Whistlebird annual NP3 training register",
+      "evidence_fields": {
+        "control_method": "Keeping foods separate in the food preparation area"
+      }
+    },
+    {
+      "control_id": "defrosting-reheating",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "N/A",
+      "evidence_fields": {
+        "log_reference": "Not applicable — confirm on annual scope review",
+        "method": "Not applicable — no defrosting or reheating process"
+      }
+    },
+    {
+      "control_id": "delegation",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Both of us perform all duties in the business. We are both across cross contamination and hygiene protocols and stay away if sick - since we are part time we do not have set 'days' for work.",
+      "evidence_fields": {
+        "delegation_reference": "Both owner-operators perform all duties",
+        "responsible_person": "Johnny Dempsey"
+      }
+    },
+    {
+      "control_id": "display-temperature",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "N/A",
+      "evidence_fields": {
+        "display_area": "Not applicable — no temperature-controlled display",
+        "log_reference": "Not applicable — confirm on annual scope review"
+      }
+    },
+    {
+      "control_id": "documentation-record-keeping",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "This system has routine checks that flag when reviews are done which is set per check. We have not had any issues since we have always used in house systems like this to prevent issues and there are only 2 of us that own and operate this so it's easy to stay on top of.",
+      "evidence_fields": {
+        "record_register_location": "Compliant NP3 register and Core execution evidence",
+        "retention_check_date": "2026-02-01"
+      }
+    },
+    {
+      "control_id": "equipment-design",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Our equipment was selected to fit into a small scale operation and we opted for glassware because it's easy to clean. All equipment is washed in the sink with dishwashing liquid and scrubbing like you would home dishes.",
+      "evidence_fields": {
+        "equipment_or_area": "Production equipment and food-contact surfaces",
+        "suitability_check": "Glassware chosen because it is easy to clean; equipment washed with dishwashing liquid and scrubbing"
+      }
+    },
+    {
+      "control_id": "food-labelling-advertising",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Labels sent prior to verification. Labels contain pregnancy warnings, label strength of product (abv) and standard drinks, name and address of business and batch numbers.",
+      "evidence_fields": {
+        "label_requirements_check": "Labels carry pregnancy warning, ABV, standard drinks, business name and address, and batch number",
+        "pre_visit_submission_reference": "Labels sent to the verifier prior to verification"
+      }
+    },
+    {
+      "control_id": "food-standards-composition",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "We only use raw ingredients in our products, none of which are allergens.",
+      "evidence_fields": {
+        "product_or_recipe": "Whistlebird spirit recipes"
+      }
+    },
+    {
+      "control_id": "food-standards-microbiological",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Chemicals and food are stored in separate contained containers. Food is stored in air tight containers individually per ingredient to avoid cross contamination. Food processing areas are cleaned before food processing is done and food handling is done with new and clean gloves and we wear clean clothing to reduce the chance of issues here."
+    },
+    {
+      "control_id": "health-and-sickness",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "We stay away from work if we are sick, since there are only 2 of us this is easy to manage and this system flags on every check now when they are up for review which prompts us to re-evaluate if our processes are still fit for purpose.",
+      "evidence_reference": "Whistlebird annual NP3 training register and illness register",
+      "evidence_fields": {
+        "illness_procedure": "Keeping away from food when sick procedure",
+        "last_health_review": "2026-02-01"
+      }
+    },
+    {
+      "control_id": "importing-food",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "N/A",
+      "evidence_fields": {
+        "clearance_reference": "Not applicable — confirm before importing",
+        "import_reference": "Not applicable unless importing food"
+      }
+    },
+    {
+      "control_id": "maintenance",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Our physical premise is a new solid concrete structure. Our equipment is in good working order and is tuned for our operations.",
+      "evidence_fields": {
+        "asset_or_area": "Production equipment and premises",
+        "maintenance_reference": "Equipment in good working order and tuned for operations"
+      }
+    },
+    {
+      "control_id": "operator-verification",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Areas for improvement from last verification noted and actioned - obtained first aid kit and completed recall simulation.",
+      "evidence_fields": {
+        "follow_up_status": "Areas for improvement from last verification noted and actioned: first aid kit obtained and recall simulation completed"
+      }
+    },
+    {
+      "control_id": "personal-hygiene",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Staff follow cross contamination and hygiene protocols, handwashing, wear clean clothes and wear new and clean gloves when handling food.",
+      "evidence_reference": "Whistlebird annual NP3 training register",
+      "evidence_fields": {
+        "hygiene_procedure": "Hand washing and clean clothing procedure",
+        "observation_date": "2026-02-01"
+      }
+    },
+    {
+      "control_id": "pest-animal-control",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Rodent traps are set. We inspect food packaging for any signs of pests.",
+      "evidence_fields": {
+        "last_inspection": "2026-02-01",
+        "pest_control_reference": "Rodent traps set; food packaging inspected for signs of pests"
+      }
+    },
+    {
+      "control_id": "physical-hazards",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "We have had broken bottles which we dispose of by wrapping in thick cardboard and put in the bin which goes out with our home bins since we take all rubbish off site to our homes.",
+      "evidence_fields": {
+        "control_verification": "Bottles inspected during manufacturing; broken bottles wrapped in thick cardboard and removed off site",
+        "hazard": "Foreign matter from equipment or packaging"
+      }
+    },
+    {
+      "control_id": "premises-services",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Spaces of the premise have been curated for specific uses e.g. we are close to kitchen taps for cooling when running the still and have adequate bench space that is easy to clean and sanitise for most operations.",
+      "evidence_fields": {
+        "area_or_service": "Production premises and essential services",
+        "condition_check": "New solid concrete structure with dedicated spaces and easy-to-clean benches"
+      }
+    },
+    {
+      "control_id": "receiving-food",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Food received is inspected upon arrival for damage or being dirty, is recorded in our internal system with supplier, batch numbers, dates and expiry dates.",
+      "evidence_fields": {
+        "last_delivery_check": "2026-02-01",
+        "receiving_log": "Core inventory receipts plus NP3 receiving log"
+      }
+    },
+    {
+      "control_id": "registration-scope",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "This system stores all records for Whistlebird and actively follows requirements for NP3 compliance.",
+      "evidence_fields": {
+        "last_scope_review": "2026-02-01"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Staff training and competency is recorded in the training register on this check: each training category is logged per person with the date it was completed, and the register table shows the latest date for each person.",
+      "evidence_reference": "Whistlebird annual NP3 training register",
+      "evidence_fields": {
+        "last_training_review": "2026-02-01",
+        "training_register_reference": "Staff training register on this check (training category, person and date)"
+      }
+    },
+    {
+      "control_id": "storage-stock-rotation",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "All received botanicals are stored in individual clean, air tight glass containers. This is to prevent cross contamination and keep for as long as possible. Our internal system has the supplier, batch numbers and expiry dates so we are flagged immediately if anything were to be expired or coming up to expired ahead of time which we dispose of the ingredient and replace with fresh food.",
+      "evidence_reference": "Core inventory and expired-stock disposal records",
+      "evidence_fields": {
+        "check_reference": "Core inventory stock-rotation review",
+        "storage_area": "Ingredient and finished-product storage"
+      }
+    },
+    {
+      "control_id": "suppliers-and-purchasing",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Supplier provided inventory is recorded in our internal system. This records batch numbers, received dates and expiry dates and allows us to get source to sale tracing.",
+      "evidence_fields": {
+        "supplier_name": "Whistlebird ingredient suppliers"
+      }
+    },
+    {
+      "control_id": "time-temperature-processing",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "We distill our Gin above 78°C for a couple of hours per distillation, this is well above the minimum time at temperature to avoid issues.",
+      "evidence_fields": {
+        "critical_limit": "Distillation above 78°C for a couple of hours per distillation",
+        "process_step": "Spirit production process"
+      }
+    },
+    {
+      "control_id": "trace-and-recall",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Our internal system was built to trace everything. We integrate with Xero and map batch IDs to sales records so we can see full lineage from source ingredient through to all stores that have taken our stock.",
+      "evidence_fields": {
+        "mock_recall_date": "2026-02-01",
+        "trace_result": "Batch IDs are mapped to Xero sales records, giving full lineage from source ingredient to every store that has taken stock"
+      }
+    },
+    {
+      "control_id": "transporting-food",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "N/A, our spirits are good in their bottles and have heatshrinks to show tampering for customers.",
+      "evidence_fields": {
+        "transport_method": "Sealed bottles with tamper-evident heat shrink"
+      }
+    },
+    {
+      "control_id": "unsafe-unsuitable-food",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "We have had couriers break our products on deliveries. They dispose of the product and we invoice them for the cost of the product. Physical hazard is the main concern with what we manufacture and we inspect all bottles during manufacturing processes.",
+      "evidence_fields": {
+        "affected_product": "Bottles broken in courier delivery",
+        "disposition": "Courier disposes of the product and is invoiced for its cost"
+      }
+    },
+    {
+      "control_id": "waste-management",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "Rubbish is removed every shift. Waste from our distillations is small enough that I take it home and put it in our compost since it's all natural botanicals and the alcohol is all gone.",
+      "evidence_fields": {
+        "waste_control": "Rubbish removed every shift; small volumes of botanical distillation waste composted at home once the alcohol is gone"
+      }
+    },
+    {
+      "control_id": "water-activity-control",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "N/A",
+      "evidence_fields": {
+        "applicability": "Not applicable — no dried or concentrated food process",
+        "method": "Not applicable",
+        "result_reference": "Not applicable — confirm on annual scope review"
+      }
+    },
+    {
+      "control_id": "water-supply",
+      "signed_on": "2026-02-01",
+      "due_date": "2027-02-01",
+      "review_interval_months": 12,
+      "how_we_meet": "We use the Petone Aquifer as our water supply which the council monitor and test.",
+      "evidence_fields": {
+        "storage_container_provenance": "Not applicable unless water is stored in a repurposed container",
+        "water_assurance": "Council monitors and tests the supply",
+        "water_source": "Petone Aquifer",
+        "water_source_type": "Council-monitored supply"
+      }
+    }
   ],
   "logs": [
-    {"control_id": "health-and-sickness", "fields": {"event_date": "2026-02-01", "employee_email": "johnny.dempsey@whistlebird.test", "food_safety_decision": "cleared", "manager_notes": "Staff stay away from work when sick."}},
-    {"control_id": "health-and-sickness", "fields": {"event_date": "2026-02-01", "employee_email": "nikolai.scott@whistlebird.test", "food_safety_decision": "cleared", "manager_notes": "Staff stay away from work when sick."}},
-    {"control_id": "cooling-freezing", "fields": {"event_date": "2026-02-01", "batch_or_product": "Not applicable — no cooling/freezing process", "observed_limit": "Not applicable — confirm if process scope changes", "result": "ok"}},
-    {"control_id": "display-temperature", "fields": {"event_date": "2026-02-01", "display_area": "Not applicable — no temperature-controlled display", "observed_temperature": "Not applicable — confirm if display scope changes", "result": "ok"}},
-    {"control_id": "water-activity-control", "fields": {"event_date": "2026-02-01", "batch_or_product": "Not applicable — no dried or concentrated food", "method": "Not applicable — confirm if scope changes", "test_result": "Not applicable — confirm if scope changes", "result": "ok"}},
-    {"control_id": "acidification-fermentation-control", "fields": {"event_date": "2026-02-01", "batch_or_product": "Not applicable — no acidification or fermentation safety control", "method": "Not applicable — confirm if scope changes", "test_result": "Not applicable — confirm if scope changes", "result": "ok"}}
+    {
+      "control_id": "acidification-fermentation-control",
+      "fields": {
+        "batch_or_product": "Not applicable — no acidification or fermentation safety control",
+        "event_date": "2026-02-01",
+        "method": "Not applicable — confirm if scope changes",
+        "result": "ok",
+        "test_result": "Not applicable — confirm if scope changes"
+      }
+    },
+    {
+      "control_id": "cooling-freezing",
+      "fields": {
+        "batch_or_product": "Not applicable — no cooling/freezing process",
+        "event_date": "2026-02-01",
+        "observed_limit": "Not applicable — confirm if process scope changes",
+        "result": "ok"
+      }
+    },
+    {
+      "control_id": "display-temperature",
+      "fields": {
+        "display_area": "Not applicable — no temperature-controlled display",
+        "event_date": "2026-02-01",
+        "observed_temperature": "Not applicable — confirm if display scope changes",
+        "result": "ok"
+      }
+    },
+    {
+      "control_id": "health-and-sickness",
+      "fields": {
+        "employee_email": "johnny.dempsey@whistlebird.test",
+        "event_date": "2026-02-01",
+        "food_safety_decision": "cleared",
+        "manager_notes": "Staff stay away from work when sick."
+      }
+    },
+    {
+      "control_id": "health-and-sickness",
+      "fields": {
+        "employee_email": "nikolai.scott@whistlebird.test",
+        "event_date": "2026-02-01",
+        "food_safety_decision": "cleared",
+        "manager_notes": "Staff stay away from work when sick."
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2024-02-02",
+        "training_topic": "cleaning-and-sanitising"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2024-02-02",
+        "training_topic": "cross-contamination-protocols"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2024-02-02",
+        "training_topic": "equipment-set-up-and-operation"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2024-02-02",
+        "training_topic": "hand-washing-clean-clothing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2024-02-02",
+        "training_topic": "keeping-away-when-sick"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2024-02-02",
+        "training_topic": "keeping-foods-separate"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2024-02-02",
+        "training_topic": "process-step-risk-checks"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2024-02-02",
+        "training_topic": "sourcing-receiving-tracing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2024-02-02",
+        "training_topic": "when-something-goes-wrong"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2024-02-02",
+        "training_topic": "cleaning-and-sanitising"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2024-02-02",
+        "training_topic": "cross-contamination-protocols"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2024-02-02",
+        "training_topic": "equipment-set-up-and-operation"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2024-02-02",
+        "training_topic": "hand-washing-clean-clothing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2024-02-02",
+        "training_topic": "keeping-away-when-sick"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2024-02-02",
+        "training_topic": "keeping-foods-separate"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2024-02-02",
+        "training_topic": "process-step-risk-checks"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2024-02-02",
+        "training_topic": "sourcing-receiving-tracing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2024-02-02",
+        "training_topic": "when-something-goes-wrong"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2025-02-02",
+        "training_topic": "cleaning-and-sanitising"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2025-02-02",
+        "training_topic": "cross-contamination-protocols"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2025-02-02",
+        "training_topic": "equipment-set-up-and-operation"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2025-02-02",
+        "training_topic": "hand-washing-clean-clothing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2025-02-02",
+        "training_topic": "keeping-away-when-sick"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2025-02-02",
+        "training_topic": "keeping-foods-separate"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2025-02-02",
+        "training_topic": "process-step-risk-checks"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2025-02-02",
+        "training_topic": "sourcing-receiving-tracing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2025-02-02",
+        "training_topic": "when-something-goes-wrong"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2025-02-02",
+        "training_topic": "cleaning-and-sanitising"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2025-02-02",
+        "training_topic": "cross-contamination-protocols"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2025-02-02",
+        "training_topic": "equipment-set-up-and-operation"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2025-02-02",
+        "training_topic": "hand-washing-clean-clothing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2025-02-02",
+        "training_topic": "keeping-away-when-sick"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2025-02-02",
+        "training_topic": "keeping-foods-separate"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2025-02-02",
+        "training_topic": "process-step-risk-checks"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2025-02-02",
+        "training_topic": "sourcing-receiving-tracing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2025-02-02",
+        "training_topic": "when-something-goes-wrong"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-02-02",
+        "training_topic": "cleaning-and-sanitising"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-02-02",
+        "training_topic": "cross-contamination-protocols"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-02-02",
+        "training_topic": "equipment-set-up-and-operation"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-02-02",
+        "training_topic": "hand-washing-clean-clothing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-02-02",
+        "training_topic": "keeping-away-when-sick"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-02-02",
+        "training_topic": "keeping-foods-separate"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-02-02",
+        "training_topic": "process-step-risk-checks"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-02-02",
+        "training_topic": "sourcing-receiving-tracing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-02-02",
+        "training_topic": "when-something-goes-wrong"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-02-02",
+        "training_topic": "cleaning-and-sanitising"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-02-02",
+        "training_topic": "cross-contamination-protocols"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-02-02",
+        "training_topic": "equipment-set-up-and-operation"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-02-02",
+        "training_topic": "hand-washing-clean-clothing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-02-02",
+        "training_topic": "keeping-away-when-sick"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-02-02",
+        "training_topic": "keeping-foods-separate"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-02-02",
+        "training_topic": "process-step-risk-checks"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-02-02",
+        "training_topic": "sourcing-receiving-tracing"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-02-02",
+        "training_topic": "when-something-goes-wrong"
+      }
+    },
+    {
+      "control_id": "water-activity-control",
+      "fields": {
+        "batch_or_product": "Not applicable — no dried or concentrated food",
+        "event_date": "2026-02-01",
+        "method": "Not applicable — confirm if scope changes",
+        "result": "ok",
+        "test_result": "Not applicable — confirm if scope changes"
+      }
+    }
   ]
 }

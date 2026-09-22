@@ -156,3 +156,44 @@ def test_replay_raises_clearly_when_real_stock_is_short():
 
     with pytest.raises(AssertionError, match="Cinnamon"):
         rb.replay_recent_batches(client, store, batches)
+
+
+def test_expected_verification_contribution_counts_one_execution_and_its_pending_steps():
+    """A full rebuild's verification (whistlebird_migration.build_import_verification)
+    must expect what an API replay of these batches actually creates, or a real
+    in-progress batch (this MR's Solstice maceration) makes every rebuild fail forever:
+    one execution for its workflow, and every step past the ones it lists as done
+    counted as still-incomplete -- not zero, which is what the historical-only baseline
+    assumes for a workflow it doesn't know is missing steps on purpose."""
+    batches = rb.parse_recent_batches_manifest(VALID)
+
+    workflow_counts, incomplete_steps, markers = rb.expected_verification_contribution(batches)
+
+    total_solstice_steps = len(rb.wm.PRODUCT_WORKFLOWS[rb.wm.SOLSTICE_WORKFLOW][1])
+    assert workflow_counts == {rb.wm.SOLSTICE_WORKFLOW: 1}
+    assert incomplete_steps == total_solstice_steps - 1  # only "maceration" is done
+    assert markers == ["solstice-2026-09-22-maceration"]
+
+
+def test_expected_verification_contribution_sums_across_multiple_batches():
+    two_batches = {
+        "batches": [
+            VALID["batches"][0],
+            {
+                "marker": "wildflower-2026-09-22-maceration",
+                "product_line": "wildflower",
+                "started": "2026-09-22",
+                "steps_completed": ["maceration"],
+                "note": "test",
+            },
+        ]
+    }
+    batches = rb.parse_recent_batches_manifest(two_batches)
+
+    workflow_counts, incomplete_steps, markers = rb.expected_verification_contribution(batches)
+
+    assert workflow_counts == {rb.wm.SOLSTICE_WORKFLOW: 1, rb.wm.WILDFLOWER_WORKFLOW: 1}
+    solstice_steps = len(rb.wm.PRODUCT_WORKFLOWS[rb.wm.SOLSTICE_WORKFLOW][1])
+    wildflower_steps = len(rb.wm.PRODUCT_WORKFLOWS[rb.wm.WILDFLOWER_WORKFLOW][1])
+    assert incomplete_steps == (solstice_steps - 1) + (wildflower_steps - 1)
+    assert set(markers) == {"solstice-2026-09-22-maceration", "wildflower-2026-09-22-maceration"}
