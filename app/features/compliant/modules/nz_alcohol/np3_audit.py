@@ -150,6 +150,11 @@ NP3_TRAINING_CATEGORIES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "Training how to set up and operate equipment safely",
         ("equipment-design", "calibration", "maintenance"),
     ),
+    (
+        "recall-policy-procedures",
+        "The written recall policy: when to recall, who decides, and NZFS notification",
+        ("recall-policy", "trace-and-recall"),
+    ),
 )
 
 NP3_LOG_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -366,6 +371,235 @@ NP3_LOG_TEMPLATES: dict[str, dict[str, Any]] = {
             {"key": "trace_result", "label": "Trace and recall result", "type": "textarea", "required": True},
             {"key": "elapsed_time", "label": "Elapsed time", "type": "text", "required": True},
             {"key": "improvement_action", "label": "Improvement action", "type": "textarea", "required": False},
+        ),
+    ),
+    # Added 2026-09-23 after a real NP3 verification visit -- see the matching block in
+    # catalogue.py's np3-food-control controls for the full context. Deliberately
+    # generic to any NP3 business, not just a distillery.
+    "recall-policy": _log_template(
+        "recall_policy_review",
+        "Recall policy review",
+        "One entry each time the written recall policy itself is reviewed or updated -- not "
+        "a recall exercise (that's the mock recall and trace exercise log above).",
+        "attestation",
+        (
+            {"key": "event_date", "label": "Review date", "type": "date", "required": True},
+            {
+                "key": "covers_supplier_notified",
+                "label": "Covers a supplier-notified recall (a supplier tells you their input needs recalling)",
+                "type": "select",
+                "required": True,
+                "options": (("yes", "Yes"), ("no", "No — action required")),
+            },
+            {
+                "key": "covers_self_initiated",
+                "label": "Covers a self-initiated recall (you find your own product is unsafe/unsuitable)",
+                "type": "select",
+                "required": True,
+                "options": (("yes", "Yes"), ("no", "No — action required")),
+            },
+            {
+                "key": "covers_nzfs_notification",
+                "label": "States the 24-hour NZFS notification requirement and contact details",
+                "type": "select",
+                "required": True,
+                "options": (("yes", "Yes"), ("no", "No — action required")),
+            },
+            {"key": "policy_reference", "label": "Where the policy is kept", "type": "text", "required": True},
+        ),
+    ),
+    "hazard-issues-register": _log_template(
+        "hazard_issue",
+        "Hazard and issues register",
+        "One entry per hazard actually observed, whatever caused it -- a foreign object, a "
+        "positive microbial result, a chemical spill or contamination risk.",
+        "incident",
+        (
+            {"key": "event_date", "label": "Date observed", "type": "date", "required": True},
+            {
+                "key": "hazard_type",
+                "label": "Hazard type",
+                "type": "select",
+                "required": True,
+                "options": (
+                    ("physical", "Physical (e.g. glass, metal, plastic)"),
+                    ("biological", "Biological / microbial (e.g. bugs, mould)"),
+                    ("chemical", "Chemical (e.g. cleaning product, allergen)"),
+                ),
+            },
+            {"key": "description", "label": "What was found and where", "type": "textarea", "required": True},
+            {"key": "corrective_action", "label": "Action taken", "type": "textarea", "required": True},
+            {
+                "key": "result",
+                "label": "Status",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Resolved"), ("action-required", "Still open")),
+            },
+        ),
+    ),
+    "packaging-supplier-verification": _log_template(
+        "packaging_supplier_verification",
+        "Packaging supplier verification",
+        "One entry per packaging item that touches the product -- bottle, can, cap, cork, "
+        "lid or seal -- confirming it is food-grade and safe for its intended use.",
+        "attestation",
+        (
+            {"key": "event_date", "label": "Verification date", "type": "date", "required": True},
+            {
+                "key": "packaging_item",
+                "label": "Packaging item",
+                "type": "text",
+                "required": True,
+            },
+            {"key": "supplier_name", "label": "Supplier", "type": "text", "required": True},
+            {
+                "key": "verification_type",
+                "label": "How this was confirmed",
+                "type": "select",
+                "required": True,
+                "options": (
+                    ("labelled-food-grade", "Purchased labelled as food-grade/food-safe"),
+                    ("supplier-assurance", "Written supplier assurance"),
+                    ("test-certificate", "Test certificate or compliance declaration"),
+                ),
+            },
+            {"key": "evidence_reference", "label": "Where the evidence is kept", "type": "text", "required": True},
+        ),
+    ),
+    "customer-complaints-register": _log_template(
+        "customer_complaint",
+        "Customer complaints register",
+        "One entry per complaint about food safety or suitability, from first contact to close-out.",
+        "incident",
+        (
+            {"key": "event_date", "label": "Complaint date", "type": "date", "required": True},
+            {
+                "key": "complaint_category",
+                "label": "Complaint category",
+                "type": "select",
+                "required": True,
+                "options": (
+                    ("foreign-matter", "Foreign matter / physical"),
+                    ("illness", "Reported illness"),
+                    ("quality-suitability", "Quality or suitability (not unsafe)"),
+                    ("allergen", "Allergen"),
+                    ("other", "Other"),
+                ),
+            },
+            {"key": "description", "label": "What the customer reported", "type": "textarea", "required": True},
+            {
+                "key": "investigation_outcome",
+                "label": "Investigation and outcome",
+                "type": "textarea",
+                "required": True,
+            },
+            {
+                "key": "result",
+                "label": "Status",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Closed"), ("action-required", "Still open")),
+            },
+        ),
+    ),
+    "manufacturing-process-description": _log_template(
+        "manufacturing_process_description",
+        "Manufacturing process description",
+        "One entry per product line, describing how it's made from raw ingredients to "
+        "finished product. If the process is modelled in Core, reference that instead of "
+        "duplicating the step list here.",
+        "attestation",
+        (
+            {"key": "event_date", "label": "Last reviewed", "type": "date", "required": True},
+            {"key": "product_or_process", "label": "Product or Core process", "type": "text", "required": True},
+            {
+                "key": "process_reference",
+                "label": "Where the process description is kept (or the Core process name)",
+                "type": "text",
+                "required": True,
+            },
+        ),
+    ),
+    "food-contact-equipment-cleaning": _log_template(
+        "food_contact_equipment_cleaning",
+        "Food-contact equipment cleaning log",
+        "One entry per piece of equipment that directly touches the product -- for example "
+        "a still, fermenter, vat, press, pipework or filler -- separate from general "
+        "premises cleaning.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Check date", "type": "date", "required": True},
+            {
+                "key": "equipment",
+                "label": "Equipment (e.g. still, fermenter, vat, press, pipework, filler)",
+                "type": "text",
+                "required": True,
+            },
+            {"key": "method", "label": "Cleaning and sanitising method", "type": "text", "required": True},
+            {
+                "key": "result",
+                "label": "Result",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Effective"), ("action-required", "Action required")),
+            },
+            {"key": "corrective_action", "label": "Corrective action", "type": "textarea", "required": False},
+        ),
+    ),
+    "premises-notices-displayed": _log_template(
+        "premises_notices",
+        "Premises notices displayed",
+        "One entry per check that required notices are actually displayed at the premises.",
+        "reading",
+        (
+            {"key": "event_date", "label": "Check date", "type": "date", "required": True},
+            {
+                "key": "notice",
+                "label": "Notice",
+                "type": "text",
+                "required": True,
+            },
+            {
+                "key": "result",
+                "label": "Displayed",
+                "type": "select",
+                "required": True,
+                "options": (("ok", "Yes"), ("action-required", "No — action required")),
+            },
+        ),
+    ),
+    "cleaning-chemicals-food-safe": _log_template(
+        "cleaning_chemical_record",
+        "Cleaning and sanitising chemical register",
+        "One entry per cleaning or sanitising product used in food areas. There's no file "
+        "upload here (same as every other NP3 register) -- note where the label photo, "
+        "safety data sheet or supplier link is kept.",
+        "attestation",
+        (
+            {"key": "event_date", "label": "Confirmed date", "type": "date", "required": True},
+            {"key": "product_name", "label": "Product name", "type": "text", "required": True},
+            {
+                "key": "purpose",
+                "label": "Purpose",
+                "type": "select",
+                "required": True,
+                "options": (("cleaning", "Cleaning"), ("sanitising", "Sanitising"), ("other", "Other")),
+            },
+            {
+                "key": "food_safe_confirmed",
+                "label": "Suitable for food areas / food-grade confirmed",
+                "type": "select",
+                "required": True,
+                "options": (("yes", "Yes"), ("no", "No — action required")),
+            },
+            {
+                "key": "evidence_reference",
+                "label": "Where the label photo, SDS or certificate is kept",
+                "type": "text",
+                "required": True,
+            },
+            {"key": "product_link", "label": "Supplier or product link (optional)", "type": "text", "required": False},
         ),
     ),
     "water-supply": _log_template(
@@ -703,6 +937,28 @@ NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
             "workspace_label": "Open Core tasks",
         },
     ),
+    "manufacturing-process-description": (
+        {
+            "title": "Core processes",
+            "detail": "Every process in Core is already its own step-by-step manufacturing description -- open the process instead of writing a second one.",
+            "workspace_url": "/core/flows",
+            "workspace_label": "Open Core processes",
+        },
+    ),
+    "food-contact-equipment-cleaning": (
+        {
+            "title": "Core processes",
+            "detail": "A process's step names are a ready-made starting list of the food-contact equipment used to make it (for example a Distilling or Fermenting step names the still or fermenter).",
+            "workspace_url": "/core/flows",
+            "workspace_label": "Open Core processes",
+        },
+        {
+            "title": "Core tasks",
+            "detail": "Schedule the cleaning check as a recurring Core task; keep the result and any correction in this register.",
+            "workspace_url": "/core?tab=tasks",
+            "workspace_label": "Open Core tasks",
+        },
+    ),
 }
 
 
@@ -741,6 +997,161 @@ NP3_EVIDENCE_PLAYBOOKS = {
         reference_notes=(
             "For a self-initiated recall: investigate and hold affected food, inform your verifier or NZFS, assess, report the recall decision to NZFS within 24 hours, communicate, then audit the outcome.",
             "A mock recall is required at least every 12 months unless a real recall was carried out effectively in that period. Keep the risk assessment, recall notice and actions taken.",
+        ),
+    ),
+    # Added 2026-09-23 after a real NP3 verification visit -- generic to any NP3
+    # business, not just a distillery.
+    "recall-policy": _playbook(
+        "Recalling your food",
+        68,
+        (
+            "Written recall policy covering both a supplier-notified recall and a "
+            "self-initiated recall",
+            "Criteria for deciding a recall is needed, retrieval/disposal or "
+            "rework/relabel decisions, and who is authorised to decide",
+            "The 24-hour New Zealand Food Safety (NZFS) notification requirement and current contact details",
+        ),
+        (
+            ("policy_reference", "Where the written recall policy is kept"),
+            ("last_policy_review", "Date the policy was last reviewed"),
+        ),
+        reference_notes=(
+            "Example: 'Our recall policy is a one-page document held in [location]. It sets out "
+            "that [named role] decides whether a recall is needed, based on whether affected "
+            "product could be unsafe or unsuitable. We email Food.Recalls@mpi.govt.nz or call "
+            "0800 00 83 33 within 24 hours of deciding to recall, complete the Food Recall Risk "
+            "Assessment form, and follow supplier instructions for a supplier-notified recall.'",
+            "This is the written policy itself -- the trace-and-recall check above keeps the "
+            "evidence that you actually tested it (a mock recall or a real recall in the last 12 months).",
+            "Official guidance: 'Recalling your food' card, New Zealand Food Safety / MPI National Programme 3 Guidance.",
+        ),
+    ),
+    "hazard-issues-register": _playbook(
+        "Preventing contamination of your food",
+        46,
+        (
+            "A register of hazards actually found (not just the hazard types you control for)",
+            "What was found, the corrective action, and whether it's resolved",
+        ),
+        (
+            ("register_reference", "Where the hazard and issues register is kept"),
+            ("last_entry_date", "Date of the most recent entry, or confirmation none have occurred"),
+        ),
+        reference_notes=(
+            "Example: 'Found a small glass fragment near the bottling line on 3 Sep 2026 -- "
+            "isolated the batch, inspected the line, no further fragments found, batch released.'",
+            "The three hazard categories are physical (e.g. glass, metal), biological/microbial "
+            "(bugs) and chemical (e.g. a cleaning product or allergen cross-contact).",
+            "This register is for what actually happened; the biological/chemical/physical hazard "
+            "checks elsewhere record your ongoing control method.",
+        ),
+    ),
+    "packaging-supplier-verification": _playbook(
+        "Packaging and labelling your food",
+        61,
+        (
+            "Supplier assurance or certification that packaging touching the product is food-grade",
+            "Covers every packaging item that contacts the product -- bottles, cans, caps, "
+            "corks, lids and seals -- not just the primary container",
+        ),
+        (
+            ("packaging_item", "Packaging item(s) verified"),
+            ("verification_reference", "Supplier assurance or certificate reference"),
+        ),
+        reference_notes=(
+            "Example: 'Imported glass bottles -- supplier's food-grade compliance certificate on "
+            "file, dated 14 Jan 2026. Cork stoppers -- purchased pre-labelled as food-safe cork.'",
+            "Either purchase packaging already labelled as suitable for food, or get a written "
+            "assurance from the supplier that it is food-grade for its intended use.",
+        ),
+    ),
+    "customer-complaints-register": _playbook(
+        "Taking action when something goes wrong",
+        66,
+        (
+            "A register of customer complaints about food safety or suitability",
+            "How each complaint was investigated and what the outcome was",
+        ),
+        (
+            ("register_reference", "Where the customer complaints register is kept"),
+            ("last_entry_date", "Date of the most recent entry, or confirmation none have occurred"),
+        ),
+        reference_notes=(
+            "Example: 'Customer reported an off taste in a bottle, 22 Aug 2026 -- traced to batch "
+            "B2408, retained sample tasted normal, no other complaints for that batch, closed.'",
+            "If a complaint reveals the product is unsafe or unsuitable, follow the recall policy "
+            "and the unsafe/unsuitable food register above.",
+        ),
+    ),
+    "manufacturing-process-description": _playbook(
+        "Producing, processing or handling food",
+        35,
+        (
+            "A description of how each product is made, from raw ingredients to finished product",
+            "Kept current when the process changes",
+        ),
+        (
+            ("process_or_product", "Product or Core process this describes"),
+            ("last_reviewed", "Date the description was last reviewed"),
+        ),
+        reference_notes=(
+            "If the process is modelled in Core, that step-by-step workflow already is your "
+            "manufacturing process description -- open the process there rather than writing a "
+            "second copy.",
+        ),
+    ),
+    "food-contact-equipment-cleaning": _playbook(
+        "Cleaning and sanitising",
+        27,
+        (
+            "Cleaning and sanitising method for equipment that directly touches the product",
+            "Covers equipment like a still, fermenter, vat, press, pipework or filler -- not "
+            "just general premises cleaning",
+        ),
+        (
+            ("equipment", "Equipment covered"),
+            ("last_verification", "Date cleaning effectiveness was last checked"),
+        ),
+        reference_notes=(
+            "Example (distillery): 'Still and condenser flushed with hot water after every run; "
+            "CIP-cleaned monthly.' Example (brewery): 'Fermenter cleaned and sanitised between every batch.'",
+            "Clean food-contact surfaces every day they're used; sanitise after cleaning, since "
+            "sanitiser doesn't work properly on a surface that isn't already clean.",
+        ),
+    ),
+    "premises-notices-displayed": _playbook(
+        "Getting started and registering your business",
+        12,
+        (
+            "Current notice of verification/registration displayed at the premises",
+            "Any other notice your registration authority or verifier requires to be displayed",
+        ),
+        (
+            ("notice", "Notice(s) confirmed displayed"),
+            ("last_checked", "Date this was last confirmed"),
+        ),
+        reference_notes=(
+            "There isn't a dedicated MPI card for this specifically -- it's a standard, practical "
+            "check a verifier makes on-site alongside registration and scope, so it's tracked here "
+            "as its own item rather than assumed.",
+        ),
+    ),
+    "cleaning-chemicals-food-safe": _playbook(
+        "Cleaning and sanitising",
+        27,
+        (
+            "Confirmation each cleaning/sanitising product used in food areas is suitable for that use",
+            "Where the label photo, safety data sheet or supplier link is kept",
+        ),
+        (
+            ("product_name", "Cleaning/sanitising product(s) confirmed"),
+            ("last_checked", "Date this was last confirmed"),
+        ),
+        reference_notes=(
+            "Use hot soapy water or a suitable cleaning chemical (for example food-grade), and a "
+            "sanitising chemical designed for food areas -- follow the instructions on the label for both.",
+            "There's no file upload on this register (same as every other NP3 check) -- note where "
+            "the photo of the label, safety data sheet, or a link to the product page is kept.",
         ),
     ),
     "documentation-record-keeping": _playbook(
@@ -1126,8 +1537,10 @@ NP3_AUDIT_CATEGORIES = (
         "Confidence in management",
         (
             ("registration-scope", "Registration / scope of operations"),
+            ("premises-notices-displayed", "Premises notices displayed"),
             ("corrective-actions", "Improvements and corrective actions"),
             ("trace-and-recall", "Traceability, recall and complaints"),
+            ("recall-policy", "Recall policy"),
             ("documentation-record-keeping", "Documentation and record keeping"),
             ("staff-competency", "Competency in management"),
             ("delegation", "Delegation"),
@@ -1151,8 +1564,10 @@ NP3_AUDIT_CATEGORIES = (
             ("cross-contamination", "Preventing cross contamination"),
             ("equipment-design", "Design and appropriate use of equipment"),
             ("suppliers-and-purchasing", "Suppliers and purchasing"),
+            ("packaging-supplier-verification", "Packaging supplier verification"),
             ("receiving-food", "Receiving food"),
             ("allergen-management", "Food allergen management"),
+            ("manufacturing-process-description", "Manufacturing process description"),
             ("cooking-poultry", "Cooking poultry"),
             ("defrosting-reheating", "Defrosting and reheating food"),
             ("storage-stock-rotation", "Storage and stock rotation"),
@@ -1173,6 +1588,8 @@ NP3_AUDIT_CATEGORIES = (
         "Environmental control",
         (
             ("cleaning-and-hygiene", "Cleaning and sanitising"),
+            ("food-contact-equipment-cleaning", "Food-contact equipment cleaning"),
+            ("cleaning-chemicals-food-safe", "Cleaning chemicals are food-safe"),
             ("pest-animal-control", "Pest and animal control"),
             ("waste-management", "Waste management"),
             ("premises-services", "Design and use of places, facilities and essential services"),
@@ -1184,6 +1601,8 @@ NP3_AUDIT_CATEGORIES = (
         "Compliance history",
         (
             ("trace-and-recall", "Complaints and recalls"),
+            ("customer-complaints-register", "Customer complaints"),
+            ("hazard-issues-register", "Hazards and issues found"),
             ("corrective-actions", "Non-compliance"),
             ("unsafe-unsuitable-food", "Managing unsafe / unsuitable food"),
         ),

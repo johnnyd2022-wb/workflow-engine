@@ -45,6 +45,17 @@ NP3_CONTROL_REFERENCES = {
     "water-supply": "Suitable water",
     "maintenance": "Maintenance",
     "unsafe-unsuitable-food": "When something goes wrong",
+    # Added 2026-09-23 after a real NP3 verification visit -- each of these was a
+    # specific ask from the verifier that wasn't yet its own trackable check. Kept
+    # generic to any NP3 business (brewery, winery, distillery, etc), not just alcohol.
+    "recall-policy": "Recalling your food",
+    "hazard-issues-register": "Preventing contamination of your food",
+    "packaging-supplier-verification": "Packaging and labelling your food",
+    "customer-complaints-register": "When something goes wrong",
+    "manufacturing-process-description": "Producing, processing or handling food",
+    "food-contact-equipment-cleaning": "Cleaning and sanitising",
+    "premises-notices-displayed": "Getting started and registering your business",
+    "cleaning-chemicals-food-safe": "Cleaning and sanitising",
 }
 
 
@@ -146,6 +157,53 @@ NZ_ALCOHOL_FRAMEWORKS = (
             ("water-supply", "Keep water-supply controls and any relevant records."),
             ("maintenance", "Keep maintenance evidence for food-safety-critical areas and equipment."),
             ("unsafe-unsuitable-food", "Show how unsafe or unsuitable food is identified, isolated and managed."),
+            # Added 2026-09-23 after a real NP3 verification visit (see this framework's
+            # controls docstring above the block for context). Deliberately generic --
+            # any NP3 business, not just a distillery -- so "food-contact equipment"
+            # names a still and a fermenter and a bottling line alike.
+            (
+                "recall-policy",
+                "Keep a written recall policy: when a recall is triggered, who decides, "
+                "retrieval/disposal and the 24-hour NZFS notification -- separate from the "
+                "mock-recall exercise evidence kept under traceability and recall.",
+            ),
+            (
+                "hazard-issues-register",
+                "Keep a register of food-safety hazards and issues actually observed "
+                "(physical, biological/microbial, chemical) and how each was resolved.",
+            ),
+            (
+                "packaging-supplier-verification",
+                "Get supplier assurance that primary packaging in contact with the product "
+                "(bottles, cans, caps, corks, lids, seals) is food-grade, and keep the evidence.",
+            ),
+            (
+                "customer-complaints-register",
+                "Keep a register of customer complaints about food safety or suitability and "
+                "how each was investigated and resolved.",
+            ),
+            (
+                "manufacturing-process-description",
+                "Keep an up-to-date description of how each product is made, from raw "
+                "ingredients through to finished product.",
+            ),
+            (
+                "food-contact-equipment-cleaning",
+                "Keep the cleaning and sanitising method for equipment that directly touches "
+                "the product (for example a still, fermenter, vat, press, pipework or filler), "
+                "separate from general premises cleaning.",
+            ),
+            (
+                "premises-notices-displayed",
+                "Confirm required notices are displayed at the premises, for example the "
+                "current notice of verification/registration.",
+            ),
+            (
+                "cleaning-chemicals-food-safe",
+                "Confirm the cleaning and sanitising chemicals used are suitable for food "
+                "areas (food-grade or otherwise approved for the purpose) and keep the "
+                "product evidence.",
+            ),
         ),
     },
     {
@@ -255,6 +313,14 @@ CONTROL_REQUIREMENTS = {
     ("np3-food-control", "operational-verification"): {"evidence": True},
     ("np3-food-control", "cleaning-and-hygiene"): {"evidence": True},
     ("np3-food-control", "trace-and-recall"): {"evidence": True, "source_refs": True},
+    ("np3-food-control", "recall-policy"): {"evidence": True},
+    ("np3-food-control", "hazard-issues-register"): {"evidence": True},
+    ("np3-food-control", "packaging-supplier-verification"): {"evidence": True},
+    ("np3-food-control", "customer-complaints-register"): {"evidence": True},
+    ("np3-food-control", "manufacturing-process-description"): {"evidence": True},
+    ("np3-food-control", "food-contact-equipment-cleaning"): {"evidence": True},
+    ("np3-food-control", "premises-notices-displayed"): {"evidence": True},
+    ("np3-food-control", "cleaning-chemicals-food-safe"): {"evidence": True},
     ("wine-standards", "wsmp-registration"): {"evidence": True},
     ("wine-standards", "wine-trace-and-recall"): {"evidence": True, "source_refs": True},
     ("trade-waste", "consent-profile"): {"evidence": True},
