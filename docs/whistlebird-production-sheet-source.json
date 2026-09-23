@@ -1228,12 +1228,12 @@
       "product": "solstice",
       "steps": {
         "maceration": {
-          "date": null,
-          "confidence": "derived"
+          "date": "2026-07-02",
+          "confidence": "clean"
         },
         "distilling": {
-          "date": null,
-          "confidence": "derived"
+          "date": "2026-07-02",
+          "confidence": "clean"
         },
         "aging": {
           "date": null,
@@ -1254,7 +1254,11 @@
           "bottles": "88",
           "sheet_row": 2081
         }
-      ]
+      ],
+      "vat_volume_l": "61.6",
+      "vat_fill_ngs_l": "25.560",
+      "vat_fill_water_l": "36.040",
+      "notes": "Founder-confirmed (2026-09-23): an accidental extra pour of ethanol at the VAT-fill stage produced a bigger-than-standard vat -- 88 x 700ml bottles instead of the usual ~60-62. Topped up with proportionally more water too, so the final ABV matches every standard Solstice batch rather than running hot; vat_fill_ngs_l/vat_fill_water_l scale the standard 17.776L/25.064L fill by the same ratio to reach the real 61.6L total (see whistlebird_replay_timeline._vat_fill_ngs_and_water_l's override)."
     }
   ],
   "green_gold_records": [

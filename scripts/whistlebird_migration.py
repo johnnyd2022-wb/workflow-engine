@@ -1067,6 +1067,17 @@ def _load_manifest(manifest_path: Path) -> tuple[list[ProductionBatch], list[dic
                     # notes and must still produce consumable VAT-batch WIP.
                     "diverted_to": entry.get("diverted_to") or rosella_conversion_by_base_vat.get(global_vat),
                     "from_manifest": True,
+                    # A batch that genuinely deviated from the standard fixed VAT-fill
+                    # recipe (see whistlebird_replay_timeline._vat_fill_ngs_and_water_l)
+                    # -- e.g. VAT54's accidental extra ethanol pour. Both or neither;
+                    # validated together so a typo'd single key fails loudly at load
+                    # time instead of silently falling back to the standard recipe.
+                    "vat_fill_ngs_l": _optional_decimal(
+                        entry.get("vat_fill_ngs_l"), "vat_fill_ngs_l", PRODUCTION_SOURCE_TABLE, global_vat
+                    ),
+                    "vat_fill_water_l": _optional_decimal(
+                        entry.get("vat_fill_water_l"), "vat_fill_water_l", PRODUCTION_SOURCE_TABLE, global_vat
+                    ),
                 },
             )
         )

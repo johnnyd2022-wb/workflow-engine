@@ -164,7 +164,7 @@ def _wildflower_batch(step_date: date, global_vat: int = 27, product_line: str =
 
 def test_wildflower_recipe_uses_founder_confirmed_ngs_water_and_foraged_inputs():
     flask_ngs, flask_water = _flask_ngs_and_water_l()
-    fill_ngs, fill_water = _vat_fill_ngs_and_water_l("wildflower")
+    fill_ngs, fill_water = _vat_fill_ngs_and_water_l(_wildflower_batch(date(2025, 1, 1)))
 
     assert (flask_ngs, flask_water) == (Decimal("0.746"), Decimal("2.854"))
     # 24.456 L initial dilution, plus the NGS portion of the 1.260 L / 66.6% top-up.
@@ -179,6 +179,25 @@ def test_wildflower_recipe_uses_founder_confirmed_ngs_water_and_foraged_inputs()
         {"name": "Orange peel", "quantity": "5.0", "unit": "g"},
         {"name": "Orange juice", "quantity": "108", "unit": "mL"},
     ]
+
+
+def test_vat_fill_override_replaces_the_standard_recipe_for_that_batch_only():
+    """VAT54: an accidental extra ethanol pour meant its real fill wasn't the standard
+    17.776L/25.064L Solstice recipe. A per-batch override in extra_data must win, and
+    must not leak into any other batch's (unrelated) standard amount."""
+    standard = _wildflower_batch(date(2026, 1, 1), global_vat=35, product_line="solstice")
+    overridden = replace(standard, extra_data={"vat_fill_ngs_l": Decimal("25.560"), "vat_fill_water_l": Decimal("36.040")})
+
+    assert _vat_fill_ngs_and_water_l(standard) == (Decimal("17.776"), Decimal("25.064"))
+    assert _vat_fill_ngs_and_water_l(overridden) == (Decimal("25.560"), Decimal("36.040"))
+
+
+def test_vat_fill_override_requires_both_keys_together():
+    batch = _wildflower_batch(date(2026, 1, 1), global_vat=54, product_line="solstice")
+    half_set = replace(batch, extra_data={"vat_fill_ngs_l": Decimal("25.560"), "vat_fill_water_l": None})
+
+    with pytest.raises(ValueError, match="must both be set, or neither"):
+        _vat_fill_ngs_and_water_l(half_set)
 
 
 def test_post_cutoff_ngs_purchase_is_created_before_maceration_consumes_it():
