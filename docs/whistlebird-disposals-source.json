@@ -242,14 +242,6 @@
       "reason": "Expired 2026-06-19"
     },
     {
-      "lot": "raw-manifest-CIN002",
-      "ingredient": "Cinnamon",
-      "quantity": 0.12,
-      "unit": "g",
-      "date": "2026-08-10",
-      "reason": "Expired 2026-08-10"
-    },
-    {
       "lot": "raw-manifest-GNS-2024-08-19-6",
       "ingredient": "Neutral grain spirit",
       "quantity": 100,

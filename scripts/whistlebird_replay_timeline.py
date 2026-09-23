@@ -90,9 +90,27 @@ def _flask_ngs_and_water_l() -> tuple[Decimal, Decimal]:
     return ngs_per_flask * flasks_per_vat, water_per_flask * flasks_per_vat
 
 
-def _vat_fill_ngs_and_water_l(product_line: str) -> tuple[Decimal, Decimal]:
+def _vat_fill_ngs_and_water_l(batch: wm.ProductionBatch) -> tuple[Decimal, Decimal]:
     """Post-distillation VAT fill that dilutes the concentrate to label strength.
-    Returns (total NGS litres, total water litres)."""
+    Returns (total NGS litres, total water litres).
+
+    A batch's manifest record may override this with its own real
+    `vat_fill_ngs_l`/`vat_fill_water_l` (see whistlebird_migration.py's ProductionBatch
+    parsing) -- used for a batch that genuinely deviated from the standard recipe (e.g.
+    VAT54, 2026-09-23: an accidental extra pour of ethanol at the fill stage produced a
+    bigger-than-standard vat, topped up with proportionally more water to keep the same
+    final ABV rather than left at standard water with a stronger blend). Every other
+    batch has neither key set and gets the standard, product-line-wide amount below.
+    """
+    override_ngs = batch.extra_data.get("vat_fill_ngs_l")
+    override_water = batch.extra_data.get("vat_fill_water_l")
+    if override_ngs is not None or override_water is not None:
+        if override_ngs is None or override_water is None:
+            raise ValueError(
+                f"batch {batch.batch_label}: vat_fill_ngs_l and vat_fill_water_l must both be set, or neither"
+            )
+        return override_ngs, override_water
+    product_line = batch.product_line
     if product_line == "wildflower":
         ngs = Decimal("24.456")
         water = Decimal("30.397")
@@ -114,7 +132,7 @@ def _foraged_botanical_inputs(product_line: str) -> list[dict[str, Any]]:
 
 def _ngs_required_l(batch: wm.ProductionBatch) -> Decimal:
     flask_ngs, _flask_water = _flask_ngs_and_water_l()
-    fill_ngs, _fill_water = _vat_fill_ngs_and_water_l(batch.product_line)
+    fill_ngs, _fill_water = _vat_fill_ngs_and_water_l(batch)
     return flask_ngs + fill_ngs
 
 
@@ -513,7 +531,7 @@ def _batch_events(
                 *_foraged_botanical_inputs(batch.product_line),
             ]
         if key == "aging" and batch.product_line != "rosella":
-            fill_ngs, fill_water = _vat_fill_ngs_and_water_l(batch.product_line)
+            fill_ngs, fill_water = _vat_fill_ngs_and_water_l(batch)
             ngs_needed = fill_ngs
             payload["other_material_inputs"] = [{"name": "Water", "quantity": str(fill_water), "unit": "L"}]
         if ngs_needed:
