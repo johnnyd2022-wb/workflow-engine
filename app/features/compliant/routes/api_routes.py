@@ -19,7 +19,13 @@ from app.core.utils.log_action import log_action
 from app.features.compliant.models import ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
 from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook, np3_log_template
-from app.features.compliant.modules.nz_alcohol.workflow_rules import validate_workflow_settings
+from app.features.compliant.modules.nz_alcohol.workflow_rules import (
+    ABV_RULES_SETTING,
+    matching_abv_rule,
+    terminal_steps,
+    validate_abv_rules,
+    validate_workflow_settings,
+)
 from app.features.compliant.np3_evidence_pdf import build_np3_evidence_register_pdf
 from app.features.compliant.platform.workflow_rules import workflow_context
 from app.features.compliant.service import ComplianceService, serialise_record
@@ -361,8 +367,69 @@ def add_np3_check_log(control_id: str):
 @api_bp.route("/api/compliant/capture-context", methods=["GET"])
 @requires_auth
 def capture_context():
-    """Return module-contributed workflow extensions in Core's generic contract."""
-    return jsonify(workflow_context(db_session(), _org_id())), 200
+    """Return module-contributed workflow extensions in Core's generic contract.
+
+    ``?step_id=`` (the step definition being executed) adds any rules that apply only to
+    that step; without it, only rules that apply to every step are returned.
+    """
+    raw_step_id = (request.args.get("step_id") or "").strip()
+    step_id = None
+    if raw_step_id:
+        try:
+            step_id = UUID(raw_step_id)
+        except ValueError:
+            return jsonify({"error": "step_id must be a UUID"}), 400
+    return jsonify(workflow_context(db_session(), _org_id(), step_id)), 200
+
+
+def _abv_rules_payload(org_id: UUID) -> dict:
+    """Every workflow's final-step outputs, and which ABV rule (if any) covers each one."""
+    profile = _service().get_profile(org_id)
+    rules = list(((profile.settings or {}) if profile else {}).get(ABV_RULES_SETTING) or [])
+    candidates = []
+    for process, step in terminal_steps(db_session(), org_id):
+        for output in step.outputs or []:
+            name = str((output or {}).get("name") or "").strip() if isinstance(output, dict) else ""
+            if not name:
+                continue
+            rule = matching_abv_rule(name, rules)
+            candidates.append(
+                {
+                    "process_id": str(process.id),
+                    "process_name": process.name,
+                    "is_draft": bool(process.is_draft),
+                    "step_id": str(step.id),
+                    "step_name": step.name,
+                    "output_name": name,
+                    "matched_rule": rule,
+                }
+            )
+    return {"rules": rules, "candidates": candidates, "enabled": bool(profile and profile.enabled)}
+
+
+@api_bp.route("/api/compliant/nz-alcohol/abv-rules", methods=["GET"])
+@requires_auth
+def get_abv_rules():
+    return jsonify(_abv_rules_payload(_org_id())), 200
+
+
+@api_bp.route("/api/compliant/nz-alcohol/abv-rules", methods=["PUT"])
+@requires_auth
+@requires_role(UserRole.ADMIN)
+def update_abv_rules():
+    """Replace only the ABV product rules; every other profile setting is left untouched."""
+    data = request.get_json(silent=True)
+    rules = data.get("rules") if isinstance(data, dict) else None
+    error = validate_abv_rules(rules)
+    if error:
+        return jsonify({"error": error}), 400
+    profile = _service().get_profile(_org_id())
+    if profile is None:
+        return jsonify({"error": "Configure Compliant before adding ABV rules"}), 409
+    cleaned = [{"pattern": rule["pattern"].strip(), "match_type": rule["match_type"]} for rule in rules]
+    _service().upsert_profile(_org_id(), {"settings": {**(profile.settings or {}), ABV_RULES_SETTING: cleaned}})
+    log_action("update", "compliance_profile", profile.id, {ABV_RULES_SETTING: len(cleaned)})
+    return jsonify(_abv_rules_payload(_org_id())), 200
 
 
 @api_bp.route("/api/compliant/profile", methods=["PUT"])

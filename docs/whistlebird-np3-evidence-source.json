@@ -18,7 +18,13 @@
       "np3_verification_location": null,
       "np3_check_review_intervals": {},
       "np3_review_interval_months": 12,
-      "np3_execution_evidence_mode": "required"
+      "np3_execution_evidence_mode": "required",
+      "abv_product_rules": [
+        {
+          "pattern": "final product",
+          "match_type": "contains"
+        }
+      ]
     }
   },
   "staff": [

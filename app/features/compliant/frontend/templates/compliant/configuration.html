@@ -23,6 +23,14 @@
     <label class="span-2 config-toggle"><input type="checkbox" name="require_core_source_refs"> Require a linked Core source for every evidence record</label>
     <button type="submit">Save configuration</button>
   </form></section>
+  <section class="compliant-record-panel configuration-panel abv-rules-panel" data-abv-rules>
+    <div class="section-heading"><div><p class="compliant-eyebrow">ABV ON ALCOHOL PRODUCTS</p><h2>Record ABV on every alcohol product batch</h2></div><p>Tick each workflow's final product that is an alcohol product. Its final step then asks for the batch's ABV and cannot be completed without it.</p></div>
+    <p class="compliant-error" data-abv-error hidden></p>
+    <div class="np3-training-table abv-candidates"><table><thead><tr><th scope="col">ABV</th><th scope="col">Workflow</th><th scope="col">Final product</th><th scope="col">Status</th></tr></thead><tbody data-abv-candidates><tr><td colspan="4">Loading workflows…</td></tr></tbody></table></div>
+    <form class="abv-contains-form" data-abv-contains-form><label>Also require ABV on any final product whose name contains <input name="pattern" maxlength="255" placeholder="e.g. final product" autocomplete="off"></label><button type="submit" class="suggestion">Add phrase</button><small>Matching ignores upper/lower case. A phrase also covers workflows you add later.</small></form>
+    <ul class="abv-rule-list" data-abv-rule-list hidden></ul>
+    <div class="abv-actions"><button type="button" data-abv-save>Save ABV rules</button><span class="abv-status" data-abv-status aria-live="polite"></span></div>
+  </section>
 </main>
 {% endblock %}
 {% block scripts %}<script src="/compliant/static/configuration.js"></script>{% endblock %}

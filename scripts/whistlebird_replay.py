@@ -836,6 +836,12 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
         execution_data["Batch number"] = _batch_number_prompt_value(event.payload.get("label_batches"))
     if green_gold is not None:
         execution_data["Batch number"] = green_gold.batch_label
+    # Every product workflow's final step records the batch's label ABV (the NZ-alcohol
+    # ABV rule makes Core require it there -- see WHISTLEBIRD_NZ_ALCOHOL_SETTINGS).
+    if batch is not None and step_key == "labelling":
+        execution_data[wm.ABV_PROMPT_LABEL] = wm.abv_prompt_value(wm.product_abv_percent(batch))
+    if green_gold is not None:
+        execution_data[wm.ABV_PROMPT_LABEL] = wm.abv_prompt_value(wm.GREEN_GOLD_ABV_PERCENT)
 
     client.post(
         f"/api/core/executions/{execution_id}/steps/{step_row['id']}/complete",

@@ -30,13 +30,20 @@
     // explicit server-enforced rule may make its own extension required.
     if (CoreAPI && typeof CoreAPI.getCompliantWorkflowExtensions === 'function') {
       try {
-        var workflowContext = await CoreAPI.getCompliantWorkflowExtensions({ signal: signal });
+        var workflowContext = await CoreAPI.getCompliantWorkflowExtensions({ signal: signal, stepId: currentStepId });
         var extensions = (workflowContext && Array.isArray(workflowContext.extensions)) ? workflowContext.extensions : [];
         extensions.forEach(function(extension) {
           var extensionPrompt = extension && extension.prompt;
           if (!extensionPrompt || !extensionPrompt.type) return;
+          // Evidence is one shelf per step, so any saved evidence prompt is "the" one. A
+          // value field (e.g. a required "ABV (%)" number) must only merge with a saved
+          // prompt of the same label -- matching on type alone would silently fold it
+          // into an unrelated number prompt like "VAT number".
+          var extensionLabel = String(extensionPrompt.label || '').trim().toLowerCase();
           var matchingPrompt = executionPrompts.find(function(prompt) {
-            return prompt && prompt.type === extensionPrompt.type;
+            if (!prompt || prompt.type !== extensionPrompt.type) return false;
+            if (extensionPrompt.type === 'evidence') return true;
+            return String(prompt.label || '').trim().toLowerCase() === extensionLabel;
           });
           if (matchingPrompt) {
             // A saved workflow prompt remains the canonical field, but an applicable
@@ -50,6 +57,8 @@
             required: Boolean(extensionPrompt.required),
             compliant_auto: true,
             help: extensionPrompt.help || '',
+            min: extensionPrompt.min,
+            max: extensionPrompt.max,
           });
         });
       } catch (e) {
@@ -129,7 +138,8 @@
         } else if (prompt.type === 'text') {
           inputHtml = `<input type="text" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''}>`;
         } else if (prompt.type === 'number') {
-          inputHtml = `<input type="number" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''} step="0.01">`;
+          var numberBounds = (typeof prompt.min === 'number' ? ` min="${prompt.min}"` : '') + (typeof prompt.max === 'number' ? ` max="${prompt.max}"` : '');
+          inputHtml = `<input type="number" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''} step="0.01"${numberBounds}>`;
         } else if (prompt.type === 'date') {
           inputHtml = `<input type="date" class="spa-inp execute-prompt-input" data-prompt-label="${escapeHtml(prompt.label)}" ${prompt.required !== false ? 'data-required="true"' : ''}>`;
         } else if (prompt.type === 'select') {
