@@ -88,10 +88,19 @@ def test_committed_manifest_is_valid():
     manifest = np3.load_np3_manifest()
 
     assert len(manifest.attestations) == 38
-    assert len(manifest.logs) == 60
+    assert len(manifest.logs) == 62
     training = [record for record in manifest.logs if record.control_id == "staff-competency"]
-    assert len(training) == 54  # 2 staff x 9 supplied register items x 3 annual dates
-    assert {record.event_date.isoformat() for record in training} == {"2024-02-02", "2025-02-02", "2026-02-02"}
+    # 2 staff x 9 supplied register items x 3 annual dates, plus both staff trained on the
+    # written recall policy the NP3 verifier asked for (2026-09-23).
+    assert len(training) == 56
+    assert {record.event_date.isoformat() for record in training} == {
+        "2024-02-02",
+        "2025-02-02",
+        "2026-02-02",
+        "2026-09-23",
+    }
+    recall = [record for record in training if record.fields["training_topic"] == "recall-policy-procedures"]
+    assert {record.fields["employee_name"] for record in recall} == {"Johnny Dempsey", "Nikolai Scott"}
     assert {member.name for member in manifest.staff} == {"Johnny Dempsey", "Nikolai Scott"}
     assert {record.fields["employee_name"] for record in training} == {"Johnny Dempsey", "Nikolai Scott"}
     assert manifest.record_count == len(manifest.attestations) + len(manifest.logs)
@@ -422,11 +431,11 @@ def test_committed_manifest_replays_all_review_placeholders(db, np3_org):
     updated = np3.correct_np3_timestamps(np3_org["url"], np3_org["name"], manifest)
     report = np3.verify_np3(np3_org["url"], np3_org["name"], manifest)
 
-    assert counts == {"staff": 2, "profile": 1, "attestations": 38, "logs": 60, "skipped": 0}
-    assert updated == 98
+    assert counts == {"staff": 2, "profile": 1, "attestations": 38, "logs": 62, "skipped": 0}
+    assert updated == 100
     assert report == {
-        "np3_record_count": {"expected": 98, "actual": 98},
-        "np3_record_content": {"expected": 98, "actual": 98},
+        "np3_record_count": {"expected": 100, "actual": 100},
+        "np3_record_content": {"expected": 100, "actual": 100},
         "np3_staff": {"expected": 2, "actual": 2},
         "np3_profile": {"expected": 1, "actual": 1},
         "np3_date_mismatches": 0,
