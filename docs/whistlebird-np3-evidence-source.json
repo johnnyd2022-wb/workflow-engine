@@ -940,6 +940,22 @@
         "result": "ok",
         "test_result": "Not applicable — confirm if scope changes"
       }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Johnny Dempsey",
+        "event_date": "2026-09-23",
+        "training_topic": "recall-policy-procedures"
+      }
+    },
+    {
+      "control_id": "staff-competency",
+      "fields": {
+        "employee_name": "Nikolai Scott",
+        "event_date": "2026-09-23",
+        "training_topic": "recall-policy-procedures"
+      }
     }
   ]
 }

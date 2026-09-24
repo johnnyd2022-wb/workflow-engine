@@ -290,6 +290,74 @@ def test_every_np3_audit_check_has_a_tailored_guidance_card_and_evidence_plan():
     assert "#page=" in training["guidance_url"]
 
 
+def test_np3_post_audit_checks_added_2026_09_23_have_playbooks_registers_and_a_category():
+    """Eight checks added after a real NP3 verification visit: each needs a guidance
+    card/example, most need a register, and every one must appear in the audit list
+    (not just live in the catalogue) or a verifier walkthrough would never surface it."""
+    from app.features.compliant.modules.nz_alcohol.catalogue import (
+        CONTROL_REQUIREMENTS,
+        NP3_CONTROL_REFERENCES,
+        framework_by_slug,
+    )
+
+    new_controls = {
+        "recall-policy",
+        "hazard-issues-register",
+        "packaging-supplier-verification",
+        "customer-complaints-register",
+        "manufacturing-process-description",
+        "food-contact-equipment-cleaning",
+        "premises-notices-displayed",
+        "cleaning-chemicals-food-safe",
+    }
+    np3 = framework_by_slug("np3-food-control")
+    catalogued = {control_id for control_id, _description in np3["controls"]}
+    assert new_controls <= catalogued
+    assert new_controls <= NP3_CONTROL_REFERENCES.keys()
+    assert all(("np3-food-control", control_id) in CONTROL_REQUIREMENTS for control_id in new_controls)
+    audit_controls = {control_id for _category, topics in NP3_AUDIT_CATEGORIES for control_id, _topic in topics}
+    assert new_controls <= audit_controls
+    for control_id in new_controls:
+        playbook = evidence_playbook(control_id)
+        assert playbook["page"], control_id
+        assert "#page=" in playbook["guidance_url"]
+        assert playbook["proof"], control_id
+        assert playbook["fields"], control_id
+        # Every new control has its own register except the two that hook into Core
+        # instead of duplicating a fact Core already owns.
+        if control_id != "manufacturing-process-description":
+            assert np3_log_template(control_id) is not None, control_id
+
+    recall_policy = evidence_playbook("recall-policy")
+    assert any("24" in item and "NZFS" in item for item in recall_policy["proof"])
+    assert control_reference("np3-food-control", "recall-policy") == "Recalling your food"
+
+    hazard_log = np3_log_template("hazard-issues-register")
+    hazard_options = {option for field in hazard_log["fields"] if field["key"] == "hazard_type" for option, _label in field["options"]}
+    assert hazard_options == {"physical", "biological", "chemical"}
+
+    cleaning_chem_log = np3_log_template("cleaning-chemicals-food-safe")
+    assert {field["key"] for field in cleaning_chem_log["fields"]} >= {
+        "food_safe_confirmed",
+        "evidence_reference",
+        "product_link",
+    }
+    product_link = next(field for field in cleaning_chem_log["fields"] if field["key"] == "product_link")
+    assert product_link["required"] is False
+
+    manufacturing = evidence_playbook("manufacturing-process-description")
+    core_link = manufacturing.get("core_connections") or []
+    assert any(link["workspace_url"] == "/core/flows" for link in core_link)
+
+
+def test_recall_policy_training_category_links_the_new_control():
+    from app.features.compliant.modules.nz_alcohol.np3_audit import NP3_TRAINING_CATEGORIES
+
+    category = next(entry for entry in NP3_TRAINING_CATEGORIES if entry[0] == "recall-policy-procedures")
+    _key, _label, controls = category
+    assert "recall-policy" in controls
+
+
 def test_upcoming_evidence_review_is_a_live_priority_action():
     record = SimpleNamespace(
         status="complete",
