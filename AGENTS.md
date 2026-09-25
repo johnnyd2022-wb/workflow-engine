@@ -77,6 +77,13 @@ Product modules own the system-finding content and actions they expose to Core. 
 
 Tests use a real PostgreSQL instance (not mocks). The test suite covers execution workflows, DAG traversal, business logic, login/2FA flows, and multi-tenant API isolation. See `tests/TEST_DOCUMENTATION.md` for details.
 
+### Product plan
+
+`docs/source-to-sale-plan.md` is the product roadmap: a checklist with stable item IDs
+(e.g. `1.3`, `4.7c`). Before starting product work, check whether it covers the change;
+when an MR delivers an item, tick it in the same MR with the MR number. Don't reopen its
+"Decisions already made" without the founder.
+
 ## Observability
 
 Structured logging (`structlog`, JSON), OpenTelemetry traces/metrics, and privacy-masked
