@@ -169,7 +169,7 @@
         </article>
 
         {% if crm_enabled %}
-        <article class="dash-kpi-card">
+        <article class="dash-kpi-card" data-kpi-revenue-goal-card>
           <p class="dash-kpi-label">Monthly revenue goal</p>
           <p class="dash-kpi-value" data-kpi-revenue-goal>n/a</p>
           <p class="dash-kpi-meta">Baseline attainment (month-to-date)</p>
@@ -245,8 +245,8 @@
           <div class="dash-stat-rows">
             <div class="dash-stat-row"><span>Revenue month-to-date</span><strong data-sales-revenue-mtd>$0</strong></div>
             <div class="dash-stat-row"><span>Revenue baseline target</span><strong data-sales-baseline-target>$0</strong></div>
-            <div class="dash-stat-row"><span>Revenue variance vs baseline</span><strong data-sales-baseline-variance>n/a</strong></div>
-            <div class="dash-stat-row"><span>Revenue month-on-month change</span><strong data-sales-mom>n/a</strong></div>
+            <div class="dash-stat-row" data-sales-baseline-variance-row hidden><span>Revenue variance vs baseline</span><strong data-sales-baseline-variance></strong></div>
+            <div class="dash-stat-row" data-sales-mom-row hidden><span>Revenue month-on-month change</span><strong data-sales-mom></strong></div>
           </div>
           <p class="dash-caption" data-sales-caption>Define a baseline in CRM Configuration to track attainment.</p>
         </section>

@@ -454,7 +454,7 @@ Sales matter here because they finish the trace. Make them readable and complete
   - Change: show how many customers have a contact phone and email on record and prompt
     for missing ones. A recall is only as good as its contact list.
 
-- [ ] **3.5 Hide empty sales metrics.** *S*
+- [x] **3.5 Hide empty sales metrics.** *S* (!340)
   - Evidence: revenue-target tiles on the dashboard and CRM read "n/a" until a target is
     set.
   - Change: hide them, or offer a one-click setup.
