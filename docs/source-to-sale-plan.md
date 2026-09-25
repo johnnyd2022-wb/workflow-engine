@@ -225,40 +225,34 @@ want it, and never produce a recall list that can't be trusted.
     - Pack size is `units_per_line` on a product mapping (migration
       `product_mapping_pack_size_001`), shown and editable in CRM configuration.
 
-- [ ] **1.3 Go live with a stocktake instead of reconstructing history.** *Critical · L*
-  - Evidence: the only way to get traceable history today is to rebuild past production.
+- [x] **1.3 Go live with a stocktake instead of reconstructing history.** *Critical · L* (!MR)
+  - Evidence: the only way to get traceable history was to rebuild past production.
     Adding a finished product by hand warns that it "creates untraceable stock and will
-    require reconciliation" and demands a justification
-    (`app/core/frontend/inventory/add_manual.html:211`). The product treats opening
-    stock as a problem, when every new customer arrives with some.
-  - Flow:
-    - [ ] a. **Go-live date.** Defaults to today. Traceability starts here, and the app says
-      so plainly.
-    - [ ] b. **Workflows.** Pick a template for the producer type or build one. Comes first
-      because finished stock belongs to a workflow's final output, using the same
-      final-step list as the ABV setting (`terminal_steps` in
-      `app/features/compliant/modules/nz_alcohol/workflow_rules.py`).
-    - [ ] c. **Count what's on hand**, one screen with three pre-filled lists:
-      - *Raw materials and packaging:* the existing manual, CSV and barcode entry, with
-        quantity, supplier batch and expiry.
-      - *Finished goods:* one row per final output. Add batches with the org's own batch
-        ID, whole-unit quantity, ABV, and bottling date if known ("unknown" allowed).
-        Library stock on the same screen.
-      - *In progress:* for batches mid-process (in barrel, fermenting), choose the step
-        it's at, quantity and batch ID; the batch continues from that step. **First check
-        whether Core can start a batch partway through a workflow.** If not, that is the
-        main engineering work in this item.
-    - [ ] d. **Connect Xero.** Past invoices come in for sales reporting. Those before
-      go-live are marked and left out of matching, and those after are matched from
-      opening stock first. Finish with a summary such as "412 earlier invoices imported
-      for reporting; tracing starts 1 Oct 2026".
-    - [ ] e. **Under the hood:** opening stock is written with its own reason (a new
-      opening-balance value in `InventoryQuantityWriteReason`), with no warning. Source
-      Map shows it as a starting point: "Opening stock at 1 Oct 2026, earlier history
-      not recorded". A recall on an opening batch lists customers from go-live onward and
-      says so.
-    - [ ] f. **Later:** the same screen becomes the regular **Stocktake**: count, compare
-      with the system, record differences as adjustments with a reason.
+    require reconciliation" (`app/core/frontend/inventory/add_manual.html:211`), so the
+    product treated opening stock as a problem, when every new customer arrives with some.
+  - Approach (Claude's recommendation after the founder asked "why not just start new
+    batches?"; built in the recommended order, so revisit if the founder disagrees):
+    producers **record new batches as normal** from go-live, with no history to rebuild,
+    and count only what the system can't know. Starting a batch partway through a
+    workflow was dropped as unnecessary.
+  - [x] a. **Go-live date** (`organisations.go_live_date`, admin only). Tracing starts
+    there, and the page says so.
+  - [x] b. **Workflows** step: shows how many exist and links to templates. Each
+    workflow's final output becomes a row in the count.
+  - [x] c. **Count what's on hand** at `/core/go-live`: finished goods per final output
+    (batch ID, whole-unit quantity, bottling date, ABV, Library stock in mL); what's in
+    tank or barrel as opening work in progress, which a later step picks as an input;
+    raw materials through the existing add-stock screens. All rows or none.
+  - [x] d. **Xero boundary:** sales dated before go-live stay in sales reporting but are
+    not matched to batches (`before_go_live` in the reconcile summary; earlier matches are
+    undone). Later sales take opening batches first.
+  - [x] e. **Under the hood:** opening stock is written with the `OPENING_BALANCE`
+    reason, `add_method: opening_stock`, and `extra_data.opening_stock` / `opening_as_of`;
+    it is not a traceability gap. Source Map notes "Opening stock counted at go-live on
+    …; history before then wasn't recorded".
+  - [ ] f. **Later:** the same count becomes the regular stocktake. Tracked in 2.6c.
+  - Also: a dashboard prompt ("Setting up? Go live with a stocktake") until the date is
+    set, and the manual-add warning points to the go-live stocktake.
   - Done when: a new producer goes live in one sitting without inventing a past date, and
     the first sale after go-live traces to an opening batch.
 

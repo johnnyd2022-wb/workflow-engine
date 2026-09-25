@@ -212,7 +212,9 @@
                 var sentence2 = target
                   ? ('To reconcile this item, record the producing step (' + target + ') and use the reconcile option to map its output to this item.')
                   : 'To reconcile this item, record the producing step and use the reconcile option to map its output to this item.';
-                copyEl.textContent = sentence1 + '\n' + sentence2;
+                // Plan 1.3: stock already on hand at go-live isn't a gap to reconcile.
+                var sentence3 = 'Setting up? Stock you already had when you started using the app belongs in the go-live stocktake (/core/go-live), which needs no reconciling.';
+                copyEl.textContent = sentence1 + '\n' + sentence2 + '\n' + sentence3;
               }
               hideRawOnlySections();
             } else {

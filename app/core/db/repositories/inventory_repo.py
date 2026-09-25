@@ -64,6 +64,8 @@ def _detect_add_method(extra_data: dict | None, source_execution_id) -> str:
         return "barcode_scan"
     if extra.get("csv_import"):
         return "csv_import"
+    if extra.get("opening_stock"):
+        return "opening_stock"
     return "manual"
 
 
@@ -195,6 +197,7 @@ class InventoryRepository:
         source_step_name: str | None = None,
         extra_data: dict | None = None,
         commit: bool = True,
+        write_reason: InventoryQuantityWriteReason = InventoryQuantityWriteReason.REPOSITORY_CREATE,
     ) -> InventoryItem:
         """Create a new inventory item. If commit=False, caller is responsible for commit."""
         with start_span(
@@ -209,7 +212,7 @@ class InventoryRepository:
                 org_id, source_execution_id, source_execution_step_id, source_output_id
             )
             _require_whole_count(quantity, unit, name)
-            with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_CREATE):
+            with allow_inventory_quantity_write(write_reason):
                 item = InventoryItem(
                     org_id=org_id,
                     name=name,
@@ -701,6 +704,8 @@ class InventoryRepository:
                 InventoryItem.quantity > self._NONZERO_QTY,
                 InventoryItem.source_execution_id.is_(None),
                 InventoryItem.supplier_batch_number.is_(None),
+                # Opening stock has no history by design (plan 1.3); it isn't a gap.
+                ~InventoryItem.extra_data.contains({"opening_stock": True}),
             )
             .order_by(InventoryItem.created_at.desc())
             .limit(safe_limit)

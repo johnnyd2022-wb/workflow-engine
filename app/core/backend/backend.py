@@ -31,6 +31,7 @@ from app.api.routes.auth_routes import limiter
 from app.core.backend import (
     changes_feed,
     corechecks,
+    go_live,
     inventory_upload_routes,
     suppliers,
     tasks,
@@ -4006,6 +4007,7 @@ evidence_routes.register_routes(core_bp)
 process_docs_routes.register_routes(core_bp)
 tasks.register_routes(core_bp)
 suppliers.register_routes(core_bp)
+go_live.register_routes(core_bp)  # plan 1.3
 demo_data_routes.register_routes(core_bp)
 
 

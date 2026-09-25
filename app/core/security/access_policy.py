@@ -168,6 +168,11 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("initialize", None, "settings.manage"),
     # Guarded by the route itself: demo org only, local/test environments only.
     ("core.reset_demo_db_route", None, SIGNED_IN),
+    # --- go-live stocktake (plan 1.3)
+    ("core.set_go_live_date", None, "settings.manage"),  # changes which sales are matched
+    ("core.create_opening_stock", None, "inventory.adjust"),
+    ("core.go_live_page", None, "inventory.adjust"),
+    ("core.get_go_live", None, ("inventory.view", "production.view")),
     # --- process design
     ("core.create_process", None, "production.design"),
     ("core.update_process", None, "production.design"),

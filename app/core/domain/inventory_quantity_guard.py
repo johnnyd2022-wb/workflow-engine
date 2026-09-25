@@ -82,6 +82,8 @@ class InventoryQuantityWriteReason(str, Enum):
     RESETDB_DEV = "resetdb_dev"
     SALES_FIFO_CONSUMPTION = "sales_fifo_consumption"
     SALES_FIFO_REVERSAL = "sales_fifo_reversal"
+    # Plan 1.3: stock counted at go-live, with no production history behind it.
+    OPENING_BALANCE = "opening_balance"
 
 
 class InventoryQuantityWriteForbiddenError(RuntimeError):
