@@ -9,7 +9,6 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from flask import (
     Blueprint,
@@ -26,13 +25,13 @@ from flask import (
 from pydantic import ValidationError
 from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
+from zoneinfo import ZoneInfo
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import (
     changes_feed,
     corechecks,
     inventory_upload_routes,
-    reconciliation_routes,
     suppliers,
     tasks,
 )
@@ -49,7 +48,6 @@ from app.core.backend.event_writer import EventWriter
 from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
 from app.core.backend.process_docs import process_docs_routes
-from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import SessionLocal, db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.entity_event import EntityEvent
@@ -90,6 +88,8 @@ from app.core.utils.log_action import log_action
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
 from app.features.demo_data.routes import api_routes as demo_data_routes
 from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL
+from app.features.reconciliation.routes import reconciliation_routes
+from app.features.reconciliation.service import _find_producing_step
 from app.observability import get_logger
 from app.utils.config_loader import config
 
@@ -2949,7 +2949,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                 db_session.flush()
 
             # Create inventory items for outputs; when reconciling to untracked, reduce first then create only surplus
-            from app.core.backend.reconciliation_service import reconcile_output_to_untracked_reduce_only
+            from app.features.reconciliation.service import reconcile_output_to_untracked_reduce_only
 
             for output_params in output_creations:
                 untracked_item_id = output_params.pop("untracked_item_id", None)

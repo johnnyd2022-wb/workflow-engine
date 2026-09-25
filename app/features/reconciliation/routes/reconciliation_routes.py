@@ -10,13 +10,13 @@ from uuid import UUID
 
 from flask import g, jsonify, request
 
-from app.core.backend.reconciliation_service import (
+from app.core.db import db_session
+from app.core.security.permissions import requires_auth
+from app.features.reconciliation.service import (
     get_matching_untracked,
     reconcile_via_addition,
     reconcile_via_execution,
 )
-from app.core.db import db_session
-from app.core.security.permissions import requires_auth
 from app.observability import get_logger
 
 logger = get_logger(__name__)
