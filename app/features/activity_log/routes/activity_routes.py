@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from flask import g, jsonify, request
@@ -300,6 +301,13 @@ def _human_summary(ev) -> str:
     p = ev.payload or {}
     d = ev.diff or {}
 
+    if et in {"crm_xero.sync_completed", "crm_xero.sync_failed"}:
+        status = "failed" if et.endswith("failed") else "completed"
+        invoices = int(p.get("invoices_synced") or 0)
+        allocated = int(p.get("sales_allocated") or 0)
+        unmapped = int(p.get("sales_unmapped") or 0)
+        return f"Xero sync {status} — {invoices} invoices, {allocated} sales matched, {unmapped} unmapped"
+
     if et == "inventory_item.created":
         qty = p.get("quantity", "")
         unit = p.get("unit", "")
@@ -320,6 +328,30 @@ def _human_summary(ev) -> str:
         return " ".join(parts)
 
     if et == "inventory_item.quantity_adjusted":
+        reason = p.get("reason")
+        if reason in {"sales_fifo_consumption", "sales_fifo_reversal"}:
+            sale = p.get("sale") or {}
+            quantity = sale.get("quantity_from_batch") or sale.get("quantity_sold") or p.get("delta", "?")
+            total = sale.get("quantity_sold")
+            product = sale.get("product_name") or p.get("name") or "product"
+            batch = sale.get("batch_number")
+            invoice = sale.get("invoice_number")
+            customer = sale.get("customer_name")
+            batch_text = f"batch {batch}" if batch not in (None, "") else "unlabelled batch"
+            try:
+                quantity_text = format(Decimal(str(quantity)).normalize(), "f")
+            except (InvalidOperation, TypeError, ValueError):
+                quantity_text = str(quantity)
+            sale_text = f"{quantity_text} × {product} ({batch_text})"
+            if total not in (None, "") and str(total) != str(quantity):
+                try:
+                    total_text = format(Decimal(str(total)).normalize(), "f")
+                except (InvalidOperation, TypeError, ValueError):
+                    total_text = str(total)
+                sale_text += f" · {total_text} total"
+            if reason == "sales_fifo_reversal":
+                return f"Sale reversed: {sale_text}{f', {invoice}' if invoice else ''}{f', {customer}' if customer else ''}"
+            return f"Sold {sale_text}{f', {invoice}' if invoice else ''}{f', {customer}' if customer else ''}"
         before = p.get("quantity_before", "?")
         after = p.get("quantity_after", p.get("quantity", "?"))
         unit = p.get("unit", "")
@@ -788,11 +820,10 @@ def entity_activity_feed():
         }
     ), 200
 
+
 def register_routes(bp):
     """Keep activity URLs and endpoint names on the Core blueprint."""
-    bp.add_url_rule(
-        "/api/core/entities/<entity_type>/<entity_id>/story", view_func=entity_story, methods=["GET"]
-    )
+    bp.add_url_rule("/api/core/entities/<entity_type>/<entity_id>/story", view_func=entity_story, methods=["GET"])
     bp.add_url_rule(
         "/api/core/entities/<entity_type>/<entity_id>/summary", view_func=entity_summary_detail, methods=["GET"]
     )
