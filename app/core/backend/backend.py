@@ -5227,7 +5227,7 @@ def _dashboard_compliant_workspace_summary(
     unavailable = {
         "available": False,
         "state": "unavailable",
-        "label": "Compliant is not enabled for this organisation.",
+        "label": "Compliance is not enabled for this organisation.",
         "attention_count": 0,
         "modules": [],
     }
@@ -5312,7 +5312,7 @@ def _dashboard_build_action_board(
             "count": (findings.get("expired_materials") or {}).get("count") or 0,
             "severity": "critical",
             "href": "/core/inventory/view",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "untracked_items",
@@ -5320,7 +5320,7 @@ def _dashboard_build_action_board(
             "count": (findings.get("untracked_items") or {}).get("count") or 0,
             "severity": "high",
             "href": "/core/notifications",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "output_expired",
@@ -5328,7 +5328,7 @@ def _dashboard_build_action_board(
             "count": output_expiry.get("red_count") or 0,
             "severity": "critical",
             "href": "/core/notifications",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "output_not_ready",
@@ -5336,15 +5336,15 @@ def _dashboard_build_action_board(
             "count": output_ready.get("red_count") or 0,
             "severity": "informational",
             "href": "/core/notifications",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "overdue_tasks",
-            "label": "Overdue CRM tasks",
+            "label": "Overdue Sales tasks",
             "count": (tasks_summary or {}).get("overdue_count") or 0,
             "severity": "high",
             "href": "/crm/tasks",
-            "workspace": "CRM",
+            "workspace": "Sales",
         },
         {
             "key": "compliant_evidence",
@@ -5352,7 +5352,7 @@ def _dashboard_build_action_board(
             "count": (compliant_workspace or {}).get("attention_count") or 0,
             "severity": "high",
             "href": "/compliant",
-            "workspace": "Compliant",
+            "workspace": "Compliance",
         },
     ]
 
