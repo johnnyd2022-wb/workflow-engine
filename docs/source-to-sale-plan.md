@@ -502,7 +502,7 @@ any time.
     food-safety, `/compliant/nz-alcohol/evidence` → customs, `/core/tasks` →
     `/core?tab=tasks`. Redirect on purpose or remove.
 
-- [ ] **4.5 Make the dashboard today's work list.** *High · M*
+- [x] **4.5 Make the dashboard today's work list.** *High · M* (!350)
   - Evidence: a "−100% batch completion vs last week" tile computed against a zero base;
     a sign-in ("Logged in with password from 127.0.0.1") shown as the day's featured
     event; several "n/a" tiles; a "System Issues Detected" banner on Core pages with no
