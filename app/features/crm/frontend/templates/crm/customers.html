@@ -85,7 +85,13 @@
         <option value="ACTIVE">Active</option>
         <option value="ARCHIVED">Archived</option>
       </select>
+      <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" :aria-pressed="missingContactOnly" @click="missingContactOnly=!missingContactOnly; page=1; loadCustomers()" x-text="missingContactOnly ? 'Show all contacts' : 'Missing contact details'">
+        Missing contact details
+      </button>
     </div>
+    <p x-show="missingContactOnly" style="margin:0 16px 12px; color:var(--text-secondary,#6b7280);" x-cloak>
+      Update missing phone or email details in Xero, then sync contacts here.
+    </p>
 
     {# Loading skeletons #}
     <template x-if="loading">
@@ -109,8 +115,8 @@
         <div class="crm-empty-icon">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
-        <h3 x-text="search ? 'No customers match your search' : 'No customers yet'">No customers yet</h3>
-        <p x-text="search ? 'Try a different search term.' : isConnected ? 'Sync Xero to import your contacts.' : 'Connect Xero to get started.'"></p>
+        <h3 x-text="missingContactOnly ? 'All customers have contact details' : search ? 'No customers match your search' : 'No customers yet'">No customers yet</h3>
+        <p x-text="missingContactOnly ? 'There are no customers missing a phone number or email address.' : search ? 'Try a different search term.' : isConnected ? 'Sync Xero to import your contacts.' : 'Connect Xero to get started.'"></p>
         <template x-if="!isConnected">
           <button type="button" class="crm-btn crm-btn--primary" style="margin-top:8px;" @click="beginXeroConnect()">Connect Xero</button>
         </template>
