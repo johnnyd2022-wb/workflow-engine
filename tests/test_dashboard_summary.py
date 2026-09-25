@@ -5,7 +5,19 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.backend.backend import (
+from app.core.db import db_session
+from app.core.db.models.audit_log import AuditLog
+from app.core.db.models.execution import Execution, ExecutionStatus
+from app.core.db.models.organisation import Organisation
+from app.core.db.models.process import Process
+from app.core.db.models.user import User
+from app.core.db.repositories.execution_repo import ExecutionRepository
+from app.core.db.repositories.organisation_repo import OrganisationRepository
+from app.core.db.repositories.process_repo import ProcessRepository
+from app.core.db.repositories.user_repo import UserRepository
+from app.core.security.auth_service import AuthService
+from app.features.crm.services.crm_service import CRMService
+from app.features.dashboard.routes.dashboard_routes import (
     _APP_TZ,
     _dashboard_build_action_board,
     _dashboard_build_compliance_summary,
@@ -21,18 +33,6 @@ from app.core.backend.backend import (
     _dashboard_week_boundaries,
     _local_midnight,
 )
-from app.core.db import db_session
-from app.core.db.models.audit_log import AuditLog
-from app.core.db.models.execution import Execution, ExecutionStatus
-from app.core.db.models.organisation import Organisation
-from app.core.db.models.process import Process
-from app.core.db.models.user import User
-from app.core.db.repositories.execution_repo import ExecutionRepository
-from app.core.db.repositories.organisation_repo import OrganisationRepository
-from app.core.db.repositories.process_repo import ProcessRepository
-from app.core.db.repositories.user_repo import UserRepository
-from app.core.security.auth_service import AuthService
-from app.features.crm.services.crm_service import CRMService
 from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
 
 
