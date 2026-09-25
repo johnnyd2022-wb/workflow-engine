@@ -575,7 +575,7 @@ split.
   - Change: the 1.7 checks as tests, plus a mock-recall scenario and a Customs stocktake
     scenario (2.6) in the end-to-end suite.
 
-- [ ] **5.3 Keep tooling in proportion.** *S*
+- [x] **5.3 Keep tooling in proportion.** *S* (!351)
   - Evidence: `.agents/reports/` has 33 directories, alongside 11 watcher/sweep scripts.
   - Change: keep the tools that change decisions; retire the rest. Review on 26 Sep 2026
     found no unreferenced automation: the six watch/sweep flows are wired to explicit
