@@ -677,3 +677,45 @@ def test_arguments_reject_wrong_tenant_before_any_database_work(migration_module
     )
     with pytest.raises(SystemExit):
         migration_module._arguments()
+
+
+# --- ABV on final products ---------------------------------------------------------
+
+
+def test_whistlebird_abv_rule_covers_every_product_final_step_and_no_trial(migration_module):
+    """Ties the replay's NZ-alcohol ABV rule to the real workflow definitions: renaming a
+    product's final output must not silently stop its batches recording ABV, and the
+    trials' library stock (not a saleable product) must never require one."""
+    from app.features.compliant.modules.nz_alcohol.workflow_rules import matching_abv_rule, validate_abv_rules
+
+    rules = migration_module.WHISTLEBIRD_NZ_ALCOHOL_SETTINGS["abv_product_rules"]
+    assert validate_abv_rules(rules) is None
+    final_outputs = {workflow: steps[-1][2] for workflow, (_shape, steps) in migration_module.PRODUCT_WORKFLOWS.items()}
+    trials = {
+        migration_module.GG_TRIAL_WORKFLOW,
+        migration_module.WB_TRIAL_WORKFLOW,
+        migration_module.SGS_TRIAL_WORKFLOW,
+    }
+    for workflow, output in final_outputs.items():
+        assert bool(matching_abv_rule(output, rules)) is (workflow not in trials), (workflow, output)
+
+
+def test_product_abv_prefers_the_batchs_own_reading_then_the_product_default(migration_module):
+    from decimal import Decimal
+
+    def batch(product_line, vat_abv=None, bottlings=()):
+        return SimpleNamespace(product_line=product_line, vat_abv=vat_abv, bottlings=bottlings)
+
+    abv = migration_module.product_abv_percent
+    assert abv(batch("wildflower", vat_abv=Decimal("43.5000"))) == Decimal("43.5000")
+    assert abv(batch("solstice", bottlings=({"abv_percent": "41"},))) == Decimal("41")
+    assert abv(batch("solstice")) == Decimal("40")
+    assert abv(batch("wildflower")) == Decimal("44")
+    assert abv(batch("rosella")) == Decimal("40")
+    assert migration_module.GREEN_GOLD_ABV_PERCENT == Decimal("25")
+    assert [migration_module.abv_prompt_value(Decimal(v)) for v in ("44.0000", "40", "40.5000")] == ["44", "40", "40.5"]
+    # Must be the exact label the Compliant ABV rule prompts for, or Core would reject
+    # every replayed final step.
+    from app.features.compliant.modules.nz_alcohol.workflow_rules import ABV_PROMPT_LABEL
+
+    assert migration_module.ABV_PROMPT_LABEL == ABV_PROMPT_LABEL

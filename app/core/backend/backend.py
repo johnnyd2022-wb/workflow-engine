@@ -2320,6 +2320,30 @@ def get_execution_with_process(execution_id: str):
     ), 200
 
 
+def _prompt_value_violation(value: Any, constraint: Any) -> str | None:
+    """Check a module-required execution-prompt value Core itself captured.
+
+    Generic by design: the constraint names the prompt label and optional inclusive
+    numeric bounds; which compliance rule asked for it stays with the module.
+    """
+    label = constraint.prompt_label
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return constraint.message
+    if constraint.minimum is None and constraint.maximum is None:
+        return None
+    try:
+        number = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return f'"{label}" must be a number.'
+    if not number.is_finite():
+        return f'"{label}" must be a number.'
+    if (constraint.minimum is not None and number < constraint.minimum) or (
+        constraint.maximum is not None and number > constraint.maximum
+    ):
+        return f'"{label}" must be between {constraint.minimum} and {constraint.maximum}.'
+    return None
+
+
 @core_bp.route("/api/core/executions/<execution_id>/steps/<execution_step_id>/complete", methods=["POST"])
 @requires_auth
 def complete_step(execution_id: str, execution_step_id: str):
@@ -2398,18 +2422,26 @@ def complete_step(execution_id: str, execution_step_id: str):
         if _product_available("compliant"):
             from app.features.compliant.platform.workflow_rules import completion_constraints
 
-            constraints = completion_constraints(db_session, org_id)
+            policy_step = (
+                db_session.query(ExecutionStep)
+                .filter(
+                    ExecutionStep.id == execution_step_uuid,
+                    ExecutionStep.execution_id == execution_uuid,
+                    ExecutionStep.org_id == org_id,
+                )
+                .one_or_none()
+            )
+            constraints = completion_constraints(
+                db_session, org_id, policy_step.step_id if policy_step is not None else None
+            )
+            for constraint in constraints:
+                if constraint.requirement != "prompt_value" or not constraint.prompt_label:
+                    continue
+                violation = _prompt_value_violation(execution_data.get(constraint.prompt_label), constraint)
+                if violation:
+                    return jsonify({"error": violation, "code": constraint.code, "action": constraint.action}), 409
             evidence_constraints = [item for item in constraints if item.requirement == "active_evidence"]
             if evidence_constraints:
-                policy_step = (
-                    db_session.query(ExecutionStep)
-                    .filter(
-                        ExecutionStep.id == execution_step_uuid,
-                        ExecutionStep.execution_id == execution_uuid,
-                        ExecutionStep.org_id == org_id,
-                    )
-                    .one_or_none()
-                )
                 if policy_step is not None:
                     has_evidence = (
                         db_session.query(ExecutionEvidence.id)

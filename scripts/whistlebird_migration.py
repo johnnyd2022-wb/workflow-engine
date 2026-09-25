@@ -151,7 +151,42 @@ WHISTLEBIRD_NZ_ALCOHOL_SETTINGS = {
     "alcohol_product_types": ["spirits"],
     "require_core_source_refs": True,
     "trade_waste_required": False,
+    # Every Whistlebird final product is alcohol, and every product workflow's final
+    # output is "<Product> - final product" -- one contains-rule covers all of them (and
+    # any product line added later) while leaving the trials' "Library stock" out.
+    "abv_product_rules": [{"pattern": "final product", "match_type": "contains"}],
 }
+
+# Label ABV per product line, recorded on each batch's final (labelling) step. Sources:
+# Wildflower 44% -- every legacy bottling, flavour-VAT and Customs lodgement row;
+# Rosella 40% -- its legacy flavour-VAT row (WBRS26); Solstice 40% -- founder-confirmed
+# 2026-09-24 (no legacy/sheet record); Green Gold 25% -- the founder's product roadmap
+# (.claude/agents/projects/whistlebird/PRODUCT_ROADMAP.md). A batch's own recorded VAT or
+# bottling ABV always wins over these; they only fill in batches with no reading.
+PRODUCT_LINE_ABV_PERCENT = {
+    "wildflower": Decimal("44"),
+    "solstice": Decimal("40"),
+    "rosella": Decimal("40"),
+}
+GREEN_GOLD_ABV_PERCENT = Decimal("25")
+ABV_PROMPT_LABEL = "ABV (%)"  # must equal the Compliant NZ-alcohol ABV prompt label
+
+
+def product_abv_percent(batch: ProductionBatch) -> Decimal:
+    """This batch's label ABV: its own recorded reading first, the product's ABV otherwise."""
+    if batch.vat_abv is not None:
+        return batch.vat_abv
+    if batch.bottlings and batch.bottlings[0].get("abv_percent"):
+        return Decimal(str(batch.bottlings[0]["abv_percent"]))
+    return PRODUCT_LINE_ABV_PERCENT[batch.product_line]
+
+
+def abv_prompt_value(abv: Decimal) -> str:
+    """ABV as an operator would type it: legacy readings are stored to 4dp ("44.0000"), so
+    normalise to "44" / "40.5" rather than record two spellings of the same value."""
+    return f"{abv.normalize():f}"
+
+
 DERIVED_TIMEZONE = ZoneInfo("Pacific/Auckland")
 DERIVED_TIME = time(hour=12)
 
@@ -1863,9 +1898,7 @@ def apply_production_batches(
                         )
                     total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
                     size_ml = batch.bottlings[0].get("bottle_size_ml") if batch.bottlings else None
-                    abv = batch.vat_abv
-                    if abv is None and batch.bottlings and batch.bottlings[0].get("abv_percent"):
-                        abv = Decimal(str(batch.bottlings[0]["abv_percent"]))
+                    abv = product_abv_percent(batch)
                     product_item = inventory_repository.create_inventory_item(
                         org_id=org.id,
                         name=f"{batch.product_line.title()} {batch.batch_label} bottled product",
@@ -1917,6 +1950,8 @@ def apply_production_batches(
                         )
                     step_data["bottlings"] = list(batch.bottlings)
 
+                if step_key == "labelling":
+                    step_data[ABV_PROMPT_LABEL] = abv_prompt_value(product_abv_percent(batch))
                 if step_key == "labelling" and product_item is not None:
                     actual_inputs.append(
                         {

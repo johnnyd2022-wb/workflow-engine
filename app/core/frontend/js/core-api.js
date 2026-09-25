@@ -574,7 +574,12 @@ window.CoreAPI = window.CoreAPI || {
 
     /** Installed Compliant modules contribute generic execution extensions. */
     async getCompliantWorkflowExtensions(options = {}) {
-        const response = await fetch('/api/compliant/capture-context', {
+        // With the step being executed, modules can add rules that apply only to that
+        // step (e.g. a required field on a workflow's final step), not just global ones.
+        const url = options.stepId
+            ? `/api/compliant/capture-context?step_id=${encodeURIComponent(options.stepId)}`
+            : '/api/compliant/capture-context';
+        const response = await fetch(url, {
             credentials: 'same-origin',
             signal: options.signal,
         });
