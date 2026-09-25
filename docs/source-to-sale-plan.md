@@ -112,9 +112,10 @@ Small, and everything else builds on it.
   - [ ] c. Fix `CLAUDE.md` drift: test DB password (now `$POSTGRES_PASSWORD_TEST`), test
     counts, DAG code location (`CLAUDE.md` says `app/features/workflow_engine/`; it's
     `app/core/backend/dagtraversal.py`).
-  - [ ] d. Run end-to-end tests in merge request pipelines (currently skipped by
-    relevant-test selection).
-  - [ ] e. Block merges while `main` is red.
+  - [x] d. Run end-to-end tests in merge request pipelines: application changes select
+    the browser smoke flow, and the full-suite fallback runs collected E2E tests (!369).
+  - [x] e. Block merges while `main` is red: GitLab's
+    `only_allow_merge_if_pipeline_succeeds` setting is enabled (verified in !369).
   - Done when: a fresh clone passes lint and every test on the first run.
 
 - [ ] **0.4 Team roles and permissions.** *Critical · L*
