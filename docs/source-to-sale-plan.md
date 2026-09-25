@@ -439,7 +439,7 @@ Sales matter here because they finish the trace. Make them readable and complete
   - Change: group by the mapped product, with a row that expands to show Xero codes;
     unmapped lines go to a queue to be mapped.
 
-- [ ] **3.2 Make sales readable in the activity log.** *High · S*
+- [x] **3.2 Make sales readable in the activity log.** *High · S* (!343)
   - Evidence: a sale is logged as "Quantity adjusted 36.0000 → 30.0000 units"
     (`app/core/backend/backend.py`, `Quantity adjusted` formatter), and one sync writes
     hundreds of these, flooding the dashboard's "Logged events".
