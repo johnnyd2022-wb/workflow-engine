@@ -487,7 +487,7 @@ Sales matter here because they finish the trace. Make them readable and complete
   - Change: log sales as "Sold 6 × Wildflower (batch 044), INV-0386, Eastbourne Sports
     Club"; show each sync as one entry with a count that expands.
 
-- [ ] **3.3 A queue for unmatched sales.** *S*
+- [x] **3.3 A queue for unmatched sales.** *S* (!386)
   - Change: invoice lines with no product mapping, or that can't be filled from any stock
     (1.1d), become tasks with a direct fix.
 
