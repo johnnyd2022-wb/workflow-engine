@@ -141,6 +141,23 @@
   .app-layout {
     display: flex;
     min-height: 100vh;
+    position: relative;
+  }
+
+  /* The fixed rail itself is only viewport-tall. Paint its surface on the
+     content-height layout so long pages keep the sidebar background behind it. */
+  .app-layout::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 260px;
+    background: linear-gradient(to bottom, var(--sidebar-bg-from), var(--sidebar-bg-to));
+    border-right: 1px solid var(--sidebar-border);
+    pointer-events: none;
+  }
+
+  .app-layout:has(#sidebar.collapsed)::before {
+    width: 72px;
   }
   
   .main-content {
@@ -180,8 +197,7 @@
     top: 0;
     height: 100vh;
     width: 260px;
-    background: linear-gradient(to bottom, var(--sidebar-bg-from), var(--sidebar-bg-to));
-    border-right: 1px solid var(--sidebar-border);
+    background: transparent;
     display: flex;
     flex-direction: column;
     transition: width var(--transition-normal);
@@ -489,6 +505,14 @@
   
   /* Sidebar: bottom bar, icons only on mobile (0–767px) */
   @media (max-width: 767px) {
+    .app-layout::before {
+      display: none;
+    }
+
+    .sidebar {
+      background: linear-gradient(to bottom, var(--sidebar-bg-from), var(--sidebar-bg-to));
+    }
+
     .sidebar {
       left: 0;
       right: 0;
