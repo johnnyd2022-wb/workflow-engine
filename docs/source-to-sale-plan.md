@@ -582,6 +582,7 @@ split.
         - [x] Extract input/output row UI helpers into `process-modal-rows.js` (!364).
         - [x] Extract inventory-card display helpers into `process-modal-inventory-cards.js` (!365).
         - [x] Extract SPA payload serialization and preservation helpers into `process-modal-spa-payloads.js` (!366).
+        - [x] Extract prompt editor helpers into `process-modal-prompts.js` (!367).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
