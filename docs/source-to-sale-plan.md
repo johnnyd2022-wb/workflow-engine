@@ -489,7 +489,7 @@ any time.
   - [ ] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
     Compliance; pages and cards say Compliant), CRM → **Sales**.
   - [ ] b. Durations in days ("22 days"), not hours ("Started 535h 54m ago").
-  - [ ] c. No trailing zeros ("30", not "30.0000"), including activity entries.
+  - [x] c. No trailing zeros ("30", not "30.0000"), including activity entries. (!345)
   - [x] d. Fix "5 active batchs". Already pluralised by `pluralize()` in
     `app/core/frontend/js/dashboard.js:171`. (!344)
 
