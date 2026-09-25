@@ -538,8 +538,9 @@ any time.
     (`core.sourcemap`). (!391)
   - [x] b. The redundant "+ Receive stock" action is removed; "Add to inventory"
     retains the manual, CSV and barcode choices. (!392)
-  - [ ] c. Pages have three back controls (top-bar arrow, "← Back to …" link, sidebar);
-    keep one.
+  - [x] c. Focused Core pages and Task settings retain their destination-specific back
+    links without a duplicate generic top-bar arrow; the sidebar remains primary
+    navigation. (!393)
   - [x] d. Old URLs redirect to their intended destinations in
     `app/features/compliant/routes/page_routes.py` and `app/core/backend/backend.py`
     (!390).
