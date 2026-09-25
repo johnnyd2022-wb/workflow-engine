@@ -189,7 +189,7 @@ want it, and never produce a recall list that can't be trusted.
       unmatched queue (3.3).
   - Done when: all three options do what they say, and FIFO still needs no attention.
 
-- [x] **1.2 Whole bottles, with partial fills going to Library stock.** *Critical · M*
+- [x] **1.2 Whole bottles, with partial fills going to Library stock.** *Critical · M* (!336)
   - Evidence: nothing stops a finished lot holding 78.5 bottles, and FIFO
     (`app/core/db/repositories/inventory_repo.py:361`) will split one sold bottle across
     two lots (0.5 + 0.5).
@@ -206,7 +206,7 @@ want it, and never produce a recall list that can't be trusted.
       tested.
   - Done when: no counted stock or sale match holds a fraction, and every partial fill
     can be found in Library stock.
-  - As built (!MR):
+  - As built (!336):
     - Counted units are `units`, `pcs`, `pieces`, `boxes`, `pallets`, `containers` and the
       new `bottles`, `cans`, `kegs`, `cases` (`app/core/utils/unit_conversion.py`). The
       rule is enforced in `InventoryRepository` on every write, and on the **change**, not
