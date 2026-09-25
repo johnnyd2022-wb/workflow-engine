@@ -1005,8 +1005,7 @@ NP3_EVIDENCE_PLAYBOOKS = {
         "Recalling your food",
         68,
         (
-            "Written recall policy covering both a supplier-notified recall and a "
-            "self-initiated recall",
+            "Written recall policy covering both a supplier-notified recall and a self-initiated recall",
             "Criteria for deciding a recall is needed, retrieval/disposal or "
             "rework/relabel decisions, and who is authorised to decide",
             "The 24-hour New Zealand Food Safety (NZFS) notification requirement and current contact details",
