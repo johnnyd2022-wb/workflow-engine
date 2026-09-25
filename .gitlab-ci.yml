@@ -125,6 +125,22 @@ data_stores:
     - main
   allow_failure: false
 
+# Plan 5.1a: fail when a route claimed by the Feature Index no longer exists in the
+# composed app. The test environment mounts every optional product blueprint.
+feature_index_routes:
+  stage: test
+  image: python:3.14-bookworm
+  variables:
+    ENVIRONMENT: test
+  script:
+    - pip install "uv==${UV_VERSION}"
+    - uv sync --extra dev
+    - uv run python scripts/check_feature_index_routes.py
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
+
 # Deterministic, path-aware MR test gate. The selector emits every chosen test and the
 # source rule that chose it, so this is inspectable rather than an opaque heuristic.
 # New/unmapped application paths deliberately fall back to tests/, while docs-only MRs
