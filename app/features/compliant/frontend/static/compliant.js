@@ -82,8 +82,9 @@
       overdue: Number(health.overdue || 0)
     };
   }
-  function moduleMetric(number, label, tone) {
-    var metric = document.createElement('span'); metric.className = 'compliant-framework-summary__metric compliant-framework-summary__metric--' + tone;
+  function moduleMetric(number, label, tone, destination) {
+    var metric = document.createElement(destination ? 'a' : 'span'); metric.className = 'compliant-framework-summary__metric compliant-framework-summary__metric--' + tone;
+    if (destination) { metric.href = destination; metric.setAttribute('hx-boost', 'false'); }
     metric.appendChild(textElement('strong', String(number)));
     metric.appendChild(document.createTextNode(' ' + label));
     return metric;
@@ -110,11 +111,12 @@
       card.appendChild(textElement('h2', framework.name, 'compliant-framework-summary__title'));
       card.appendChild(textElement('p', 'Compliance score: ' + health.score + '%', 'compliant-framework-summary__score'));
       if (framework.slug === 'np3-food-control') card.appendChild(np3ReadinessBar(health));
-      card.appendChild(textElement('p', health.currentControls + ' / ' + health.totalControls + ' current evidence controls', 'compliant-framework-summary__coverage'));
+      card.appendChild(textElement('p', health.currentControls + ' / ' + health.totalControls + ' NP3 checks with current evidence', 'compliant-framework-summary__coverage'));
       var metrics = document.createElement('div'); metrics.className = 'compliant-framework-summary__metrics';
-      metrics.appendChild(moduleMetric(health.evidenceReady, 'evidence ready', 'ready'));
-      metrics.appendChild(moduleMetric(health.needsAttention, 'need attention', 'attention'));
-      metrics.appendChild(moduleMetric(health.overdue, 'overdue', 'overdue'));
+      var np3 = framework.slug === 'np3-food-control';
+      metrics.appendChild(moduleMetric(health.evidenceReady, np3 ? 'checks with current evidence' : 'evidence ready', 'ready', np3 ? '/compliant/nz-alcohol/food-safety?filter=ok' : null));
+      metrics.appendChild(moduleMetric(health.needsAttention, np3 ? 'checks to review' : 'need attention', 'attention', np3 ? '/compliant/nz-alcohol/food-safety?filter=attention' : null));
+      metrics.appendChild(moduleMetric(health.overdue, 'overdue', 'overdue', np3 ? '/compliant/nz-alcohol/food-safety?filter=overdue' : null));
       card.appendChild(metrics);
       // Only these two have a workspace: NP3 evidence is per-check, Customs keeps the generic
       // record form. Any other framework in the catalogue has no capture page yet.
