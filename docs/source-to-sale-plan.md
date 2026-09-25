@@ -189,23 +189,41 @@ want it, and never produce a recall list that can't be trusted.
       unmatched queue (3.3).
   - Done when: all three options do what they say, and FIFO still needs no attention.
 
-- [ ] **1.2 Whole bottles, with partial fills going to Library stock.** *Critical · M*
+- [x] **1.2 Whole bottles, with partial fills going to Library stock.** *Critical · M*
   - Evidence: nothing stops a finished lot holding 78.5 bottles, and FIFO
     (`app/core/db/repositories/inventory_repo.py:361`) will split one sold bottle across
     two lots (0.5 + 0.5).
   - Change:
-    - [ ] a. Mark units as counted (bottle, can, keg, case) or measured (L, mL, g); only
+    - [x] a. Mark units as counted (bottle, can, keg, case) or measured (L, mL, g); only
       whole numbers for counted units, enforced on write.
-    - [ ] b. When a final step's output doesn't divide into whole units, the remainder goes
+    - [x] b. When a final step's output doesn't divide into whole units, the remainder goes
       by default to **Library stock** for that product, in mL, keeping the batch's
       lineage. The category name is configurable.
-    - [ ] c. Library stock can be mapped to a Xero item and sold (tastings, samples,
+    - [x] c. Library stock can be mapped to a Xero item and sold (tastings, samples,
       refills), used as an input to a later batch, or written off as loss.
-    - [ ] d. Matching never splits a unit.
-    - [ ] e. Pack sizes are explicit in product mapping (a case of 6 is 6 bottles) and
+    - [x] d. Matching never splits a unit.
+    - [x] e. Pack sizes are explicit in product mapping (a case of 6 is 6 bottles) and
       tested.
   - Done when: no counted stock or sale match holds a fraction, and every partial fill
     can be found in Library stock.
+  - As built (!MR):
+    - Counted units are `units`, `pcs`, `pieces`, `boxes`, `pallets`, `containers` and the
+      new `bottles`, `cans`, `kegs`, `cases` (`app/core/utils/unit_conversion.py`). The
+      rule is enforced in `InventoryRepository` on every write, and on the **change**, not
+      the stored total: a lot created before this rule can still sell whole units down to
+      its fraction, which then waits for a stocktake correction.
+    - FIFO only takes whole units from a lot, so a half-bottle remainder is never split
+      across batches; a fractional sale quantity is left unmatched and counted as
+      `fractional_quantity` in the reconcile summary.
+    - Step screens (modal and full-page) take whole numbers for counted outputs and have
+      a "Part-filled, in mL" box; the server adds "<product> - Library stock" (mL, final
+      product, same batch lineage). The name after the dash is the workflow setting
+      `library_stock_name`.
+    - Selling, re-using or writing off Library stock uses what exists: it is a final
+      product, so it can be mapped to a Xero item, picked as a step input, or recorded as
+      wastage.
+    - Pack size is `units_per_line` on a product mapping (migration
+      `product_mapping_pack_size_001`), shown and editable in CRM configuration.
 
 - [ ] **1.3 Go live with a stocktake instead of reconstructing history.** *Critical · L*
   - Evidence: the only way to get traceable history today is to rebuild past production.

@@ -224,6 +224,11 @@
         </div>
       </div>
       <div class="crm-form-group">
+        <label class="crm-form-label" for="mapping-units-per-line">Units per Xero line quantity</label>
+        <input class="crm-form-input" id="mapping-units-per-line" type="number" min="1" max="1000" step="1" inputmode="numeric" x-model.number="mappingDraft.units_per_line" style="max-width: 8rem;">
+        <p style="margin:4px 0 0; font-size:.8rem; color:var(--text-secondary,#6b7280);">1 for single bottles. 6 if a line like "Case of 6" with quantity 2 means 12 bottles.</p>
+      </div>
+      <div class="crm-form-group">
         <label class="crm-form-label">Notes (optional)</label>
         <input class="crm-form-input" x-model="mappingDraft.notes" placeholder="Internal note">
       </div>
@@ -247,6 +252,7 @@
               <span x-text="mapping.biz_e_product_name"></span><span>→</span>
               <span x-text="mapping.xero_description_pattern"></span>
               <span class="crm-badge crm-badge--active" x-text="mapping.match_type"></span>
+              <span class="crm-badge" x-show="(mapping.units_per_line || 1) > 1" x-text="`× ${mapping.units_per_line} per line`"></span>
               <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="removePendingMapping(index)">Remove</button>
             </div>
           </template>
@@ -266,6 +272,7 @@
           <span class="crm-mapping-arrow">→</span>
           <span class="crm-mapping-xero" x-text="m.xero_description_pattern"></span>
           <span class="crm-badge crm-badge--active" x-text="m.match_type || 'exact'"></span>
+          <span class="crm-badge" x-show="(m.units_per_line || 1) > 1" x-text="`× ${m.units_per_line} per line`"></span>
           <span class="crm-badge" :class="mappingStatusClass(m)" x-text="m.mapping_status || 'active'"></span>
           <button class="crm-btn crm-btn--ghost crm-btn--sm" style="color:var(--crm-red);" @click="openDeleteMappingModal(m)">Delete</button>
         </div>

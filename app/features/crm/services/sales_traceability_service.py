@@ -89,6 +89,8 @@ class SalesTraceabilityService:
                 if not existing:
                     summary["invalid_quantity"] += 1
                 continue
+            # Plan 1.2: a "Case of 6" line takes 6 stock units per quantity.
+            quantity = quantity * int(getattr(match, "units_per_line", None) or 1)
             if self._matches_existing(existing, match, quantity):
                 summary["already_allocated"] += 1
                 continue
@@ -104,10 +106,11 @@ class SalesTraceabilityService:
                     source_output_id=match.biz_e_source_output_id,
                     commit=False,
                 )
-            except ValueError:
-                # FIFO refuses partial consumption. Leave this line unallocated so a
-                # later stock correction/replay can safely retry it in date order.
-                summary["insufficient_stock"] += 1
+            except ValueError as exc:
+                # FIFO refuses partial consumption, and counted stock moves in whole units.
+                # Leave this line unallocated so a later stock correction/replay can safely
+                # retry it in date order.
+                summary["fractional_quantity" if "whole numbers" in str(exc) else "insufficient_stock"] += 1
                 continue
             for row in consumed:
                 self.db.add(
