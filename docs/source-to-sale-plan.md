@@ -575,6 +575,7 @@ split.
         - [x] Extract process-modal session/API mappers into `process-modal-mappers.js` (!358).
         - [x] Extract wizard session recovery into `process-modal-session.js` (!359).
         - [x] Extract process-modal mode controls into `process-modal-controls.js` (!360).
+        - [x] Extract step-document UI into `process-modal-docs.js` (!361).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
