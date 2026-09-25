@@ -4330,61 +4330,25 @@
    * Deep-link / resume: ?edit=<stepId> on step wizard SPA pages (after mergeProcessStepsFromApiForCurrentProcess).
    * Each route mounts partial DOM; seed session from the API step then restore so inputs/outputs/evidence load correctly.
    */
-  async function applyEditStepFromUrl(stepId, isCurrent) {
-    const current = typeof isCurrent === 'function' ? isCurrent : function() { return true; };
-    if (!current()) return;
-    const step = createdSteps.find(function (s) {
-      return s && String(s.id) === String(stepId);
-    });
-    if (!step) {
-      console.warn('applyEditStepFromUrl: step not in createdSteps', stepId);
-      return;
-    }
-    const urlPid = new URLSearchParams(window.location.search || '').get('id');
-    let workflowProcessName = '';
-    if (urlPid && typeof CoreAPI !== 'undefined' && CoreAPI.getProcess) {
-      try {
-        const proc = await CoreAPI.getProcess(urlPid);
-        if (!current()) return;
-        if (proc && proc.name != null) workflowProcessName = String(proc.name).trim();
-      } catch (e) {}
-    }
-
-    editingStepId = step.id;
-    resetForm(true);
-
-    const payload = window.ProcessModalApiSession.buildSpaWizardSessionPayloadFromApiStep(
-      step,
-      { processId: urlPid, workflowProcessName },
-      {
+  const applyEditStepFromUrl = window.ProcessModalDeepLinkEdit.create({
+    getCoreApi: function() { return typeof CoreAPI === 'undefined' ? null : CoreAPI; },
+    getCreatedSteps: function() { return createdSteps; },
+    setEditingStepId: function(stepId) { editingStepId = stepId; },
+    resetForm,
+    buildSessionPayload: function(step, opts) {
+      return window.ProcessModalApiSession.buildSpaWizardSessionPayloadFromApiStep(step, opts, {
         createdSteps,
         deriveTraceabilityModes,
         mapApiInputToWizardSessionInput,
         mapApiOutputToWizardSessionOutput,
         isCustomExecutionPrompt,
         normalisePromptOptions
-      }
-    );
-    try {
-      sessionStorage.setItem(getProcessFlowSpaStorageKey(), JSON.stringify(payload));
-    } catch (e) {
-      console.warn('applyEditStepFromUrl session seed failed', e);
-    }
-
-    if (typeof window.restoreSpaWizardState === 'function') {
-      await window.restoreSpaWizardState({ isCurrent: current });
-    }
-    if (!current()) return;
-
-    const indicators = document.getElementById('create-process-step-indicators');
-    if (indicators) indicators.style.display = 'flex';
-    const slug = document.body.getAttribute('data-flow-wizard-page');
-    const slugToStep = { 'step-name': 1, inputs: 2, outputs: 3, 'evidence-and-prompts': 4 };
-    if (slug && slugToStep[slug]) {
-      currentStep = slugToStep[slug];
-    }
-    updateStepDisplay();
-  }
+      });
+    },
+    getProcessFlowSpaStorageKey,
+    setCurrentStep: function(step) { currentStep = step; },
+    updateStepDisplay
+  });
   window.applyEditStepFromUrl = applyEditStepFromUrl;
   
   // Add new step from the "existing steps" view (when editing a non-draft process)
