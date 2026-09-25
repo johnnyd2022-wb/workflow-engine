@@ -1360,7 +1360,6 @@
     totalSteps,
     validateInventoryInputs,
     validateFixedExpiryWarning,
-    validateFixedReadyDateWarning,
     toggleOutputExpand,
     isProcessFlowSpaPage,
     updateStepDisplay

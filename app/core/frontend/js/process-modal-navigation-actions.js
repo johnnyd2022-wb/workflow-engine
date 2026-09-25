@@ -136,7 +136,7 @@
         }
         outputsWithReadyDate.push(outObj);
       });
-      const rdValidation = helpers.validateFixedReadyDateWarning(outputsWithReadyDate);
+      const rdValidation = validateFixedReadyDateWarning(outputsWithReadyDate);
       if (!rdValidation.valid) {
         if (window.showNotification) {
           window.showNotification('error', 'Invalid ready date settings', rdValidation.message);
