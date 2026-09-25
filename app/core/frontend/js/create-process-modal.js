@@ -9,6 +9,15 @@
     normalisePromptOptions,
     base64ToBlob
   } = window.ProcessModalUtils;
+  const {
+    mapSessionInputsToApiPayloadFromRows,
+    validateInventoryInputsFromSession,
+    buildExecutionPromptsForApiFromSession,
+    wizardSessionHasDraftStepData,
+    mapSessionInputsToSummaryRows,
+    mapApiInputToWizardSessionInput,
+    mapApiOutputToWizardSessionOutput
+  } = window.ProcessModalMappers;
   
   let currentStep = 1;
   const totalSteps = 4;
@@ -4794,111 +4803,9 @@
     }
   };
 
-  function mapSessionInputsToApiPayloadFromRows(rows) {
-    const inputs = [];
-    (rows || []).forEach(function(inputRow) {
-      const name = (inputRow.name || '').trim();
-      const unit = (inputRow.unit || '').trim();
-      if (!name || !unit) return;
-      const executionType = inputRow.executionType || 'variable';
-      const isPreviousOutput =
-        inputRow.inputType === 'previous_output' ||
-        (inputRow.executionType == null && inputRow.inputType !== 'inventory' && inputRow.inputType !== 'new');
-      const isVariable = isPreviousOutput ? true : executionType === 'variable' || executionType === 'prompt';
-      const requiresInventorySelection = isPreviousOutput ? true : executionType === 'variable';
-      const inputObj = {
-        name: name,
-        quantity:
-          inputRow.quantity !== null && inputRow.quantity !== undefined && inputRow.quantity !== ''
-            ? parseFloat(inputRow.quantity)
-            : null,
-        unit: unit,
-        is_variable: isVariable,
-        requires_inventory_selection: requiresInventorySelection
-      };
-      const sourceOutputId = inputRow.source_output_id || inputRow.sourceOutputId || null;
-      if (sourceOutputId) inputObj.source_output_id = sourceOutputId;
-      const expectedInv =
-        inputRow.expected_inventory_type || inputRow.expectedInventoryType || null;
-      if (expectedInv) inputObj.expected_inventory_type = expectedInv;
-      inputs.push(inputObj);
-    });
-    return inputs;
-  }
 
-  function validateInventoryInputsFromSession(session) {
-    const rows = session && Array.isArray(session.inputs) ? session.inputs : [];
-    const invRows = rows.filter(function(r) {
-      return r && (r.inputType === 'inventory' || r.inputType === 'previous_output');
-    });
-    for (let i = 0; i < invRows.length; i++) {
-      const row = invRows[i];
-      const q = row.quantity;
-      const u = (row.unit || '').trim();
-      if (u === '' || q === null || q === undefined || q === '') {
-        return {
-          valid: false,
-          message: 'Please fill Quantity and Unit for all inventory items. Both are required.'
-        };
-      }
-      const qn = typeof q === 'number' ? q : parseFloat(String(q));
-      if (isNaN(qn) || qn <= 0) {
-        return { valid: false, message: 'Quantity must be greater than 0 for all inventory items.' };
-      }
-    }
-    return { valid: true };
-  }
 
-  function buildExecutionPromptsForApiFromSession(session) {
-    const collected = [];
-    (session.prompts || []).forEach(function(p) {
-      if (!p || !(p.label || '').trim()) return;
-      const label = (p.label || '').toLowerCase();
-      const isEvidence = p.type === 'evidence' || label === 'evidence';
-      if (label === 'batch number' || isEvidence) return;
-      collected.push({
-        label: p.label,
-        type: p.type || 'text',
-        unit: p.unit || null,
-        required: p.required !== false,
-        ...(p.type === 'select' ? { options: normalisePromptOptions(p.options) } : {})
-      });
-    });
-    const batchNumberMode = session.batchNumberMode || 'dont_ask';
-    const evidenceMode = session.evidenceMode || 'dont_ask';
-    const filtered = collected.filter(function(p) {
-      const label = (p.label || '').toLowerCase();
-      const isEvidence = p.type === 'evidence' || label === 'evidence';
-      return label !== 'batch number' && !isEvidence;
-    });
-    if (batchNumberMode === 'required' || batchNumberMode === 'optional') {
-      filtered.unshift({
-        label: 'Batch number',
-        type: 'text',
-        unit: null,
-        required: batchNumberMode === 'required'
-      });
-    }
-    if (evidenceMode === 'required' || evidenceMode === 'optional') {
-      filtered.push({
-        label: 'Evidence',
-        type: 'evidence',
-        unit: null,
-        required: evidenceMode === 'required'
-      });
-    }
-    return filtered;
-  }
 
-  function wizardSessionHasDraftStepData(session) {
-    if (!session || session.v !== 1) return false;
-    const name = (session.stepName || '').trim();
-    const hasBody =
-      (session.inputs || []).length > 0 ||
-      (session.outputs || []).length > 0 ||
-      (session.prompts || []).length > 0;
-    return !!(name || hasBody);
-  }
 
   function hasPendingUnsavedWizardStepForFinish() {
     if (getFlowWizardPageSlug() === 'next-steps') {
@@ -5298,21 +5205,6 @@
     return !!(last && String(last.id) === String(step.id));
   }
 
-  function mapSessionInputsToSummaryRows(raw) {
-    if (!Array.isArray(raw)) return [];
-    const out = [];
-    raw.forEach(function (i) {
-      if (!i) return;
-      const name = summaryInputDisplayName(i);
-      if (!name) return;
-      out.push({
-        name: name,
-        quantity: i.quantity != null ? i.quantity : null,
-        unit: i.unit || ''
-      });
-    });
-    return out;
-  }
 
   /**
    * Summary route has no wizard DOM; GET /process may lag. Prefer session.createdSteps (full step
@@ -6218,84 +6110,7 @@
     });
   }
   
-  function mapApiInputToWizardSessionInput(apiIn) {
-    if (!apiIn) {
-      return {
-        inputType: 'new',
-        name: '',
-        quantity: null,
-        unit: '',
-        executionType: 'variable',
-        inventoryPreselected: false,
-        is_variable: true,
-        requires_inventory_selection: true
-      };
-    }
-    const inputType = apiIn.source_output_id ? 'previous_output' : (apiIn.requires_inventory_selection ? 'inventory' : 'new');
-    const name = summaryInputDisplayName(apiIn);
-    let executionType = 'variable';
-    if (inputType === 'previous_output') {
-      executionType = apiIn.is_variable !== false ? 'variable' : 'static';
-    } else if (inputType === 'inventory') {
-      executionType = apiIn.requires_inventory_selection ? 'variable' : 'static';
-    } else {
-      executionType = apiIn.is_variable !== false ? 'variable' : 'static';
-    }
-    const qty = apiIn.quantity;
-    let quantity = null;
-    if (qty != null && qty !== '') {
-      const n = typeof qty === 'number' ? qty : parseFloat(String(qty).trim());
-      quantity = isNaN(n) ? null : n;
-    }
-    const isPreviousOutput = inputType === 'previous_output';
-    const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
-    const requiresInventorySelection = isPreviousOutput ? true : executionType === 'variable';
-    return {
-      inputType,
-      name,
-      quantity,
-      unit: apiIn.unit || '',
-      executionType,
-      source_output_id: apiIn.source_output_id || undefined,
-      previousOutputDisplayName:
-        apiIn.previous_output_display_name || apiIn.previousOutputDisplayName || undefined,
-      expected_inventory_type: apiIn.expected_inventory_type || undefined,
-      inventoryPreselected: false,
-      is_variable: isVariable,
-      requires_inventory_selection: requiresInventorySelection
-    };
-  }
 
-  function mapApiOutputToWizardSessionOutput(apiOut) {
-    if (!apiOut) {
-      return {
-        id: null,
-        name: '',
-        unit: '',
-        quantity: null,
-        is_variable: true,
-        requires_execution_confirmation: true
-      };
-    }
-    const qty = apiOut.quantity;
-    let quantity = null;
-    if (qty != null && qty !== '') {
-      const n = typeof qty === 'number' ? qty : parseFloat(String(qty).trim());
-      quantity = isNaN(n) ? null : n;
-    }
-    const out = {
-      id: apiOut.id || null,
-      name: summaryOutputDisplayName(apiOut),
-      unit: apiOut.unit || '',
-      quantity,
-      is_variable: apiOut.is_variable !== false,
-      requires_execution_confirmation: apiOut.requires_execution_confirmation !== false
-    };
-    if (apiOut.extra_data && typeof apiOut.extra_data === 'object') {
-      out.extra_data = JSON.parse(JSON.stringify(apiOut.extra_data));
-    }
-    return out;
-  }
 
   /**
    * Session v1 payload compatible with restoreSpaWizardState / serializeSpaWizardState (deep-link edit).
