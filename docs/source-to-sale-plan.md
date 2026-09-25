@@ -94,7 +94,7 @@ Small, and everything else builds on it.
   - Done when: the test suite cannot reach a real tenant, and a restore has been
     rehearsed.
 
-- [ ] **0.2 Require 2FA for owners and admins.** *Critical · S*
+- [x] **0.2 Require 2FA for owners and admins.** *Critical · S* (!322)
   - Evidence: the admin of a live tenant signs in with a password alone. The
     `/auth/verify-2fa` rate-limit finding (F6 in
     `.agents/reports/auth/security-audit.md`) is still open.
