@@ -21,8 +21,10 @@ Selection is conservative:
 3. A conventional `tests/test_<module>.py` companion is included when a Python source
    file has one; frontend filenames do not accidentally pull in a same-named backend test.
 4. Shared CI/dependency/config/migration/app-factory changes, or an unmapped `app/` or
-   `scripts/` code path, select the complete `tests/` suite. The selector therefore
-   fails safe rather than silently under-testing a new architecture area.
+   `scripts/` code path, select the complete `tests/` suite. Application source changes
+   also select the browser smoke flow; a full-suite fallback runs the collected E2E
+   tests too. The selector therefore fails safe rather than silently under-testing a
+   new architecture area.
 5. Documentation and agent-workspace-only changes select no pytest tests.
 
 The mapping is code, covered by `tests/test_select_relevant_tests.py`, and validates
@@ -34,9 +36,10 @@ can see and challenge every selection.
 - `relevant_tests` runs on merge requests. It asks the selector for the pytest targets,
   starts PostgreSQL only when the selected tests need it, and installs Node.js, Chromium,
   or starts the local app only when a deliberately selected test requires each runtime.
-  Documentation-only work exits before dependency/database setup. UI source changes
-  select the fast frontend/JS regression suites; browser smoke coverage remains the
-  existing deployed `cd_e2e` gate on `main`.
+  Documentation-only work exits before dependency/database setup. Application source
+  changes select `tests/e2e/test_smoke.py` and run it against the CI-local test server;
+  the full-suite fallback also enables its collected E2E tests. The deployed `cd_e2e`
+  gate on `main` continues to check the built container.
 - `unit_tests` runs `pytest tests/ -v` on `main` only. This preserves a full-suite gate
   as part of the post-merge CD pipeline before build and deploy. The separate `cd_e2e`
   job remains the browser gate against the deployed candidate, so the unit-test job does

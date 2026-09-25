@@ -22,15 +22,17 @@ def _load_module():
 selector = _load_module()
 
 
-def test_inventory_ui_selects_database_free_frontend_regressions():
+def test_inventory_ui_also_runs_browser_smoke():
     plan = selector.select(["app/core/frontend/inventory/inventory.js"])
 
     assert plan["mode"] == "selected"
     assert "tests/test_execution_modal_frontend_assets.py" in plan["tests"]
     assert "tests/test_inventory_csv_validation.py" in plan["tests"]
-    assert plan["needs_browser"] is False
-    assert plan["needs_server"] is False
-    assert plan["needs_database"] is False
+    assert "tests/e2e/test_smoke.py" in plan["tests"]
+    assert plan["needs_browser"] is True
+    assert plan["needs_server"] is True
+    assert plan["needs_e2e"] is True
+    assert plan["needs_database"] is True
     assert (
         "Inventory UI: app/core/frontend/inventory/inventory.js"
         in plan["reasons"]["tests/test_inventory_csv_validation.py"]
@@ -51,7 +53,7 @@ def test_shared_ci_or_migration_change_uses_the_full_suite():
         plan = selector.select([path])
         assert plan["mode"] == "full"
         assert plan["tests"] == ["tests/"]
-        assert plan["needs_e2e"] is False
+        assert plan["needs_e2e"] is True
         assert plan["needs_database"] is True
 
 
@@ -60,6 +62,7 @@ def test_unmapped_application_code_falls_back_to_the_full_suite():
 
     assert plan["mode"] == "full"
     assert plan["reasons"]["tests/"] == ["unmapped code path: app/brand_new_feature/service.py"]
+    assert plan["needs_e2e"] is True
 
 
 def test_docs_only_change_runs_no_pytest_suite():

@@ -262,6 +262,11 @@ def select(paths: list[str]) -> dict[str, Any]:
         if not matched and (path.startswith("app/") or path.startswith("scripts/")):
             unmapped_code_paths.append(path)
 
+        if path.startswith("app/"):
+            selected.setdefault("tests/e2e/test_smoke.py", set()).add(
+                f"application browser smoke: {path}"
+            )
+
     if full_suite_reasons or unmapped_code_paths:
         reasons = [f"shared test environment: {path}" for path in full_suite_reasons]
         reasons += [f"unmapped code path: {path}" for path in unmapped_code_paths]
@@ -270,13 +275,12 @@ def select(paths: list[str]) -> dict[str, Any]:
             "mode": "full",
             "tests": ["tests/"],
             "reasons": {"tests/": reasons},
-            # Match the established full-suite CI behaviour. tests/e2e is collected
-            # but skipped under ENVIRONMENT=test; deployed smoke E2E remains the CD
-            # gate rather than turning a broad fallback into a new, unproven browser
-            # matrix.
-            "needs_browser": False,
-            "needs_server": False,
-            "needs_e2e": False,
+            # The full-suite fallback includes tests/e2e. Tell CI to point those tests
+            # at its local test server so the suite does not silently skip browser
+            # coverage under ENVIRONMENT=test.
+            "needs_browser": True,
+            "needs_server": True,
+            "needs_e2e": True,
             "needs_database": True,
             "needs_node": True,
         }
