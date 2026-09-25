@@ -9,7 +9,6 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from flask import (
     Blueprint,
@@ -26,16 +25,15 @@ from flask import (
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
+from zoneinfo import ZoneInfo
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import (
     changes_feed,
-    corechecks,
     inventory_upload_routes,
     suppliers,
     tasks,
 )
-from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.complete_step_payload import (
     MAX_COMPLETE_STEP_CONTENT_LENGTH,
     CompleteStepRequestBody,
@@ -77,6 +75,8 @@ from app.core.utils.inventory_quantity import (
 )
 from app.core.utils.log_action import log_action
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.features.compliance_checks.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
+from app.features.compliance_checks.routes import corechecks
 from app.features.demo_data.routes import api_routes as demo_data_routes
 from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL
 from app.features.reconciliation.routes import reconciliation_routes
@@ -3005,10 +3005,10 @@ def list_inventory():
 
     from sqlalchemy.orm import joinedload
 
-    from app.core.backend.checks.output_ready_date_check import get_operator_ready_instant_for_item
     from app.core.db.models.execution import Execution
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
+    from app.features.compliance_checks.checks.output_ready_date_check import get_operator_ready_instant_for_item
 
     # One query for all producing steps (avoids N+1 hydration + ready-date lookups).
     # JOIN Execution + filter org_id: bounded by step_ids (inventory row count), no materialized list of all org executions.
@@ -4858,11 +4858,11 @@ def get_dashboard_summary():
     # mutations, pre-warmed by the warm-system-findings job); the cheap checks run live.
     # Same result set as CoreChecksRunner.run_all_checks() without the ~640ms DAG cost on
     # every landing-page load.
-    from app.core.backend.system_findings_cache import get_check_results
+    from app.features.compliance_checks.system_findings_cache import get_check_results
 
     check_results = get_check_results(org_id, db_session)
 
-    from app.core.backend.system_status import build_system_status_payload
+    from app.features.compliance_checks.system_status import build_system_status_payload
 
     system_status = build_system_status_payload(org_id, db_session, check_results)
     compliance = _dashboard_build_compliance_summary(check_results, system_status)

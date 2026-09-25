@@ -336,9 +336,10 @@ do not introduce reverse imports into existing domain code.
       - /api/core/inventory/untracked-items
       - /api/core/inventory/output-expiry
       - /api/core/inventory/output-ready-date
-    backend:  app/core/backend/corechecks.py (281 — CoreChecksRunner + registry)
-              app/core/backend/checks/
-              app/core/backend/system_status.py (269)
+    backend:  app/features/compliance_checks/routes/corechecks.py (CoreChecksRunner + registry)
+              app/features/compliance_checks/checks/{output_ready_date_check,output_expiry_check,
+                untracked_items (265),expired_materials (114)}.py
+              app/features/compliance_checks/{system_findings_cache,system_status}.py
               app/core/domain/{expiry_rules,ready_date_rules,expiry_ready_date_rules}.py
     frontend: frontend/notifications/notifications.html,
               js/system-findings-notifications.js (1148), js/system-findings-banner.js (513),
