@@ -411,11 +411,11 @@
     margin-top: auto;
   }
   
-  /* Sidebar Toggle Button - Centered and Overlapping */
+  /* Keep the collapse control inside the sidebar so it doesn't cover page content. */
   .sidebar-toggle-btn {
     position: absolute;
     top: 50%;
-    right: -20px;
+    right: 10px;
     transform: translateY(-50%);
     width: 40px;
     height: 40px;
@@ -448,10 +448,6 @@
     width: 20px;
     height: 20px;
     stroke-width: 2.5;
-  }
-  
-  .sidebar.collapsed .sidebar-toggle-btn {
-    right: -20px;
   }
   
   @keyframes subtle-pulse {
