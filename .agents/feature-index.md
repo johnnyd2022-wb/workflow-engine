@@ -384,8 +384,8 @@ do not introduce reverse imports into existing domain code.
     reviewed:     2026-08-12 (see .agents/reports/dashboard/review.md)
 
     routes:   /core/dashboard, /api/core/dashboard/summary [GET], /api/core/metrics [GET]
-    backend:  app/core/backend/backend.py:4100-4780 (summary, action board, weekly series)
-              app/core/backend/backend.py:4781-4836 (metrics)
+    backend:  app/features/dashboard/routes/dashboard_routes.py (summary, action board,
+              weekly series, metrics; registered on core_bp with stable endpoint names)
     frontend: frontend/dashboard/dashboard.html, js/dashboard.js,
               js/core-active-batches-graph.js (813), css/dashboard_spa.css
     tests:    test_dashboard_summary
