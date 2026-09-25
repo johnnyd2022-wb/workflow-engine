@@ -114,6 +114,9 @@ Small, and everything else builds on it.
   - [ ] d. Run end-to-end tests in merge request pipelines (currently skipped by
     relevant-test selection).
   - [ ] e. Block merges while `main` is red.
+    - [x] An MR pipeline fails if the latest `main` pipeline is not green. (!325)
+    - [ ] Enforce freshness at merge time so a later red `main` invalidates an older
+      green MR pipeline.
   - Done when: a fresh clone passes lint and every test on the first run.
 
 - [ ] **0.4 Team roles and permissions.** *Critical · L*
