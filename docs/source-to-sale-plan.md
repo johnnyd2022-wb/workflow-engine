@@ -584,6 +584,7 @@ split.
         - [x] Extract SPA payload serialization and preservation helpers into `process-modal-spa-payloads.js` (!366).
         - [x] Extract prompt editor helpers into `process-modal-prompts.js` (!367).
         - [x] Extract API-step wizard-session payload mapping into `process-modal-api-session.js` (!368).
+        - [x] Extract virtual summary-step construction into `process-modal-session-summary.js` (!370).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
