@@ -45,6 +45,7 @@ def _latest_event(db, org_id, event_type: str) -> EntityEvent | None:
 
 def test_overview_sales_summaries_cover_all_authorised_sales(db, org):
     """Footer summaries must not inherit the configurable Top-N display limit."""
+    from app.features.crm.models.product_mapping import ProductMapping
     from app.features.crm.models.xero_contact import XeroContact
     from app.features.crm.models.xero_invoice import XeroInvoice
     from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
@@ -126,6 +127,22 @@ def test_overview_sales_summaries_cover_all_authorised_sales(db, org):
             quantity=Decimal("50"),
             amount=Decimal("500"),
         )
+        db.add_all(
+            [
+                ProductMapping(
+                    org_id=org.id,
+                    biz_e_product_name="Wildflower Gin",
+                    xero_description_pattern="Wildflower Gin",
+                    match_type="exact",
+                ),
+                ProductMapping(
+                    org_id=org.id,
+                    biz_e_product_name="Tonic Water",
+                    xero_description_pattern="Tonic Water",
+                    match_type="exact",
+                ),
+            ]
+        )
         db.commit()
 
         overview = CRMService(db).get_overview(org.id)
@@ -134,6 +151,10 @@ def test_overview_sales_summaries_cover_all_authorised_sales(db, org):
         assert overview["authorised_customer_count"] == 2
         assert {row["description"] for row in overview["top_products"]} == {"Wildflower Gin", "Tonic Water"}
     finally:
+        db.query(ProductMapping).filter(
+            ProductMapping.org_id == org.id,
+            ProductMapping.biz_e_product_name.in_(["Wildflower Gin", "Tonic Water"]),
+        ).delete(synchronize_session=False)
         db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.org_id == org.id).delete(synchronize_session=False)
         db.query(XeroInvoice).filter(XeroInvoice.org_id == org.id).delete(synchronize_session=False)
         db.query(XeroContact).filter(XeroContact.org_id == org.id).delete(synchronize_session=False)

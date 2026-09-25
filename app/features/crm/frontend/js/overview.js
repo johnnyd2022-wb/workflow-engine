@@ -64,6 +64,7 @@ function crmOverview() {
       top_products: 10,
       top_customers: 10,
     },
+    expandedProductName: null,
 
     async init() {
       CRMAPI.ensureBackButton('/crm', true);
@@ -329,7 +330,7 @@ function crmOverview() {
     widgetSubtitle(widget) {
       if (widget.type === 'sales_trend') return this.chartMode === 'line' ? 'Line chart for larger ranges' : 'Bar chart for shorter ranges';
       if (widget.type === 'task_board') return 'To Do and In Progress tasks';
-      if (widget.type === 'top_products') return 'By invoice line revenue';
+      if (widget.type === 'top_products') return 'Grouped by mapped product; expand to see Xero items';
       if (widget.type === 'top_customers') return 'By total invoiced revenue';
       if (widget.kind === 'custom') return this.customWidgetSubtitle(widget);
       return '';
@@ -421,6 +422,10 @@ function crmOverview() {
     collapseSystemRows(type) {
       this.systemWidgetLimits[type] = 10;
       this.persistSystemWidgetPrefs();
+    },
+
+    toggleProductDetails(name) {
+      this.expandedProductName = this.expandedProductName === name ? null : name;
     },
 
     startWidgetDrag(widgetId) {

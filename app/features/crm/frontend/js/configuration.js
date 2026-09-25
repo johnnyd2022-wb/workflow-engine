@@ -59,6 +59,11 @@ function crmConfiguration() {
             traceCfg?.revenue_baseline_target_mtd == null ? '' : Number(traceCfg.revenue_baseline_target_mtd),
           obfuscate_sales_figures: traceCfg?.obfuscate_sales_figures === true,
         };
+        const params = new URLSearchParams(window.location.search);
+        const xeroLine = params.get('xero_line');
+        if (xeroLine && this.lineItemOptions.some((option) => (option.description || option.item_code) === xeroLine)) {
+          this.mappingDraft.xero_description_pattern = xeroLine;
+        }
       } catch (e) {
         this.error = e.message || 'Failed to load configuration.';
       } finally {
