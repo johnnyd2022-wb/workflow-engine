@@ -49,6 +49,7 @@ from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
 from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.reconciliation_service import _find_producing_step
+from app.core.backend.static_assets import core_asset_directory, iter_core_assets
 from app.core.db import SessionLocal, db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.execution import Execution, ExecutionStatus
@@ -221,7 +222,13 @@ def _asset_version() -> str:
     freshly rendered page can run hour-old JS that predates the endpoints it calls."""
     h = hashlib.blake2b(digest_size=8)
     frontend = os.path.join(os.path.dirname(__file__), "..", "frontend")
-    for sub in ("js", "css", "inventory_static", "img"):
+    for kind, name, directory in iter_core_assets():
+        try:
+            st = (directory / name).stat()
+        except OSError:
+            continue
+        h.update(f"{kind}/{name}:{int(st.st_mtime)}:{st.st_size}\n".encode())
+    for sub in ("inventory_static", "img"):
         directory = os.path.join(frontend, sub)
         try:
             names = sorted(os.listdir(directory))
@@ -1282,7 +1289,9 @@ def serve_core_js(filename):
     if not filename.lower().endswith(".js"):
         abort(400, "Invalid file type")
 
-    core_frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "js")
+    core_frontend_dir = core_asset_directory("js", filename)
+    if core_frontend_dir is None:
+        abort(404, "File not found")
     # Use safe_join for validation only (not for file access)
     safe_path = safe_join(core_frontend_dir, filename)
     if safe_path is None:
@@ -1326,7 +1335,9 @@ def serve_core_css(filename):
     if not filename.lower().endswith(".css"):
         abort(400, "Invalid file type")
 
-    core_frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "css")
+    core_frontend_dir = core_asset_directory("css", filename)
+    if core_frontend_dir is None:
+        abort(404, "File not found")
     # Use safe_join for validation only (not for file access)
     safe_path = safe_join(core_frontend_dir, filename)
     if safe_path is None:

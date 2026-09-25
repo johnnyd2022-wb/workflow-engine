@@ -563,9 +563,10 @@ split.
     - [ ] e. **New work starts in its slice:** roles and permissions (0.4) in
       platform/identity; Customs (2.1, 2.6) and licensing (2.5) in
       `app/features/compliant/modules/nz_alcohol/`; matching modes (1.1) in crm.
-    - [ ] f. **Frontend after backend:** the asset registry (slicing plan §3, option 1)
-      before any JS moves; split `create-process-modal.js` internally as part of
-      process-design.
+    - [ ] f. **Frontend after backend:**
+      - [x] Register public Core JS/CSS assets by owning slice before any asset moves.
+        (!352)
+      - [ ] Split `create-process-modal.js` internally as part of process-design.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
   - Done when: `backend.py` holds only shell code, and every slice in the feature index
