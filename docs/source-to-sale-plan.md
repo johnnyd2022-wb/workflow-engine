@@ -35,6 +35,9 @@ product change.
 | Customs | The Customs page is placeholder data; the module isn't built yet. 2.1 is design rules for building it. |
 | Module shape | NZ Alcohol is one module made of NP1/NP2/NP3, Customs and liquor licensing. Each part plugs into Core the way ABV does: required fields on the relevant steps when switched on, with no change to the producer's process (2.4). No second module is planned. |
 | "Just works" | NZ producers expect it to work without setup or babysitting. Defaults must need no attention; control is opt-in. |
+| Architecture | Follow the agreed feature-slicing plan (`.agents/plans/feature-slicing-plan.md`): slices under `app/features/<slice>/`, moved through the `register_routes(core_bp)` seam with no URL changes. Don't invent another split (5.1). |
+| Excise | Built around what Customs taxes: alcohol **removed** from the licensed area, per lodgement period, with sales as the main source of removals (2.1). Stocktakes reconcile counted stock to lodged duty (2.6). |
+| Access | Staff roles are permission sets enforced on the server, default deny; the UI only hides what the server already refuses (0.4). |
 
 ## What excellent means
 
@@ -44,7 +47,8 @@ The finish line for this plan. Each outcome can be tested.
 | --- | --- |
 | **Recall in minutes.** From any finished batch or supplier lot to a customer list with quantities and contacts. | A timed mock recall takes under 5 minutes and ends in an export, with no manual lookups. |
 | **Stock you can trust.** Finished goods in the system match the shelf. | Stocktake variance on finished goods is under 1%, and every screen shows the same number. |
-| **Excise from records.** Litres of alcohol (LAL) per period come from recorded production and sales. | The producer checks a draft and files it, with no spreadsheet. |
+| **Excise from records.** Litres of alcohol (LAL) per period come from recorded removals and sales. | The producer checks a draft and lodges it, with no spreadsheet; a Customs stocktake reconciles counted stock to lodged duty. |
+| **Right people, right data.** Staff see what their role needs. | A production user gets 403 from every sales endpoint and sees no revenue anywhere. |
 | **Audit day is a download.** NP evidence pack, verification result and corrective actions are all in the app. | No manual assembly before a visit; the next verification date is always on screen. |
 | **Live in a day.** A new producer goes from sign-up to a first traced sale in one sitting. | Template + Xero + go-live stocktake, with no back-dated history. |
 | **Works on the floor.** Recording a step, scanning stock and attaching photo evidence work on a phone. | The main action is visible without scrolling at 390 px on every recording screen. |
@@ -73,7 +77,8 @@ The finish line for this plan. Each outcome can be tested.
   dates. Adding finished stock by hand is treated as an error.
 - The interface explains itself instead of showing work, uses three visual styles, and
   shows different stock figures on different screens.
-- Admins can sign in without 2FA.
+- Admins can sign in without 2FA, and there are only two roles (admin and member): every
+  member sees revenue, customers and invoices.
 
 ---
 
@@ -110,6 +115,42 @@ Small, and everything else builds on it.
     relevant-test selection).
   - [ ] e. Block merges while `main` is red.
   - Done when: a fresh clone passes lint and every test on the first run.
+
+- [ ] **0.4 Team roles and permissions.** *Critical · L*
+  - Evidence: two roles, `UserRole.ADMIN` and `MEMBER` (`app/core/db/models/user.py:14`).
+    11 routes check a role with `requires_role`, all admin-only. No CRM or sales route
+    checks one, so every member sees revenue, customers and invoices. `/org/users` can
+    add and remove users (admin only), with no role choice beyond admin or member.
+  - Design:
+    - [ ] a. **Permissions, then roles.** Named capabilities per area, e.g.
+      `production.view`, `production.record`, `production.design`, `inventory.adjust`,
+      `sales.view`, `sales.revenue` (money figures), `sales.manage` (Xero, mappings),
+      `compliance.view`, `compliance.sign`, `customs.lodge`, `users.manage`,
+      `settings.manage`.
+    - [ ] b. **Built-in roles as permission sets:** Owner (everything; the last owner can't
+      be removed), Admin, Production (record steps and stock; no money), Compliance
+      (compliance plus read-only production), Sales (customers, sales and finished stock
+      on hand; no recipes or process design), Auditor (read-only and time-limited, for a
+      verifier visit). On migration, ADMIN becomes Owner/Admin and MEMBER becomes a
+      "Staff" role with today's access, so nothing changes for current users.
+    - [ ] c. **Custom roles later:** clone a built-in role and tick permissions.
+    - [ ] d. **Server-side, default deny.** Every route declares
+      `@requires_permission(...)`. A test walks Flask's URL map and fails if any route
+      lacks a declaration; public routes are an explicit allow-list. Nav and buttons hide
+      what a role can't use, but the server is the source of truth.
+    - [ ] e. **Aggregates respect permissions.** Dashboard and other composition endpoints
+      leave out sections a user can't see (e.g. revenue tiles) instead of sending them
+      for the browser to hide.
+    - [ ] f. **Permission matrix test:** for every built-in role and route, the expected
+      200 or 403, generated from one table.
+    - [ ] g. **User management for owners and admins:** invite by email (2FA enrolment
+      forced per 0.2), change role, deactivate (keeps history, blocks sign-in), resend
+      invite. Every change goes to the audit log.
+  - Fits the slicing plan: permissions are platform code (`app/core/security/permissions.py`
+    today), and this is the authorisation change that plan already anticipates for
+    enterprise customer logins.
+  - Done when: a Production user gets 403 from every sales endpoint and sees no revenue
+    anywhere, a Sales user can't open process design, and the route-coverage test passes.
 
 ---
 
@@ -236,23 +277,49 @@ want it, and never produce a recall list that can't be trusted.
 Finish the NZ Alcohol module so compliance outputs come from production and sales
 records, not from people typing figures in.
 
-- [ ] **2.1 Build Customs excise to calculate from records.** *High · L*
-  - Status: not built; the current Customs page is placeholder data. Observed problems in
-    the placeholder, to avoid when building: a second ABV list separate from the
-    final-step ABV (so it shows "0.0000 LAL"), botanicals offered as alcohol products to
-    map, a field asking for "comma-separated … UUIDs", periods out of date order.
-  - Design rules:
-    - [ ] a. ABV comes from one place: the final-step `ABV (%)` field.
-    - [ ] b. Only alcohol products (final outputs) are offered for mapping, never raw
-      materials.
-    - [ ] c. LAL produced and removed per period is calculated from bottling and sales,
-      with a breakdown back to batches and invoices.
-    - [ ] d. The producer checks a draft for the period and attaches the filing
-      confirmation to it; periods listed in order, gaps flagged.
-    - [ ] e. No field asks for raw IDs; records are linked by picking them.
-    - [ ] f. Return fields checked against current NZ Customs excise guidance before
-      building.
-  - Done when: a producer files a period from the draft without opening a spreadsheet.
+- [ ] **2.1 Excise per period from linked sales and removals.** *High · L*
+  - Status: not built; the current Customs page is placeholder data. Avoid what the
+    placeholder does: a second ABV list separate from the final-step ABV (so it shows
+    "0.0000 LAL"), botanicals offered as alcohol products, fields asking for
+    "comma-separated … UUIDs", and periods out of date order.
+  - Customs rules this must follow (checked 25 Sep 2026; see Sources):
+    - Duty is due on alcohol **removed from the Customs-controlled area** (the licensed
+      manufacturing area), not when it's invoiced. Monthly payment is due by the last
+      working day of the month after removal.
+    - Entries are monthly by default. Six-monthly (annual duty up to $100,000) or
+      twelve-monthly (up to $50,000) needs Customs approval. A monthly entry is due by the
+      15th working day of the following month.
+    - A **nil return** is required for a period with no removals.
+    - Records are kept for at least 7 years, in New Zealand or with approved cloud storage.
+  - Change:
+    - [ ] a. **Excise products** are final-step outputs flagged as alcohol products (the ABV
+      rule already identifies them). Each has a pack volume (e.g. 700 mL), the ABV
+      recorded on its final step, and a Customs tariff item. Only these are offered for
+      mapping, never raw materials.
+    - [ ] b. **Removals, not only sales.** Each period's lines come from stock leaving the
+      licensed area: Xero sales dispatched straight from it (the default, and for many
+      producers all of it), plus stock moved to an outside location (a sales rep, an
+      event, samples). A later sale from a rep's stock links to the original removal and
+      isn't counted twice. This needs stock locations in inventory; check what Core has
+      today.
+    - [ ] c. **Lines calculated automatically for each period**, grouped by product and
+      tariff item: units × volume × ABV = LAL, then LAL × rate = duty. Each line drills
+      down to its batches and invoices or movements. The rate table is editable and
+      dated, because rates change every 1 July.
+    - [ ] d. **Lodgement period** is configurable (monthly, six-monthly, twelve-monthly) to
+      match the org's Customs approval.
+    - [ ] e. **Lodgement reminder:** at the start of the month after each period, a system
+      alert such as "Excise entry for September 2026 due 21 Oct: 412.6 LAL, $x" (or
+      "nil return due"). It stays until someone with `customs.lodge` confirms it's
+      lodged, with the date and optionally the entry number or confirmation. An overdue
+      entry escalates. Confirming locks that period's figures as a snapshot.
+    - [ ] f. **Changes after lodging** never rewrite a lodged period. A removal recorded
+      late, or a correction, is carried into the next open period's draft as an
+      adjustment noting the period it belongs to.
+    - [ ] g. Check entry fields and the rate table against current Customs guidance before
+      building. This plan is not tax advice.
+  - Done when: each period is lodged from the draft (or as a nil return) and confirmed in
+    the app, and nobody opens a spreadsheet.
 
 - [ ] **2.2 Track verifications from visit to next due date.** *High · M*
   - Evidence: after a passed verification the NP3 page still says "Verification ready",
@@ -283,9 +350,82 @@ records, not from people typing figures in.
   - Done when: switching on any part of NZ Alcohol shows the right required fields on the
     right steps, with no change to anyone's workflow.
 
-- [ ] **2.5 Reminders for licences and people.** *S*
-  - Change: reminders for licence renewals, duty manager certificates and training
-    refreshers, built on the licence dates and training records that already exist.
+- [ ] **2.5 Liquor licensing (basic).** *M*
+  - Scope: Sale and Supply of Alcohol Act 2012 obligations for producers who sell (cellar
+    door, online, events). The first version is a register with reminders and checks, on
+    the existing NP3 patterns (checks, evidence, review reminders, training register).
+    Confirm each obligation against the Act, its regulations and the org's own licence
+    conditions before building; the in-repo licence dossier
+    (`.claude/agents/outputs/whistlebird-licence-dossier.html`) is a worked example of
+    one producer's process.
+  - Change:
+    - [ ] a. **Licence register:** type (on, off, club, special), endorsements (e.g. s 40
+      remote seller), number, issuing DLC, issue and expiry dates, conditions (sale and
+      delivery hours), premises. Reminders far enough ahead of expiry to lodge the renewal
+      in time (confirm the lead time with the DLC), and for annual fees.
+    - [ ] b. **Special licences** for events: date, venue, conditions, manager on duty.
+    - [ ] c. **Manager register:** certified managers with certificate number, issuing
+      DLC, expiry and renewal reminders.
+    - [ ] d. **Recurring checks with evidence:**
+      - the licence and the manager on duty are displayed where required;
+      - host responsibility or social responsibility policy, and the alcohol management
+        plan, are current;
+      - staff training (reuse the NP3 training register);
+      - for remote sellers: licence details shown on the website, and age verification
+        and delivery conditions followed.
+    - [ ] e. **Incident and refusal log:** ID refusals, intoxication refusals, incidents,
+      controlled purchase operations. This is what an inspector asks to see.
+    - [ ] f. **Links to Core and Sales where cheap:** e.g. flag a delivery recorded outside
+      licensed delivery hours, if order times are available.
+  - Done when: licence and certificate dates never lapse unnoticed, and an inspector's
+    request for policies, training and incident records is one download.
+
+- [ ] **2.6 Customs stocktake: count reality and reconcile it to lodged duty.** *High · L*
+  - Why: at a Customs audit the officer asks for sales data and for where every product is
+    right now (e.g. "VAT57 and VAT59 in tank, 43 bottles of Solstice on the shelf"), then
+    counts the shelf to check. Customs requires stocktakes at least once a year.
+    Discrepancies must be investigated and resolved, and a confirmed unexplained loss is
+    dutiable and must be reported to Customs.
+  - Change:
+    - [ ] a. **Stock position:** where everything is, by location and batch. Bulk stock in
+      tanks in litres, ABV and LAL; packaged goods by product and batch; for the licensed
+      area and each outside location. Exportable for a visit together with the lodged
+      periods.
+    - [ ] b. **Stocktake schedule:** configurable frequency (monthly, quarterly,
+      six-monthly or annual; Customs' minimum is annual) with a reminder, plus an
+      on-demand "Customs is here" count.
+    - [ ] c. **Count screen** (reuses the stocktake from 1.3f): the expected quantity for
+      each line; type the count or scan; variance per line in units and LAL. Works on a
+      phone during the visit.
+    - [ ] d. **Reconciliation per product:** opening + produced − removed − approved losses
+      = expected closing, tied back to the lodged entries.
+    - [ ] e. **Resolve variances** as below. Nothing blocks work; unresolved variances stay
+      on the alert list with their LAL and potential duty.
+  - Resolving a variance takes one tap, with the most likely reason suggested first. A
+    variance can be split across reasons (e.g. 4 with a rep, 3 broken).
+
+    | Counted less (expected 50, counted 43) | What the system does |
+    | --- | --- |
+    | Found elsewhere (rep, event, other store) | Move the 7 to that location. If it's outside the licensed area, that's a removal in the month it left: added to that period, or carried into the current draft if that period is already lodged. |
+    | Removed but not recorded (tasting, samples, gift, missed sale) | Record the removal. Dutiable. |
+    | Broken, damaged or faulty | Record the loss with a photo or note, and offer remission: licensees with pre-authorisation claim it in the entry; others use form NZCS 277. Not dutiable once remitted. |
+    | Still looking | Hold it open as an investigation (default 14 days) with a reminder; the count can be redone. |
+    | Can't explain | Confirmed loss: 7 bottles (x LAL, $y) added to the current draft as an unaccounted loss, with a prompt to advise Customs. |
+
+    | Counted more (expected 50, counted 55) | What the system does |
+    | --- | --- |
+    | Came back from a rep or event | Move it back into the licensed area. If duty was paid when it left, flag a possible credit to raise with Customs (never claimed automatically). |
+    | A removal was recorded that didn't happen | Reverse it. If its period is lodged, flag the overpaid duty as a correction to raise with Customs. |
+    | Production was under-recorded | Correct the bottling record with a reason; lineage is kept. |
+    | Can't explain | Accept as an adjustment with a note, flagged for review. |
+
+    Customs' published guidance doesn't cover surpluses. Confirm how Customs treats
+    surpluses, and duty-paid stock coming back into the licensed area, before building.
+  - Principles: every resolution is a dated adjustment recording who and why, never an
+    overwrite. Bulk liquid can have a configurable measurement tolerance (e.g. ±0.5% of
+    volume); packaged units have none.
+  - Done when: a Customs officer's count can be recorded during the visit, and every
+    variance ends in an explained adjustment that ties back to a lodged period.
 
 ---
 
@@ -389,16 +529,48 @@ any time.
 
 ## Phase 5: Engineering health
 
-Runs alongside the other phases, roughly a fifth of each. No big rewrite.
+Runs alongside the other phases, roughly a fifth of each. The architecture direction is
+already decided in `.agents/plans/feature-slicing-plan.md` (agreed 2026-07-27): 15 slices
+plus platform. Code moves into `app/features/<slice>/` through the
+`register_routes(core_bp)` seam with no URL changes, then gets real blueprints, then
+models, then frontend through an asset registry. Follow that plan; don't invent another
+split.
 
-- [ ] **5.1 Split the two largest files as they're touched.** *M*
-  - Evidence: `app/core/backend/backend.py` is 6,784 lines and
-    `app/core/frontend/js/create-process-modal.js` is 6,895; both grow with every feature.
-  - Change: when a change touches one of them, move that feature's code into its own
-    module.
+- [ ] **5.1 Resume the feature-slicing carve.** *L, as many small MRs*
+  - Evidence: the carve started 2026-07-28, when demo-data moved out, `backend.py` was
+    5,763 lines and the feature index was verified. No further slice has moved since.
+    `backend.py` is now 6,784 lines, and `.agents/feature-index.md` still says "Last
+    verified: 2026-07-28". `create-process-modal.js` is 6,895 lines.
+  - Change:
+    - [ ] a. Refresh `.agents/feature-index.md` against today's code (backend line ranges
+      have shifted by about 1,000 lines). Add the staleness check the slicing plan left
+      open (§6 item 1): a script that checks every `routes:` entry against the live URL
+      map.
+    - [ ] b. **Stop the growth first:** a CI ratchet that fails if
+      `app/core/backend/backend.py` gets longer. New routes go in the owning slice.
+    - [ ] c. Carve in the slicing plan's Phase 1 order: reconciliation → wastage →
+      compliance-checks → traceability → activity-log → dashboard, then inventory →
+      process-design → execution. One slice per MR, pure moves with no behaviour change,
+      with the e2e suite as the safety net.
+    - [ ] d. **Carve before you change:** when an item in this plan needs substantial work
+      in a slice that still lives in `backend.py`, carve that slice first in its own MR,
+      then make the change in its new home. Likely pulls: 1.2, 1.3, 1.6 and 2.6 →
+      inventory; 1.4 → traceability; 1.5 → execution; 4.5 → dashboard; 3.2 →
+      activity-log.
+    - [ ] e. **New work starts in its slice:** roles and permissions (0.4) in
+      platform/identity; Customs (2.1, 2.6) and licensing (2.5) in
+      `app/features/compliant/modules/nz_alcohol/`; matching modes (1.1) in crm.
+    - [ ] f. **Frontend after backend:** the asset registry (slicing plan §3, option 1)
+      before any JS moves; split `create-process-modal.js` internally as part of
+      process-design.
+    - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
+      `app/core/backend/` (slicing plan decision 3, open item 4).
+  - Done when: `backend.py` holds only shell code, and every slice in the feature index
+    points at its own directory.
 
 - [ ] **5.2 Run the stock checks as tests.** *S*
-  - Change: the 1.7 checks as tests, plus a mock-recall scenario in the end-to-end suite.
+  - Change: the 1.7 checks as tests, plus a mock-recall scenario and a Customs stocktake
+    scenario (2.6) in the end-to-end suite.
 
 - [ ] **5.3 Keep tooling in proportion.** *S*
   - Evidence: 40 report categories under `.agents/reports/`, plus several watchers and
@@ -429,15 +601,38 @@ Starts once Phases 1 and 2 hold up with a second producer.
 
 ## Order
 
-1. **Phase 0.** Require 2FA and get `main` green; the database split is planned for
-   go-live.
-2. **1.2 then 1.3.** Whole bottles and Library stock, then the go-live stocktake. They
+1. **Phase 0.** Require 2FA and get `main` green now; the database split is planned for
+   go-live. Add the 5.1b ratchet straight away so `backend.py` stops growing.
+2. **0.4 roles and permissions** before a second producer with staff goes live.
+3. **1.2 then 1.3.** Whole bottles and Library stock, then the go-live stocktake. They
    decide whether a new producer can start cleanly and whether stock can be trusted from
    day one. Start 1.3 by checking whether Core can start a batch partway through a
    workflow; that sets its size.
-3. **1.1 and 1.4.** Matching modes and the recall screen give owners control and turn the
+4. **1.1 and 1.4.** Matching modes and the recall screen give owners control and turn the
    trace into something to hand to NZFS.
-4. **Phase 3** alongside the end of Phase 1.
-5. **Phase 2** as NZ Alcohol parts are finished; Customs depends on 1.2 and final-step ABV.
-6. **Phase 4** on the corrected data; 4.1 and 4.7 can go first at any time.
-7. **Phase 6** once a second producer works. Generalise from two real producers, not one.
+5. **2.1 then 2.6.** Excise per period, then the Customs stocktake. Both depend on 1.2,
+   final-step ABV, and stock locations. 2.5 licensing can run in parallel.
+6. **Phase 3** alongside the end of Phase 1; the rest of Phase 2 as NZ Alcohol parts are
+   finished.
+7. **Phase 4** on the corrected data; 4.1 and 4.7 can go first at any time.
+8. **Phase 5** throughout, carving each slice before a plan item changes it (5.1d).
+9. **Phase 6** once a second producer works. Generalise from two real producers, not one.
+
+## Sources
+
+Official guidance checked 25 Sep 2026. Re-check before building, because rules and rates
+change.
+
+- NZ Customs, [Entry lodgement timing](https://www.customs.govt.nz/business/excise/entry-lodgement-timing):
+  lodgement periods, thresholds, due dates, nil returns.
+- NZ Customs, [Record-keeping obligations for alcohol licensed manufacturing areas and off-site storage](https://www.customs.govt.nz/business/excise/alcohol-and-excise/record-keeping-obligations-for-alcohol-licenced-manufacturing-areas-and-off-site-storage):
+  stock register, 7-year retention, NZ storage.
+- NZ Customs, [CCA licence holder guide: licensed manufacturing area](https://www.customs.govt.nz/media/vitaw55u/customer-guide-cca-licence-holder-licensed-manufacturing-area-alcohol-products-oct-2018.pdf):
+  at-least-annual stocktakes; confirmed losses are dutiable and must be reported. (Oct
+  2018 PDF; this link returned 404 on 25 Sep 2026, and the wording was confirmed from
+  Customs' own search excerpts. Find the current guide on customs.govt.nz.)
+- NZ Customs, [Excise duty remissions](https://www.customs.govt.nz/business/excise/excise-duty/excise-duty-remissions):
+  damaged, destroyed, lost, stolen and faulty goods; form NZCS 277.
+- NZ Customs, [Pay excise duty and other charges](https://www.customs.govt.nz/business/excise/pay-excise-duty-and-other-charges/).
+- [Sale and Supply of Alcohol Act 2012](https://www.legislation.govt.nz/act/public/2012/0120/latest/DLM3339333.html)
+  and its regulations, for 2.5.
