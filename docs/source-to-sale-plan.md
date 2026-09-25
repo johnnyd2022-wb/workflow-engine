@@ -701,6 +701,7 @@ split.
       - [x] Reconciliation pure move. (!331)
       - [x] Wastage pure move. (!332)
       - [x] Compliance-checks pure move. (!334)
+      - [x] Activity-log pure move. (!335)
     - [ ] d. **Carve before you change:** when an item in this plan needs substantial work
       in a slice that still lives in `backend.py`, carve that slice first in its own MR,
       then make the change in its new home. Likely pulls: 1.2, 1.3, 1.6 and 2.6 →
