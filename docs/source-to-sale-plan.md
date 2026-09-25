@@ -490,7 +490,8 @@ any time.
     Compliance; pages and cards say Compliant), CRM → **Sales**.
   - [ ] b. Durations in days ("22 days"), not hours ("Started 535h 54m ago").
   - [ ] c. No trailing zeros ("30", not "30.0000"), including activity entries.
-  - [ ] d. Fix "5 active batchs".
+  - [x] d. Fix "5 active batchs". Already pluralised by `pluralize()` in
+    `app/core/frontend/js/dashboard.js:171`. (!344)
 
 - [ ] **4.4 One route to each job.** *S*
   - [ ] a. "Trace" button and Source Map lead to the same place; keep one.
