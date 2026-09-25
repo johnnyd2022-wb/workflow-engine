@@ -84,6 +84,17 @@ ruff:
     - main
   allow_failure: false
 
+# Plan 0.3e: GitLab's "Pipelines must succeed" setting checks the MR pipeline, not
+# the latest main pipeline. Read its status with the job token and fail closed.
+main_green:
+  stage: test
+  image: python:3.14-bookworm
+  script:
+    - python3 scripts/check_main_pipeline.py
+  only:
+    - merge_requests
+  allow_failure: false
+
 # Guard the agent-written data stores (AER metrics ledger + findings history). These are
 # append-only JSONL that unattended skills write; a malformed line should fail fast here
 # rather than silently corrupt a scorecard or suppress the wrong finding. Stdlib-only.
