@@ -402,7 +402,9 @@ do not introduce reverse imports into existing domain code.
       - /api/core/entities/<entity_type>/<entity_id>/summary
       - /api/core/entities/activity
       - /api/core/changes
-    backend:  app/core/backend/backend.py:5791-6569 (event→human diff rendering)
+    backend:  app/features/activity_log/routes/activity_routes.py (event→human diff
+              rendering and three read routes; registered on core_bp)
+              app/core/backend/changes_feed.py (polled change feed; registered on core_bp)
               app/core/backend/event_writer.py (497) — WRITER, belongs to platform
               app/core/utils/{emit_event,log_action}.py
     models:   EntityEvent, EntityEventSummary, AuditLog
@@ -414,7 +416,7 @@ do not introduce reverse imports into existing domain code.
 
     - Split of responsibility: EventWriter is platform (every slice emits events); reading
       the stream back as human-readable history is this slice. Writer down, reader up.
-    - _merge_inventory_legacy_audit (backend.py:6342) blends pre-event-sourcing AuditLog
+    - _merge_inventory_legacy_audit (activity_routes.py) blends pre-event-sourcing AuditLog
       rows into the modern EntityEvent stream. There are two historical formats in play.
     - Much of the block is diff humanisation (_smart_list_diff_rows, _human_summary,
       _fmt_field_value). Presentation logic in the API layer — a candidate for a service.
