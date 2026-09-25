@@ -170,7 +170,7 @@ Small, and everything else builds on it.
 The core of the product. It should just work by default, give owners control when they
 want it, and never produce a recall list that can't be trusted.
 
-- [x] **1.1 Let owners choose how sales are matched to batches.** *High · M* (!MR)
+- [x] **1.1 Let owners choose how sales are matched to batches.** *High · M* (!338)
   - Evidence: Sales configuration offers FIFO, manual and hybrid matching plus "manual
     review days", but only FIFO is implemented. Choosing manual or hybrid silently stops
     all matching (`app/features/crm/services/sales_traceability_service.py:68` returns
@@ -188,7 +188,7 @@ want it, and never produce a recall list that can't be trusted.
     - [x] d. In every mode, only a line that can't be filled from any stock goes to the
       unmatched queue (3.3).
   - Done when: all three options do what they say, and FIFO still needs no attention.
-  - As built (!MR): allocations carry `status` (confirmed / pending_review), `presold`
+  - As built (!338): allocations carry `status` (confirmed / pending_review), `presold`
     and `review_due_at` (migration `sales_matching_modes_001`). Hybrid sends pre-sold
     matches and non-exact ("contains"/"alias") mappings to review; due reviews confirm on
     the next matching run. Manual mode lists mapped lines with no batch and takes the
