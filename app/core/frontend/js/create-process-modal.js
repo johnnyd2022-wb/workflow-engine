@@ -118,155 +118,16 @@
 
 
 
-  function serializeSpaWizardState() {
-    const merge = shouldMergePersistSpaFormFields();
-    const prev = merge ? (loadWizardSessionMergeBase() || {}) : null;
-
-    const nameEl = document.getElementById('guided-step-name');
-    const descEl = document.getElementById('guided-step-description');
-    const stepName = nameEl ? (nameEl.value || '') : (merge ? (prev.stepName || '') : '');
-    const stepDescription = descEl ? (descEl.value || '') : (merge ? (prev.stepDescription || '') : '');
-
-    let inputs;
-    if (document.getElementById('guided-inputs-list-unified')) {
-      inputs = [];
-      getAllGuidedInputElements().forEach(inputEl => {
-        const inputType = inputEl.dataset.inputType || 'new';
-        const nameInput = inputEl.querySelector('.guided-input-name');
-        let name = '';
-        if (nameInput) {
-          name = nameInput.classList.contains('searchable-dropdown-input') ? nameInput.value.trim() : nameInput.value.trim();
-        }
-        const quantityInput = inputEl.querySelector('.guided-input-quantity');
-        const quantity = quantityInput ? (quantityInput.value || '').trim() : '';
-        const unitSelect = inputEl.querySelector('.guided-input-unit');
-        const unit = unitSelect ? unitSelect.value : '';
-        const executionTypeSelect = inputEl.querySelector('.guided-input-execution-type');
-        const executionType = executionTypeSelect ? executionTypeSelect.value : 'variable';
-        const sourceOutputId = inputEl.dataset.sourceOutputId || null;
-        const previousOutputDisplayName = inputEl.dataset.previousOutputDisplayName || null;
-        const inventoryPreselected = inputType === 'inventory' && nameInput && nameInput.type === 'hidden';
-        const isPreviousOutput = !executionTypeSelect;
-        const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
-        const requiresInventorySelection = isPreviousOutput ? true : (executionType === 'variable');
-        const expectedInventoryType = inputEl.dataset.expectedInventoryType || null;
-        inputs.push({
-          inputType,
-          name,
-          quantity: quantity ? parseFloat(quantity) : null,
-          unit,
-          executionType,
-          source_output_id: sourceOutputId || undefined,
-          previousOutputDisplayName: previousOutputDisplayName || undefined,
-          expected_inventory_type: expectedInventoryType || undefined,
-          inventoryPreselected,
-          is_variable: isVariable,
-          requires_inventory_selection: requiresInventorySelection
-        });
-      });
-    } else {
-      inputs = merge ? (prev.inputs || []) : [];
-    }
-
-    let outputs;
-    if (document.getElementById('guided-outputs-list')) {
-      outputs = collectSpaWizardOutputsPayload();
-    } else {
-      outputs = merge ? (prev.outputs || []) : [];
-    }
-
-    let prompts;
-    if (document.getElementById('guided-prompts-list')) {
-      prompts = collectCurrentPrompts();
-    } else {
-      prompts = merge ? (prev.prompts || []) : [];
-    }
-
-    const batchEl = document.getElementById('guided-prompt-batch-number-mode');
-    const evEl = document.getElementById('guided-prompt-evidence-mode');
-    const batchNumberMode = batchEl ? batchEl.value : (merge ? (prev.batchNumberMode || 'optional') : 'optional');
-    const evidenceMode = evEl ? evEl.value : (merge ? (prev.evidenceMode || 'optional') : 'optional');
-
-    let inputTab = 'inventory';
-    const activeTab = document.querySelector('.flow-mode-segment[data-input-tab].flow-mode-segment--active');
-    if (activeTab && activeTab.dataset.inputTab) {
-      inputTab = activeTab.dataset.inputTab;
-    } else if (merge && prev.inputTab) {
-      inputTab = prev.inputTab;
-    }
-
-    const docInlineTitleEl = document.getElementById('guided-doc-inline-title');
-    const docInlineContentEl = document.getElementById('guided-doc-inline-content');
-    const docInlineTitle = docInlineTitleEl
-      ? docInlineTitleEl.value
-      : merge
-        ? prev.docInlineTitle || ''
-        : '';
-    const docInlineContent = docInlineContentEl
-      ? docInlineContentEl.value
-      : merge
-        ? prev.docInlineContent || ''
-        : '';
-
-    const urlPid = new URLSearchParams(window.location.search || '').get('id');
-    const processIdPersist = urlPid || (merge ? prev.processId || null : null) || null;
-
-    const workflowNameEl = document.getElementById('guided-process-workflow-name');
-    let workflowProcessName = workflowNameEl
-      ? (workflowNameEl.value || '').trim()
-      : merge && prev
-        ? (prev.workflowProcessName || '').trim()
-        : '';
-
-    let createdStepsOut = JSON.parse(JSON.stringify(createdSteps));
-    if (merge && prev) {
-      createdStepsOut = preserveCreatedStepsIoFromPrev(prev, createdStepsOut);
-    }
-
-    const slug = getFlowWizardPageSlug();
-    if (merge && prev) {
-      if (slug !== 'inputs' && inputs.length === 0 && (prev.inputs || []).length > 0) {
-        inputs = JSON.parse(JSON.stringify(prev.inputs));
-      }
-      if (slug !== 'outputs' && (!outputs || outputs.length === 0) && (prev.outputs || []).length > 0) {
-        outputs = JSON.parse(JSON.stringify(prev.outputs));
-      }
-      if (slug !== 'evidence-and-prompts' && (!prompts || prompts.length === 0) && (prev.prompts || []).length > 0) {
-        prompts = JSON.parse(JSON.stringify(prev.prompts));
-      }
-    }
-
-    let docFileUpload = null;
-    const pendingGuidedDocFileUpload = getPendingGuidedDocFileUpload();
-    if (pendingGuidedDocFileUpload && pendingGuidedDocFileUpload.base64) {
-      docFileUpload = {
-        fileName: pendingGuidedDocFileUpload.fileName,
-        mime: pendingGuidedDocFileUpload.mime,
-        base64: pendingGuidedDocFileUpload.base64
-      };
-    } else if (merge && prev && prev.docFileUpload && prev.docFileUpload.base64) {
-      docFileUpload = JSON.parse(JSON.stringify(prev.docFileUpload));
-    }
-
-    return {
-      v: 1,
-      stepName,
-      stepDescription,
-      workflowProcessName,
-      inputs,
-      outputs,
-      prompts,
-      batchNumberMode,
-      evidenceMode,
-      inputTab,
-      editingStepId: editingStepId || null,
-      createdSteps: createdStepsOut,
-      docInlineTitle,
-      docInlineContent,
-      processId: processIdPersist,
-      docFileUpload
-    };
-  }
+  const serializeSpaWizardState = window.ProcessModalSpaPayloads.createStateSerializer({
+    shouldMergePersistSpaFormFields,
+    loadWizardSessionMergeBase,
+    getAllGuidedInputElements,
+    collectCurrentPrompts,
+    getCreatedSteps: function() { return createdSteps; },
+    getEditingStepId: function() { return editingStepId; },
+    getFlowWizardPageSlug,
+    getPendingGuidedDocFileUpload
+  });
 
   window.persistSpaWizardState = function() {
     if (!isProcessFlowSpaPage()) return;
