@@ -433,7 +433,7 @@ records, not from people typing figures in.
 
 Sales matter here because they finish the trace. Make them readable and complete.
 
-- [ ] **3.1 Total sales per product.** *High · S*
+- [x] **3.1 Total sales per product.** *High · S* (!342)
   - Evidence: CRM Top Products lists one product across seven or more rows because Xero
     item codes and descriptions vary, typos included.
   - Change: group by the mapped product, with a row that expands to show Xero codes;
