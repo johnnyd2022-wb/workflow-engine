@@ -292,9 +292,32 @@
   }
 
 
+  function buildClearedDraftPayload(prev, processId, createdSteps) {
+    return {
+      v: 1,
+      stepName: '',
+      stepDescription: '',
+      workflowProcessName: (prev.workflowProcessName != null ? String(prev.workflowProcessName) : '').trim(),
+      inputs: [],
+      outputs: [],
+      prompts: [],
+      batchNumberMode: 'optional',
+      evidenceMode: 'optional',
+      inputTab: prev.inputTab || 'inventory',
+      editingStepId: null,
+      createdSteps: Array.isArray(createdSteps) ? JSON.parse(JSON.stringify(createdSteps)) : [],
+      docInlineTitle: '',
+      docInlineContent: '',
+      processId: processId,
+      docFileUpload: null
+    };
+  }
+
+
   window.ProcessModalSpaPayloads = Object.freeze({
     collectSpaWizardOutputsPayload,
     preserveCreatedStepsIoFromPrev,
-    createStateSerializer
+    createStateSerializer,
+    buildClearedDraftPayload
   });
 })();
