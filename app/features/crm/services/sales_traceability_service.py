@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.utils.inventory_quantity import parse_stored_quantity_to_decimal
 from app.features.crm.models.product_mapping import ProductMapping
@@ -45,6 +47,9 @@ class SalesTraceabilityService:
             .all()
         )
         summary = defaultdict(int)
+        confirmed = self._confirm_due_reviews(org_id)
+        if confirmed:
+            summary["auto_confirmed"] += confirmed
         for invoice in invoices:
             for key, value in self._reconcile_invoice(org_id, invoice).items():
                 summary[key] += value
@@ -76,8 +81,7 @@ class SalesTraceabilityService:
             return summary
 
         config = self.config_repo.get_for_org(org_id)
-        if config is not None and config.matching_strategy != "fifo":
-            return {"deferred": len(line_items)} if line_items else {}
+        strategy = (config.matching_strategy if config is not None else "fifo") or "fifo"
         strict = True if config is None else bool(config.strict_mapping)
         mappings = (
             self.db.query(ProductMapping)
@@ -105,6 +109,13 @@ class SalesTraceabilityService:
             if self._matches_existing(existing, match, quantity):
                 summary["already_allocated"] += 1
                 continue
+            if strategy == "manual":
+                # Plan 1.1: the owner picks the batch for each line (see assign_line).
+                # A line already assigned keeps its batches unless its quantity changed.
+                if existing:
+                    self._reverse_allocations(existing)
+                summary["awaiting_assignment"] += 1
+                continue
             if existing:
                 self._reverse_allocations(existing)
             reference = _line_reference(invoice.xero_invoice_id, line_key)
@@ -123,22 +134,269 @@ class SalesTraceabilityService:
                 # retry it in date order.
                 summary["fractional_quantity" if "whole numbers" in str(exc) else "insufficient_stock"] += 1
                 continue
-            for row in consumed:
-                self.db.add(
-                    SalesFifoAllocation(
-                        org_id=org_id,
-                        xero_invoice_id=invoice.xero_invoice_id,
-                        xero_line_key=line_key,
-                        inventory_item_id=UUID(row["inventory_item_id"]),
-                        product_mapping_id=match.id,
-                        product_name=match.biz_e_product_name,
-                        quantity=Decimal(row["quantity_consumed"]),
-                        unit=row["unit"],
-                    )
-                )
+            review = strategy == "hybrid" and (match.match_type or "exact") != "exact"
+            created = [self._new_allocation(org_id, invoice, line_key, match, row) for row in consumed]
+            presold = any(a.presold for a in created)
+            for allocation in created:
+                if strategy == "hybrid" and (review or presold):
+                    allocation.status = "pending_review"
+                    allocation.review_due_at = _now() + timedelta(days=self._review_days(config))
+                self.db.add(allocation)
             self.db.flush()
             summary["allocated"] += 1
+            if presold:
+                summary["presold"] += 1
         return dict(summary)
+
+    # --- plan 1.1: pre-sales, hybrid review, manual assignment ----------------------------
+
+    def _new_allocation(self, org_id, invoice, line_key, match, row) -> SalesFifoAllocation:
+        item_id = UUID(row["inventory_item_id"])
+        return SalesFifoAllocation(
+            org_id=org_id,
+            xero_invoice_id=invoice.xero_invoice_id,
+            xero_line_key=line_key,
+            inventory_item_id=item_id,
+            product_mapping_id=match.id,
+            product_name=match.biz_e_product_name,
+            quantity=Decimal(row["quantity_consumed"]),
+            unit=row["unit"],
+            presold=_is_presold(self.db, item_id, invoice.date),
+        )
+
+    @staticmethod
+    def _review_days(config) -> int:
+        try:
+            return max(1, min(90, int(getattr(config, "manual_review_days", None) or 7)))
+        except (TypeError, ValueError):
+            return 7
+
+    def _confirm_due_reviews(self, org_id: UUID) -> int:
+        """Hybrid matches nobody changed within the review window confirm themselves."""
+        due = (
+            self.db.query(SalesFifoAllocation)
+            .filter(
+                SalesFifoAllocation.org_id == org_id,
+                SalesFifoAllocation.status == "pending_review",
+                SalesFifoAllocation.review_due_at <= _now(),
+            )
+            .all()
+        )
+        for allocation in due:
+            allocation.status = "confirmed"
+        if due:
+            self.db.flush()
+        return len({(a.xero_invoice_id, a.xero_line_key) for a in due})
+
+    def _line_and_match(self, org_id: UUID, invoice_id: str, line_key: str):
+        invoice = (
+            self.db.query(XeroInvoice)
+            .filter(XeroInvoice.org_id == org_id, XeroInvoice.xero_invoice_id == invoice_id)
+            .one_or_none()
+        )
+        if invoice is None:
+            raise ValueError("Invoice not found")
+        lines = (
+            self.db.query(XeroInvoiceLineItem)
+            .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id == invoice.id)
+            .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
+            .all()
+        )
+        line = next(
+            (ln for i, ln in enumerate(lines) if (ln.xero_line_item_id or f"position:{i + 1}").strip() == line_key),
+            None,
+        )
+        if line is None:
+            raise ValueError("Invoice line not found")
+        config = self.config_repo.get_for_org(org_id)
+        mappings = (
+            self.db.query(ProductMapping)
+            .filter(ProductMapping.org_id == org_id, ProductMapping.is_active.is_(True))
+            .all()
+        )
+        match = self._find_mapping(line, mappings, True if config is None else bool(config.strict_mapping))
+        if match is None:
+            raise ValueError("This line isn't mapped to a product yet")
+        quantity = _positive_quantity(line.quantity)
+        if quantity is None:
+            raise ValueError("This line has no quantity")
+        return invoice, line, match, quantity * int(getattr(match, "units_per_line", None) or 1)
+
+    def confirm_line(self, org_id: UUID, invoice_id: str, line_key: str) -> int:
+        allocations = self._line_allocations(org_id, invoice_id, line_key)
+        for allocation in allocations:
+            allocation.status = "confirmed"
+            allocation.review_due_at = None
+        self.db.flush()
+        return len(allocations)
+
+    def assign_line(self, org_id: UUID, invoice_id: str, line_key: str, picks: list[dict]) -> list[SalesFifoAllocation]:
+        """Put a sale line on the batches the owner chose (replacing any earlier match)."""
+        invoice, _line, match, needed = self._line_and_match(org_id, invoice_id, line_key)
+        parsed = []
+        for pick in picks or []:
+            try:
+                item_id = UUID(str(pick.get("inventory_item_id")))
+                qty = Decimal(str(pick.get("quantity")))
+            except (InvalidOperation, ValueError, TypeError, AttributeError):
+                raise ValueError("Each pick needs an inventory_item_id and a quantity") from None
+            if qty > 0:
+                parsed.append((item_id, qty))
+        if not parsed:
+            raise ValueError("Choose at least one batch")
+        total = sum((q for _, q in parsed), Decimal("0"))
+        if total != needed:
+            raise ValueError(f"The batches must add up to {needed.normalize():f}; they add up to {total.normalize():f}")
+
+        existing = self._line_allocations(org_id, invoice_id, line_key)
+        if existing:
+            self._reverse_allocations(existing)
+        reference = _line_reference(invoice_id, line_key)
+        created = []
+        for item_id, qty in parsed:
+            row = self.inventory.consume_final_product_lot(org_id, item_id, qty, reference=reference, commit=False)
+            item = self.db.get(InventoryItem, item_id)
+            if item is None or item.name != match.biz_e_product_name:
+                raise ValueError(f"That batch isn't {match.biz_e_product_name}")
+            allocation = self._new_allocation(org_id, invoice, line_key, match, row)
+            self.db.add(allocation)
+            created.append(allocation)
+        self.db.flush()
+        return created
+
+    def lot_candidates(self, org_id: UUID, product_name: str) -> list[dict]:
+        """Batches of ``product_name`` in stock, oldest first, for the owner to pick from."""
+        items = (
+            self.db.query(InventoryItem)
+            .filter(
+                InventoryItem.org_id == org_id,
+                InventoryItem.name == product_name,
+                InventoryItem.inventory_type == "final_product",
+                InventoryItem.quantity > 0,
+            )
+            .all()
+        )
+        rows = []
+        for i in items:
+            made = _made_on(self.db, i)
+            rows.append(
+                {
+                    "inventory_item_id": str(i.id),
+                    "batch": i.supplier_batch_number or (i.extra_data or {}).get("batch_number"),
+                    "available": f"{Decimal(str(i.quantity)).normalize():f}",
+                    "unit": i.unit,
+                    "made_on": made.isoformat() if made else None,
+                }
+            )
+        return sorted(rows, key=lambda r: (r["made_on"] or "9999", r["batch"] or ""))
+
+    def review_queue(self, org_id: UUID, limit: int = 200) -> dict:
+        """Hybrid matches waiting for review, and (manual mode) lines waiting for a batch."""
+        config = self.config_repo.get_for_org(org_id)
+        strategy = (config.matching_strategy if config is not None else "fifo") or "fifo"
+        pending = (
+            self.db.query(SalesFifoAllocation)
+            .filter(SalesFifoAllocation.org_id == org_id, SalesFifoAllocation.status == "pending_review")
+            .order_by(SalesFifoAllocation.review_due_at.asc())
+            .limit(limit)
+            .all()
+        )
+        invoices = {
+            inv.xero_invoice_id: inv
+            for inv in self.db.query(XeroInvoice)
+            .filter(
+                XeroInvoice.org_id == org_id,
+                XeroInvoice.xero_invoice_id.in_({a.xero_invoice_id for a in pending} or {""}),
+            )
+            .all()
+        }
+        grouped: dict = {}
+        for a in pending:
+            key = (a.xero_invoice_id, a.xero_line_key)
+            inv = invoices.get(a.xero_invoice_id)
+            entry = grouped.setdefault(
+                key,
+                {
+                    "invoice_id": a.xero_invoice_id,
+                    "line_key": a.xero_line_key,
+                    "invoice_number": getattr(inv, "invoice_number", None),
+                    "invoice_date": inv.date.isoformat() if inv is not None and inv.date else None,
+                    "product_name": a.product_name,
+                    "review_due_at": a.review_due_at.isoformat() if a.review_due_at else None,
+                    "presold": False,
+                    "batches": [],
+                },
+            )
+            item = self.db.get(InventoryItem, a.inventory_item_id)
+            entry["presold"] = entry["presold"] or bool(a.presold)
+            entry["batches"].append(
+                {
+                    "inventory_item_id": str(a.inventory_item_id),
+                    "batch": getattr(item, "supplier_batch_number", None),
+                    "quantity": f"{Decimal(str(a.quantity)).normalize():f}",
+                    "unit": a.unit,
+                }
+            )
+        to_assign = self._lines_to_assign(org_id, limit) if strategy == "manual" else []
+        return {"mode": strategy, "pending_review": list(grouped.values()), "to_assign": to_assign}
+
+    def _lines_to_assign(self, org_id: UUID, limit: int) -> list[dict]:
+        go_live = self._go_live_date(org_id)
+        config = self.config_repo.get_for_org(org_id)
+        strict = True if config is None else bool(config.strict_mapping)
+        mappings = (
+            self.db.query(ProductMapping)
+            .filter(ProductMapping.org_id == org_id, ProductMapping.is_active.is_(True))
+            .all()
+        )
+        allocated = {
+            (a.xero_invoice_id, a.xero_line_key)
+            for a in self.db.query(SalesFifoAllocation.xero_invoice_id, SalesFifoAllocation.xero_line_key)
+            .filter(SalesFifoAllocation.org_id == org_id)
+            .all()
+        }
+        out = []
+        invoices = (
+            self.db.query(XeroInvoice)
+            .filter(XeroInvoice.org_id == org_id)
+            .order_by(XeroInvoice.date.asc().nulls_last())
+            .all()
+        )
+        for inv in invoices:
+            if (inv.invoice_type or "").upper() != _SALE_INVOICE_TYPE or (
+                inv.status or ""
+            ).upper() not in _SALE_STATUSES:
+                continue
+            if go_live is not None and inv.date is not None and inv.date < go_live:
+                continue
+            lines = (
+                self.db.query(XeroInvoiceLineItem)
+                .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id == inv.id)
+                .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
+                .all()
+            )
+            for index, line in enumerate(lines):
+                key = (line.xero_line_item_id or f"position:{index + 1}").strip()
+                if (inv.xero_invoice_id, key) in allocated:
+                    continue
+                match = self._find_mapping(line, mappings, strict)
+                quantity = _positive_quantity(line.quantity)
+                if match is None or quantity is None:
+                    continue
+                out.append(
+                    {
+                        "invoice_id": inv.xero_invoice_id,
+                        "line_key": key,
+                        "invoice_number": inv.invoice_number,
+                        "invoice_date": inv.date.isoformat() if inv.date else None,
+                        "description": line.description,
+                        "product_name": match.biz_e_product_name,
+                        "quantity": f"{(quantity * int(match.units_per_line or 1)).normalize():f}",
+                    }
+                )
+                if len(out) >= limit:
+                    return out
+        return out
 
     def _go_live_date(self, org_id: UUID):
         cache = self.__dict__.setdefault("_go_live_cache", {})
@@ -224,6 +482,40 @@ class SalesTraceabilityService:
         if exact_matches:
             return exact_matches[0] if len(exact_matches) == 1 else None
         return contains_matches[0] if len(contains_matches) == 1 else None
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _made_on(db, item) -> date | None:
+    """When a finished batch came into being: its producing step, else its bottling date."""
+    step_id = getattr(item, "source_execution_step_id", None)
+    if step_id is not None:
+        from app.core.db.models.execution_step import ExecutionStep
+
+        step = db.get(ExecutionStep, step_id)
+        if step is not None and step.completed_at is not None:
+            return step.completed_at.date()
+    bottled = (getattr(item, "extra_data", None) or {}).get("bottled_on")
+    if bottled:
+        try:
+            return date.fromisoformat(str(bottled))
+        except ValueError:
+            pass
+    if getattr(item, "purchase_date", None):
+        return item.purchase_date
+    created = getattr(item, "created_at", None)
+    return created.date() if created else None
+
+
+def _is_presold(db, item_id: UUID, invoice_date: date | None) -> bool:
+    """A sale filled from a batch made after the invoice date (plan 1.1)."""
+    if invoice_date is None:
+        return False
+    item = db.get(InventoryItem, item_id)
+    made = _made_on(db, item) if item is not None else None
+    return made is not None and made > invoice_date
 
 
 def _positive_quantity(raw: Any) -> Decimal | None:
@@ -355,6 +647,14 @@ def append_sales_to_dag(
                 "item_code": line.item_code if line else None,
                 "xero_invoice_id": invoice_external_id,
                 "xero_line_key": line_key,
+                # Plan 1.1: filled from a batch made after the invoice (a pre-sale), and
+                # whether the owner still has to review the match (hybrid mode).
+                "presold": any(bool(getattr(row, "presold", False)) for row in line_allocations),
+                "match_status": (
+                    "pending_review"
+                    if any(getattr(row, "status", "confirmed") == "pending_review" for row in line_allocations)
+                    else "confirmed"
+                ),
             }
         )
         for allocation in line_allocations:

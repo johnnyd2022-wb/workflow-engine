@@ -19,6 +19,12 @@
       class="flow-mode-segment{% if active_crm_tab == 'tasks' %} flow-mode-segment--active{% endif %}"
     >Tasks</a>
     <a
+      href="/crm/matching"
+      role="tab"
+      aria-selected="{{ 'true' if active_crm_tab == 'matching' else 'false' }}"
+      class="flow-mode-segment{% if active_crm_tab == 'matching' %} flow-mode-segment--active{% endif %}"
+    >Batch matching</a>
+    <a
       href="/crm/configuration"
       role="tab"
       aria-selected="{{ 'true' if active_crm_tab == 'configuration' else 'false' }}"

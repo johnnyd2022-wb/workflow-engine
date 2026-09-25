@@ -483,6 +483,60 @@ class InventoryRepository:
                 self.db.commit()
             return consumed
 
+    def consume_final_product_lot(
+        self,
+        org_id: UUID,
+        inventory_item_id: UUID,
+        quantity: str | Decimal,
+        reference: str | None = None,
+        commit: bool = True,
+    ) -> dict:
+        """Take ``quantity`` from one chosen final-product lot (plan 1.1 manual matching).
+
+        Same rules as FIFO: whole units for counted goods, never more than the lot holds.
+        """
+        amount = _parse_quantity(quantity)
+        if amount is None or not amount.is_finite() or amount <= 0:
+            raise ValueError("quantity must be a positive finite number")
+        item = (
+            self.db.query(InventoryItem)
+            .filter(
+                InventoryItem.id == inventory_item_id,
+                InventoryItem.org_id == org_id,
+                InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if item is None:
+            raise ValueError("That batch isn't a finished product in this organisation")
+        _require_whole_count(amount, item.unit, item.name)
+        current = parse_stored_quantity_to_decimal(item.quantity)
+        usable = current.to_integral_value(rounding=ROUND_FLOOR) if is_count_unit(item.unit) else current
+        if amount > usable:
+            raise ValueError(f"Batch {item.supplier_batch_number or item.name} only has {usable} {item.unit}")
+        quantity_before = str(current)
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.SALES_FIFO_CONSUMPTION):
+            item.quantity = coerce_stored_quantity(current - amount)
+            self.db.flush()
+        EventWriter(self.db, org_id).emit(
+            event_type="inventory_item.quantity_adjusted",
+            entity_type="inventory_item",
+            entity_id=item.id,
+            payload={
+                **_item_snapshot(item),
+                "quantity_before": quantity_before,
+                "quantity_after": str(item.quantity),
+                "delta": str(-amount),
+                "reason": "sales_manual_allocation",
+                "reference": reference,
+            },
+            diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+        )
+        if commit:
+            self.db.commit()
+        return {"inventory_item_id": str(item.id), "quantity_consumed": str(amount), "unit": item.unit}
+
     def reverse_final_product_fifo_consumption(
         self,
         org_id: UUID,
