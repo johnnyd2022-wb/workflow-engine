@@ -1,5 +1,14 @@
 (function() {
   'use strict';
+
+  const {
+    summaryInputDisplayName,
+    summaryOutputDisplayName,
+    isCustomExecutionPrompt,
+    countLabeledExecutionPrompts,
+    normalisePromptOptions,
+    base64ToBlob
+  } = window.ProcessModalUtils;
   
   let currentStep = 1;
   const totalSteps = 4;
@@ -218,25 +227,6 @@
     return outputs;
   }
 
-  /** Summary / API rows may use alternate keys (inventory, legacy). */
-  function summaryInputDisplayName(row) {
-    if (!row) return '';
-    return String(row.name || row.input_name || row.material_name || row.item_name || '').trim();
-  }
-
-  function summaryOutputDisplayName(row) {
-    if (!row) return '';
-    return String(row.name || row.output_name || '').trim();
-  }
-
-  function isCustomExecutionPrompt(p) {
-    if (!p || !(p.label || '').trim()) return false;
-    const l = (p.label || '').trim().toLowerCase();
-    if (l === 'batch number' || l === 'evidence') return false;
-    if (p.type === 'evidence') return false;
-    return true;
-  }
-
   /**
    * After GET /process merges into createdSteps, persist must not wipe nested I/O that
    * still exists in the previous session snapshot (common on summary route).
@@ -272,27 +262,6 @@
       }
       return o;
     });
-  }
-
-  function countLabeledExecutionPrompts(prompts) {
-    if (!Array.isArray(prompts)) return 0;
-    return prompts.filter(function (p) {
-      return p && (p.label || '').trim();
-    }).length;
-  }
-
-  /** Keep select choices tidy and stable in the stored workflow contract. */
-  function normalisePromptOptions(options) {
-    const raw = Array.isArray(options) ? options : String(options || '').split(/\r?\n/);
-    const seen = new Set();
-    return raw.reduce(function (result, option) {
-      const value = String(option == null ? '' : option).trim();
-      if (value && !seen.has(value)) {
-        seen.add(value);
-        result.push(value);
-      }
-      return result;
-    }, []);
   }
 
   function serializeSpaWizardState() {
@@ -4824,13 +4793,6 @@
       if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
     }
   };
-
-  function base64ToBlob(b64, mime) {
-    const bin = atob(b64);
-    const arr = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    return new Blob([arr], { type: mime || 'application/octet-stream' });
-  }
 
   function mapSessionInputsToApiPayloadFromRows(rows) {
     const inputs = [];
