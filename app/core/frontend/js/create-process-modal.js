@@ -4804,44 +4804,7 @@
   
 
 
-  /**
-   * Session v1 payload compatible with restoreSpaWizardState / serializeSpaWizardState (deep-link edit).
-   */
-  function buildSpaWizardSessionPayloadFromApiStep(step, opts) {
-    const urlPid = opts && opts.processId != null ? opts.processId : null;
-    const workflowProcessName =
-      opts && opts.workflowProcessName != null ? String(opts.workflowProcessName).trim() : '';
-    const tm = deriveTraceabilityModes(step);
-    const inputs = (step.inputs || []).map(mapApiInputToWizardSessionInput);
-    const outputs = (step.outputs || []).map(mapApiOutputToWizardSessionOutput);
-    const prompts = (step.execution_prompts || []).filter(isCustomExecutionPrompt).map(function(p) {
-      return {
-        label: (p.label || '').trim(),
-        type: p.type || 'text',
-        unit: (p.unit || '').trim(),
-        required: p.required !== false,
-        ...(p.type === 'select' ? { options: normalisePromptOptions(p.options) } : {})
-      };
-    });
-    return {
-      v: 1,
-      stepName: step.name || '',
-      stepDescription: step.description || '',
-      workflowProcessName,
-      inputs,
-      outputs,
-      prompts,
-      batchNumberMode: tm.batch,
-      evidenceMode: tm.evidence,
-      inputTab: 'inventory',
-      editingStepId: step.id || null,
-      createdSteps: JSON.parse(JSON.stringify(createdSteps)),
-      docInlineTitle: '',
-      docInlineContent: '',
-      processId: urlPid,
-      docFileUpload: null
-    };
-  }
+
 
   // Toggle step summary expand/collapse
   function toggleStepSummary(stepId) {
@@ -4910,10 +4873,18 @@
     editingStepId = step.id;
     resetForm(true);
 
-    const payload = buildSpaWizardSessionPayloadFromApiStep(step, {
-      processId: urlPid,
-      workflowProcessName
-    });
+    const payload = window.ProcessModalApiSession.buildSpaWizardSessionPayloadFromApiStep(
+      step,
+      { processId: urlPid, workflowProcessName },
+      {
+        createdSteps,
+        deriveTraceabilityModes,
+        mapApiInputToWizardSessionInput,
+        mapApiOutputToWizardSessionOutput,
+        isCustomExecutionPrompt,
+        normalisePromptOptions
+      }
+    );
     try {
       sessionStorage.setItem(getProcessFlowSpaStorageKey(), JSON.stringify(payload));
     } catch (e) {
