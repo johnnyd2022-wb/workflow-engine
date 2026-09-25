@@ -516,7 +516,7 @@ any time.
     right; keep it.)
 
 - [ ] **4.7 Fix the visual bugs.** *S*
-  - [ ] a. Sidebar background stops at viewport height on long pages (white below it).
+  - [x] a. Sidebar background stops at viewport height on long pages (white below it). (!387)
   - [ ] b. The floating blue menu toggle overlaps the sidebar edge.
   - [ ] c. CRM widget control icons render as missing-glyph boxes.
   - [ ] d. `/settings` requests a resource that returns 404.
