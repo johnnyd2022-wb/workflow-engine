@@ -23,6 +23,7 @@ from app.core.db.repositories.user_repo import EmailConflictError, UserRepositor
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
 from app.core.security.permissions import requires_auth
+from app.core.security.two_factor_policy import ENROLLMENT_PAGE, enrollment_required, two_factor_required
 from app.core.utils.log_action import log_action
 from app.observability import get_logger, start_span, traced
 
@@ -133,6 +134,34 @@ limiter = Limiter(key_func=get_rate_limit_key)
 
 # Pending 2FA session expiry (Using 5 minutes as default)
 PENDING_2FA_EXPIRY_MINUTES = 5
+
+
+# F6 (.agents/reports/auth/security-audit.md): /auth/verify-2fa had no brute-force
+# throttle, so anyone holding a password could guess codes without limit. Two layers:
+# a rate limit keyed on the account being verified (not the IP, which an attacker can
+# rotate; not the email, which this request doesn't carry), and a cap on wrong codes per
+# pending session, after which the password has to be entered again. The account key
+# matters because /auth/login resets the account's failure counter on every correct
+# password, so a per-session cap alone could be sidestepped by logging in again.
+MAX_2FA_FAILURES_PER_PENDING_SESSION = 5
+
+
+def _pending_2fa_rate_limit_key():
+    pending = session.get("pending_2fa_user_id")
+    return f"2fa:{pending}" if pending else f"2fa-ip:{get_remote_address()}"
+
+
+def _reject_2fa_code(user_id, user_org_id):
+    log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
+    failures = int(session.get("pending_2fa_failures", 0)) + 1
+    if failures >= MAX_2FA_FAILURES_PER_PENDING_SESSION:
+        session.pop("pending_2fa_user_id", None)
+        session.pop("pending_2fa_created_at", None)
+        session.pop("pending_2fa_failures", None)
+        logger.warning("2fa_pending_session_cleared_after_failures", user_id=str(user_id), failures=failures)
+        return jsonify({"error": "Too many incorrect codes. Please sign in again."}), 401
+    session["pending_2fa_failures"] = failures
+    return jsonify({"error": "Invalid 2FA token or backup code"}), 401
 
 
 def rotate_session():
@@ -570,6 +599,7 @@ def login():
             # Set pending 2FA session with timestamp
             session["pending_2fa_user_id"] = str(user.id)
             session["pending_2fa_created_at"] = datetime.now(UTC).isoformat()
+            session.pop("pending_2fa_failures", None)
             return jsonify({"requires_2fa": True}), 200
 
         # Rotate session ID on successful login (session fixation protection)
@@ -584,6 +614,8 @@ def login():
         user_email = user.email
         user_role = user.role.value
         user_org_id = str(user.org_id)
+        # Plan 0.2: an admin without 2FA gets a session that can only reach enrolment.
+        must_enroll_2fa = enrollment_required(user)
 
         # Get user's session timeout preference
         if hasattr(user, "session_timeout_minutes") and user.session_timeout_minutes:
@@ -605,12 +637,14 @@ def login():
             payload={"ip": ip_address, "user_agent": user_agent[:200], "2fa_used": False},
         )
 
-        return jsonify(
-            {
-                "message": "Login successful",
-                "user": {"id": user_id, "email": user_email, "role": user_role, "org_id": user_org_id},
-            }
-        ), 200
+        body = {
+            "message": "Login successful",
+            "user": {"id": user_id, "email": user_email, "role": user_role, "org_id": user_org_id},
+        }
+        if must_enroll_2fa:
+            body["requires_2fa_enrollment"] = True
+            body["action"] = ENROLLMENT_PAGE
+        return jsonify(body), 200
 
     except ValueError:
         # Kept as a guard even though the client-supplied org_id that used to be parsed
@@ -689,6 +723,8 @@ def get_current_user():
         "org_id": g.org_id,
         "is_active": g.current_user.is_active if g.current_user else True,
         "two_factor_enabled": g.current_user.two_factor_enabled if g.current_user else False,
+        "two_factor_required": two_factor_required(g.current_user),
+        "two_factor_enrollment_required": enrollment_required(g.current_user),
     }
 
     org = (
@@ -705,6 +741,10 @@ def get_current_user():
 
 
 @auth_bp.route("/verify-2fa", methods=["POST"])
+@limiter.limit(
+    "1000 per minute" if USE_RELAXED_AUTH_RATE_LIMITS else "5 per minute;20 per hour",
+    key_func=_pending_2fa_rate_limit_key,
+)
 @traced("auth.verify_2fa")
 def verify_two_factor():
     """Verify TOTP token during login.
@@ -809,9 +849,7 @@ def verify_two_factor():
             # Try TOTP verification for 6-digit codes
             totp_valid = auth_service.verify_totp(user, token)
             if not totp_valid:
-                # TOTP failed - log failure
-                log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
-                return jsonify({"error": "Invalid 2FA token or backup code"}), 401
+                return _reject_2fa_code(user_id, user_org_id)
         elif is_backup_code:
             # For 8-character codes, try backup code directly
             backup_code_valid = auth_service.verify_backup_code(user_id, token)
@@ -819,13 +857,10 @@ def verify_two_factor():
                 backup_code_used = True
                 log_action("2fa_backup_code_used", "user", user_id, None, user_org_id, user_id)
             else:
-                # Backup code invalid
-                log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
-                return jsonify({"error": "Invalid 2FA token or backup code"}), 401
+                return _reject_2fa_code(user_id, user_org_id)
         else:
             # Should not reach here due to validation above, but safety check
-            log_action("2fa_failure", "user", user_id, None, user_org_id, user_id)
-            return jsonify({"error": "Invalid 2FA token or backup code"}), 401
+            return _reject_2fa_code(user_id, user_org_id)
 
         # Rotate session ID on successful 2FA verification (session fixation protection)
         # Rotate session (clears everything)
@@ -866,7 +901,9 @@ def verify_two_factor():
                 device_token = trusted_device_repo.generate_device_token()
                 hashed_token = trusted_device_repo.hash_device_token(device_token)
                 expires_at = TrustedDevice.get_expiration_date()
-                trusted_device_repo.create_trusted_device(user_org_id, user_id, hashed_token, device_fingerprint, expires_at)
+                trusted_device_repo.create_trusted_device(
+                    user_org_id, user_id, hashed_token, device_fingerprint, expires_at
+                )
 
             db.commit()
 
@@ -1137,6 +1174,10 @@ def disable_2fa():
     All operations (delete codes, disable 2FA) are wrapped in a transaction.
     """
     user = g.current_user
+    if two_factor_required(user):
+        return jsonify(
+            {"error": "Administrators must keep two-factor authentication on.", "code": "two_factor_required"}
+        ), 403
 
     db = db_session()
     try:

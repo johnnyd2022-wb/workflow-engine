@@ -1000,6 +1000,10 @@
                 errorDiv.style.display = 'block';
                 submitButton.disabled = false;
               }
+            } else if (data.requires_2fa_enrollment) {
+              // Admins must set up 2FA before anything else (the server enforces it too)
+              closeModal('loginModal');
+              window.location.href = data.action || '/core/settings?enroll2fa=1';
             } else {
               // Success - close modal and redirect
               closeModal('loginModal');
