@@ -141,6 +141,12 @@
   .app-layout {
     display: flex;
     min-height: 100vh;
+    /* Continue the fixed sidebar's dark surface below one viewport on long pages. */
+    background: linear-gradient(to right, var(--sidebar-bg-to) 260px, transparent 260px);
+  }
+
+  .app-layout:has(> .sidebar.collapsed) {
+    background: linear-gradient(to right, var(--sidebar-bg-to) 72px, transparent 72px);
   }
   
   .main-content {
@@ -395,12 +401,11 @@
     margin-top: auto;
   }
   
-  /* Sidebar Toggle Button - Centered and Overlapping */
+  /* Keep the collapse control inside the sidebar, clear of the page content. */
   .sidebar-toggle-btn {
     position: absolute;
-    top: 50%;
-    right: -20px;
-    transform: translateY(-50%);
+    top: 20px;
+    right: 12px;
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -414,18 +419,17 @@
     z-index: 200;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(0, 100, 255, 0.1);
     transition: all var(--transition-fast);
-    animation: subtle-pulse 2s ease-in-out infinite;
   }
   
   .sidebar-toggle-btn:hover {
     background: var(--primary-dark);
     border-color: var(--bg-primary);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(0, 100, 255, 0.15);
-    transform: translateY(-50%) scale(1.1);
+    transform: scale(1.1);
   }
   
   .sidebar-toggle-btn:active {
-    transform: translateY(-50%) scale(0.95);
+    transform: scale(0.95);
   }
   
   .sidebar-toggle-btn svg {
@@ -435,16 +439,15 @@
   }
   
   .sidebar.collapsed .sidebar-toggle-btn {
-    right: -20px;
+    right: 16px;
   }
-  
-  @keyframes subtle-pulse {
-    0%, 100% {
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(0, 100, 255, 0.1);
-    }
-    50% {
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 6px rgba(0, 100, 255, 0.2);
-    }
+
+  .sidebar.collapsed .sidebar-header {
+    display: none;
+  }
+
+  .sidebar.collapsed .sidebar-nav {
+    padding-top: 72px;
   }
   
   .sidebar-user {
@@ -489,6 +492,11 @@
   
   /* Sidebar: bottom bar, icons only on mobile (0–767px) */
   @media (max-width: 767px) {
+    .app-layout,
+    .app-layout:has(> .sidebar.collapsed) {
+      background: none;
+    }
+
     .sidebar {
       left: 0;
       right: 0;
@@ -502,6 +510,9 @@
       border-top: 1px solid var(--sidebar-border);
       justify-content: center;
       padding: 0 8px;
+    }
+    .sidebar.collapsed {
+      width: 100%;
     }
     .sidebar-header {
       display: none;
@@ -520,6 +531,9 @@
       justify-content: space-around;
       padding: 6px 0;
       margin: 0;
+    }
+    .sidebar.collapsed .sidebar-nav {
+      padding: 6px 0;
     }
     .sidebar .nav-label {
       display: none;
