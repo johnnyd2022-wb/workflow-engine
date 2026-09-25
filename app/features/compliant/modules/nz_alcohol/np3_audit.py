@@ -1806,6 +1806,11 @@ GUIDED_STEP_LIMIT = 3
 _SEVERITY_RANK = {"overdue": 0, "attention": 1, "due-soon": 2}
 # kind -> (health-card filter that opens the matching register view, plural title, description)
 _GUIDED_GROUPS = {
+    "missing-evidence": (
+        "attention",
+        "{n} checks need evidence",
+        "Open each check and record the evidence needed for its current state.",
+    ),
     "overdue-review": (
         "overdue",
         "{n} NP3 reviews are overdue",
