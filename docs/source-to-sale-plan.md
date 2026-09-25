@@ -225,7 +225,7 @@ want it, and never produce a recall list that can't be trusted.
     - Pack size is `units_per_line` on a product mapping (migration
       `product_mapping_pack_size_001`), shown and editable in CRM configuration.
 
-- [x] **1.3 Go live with a stocktake instead of reconstructing history.** *Critical · L* (!MR)
+- [x] **1.3 Go live with a stocktake instead of reconstructing history.** *Critical · L* (!337)
   - Evidence: the only way to get traceable history was to rebuild past production.
     Adding a finished product by hand warns that it "creates untraceable stock and will
     require reconciliation" (`app/core/frontend/inventory/add_manual.html:211`), so the
