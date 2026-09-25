@@ -4427,7 +4427,7 @@
       // Header (clickable to expand/collapse)
       const stepHeader = document.createElement('div');
       stepHeader.style.cssText = 'display: flex; align-items: center; gap: 12px; cursor: pointer;';
-      stepHeader.onclick = () => toggleStepSummary(stepId);
+      stepHeader.onclick = () => window.ProcessModalStepSummaryUi.toggleStepSummary(stepId);
 
       // Drag handle hint (clickable header still works; drag anywhere on card).
       if (step && step.id) {
@@ -4606,31 +4606,6 @@
 
 
 
-  // Toggle step summary expand/collapse
-  function toggleStepSummary(stepId) {
-    const summaryCard = document.getElementById(stepId);
-    if (!summaryCard) return;
-    
-    const expandedDetails = summaryCard.querySelector('.step-summary-expanded');
-    const collapsedSummary = summaryCard.querySelector('.step-summary-collapsed');
-    const expandIcon = summaryCard.querySelector('.step-summary-expand-icon');
-    
-    if (!expandedDetails || !expandIcon) return;
-    
-    const isExpanded = summaryCard.dataset.expanded === 'true';
-    if (isExpanded) {
-      expandedDetails.style.display = 'none';
-      if (collapsedSummary) collapsedSummary.style.display = 'block';
-      expandIcon.style.transform = 'rotate(0deg)';
-      summaryCard.dataset.expanded = 'false';
-    } else {
-      expandedDetails.style.display = 'block';
-      if (collapsedSummary) collapsedSummary.style.display = 'none';
-      expandIcon.style.transform = 'rotate(180deg)';
-      summaryCard.dataset.expanded = 'true';
-    }
-  }
-  
   // Start editing an existing step (from the "existing steps" view when editing a non-draft process)
   window.startEditingStep = async function(stepId) {
     const step = createdSteps.find(s => String(s.id) === String(stepId));
