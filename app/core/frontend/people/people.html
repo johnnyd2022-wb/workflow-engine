@@ -1,0 +1,137 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}People{% endblock %}
+
+{% block body_class %}people-page{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Manage who can see and do what in your organisation">
+  <style>
+    .people-shell { display: flex; flex-direction: column; gap: 20px; padding-block: 24px 48px; }
+    .people-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+    .people-header h1 { margin: 0; font-size: 26px; color: var(--text-primary); }
+    .people-header p { margin: 4px 0 0; color: var(--text-secondary); font-size: 14px; max-width: 60ch; }
+    .people-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); }
+    .people-table-wrap { overflow-x: auto; }
+    .people-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 720px; }
+    .people-table th { text-align: left; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+      color: var(--text-secondary); padding: 12px 16px; border-bottom: 1px solid var(--border-default); }
+    .people-table td { padding: 12px 16px; border-bottom: 1px solid var(--border-default); vertical-align: middle; color: var(--text-primary); }
+    .people-table tr:last-child td { border-bottom: 0; }
+    .people-name { font-weight: 600; }
+    .people-email { color: var(--text-secondary); font-size: 13px; }
+    .people-you { font-size: 12px; color: var(--text-secondary); margin-left: 6px; }
+    .people-status { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .people-status--active { background: #e3f4ec; color: #17603f; }
+    .people-status--invited { background: #fdf3dc; color: #7a5410; }
+    .people-status--deactivated, .people-status--expired { background: #eef0f3; color: #4b5563; }
+    .people-meta { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+    .people-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .people-actions button, .people-role-select { font: inherit; font-size: 13px; }
+    .people-role-select { padding: 6px 8px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); }
+    .people-link-btn { background: none; border: 0; padding: 4px 6px; color: var(--azure-blue); cursor: pointer; text-decoration: underline; }
+    .people-link-btn--danger { color: var(--error); }
+    .people-roles { padding: 16px 20px; }
+    .people-roles summary { cursor: pointer; font-weight: 600; color: var(--text-primary); }
+    .people-roles dl { display: grid; grid-template-columns: 9em 1fr; gap: 8px 16px; margin: 12px 0 0; font-size: 14px; }
+    .people-roles dt { font-weight: 600; color: var(--text-primary); }
+    .people-roles dd { margin: 0; color: var(--text-secondary); }
+    .people-message { padding: 12px 16px; border-radius: var(--radius-md); font-size: 14px; }
+    .people-message--error { background: var(--error-bg, #fef2f2); color: var(--error, #b42318); border: 1px solid var(--error, #b42318); }
+    .people-message--ok { background: #e3f4ec; color: #17603f; border: 1px solid #9ad3b6; }
+    .people-dialog { border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 0; max-width: min(34rem, 94vw); width: 100%;
+      background: var(--bg-card); color: var(--text-primary); }
+    .people-dialog { margin: auto; }
+    .people-dialog [hidden], .people-shell [hidden] { display: none !important; }
+    .people-dialog::backdrop { background: rgba(15, 23, 42, .45); }
+    .people-dialog form, .people-dialog .people-invite-result { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
+    .people-dialog h2 { margin: 0; font-size: 18px; }
+    .people-dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 500; }
+    .people-dialog input, .people-dialog select { font: inherit; padding: 9px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default);
+      background: var(--bg-card); color: var(--text-primary); }
+    .people-dialog .people-hint { font-size: 13px; color: var(--text-secondary); font-weight: 400; }
+    .people-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .people-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .people-invite-link { display: flex; gap: 8px; }
+    .people-invite-link input { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+    @media (max-width: 560px) { .people-row2 { grid-template-columns: 1fr; } .people-roles dl { grid-template-columns: 1fr; } }
+  </style>
+{% endblock %}
+
+{% block topbar %}{% endblock %}
+
+{% block content %}
+  <div class="max-content people-shell" data-people-root>
+    <header class="people-header">
+      <div>
+        <h1>People</h1>
+        <p>Who can use this organisation, and what each person can see and do. The server enforces every role.</p>
+      </div>
+      <button type="button" class="btn btn-primary" data-people-add>Add person</button>
+    </header>
+
+    <div class="people-message" data-people-message hidden role="status"></div>
+
+    <section class="people-card people-table-wrap" aria-label="People in this organisation">
+      <table class="people-table">
+        <thead>
+          <tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Status</th><th scope="col">2FA</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr>
+        </thead>
+        <tbody data-people-rows><tr><td colspan="5">Loading…</td></tr></tbody>
+      </table>
+    </section>
+
+    <details class="people-card people-roles">
+      <summary>What each role can do</summary>
+      <dl data-people-role-guide></dl>
+    </details>
+  </div>
+
+  <dialog class="people-dialog" data-people-dialog aria-labelledby="people-dialog-title">
+    <form data-people-form method="dialog" novalidate>
+      <h2 id="people-dialog-title">Add a person</h2>
+      <label>Email<input type="email" name="email" id="people-email" required autocomplete="off"></label>
+      <div class="people-row2">
+        <label>First name<input name="first_name" id="people-first-name" autocomplete="off"></label>
+        <label>Last name<input name="last_name" id="people-last-name" autocomplete="off"></label>
+      </div>
+      <label>Role
+        <select name="role" id="people-role" data-people-role-select></select>
+        <span class="people-hint" data-people-role-hint></span>
+      </label>
+      <label data-people-expiry-field hidden>Access ends
+        <input type="date" name="access_expires_at" id="people-access-expires">
+        <span class="people-hint">Auditors need an end date, at most 90 days away. Access stops at the end of that day.</span>
+      </label>
+      <div class="people-message people-message--error" data-people-form-error hidden></div>
+      <div class="people-dialog-actions">
+        <button type="button" class="btn btn-secondary" data-people-cancel>Cancel</button>
+        <button type="submit" class="btn btn-primary">Create invite link</button>
+      </div>
+    </form>
+    <div class="people-invite-result" data-people-invite-result hidden>
+      <h2>Send this link to <span data-people-invite-email></span></h2>
+      <p class="people-hint">It works once and expires in 7 days. They'll set their own password. This link isn't shown again, but you can create a new one from the list.</p>
+      <div class="people-invite-link">
+        <input type="text" readonly id="people-invite-url" data-people-invite-url aria-label="Invite link">
+        <button type="button" class="btn btn-secondary" data-people-copy>Copy</button>
+      </div>
+      <div class="people-dialog-actions"><button type="button" class="btn btn-primary" data-people-done>Done</button></div>
+    </div>
+  </dialog>
+  <dialog class="people-dialog" data-people-expiry-dialog aria-labelledby="people-expiry-title">
+    <div class="people-invite-result">
+      <h2 id="people-expiry-title">Auditor access for <span data-people-expiry-name></span></h2>
+      <label>Access ends<input type="date" id="people-expiry-date">
+        <span class="people-hint">At most 90 days away. Access stops at the end of that day.</span></label>
+      <div class="people-dialog-actions">
+        <button type="button" class="btn btn-secondary" data-people-expiry-cancel>Cancel</button>
+        <button type="button" class="btn btn-primary" data-people-expiry-ok>Make auditor</button>
+      </div>
+    </div>
+  </dialog>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/people.js"></script>
+{% endblock %}

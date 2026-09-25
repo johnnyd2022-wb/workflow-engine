@@ -73,7 +73,7 @@ from app.core.domain.inventory_quantity_guard import (
     InventoryQuantityWriteReason,
     allow_inventory_quantity_write,
 )
-from app.core.security.permissions import requires_auth, requires_role
+from app.core.security.permissions import has_permission, requires_auth, requires_role
 from app.core.utils.internal_counters import inc_counter
 from app.core.utils.inventory_quantity import (
     assert_movement_unit_matches_item_canonical,
@@ -5231,7 +5231,7 @@ def _dashboard_compliant_workspace_summary(
         "attention_count": 0,
         "modules": [],
     }
-    if not config.compliant_enabled:
+    if not config.compliant_enabled or not has_permission(g.current_user, "compliance.view"):
         return unavailable
 
     try:
@@ -5433,7 +5433,7 @@ def get_dashboard_summary():
     }
     revenue_daily_mtd: list[dict[str, Any]] = []
 
-    if config.crm_enabled:
+    if config.crm_enabled and has_permission(g.current_user, "sales.view"):
         try:
             from app.features.crm.services.crm_service import CRMService
 

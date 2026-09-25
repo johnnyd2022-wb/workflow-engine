@@ -283,6 +283,18 @@
             </div>
           </section>
 
+          {% if can('users.manage') %}
+          <section class="card settings-card">
+            <div class="card-header" style="padding-bottom: 12px;">
+              <h2 class="card-title" style="margin-bottom: 0;">People and roles</h2>
+            </div>
+            <div class="card-content">
+              <p style="color: var(--text-secondary); font-size: 14px; margin: 0 0 12px;">Invite people, choose what each person can see and do, and remove access.</p>
+              <a class="btn btn-primary" href="/core/people">Manage people</a>
+            </div>
+          </section>
+          {% endif %}
+
           <section class="card settings-card">
             <div class="card-header" style="padding-bottom: 12px;">
               <h2 class="card-title" style="margin-bottom: 0;">Two-Factor Authentication</h2>

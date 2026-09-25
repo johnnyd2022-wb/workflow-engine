@@ -18,11 +18,15 @@ from app.api.middleware.session_security import (
 )
 from app.core.db import db_session
 from app.core.db.models.trusted_device import TrustedDevice
+from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.trusted_device_repo import TrustedDeviceRepository
 from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
+from app.core.security.access_policy import ROLE_LABELS, access_expired
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
+from app.core.security.people import PeopleError, hash_invite_token, permission_list, validate_new_password
 from app.core.security.permissions import requires_auth
+from app.core.security.tenant_scope import unscoped
 from app.core.security.two_factor_policy import ENROLLMENT_PAGE, enrollment_required, two_factor_required
 from app.core.utils.log_action import log_action
 from app.observability import get_logger, start_span, traced
@@ -488,6 +492,12 @@ def login():
         user_repo.reset_failed_login_attempts(user.id)
         db.commit()
 
+        # Plan 0.4: time-limited access (e.g. an Auditor) that has ended. Only reachable
+        # with the right password, so saying why doesn't help anyone enumerate accounts.
+        if access_expired(user):
+            log_action("login_access_expired", "user", user.id, {"ip_address": ip_address}, user.org_id, user.id)
+            return jsonify({"error": "Your access to this organisation has ended.", "code": "access_expired"}), 401
+
         # Check if 2FA is enabled
         if user.two_factor_enabled:
             # Check for trusted device - following Google/AWS/Azure patterns
@@ -658,6 +668,82 @@ def login():
     # Don't close session here - let middleware teardown handle it
 
 
+@auth_bp.route("/accept-invite", methods=["POST"])
+@limiter.limit("1000 per minute" if USE_RELAXED_AUTH_RATE_LIMITS else "10 per 1 minute")
+@traced("auth.accept_invite")
+def accept_invite():
+    """Set a password from an admin's invite link and activate the account (plan 0.4)."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "JSON body required"}), 400
+    token = (data.get("token") or "").strip()
+    if not token:
+        return jsonify({"error": "token is required"}), 400
+
+    db = db_session()
+    try:
+        user = _pending_invite_user(db, token)
+        if user is None:
+            return jsonify({"error": "This invite link isn't valid or has expired. Ask your admin for a new one."}), 400
+        try:
+            validate_new_password(data.get("password") or "", data.get("password_confirm"))
+        except PeopleError as e:
+            return jsonify({"error": str(e)}), 400
+
+        user.password_hash = AuthService.hash_password(data["password"])
+        user.is_active = True
+        user.invite_token_hash = None
+        user.invite_expires_at = None
+        for field in ("first_name", "last_name"):
+            value = (data.get(field) or "").strip()
+            if value:
+                setattr(user, field, value[:255])
+        db.commit()
+        log_action("accept_invite", "user", user.id, None, user.org_id, user.id)
+        return jsonify({"message": "Your account is ready. Sign in to continue.", "email": user.email}), 200
+    except Exception:
+        db.rollback()
+        logger.exception("accept_invite_failed")
+        return jsonify({"error": "Internal server error"}), 500
+
+
+def _pending_invite_user(db, token: str):
+    """The not-yet-active user this token invites, or None if unknown or expired."""
+    from app.core.db.models.user import User
+
+    with unscoped():
+        user = db.query(User).filter(User.invite_token_hash == hash_invite_token(token)).one_or_none()
+    if user is None or user.is_active or not user.invite_expires_at:
+        return None
+    if user.invite_expires_at <= datetime.now(UTC):
+        return None
+    return user
+
+
+invite_bp = Blueprint("invite", __name__)
+
+
+@invite_bp.route("/invite/<token>", methods=["GET"])
+def accept_invite_page(token: str):
+    """The page an invite link opens: shows who it's for and asks for a password."""
+    from flask import render_template
+
+    db = db_session()
+    user = _pending_invite_user(db, token)
+    context = {"token": token, "valid": user is not None}
+    if user is not None:
+        with unscoped():
+            org = OrganisationRepository(db).get_org_by_id(user.org_id)
+        context.update(
+            email=user.email,
+            org_name=org.name if org else "",
+            role_label=ROLE_LABELS.get(user.role, user.role.value),
+            first_name=user.first_name or "",
+            last_name=user.last_name or "",
+        )
+    return render_template("invite.html", **context), (200 if user is not None else 404)
+
+
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     """Logout and clear session
@@ -725,6 +811,13 @@ def get_current_user():
         "two_factor_enabled": g.current_user.two_factor_enabled if g.current_user else False,
         "two_factor_required": two_factor_required(g.current_user),
         "two_factor_enrollment_required": enrollment_required(g.current_user),
+        "role_label": ROLE_LABELS.get(g.current_user.role, g.user_role) if g.current_user else None,
+        "permissions": permission_list(g.current_user) if g.current_user else [],
+        "access_expires_at": (
+            g.current_user.access_expires_at.isoformat()
+            if g.current_user is not None and g.current_user.access_expires_at
+            else None
+        ),
     }
 
     org = (
