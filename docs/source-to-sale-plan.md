@@ -590,6 +590,7 @@ split.
         - [x] Extract process-step summary rendering and reorder UI into `process-modal-step-summary.js` (!373).
         - [x] Extract process-step order persistence and stale-write recovery into `process-modal-step-order.js` (!374).
         - [x] Extract the `?edit=<stepId>` resume flow into `process-modal-deep-link-edit.js` (!375).
+        - [x] Extract process wizard step display updates into `process-modal-navigation.js` (!376).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
