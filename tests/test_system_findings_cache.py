@@ -16,11 +16,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
-from app.core.backend import system_findings_cache as sfc
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.system_findings_cache import SystemFindingsCache
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
+from app.features.compliance_checks import system_findings_cache as sfc
 from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
 
 PASSWORD = DEFAULT_TEST_PASSWORD
@@ -285,7 +285,7 @@ def test_banner_payload_is_slimmed(db, authed):
 def test_get_check_results_is_the_full_merged_set(db, authed):
     """get_check_results() returns the same check ids CoreChecksRunner.run_all_checks()
     does -- the expensive slice from cache, the cheap ones live."""
-    from app.core.backend.corechecks import CoreChecksRunner
+    from app.features.compliance_checks.routes.corechecks import CoreChecksRunner
 
     org, _client = authed
     merged = sfc.get_check_results(org.id, db)
@@ -348,7 +348,7 @@ def test_prewarm_populates_a_fresh_row_without_a_request(db, authed):
 
 
 def _raise_for(check_id_to_fail, message="check exploded"):
-    from app.core.backend.corechecks import CoreChecksRunner
+    from app.features.compliance_checks.routes.corechecks import CoreChecksRunner
 
     real = CoreChecksRunner.run_check
 
@@ -362,7 +362,7 @@ def _raise_for(check_id_to_fail, message="check exploded"):
 
 def test_live_check_failure_is_a_flagged_result_not_dropped(db, authed, monkeypatch):
     org, _client = authed
-    from app.core.backend.corechecks import CoreChecksRunner
+    from app.features.compliance_checks.routes.corechecks import CoreChecksRunner
 
     monkeypatch.setattr(CoreChecksRunner, "run_check", _raise_for("untracked_items", "db exploded"))
 
@@ -376,7 +376,7 @@ def test_live_check_failure_is_a_flagged_result_not_dropped(db, authed, monkeypa
 
 def test_cached_check_failure_is_returned_visible_and_not_frozen_into_cache(db, authed, monkeypatch):
     org, _client = authed
-    from app.core.backend.corechecks import CoreChecksRunner
+    from app.features.compliance_checks.routes.corechecks import CoreChecksRunner
 
     monkeypatch.setattr(CoreChecksRunner, "run_check", _raise_for("expired_materials", "dag exploded"))
 
@@ -401,7 +401,7 @@ def test_cached_check_failure_is_returned_visible_and_not_frozen_into_cache(db, 
 
 def test_prewarm_does_not_cache_a_failed_slice(db, authed, monkeypatch):
     org, _client = authed
-    from app.core.backend.corechecks import CoreChecksRunner
+    from app.features.compliance_checks.routes.corechecks import CoreChecksRunner
 
     monkeypatch.setattr(CoreChecksRunner, "run_check", _raise_for("expired_materials"))
     sfc.prewarm(org.id, db)
@@ -414,8 +414,8 @@ def test_system_status_is_not_healthy_while_a_check_is_failing():
     flagged 'Check failed' result (data=None) yields a CHECK_FAILED signal and drops the
     state off 'healthy'. Without this, _signals_from_results ignored data-less results and
     a failing check left the banner green."""
-    from app.core.backend.corechecks import CheckResult
-    from app.core.backend.system_status import _signals_from_results, derive_health_state
+    from app.features.compliance_checks.routes.corechecks import CheckResult
+    from app.features.compliance_checks.system_status import _signals_from_results, derive_health_state
 
     healthy = CheckResult(check_id="untracked_items", flagged=False, message=None, data={"untracked_items": []})
     failed = CheckResult(check_id="output_expiry", flagged=True, message="Check failed: boom", data=None)

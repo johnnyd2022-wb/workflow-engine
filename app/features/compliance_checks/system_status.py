@@ -12,12 +12,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.backend.checks.output_expiry_check import SEVERITY_EXPIRED as OUTPUT_EXPIRY_SEVERITY_EXPIRED
-from app.core.backend.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
-from app.core.backend.corechecks import CheckResult
 from app.core.db.models.execution import Execution
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.process import Process
+from app.features.compliance_checks.checks.output_expiry_check import SEVERITY_EXPIRED as OUTPUT_EXPIRY_SEVERITY_EXPIRED
+from app.features.compliance_checks.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
+from app.features.compliance_checks.routes.corechecks import CheckResult
 
 
 def _safe_qty_positive(raw: Any) -> bool:
