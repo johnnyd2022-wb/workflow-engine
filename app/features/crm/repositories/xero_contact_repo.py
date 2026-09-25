@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.utils.time import utc_now
@@ -79,6 +79,7 @@ class XeroContactRepository:
         sort_dir: str = "asc",
         page: int = 1,
         page_size: int = 50,
+        missing_contact: bool = False,
     ) -> tuple[list[XeroContact], int]:
         q = self.db.query(XeroContact).filter(XeroContact.org_id == org_id)
 
@@ -95,6 +96,11 @@ class XeroContactRepository:
         if status:
             q = q.filter(XeroContact.contact_status == status.upper())
 
+        if missing_contact:
+            has_email = func.nullif(func.trim(XeroContact.email_address), "").isnot(None)
+            has_phone = func.nullif(func.trim(XeroContact.phone_number), "").isnot(None)
+            q = q.filter(~has_email | ~has_phone)
+
         sort_col = {
             "name": XeroContact.name,
             "email": XeroContact.email_address,
@@ -110,3 +116,24 @@ class XeroContactRepository:
 
     def count_for_org(self, org_id: UUID) -> int:
         return self.db.query(XeroContact).filter(XeroContact.org_id == org_id).count()
+
+    def contact_completeness_for_org(self, org_id: UUID) -> dict[str, int]:
+        has_email = func.nullif(func.trim(XeroContact.email_address), "").isnot(None)
+        has_phone = func.nullif(func.trim(XeroContact.phone_number), "").isnot(None)
+        total, with_email, with_phone, with_both = (
+            self.db.query(
+                func.count(XeroContact.id),
+                func.count(case((has_email, 1))),
+                func.count(case((has_phone, 1))),
+                func.count(case((has_email & has_phone, 1))),
+            )
+            .filter(XeroContact.org_id == org_id)
+            .one()
+        )
+        return {
+            "total": total,
+            "with_email": with_email,
+            "with_phone": with_phone,
+            "with_both": with_both,
+            "missing_any": total - with_both,
+        }
