@@ -281,7 +281,8 @@ do not introduce reverse imports into existing domain code.
       - /core/inventory/dispose
       - /core/inventory/dispose/confirm
       - /api/core/inventory/wastage
-    backend:  app/core/backend/backend.py:3526-3541 (advisory lock), :3542-3946 (record+list)
+    backend:  app/features/wastage/routes/wastage_routes.py (disposal pages, advisory lock,
+              record+list routes; registered on core_bp)
               app/core/utils/inventory_wastage_quantity.py (89)
     models:   InventoryWastage
     repos:    wastage_repo
@@ -292,7 +293,7 @@ do not introduce reverse imports into existing domain code.
     depended on by:  compliance-checks, dashboard
 
     - Idempotency is a Postgres advisory lock keyed on batch hash
-      (_pg_advisory_lock_wastage_idempotency, backend.py:3526) — not the ApiIdempotencyKey
+      (_pg_advisory_lock_wastage_idempotency, wastage_routes.py) — not the ApiIdempotencyKey
       table the rest of the app uses. Two different mechanisms; don't assume one.
     - Separate table and separate compliance meaning from an inventory adjustment. Writing
       stock off is not the same event as correcting a count.
