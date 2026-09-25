@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_FLOOR, Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.utils.inventory_quantity import parse_stored_quantity_to_decimal
+from app.core.utils.unit_conversion import is_count_unit
 from app.features.crm.models.product_mapping import ProductMapping
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.models.xero_contact import XeroContact
@@ -338,7 +339,106 @@ class SalesTraceabilityService:
                 }
             )
         to_assign = self._lines_to_assign(org_id, limit) if strategy == "manual" else []
-        return {"mode": strategy, "pending_review": list(grouped.values()), "to_assign": to_assign}
+        unmatched = self._unmatched_sales_lines(org_id, limit)
+        return {
+            "mode": strategy,
+            "pending_review": list(grouped.values()),
+            "to_assign": to_assign,
+            "unmatched": unmatched,
+        }
+
+    def _unmatched_sales_lines(self, org_id: UUID, limit: int) -> list[dict]:
+        """Return active post-go-live sale lines that have no mapping or enough stock."""
+        go_live = self._go_live_date(org_id)
+        config = self.config_repo.get_for_org(org_id)
+        strict = True if config is None else bool(config.strict_mapping)
+        mappings = (
+            self.db.query(ProductMapping)
+            .filter(ProductMapping.org_id == org_id, ProductMapping.is_active.is_(True))
+            .all()
+        )
+        allocated = {
+            (a.xero_invoice_id, a.xero_line_key)
+            for a in self.db.query(SalesFifoAllocation.xero_invoice_id, SalesFifoAllocation.xero_line_key)
+            .filter(SalesFifoAllocation.org_id == org_id)
+            .all()
+        }
+        invoices = (
+            self.db.query(XeroInvoice)
+            .filter(XeroInvoice.org_id == org_id)
+            .order_by(XeroInvoice.date.asc().nulls_last(), XeroInvoice.created_at.asc())
+            .all()
+        )
+        stock_cache: dict[tuple[str, UUID | None], Decimal] = {}
+        rows = []
+        for invoice in invoices:
+            if (invoice.invoice_type or "").upper() != _SALE_INVOICE_TYPE or (
+                invoice.status or ""
+            ).upper() not in _SALE_STATUSES:
+                continue
+            if go_live is not None and invoice.date is not None and invoice.date < go_live:
+                continue
+            lines = (
+                self.db.query(XeroInvoiceLineItem)
+                .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id == invoice.id)
+                .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
+                .all()
+            )
+            for index, line in enumerate(lines):
+                line_key = (line.xero_line_item_id or f"position:{index + 1}").strip()
+                if (invoice.xero_invoice_id, line_key) in allocated:
+                    continue
+                match = self._find_mapping(line, mappings, strict)
+                quantity = _positive_quantity(line.quantity)
+                if quantity is None:
+                    continue
+                reason = "unmapped"
+                product_name = None
+                needed = quantity
+                available = Decimal("0")
+                if match is not None:
+                    product_name = match.biz_e_product_name
+                    needed = quantity * int(match.units_per_line or 1)
+                    stock_key = (product_name, match.biz_e_source_output_id)
+                    if stock_key not in stock_cache:
+                        items = self.db.query(InventoryItem).filter(
+                            InventoryItem.org_id == org_id,
+                            InventoryItem.name == product_name,
+                            InventoryItem.inventory_type == "final_product",
+                            InventoryItem.quantity > 0,
+                        )
+                        if match.biz_e_source_output_id is not None:
+                            items = items.filter(InventoryItem.source_output_id == match.biz_e_source_output_id)
+                        available = Decimal("0")
+                        for item in items.all():
+                            item_quantity = parse_stored_quantity_to_decimal(item.quantity)
+                            if is_count_unit(item.unit):
+                                item_quantity = item_quantity.to_integral_value(rounding=ROUND_FLOOR)
+                            available += item_quantity
+                        stock_cache[stock_key] = available
+                    available = stock_cache[stock_key]
+                    if available >= needed:
+                        continue
+                    reason = "no_stock"
+                else:
+                    reason = "unmapped"
+                rows.append(
+                    {
+                        "invoice_id": invoice.xero_invoice_id,
+                        "line_key": line_key,
+                        "invoice_number": invoice.invoice_number,
+                        "invoice_date": invoice.date.isoformat() if invoice.date else None,
+                        "description": line.description,
+                        "item_code": line.item_code,
+                        "product_name": product_name,
+                        "quantity": f"{needed.normalize():f}",
+                        "available": f"{available.normalize():f}",
+                        "reason": reason,
+                    }
+                )
+                if len(rows) >= limit:
+                    return rows
+        return rows
 
     def _lines_to_assign(self, org_id: UUID, limit: int) -> list[dict]:
         go_live = self._go_live_date(org_id)

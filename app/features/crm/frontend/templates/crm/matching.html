@@ -104,5 +104,19 @@
       </div>
     </template>
   </div>
+
+  <div class="crm-card" style="margin-top:12px;">
+    <div class="crm-analytics-header"><span class="crm-analytics-title" x-text="`Unmatched sales (${unmatched.length})`"></span></div>
+    <p class="mt-meta" style="padding:0 16px;" x-show="unmatched.length">These invoice lines have no product mapping or cannot be filled from current stock. Fix the mapping or receive stock, then re-run matching.</p>
+    <div x-show="!loading && !unmatched.length" class="mt-meta" style="padding:14px 16px;">No unmatched sales.</div>
+    <template x-for="line in unmatched" :key="line.invoice_id + line.line_key">
+      <div class="mt-line">
+        <div><div class="mt-title" x-text="line.description || line.item_code || 'Unlabelled sale'"></div>
+          <div class="mt-meta" x-text="`${line.invoice_number || 'Invoice'} · ${fmtDate(line.invoice_date)} · ${line.quantity || '—'} ${line.product_name || ''}`"></div></div>
+        <div class="mt-meta" x-text="unmatchedReason(line)"></div>
+        <div class="mt-actions"><a class="crm-btn crm-btn--primary crm-btn--sm" :href="fixLink(line)" x-text="fixLabel(line)"></a></div>
+      </div>
+    </template>
+  </div>
 </div>
 {% endblock %}
