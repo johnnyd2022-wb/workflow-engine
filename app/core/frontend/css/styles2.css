@@ -141,6 +141,7 @@
   .app-layout {
     display: flex;
     min-height: 100vh;
+    background: linear-gradient(180deg, var(--sidebar-bg-from), var(--sidebar-bg-to)) left top / 260px 100% no-repeat;
   }
   
   .main-content {
@@ -199,6 +200,10 @@
   
   .sidebar.collapsed {
     width: 72px;
+  }
+
+  .app-layout:has(.sidebar.collapsed) {
+    background-size: 72px 100%;
   }
   
   .sidebar.collapsed .sidebar-footer {
@@ -489,6 +494,10 @@
   
   /* Sidebar: bottom bar, icons only on mobile (0–767px) */
   @media (max-width: 767px) {
+    .app-layout,
+    .app-layout:has(.sidebar.collapsed) {
+      background: none;
+    }
     .sidebar {
       left: 0;
       right: 0;
