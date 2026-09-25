@@ -580,6 +580,7 @@ split.
         - [x] Extract the summary/compliance panel into `process-modal-summary.js` (!362).
         - [x] Extract step merge and ordering helpers into `process-modal-step-data.js` (!363).
         - [x] Extract input/output row UI helpers into `process-modal-rows.js` (!364).
+        - [x] Extract inventory-card display helpers into `process-modal-inventory-cards.js` (!365).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
