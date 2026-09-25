@@ -225,11 +225,10 @@ mr_e2e:
         if [ "$attempt" -eq 3 ]; then exit 1; fi
         sleep "$((attempt * 15))"
       done
-    - ./ci/setup_server.sh
+    - mkdir -p app/tls
+    - openssl req -x509 -newkey rsa:4096 -nodes -keyout app/tls/app_cert.key -out app/tls/app_cert.pem -days 1 -subj "/CN=localhost" 2>/dev/null
   script:
-    - E2E_BASE_URL="$(cat /tmp/flask.base-url)" ENVIRONMENT=test uv run pytest tests/e2e/ -v
-  after_script:
-    - ./ci/cleanup_server.sh
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/ -v
   only:
     - merge_requests
   allow_failure: false
