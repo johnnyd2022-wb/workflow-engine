@@ -35,8 +35,11 @@ can see and challenge every selection.
   starts PostgreSQL only when the selected tests need it, and installs Node.js, Chromium,
   or starts the local app only when a deliberately selected test requires each runtime.
   Documentation-only work exits before dependency/database setup. UI source changes
-  select the fast frontend/JS regression suites; browser smoke coverage remains the
-  existing deployed `cd_e2e` gate on `main`.
+  select the fast frontend/JS regression suites.
+- `mr_e2e` runs the complete `tests/e2e/` browser suite on every merge request against
+  a local TLS app and test PostgreSQL service. It is a blocking gate independent of
+  relevant-test selection, so even a documentation-only MR exercises the browser flows.
+  `cd_e2e` continues to smoke-test the deployed candidate on `main`.
 - `unit_tests` runs `pytest tests/ -v` on `main` only. This preserves a full-suite gate
   as part of the post-merge CD pipeline before build and deploy. The separate `cd_e2e`
   job remains the browser gate against the deployed candidate, so the unit-test job does
