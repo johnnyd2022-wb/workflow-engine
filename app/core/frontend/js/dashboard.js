@@ -346,7 +346,12 @@
         setText(root, '[data-kpi-operator-actions]', operatorActions.week_to_date || 0);
         setText(root, '[data-kpi-open-action-items]', actionBoard.critical_actions_total || 0);
         setText(root, '[data-kpi-active-batches]', operations.active_executions || 0);
-        setText(root, '[data-kpi-revenue-goal]', formatGoalPct(sales.baseline_attainment_pct));
+        setText(root, '[data-kpi-revenue-goal]', sales.baseline_target_mtd == null
+            ? 'Set target'
+            : formatGoalPct(sales.baseline_attainment_pct));
+        var revenueGoalCard = byData(root, '[data-kpi-revenue-goal-card]');
+        var revenueGoalSpark = revenueGoalCard && revenueGoalCard.querySelector('[data-kpi-spark="monthly_goal"]');
+        if (revenueGoalSpark) revenueGoalSpark.hidden = sales.baseline_target_mtd == null;
         setText(root, '[data-kpi-tasks-week]', tasks.due_this_week_count || 0);
         setText(root, '[data-kpi-overdue]', tasks.overdue_count || 0);
         setText(root, '[data-kpi-throughput-vs-last-week]', formatPct(operations.completed_vs_last_week_pct));
@@ -369,8 +374,16 @@
 
         setText(root, '[data-sales-revenue-mtd]', formatCurrency(sales.current_month_revenue));
         setText(root, '[data-sales-baseline-target]', sales.baseline_target_mtd == null ? 'Not set' : formatCurrency(sales.baseline_target_mtd));
-        setText(root, '[data-sales-baseline-variance]', formatCurrencyVariance(sales.baseline_variance_mtd));
-        setText(root, '[data-sales-mom]', formatPct(sales.revenue_vs_last_month_pct));
+        var baselineVarianceRow = byData(root, '[data-sales-baseline-variance-row]');
+        if (baselineVarianceRow) baselineVarianceRow.hidden = sales.baseline_variance_mtd == null;
+        if (sales.baseline_variance_mtd != null) {
+            setText(root, '[data-sales-baseline-variance]', formatCurrencyVariance(sales.baseline_variance_mtd));
+        }
+        var salesMomRow = byData(root, '[data-sales-mom-row]');
+        if (salesMomRow) salesMomRow.hidden = sales.revenue_vs_last_month_pct == null;
+        if (sales.revenue_vs_last_month_pct != null) {
+            setText(root, '[data-sales-mom]', formatPct(sales.revenue_vs_last_month_pct));
+        }
 
         if (sales.enabled === false) {
             setText(root, '[data-sales-caption]', 'CRM is disabled for this tenant.');

@@ -37,7 +37,7 @@
         <div class="crm-kpi-value" x-text="formatCurrency2(overview.outstanding_receivables)"></div>
         <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`${overview.outstanding_invoice_count || 0} invoices`"></div>
       </button>
-      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openMoMModal()">
+      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openMoMModal()" x-show="monthOnMonthChangePct != null">
         <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">Month on month change</div>
         <div class="crm-kpi-value" :style="monthOnMonthChangePct == null ? 'color:var(--text-primary,#111827);' : (monthOnMonthChangePct >= 0 ? 'color:var(--crm-teal);' : 'color:var(--crm-red);')" x-text="formatPercent(monthOnMonthChangePct)"></div>
         <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`Last ${momPeriodMonths} month${momPeriodMonths > 1 ? 's' : ''} vs prior period`"></div>
