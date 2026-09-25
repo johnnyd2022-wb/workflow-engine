@@ -594,6 +594,7 @@ split.
         - [x] Extract the existing-process step list renderer into `process-modal-existing-steps.js` (!377).
         - [x] Extract process-overview and forward/back wizard actions into `process-modal-navigation-actions.js` (!378).
         - [x] Extract inventory and fixed-expiry validation adapters into `process-modal-validation.js` (!379).
+        - [x] Extract SPA wizard form-state serialization into `process-modal-spa-payloads.js` (!380).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
