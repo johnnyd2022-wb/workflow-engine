@@ -427,7 +427,7 @@ def test_wastage_rejects_non_string_idempotency_key(db, app_client, org):
 
 def test_wastage_batch_rejects_more_than_max_entries(db, app_client, org):
     """AC13: a batch larger than MAX_WASTAGE_BATCH_ENTRIES is rejected outright."""
-    from app.core.backend.backend import MAX_WASTAGE_BATCH_ENTRIES
+    from app.features.wastage.routes.wastage_routes import MAX_WASTAGE_BATCH_ENTRIES
 
     item = InventoryItemFactory(org_id=org.id, quantity="1000", unit="kg")
     db.commit()
