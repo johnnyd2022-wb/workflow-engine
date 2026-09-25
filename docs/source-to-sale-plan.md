@@ -108,7 +108,7 @@ Small, and everything else builds on it.
     folders.~~ Not a repo issue: neither is tracked in git; they are untracked leftovers
     in one local checkout (delete locally if `test_ac9_package_and_factory_wiring_removed`
     fails).
-  - [ ] c. Fix `CLAUDE.md` drift: test DB password (now `$POSTGRES_PASSWORD_TEST`), test
+  - [x] c. (!323) Fix `CLAUDE.md` drift: test DB password (now `$POSTGRES_PASSWORD_TEST`), test
     counts, DAG code location (`CLAUDE.md` says `app/features/workflow_engine/`; it's
     `app/core/backend/dagtraversal.py`).
   - [ ] d. Run end-to-end tests in merge request pipelines (currently skipped by
