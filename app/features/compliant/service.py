@@ -22,6 +22,7 @@ from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.organisation import Organisation
+from app.core.db.models.process import Process
 from app.core.db.models.step import Step
 from app.core.db.models.user import User
 from app.features.compliant.models import AlcoholProductProfile, ComplianceProfile, ComplianceRecord, ComplianceReport
@@ -468,6 +469,87 @@ class ComplianceService:
             for step, step_name in steps
         ]
         return (file_candidates + step_candidates)[:8]
+
+    def search_core_sources(self, org_id: UUID, kind: str, query: str, offset: int) -> dict[str, Any]:
+        """Page through selectable Core records, always scoped to the current tenant."""
+        limit = 20
+        pattern = f"%{query.replace('\\', r'\\').replace('%', r'\%').replace('_', r'\_')}%"
+        if kind == "file":
+            rows = (
+                self.session.query(ExecutionEvidence)
+                .filter(
+                    ExecutionEvidence.org_id == org_id,
+                    ExecutionEvidence.evidence_status == EVIDENCE_STATUS_ACTIVE,
+                    ExecutionEvidence.file_name.ilike(pattern, escape="\\"),
+                )
+                .order_by(ExecutionEvidence.created_at.desc(), ExecutionEvidence.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+                .all()
+            )
+            sources = [
+                {"id": row.id, "kind": kind, "title": row.file_name, "created_at": row.created_at}
+                for row in rows[:limit]
+            ]
+        elif kind == "execution-step":
+            rows = (
+                self.session.query(ExecutionStep, Step.name)
+                .join(Step, Step.id == ExecutionStep.step_id)
+                .filter(
+                    ExecutionStep.org_id == org_id,
+                    Step.org_id == org_id,
+                    ExecutionStep.status == ExecutionStepStatus.COMPLETED,
+                    Step.name.ilike(pattern, escape="\\"),
+                )
+                .order_by(ExecutionStep.completed_at.desc(), ExecutionStep.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+                .all()
+            )
+            sources = [
+                {"id": step.id, "kind": kind, "title": f"Completed Core step: {name}", "created_at": step.completed_at}
+                for step, name in rows[:limit]
+            ]
+        elif kind == "execution":
+            rows = (
+                self.session.query(Execution, Process.name)
+                .join(Process, Process.id == Execution.process_id)
+                .filter(Execution.org_id == org_id, Process.org_id == org_id, Process.name.ilike(pattern, escape="\\"))
+                .order_by(Execution.created_at.desc(), Execution.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+                .all()
+            )
+            sources = [
+                {"id": execution.id, "kind": kind, "title": f"Execution: {name}", "created_at": execution.created_at}
+                for execution, name in rows[:limit]
+            ]
+        elif kind == "movement":
+            rows = (
+                self.session.query(InventoryMovement, InventoryItem.name)
+                .join(InventoryItem, InventoryItem.id == InventoryMovement.inventory_item_id)
+                .filter(
+                    InventoryMovement.org_id == org_id,
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.name.ilike(pattern, escape="\\"),
+                )
+                .order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+                .all()
+            )
+            sources = [
+                {
+                    "id": movement.id,
+                    "kind": kind,
+                    "title": f"{movement.movement_type.title()} · {name} · {movement.quantity} {movement.unit}",
+                    "created_at": movement.created_at,
+                }
+                for movement, name in rows[:limit]
+            ]
+        else:
+            raise ValueError("Unknown Core source type")
+        return {"sources": _iso(sources), "has_more": len(rows) > limit}
 
     def customs_reconciliation(self, org_id: UUID) -> dict[str, Any]:
         """Calculate litres of alcohol from profiled production and wastage movements.

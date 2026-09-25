@@ -89,3 +89,11 @@ html[data-spa-theme="dark"] .compliant-shell .compliant-action-plan,
 html[data-spa-theme="dark"] .compliant-shell .compliant-setup,
 html[data-spa-theme="dark"] .compliant-shell .compliant-record-panel,
 html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui-text); }
+/* Customs Core source picker: show readable records rather than asking for UUIDs. */
+.core-source-picker{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;max-height:240px;overflow:auto}
+.compliant-record-panel .core-source-picker__choice{display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid #dce4e9;border-radius:8px;font-weight:500;cursor:pointer}
+.core-source-picker__choice input[type=checkbox]{flex:none;margin:2px 0 0;padding:0;accent-color:#0d6c6a}
+.compliant-record-panel fieldset>p{margin:4px 0 12px}
+.core-source-search{display:grid;grid-template-columns:minmax(150px,1fr) minmax(180px,2fr) auto;gap:8px;align-items:end;margin-bottom:12px}.core-source-search button{height:38px}.core-source-selected{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;color:#5d6778;font-size:.83rem}.core-source-selected button{padding:5px 8px;background:#e7f3f1;color:#175c52;font-size:.78rem}.core-source-selected button:hover{background:#d8eeeb}.compliant-record-panel [data-core-source-more]{margin-top:8px;background:#e7f3f1;color:#175c52}@media(max-width:700px){.core-source-search{grid-template-columns:1fr}.core-source-search button{height:auto}}
+.compliant-record-panel .core-source-search button{grid-column:auto}
+.compliant-record-panel fieldset.span-2{min-width:0}
