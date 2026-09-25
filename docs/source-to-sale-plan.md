@@ -450,7 +450,7 @@ Sales matter here because they finish the trace. Make them readable and complete
   - Change: invoice lines with no product mapping, or that can't be filled from any stock
     (1.1d), become tasks with a direct fix.
 
-- [ ] **3.4 Customer records ready for a recall.** *S*
+- [x] **3.4 Customer records ready for a recall.** *S* (!341)
   - Change: show how many customers have a contact phone and email on record and prompt
     for missing ones. A recall is only as good as its contact list.
 
