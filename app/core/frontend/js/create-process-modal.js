@@ -84,6 +84,12 @@
     syncDocInlineDisabledState,
     setPendingGuidedDocFileUpload
   });
+  const restoreControls = window.ProcessModalRestoreControls.create({
+    updateInputButtonsText,
+    updateOutputButtonText,
+    syncStep4ModeSegments,
+    updateStep4SummaryBar
+  });
   const {
     inventoryCardSummary,
     inventoryExecutionHelperText,
@@ -267,32 +273,7 @@
       }
     }
     restorePromptList(data.prompts || []);
-    const batchEl = document.getElementById('guided-prompt-batch-number-mode');
-    if (batchEl) {
-      const bm = data.batchNumberMode;
-      if (bm === 'required' || bm === 'optional' || bm === 'dont_ask') {
-        batchEl.value = bm;
-      }
-    }
-    const evEl = document.getElementById('guided-prompt-evidence-mode');
-    if (evEl) {
-      const evm = data.evidenceMode;
-      if (evm === 'required' || evm === 'optional' || evm === 'dont_ask') {
-        evEl.value = evm;
-      }
-    }
-    if (data.inputTab) {
-      const tabBtn = document.querySelector('.flow-mode-segment[data-input-tab="' + data.inputTab + '"]');
-      if (tabBtn) tabBtn.click();
-    }
-    updateInputButtonsText();
-    updateOutputButtonText();
-    syncStep4ModeSegments();
-    if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
-    requestAnimationFrame(function() {
-      syncStep4ModeSegments();
-      if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
-    });
+    restoreControls(data);
     isRestoringDraft = false;
   };
   
