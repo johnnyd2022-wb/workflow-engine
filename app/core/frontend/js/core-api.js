@@ -79,6 +79,9 @@ window.CoreAPI = window.CoreAPI || {
                 // navigation (SPA nav cancels in-flight fetches). Not an error worth
                 // logging -- surface it like any other abort.
                 if (parseErr && parseErr.name === 'AbortError') throw parseErr;
+                if (window.__coreApiPageUnloading && parseErr && parseErr.name === 'TypeError') {
+                    throw new DOMException('Request cancelled by navigation', 'AbortError');
+                }
                 console.error(`API request failed: ${endpoint} - invalid JSON`, parseErr);
                 throw new Error(response.ok ? 'Invalid response from server.' : `Server error (${response.status}). Please try again.`);
             }
