@@ -862,6 +862,8 @@ html[data-spa-theme="dark"] .sm-temporal-banner { background: rgba(120,53,15,0.2
 .sm-recall-header__batch { margin: 4px 0 0; color: var(--text-secondary, #6b7280); font-weight: 650; }
 .sm-recall-export-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sm-recall-export-actions button { min-height: 44px; }
+.sm-link-button { padding: 2px 6px; border: 0; background: transparent; color: var(--link-color, #2563eb); cursor: pointer; text-decoration: underline; }
+.sm-link-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .sm-recall-summary { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--border-default, #d1d5db); border-radius: 10px; color: var(--text-primary, #111827); background: var(--bg-card, #fff); font-weight: 700; }
 .sm-recall-sales .sm-table { min-width: 760px; }
 .sm-recall-customer--missing-contact td:last-child { color: #9a3412; font-weight: 700; }
