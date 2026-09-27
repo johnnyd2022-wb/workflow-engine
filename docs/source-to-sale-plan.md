@@ -504,7 +504,8 @@ any time.
   - [ ] d. Fix "5 active batchs".
 
 - [ ] **4.4 One route to each job.** *S*
-  - [ ] a. "Trace" button and Source Map lead to the same place; keep one.
+  - [x] a. "Trace" and Source Map links use the single `/core/sourcemap` page
+    (`core.sourcemap`). (!391)
   - [ ] b. "Add to inventory" and "+ Receive stock" do the same job; keep one.
   - [ ] c. Pages have three back controls (top-bar arrow, "← Back to …" link, sidebar);
     keep one.
