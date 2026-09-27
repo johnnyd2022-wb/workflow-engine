@@ -903,7 +903,9 @@
       const recallWrap = document.getElementById('sm-recall-wrap');
       if (recallWrap) {
         recallWrap.style.display = 'block';
-        smRenderRecall(recallWrap, tracedItem, groups, sales);
+        const saleEdges = connections.filter(connection => connection.edge_type === 'sale');
+        const recall = smBuildRecallScope(tracedItem, allItems, productionConnections, sales, saleEdges);
+        smRenderRecall(recallWrap, tracedItem, groups, recall);
       }
     }
     if (currentView !== 'table' && currentView !== 'recall' && sales.length) area.appendChild(smBuildSalesTerminal(sales));
@@ -1808,7 +1810,125 @@
   /* Recall is deliberately tabular: one row per production execution, grouped by
      workflow, so an auditor can follow the selected lot through its actual hand-offs
      and then see every linked customer sale without reading a graph. */
-  function smRenderRecall(wrap, root, groups, sales) {
+  function smBuildRecallScope(root, items, productionEdges, sales, saleEdges) {
+    const itemById = new Map(items.filter(item => item.node_type !== 'sale').map(item => [item.id, item]));
+    const outgoing = new Map();
+    productionEdges.forEach(edge => {
+      if (!outgoing.has(edge.from_id)) outgoing.set(edge.from_id, []);
+      outgoing.get(edge.from_id).push(edge.to_id);
+    });
+    const reachable = new Set([root.id]);
+    const pending = [root.id];
+    while (pending.length) {
+      (outgoing.get(pending.pop()) || []).forEach(id => {
+        if (!reachable.has(id)) { reachable.add(id); pending.push(id); }
+      });
+    }
+    const finalItems = [...reachable]
+      .map(id => itemById.get(id))
+      .filter(item => item && item.inventory_type === 'final_product');
+    if (root.inventory_type === 'final_product' && !finalItems.some(item => item.id === root.id)) finalItems.push(root);
+    const finalIds = new Set(finalItems.map(item => item.id));
+    const salesById = new Map(sales.map(sale => [sale.id, sale]));
+    const allocated = new Map();
+    saleEdges.forEach(edge => {
+      if (!finalIds.has(edge.from_id)) return;
+      const sale = salesById.get(edge.to_id);
+      if (!sale) return;
+      const qty = Number(edge.quantity || 0);
+      const source = itemById.get(edge.from_id);
+      const producedAt = (source && source.step_data && source.step_data.completed_at) || (source && source.created_at);
+      const preSold = !!(sale.sale_date && producedAt && sale.sale_date.slice(0, 10) < producedAt.slice(0, 10));
+      const row = allocated.get(sale.id) || { ...sale, recall_quantity: 0, pre_sold: false };
+      row.recall_quantity += Number.isFinite(qty) ? qty : 0;
+      row.pre_sold = row.pre_sold || preSold;
+      allocated.set(sale.id, row);
+    });
+    return { finalItems, sales: [...allocated.values()] };
+  }
+
+  function smRecallQuantitySummary(items, quantityKey) {
+    const byUnit = new Map();
+    items.forEach(item => {
+      const qty = Number(item[quantityKey] || 0);
+      if (!Number.isFinite(qty) || qty <= 0) return;
+      const unit = item.unit || 'units';
+      byUnit.set(unit, (byUnit.get(unit) || 0) + qty);
+    });
+    return [...byUnit.entries()].map(([unit, qty]) => `${smFmtQty(qty)} ${unit}`).join(', ') || `0 ${items[0]?.unit || 'units'}`;
+  }
+
+  function smRecallUniqueCustomerCount(sales) {
+    return new Set(sales.map(sale => {
+      const name = (sale.customer_name || sale.store_name || '').trim().toLowerCase();
+      return sale.customer_id || (name ? 'name:' + name : null);
+    }).filter(Boolean)).size;
+  }
+
+  function smRecallCustomerCountText(sales) {
+    const count = smRecallUniqueCustomerCount(sales);
+    const unknownLines = sales.filter(sale => !sale.customer_id && !(sale.customer_name || sale.store_name || '').trim()).length;
+    const parts = [`${count} ${count === 1 ? 'customer' : 'customers'}`];
+    if (unknownLines) parts.push(`${unknownLines} sale${unknownLines === 1 ? '' : 's'} without customer details`);
+    return parts.join(' · ');
+  }
+
+  function smRecallExportBaseName(root) {
+    const batch = root.batch_id || root.supplier_batch_number || root.id || 'batch';
+    return `recall-${String(batch).replace(/[^a-z0-9_-]+/gi, '-')}`;
+  }
+
+  function smRecallPromptData(root) {
+    const extra = root.extra_data || {};
+    return Object.assign({}, extra, extra.execution_prompts || {}, extra.custom_prompts || {}, root.custom_prompts || {});
+  }
+
+  function smRecallMeasurement(root, pattern) {
+    const entry = Object.entries(smRecallPromptData(root)).find(([label, value]) => pattern.test(label) && value != null && value !== '');
+    return entry ? String(entry[1]).trim().replace(/\s*%$/, '') : null;
+  }
+
+  function smCsvCell(value) {
+    let text = String(value == null ? '' : value);
+    if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
+
+  function smExportRecallCsv(root, sales, groups, finalItems) {
+    const abv = smRecallMeasurement(root, /\babv\b/i);
+    const bottled = smRecallMeasurement(root, /(?:bottl(?:ed|ing)?[_ ]date|date[_ ]bottl(?:ed|ing)?)/i);
+    const rows = [
+      ['Product', root.name || ''],
+      ['Batch ID', root.batch_id || root.supplier_batch_number || ''],
+      ['ABV', abv ? `${abv}%` : 'Not recorded'],
+      ['Bottling date', bottled ? smFmtDate(bottled) : 'Not recorded'],
+      ['Sold', smRecallQuantitySummary(sales, 'recall_quantity')],
+      ['Customers', smRecallCustomerCountText(sales)],
+      ['On hand', smRecallQuantitySummary(finalItems, 'quantity')],
+      [],
+      ['Customer', 'Quantity allocated', 'Unit', 'Invoices', 'Sale dates', 'Primary contact', 'Phone', 'Email', 'Address', 'Pre-sold'],
+    ];
+    smAggregateRecallCustomers(sales).forEach(customer => rows.push([
+      customer.name, customer.quantity, customer.unit, [...customer.invoices].join(', '), [...customer.dates].join(', '),
+      customer.primary, customer.phone, customer.email, customer.address, customer.preSold ? 'Yes' : 'No',
+    ]));
+    rows.push([], ['Production workflow', 'Execution date', 'Step', 'Output batches', 'Completed at']);
+    groups.forEach(group => group.steps.forEach(step => {
+      const outputs = [...new Set(step.tos.map(item => item.batch_id || item.supplier_batch_number).filter(Boolean))];
+      const when = step.tos.find(item => item.step_data && item.step_data.completed_at);
+      rows.push([group.processName, group.executionDate ? smFmtDate(group.executionDate) : '', step.stepName, outputs.join(', '), when ? smFmtDate(when.step_data.completed_at) : '']);
+    }));
+    const blob = new Blob(['\ufeff' + rows.map(row => row.map(smCsvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = smRecallExportBaseName(root) + '.csv';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function smRenderRecall(wrap, root, groups, recall) {
+    const sales = recall.sales;
     wrap.innerHTML = '';
     // Import and correlation fields are useful to the importer, but do not
     // identify a physical lot to a customer or auditor. Keep them out of the
@@ -1818,7 +1938,11 @@
       'import_ref', 'producing_process_id', 'trade_id',
       'supplier_batch_number_disambiguated',
     ]);
+    const abv = smRecallMeasurement(root, /\babv\b/i);
+    const bottlingDate = smRecallMeasurement(root, /(?:bottl(?:ed|ing)?[_ ]date|date[_ ]bottl(?:ed|ing)?)/i);
     const metadata = [
+      ['ABV', abv ? `${abv}%` : 'Not recorded'],
+      ['Bottling date', bottlingDate ? smFmtDate(bottlingDate) : 'Not recorded'],
       ['Supplier batch', root.supplier_batch_number],
       ['Internal batch', root.batch_id || (root.extra_data || {}).batch_number],
       ['Purchase date', root.purchase_date ? smFmtDate(root.purchase_date) : null],
@@ -1830,6 +1954,35 @@
     });
     const meta = document.createElement('section');
     meta.className = 'sm-recall-meta';
+    const banner = document.createElement('div');
+    banner.className = 'sm-recall-header';
+    const title = document.createElement('div');
+    const product = document.createElement('h2');
+    product.className = 'sm-recall-header__product';
+    product.textContent = root.name || 'Recall report';
+    const batch = document.createElement('p');
+    batch.className = 'sm-recall-header__batch';
+    batch.textContent = `Batch ${root.batch_id || root.supplier_batch_number || 'not recorded'}`;
+    title.append(product, batch);
+    const actions = document.createElement('div');
+    actions.className = 'sm-recall-export-actions';
+    const csvButton = document.createElement('button');
+    csvButton.type = 'button'; csvButton.className = 'sm-act-filter-btn'; csvButton.textContent = 'Export CSV';
+    csvButton.addEventListener('click', () => smExportRecallCsv(root, sales, groups, recall.finalItems));
+    const pdfButton = document.createElement('button');
+    pdfButton.type = 'button'; pdfButton.className = 'sm-act-filter-btn'; pdfButton.textContent = 'Print / Save PDF';
+    pdfButton.addEventListener('click', () => window.print());
+    actions.append(csvButton, pdfButton);
+    banner.append(title, actions);
+    wrap.appendChild(banner);
+
+    const stats = document.createElement('p');
+    stats.className = 'sm-recall-summary';
+    const onHand = smRecallQuantitySummary(recall.finalItems, 'quantity');
+    const sold = smRecallQuantitySummary(sales, 'recall_quantity');
+    stats.textContent = `${sold} sold · ${smRecallCustomerCountText(sales)} · ${onHand} on hand`;
+    wrap.appendChild(stats);
+
     const metaHeading = document.createElement('h2');
     metaHeading.textContent = 'Recall details';
     meta.appendChild(metaHeading);
@@ -1970,7 +2123,7 @@
     const salesTable = document.createElement('table');
     salesTable.className = 'sm-table';
     const head = salesTable.createTHead().insertRow();
-    ['Invoice', 'Store / customer', 'Date', 'Product'].forEach(label => {
+    ['Invoice', 'Store / customer', 'Date', 'Quantity allocated', 'Product', 'Status'].forEach(label => {
       const cell = document.createElement('th');
       cell.textContent = label;
       head.appendChild(cell);
@@ -1982,7 +2135,9 @@
         sale.invoice_number || sale.xero_invoice_id || '—',
         sale.customer_name || sale.store_name || '—',
         sale.sale_date ? smFmtDate(sale.sale_date) : '—',
+        `${smFmtQty(sale.recall_quantity)} ${sale.unit || 'units'}`,
         sale.name || '—',
+        sale.pre_sold ? 'Pre-sold' : '',
       ].forEach(value => {
         const cell = row.insertCell();
         cell.textContent = value;
@@ -1993,35 +2148,45 @@
 
   /* One entry per customer, however many invoice lines they bought. Sales with no
      customer on record are kept together as one entry rather than dropped. */
-  function smUniqueCustomers(sales) {
+  function smAggregateRecallCustomers(sales) {
     const byKey = new Map();
     sales.forEach(sale => {
       const name = (sale.customer_name || sale.store_name || '').trim();
       const key = sale.customer_id || (name ? 'name:' + name.toLowerCase() : 'unknown');
       if (!byKey.has(key)) {
-        byKey.set(key, { name: name || 'Customer not recorded', primary: '', phone: '', email: '', address: '' });
+        byKey.set(key, { name: name || 'Customer not recorded', primary: '', phone: '', email: '', address: '', quantities: new Map(), invoices: new Set(), dates: new Set(), preSold: false });
       }
       const customer = byKey.get(key);
+      const unit = sale.unit || 'units';
+      customer.quantities.set(unit, (customer.quantities.get(unit) || 0) + Number(sale.recall_quantity || 0));
       customer.primary = customer.primary || sale.customer_primary_contact || '';
       customer.phone = customer.phone || sale.customer_phone || '';
       customer.email = customer.email || sale.customer_email || '';
       customer.address = customer.address || sale.customer_address || '';
+      customer.invoices.add(sale.invoice_number || sale.xero_invoice_id || 'Invoice not recorded');
+      if (sale.sale_date) customer.dates.add(smFmtDate(sale.sale_date));
+      customer.preSold = customer.preSold || sale.pre_sold;
     });
-    return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...byKey.values()].map(customer => {
+      const amounts = [...customer.quantities.entries()];
+      customer.unit = amounts.length === 1 ? amounts[0][0] : 'mixed units';
+      customer.quantity = amounts.map(([unit, qty]) => `${smFmtQty(qty)} ${unit}`).join(', ') || '0 units';
+      return customer;
+    }).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   function smBuildRecallCustomers(sales) {
-    const customers = smUniqueCustomers(sales);
+    const customers = smAggregateRecallCustomers(sales);
     const wrap = document.createElement('div');
     const note = document.createElement('p');
     note.className = 'sm-recall-sales__note';
     note.textContent = customers.length + ' unique customer' + (customers.length === 1 ? '' : 's') +
-      ' across ' + sales.length + ' linked sale' + (sales.length === 1 ? '' : 's') + '.';
+      ' across ' + sales.length + ' allocated invoice line' + (sales.length === 1 ? '' : 's') + '.';
     wrap.appendChild(note);
     const table = document.createElement('table');
     table.className = 'sm-table';
     const head = table.createTHead().insertRow();
-    ['Customer', 'Primary contact', 'Phone', 'Email', 'Address'].forEach(label => {
+    ['Customer', 'Quantity', 'Invoices', 'Sale dates', 'Primary contact', 'Phone', 'Email', 'Address', 'Contact warning', 'Sale timing'].forEach(label => {
       const cell = document.createElement('th');
       cell.textContent = label;
       head.appendChild(cell);
@@ -2029,7 +2194,10 @@
     const body = table.createTBody();
     customers.forEach(customer => {
       const row = body.insertRow();
-      [customer.name, customer.primary, customer.phone, customer.email, customer.address].forEach(value => {
+      const missing = [!customer.primary && 'Primary contact missing', !customer.phone && 'Phone missing', !customer.email && 'Email missing'].filter(Boolean).join('; ');
+      if (missing) row.classList.add('sm-recall-customer--missing-contact');
+      if (customer.preSold) row.classList.add('sm-recall-customer--pre-sold');
+      [customer.name, customer.quantity, [...customer.invoices].join(', '), [...customer.dates].join(', '), customer.primary, customer.phone, customer.email, customer.address, missing, customer.preSold ? 'Includes pre-sold sale' : ''].forEach(value => {
         row.insertCell().textContent = value || '—';
       });
     });
@@ -2156,8 +2324,14 @@
 
   /* ── Search (filters browse grid, no dropdown) ──────────── */
   function smUpdateSearchPool() {
-    const inStock = (allInventory || []).map(it => ({ ...it, _oos: false }));
-    const oos = (allOutOfStockRawMaterials || []).map(it => ({ ...it, _oos: true }));
+    const inventoryIds = new Set((allInventory || []).map(it => String(it.id)));
+    const inStock = (allInventory || []).map(it => ({
+      ...it,
+      _oos: !Number.isFinite(Number(it.quantity)) || Number(it.quantity) <= 0,
+    }));
+    const oos = (allOutOfStockRawMaterials || [])
+      .filter(it => !inventoryIds.has(String(it.id)))
+      .map(it => ({ ...it, _oos: true }));
     allInventoryForSearch = [...inStock, ...oos];
   }
 
