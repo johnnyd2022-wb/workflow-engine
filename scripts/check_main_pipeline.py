@@ -1,4 +1,4 @@
-"""Fail an MR gate while its target branch has no successful pipeline."""
+"""Fail an MR gate while the default branch has no successful pipeline."""
 
 import json
 import os
@@ -13,7 +13,8 @@ def main() -> int:
         api_url = os.environ["CI_API_V4_URL"]
         server_host = os.environ["CI_SERVER_HOST"]
         project_id = os.environ["CI_PROJECT_ID"]
-        target = os.environ["CI_MERGE_REQUEST_TARGET_BRANCH_NAME"]
+        # Stacked MRs target feature branches, but the gate must always inspect main.
+        target = os.environ["CI_DEFAULT_BRANCH"]
         job_token = os.environ["CI_JOB_TOKEN"]
     except KeyError as exc:
         print(f"Missing CI variable: {exc.args[0]}", file=sys.stderr)
