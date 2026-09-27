@@ -508,9 +508,9 @@ any time.
   - [ ] b. "Add to inventory" and "+ Receive stock" do the same job; keep one.
   - [ ] c. Pages have three back controls (top-bar arrow, "← Back to …" link, sidebar);
     keep one.
-  - [ ] d. Old URLs redirect without explanation: `/compliant/nz-alcohol/np3-audit` →
-    food-safety, `/compliant/nz-alcohol/evidence` → customs, `/core/tasks` →
-    `/core?tab=tasks`. Redirect on purpose or remove.
+  - [x] d. Old URLs redirect to their intended destinations in
+    `app/features/compliant/routes/page_routes.py` and `app/core/backend/backend.py`
+    (!390).
 
 - [ ] **4.5 Make the dashboard today's work list.** *High · M*
   - Evidence: a "−100% batch completion vs last week" tile computed against a zero base;
