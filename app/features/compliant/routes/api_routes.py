@@ -95,6 +95,21 @@ def overview():
     return jsonify(_service().overview(_org_id())), 200
 
 
+@api_bp.route("/api/compliant/core-sources", methods=["GET"])
+@requires_auth
+def core_sources():
+    """Search selectable Core proof without exposing another tenant's records."""
+    kind = request.args.get("kind", "")
+    query = request.args.get("q", "").strip()
+    try:
+        offset = int(request.args.get("offset", "0"))
+    except ValueError:
+        return jsonify({"error": "Invalid offset"}), 400
+    if kind not in {"file", "execution-step", "execution", "movement"} or len(query) > 100 or not 0 <= offset <= 10000:
+        return jsonify({"error": "Invalid search parameters"}), 400
+    return jsonify(_service().search_core_sources(_org_id(), kind, query, offset)), 200
+
+
 @api_bp.route("/api/compliant/np3-audit", methods=["GET"])
 @requires_auth
 def np3_audit():

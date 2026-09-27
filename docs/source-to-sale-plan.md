@@ -550,8 +550,8 @@ any time.
   - [x] b. The floating blue menu toggle overlaps the sidebar edge. (!327)
   - [ ] c. CRM widget control icons render as missing-glyph boxes.
 - [x] d. `/settings` requests a resource that returns 404. (!389)
-  - [ ] e. Forms asking for raw UUIDs (Customs "Core source references") — pick records
-    instead.
+  - [x] e. Forms asking for raw UUIDs (Customs "Core source references") — pick records
+    instead. (!330)
   - [ ] f. The Compliance workspaces page is one card on an empty screen; fold it into
     NZ Alcohol or give it content.
 
