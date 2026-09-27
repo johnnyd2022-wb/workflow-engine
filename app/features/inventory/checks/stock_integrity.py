@@ -90,11 +90,9 @@ def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tupl
     return issues
 
 
-def run_stock_integrity_check(org_id: UUID, session: Session) -> CheckResult:
-    """Audit every current lot and give each failure a stable operator action."""
-    items = session.query(InventoryItem).filter(InventoryItem.org_id == org_id).all()
+def _events_by_lot(org_id: UUID, session: Session):
     events_by_item = defaultdict(list)
-    for event in (
+    events = (
         session.query(EntityEvent)
         .filter(
             EntityEvent.org_id == org_id,
@@ -104,32 +102,50 @@ def run_stock_integrity_check(org_id: UUID, session: Session) -> CheckResult:
             ),
         )
         .order_by(EntityEvent.seq)
-        .yield_per(500)
-    ):
+        .all()
+    )
+    for event in events:
         events_by_item[event.entity_id].append(event)
+    return events_by_item
 
+
+def _wastage_by_lot(org_id: UUID, session: Session):
     wasted_by_item = defaultdict(Decimal)
-    for item_id, quantity in (
+    movements = (
         session.query(InventoryMovement.inventory_item_id, InventoryMovement.quantity)
         .filter(
             InventoryMovement.org_id == org_id,
             InventoryMovement.movement_type == InventoryMovementType.WASTAGE.value,
         )
-        .yield_per(500)
-    ):
+        .all()
+    )
+    for item_id, quantity in movements:
         amount = _decimal(quantity)
         if amount is not None:
             wasted_by_item[item_id] -= amount  # signed movement
+    return wasted_by_item
 
+
+def _allocations_by_lot(org_id: UUID, session: Session):
     allocated_by_item = defaultdict(Decimal)
-    for item_id, quantity in (
+    allocations = (
         session.query(SalesFifoAllocation.inventory_item_id, SalesFifoAllocation.quantity)
         .filter(SalesFifoAllocation.org_id == org_id)
-        .yield_per(500)
-    ):
+        .all()
+    )
+    for item_id, quantity in allocations:
         amount = _decimal(quantity)
         if amount is not None:
             allocated_by_item[item_id] += amount
+    return allocated_by_item
+
+
+def run_stock_integrity_check(org_id: UUID, session: Session) -> CheckResult:
+    """Audit every current lot and give each failure a stable operator action."""
+    items = session.query(InventoryItem).filter(InventoryItem.org_id == org_id).all()
+    events_by_item = _events_by_lot(org_id, session)
+    wasted_by_item = _wastage_by_lot(org_id, session)
+    allocated_by_item = _allocations_by_lot(org_id, session)
 
     alerts = []
     for item in items:
