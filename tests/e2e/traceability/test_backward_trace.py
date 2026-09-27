@@ -66,7 +66,8 @@ def test_ac7_backward_trace_from_wip_card_shows_traced_item_in_table(traced_chai
     # source (R1) -- not just the source, which was the historical bug.
     expect(table_body).to_contain_text("W1")
     expect(table_body).to_contain_text("R1")
-    expect(page.locator("#sm-table-body tr")).to_have_count(2)
+    # Step hand-offs have their own rows; the two inventory materials appear once each.
+    expect(page.locator("#sm-table-body tr.sm-trace-row--material")).to_have_count(2)
 
 
 def test_backward_trace_from_final_item_includes_traced_item_itself(traced_chain):
