@@ -487,7 +487,7 @@ any time.
     in the right workspace.", "Dashboard gives you the signal…", "DO THE WORK / Choose a
     workspace", "CONTEXT, NOT A TO-DO LIST", "Use trends to understand the picture…".
 
-- [ ] **4.2 One design system.** *High · L*
+- [x] **4.2 One design system.** *High · L* (!396)
   - Evidence: three distinct visual styles.
     - Core: illustration header, blue pill tabs, yellow back button, oversized "Trace"
       button with icon above.

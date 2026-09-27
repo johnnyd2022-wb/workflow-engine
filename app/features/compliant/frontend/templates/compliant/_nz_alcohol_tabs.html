@@ -1,5 +1,5 @@
 <nav class="compliant-section-tabs" aria-label="NZ Alcohol sections">
-  <div class="flow-mode-segmented" role="tablist" aria-label="NZ Alcohol pages">
+  <div class="flow-mode-segmented ui-tabs" role="tablist" aria-label="NZ Alcohol pages">
     <a href="/compliant/nz-alcohol" hx-boost="false" role="tab" aria-selected="{{ 'true' if active_compliant_tab == 'overview' else 'false' }}" class="flow-mode-segment{% if active_compliant_tab == 'overview' %} flow-mode-segment--active{% endif %}">Overview</a>
     <a href="/compliant/nz-alcohol/food-safety" data-food-safety-tab{% if food_control_programme == "none" %} hidden{% endif %} hx-boost="false" role="tab" aria-selected="{{ 'true' if active_compliant_tab == 'food-safety' else 'false' }}" class="flow-mode-segment{% if active_compliant_tab == 'food-safety' %} flow-mode-segment--active{% endif %}">{{ food_control_programme|upper if food_control_programme != "none" else "Food safety" }}</a>
     <a href="/compliant/nz-alcohol/customs" hx-boost="false" role="tab" aria-selected="{{ 'true' if active_compliant_tab == 'customs' else 'false' }}" class="flow-mode-segment{% if active_compliant_tab == 'customs' %} flow-mode-segment--active{% endif %}">Customs</a>
