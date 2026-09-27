@@ -11,6 +11,10 @@ load. Its checks split cleanly:
   transaction-scoped advisory lock keyed on the org, so a burst of /core loads runs it
   once). It effectively runs ~once per NZ day per active org.
 
+- **inventory.stock_integrity** checks per-lot stock arithmetic and post-go-live sale
+  matching. It is cached with the date-driven slice and recomputed by the same nightly
+  warm job for every active tenant.
+
 - **untracked_items / output_expiry / output_ready_date / compliant.<module>** are cheap
   (no DAG -- targeted queries + date math) and some are sub-day time-sensitive
   (output_expiry supports an `hours` unit). Those run LIVE on every request so the banner
@@ -32,9 +36,8 @@ from app.observability import get_logger
 
 logger = get_logger(__name__)
 
-# Only these check ids are cached (the DAG-heavy, date-driven ones). Everything else the
-# CoreChecksRunner registers runs live on every request.
-_CACHED_CHECK_IDS = frozenset({"expired_materials"})
+# Full-org checks run from the nightly cache; cheap checks run live on every request.
+_CACHED_CHECK_IDS = frozenset({"expired_materials", "inventory.stock_integrity"})
 
 # Freshness of the cached (expensive) slice: until the next Pacific/Auckland midnight,
 # hard-capped at 25h for DST / clock-jump safety.
@@ -301,26 +304,28 @@ def get_or_compute(org_id: UUID, session) -> dict:
     return flask_json.loads(flask_json.dumps({"findings": findings, "system_status": system_status}))
 
 
-def prewarm(org_id: UUID, session) -> None:
+def prewarm(org_id: UUID, session) -> bool | None:
     """Force-recompute the cached (expensive) slice for one org. Used by the scheduled
     just-after-NZ-midnight warm job so the first user of the day never eats the DAG cost."""
     now = datetime.now(UTC)
     key = _lock_key(org_id)
     if not session.execute(sa.text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": key}).scalar():
-        return  # someone is already computing it
+        return None  # someone is already computing it
     results, ok = _compute_expensive(org_id, session)
     if not ok:
         # A cached check raised -- don't warm the cache with a failure; let the first real
         # request retry it. rollback clears any aborted txn and releases the xact lock.
         session.rollback()
         logger.warning("prewarm skipped cache write for org %s: a cached check failed", org_id)
-        return
+        return False
     try:
         _upsert(session, org_id, results, now)
         session.commit()
+        return True
     except Exception:
         session.rollback()
         logger.exception("prewarm system_findings_cache failed for org %s", org_id)
+        return False
 
 
 def mark_stale(session, org_id: UUID, event_type: str) -> None:
