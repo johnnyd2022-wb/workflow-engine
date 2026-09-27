@@ -27,6 +27,7 @@ from app.api.routes.auth_routes import limiter
 from app.core.backend import (
     changes_feed,
     corechecks,
+    execution_record_routes,
     execution_routes,
     inventory_routes,
     inventory_upload_routes,
@@ -1005,6 +1006,7 @@ execution_routes.register_routes(
     product_available=_product_available,
     validate_custom_expiry_warning_not_exceed_duration=validate_custom_expiry_warning_not_exceed_duration,
 )
+execution_record_routes.register_routes(core_bp)
 inventory_routes.register_routes(
     core_bp,
     parse_page_params=_parse_page_params,
