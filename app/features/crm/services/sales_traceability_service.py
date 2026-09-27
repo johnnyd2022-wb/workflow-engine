@@ -418,6 +418,9 @@ class SalesTraceabilityService:
                         stock_cache[stock_key] = available
                     available = stock_cache[stock_key]
                     if available >= needed:
+                        # Earlier unallocated invoice lines would consume this stock
+                        # first during replay. Reserve it before assessing later lines.
+                        stock_cache[stock_key] = available - needed
                         continue
                     reason = "no_stock"
                 else:

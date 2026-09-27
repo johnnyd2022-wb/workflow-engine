@@ -139,6 +139,27 @@ def test_reconcile_allocates_oldest_batches_idempotently_and_reverses_voided_sal
     assert _stock_by_batch(db, sales_org.id) == {1: Decimal("500.0000"), 2: Decimal("500.0000")}
 
 
+def test_unmatched_queue_accounts_for_earlier_pending_sales(db, sales_org):
+    product = "Queue stock - final product"
+    InventoryRepository(db).create_inventory_item(
+        sales_org.id,
+        name=product,
+        quantity="5",
+        unit="units",
+        inventory_type="final_product",
+    )
+    _add_mapping(db, sales_org.id, product=product, pattern="Queue stock")
+    _add_sale(db, sales_org.id, invoice_id="queue-first", description="Queue stock", quantity="3")
+    _add_sale(db, sales_org.id, invoice_id="queue-second", description="Queue stock", quantity="3")
+
+    unmatched = SalesTraceabilityService(db).review_queue(sales_org.id)["unmatched"]
+
+    assert len(unmatched) == 1
+    assert unmatched[0]["invoice_id"] == "queue-second"
+    assert unmatched[0]["reason"] == "no_stock"
+    assert unmatched[0]["available"] == "2"
+
+
 def test_reconcile_leaves_unmapped_and_insufficient_sales_unchanged(db, sales_org):
     product = "Solstice - final product"
     InventoryRepository(db).create_inventory_item(
