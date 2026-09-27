@@ -238,7 +238,7 @@
         }
       }
     }
-    
+
     if (helpers.isProcessFlowSpaPage()) {
       if (typeof window.persistSpaWizardState === 'function') {
         window.persistSpaWizardState();
@@ -257,7 +257,7 @@
       helpers.updateStepDisplay();
     }
   }
-  
+
   function createProcessPreviousStep() {
     if (helpers.getCurrentStep() > 1) {
       helpers.setCurrentStep(helpers.getCurrentStep() - 1);
