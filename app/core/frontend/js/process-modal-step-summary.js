@@ -27,7 +27,7 @@
         }
         return;
       }
-    
+
       summariesContainer.style.display = 'block';
       summariesList.innerHTML = '';
 
@@ -115,7 +115,7 @@
         } else {
           summaryCard.style.cssText = 'background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); padding: 16px; overflow: hidden;';
         }
-      
+
         // Header (clickable to expand/collapse)
         const stepHeader = document.createElement('div');
         stepHeader.style.cssText = 'display: flex; align-items: center; gap: 12px; cursor: pointer;';
@@ -129,7 +129,7 @@
           dragHint.textContent = '⋮⋮';
           stepHeader.appendChild(dragHint);
         }
-      
+
         const expandIcon = document.createElement('svg');
         expandIcon.className = 'step-summary-expand-icon';
         expandIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -144,35 +144,35 @@
         expandIcon.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg); color: var(--text-tertiary, #9ca3af); flex-shrink: 0;';
         expandIcon.innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
         stepHeader.appendChild(expandIcon);
-      
+
         const stepNumber = document.createElement('div');
         stepNumber.style.cssText = 'width: 32px; height: 32px; border-radius: 50%; background: var(--primary, #3b82f6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; flex-shrink: 0;';
         stepNumber.textContent = displayNumber;
         stepHeader.appendChild(stepNumber);
-      
+
         const stepInfo = document.createElement('div');
         stepInfo.style.cssText = 'flex: 1;';
-      
+
         const stepName = document.createElement('h4');
         stepName.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;';
         stepName.textContent = step.name;
         stepInfo.appendChild(stepName);
-      
+
         if (step.description) {
           const stepDesc = document.createElement('p');
           stepDesc.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin: 0;';
           stepDesc.textContent = step.description;
           stepInfo.appendChild(stepDesc);
         }
-      
+
         stepHeader.appendChild(stepInfo);
         summaryCard.appendChild(stepHeader);
-      
+
         // Collapsed summary (always visible)
         const collapsedSummary = document.createElement('div');
         collapsedSummary.className = 'step-summary-collapsed';
         collapsedSummary.style.cssText = 'margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light, #e5e7eb); font-size: 12px; color: var(--text-secondary);';
-      
+
         const details = [];
         if (step.inputs && step.inputs.length > 0) {
           details.push(`${step.inputs.length} input${step.inputs.length > 1 ? 's' : ''}`);
@@ -183,17 +183,17 @@
         if (step.execution_prompts && step.execution_prompts.length > 0) {
           details.push(`${step.execution_prompts.length} prompt${step.execution_prompts.length > 1 ? 's' : ''}`);
         }
-      
+
         if (details.length > 0) {
           collapsedSummary.textContent = details.join(' • ');
           summaryCard.appendChild(collapsedSummary);
         }
-      
+
         // Expanded details (hidden by default)
         const expandedDetails = document.createElement('div');
         expandedDetails.className = 'step-summary-expanded';
         expandedDetails.style.cssText = 'margin-top: 16px; padding-top: 16px; border-top: 2px solid var(--border-default, #e5e7eb); display: none;';
-      
+
         // Inputs
         if (step.inputs && step.inputs.length > 0) {
           const inputsSection = document.createElement('div');
@@ -202,7 +202,7 @@
           inputsTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;';
           inputsTitle.textContent = 'Inputs:';
           inputsSection.appendChild(inputsTitle);
-        
+
           step.inputs.forEach(input => {
             const inputItem = document.createElement('div');
             inputItem.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-sm); margin-bottom: 4px; font-size: 12px; color: var(--text-secondary);';
@@ -213,7 +213,7 @@
           });
           expandedDetails.appendChild(inputsSection);
         }
-      
+
         // Outputs
         if (step.outputs && step.outputs.length > 0) {
           const outputsSection = document.createElement('div');
@@ -222,7 +222,7 @@
           outputsTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;';
           outputsTitle.textContent = 'Outputs:';
           outputsSection.appendChild(outputsTitle);
-        
+
           step.outputs.forEach(output => {
             const outputItem = document.createElement('div');
             outputItem.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-sm); margin-bottom: 4px; font-size: 12px; color: var(--text-secondary);';
@@ -233,7 +233,7 @@
           });
           expandedDetails.appendChild(outputsSection);
         }
-      
+
         // Prompts
         if (step.execution_prompts && step.execution_prompts.length > 0) {
           const promptsSection = document.createElement('div');
@@ -241,7 +241,7 @@
           promptsTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;';
           promptsTitle.textContent = 'Prompts:';
           promptsSection.appendChild(promptsTitle);
-        
+
           step.execution_prompts.forEach(prompt => {
             const promptItem = document.createElement('div');
             promptItem.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-sm); margin-bottom: 4px; font-size: 12px; color: var(--text-secondary);';
