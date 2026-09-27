@@ -36,6 +36,15 @@ def test_lot_balance_flags_fractional_count_and_missing_sale_allocation():
     assert codes == {"fractional_count", "balance_mismatch", "sale_allocation_mismatch"}
 
 
+def test_lot_balance_subtracts_production_use_in_canonical_unit():
+    item = SimpleNamespace(quantity=Decimal("9"), unit="L")
+    events = [
+        _event("inventory_item.created", {"quantity": "10"}),
+        _event("inventory_item.consumed", {"quantity_consumed": "1000", "unit": "ml"}),
+    ]
+    assert _lot_balance(item, events, Decimal("0"), Decimal("0")) == []
+
+
 def test_stock_check_uses_generic_module_contract_without_core_frontend_branch():
     root = Path(__file__).resolve().parents[1]
     for name in ("system-findings-banner.js", "system-findings-notifications.js"):

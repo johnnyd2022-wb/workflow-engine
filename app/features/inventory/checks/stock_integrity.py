@@ -12,7 +12,7 @@ from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.organisation import Organisation
-from app.core.utils.unit_conversion import is_count_unit
+from app.core.utils.unit_conversion import convert_to_inventory_unit_decimal, is_count_unit
 from app.features.compliance_checks.routes.corechecks import CheckResult
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.services.sales_traceability_service import SalesTraceabilityService
@@ -38,7 +38,7 @@ def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tupl
     if is_count_unit(item.unit) and on_hand != on_hand.to_integral_value():
         issues.append(("fractional_count", f"{on_hand} {item.unit} on hand; counted goods must be whole."))
 
-    produced = sold = adjusted = Decimal(0)
+    produced = sold = used = adjusted = Decimal(0)
     baseline_found = False
     for event in events:
         payload = event.payload or {}
@@ -57,6 +57,16 @@ def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tupl
                 sold -= delta
             else:
                 adjusted += delta
+        elif event.event_type == "inventory_item.consumed":
+            quantity = _decimal(payload.get("quantity_consumed"))
+            source_unit = payload.get("unit") or item.unit
+            if quantity is None or quantity < 0:
+                issues.append(("invalid_history", "A production step has no valid consumed quantity."))
+            else:
+                try:
+                    used += convert_to_inventory_unit_decimal(quantity, source_unit, item.unit)
+                except (ValueError, InvalidOperation, TypeError):
+                    issues.append(("invalid_history", "A production step used an incompatible stock unit."))
         elif event.event_type == "inventory_item.updated":
             change = (event.diff or {}).get("quantity") or {}
             if change:
@@ -70,12 +80,12 @@ def _lot_balance(item, events, wasted: Decimal, allocated: Decimal) -> list[tupl
     if not baseline_found:
         issues.append(("missing_history", "This lot has no opening or production stock event."))
     elif not any(code == "invalid_history" for code, _ in issues):
-        expected = produced - sold - wasted + adjusted
+        expected = produced - sold - used - wasted + adjusted
         if expected != on_hand:
             issues.append(
                 (
                     "balance_mismatch",
-                    f"Produced/opening {produced} − sold {sold} − wasted {wasted} "
+                    f"Produced/opening {produced} − sold {sold} − used in production {used} − wasted {wasted} "
                     f"+ adjusted {adjusted} = {expected} {item.unit}; on hand is {on_hand} {item.unit}.",
                 )
             )
@@ -98,7 +108,12 @@ def _events_by_lot(org_id: UUID, session: Session):
             EntityEvent.org_id == org_id,
             EntityEvent.entity_type == "inventory_item",
             EntityEvent.event_type.in_(
-                ("inventory_item.created", "inventory_item.quantity_adjusted", "inventory_item.updated")
+                (
+                    "inventory_item.created",
+                    "inventory_item.quantity_adjusted",
+                    "inventory_item.consumed",
+                    "inventory_item.updated",
+                )
             ),
         )
         .order_by(EntityEvent.seq)
