@@ -103,7 +103,8 @@ Small, and everything else builds on it.
   - Done when: no admin session can start without a second factor.
 
 - [ ] **0.3 Keep main green.** *S*
-  - [ ] a. Ruff check and ruff format pass on `main`.
+  - [x] a. Ruff check and ruff format pass on `main`, and the CI gate is check-only so it
+    can fail (!320).
   - [x] b. ~~Remove dead `app/features/workflow_engine/` and `dilution_calculator/`
     folders.~~ Not a repo issue: neither is tracked in git; they are untracked leftovers
     in one local checkout (delete locally if `test_ac9_package_and_factory_wiring_removed`

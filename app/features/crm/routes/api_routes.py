@@ -388,7 +388,11 @@ def list_task_lanes():
 def create_task_lane():
     try:
         lane = create_lane(
-            db_session(), UUID(g.org_id), "crm", UUID(g.user_id) if g.user_id else None, request.get_json(silent=True) or {}
+            db_session(),
+            UUID(g.org_id),
+            "crm",
+            UUID(g.user_id) if g.user_id else None,
+            request.get_json(silent=True) or {},
         )
         return jsonify({"lane": lane}), 201
     except TaskError as exc:

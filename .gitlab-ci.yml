@@ -77,8 +77,10 @@ ruff:
   script:
     - pip install "uv==${UV_VERSION}"
     - uv sync --extra dev
-    - uv run ruff check app/ --fix
-    - uv run ruff format app/
+    # Check-only: --fix / a plain `format` rewrite files inside the CI container and exit 0,
+    # so the job could never fail on formatting and unformatted code reached main.
+    - uv run ruff check app/
+    - uv run ruff format --check app/
   only:
     - merge_requests
     - main

@@ -668,9 +668,7 @@ class ComplianceService:
         frameworks = self.evaluate(org_id, records=records, reconciliation=reconciliation)
         for framework in frameworks:
             overdue = sum(
-                1
-                for control in framework["controls"]
-                if str(control.get("reason") or "").startswith("Overdue since")
+                1 for control in framework["controls"] if str(control.get("reason") or "").startswith("Overdue since")
             )
             framework["summary_health"] = module_summary_health(framework["evidence_coverage"], overdue=overdue)
         # The tailored NP3 register considers structured logs and evidence derived

@@ -231,9 +231,7 @@ def _signals_from_results(results: list[CheckResult]) -> list[dict[str, Any]]:
                 "has_issue": True,
                 "in_active_use": False,
                 "count": len(failed),
-                "message": (
-                    f"{len(failed)} system check{'s' if len(failed) != 1 else ''} failed to run"
-                ),
+                "message": (f"{len(failed)} system check{'s' if len(failed) != 1 else ''} failed to run"),
             }
         )
 

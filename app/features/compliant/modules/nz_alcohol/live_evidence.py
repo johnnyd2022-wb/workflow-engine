@@ -116,9 +116,7 @@ def derive_np3_core_evidence(session: Session, org_id: UUID) -> tuple[list[dict[
         .all()
     )
     recorded_steps = [
-        step
-        for step in completed_steps
-        if step.actual_inputs or step.actual_outputs or step.execution_data
+        step for step in completed_steps if step.actual_inputs or step.actual_outputs or step.execution_data
     ]
     if recorded_steps:
         observations.append(
