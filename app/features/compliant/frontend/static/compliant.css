@@ -97,3 +97,32 @@ html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui
 .core-source-search{display:grid;grid-template-columns:minmax(150px,1fr) minmax(180px,2fr) auto;gap:8px;align-items:end;margin-bottom:12px}.core-source-search button{height:38px}.core-source-selected{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;color:#5d6778;font-size:.83rem}.core-source-selected button{padding:5px 8px;background:#e7f3f1;color:#175c52;font-size:.78rem}.core-source-selected button:hover{background:#d8eeeb}.compliant-record-panel [data-core-source-more]{margin-top:8px;background:#e7f3f1;color:#175c52}@media(max-width:700px){.core-source-search{grid-template-columns:1fr}.core-source-search button{height:auto}}
 .compliant-record-panel .core-source-search button{grid-column:auto}
 .compliant-record-panel fieldset.span-2{min-width:0}
+/* Excise workspace (plan 2.1) */
+.excise-panel { display: flex; flex-direction: column; gap: 14px; }
+.excise-panel [hidden] { display: none !important; }
+.excise-head { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-start; }
+.excise-head > div { max-width: 60ch; }
+.excise-settings, .excise-inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.excise-settings label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.excise-periods { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.excise-period { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 9.5rem; padding: 8px 12px;
+  border: 1px solid var(--border-default, #d9e0dd); border-radius: 10px; background: var(--bg-card, #fff); cursor: pointer; font: inherit; text-align: left; }
+.excise-period, .excise-period strong { color: var(--text-primary, #16211e); }
+.excise-period span { font-size: 12px; color: var(--text-secondary, #56645f); }
+.excise-period--lodged { border-color: #9ad3b6; }
+.excise-period--lodged span { color: #17603f; }
+.excise-period--active { outline: 2px solid var(--azure-blue, #1d6b58); }
+.excise-draft-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.excise-draft-head h3 { margin: 0; }
+.excise-totals { margin: 0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.excise-hint { margin: 4px 0; color: var(--text-secondary, #56645f); font-size: 13px; }
+.excise-warning { margin: 0; padding: 8px 12px; border-radius: 8px; background: #fdf3dc; color: #7a5410; font-size: 13px; }
+.excise-problems { margin: 4px 0 0; font-size: 13px; }
+.excise-table-wrap { overflow-x: auto; }
+.excise-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 640px; }
+.excise-table th, .excise-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-default, #d9e0dd); }
+.excise-detail td { padding-top: 0; font-size: 13px; color: var(--text-secondary, #56645f); }
+.excise-setup summary { cursor: pointer; font-weight: 600; }
+.excise-setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 16px; margin-top: 10px; }
+.excise-product strong { min-width: 12rem; }
+.excise-check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }

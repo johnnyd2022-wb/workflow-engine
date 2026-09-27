@@ -138,7 +138,7 @@
     controlSelect.dispatchEvent(new Event('change'));
   }
   function renderProductSuggestions(reconciliation) {
-    var target = root.querySelector('[data-product-suggestions]'); clear(target);
+    var target = root.querySelector('[data-product-suggestions]'); if (!target) return; clear(target);
     var names = reconciliation.unprofiled_inventory_names || [];
     if (!names.length) return;
     var intro = document.createElement('strong'); intro.textContent = 'Detected in Core — map with one click:'; target.appendChild(intro);
@@ -206,7 +206,7 @@
     var body = document.createElement('tbody'); records.forEach(function (record) { var tr = document.createElement('tr'); [record.framework_slug, record.control_id, record.title, record.status, record.evidence_reference || '—'].forEach(function (value) { var td = document.createElement('td'); td.textContent = value; tr.appendChild(td); }); body.appendChild(tr); }); table.appendChild(body); target.appendChild(table);
   }
   function renderProducts(products) {
-    var target = root.querySelector('[data-alcohol-products]'); clear(target);
+    var target = root.querySelector('[data-alcohol-products]'); if (!target) return; clear(target);
     if (!products.length) { target.textContent = 'No alcohol product profiles yet — unprofiled production will be shown as a reconciliation gap.'; return; }
     var list = document.createElement('ul');
     products.forEach(function (product) { var item = document.createElement('li'); item.textContent = product.inventory_name + ' · ' + product.product_type + ' · ' + product.abv_percent + '% ABV'; list.appendChild(item); });
@@ -223,7 +223,8 @@
       return;
     }
     var reconciliation = overview.customs_reconciliation || {};
-    root.querySelector('[data-customs-reconciliation]').textContent = 'Live calculated: ' + (reconciliation.production_litres_of_alcohol || '0') + ' LAL produced, ' + (reconciliation.wastage_litres_of_alcohol || '0') + ' LAL wasted. ' + (reconciliation.unprofiled_movement_count || 0) + ' movement(s) need a product profile.';
+    var reconEl = root.querySelector('[data-customs-reconciliation]');
+    if (reconEl) reconEl.textContent = 'Live calculated: ' + (reconciliation.production_litres_of_alcohol || '0') + ' LAL produced, ' + (reconciliation.wastage_litres_of_alcohol || '0') + ' LAL wasted. ' + (reconciliation.unprofiled_movement_count || 0) + ' movement(s) need a product profile.';
     renderProductSuggestions(reconciliation);
     searchCoreSources(false);
     populateControls();

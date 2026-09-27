@@ -229,6 +229,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.sourcemap_objects", None, "inventory.view"),
     ("core.sourcemap_trace", None, "inventory.view"),  # POST, but read-only
     ("core.trace_*", None, "inventory.view"),
+    ("stock_locations.*", _READ, "inventory.view"),  # plan 2.1
+    ("stock_locations.*", None, "inventory.adjust"),
     # --- reading production
     ("core.get_hub_overview", None, ("production.view", "inventory.view")),
     ("core.core", None, ("production.view", "inventory.view")),
@@ -248,6 +250,11 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_api.capture_context", None, ("production.view", "compliance.view")),
     ("compliant.compliant_tools.*", None, ("production.view", "compliance.view")),  # calculators
     ("compliant.compliant_api.update_profile", None, "compliance.manage"),
+    # Excise (plan 2.1): lodging and setup are for people who run compliance.
+    ("compliant.compliant_api.lodge_excise_period", None, "compliance.manage"),
+    ("compliant.compliant_api.update_excise_settings", None, "compliance.manage"),
+    ("compliant.compliant_api.add_excise_rate", None, "compliance.manage"),
+    ("compliant.compliant_api.save_excise_product", None, "compliance.manage"),
     ("compliant.compliant_api.update_abv_rules", None, "compliance.manage"),
     ("compliant.compliant_api.update_np3_check_settings", None, "compliance.manage"),
     ("compliant.compliant_api.create_alcohol_product", None, "compliance.manage"),

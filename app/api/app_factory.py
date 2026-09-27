@@ -151,6 +151,10 @@ def create_app():
     from app.core.backend.go_live import go_live_bp
 
     app.register_blueprint(go_live_bp)
+    # Stock locations and moves (plan 2.1), kept out of core_bp / backend.py.
+    from app.core.backend.stock_locations import stock_locations_bp
+
+    app.register_blueprint(stock_locations_bp)
 
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
