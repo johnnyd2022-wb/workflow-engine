@@ -240,6 +240,8 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
         trace["completed_at"] = _to_iso_timestamp(completed_ts)
     elif completed_at is not None:
         trace["completed_at"] = _to_iso_timestamp(completed_at)
+    if execution_data.get("entered_at") is not None:
+        trace["entered_at"] = _to_iso_timestamp(execution_data["entered_at"])
     if execution_data.get("execution_errors") is not None:
         trace["execution_errors"] = execution_data["execution_errors"]
     if execution_data.get("execution_warnings") is not None:

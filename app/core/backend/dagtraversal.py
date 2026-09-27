@@ -45,7 +45,7 @@ except ImportError:
     dateutil_parser = None  # type: ignore[assignment]
 
 # Internal fields to exclude from execution_prompts
-_EXECUTION_PROMPTS_INTERNAL = {"completed_by_email", "completed_by_user_id", "completed_at"}
+_EXECUTION_PROMPTS_INTERNAL = {"completed_by_email", "completed_by_user_id", "completed_at", "entered_at"}
 
 # Reserved execution_prompts labels the process/step builder treats as system prompts
 # (create-process-modal.js's isBatchNumber / flows2-steps.js's isTraceabilityOrSystemPrompt),
@@ -63,6 +63,7 @@ _TRACE_METADATA_INTERNAL_KEYS = {
     "completed_by_email",
     "completed_by_user_id",
     "completed_at",
+    "entered_at",
     "execution_errors",
     "execution_warnings",
 }
@@ -724,9 +725,7 @@ class DAGTracer:
         )
         steps_by_id = {s.id: s for s in steps}
         executions = (
-            self.session.query(Execution)
-            .filter(Execution.id.in_(exec_ids), Execution.org_id == self.org_id)
-            .all()
+            self.session.query(Execution).filter(Execution.id.in_(exec_ids), Execution.org_id == self.org_id).all()
             if exec_ids
             else []
         )
