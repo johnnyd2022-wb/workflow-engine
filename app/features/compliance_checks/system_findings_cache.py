@@ -24,9 +24,9 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
-from zoneinfo import ZoneInfo
 
 from app.observability import get_logger
 
