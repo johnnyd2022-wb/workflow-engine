@@ -901,7 +901,10 @@ class CRMService:
                     "_codes": set(),
                 },
             )
-            product["total_qty"] += Decimal(str(row["total_qty"]))
+            # A Xero line can represent a case while the mapped product is counted
+            # in bottles. Keep grouped quantities in the product's stock units.
+            units_per_line = int(getattr(match, "units_per_line", 1) or 1)
+            product["total_qty"] += Decimal(str(row["total_qty"])) * units_per_line
             product["total_revenue"] += Decimal(str(row["total_revenue"]))
             product["xero_items"].append(entry)
             if row["item_code"]:

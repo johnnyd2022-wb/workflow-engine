@@ -15,6 +15,7 @@ import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -171,6 +172,38 @@ def test_overview_invoice_download_uses_the_pdf_endpoint():
     assert "application/json;charset=utf-8" not in overview_js
     assert '@click.stop="viewInvoice(inv)"' in overview_template
     assert "Download PDF" in overview_template
+
+
+def test_mapped_product_quantities_use_pack_size():
+    from app.features.crm.services.crm_service import CRMService
+
+    class InvoiceRows:
+        def top_products(self, *_args, **_kwargs):
+            return [
+                {"item_code": "CASE", "description": "Case of gin", "total_qty": 2, "total_revenue": 120},
+                {"item_code": "BOTTLE", "description": "Gin bottle", "total_qty": 1, "total_revenue": 12},
+            ]
+
+    mappings = [
+        SimpleNamespace(
+            xero_description_pattern="Case of gin", match_type="exact", biz_e_product_name="Gin", units_per_line=6
+        ),
+        SimpleNamespace(
+            xero_description_pattern="Gin bottle", match_type="exact", biz_e_product_name="Gin", units_per_line=1
+        ),
+    ]
+    service = CRMService.__new__(CRMService)
+    service.traceability_repo = SimpleNamespace(get_for_org=lambda _org_id: None)
+    service.mapping_repo = SimpleNamespace(list_for_org=lambda _org_id: mappings)
+    service.invoice_repo = InvoiceRows()
+
+    products, unmapped, count = service._top_mapped_products(uuid4(), limit=8)
+
+    assert products[0]["description"] == "Gin"
+    assert products[0]["total_qty"] == 13.0
+    assert products[0]["total_revenue"] == 132.0
+    assert unmapped == []
+    assert count == 0
 
 
 @pytest.fixture()
