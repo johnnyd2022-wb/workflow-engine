@@ -996,6 +996,7 @@ class CRMService:
                 match_type=data["match_type"],
                 notes=data["notes"],
                 created_by_user_id=user_id,
+                units_per_line=data["units_per_line"],
             )
             for data in prepared
         ]
@@ -1025,8 +1026,11 @@ class CRMService:
             "match_type",
             "notes",
             "is_active",
+            "units_per_line",
         }
         updates = {k: v for k, v in data.items() if k in allowed}
+        if "units_per_line" in updates:
+            updates["units_per_line"] = _parse_units_per_line(updates["units_per_line"])
         if "biz_e_source_output_id" in updates:
             updates["biz_e_source_output_id"] = (
                 UUID(updates["biz_e_source_output_id"]) if updates["biz_e_source_output_id"] else None
@@ -1106,7 +1110,21 @@ def _mapping_event_snapshot(mapping) -> dict[str, Any]:
         "match_type": mapping.match_type,
         "is_active": bool(mapping.is_active),
         "notes_length": len(mapping.notes or ""),
+        "units_per_line": int(getattr(mapping, "units_per_line", None) or 1),
     }
+
+
+def _parse_units_per_line(value) -> int:
+    """Pack size: stock units one invoice-line quantity takes (6 for "Case of 6")."""
+    if value in (None, ""):
+        return 1
+    try:
+        units = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValueError("Pack size must be a whole number of units, e.g. 6 for a case of 6") from None
+    if units < 1 or units > 1000:
+        raise ValueError("Pack size must be between 1 and 1000")
+    return units
 
 
 def _prepare_mapping_data(data: dict) -> dict:
@@ -1130,6 +1148,7 @@ def _prepare_mapping_data(data: dict) -> dict:
         raise ValueError("biz_e_source_output_id must be a valid UUID") from exc
     notes = data.get("notes")
     return {
+        "units_per_line": _parse_units_per_line(data.get("units_per_line", 1)),
         "biz_e_product_name": biz_name,
         "biz_e_source_output_id": source_output_id,
         "xero_description_pattern": xero_pattern,
@@ -1261,6 +1280,7 @@ def _serialise_mapping(
         "mapping_status": status,
         "is_active": m.is_active,
         "notes": m.notes,
+        "units_per_line": int(getattr(m, "units_per_line", None) or 1),
         "created_at": m.created_at.isoformat() if m.created_at else None,
     }
 

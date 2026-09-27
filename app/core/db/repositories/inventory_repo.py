@@ -1,7 +1,7 @@
 """Inventory repository with tenancy enforcement"""
 
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_FLOOR, Decimal, InvalidOperation
 from uuid import UUID
 
 from sqlalchemy import Integer, and_, func, or_
@@ -14,6 +14,7 @@ from app.core.domain.inventory_quantity_guard import (
     allow_inventory_quantity_write,
 )
 from app.core.utils.inventory_quantity import coerce_stored_quantity, parse_stored_quantity_to_decimal
+from app.core.utils.unit_conversion import is_count_unit, whole_count_error
 from app.observability import get_logger, start_span
 
 logger = get_logger(__name__)
@@ -73,6 +74,13 @@ def _build_display_label(item: InventoryItem) -> str:
     if item.quantity is not None:
         parts.append(f"{item.quantity} {item.unit}")
     return " · ".join(parts)
+
+
+def _require_whole_count(quantity, unit, name) -> None:
+    """Counted goods (bottles, cans, units...) are written in whole numbers (plan 1.2)."""
+    message = whole_count_error(quantity, unit, what=f"'{name}'" if name else "Quantity")
+    if message:
+        raise ValueError(message)
 
 
 class InventoryRepository:
@@ -200,6 +208,7 @@ class InventoryRepository:
             self._assert_source_refs_belong_to_org(
                 org_id, source_execution_id, source_execution_step_id, source_output_id
             )
+            _require_whole_count(quantity, unit, name)
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_CREATE):
                 item = InventoryItem(
                     org_id=org_id,
@@ -261,6 +270,7 @@ class InventoryRepository:
                 return None
             current = parse_stored_quantity_to_decimal(item.quantity)
             add_val = _parse_quantity(quantity_to_add) or Decimal("0")
+            _require_whole_count(add_val, item.unit, item.name)
             if add_val <= 0:
                 if commit:
                     self.db.commit()
@@ -327,6 +337,7 @@ class InventoryRepository:
             # handler as an unlogged non-JSON 500 instead of a 400.
             if target is None or not target.is_finite() or target < 0:
                 raise ValueError("new_quantity must be a non-negative finite number")
+            _require_whole_count(target, item.unit, item.name)
             quantity_before = str(current)
             if current == target:
                 if commit:
@@ -409,7 +420,18 @@ class InventoryRepository:
             if source_output_id is not None:
                 items = items.filter(InventoryItem.source_output_id == source_output_id)
             items = items.all()
-            total_available = sum((parse_stored_quantity_to_decimal(i.quantity) for i in items), Decimal("0"))
+            # Plan 1.2: counted goods move in whole units and a unit is never split between
+            # batches. A lot left holding a fraction (old data) gives up only its whole units;
+            # the fraction waits for a stocktake correction.
+            counted = bool(items) and all(is_count_unit(i.unit) for i in items)
+            if counted:
+                _require_whole_count(needed, items[0].unit, name)
+
+            def _usable(item) -> Decimal:
+                current = parse_stored_quantity_to_decimal(item.quantity)
+                return current.to_integral_value(rounding=ROUND_FLOOR) if counted else current
+
+            total_available = sum((_usable(i) for i in items), Decimal("0"))
             if total_available < needed:
                 raise ValueError(f"Insufficient stock for {name!r}: requested {needed}, available {total_available}")
 
@@ -421,7 +443,7 @@ class InventoryRepository:
                     if remaining <= 0:
                         break
                     current = parse_stored_quantity_to_decimal(item.quantity)
-                    take = min(current, remaining)
+                    take = min(_usable(item), remaining)
                     if take <= 0:
                         continue
                     quantity_before = str(current)
@@ -721,6 +743,10 @@ class InventoryRepository:
             item = self.get_inventory_item_by_id(item_id, org_id)
             if not item:
                 return None
+            if quantity is not None or unit is not None:
+                _require_whole_count(
+                    quantity if quantity is not None else item.quantity, unit or item.unit, name or item.name
+                )
 
             diff: dict = {}
             if name is not None and name != item.name:
