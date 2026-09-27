@@ -6,21 +6,21 @@
   function addGuidedPrompt() {
     // Collapse all existing prompts before adding a new one
     collapseAllPrompts();
-    
+
     const promptId = `guided-prompt-${Date.now()}`;
     const promptContainer = document.createElement('div');
     promptContainer.id = promptId;
     promptContainer.dataset.expanded = 'true'; // New prompt starts expanded
     promptContainer.style.cssText = 'background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); margin-bottom: 12px; overflow: hidden;';
-    
+
     // Create header with expand/collapse
     const header = document.createElement('div');
     header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 12px; cursor: pointer; background: var(--bg-secondary, #f9fafb);';
     header.onclick = () => togglePromptExpand(promptId);
-    
+
     const headerLeft = document.createElement('div');
     headerLeft.style.cssText = 'display: flex; align-items: center; gap: 8px;';
-    
+
     const expandIcon = document.createElement('svg');
     expandIcon.className = 'guided-prompt-expand-icon';
     expandIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
@@ -35,29 +35,29 @@
     expandIcon.style.cssText = 'transition: transform 0.2s; transform: rotate(180deg);';
     expandIcon.innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
     headerLeft.appendChild(expandIcon);
-    
+
     const titleSpan = document.createElement('span');
     titleSpan.className = 'guided-prompt-title';
     titleSpan.style.cssText = 'font-size: 14px; font-weight: 500; color: var(--text-primary);';
     titleSpan.textContent = 'Execution Prompt';
     headerLeft.appendChild(titleSpan);
-    
+
     // Add label display that will show when collapsed
     const labelDisplay = document.createElement('span');
     labelDisplay.className = 'guided-prompt-label-display';
     labelDisplay.style.cssText = 'font-size: 14px; font-weight: 500; color: var(--text-primary); display: none;';
     labelDisplay.textContent = '';
     headerLeft.appendChild(labelDisplay);
-    
+
     // Add expand/collapse hint text
     const expandHint = document.createElement('span');
     expandHint.className = 'guided-prompt-expand-hint';
     expandHint.style.cssText = 'font-size: 11px; color: var(--text-tertiary, #9ca3af); margin-left: 8px; font-style: italic;';
     expandHint.textContent = '(click to collapse)';
     headerLeft.appendChild(expandHint);
-    
+
     header.appendChild(headerLeft);
-    
+
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
     removeButton.onclick = (e) => {
@@ -67,19 +67,19 @@
     removeButton.style.cssText = 'padding: 4px 8px; border: none; background: transparent; color: var(--error, #ef4444); cursor: pointer; font-size: 12px;';
     removeButton.textContent = 'Remove';
     header.appendChild(removeButton);
-    
+
     promptContainer.appendChild(header);
-    
+
     // Create content area
     const contentArea = document.createElement('div');
     contentArea.className = 'guided-prompt-content';
     contentArea.style.cssText = 'padding: 12px; display: block;';
-    
+
     // Function to update label display
     const updateLabelDisplay = () => {
       const labelInput = promptContainer.querySelector('.guided-prompt-label');
       const label = labelInput ? labelInput.value.trim() : '';
-      
+
       if (label) {
         labelDisplay.textContent = label;
         labelDisplay.style.display = 'inline';
@@ -89,7 +89,7 @@
         titleSpan.style.display = 'inline';
       }
     };
-    
+
     // Label field
     const labelField = document.createElement('div');
     labelField.style.marginBottom = '12px';
@@ -106,7 +106,7 @@
     labelInput.addEventListener('blur', updateLabelDisplay);
     labelField.appendChild(labelInput);
     contentArea.appendChild(labelField);
-    
+
     // Type field
     const typeField = document.createElement('div');
     typeField.style.marginBottom = '12px';
@@ -157,7 +157,7 @@
       optionsField.style.display = typeSelect.value === 'select' ? 'block' : 'none';
     });
     contentArea.appendChild(optionsField);
-    
+
     // Unit field (optional)
     const unitField = document.createElement('div');
     unitField.style.marginBottom = '12px';
@@ -182,7 +182,7 @@
     });
     unitField.appendChild(unitSelect);
     contentArea.appendChild(unitField);
-    
+
     // Required field
     const requiredField = document.createElement('div');
     const requiredLabel = document.createElement('label');
@@ -202,12 +202,12 @@
     requiredSelect.appendChild(optionalOption);
     requiredField.appendChild(requiredSelect);
     contentArea.appendChild(requiredField);
-    
+
     promptContainer.appendChild(contentArea);
     document.getElementById('guided-prompts-list').appendChild(promptContainer);
     if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
   };
-  
+
   // Collapse all prompts except the specified one
   function collapseAllPrompts(exceptId = null) {
     const allPrompts = document.querySelectorAll('#guided-prompts-list > div');
@@ -225,17 +225,17 @@
       }
     });
   }
-  
+
   // Toggle prompt expand/collapse
   function togglePromptExpand(promptId) {
     const promptEl = document.getElementById(promptId);
     if (!promptEl) return;
-    
+
     const contentArea = promptEl.querySelector('.guided-prompt-content');
     const expandIcon = promptEl.querySelector('.guided-prompt-expand-icon');
     const expandHint = promptEl.querySelector('.guided-prompt-expand-hint');
     if (!contentArea || !expandIcon) return;
-    
+
     const isExpanded = promptEl.dataset.expanded === 'true';
     if (isExpanded) {
       contentArea.style.display = 'none';
@@ -251,7 +251,7 @@
       collapseAllPrompts(promptId);
     }
   }
-  
+
   // Remove guided prompt
   function removeGuidedPrompt(promptId) {
     const promptElement = document.getElementById(promptId);
