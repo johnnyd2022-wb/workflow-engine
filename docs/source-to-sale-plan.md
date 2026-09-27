@@ -170,24 +170,33 @@ Small, and everything else builds on it.
 The core of the product. It should just work by default, give owners control when they
 want it, and never produce a recall list that can't be trusted.
 
-- [ ] **1.1 Let owners choose how sales are matched to batches.** *High · M*
+- [x] **1.1 Let owners choose how sales are matched to batches.** *High · M* (!338)
   - Evidence: Sales configuration offers FIFO, manual and hybrid matching plus "manual
     review days", but only FIFO is implemented. Choosing manual or hybrid silently stops
     all matching (`app/features/crm/services/sales_traceability_service.py:68` returns
     `deferred`). Under FIFO a pre-sold order is matched correctly, but nothing shows it
     was pre-sold.
   - Change:
-    - [ ] a. **FIFO (default, just works):** today's behaviour, pre-sales included. A sale
+    - [x] a. **FIFO (default, just works):** today's behaviour, pre-sales included. A sale
       filled from a batch completed after its invoice date gets a quiet "pre-sold" note
       on the sale and on the recall list. Nothing to action.
-    - [ ] b. **Hybrid:** FIFO proposes every match. Pre-sold or unclear matches wait in a
+    - [x] b. **Hybrid:** FIFO proposes every match. Pre-sold or unclear matches wait in a
       review list for `manual_review_days`, then confirm themselves; the owner can change
       the batch before then.
-    - [ ] c. **Manual:** the owner picks the batch for each invoice line from what was in
+    - [x] c. **Manual:** the owner picks the batch for each invoice line from what was in
       stock, oldest first.
-    - [ ] d. In every mode, only a line that can't be filled from any stock goes to the
+    - [x] d. In every mode, only a line that can't be filled from any stock goes to the
       unmatched queue (3.3).
   - Done when: all three options do what they say, and FIFO still needs no attention.
+  - As built (!338): allocations carry `status` (confirmed / pending_review), `presold`
+    and `review_due_at` (migration `sales_matching_modes_001`). Hybrid sends pre-sold
+    matches and non-exact ("contains"/"alias") mappings to review; due reviews confirm on
+    the next matching run. Manual mode lists mapped lines with no batch and takes the
+    owner's picks, which must add up to the line (pack size included) and come from
+    batches of the mapped product. The same picker changes the batch on any automatic
+    match (stock goes back to the old batch). Page: CRM → Batch matching (`/crm/matching`).
+    Source Map marks sales "pre-sold" / "awaiting review". For d, lines FIFO can't fill
+    still count as `insufficient_stock` in the summary; their queue is 3.3.
 
 - [x] **1.2 Whole bottles, with partial fills going to Library stock.** *Critical · M* (!336)
   - Evidence: nothing stops a finished lot holding 78.5 bottles, and FIFO

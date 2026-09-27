@@ -109,13 +109,13 @@
             <option value="hybrid">Hybrid (Auto then Review)</option>
           </select>
           <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'fifo'" x-cloak>FIFO matches the oldest unlinked batch first.</p>
-          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'manual'" x-cloak>Manual requires an operator to approve each new sales-to-batch match.</p>
-          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'hybrid'" x-cloak>Hybrid auto-matches high-confidence sales and sends uncertain ones to review.</p>
+          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'manual'" x-cloak>You pick the batch for each sale on the Batch matching page.</p>
+          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);" x-show="traceConfig.mode === 'hybrid'" x-cloak>Matches automatically; pre-sold and loosely-mapped sales wait on the Batch matching page for the review window, then confirm themselves.</p>
         </div>
         <div class="crm-form-group">
           <label class="crm-form-label">Manual Review Window (days)</label>
           <input class="crm-form-input" type="number" min="1" max="90" x-model.number="traceConfig.review_days">
-          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">If a sale cannot be confidently matched within this window, it stays in the review queue for an operator decision.</p>
+          <p style="margin:4px 0 0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Hybrid only: how long a sale waits for review before its automatic match is confirmed.</p>
         </div>
       </div>
       <label style="display:inline-flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text-secondary,#6b7280);">

@@ -1818,7 +1818,10 @@
       const invoice = sale.invoice_number || sale.xero_invoice_id || 'Xero invoice';
       const customer = sale.customer_name ? ' · ' + sale.customer_name : '';
       const saleDate = sale.sale_date ? ' · ' + smFmtDate(sale.sale_date) : '';
-      meta.textContent = invoice + customer + saleDate;
+      // Plan 1.1: a pre-sale (filled from a batch made after the invoice) is normal; say so.
+      const flags = [sale.presold ? 'pre-sold' : '', sale.match_status === 'pending_review' ? 'awaiting review' : '']
+        .filter(Boolean).join(', ');
+      meta.textContent = invoice + customer + saleDate + (flags ? ' · ' + flags : '');
       row.append(title, meta);
       section.appendChild(row);
     });

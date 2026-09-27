@@ -1,0 +1,108 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Batch matching · CRM{% endblock %}
+{% block body_class %}crm-page{% endblock %}
+
+{% block head_extras %}
+  <link rel="stylesheet" href="/crm/static/css/crm.css">
+  <style>
+    .mt-list { display: flex; flex-direction: column; gap: 10px; }
+    .mt-line { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 12px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border-default, #e5e7eb); }
+    .mt-line:first-child { border-top: 0; }
+    .mt-title { font-weight: 600; color: var(--text-primary, #111827); }
+    .mt-meta { font-size: .8rem; color: var(--text-secondary, #6b7280); }
+    .mt-flag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 600; background: #fdf3dc; color: #7a5410; margin-left: 6px; }
+    .mt-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+    .mt-picker { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .mt-pick { display: grid; grid-template-columns: 1fr 1fr 7rem; gap: 10px; align-items: center; font-size: .86rem; }
+    .mt-pick input { padding: 6px 8px; border: 1px solid var(--border-default, #d1d5db); border-radius: 8px; font: inherit; width: 100%; }
+    .mt-total { font-size: .86rem; font-variant-numeric: tabular-nums; }
+    .mt-total--bad { color: #b42318; }
+    @media (max-width: 640px) { .mt-line { grid-template-columns: 1fr; } .mt-actions { justify-content: flex-start; } }
+  </style>
+{% endblock %}
+
+{% block topbar %}
+  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to CRM" hx-boost="false">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M11 19l-7-7 7-7"/><path d="M4 12h16"/>
+    </svg>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="max-content crm-root" x-data="crmMatching()" x-init="init()">
+  {% set crm_heading = "Batch matching" %}
+  {% set crm_subtitle = "Which batch each sale came from, for recalls and stock" %}
+  {% include "crm/_crm_banner.html" %}
+  {% set active_crm_tab = "matching" %}
+  {% include "crm/_crm_section_tabs.html" %}
+
+  <div x-show="error" class="crm-error-banner" x-cloak><span x-text="error"></span>
+    <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button></div>
+  <div x-show="notice" class="crm-card" x-cloak style="padding:10px 14px; margin-bottom:12px; background:#e3f4ec; color:#17603f; border-color:#9ad3b6;"><span x-text="notice"></span></div>
+
+  <div class="crm-card" style="padding:14px 16px; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;">
+    <div>
+      <div class="mt-title">Matching: <span x-text="modeLabel()"></span></div>
+      <div class="mt-meta" x-show="mode === 'fifo'">Every sale is matched to the oldest batch in stock. Nothing to review; pre-sales are marked on the sale.</div>
+      <div class="mt-meta" x-show="mode === 'hybrid'" x-cloak>Pre-sold and loosely-mapped sales wait here, then confirm themselves after the review window. Change the batch if it's wrong.</div>
+      <div class="mt-meta" x-show="mode === 'manual'" x-cloak>You pick the batch for each sale. Sales below are waiting for one.</div>
+    </div>
+    <div class="mt-actions">
+      <a class="crm-btn crm-btn--secondary crm-btn--sm" href="/crm/configuration">Change mode</a>
+      <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="runNow()">Re-run matching</button>
+    </div>
+  </div>
+
+  <template x-if="picker">
+    <div class="crm-card mt-picker">
+      <div class="mt-title">Choose batches for <span x-text="picker.line.invoice_number || 'this sale'"></span>
+        <span class="mt-meta" x-text="`· ${picker.line.product_name} · needs ${picker.needed}`"></span></div>
+      <template x-for="b in picker.batches" :key="b.inventory_item_id">
+        <div class="mt-pick">
+          <span><strong x-text="b.batch || 'No batch ID'"></strong> <span class="mt-meta" x-text="`made ${fmtDate(b.made_on)}`"></span></span>
+          <span class="mt-meta" x-text="`${b.available} ${b.unit} in stock`"></span>
+          <input type="number" min="0" step="1" x-model.number="b.pick" :aria-label="`Quantity from ${b.batch || 'batch'}`">
+        </div>
+      </template>
+      <p class="mt-meta" x-show="!picker.batches.length">No batches of this product are in stock.</p>
+      <div class="mt-total" :class="pickedTotal() !== picker.needed && 'mt-total--bad'" x-text="`Picked ${pickedTotal()} of ${picker.needed}`"></div>
+      <div class="crm-error-banner" x-show="picker.error" x-text="picker.error"></div>
+      <div class="mt-actions">
+        <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="picker=null">Cancel</button>
+        <button class="crm-btn crm-btn--primary crm-btn--sm" @click="savePicker()" :disabled="pickedTotal() !== picker.needed">Save batches</button>
+      </div>
+    </div>
+  </template>
+
+  <div class="crm-card" style="margin-bottom:12px;" x-show="mode === 'manual'" x-cloak>
+    <div class="crm-analytics-header"><span class="crm-analytics-title" x-text="`Waiting for a batch (${toAssign.length})`"></span></div>
+    <div x-show="!toAssign.length" class="mt-meta" style="padding:14px 16px;">Nothing waiting.</div>
+    <template x-for="line in toAssign" :key="line.invoice_id + line.line_key">
+      <div class="mt-line">
+        <div><div class="mt-title" x-text="line.description || line.product_name"></div>
+          <div class="mt-meta" x-text="`${line.invoice_number || 'Invoice'} · ${fmtDate(line.invoice_date)} · ${line.quantity} × ${line.product_name}`"></div></div>
+        <div></div>
+        <div class="mt-actions"><button class="crm-btn crm-btn--primary crm-btn--sm" @click="openPicker(line)">Choose batch</button></div>
+      </div>
+    </template>
+  </div>
+
+  <div class="crm-card" x-show="mode !== 'manual' || pending.length" x-cloak>
+    <div class="crm-analytics-header"><span class="crm-analytics-title" x-text="`To review (${pending.length})`"></span></div>
+    <div x-show="!loading && !pending.length" class="mt-meta" style="padding:14px 16px;">Nothing to review.</div>
+    <template x-for="line in pending" :key="line.invoice_id + line.line_key">
+      <div class="mt-line">
+        <div><div class="mt-title"><span x-text="line.product_name"></span><span class="mt-flag" x-show="line.presold">Pre-sold</span></div>
+          <div class="mt-meta" x-text="`${line.invoice_number || 'Invoice'} · ${fmtDate(line.invoice_date)}`"></div></div>
+        <div class="mt-meta"><template x-for="b in line.batches" :key="b.inventory_item_id"><div x-text="`${b.quantity} ${b.unit} from ${b.batch || 'unlabelled batch'}`"></div></template>
+          <div x-text="`Confirms itself ${fmtDate(line.review_due_at)}`"></div></div>
+        <div class="mt-actions">
+          <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="openPicker({...line, quantity: line.batches.reduce((s, b) => s + Number(b.quantity), 0)})">Change batch</button>
+          <button class="crm-btn crm-btn--primary crm-btn--sm" @click="confirm(line)">Looks right</button>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>
+{% endblock %}
