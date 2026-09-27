@@ -76,7 +76,10 @@ def _history(org_id: UUID, execution_id: UUID, step_id: UUID) -> list[dict]:
     for event in events:
         payload = event.payload or {}
         before = (payload.get("before") or {}).get("prompts") or {}
-        after = (payload.get("after") or {}).get("prompts") or {}
+        if event.event_type == "execution.step_completed":
+            after = {k: v for k, v in (payload.get("execution_data") or {}).items() if k not in _AUDIT_KEYS}
+        else:
+            after = (payload.get("after") or {}).get("prompts") or {}
         history.append(
             {
                 "event": event.event_type,
@@ -124,6 +127,7 @@ def register_routes(bp):
         if ids is None:
             return jsonify({"error": "Invalid execution or step ID"}), 400
         org_id, execution_uuid, step_uuid = ids
+        request.max_content_length = 64 * 1024
         if request.content_length is not None and request.content_length > 64 * 1024:
             return jsonify({"error": "Request body too large"}), 413
         data = request.get_json(silent=True)

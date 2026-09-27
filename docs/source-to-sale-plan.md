@@ -249,7 +249,7 @@ want it, and never produce a recall list that can't be trusted.
     - [ ] g. Sold-out lots under their own heading, not "In stock".
   - Done when: the timed mock recall is under 5 minutes.
 
-- [ ] **1.5 Show when something happened and when it was entered.** *High · M*
+- [x] **1.5 Show when something happened and when it was entered.** *High · M* (!407, !408)
   - Evidence: a step entered days later looks the same as one recorded live, which
     undermines an auditor's trust in the whole record.
   - Change: store both the time a step happened and the time it was entered; show an
@@ -258,7 +258,7 @@ want it, and never produce a recall list that can't be trusted.
   - Done when: every late entry is visibly marked and every edit is traceable.
   - [x] Separate occurrence and entry times; mark entries over 24 hours late in
     execution and trace views. (!407)
-  - [ ] Expose a traceable edit history for completed step records.
+  - [x] Expose a traceable edit history for completed step records. (!408)
 
 - [ ] **1.6 Show one stock number everywhere.** *High · S*
   - Evidence: a Source Map card shows one lot's quantity (`sourcemap.js`, primary lot)
