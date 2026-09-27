@@ -53,3 +53,39 @@ button.np3-work-queue__item{font:inherit;text-align:left;cursor:pointer}
 .np3-training-table{margin-top:16px;overflow-x:auto}.np3-training-table table{width:100%;border-collapse:collapse;font-size:.9rem}.np3-training-table th,.np3-training-table td{padding:9px 12px;border:1px solid #dce4e9;text-align:left}.np3-training-table thead th{background:#f5fbfa;color:#175c52}.np3-training-table tbody th{font-weight:600;color:#405261}.np3-training-table td{white-space:nowrap}
 /* ABV on alcohol products (configuration): tick final products, or add a case-insensitive contains phrase. */
 .abv-rules-panel{margin-top:24px}.abv-rules-panel .section-heading{margin-bottom:12px}.abv-candidates td small{color:#5d6778}.abv-candidates td{white-space:normal;vertical-align:middle}.abv-candidates td:first-child,.abv-candidates th:first-child{width:56px;text-align:center}.abv-candidates input[type=checkbox]{width:18px;height:18px;accent-color:#0d6c6a}.abv-contains-form{display:grid!important;grid-template-columns:1fr auto!important;gap:8px 12px!important;align-items:end;margin-top:18px}.abv-contains-form label{display:grid;gap:6px;font-size:.85rem;font-weight:700}.abv-contains-form small{grid-column:1/-1;color:#5d6778;font-size:.8rem}.abv-rule-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}.abv-rule-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 12px;border:1px solid #dce4e9;border-radius:9px;background:#fbfcfd;font-size:.88rem}.abv-actions{display:flex;align-items:center;gap:14px;margin-top:18px}.abv-status{color:#175c52;font-size:.85rem;font-weight:700}@media(max-width:700px){.abv-contains-form{grid-template-columns:1fr!important}}
+
+/* Shared design system mapping for Compliance surfaces. */
+.compliant-shell {
+  --compliant-accent: var(--ui-accent, #0f766e);
+  --compliant-text: var(--ui-text, #172033);
+  --compliant-muted: var(--ui-text-muted, #5d6778);
+  --compliant-surface: var(--ui-surface, #fff);
+  --compliant-border: var(--ui-border, #dce4e9);
+  color: var(--compliant-text);
+}
+.compliant-shell .module-breadcrumb { color: var(--compliant-muted); text-decoration: none; }
+.compliant-shell .module-breadcrumb a { color: var(--ui-accent-strong, #115e59); text-decoration: none; }
+.compliant-shell .compliant-hero { border-radius: var(--ui-radius-lg, 16px); }
+.compliant-shell .module-card,
+.compliant-shell .compliant-action-plan,
+.compliant-shell .compliant-setup,
+.compliant-shell .compliant-record-panel,
+.compliant-shell .compliant-recent {
+  border-color: var(--compliant-border);
+  border-radius: var(--ui-radius-lg, 16px);
+  background: var(--compliant-surface);
+  box-shadow: var(--ui-shadow-card, 0 2px 8px rgb(15 23 42 / 5%));
+}
+.compliant-shell .module-card { color: var(--compliant-text); }
+.compliant-shell .compliant-section-tabs .flow-mode-segmented { border-color: var(--compliant-border); }
+.compliant-shell .compliant-section-tabs .flow-mode-segment--active { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
+.compliant-shell table { border-color: var(--compliant-border); color: var(--compliant-text); }
+.compliant-shell th, .compliant-shell td { border-color: var(--compliant-border); }
+.compliant-shell thead th { background: var(--ui-surface-subtle, #f8fafc); }
+.compliant-shell .module-card__link,
+.compliant-shell .module-card__mark { color: var(--ui-accent-strong, #115e59); }
+html[data-spa-theme="dark"] .compliant-shell .module-card,
+html[data-spa-theme="dark"] .compliant-shell .compliant-action-plan,
+html[data-spa-theme="dark"] .compliant-shell .compliant-setup,
+html[data-spa-theme="dark"] .compliant-shell .compliant-record-panel,
+html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui-text); }
