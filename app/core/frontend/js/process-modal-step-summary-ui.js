@@ -4,13 +4,13 @@
   function toggleStepSummary(stepId) {
     const summaryCard = document.getElementById(stepId);
     if (!summaryCard) return;
-    
+
     const expandedDetails = summaryCard.querySelector('.step-summary-expanded');
     const collapsedSummary = summaryCard.querySelector('.step-summary-collapsed');
     const expandIcon = summaryCard.querySelector('.step-summary-expand-icon');
-    
+
     if (!expandedDetails || !expandIcon) return;
-    
+
     const isExpanded = summaryCard.dataset.expanded === 'true';
     if (isExpanded) {
       expandedDetails.style.display = 'none';
