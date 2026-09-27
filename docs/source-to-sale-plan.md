@@ -507,7 +507,7 @@ Sales matter here because they finish the trace. Make them readable and complete
 Start after Phase 1 so redesigned screens show correct numbers; 4.1 and 4.7 can start at
 any time.
 
-- [ ] **4.1 Put data at the top of every page.** *High · S*
+- [x] **4.1 Put data at the top of every page.** *High · S* (!395)
   - Evidence: every Core and CRM page (dashboard, product workflows, active batches, live
     inventory, source map, CRM) opens with a decorative three-node illustration and a
     centred description, about 400 px on desktop. On a phone the dashboard's whole first
