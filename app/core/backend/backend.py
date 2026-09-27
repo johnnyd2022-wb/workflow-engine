@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from flask import (
     Blueprint,
@@ -25,7 +26,6 @@ from flask import (
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from zoneinfo import ZoneInfo
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import (
