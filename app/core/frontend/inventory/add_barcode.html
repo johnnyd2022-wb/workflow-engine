@@ -1,6 +1,7 @@
 {% extends "shared/base_spa.html" %}
 
 {% block title %}Add Inventory via Barcode{% endblock %}
+{% block body_class %}inventory-barcode-page{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="Scan or enter a barcode to add inventory.">
@@ -49,7 +50,7 @@
             <p style="font-size: 0.8125rem; color: var(--text-secondary); margin: 0;">Tap Continue to look up this barcode and fill the form.</p>
           </div>
 
-          <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap;">
+          <div class="barcode-continue-actions" style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap;">
             <button type="button" class="btn btn-primary" id="barcode-continue-btn" style="min-height: 44px;" disabled>Continue</button>
           </div>
         </div>

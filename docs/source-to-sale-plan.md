@@ -522,7 +522,7 @@ any time.
     stock alerts. Drop metrics with no meaningful base; filter sign-ins and sync noise out
     of featured activity; banners always name the issue and link to it.
 
-- [ ] **4.6 A phone mode for the production floor.** *M*
+- [x] **4.6 A phone mode for the production floor.** *M* (!397)
   - Change: recording a step, scanning a barcode and attaching photo evidence each work
     one-handed at 390 px, with tests at that width. (The bottom nav on phone is already
     right; keep it.)
