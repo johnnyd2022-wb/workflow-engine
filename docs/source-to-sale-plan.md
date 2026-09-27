@@ -530,7 +530,7 @@ any time.
   - [ ] a. Sidebar background stops at viewport height on long pages (white below it).
   - [ ] b. The floating blue menu toggle overlaps the sidebar edge.
   - [ ] c. CRM widget control icons render as missing-glyph boxes.
-  - [ ] d. `/settings` requests a resource that returns 404.
+- [x] d. `/settings` requests a resource that returns 404. (!389)
   - [ ] e. Forms asking for raw UUIDs (Customs "Core source references") — pick records
     instead.
   - [ ] f. The Compliance workspaces page is one card on an empty screen; fold it into

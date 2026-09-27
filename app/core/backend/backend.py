@@ -809,9 +809,13 @@ def integrations():
     return render_template("integrations/integrations.html", active_page="integrations")
 
 
+@core_bp.route("/settings", methods=["GET"])
+@core_bp.route("/workflow-engine/settings", methods=["GET"])
 @core_bp.route("/core/settings", methods=["GET"])
 @requires_auth
 def settings():
+    if request.path != "/core/settings":
+        return redirect("/core/settings", code=308)
     return render_template("settings/settings.html", active_page="settings")
 
 
