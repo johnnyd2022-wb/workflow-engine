@@ -111,6 +111,9 @@
       }
       smRenderBrowseGrid();
 
+      const invoiceParam = params.get('invoice');
+      if (invoiceParam) smTraceRecallInvoiceId(invoiceParam);
+
       smLoadSecondaryData();
       smLoadFindings();
 
@@ -2161,9 +2164,33 @@
   }
 
   async function smTraceRecallInvoice(sale) {
-    const itemIds = [...new Set(sale.trace_item_ids || [])];
-    if (!itemIds.length) return;
+    if (sale.xero_invoice_id) return smTraceRecallInvoiceId(sale.xero_invoice_id);
+    return smTraceRecallItems(sale.trace_item_ids || [], sale.invoice_number || 'not recorded');
+  }
+
+  async function smTraceRecallInvoiceId(invoiceId) {
     smShowAreaLoading();
+    try {
+      const response = await fetch(`/api/crm/invoices/${encodeURIComponent(invoiceId)}/trace-items`, { headers: smCsrfHeader() });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const invoice = await response.json();
+      await smTraceRecallItems(invoice.inventory_item_ids || [], invoice.invoice_number || invoiceId);
+    } catch (error) {
+      console.error('[sourcemap] invoice lookup failed', error);
+      const area = document.getElementById('sm-trace-area');
+      if (area) area.innerHTML = smEmptyState('Invoice trace failed. Please try again.');
+    }
+  }
+
+  async function smTraceRecallItems(sourceIds, invoice) {
+    const itemIds = [...new Set(sourceIds)];
+    if (!itemIds.length) {
+      const area = document.getElementById('sm-trace-area');
+      if (area) area.innerHTML = smEmptyState('No allocated stock is recorded for this invoice yet.');
+      return;
+    }
+    smShowAreaLoading();
+    smSetControlsVisible(true);
     try {
       const responses = await Promise.all(itemIds.map(async itemId => {
         const response = await fetch(`/api/core/inventory/trace-graph/${itemId}`, { headers: smCsrfHeader() });
@@ -2178,7 +2205,6 @@
       });
       const root = itemMap.get(itemIds[0]);
       if (!root) throw new Error('Invoice source item was not returned by the trace');
-      const invoice = sale.invoice_number || sale.xero_invoice_id || 'not recorded';
       tracedItemId = root.id;
       tracedItemName = root.name || '';
       tracedItemBatch = root.batch_id || root.supplier_batch_number || '';
