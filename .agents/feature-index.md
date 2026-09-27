@@ -274,8 +274,8 @@ do not introduce reverse imports into existing domain code.
     routes:   /api/core/inventory/reconcile/matching-untracked [GET]
               /api/core/inventory/reconcile/via-addition [POST]
               /api/core/inventory/reconcile/via-execution [POST]
-    backend:  app/core/backend/reconciliation_routes.py (164)
-              app/core/backend/reconciliation_service.py (889 — 2nd largest module in core)
+    backend:  app/features/reconciliation/routes/reconciliation_routes.py (168)
+              app/features/reconciliation/service.py (813)
     models:   (none of its own — operates on InventoryItem/Execution)
     frontend: js/add-inventory-reconciliation.js, js/map-to-execution-reconciliation.js
     tests:    GAP — no dedicated test file for 1053 lines of logic
@@ -283,9 +283,9 @@ do not introduce reverse imports into existing domain code.
     depends on:      platform, inventory, execution
     depended on by:  compliance-checks (untracked-items findings feed this)
 
-    - Already fully behind the register_routes(bp) seam, no backend.py entanglement.
-      Cheapest Layer-2 slice to carve, and the biggest untested surface. Worth tests first.
-    - _find_producing_step is imported back into backend.py:31 — the one coupling to break.
+    - Carved behind the existing register_routes(bp) seam; URLs and endpoint names remain
+      on core_bp. `_find_producing_step` and `reconcile_output_to_untracked_reduce_only`
+      are still imported by backend.py, a coupling to break after the pure move.
 
 ## compliance-checks
 
