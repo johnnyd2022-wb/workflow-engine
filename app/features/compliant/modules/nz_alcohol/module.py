@@ -1,5 +1,6 @@
 """Install-time registration for the NZ Alcohol module."""
 
+from datetime import date, timedelta
 from urllib.parse import quote
 from uuid import UUID
 
@@ -150,7 +151,80 @@ def run_excise_check(org_id: UUID, session: Session) -> CheckResult:
     )
 
 
+STOCKTAKE_CHECK_ID = "compliant.nz_alcohol.stocktake"
+STOCKTAKE_REMIND_DAYS = 14
+
+
+def stocktake_alerts(session: Session, org_id: UUID, settings: dict | None, today: date) -> list[dict]:
+    """Plan 2.6: the next stocktake coming due, and every unresolved variance with its LAL and duty."""
+    from app.core.backend import stocktake
+
+    alerts = []
+    plan = stocktake.schedule(session, org_id, settings, today)
+    if plan["next_due"]:
+        due = date.fromisoformat(plan["next_due"])
+        if today >= due - timedelta(days=STOCKTAKE_REMIND_DAYS):
+            alerts.append(
+                {
+                    "id": f"stocktake-due-{plan['next_due']}",
+                    "title": f"Stocktake due {due.strftime('%-d %b %Y')}",
+                    "description": (
+                        f"{'Overdue: ' if plan['overdue'] else ''}Count finished goods and work in progress "
+                        f"({plan['frequency'].replace('_', '-')} schedule; Customs' minimum is once a year)."
+                    ),
+                    "due_date": plan["next_due"],
+                    "href": "/core/stocktake",
+                    "action_label": "Start stocktake",
+                    "overdue": plan["overdue"],
+                }
+            )
+    for v in stocktake.open_variances(session, org_id, today):
+        sign = "" if v["variance"].startswith("-") else "+"
+        lal, duty = (v["measure"] or "").lstrip("-"), (v["cost"] or "").lstrip("-")
+        money = (f", {lal} LAL" + (f", ${duty} duty" if duty else "")) if lal else ""
+        what = (
+            f"under investigation until {v['investigate_until']}" if v["status"] == "investigating" else "not resolved"
+        )
+        alerts.append(
+            {
+                "id": f"stocktake-variance-{v['line_id']}",
+                "title": f"Stocktake variance: {v['product']} {sign}{v['variance']} {v['unit']}",
+                "description": f"Counted {v['counted_on']} (batch {v['batch'] or 'n/a'}{money}), {what}.",
+                "due_date": v["investigate_until"] or v["counted_on"],
+                "href": f"/core/stocktake?id={v['stocktake_id']}",
+                "action_label": "Resolve",
+                "overdue": v["overdue"] or v["status"] == "open",
+            }
+        )
+    return alerts
+
+
+def run_stocktake_check(org_id: UUID, session: Session) -> CheckResult:
+    profile = ComplianceService(session).get_profile(org_id)
+    if profile is None or not profile.enabled:
+        return CheckResult(check_id=STOCKTAKE_CHECK_ID, flagged=False, data={})
+    alerts = stocktake_alerts(session, org_id, profile.settings or {}, date.today())
+    if not alerts:
+        return CheckResult(check_id=STOCKTAKE_CHECK_ID, flagged=False, data={})
+    for alert in alerts:
+        alert.pop("overdue", None)
+    return CheckResult(
+        check_id=STOCKTAKE_CHECK_ID,
+        flagged=True,
+        message=alerts[0]["title"],
+        data={
+            "system_finding": {
+                "category": "Customs stocktake",
+                "action": {"href": "/core/stocktake", "label": "Open stocktake"},
+                "details": alerts,
+            },
+            "system_alerts": alerts,
+        },
+    )
+
+
 def register_checks(runner) -> None:
     if config.compliant_enabled:
         runner.register_check(CHECK_ID, run_check)
         runner.register_check(EXCISE_CHECK_ID, run_excise_check)
+        runner.register_check(STOCKTAKE_CHECK_ID, run_stocktake_check)

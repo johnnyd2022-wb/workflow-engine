@@ -231,6 +231,9 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.trace_*", None, "inventory.view"),
     ("stock_locations.*", _READ, "inventory.view"),  # plan 2.1
     ("stock_locations.*", None, "inventory.adjust"),
+    ("stocktake.update_stocktake_settings", None, "compliance.manage"),  # plan 2.6
+    ("stocktake.*", _READ, "inventory.view"),
+    ("stocktake.*", None, "inventory.adjust"),
     # --- reading production
     ("core.get_hub_overview", None, ("production.view", "inventory.view")),
     ("core.core", None, ("production.view", "inventory.view")),

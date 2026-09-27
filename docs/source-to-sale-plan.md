@@ -421,26 +421,26 @@ records, not from people typing figures in.
   - Done when: licence and certificate dates never lapse unnoticed, and an inspector's
     request for policies, training and incident records is one download.
 
-- [ ] **2.6 Customs stocktake: count reality and reconcile it to lodged duty.** *High · L*
+- [x] **2.6 Customs stocktake: count reality and reconcile it to lodged duty.** *High · L*
   - Why: at a Customs audit the officer asks for sales data and for where every product is
     right now (e.g. "VAT57 and VAT59 in tank, 43 bottles of Solstice on the shelf"), then
     counts the shelf to check. Customs requires stocktakes at least once a year.
     Discrepancies must be investigated and resolved, and a confirmed unexplained loss is
     dutiable and must be reported to Customs.
   - Change:
-    - [ ] a. **Stock position:** where everything is, by location and batch. Bulk stock in
+    - [x] a. **Stock position:** where everything is, by location and batch. Bulk stock in
       tanks in litres, ABV and LAL; packaged goods by product and batch; for the licensed
       area and each outside location. Exportable for a visit together with the lodged
       periods.
-    - [ ] b. **Stocktake schedule:** configurable frequency (monthly, quarterly,
+    - [x] b. **Stocktake schedule:** configurable frequency (monthly, quarterly,
       six-monthly or annual; Customs' minimum is annual) with a reminder, plus an
       on-demand "Customs is here" count.
-    - [ ] c. **Count screen** (reuses the stocktake from 1.3f): the expected quantity for
+    - [x] c. **Count screen** (reuses the stocktake from 1.3f): the expected quantity for
       each line; type the count or scan; variance per line in units and LAL. Works on a
       phone during the visit.
-    - [ ] d. **Reconciliation per product:** opening + produced − removed − approved losses
+    - [x] d. **Reconciliation per product:** opening + produced − removed − approved losses
       = expected closing, tied back to the lodged entries.
-    - [ ] e. **Resolve variances** as below. Nothing blocks work; unresolved variances stay
+    - [x] e. **Resolve variances** as below. Nothing blocks work; unresolved variances stay
       on the alert list with their LAL and potential duty.
   - Resolving a variance takes one tap, with the most likely reason suggested first. A
     variance can be split across reasons (e.g. 4 with a rep, 3 broken).
@@ -462,6 +462,21 @@ records, not from people typing figures in.
 
     Customs' published guidance doesn't cover surpluses. Confirm how Customs treats
     surpluses, and duty-paid stock coming back into the licensed area, before building.
+  - As built (!MR2.6): Core → Stocktake (`/core/stocktake`, `stocktake_bp`). The stock
+    position lists finished goods and work in progress by place and batch with LAL, and
+    downloads as CSV together with the lodged entries. The schedule (monthly, quarterly,
+    six-monthly, annual; default annual, anchored on the last stocktake or the go-live
+    date) raises a reminder 14 days before it's due; "Customs is here" starts an
+    on-demand count. Each line's expected quantity is taken when it's counted, so sales
+    during a count aren't variances; bulk liquid matches within a tolerance (default
+    0.5%), bottles never do. Every difference is resolved into ordinary dated stock
+    operations as in the tables above (moves, wastage, adjustments), so excise follows
+    on its own; system places "Removed without a sale record" and "Unaccounted loss"
+    (outside the licensed area) make those dutiable removals. Unresolved and
+    investigating lines stay on the alert list with LAL and duty. Core reaches LAL and
+    duty only through a generic stock-measure seam in the Compliant platform, so Core
+    names no industry. Surpluses are recorded and flagged to raise with Customs, never
+    credited automatically, pending Customs' confirmation of how they treat them.
   - Principles: every resolution is a dated adjustment recording who and why, never an
     overwrite. Bulk liquid can have a configurable measurement tolerance (e.g. ±0.5% of
     volume); packaged units have none.

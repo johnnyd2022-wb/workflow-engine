@@ -14,6 +14,7 @@ from app.core.db.models.process_step_document import ProcessStepDocument
 from app.core.db.models.process_version import ProcessVersion
 from app.core.db.models.step import Step
 from app.core.db.models.stock_location import StockLocation, StockTransfer
+from app.core.db.models.stocktake import Stocktake, StocktakeLine, StocktakeResolution
 from app.core.db.models.system_findings_cache import SystemFindingsCache
 from app.core.db.models.trusted_device import TrustedDevice
 from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
@@ -22,6 +23,9 @@ from app.core.db.models.user import User
 __all__ = [
     "StockLocation",
     "StockTransfer",
+    "Stocktake",
+    "StocktakeLine",
+    "StocktakeResolution",
     "ExecutionEvidence",
     "ProcessStepDocument",
     "Organisation",
