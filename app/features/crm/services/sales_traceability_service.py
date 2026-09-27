@@ -369,6 +369,22 @@ class SalesTraceabilityService:
             .order_by(XeroInvoice.date.asc().nulls_last(), XeroInvoice.created_at.asc())
             .all()
         )
+        lines_by_invoice = self._invoice_lines_by_id(org_id, invoices)
+        stock_items_by_name: dict[str, list[InventoryItem]] = defaultdict(list)
+        product_names = {mapping.biz_e_product_name for mapping in mappings}
+        if product_names:
+            stock_items = (
+                self.db.query(InventoryItem)
+                .filter(
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.name.in_(product_names),
+                    InventoryItem.inventory_type == "final_product",
+                    InventoryItem.quantity > 0,
+                )
+                .all()
+            )
+            for item in stock_items:
+                stock_items_by_name[item.name].append(item)
         stock_cache: dict[tuple[str, UUID | None], Decimal] = {}
         rows = []
         for invoice in invoices:
@@ -378,12 +394,7 @@ class SalesTraceabilityService:
                 continue
             if go_live is not None and invoice.date is not None and invoice.date < go_live:
                 continue
-            lines = (
-                self.db.query(XeroInvoiceLineItem)
-                .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id == invoice.id)
-                .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
-                .all()
-            )
+            lines = lines_by_invoice.get(invoice.id, [])
             for index, line in enumerate(lines):
                 line_key = (line.xero_line_item_id or f"position:{index + 1}").strip()
                 if (invoice.xero_invoice_id, line_key) in allocated:
@@ -401,22 +412,21 @@ class SalesTraceabilityService:
                     needed = quantity * int(match.units_per_line or 1)
                     stock_key = (product_name, match.biz_e_source_output_id)
                     if stock_key not in stock_cache:
-                        items = self.db.query(InventoryItem).filter(
-                            InventoryItem.org_id == org_id,
-                            InventoryItem.name == product_name,
-                            InventoryItem.inventory_type == "final_product",
-                            InventoryItem.quantity > 0,
-                        )
-                        if match.biz_e_source_output_id is not None:
-                            items = items.filter(InventoryItem.source_output_id == match.biz_e_source_output_id)
                         available = Decimal("0")
-                        for item in items.all():
+                        for item in stock_items_by_name.get(product_name, []):
+                            if (
+                                match.biz_e_source_output_id is not None
+                                and item.source_output_id != match.biz_e_source_output_id
+                            ):
+                                continue
                             item_quantity = parse_stored_quantity_to_decimal(item.quantity)
                             if is_count_unit(item.unit):
                                 item_quantity = item_quantity.to_integral_value(rounding=ROUND_FLOOR)
                             available += item_quantity
                         stock_cache[stock_key] = available
                     available = stock_cache[stock_key]
+                    if not available.is_finite() or not needed.is_finite():
+                        continue
                     if available >= needed:
                         # Earlier unallocated invoice lines would consume this stock
                         # first during replay. Reserve it before assessing later lines.
@@ -465,15 +475,7 @@ class SalesTraceabilityService:
             .order_by(XeroInvoice.date.asc().nulls_last())
             .all()
         )
-        # One query for every line, grouped by invoice (no per-invoice query in the loop).
-        lines_by_invoice: dict = defaultdict(list)
-        for line in (
-            self.db.query(XeroInvoiceLineItem)
-            .filter(XeroInvoiceLineItem.org_id == org_id)
-            .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
-            .all()
-        ):
-            lines_by_invoice[line.invoice_id].append(line)
+        lines_by_invoice = self._invoice_lines_by_id(org_id, invoices)
         for inv in invoices:
             if (inv.invoice_type or "").upper() != _SALE_INVOICE_TYPE or (
                 inv.status or ""
@@ -481,7 +483,8 @@ class SalesTraceabilityService:
                 continue
             if go_live is not None and inv.date is not None and inv.date < go_live:
                 continue
-            for index, line in enumerate(lines_by_invoice.get(inv.id, [])):
+            lines = lines_by_invoice.get(inv.id, [])
+            for index, line in enumerate(lines):
                 key = (line.xero_line_item_id or f"position:{index + 1}").strip()
                 if (inv.xero_invoice_id, key) in allocated:
                     continue
@@ -503,7 +506,20 @@ class SalesTraceabilityService:
                 if len(out) >= limit:
                     return out
         return out
-        return out
+
+    def _invoice_lines_by_id(self, org_id: UUID, invoices: list[XeroInvoice]) -> dict[UUID, list[XeroInvoiceLineItem]]:
+        lines_by_invoice: dict[UUID, list[XeroInvoiceLineItem]] = defaultdict(list)
+        invoice_ids = [invoice.id for invoice in invoices]
+        if invoice_ids:
+            lines = (
+                self.db.query(XeroInvoiceLineItem)
+                .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id.in_(invoice_ids))
+                .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
+                .all()
+            )
+            for line in lines:
+                lines_by_invoice[line.invoice_id].append(line)
+        return lines_by_invoice
 
     def _go_live_date(self, org_id: UUID):
         cache = self.__dict__.setdefault("_go_live_cache", {})
