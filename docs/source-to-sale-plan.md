@@ -247,7 +247,7 @@ want it, and never produce a recall list that can't be trusted.
     - [x] e. CSV and PDF export.
     - [ ] f. Trace can start from:
       - [x] a supplier lot (forward).
-      - [ ] an invoice (backward).
+      - [x] an invoice (backward).
     - [x] g. Sold-out lots under their own heading, not "In stock".
   - Done when: the timed mock recall is under 5 minutes.
 
