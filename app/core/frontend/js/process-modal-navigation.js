@@ -12,7 +12,7 @@
       const indicators = document.getElementById('create-process-step-indicators');
       if (existingView) existingView.style.display = 'none';
       if (indicators) indicators.style.display = 'flex';
-    
+
       // If we're restoring a draft and currentStep is 1, but we should be on a different step,
       // don't update (something else will set it correctly)
       // BUT: if isRestoringDraft is true and currentStep is already set to something other than 1, allow it
@@ -20,7 +20,7 @@
         console.warn('updateStepDisplay called with currentStep=1 during draft restoration, skipping to prevent reset');
         return;
       }
-    
+
       // Update step indicators
       for (let i = 1; i <= helpers.totalSteps; i++) {
         const indicator = document.querySelector(`.step-indicator[data-step="${i}"]`);
@@ -40,7 +40,7 @@
           }
         }
       }
-    
+
       // Show/hide steps - use !important to override inline styles
       for (let i = 1; i <= helpers.totalSteps; i++) {
         const stepDiv = document.getElementById(`create-process-step-${i}`);
@@ -56,7 +56,7 @@
           console.warn(`Step div not found: create-process-step-${i}`);
         }
       }
-    
+
       // On inputs step (2): show "Outputs from previous steps" tab only if there is at least one previous step; populate lists
       if (currentStep === 2) {
         if (typeof window.updatePreviousOutputTabVisibility === 'function') window.updatePreviousOutputTabVisibility();
@@ -64,7 +64,7 @@
         if (typeof window.renderPreviousOutputsList === 'function') window.renderPreviousOutputsList();
         helpers.updateInputButtonsText();
       }
-    
+
       // On outputs step (3): if no outputs yet, add one so the first output is ready and expanded
       if (currentStep === 3) {
         const outputsList = document.getElementById('guided-outputs-list');
