@@ -39,6 +39,7 @@ logger = get_logger(__name__)
 # Guardrail: batch size caps row-lock duration under concurrent SELECT ... FOR UPDATE.
 MAX_WASTAGE_BATCH_ENTRIES = 100
 
+
 @requires_auth
 def inventory_dispose():
     """Full-page disposal flow for recording inventory wastage."""
@@ -553,6 +554,7 @@ def list_wastage():
             }
         )
     return jsonify({"wastage_records": result}), 200
+
 
 def register_routes(bp):
     """Keep Core URLs and endpoint names while the wastage code lives in its slice."""

@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from flask import (
     Blueprint,
@@ -25,7 +26,6 @@ from flask import (
 from pydantic import ValidationError
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from zoneinfo import ZoneInfo
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import (
@@ -855,10 +855,6 @@ def inventory_live_view():
 def executions_live_view():
     """Dedicated active batches experience (drill-in from Core product workflows tab)."""
     return render_template("core/core2.html", active_page="core", core2_focus="active_batches_live")
-
-
-
-
 
 
 @core_bp.route("/core/flows", methods=["GET"])
@@ -3414,12 +3410,6 @@ def list_inventory():
         body["has_more"] = has_more
         body["next_cursor"] = next_cursor
     return jsonify(body), 200
-
-
-
-
-
-
 
 
 @core_bp.route("/api/core/inventory/out-of-stock", methods=["GET"])
