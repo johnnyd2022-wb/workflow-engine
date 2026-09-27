@@ -904,8 +904,8 @@
       if (recallWrap) {
         recallWrap.style.display = 'block';
         const saleEdges = connections.filter(connection => connection.edge_type === 'sale');
-        const recall = smBuildRecallScope(tracedItem, allItems, productionConnections, sales, saleEdges);
-        smRenderRecall(recallWrap, tracedItem, groups, recall);
+        const recall = smBuildRecallScope(tracedItem, allItems, productionConnections, sales, saleEdges, traceResult.recall_start_item_ids || []);
+        smRenderRecall(recallWrap, tracedItem, groups, recall, traceResult.recall_origin_invoice || '');
       }
     }
     if (currentView !== 'table' && currentView !== 'recall' && sales.length) area.appendChild(smBuildSalesTerminal(sales));
@@ -1810,15 +1810,15 @@
   /* Recall is deliberately tabular: one row per production execution, grouped by
      workflow, so an auditor can follow the selected lot through its actual hand-offs
      and then see every linked customer sale without reading a graph. */
-  function smBuildRecallScope(root, items, productionEdges, sales, saleEdges) {
+  function smBuildRecallScope(root, items, productionEdges, sales, saleEdges, startIds = []) {
     const itemById = new Map(items.filter(item => item.node_type !== 'sale').map(item => [item.id, item]));
     const outgoing = new Map();
     productionEdges.forEach(edge => {
       if (!outgoing.has(edge.from_id)) outgoing.set(edge.from_id, []);
       outgoing.get(edge.from_id).push(edge.to_id);
     });
-    const reachable = new Set([root.id]);
-    const pending = [root.id];
+    const reachable = new Set([root.id, ...startIds]);
+    const pending = [...reachable];
     while (pending.length) {
       (outgoing.get(pending.pop()) || []).forEach(id => {
         if (!reachable.has(id)) { reachable.add(id); pending.push(id); }
@@ -1839,9 +1839,10 @@
       const source = itemById.get(edge.from_id);
       const producedAt = (source && source.step_data && source.step_data.completed_at) || (source && source.created_at);
       const preSold = !!(sale.sale_date && producedAt && sale.sale_date.slice(0, 10) < producedAt.slice(0, 10));
-      const row = allocated.get(sale.id) || { ...sale, recall_quantity: 0, pre_sold: false };
+      const row = allocated.get(sale.id) || { ...sale, recall_quantity: 0, pre_sold: false, trace_item_ids: [] };
       row.recall_quantity += Number.isFinite(qty) ? qty : 0;
       row.pre_sold = row.pre_sold || preSold;
+      if (!row.trace_item_ids.includes(edge.from_id)) row.trace_item_ids.push(edge.from_id);
       allocated.set(sale.id, row);
     });
     return { finalItems, sales: [...allocated.values()] };
@@ -1927,7 +1928,7 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  function smRenderRecall(wrap, root, groups, recall) {
+  function smRenderRecall(wrap, root, groups, recall, originInvoice = '') {
     const sales = recall.sales;
     wrap.innerHTML = '';
     // Import and correlation fields are useful to the importer, but do not
@@ -1963,6 +1964,7 @@
     const batch = document.createElement('p');
     batch.className = 'sm-recall-header__batch';
     batch.textContent = `Batch ${root.batch_id || root.supplier_batch_number || 'not recorded'}`;
+    if (originInvoice) batch.textContent = `Started from invoice ${originInvoice} · ${batch.textContent}`;
     title.append(product, batch);
     const actions = document.createElement('div');
     actions.className = 'sm-recall-export-actions';
@@ -2131,8 +2133,20 @@
     const body = salesTable.createTBody();
     sales.forEach(sale => {
       const row = body.insertRow();
+      const invoiceCell = row.insertCell();
+      const invoice = sale.invoice_number || sale.xero_invoice_id || '—';
+      invoiceCell.textContent = invoice;
+      if (sale.trace_item_ids && sale.trace_item_ids.length) {
+        const traceButton = document.createElement('button');
+        traceButton.type = 'button';
+        traceButton.className = 'sm-link-button';
+        traceButton.textContent = 'Trace invoice';
+        traceButton.setAttribute('aria-label', `Trace backward from invoice ${invoice}`);
+        traceButton.addEventListener('click', () => smTraceRecallInvoice(sale));
+        invoiceCell.appendChild(document.createTextNode(' '));
+        invoiceCell.appendChild(traceButton);
+      }
       [
-        sale.invoice_number || sale.xero_invoice_id || '—',
         sale.customer_name || sale.store_name || '—',
         sale.sale_date ? smFmtDate(sale.sale_date) : '—',
         `${smFmtQty(sale.recall_quantity)} ${sale.unit || 'units'}`,
@@ -2144,6 +2158,49 @@
       });
     });
     return salesTable;
+  }
+
+  async function smTraceRecallInvoice(sale) {
+    const itemIds = [...new Set(sale.trace_item_ids || [])];
+    if (!itemIds.length) return;
+    smShowAreaLoading();
+    try {
+      const responses = await Promise.all(itemIds.map(async itemId => {
+        const response = await fetch(`/api/core/inventory/trace-graph/${itemId}`, { headers: smCsrfHeader() });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      }));
+      const itemMap = new Map();
+      const edgeMap = new Map();
+      responses.forEach(result => {
+        (result.all_items || []).forEach(item => itemMap.set(item.id, item));
+        (result.connections || []).forEach(edge => edgeMap.set([edge.from_id, edge.to_id, edge.execution_id, edge.edge_type].join('|'), edge));
+      });
+      const root = itemMap.get(itemIds[0]);
+      if (!root) throw new Error('Invoice source item was not returned by the trace');
+      const invoice = sale.invoice_number || sale.xero_invoice_id || 'not recorded';
+      tracedItemId = root.id;
+      tracedItemName = root.name || '';
+      tracedItemBatch = root.batch_id || root.supplier_batch_number || '';
+      currentView = 'recall';
+      document.querySelectorAll('.sm-view-btn').forEach(button => {
+        button.classList.toggle('sm-view-btn--active', button.dataset.view === 'recall');
+        button.setAttribute('aria-selected', button.dataset.view === 'recall' ? 'true' : 'false');
+      });
+      const result = {
+        all_items: [...itemMap.values()],
+        connections: [...edgeMap.values()],
+        traced_item: root,
+        recall_start_item_ids: itemIds,
+        recall_origin_invoice: invoice,
+      };
+      lastTraceResult = result;
+      smRenderTrace(result);
+    } catch (error) {
+      console.error('[sourcemap] invoice recall trace failed', error);
+      const area = document.getElementById('sm-trace-area');
+      if (area) area.innerHTML = smEmptyState('Invoice trace failed. Please try again.');
+    }
   }
 
   /* One entry per customer, however many invoice lines they bought. Sales with no
