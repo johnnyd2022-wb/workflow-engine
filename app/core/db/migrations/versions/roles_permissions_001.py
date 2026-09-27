@@ -24,12 +24,12 @@ down_revision: Union[str, None] = "process_settings_001"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-NEW_ROLES = ("PRODUCTION", "COMPLIANCE", "SALES", "AUDITOR")
-
 
 def upgrade() -> None:
-    for value in NEW_ROLES:
-        op.execute(f"ALTER TYPE user_role ADD VALUE IF NOT EXISTS '{value}'")
+    op.execute("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'PRODUCTION'")
+    op.execute("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'COMPLIANCE'")
+    op.execute("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'SALES'")
+    op.execute("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'AUDITOR'")
     op.add_column("users", sa.Column("access_expires_at", sa.DateTime(timezone=True), nullable=True))
     # Invite links: an admin adds a person and sends them a one-time link to set their own
     # password. Only a SHA-256 of the token is stored.
