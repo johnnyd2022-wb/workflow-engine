@@ -21,7 +21,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from flask import g, jsonify, render_template, request
+from flask import Blueprint, g, jsonify, render_template, request
 
 from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
@@ -253,3 +253,8 @@ def register_routes(bp):
 
         log_action("opening_stock", "organisation", org_id, {"rows": len(created)}, org_id, g.current_user.id)
         return jsonify({"created": len(created), **go_live_status(db_session, org_id)}), 201
+
+
+# Its own blueprint so backend.py doesn't grow.
+go_live_bp = Blueprint("go_live", __name__, template_folder="../frontend")
+register_routes(go_live_bp)
