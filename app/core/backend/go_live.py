@@ -51,7 +51,7 @@ def _org_id() -> UUID:
 def workflow_outputs(session, org_id: UUID) -> dict:
     """Final outputs (one per workflow's last step) and intermediate outputs, by name."""
     processes = session.query(Process).filter(Process.org_id == org_id).order_by(Process.name.asc()).all()
-    steps = session.query(Step).filter(Step.org_id == org_id).all()
+    steps = session.query(Step).filter(Step.org_id == org_id).yield_per(200)
     by_process: dict = {}
     for step in steps:
         by_process.setdefault(step.process_id, []).append(step)
