@@ -13,6 +13,7 @@ from app.core.db import db_session
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
+from app.core.domain.execution_prompt_rules import validate_execution_prompts
 from app.core.security.permissions import requires_auth
 from app.observability import get_logger
 
@@ -170,6 +171,20 @@ def register_routes(bp):
             }
             updated = dict(existing)
             updated.update(changes)
+            for key, value in changes.items():
+                previous = existing.get(key)
+                if previous is not None and type(value) is not type(previous):
+                    db_session.rollback()
+                    return jsonify({"error": f"{key} must keep its recorded value type"}), 400
+            changed_prompts = [
+                prompt
+                for prompt in (step.step.execution_prompts or [])
+                if isinstance(prompt, dict) and prompt.get("label") in changes
+            ]
+            prompt_errors = validate_execution_prompts(changed_prompts, updated)
+            if prompt_errors:
+                db_session.rollback()
+                return jsonify({"error": "; ".join(prompt_errors)}), 400
             occurred = step.completed_at
             after = {
                 "occurred_at": occurred.isoformat() if occurred else None,
