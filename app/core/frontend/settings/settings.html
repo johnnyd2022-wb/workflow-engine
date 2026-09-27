@@ -288,6 +288,10 @@
               <h2 class="card-title" style="margin-bottom: 0;">Two-Factor Authentication</h2>
             </div>
             <div class="card-content">
+          <div id="2fa-required-banner" class="settings-2fa-required" role="alert" hidden>
+            <strong>Two-factor authentication is required for administrators.</strong>
+            <span id="2fa-required-banner-text">Set it up now to continue using the app.</span>
+          </div>
           <div id="2fa-status-section" class="settings-2fa-block">
             <p class="settings-2fa-status" id="2fa-status-text">
               Status: <span id="2fa-status-value">Loading...</span>
@@ -332,6 +336,13 @@
     .modal-overlay.active {
       display: flex !important;
     }
+    .settings-2fa-required {
+      display: flex; flex-direction: column; gap: 4px;
+      padding: 12px 14px; margin-bottom: 12px; border-radius: var(--radius-md);
+      border: 1px solid var(--warning, #b7791f); background: var(--warning-bg, #fdf6e7);
+      color: var(--text-primary); font-size: 14px; line-height: 1.45;
+    }
+    .settings-2fa-required[hidden] { display: none; }
     #2fa-enrollment-modal.active {
       display: flex !important;
     }
@@ -584,6 +595,9 @@
     let current2FAStatus = false;
     let enrollmentSecret = null;
     let enrollmentInProgress = false;  // Prevent multiple enrollment modals
+    let twoFactorRequired = false;          // Admin policy: can't be disabled
+    let twoFactorEnrollmentRequired = false; // Admin without 2FA: everything else is blocked
+    let autoEnrollmentOffered = false;
     
     // Check for incomplete enrollment on page load
     async function checkIncompleteEnrollment() {
@@ -912,7 +926,15 @@
           const data = await response.json();
           if (data.user) {
             current2FAStatus = data.user.two_factor_enabled || false;
+            twoFactorRequired = !!data.user.two_factor_required;
+            twoFactorEnrollmentRequired = !!data.user.two_factor_enrollment_required;
             update2FAUI();
+            if (twoFactorEnrollmentRequired && !autoEnrollmentOffered) {
+              // Open enrolment straight away: nothing else works until it's done.
+              autoEnrollmentOffered = true;
+              const enableBtn = document.getElementById('enable-2fa-btn');
+              if (enableBtn) enableBtn.click();
+            }
           }
         }
       } catch (error) {
@@ -926,11 +948,13 @@
       const enableBtn = document.getElementById('enable-2fa-btn');
       const disableBtn = document.getElementById('disable-2fa-btn');
       
+      const requiredBanner = document.getElementById('2fa-required-banner');
+      if (requiredBanner) requiredBanner.hidden = !(twoFactorRequired && !current2FAStatus);
       if (current2FAStatus) {
-        statusValue.textContent = 'Enabled';
+        statusValue.textContent = twoFactorRequired ? 'Enabled (required for administrators)' : 'Enabled';
         statusValue.style.color = 'var(--azure-blue)';
         enableBtn.style.display = 'none';
-        disableBtn.style.display = 'block';
+        disableBtn.style.display = twoFactorRequired ? 'none' : 'block';
       } else {
         statusValue.textContent = 'Disabled';
         statusValue.style.color = 'var(--text-secondary)';
@@ -1294,6 +1318,11 @@
       current2FAStatus = true;
       update2FAUI();
       showSuccessNotification('Two-factor authentication has been enabled successfully!');
+      if (twoFactorEnrollmentRequired) {
+        // Enrolment was the only thing this session could do; carry on into the app.
+        twoFactorEnrollmentRequired = false;
+        setTimeout(() => { window.location.href = '/dashboard'; }, 800);
+      }
     });
     
     // Retry helper for critical operations
