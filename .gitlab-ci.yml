@@ -86,6 +86,28 @@ ruff:
     - main
   allow_failure: false
 
+# Plan 5.1b: each merge may shrink backend.py, but none may make it longer.
+backend_size:
+  stage: test
+  image: python:3.14-bookworm
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
+        BASE_REF="$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+      else
+        BASE_REF="$CI_COMMIT_BEFORE_SHA"
+      fi
+      if [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
+        BASE_REF="$CI_COMMIT_SHA^1"
+      fi
+      python3 scripts/check_backend_size.py --base "$BASE_REF" --head "$CI_COMMIT_SHA"
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
+
 # Guard the agent-written data stores (AER metrics ledger + findings history). These are
 # append-only JSONL that unattended skills write; a malformed line should fail fast here
 # rather than silently corrupt a scorecard or suppress the wrong finding. Stdlib-only.

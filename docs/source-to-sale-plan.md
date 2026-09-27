@@ -557,8 +557,8 @@ split.
       have shifted by about 1,000 lines). Add the staleness check the slicing plan left
       open (§6 item 1): a script that checks every `routes:` entry against the live URL
       map.
-    - [ ] b. **Stop the growth first:** a CI ratchet that fails if
-      `app/core/backend/backend.py` gets longer. New routes go in the owning slice.
+    - [x] b. **Stop the growth first:** a CI ratchet that fails if
+      `app/core/backend/backend.py` gets longer. New routes go in the owning slice. (!321)
     - [ ] c. Carve in the slicing plan's Phase 1 order: reconciliation → wastage →
       compliance-checks → traceability → activity-log → dashboard, then inventory →
       process-design → execution. One slice per MR, pure moves with no behaviour change,
