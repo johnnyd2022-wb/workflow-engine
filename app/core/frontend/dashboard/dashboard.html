@@ -70,6 +70,19 @@
         <p class="dash-refresh">Last refresh: <span data-dashboard-date>now</span></p>
       </section>
 
+      <p class="dash-denied-notice" data-dashboard-denied role="status" hidden>You don't have access to that page with your role. Ask an admin if you need it.</p>
+      <script>
+        (function () {
+          var params = new URLSearchParams(window.location.search);
+          if (params.get('denied') !== '1') return;
+          var el = document.querySelector('[data-dashboard-denied]');
+          if (el) el.hidden = false;
+          params.delete('denied');
+          var rest = params.toString();
+          window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : ''));
+        })();
+      </script>
+      <style>.dash-denied-notice { margin: 0 0 16px; padding: 12px 16px; border-radius: 10px; border: 1px solid #e0b252; background: #fdf6e7; color: #5b4210; font-size: 14px; }</style>
       <section class="dash-card dash-attention-card" aria-labelledby="dashboard-attention-title">
         <div class="dash-card-header">
           <div>
@@ -93,14 +106,16 @@
           <p>Dashboard gives you the signal. These workspaces hold the detailed tools and records.</p>
         </div>
         <div class="dash-workspace-grid">
+          {% if can('production.view', 'inventory.view') %}
           <a class="dash-workspace-card" href="/core" aria-label="Open Core operations workspace">
             <span class="dash-workspace-card__eyebrow">CORE</span>
             <h3>Run production and inventory</h3>
             <p data-dashboard-core-summary>Loading operations summary...</p>
             <span class="dash-workspace-card__link">Open Core <span aria-hidden="true">→</span></span>
           </a>
+          {% endif %}
 
-          {% if compliant_subscribed %}
+          {% if compliant_subscribed and can('compliance.view') %}
           <a class="dash-workspace-card" href="/compliant" hx-boost="false" data-dashboard-compliant-card aria-label="Open Compliant evidence workspace">
             <span class="dash-workspace-card__eyebrow">COMPLIANT</span>
             <h3>Prove compliance with evidence</h3>
@@ -108,7 +123,7 @@
             <div class="dash-compliant-health" data-dashboard-compliant-health hidden aria-live="polite"></div>
             <span class="dash-workspace-card__link" data-dashboard-compliant-link>Open Compliant <span aria-hidden="true">→</span></span>
           </a>
-          {% else %}
+          {% elif not compliant_subscribed %}
           <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Compliant workspace availability">
             <span class="dash-workspace-card__eyebrow">COMPLIANT</span>
             <h3>Prove compliance with evidence</h3>
@@ -117,14 +132,14 @@
           </article>
           {% endif %}
 
-          {% if crm_enabled %}
+          {% if crm_enabled and can('sales.view') %}
           <a class="dash-workspace-card" href="/crm" aria-label="Open CRM workspace">
             <span class="dash-workspace-card__eyebrow">CRM</span>
             <h3>Manage customers and commitments</h3>
             <p data-dashboard-crm-summary>Loading customer commitments...</p>
             <span class="dash-workspace-card__link">Open CRM <span aria-hidden="true">→</span></span>
           </a>
-          {% else %}
+          {% elif not crm_enabled %}
           <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="CRM workspace availability">
             <span class="dash-workspace-card__eyebrow">CRM</span>
             <h3>Manage customers and commitments</h3>
@@ -168,7 +183,7 @@
           <a class="dash-kpi-link" href="/core">Open Core</a>
         </article>
 
-        {% if crm_enabled %}
+        {% if crm_enabled and can('sales.view') %}
         <article class="dash-kpi-card">
           <p class="dash-kpi-label">Monthly revenue goal</p>
           <p class="dash-kpi-value" data-kpi-revenue-goal>n/a</p>
@@ -236,7 +251,7 @@
           </div>
         </section>
 
-        {% if crm_enabled %}
+        {% if crm_enabled and can('sales.view') %}
         <section class="dash-card" aria-label="Commercial pulse mtd">
           <div class="dash-card-header">
             <h2>Commercial pulse (MTD)</h2>

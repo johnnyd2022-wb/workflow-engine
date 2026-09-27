@@ -16,7 +16,11 @@ class UserRole(enum.Enum):
     """User role enum"""
 
     ADMIN = "admin"
-    MEMBER = "member"
+    MEMBER = "member"  # shown as "Staff": everything except admin-only settings
+    PRODUCTION = "production"
+    COMPLIANCE = "compliance"
+    SALES = "sales"
+    AUDITOR = "auditor"  # read-only and time-limited (access_expires_at)
 
 
 class User(TenantScoped, Base):
@@ -39,6 +43,12 @@ class User(TenantScoped, Base):
     two_factor_enabled = Column(Boolean, default=False, nullable=False)
     # Conservative default (24h); long sessions only with explicit user choice in settings.
     session_timeout_minutes = Column(Integer, default=24 * 60, nullable=False)
+    # Time-limited access (e.g. an Auditor for a verification visit). After this moment
+    # the account can't sign in or use an existing session.
+    access_expires_at = Column(DateTime(timezone=True), nullable=True)
+    # Pending invite: SHA-256 of the one-time setup token, and when it stops working.
+    invite_token_hash = Column(String(64), nullable=True, unique=True, index=True)
+    invite_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     # Account lockout fields for brute force protection
     failed_login_attempts = Column(Integer, default=0, nullable=False)  # Count of consecutive failed login attempts

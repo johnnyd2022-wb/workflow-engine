@@ -126,9 +126,17 @@
 
   /** Processes + executions + activity feed: needed for trace views and the Activity
    *  tab, not for first paint. Fetched once, after the browse grid has rendered. */
+  /* Roles without production access (e.g. Sales) see stock and traces but not batches
+     or the activity feed; the server refuses those anyway (plan 0.4). */
+  function smCanSeeProduction() {
+    const el = document.querySelector('[data-sm-can-production]');
+    return !el || el.dataset.smCanProduction !== 'false';
+  }
+
   async function smLoadSecondaryData() {
     if (_smSecondaryLoaded) return;
     _smSecondaryLoaded = true;
+    if (!smCanSeeProduction()) return;
     const [processesData, executionsData, activityData] = await Promise.all([
       CoreAPI.getProcesses(true).catch(() => ({ processes: [] })),
       CoreAPI.getExecutions().catch(() => ({ executions: [] })),
@@ -164,7 +172,7 @@
       { key: 'batches',   label: 'Batches' },
       { key: 'suppliers', label: 'Suppliers' },
       { key: 'activity',  label: 'Activity' },
-    ];
+    ].filter(t => smCanSeeProduction() || (t.key !== 'batches' && t.key !== 'activity'));
 
     const tabStrip = document.createElement('div');
     tabStrip.className = 'sm-browse-seg';

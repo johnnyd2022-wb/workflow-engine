@@ -41,6 +41,7 @@
           </svg>
         </a>
       </li>
+      {% if can('production.view', 'inventory.view') %}
       <li class="nav-item">
         <a href="/core" class="nav-link{% if active_page == 'core' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
@@ -68,7 +69,8 @@
           </svg>
         </a>
       </li>
-      {% if compliant_subscribed %}
+      {% endif %}
+      {% if compliant_subscribed and can('compliance.view') %}
       <li class="nav-item">
         {# Compliant's CSS and page controller are deliberately page-scoped and enter
            the document head/body on a full load.  Boosting this link only swaps
@@ -86,7 +88,7 @@
         </a>
       </li>
       {% endif %}
-      {% if crm_enabled %}
+      {% if crm_enabled and can('sales.view') %}
       <li class="nav-item">
         <a href="/crm" class="nav-link{% if active_page == 'crm' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">

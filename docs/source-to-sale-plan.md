@@ -123,28 +123,28 @@ Small, and everything else builds on it.
     checks one, so every member sees revenue, customers and invoices. `/org/users` can
     add and remove users (admin only), with no role choice beyond admin or member.
   - Design:
-    - [ ] a. **Permissions, then roles.** Named capabilities per area, e.g.
+    - [x] a. (!333) **Permissions, then roles.** Named capabilities per area, e.g.
       `production.view`, `production.record`, `production.design`, `inventory.adjust`,
       `sales.view`, `sales.revenue` (money figures), `sales.manage` (Xero, mappings),
       `compliance.view`, `compliance.sign`, `customs.lodge`, `users.manage`,
       `settings.manage`.
-    - [ ] b. **Built-in roles as permission sets:** Owner (everything; the last owner can't
+    - [x] b. (!333) **Built-in roles as permission sets:** Owner (everything; the last owner can't
       be removed), Admin, Production (record steps and stock; no money), Compliance
       (compliance plus read-only production), Sales (customers, sales and finished stock
       on hand; no recipes or process design), Auditor (read-only and time-limited, for a
       verifier visit). On migration, ADMIN becomes Owner/Admin and MEMBER becomes a
       "Staff" role with today's access, so nothing changes for current users.
     - [ ] c. **Custom roles later:** clone a built-in role and tick permissions.
-    - [ ] d. **Server-side, default deny.** Every route declares
+    - [x] d. (!333) **Server-side, default deny.** Every route declares
       `@requires_permission(...)`. A test walks Flask's URL map and fails if any route
       lacks a declaration; public routes are an explicit allow-list. Nav and buttons hide
       what a role can't use, but the server is the source of truth.
-    - [ ] e. **Aggregates respect permissions.** Dashboard and other composition endpoints
+    - [x] e. (!333) **Aggregates respect permissions.** Dashboard and other composition endpoints
       leave out sections a user can't see (e.g. revenue tiles) instead of sending them
       for the browser to hide.
-    - [ ] f. **Permission matrix test:** for every built-in role and route, the expected
+    - [x] f. (!333) **Permission matrix test:** for every built-in role and route, the expected
       200 or 403, generated from one table.
-    - [ ] g. **User management for owners and admins:** invite by email (2FA enrolment
+    - [x] g. (!333) **User management for owners and admins:** invite by email (2FA enrolment
       forced per 0.2), change role, deactivate (keeps history, blocks sign-in), resend
       invite. Every change goes to the audit log.
   - Fits the slicing plan: permissions are platform code (`app/core/security/permissions.py`
@@ -152,6 +152,16 @@ Small, and everything else builds on it.
     enterprise customer logins.
   - Done when: a Production user gets 403 from every sales endpoint and sees no revenue
     anywhere, a Sales user can't open process design, and the route-coverage test passes.
+  - As built (!333), where it differs from the design above:
+    - One policy table (`app/core/security/access_policy.py`, `POLICY`) instead of a
+      decorator on every route. Same default deny and the same URL-map coverage test,
+      but it keeps the permission model out of the files the 5.1 carve is moving.
+    - `sales.revenue` folded into `sales.view`: no role needs customers without money.
+      `compliance.sign` is `compliance.record`; `customs.lodge` waits for 2.1.
+    - Owner is Admin plus the last-admin rule; no separate Owner role yet.
+    - "Invite by email" is an invite **link** the admin sends (7 days, one use, only a
+      hash stored): the app has no email sender yet. Swap in email when one exists.
+    - Only c. (custom roles) is left.
 
 ---
 

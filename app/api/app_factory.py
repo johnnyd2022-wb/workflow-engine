@@ -10,8 +10,9 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
-from app.api.routes.auth_routes import auth_bp
-from app.api.routes.org_routes import org_bp
+from app.api.routes.auth_routes import auth_bp, invite_bp
+from app.api.routes.org_routes import org_bp, people_pages
+from app.core.security.access_policy import setup_access_policy
 from app.core.security.two_factor_policy import resolve_require_admin_2fa, setup_two_factor_policy
 from app.observability import (
     configure_logging,
@@ -138,7 +139,9 @@ def create_app():
 
     # Register multi-tenant blueprints
     app.register_blueprint(auth_bp)
+    app.register_blueprint(invite_bp)
     app.register_blueprint(org_bp)
+    app.register_blueprint(people_pages)
 
     # Register core blueprint
     from app.core.backend.backend import core_bp
@@ -387,6 +390,8 @@ def create_app():
     setup_tenant_context(app)
     # After tenant context: the policy reads g.current_user.
     setup_two_factor_policy(app)
+    # After tenant context: reads g.current_user. Every endpoint must be in POLICY.
+    setup_access_policy(app)
     setup_session_security(app)
     setup_observability(app)
 
