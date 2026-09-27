@@ -362,6 +362,15 @@ class SalesTraceabilityService:
             .order_by(XeroInvoice.date.asc().nulls_last())
             .all()
         )
+        # One query for every line, grouped by invoice (no per-invoice query in the loop).
+        lines_by_invoice: dict = defaultdict(list)
+        for line in (
+            self.db.query(XeroInvoiceLineItem)
+            .filter(XeroInvoiceLineItem.org_id == org_id)
+            .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
+            .all()
+        ):
+            lines_by_invoice[line.invoice_id].append(line)
         for inv in invoices:
             if (inv.invoice_type or "").upper() != _SALE_INVOICE_TYPE or (
                 inv.status or ""
@@ -369,13 +378,7 @@ class SalesTraceabilityService:
                 continue
             if go_live is not None and inv.date is not None and inv.date < go_live:
                 continue
-            lines = (
-                self.db.query(XeroInvoiceLineItem)
-                .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id == inv.id)
-                .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
-                .all()
-            )
-            for index, line in enumerate(lines):
+            for index, line in enumerate(lines_by_invoice.get(inv.id, [])):
                 key = (line.xero_line_item_id or f"position:{index + 1}").strip()
                 if (inv.xero_invoice_id, key) in allocated:
                     continue
@@ -396,6 +399,7 @@ class SalesTraceabilityService:
                 )
                 if len(out) >= limit:
                     return out
+        return out
         return out
 
     def _go_live_date(self, org_id: UUID):
