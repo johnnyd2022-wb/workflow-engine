@@ -28,6 +28,7 @@
 
   <section aria-labelledby="record-history-heading">
     <h2 id="record-history-heading">Edit history</h2>
+    {% if not history %}<p>This legacy step has no original audit event. Corrections made here will appear below.</p>{% endif %}
     <ol style="padding-left:24px;">
       {% for event in history %}
       <li style="margin:0 0 18px;">

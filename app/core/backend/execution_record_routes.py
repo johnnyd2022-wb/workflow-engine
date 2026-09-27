@@ -136,7 +136,9 @@ def register_routes(bp):
             return jsonify({"error": "JSON object required"}), 400
         if set(data) - {"reason", "prompts"}:
             return jsonify({"error": "Only prompts and an edit reason can be amended"}), 400
-        reason = str(data.get("reason") or "").strip()
+        if not isinstance(data.get("reason"), str):
+            return jsonify({"error": "An edit reason is required"}), 400
+        reason = data["reason"].strip()
         if len(reason) < 3 or len(reason) > 500:
             return jsonify({"error": "An edit reason of 3–500 characters is required"}), 400
         changes = data.get("prompts", {})
