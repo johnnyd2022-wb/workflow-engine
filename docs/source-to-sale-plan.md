@@ -238,15 +238,17 @@ want it, and never produce a recall list that can't be trusted.
     steps appear out of order, there's no export, and lots with 0 units are listed under
     "In stock" in the batch picker.
   - Change:
-    - [ ] a. Header shows product, the org's batch ID, ABV and bottling date.
-    - [ ] b. Summary line such as "48 sold to 8 customers · 30 on hand", with pre-sold
+    - [x] a. Header shows product, the org's batch ID, ABV and bottling date.
+    - [x] b. Summary line such as "48 sold to 8 customers · 30 on hand", with pre-sold
       sales marked.
-    - [ ] c. Per customer: quantity, invoices, dates and contact details, with a warning
+    - [x] c. Per customer: quantity, invoices, dates and contact details, with a warning
       where contact details are missing.
-    - [ ] d. Steps listed in process order.
-    - [ ] e. CSV and PDF export.
-    - [ ] f. Trace can start from a supplier lot (forward) or an invoice (backward).
-    - [ ] g. Sold-out lots under their own heading, not "In stock".
+    - [x] d. Steps listed in process order.
+    - [x] e. CSV and PDF export.
+    - [ ] f. Trace can start from:
+      - [x] a supplier lot (forward).
+      - [ ] an invoice (backward).
+    - [x] g. Sold-out lots under their own heading, not "In stock".
   - Done when: the timed mock recall is under 5 minutes.
 
 - [ ] **1.5 Show when something happened and when it was entered.** *High · M*
