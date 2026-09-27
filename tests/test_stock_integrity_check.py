@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from sqlalchemy import text
 
 from app.core.db.repositories.inventory_repo import InventoryRepository
+from app.core.domain.inventory_quantity_guard import InventoryQuantityWriteReason, allow_inventory_quantity_write
 from app.features.inventory.checks.stock_integrity import CHECK_ID, _lot_balance, run_stock_integrity_check
 from tests.factories import OrganisationFactory
 
@@ -49,7 +50,9 @@ def test_stock_check_emits_actionable_finding_for_drift(db):
         org.id, name="Audit bottle", quantity="2", unit="bottles", inventory_type="final_product", commit=False
     )
     db.flush()
-    db.execute(text("UPDATE inventory_items SET quantity = 3 WHERE id = :id"), {"id": item.id})
+    # Simulate an authorized quantity write whose audit event went missing.
+    with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_UPDATE):
+        db.execute(text("UPDATE inventory_items SET quantity = 3 WHERE id = :id"), {"id": item.id})
     db.expire(item)
 
     result = run_stock_integrity_check(org.id, db)
