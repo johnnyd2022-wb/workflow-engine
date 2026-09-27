@@ -19,7 +19,7 @@ def test_compliant_overview_is_a_summary_not_an_evidence_workbench():
     assert "A clear view of what applies." not in dashboard
     assert "without pretending to be legal certification" not in dashboard
     assert "data-frameworks" in dashboard
-    assert "data-compliant-surface=\"overview\"" in dashboard
+    assert 'data-compliant-surface="overview"' in dashboard
 
 
 def test_compliant_dashboard_keeps_its_summary_copy_concise():
@@ -125,7 +125,7 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "Compliance score:" in dashboard_script
     assert "np3ReadinessBar" in dashboard_script
     assert "framework.slug === 'np3-food-control'" in dashboard_script
-    assert "current evidence controls" in dashboard_script
+    assert "NP3 checks with current evidence" in dashboard_script
     assert "evidence ready" in dashboard_script
     assert "need attention" in dashboard_script
     assert "overdue" in dashboard_script
@@ -135,9 +135,13 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "data-np3-control-detail" not in audit
     assert ">NP3</strong>" in audit
     assert "np3-overview-panels" in audit
-    assert audit.index('np3-overview-panels') < audit.index('np3-audit-layout')
-    assert audit.index('data-np3-health-progress') < audit.index('data-np3-core-evidence') < audit.index('np3-audit-layout')
-    assert audit.index('np3-audit-rail') < audit.index('np3-audit-prep') < audit.index('np3-audit-content')
+    assert audit.index("np3-overview-panels") < audit.index("np3-audit-layout")
+    assert (
+        audit.index("data-np3-health-progress")
+        < audit.index("data-np3-core-evidence")
+        < audit.index("np3-audit-layout")
+    )
+    assert audit.index("np3-audit-rail") < audit.index("np3-audit-prep") < audit.index("np3-audit-content")
     assert "data-np3-health-progress" in audit
     assert "AUDIT PREP" in audit
     assert "np3-rail-register" in audit
@@ -172,9 +176,9 @@ def test_dashboard_projects_module_owned_compliance_health():
 
 
 def test_np3_health_uses_attention_as_one_actionable_total():
-    audit_script = (
-        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js"
-    ).read_text(encoding="utf-8")
+    audit_script = (_REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js").read_text(
+        encoding="utf-8"
+    )
     stylesheet = (_REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.css").read_text(
         encoding="utf-8"
     )
@@ -187,7 +191,9 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert "compliant-framework-summary__metric--attention" in stylesheet
     assert "compliant-framework-summary__metric--overdue" in stylesheet
     assert ".np3-category-tab strong{font-size:.875rem;font-weight:500" in stylesheet
-    assert ".np3-overview-panels .np3-core-evidence__stats span,.np3-overview-panels .np3-health-card span" in stylesheet
+    assert (
+        ".np3-overview-panels .np3-core-evidence__stats span,.np3-overview-panels .np3-health-card span" in stylesheet
+    )
     assert ".np3-health-progress__track" in stylesheet
     assert ".np3-health-progress__counts{display:flex;justify-content:space-between" in stylesheet
     assert ".compliant-framework-summary__progress" in stylesheet
@@ -195,8 +201,12 @@ def test_np3_health_uses_attention_as_one_actionable_total():
     assert "padding:0!important;border:0!important" in stylesheet
     assert ".np3-audit-layout{display:grid;grid-template-columns:220px minmax(0,1fr)" in stylesheet
     assert "box-sizing:border-box;border:1px solid #dce4e9;border-radius:16px;background:#fff" in stylesheet
-    assert ".np3-audit-layout .np3-audit-prep .np3-prep-panel li{position:relative;padding:9px 10px 9px 28px" in stylesheet
-    assert ".np3-overview-panels{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:stretch" in stylesheet
+    assert (
+        ".np3-audit-layout .np3-audit-prep .np3-prep-panel li{position:relative;padding:9px 10px 9px 28px" in stylesheet
+    )
+    assert (
+        ".np3-overview-panels{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:stretch" in stylesheet
+    )
     assert ".np3-audit-layout .np3-audit-prep>details>summary" in stylesheet
 
 
