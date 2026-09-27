@@ -64,6 +64,17 @@ class SalesTraceabilityService:
             restored = self._reverse_invoice_allocations(org_id, invoice.xero_invoice_id)
             return {"reversed": restored} if restored else {}
 
+        # Plan 1.3: tracing starts at go-live. An earlier sale stays in sales reporting but
+        # isn't matched to batches (the opening stocktake already reflects it); any match
+        # made before the go-live date was set is undone.
+        go_live = self._go_live_date(org_id)
+        if go_live is not None and invoice.date is not None and invoice.date < go_live:
+            restored = self._reverse_invoice_allocations(org_id, invoice.xero_invoice_id)
+            summary = {"before_go_live": len(line_items)}
+            if restored:
+                summary["reversed"] = restored
+            return summary
+
         config = self.config_repo.get_for_org(org_id)
         if config is not None and config.matching_strategy != "fifo":
             return {"deferred": len(line_items)} if line_items else {}
@@ -128,6 +139,15 @@ class SalesTraceabilityService:
             self.db.flush()
             summary["allocated"] += 1
         return dict(summary)
+
+    def _go_live_date(self, org_id: UUID):
+        cache = self.__dict__.setdefault("_go_live_cache", {})
+        if org_id not in cache:
+            from app.core.db.models.organisation import Organisation
+
+            org = self.db.get(Organisation, org_id)
+            cache[org_id] = getattr(org, "go_live_date", None)
+        return cache[org_id]
 
     def _line_allocations(self, org_id: UUID, invoice_id: str, line_key: str) -> list[SalesFifoAllocation]:
         return (

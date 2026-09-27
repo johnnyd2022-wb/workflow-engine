@@ -83,6 +83,24 @@
         })();
       </script>
       <style>.dash-denied-notice { margin: 0 0 16px; padding: 12px 16px; border-radius: 10px; border: 1px solid #e0b252; background: #fdf6e7; color: #5b4210; font-size: 14px; }</style>
+      {% if can('inventory.adjust') %}
+      <section class="dash-card" data-dashboard-go-live hidden aria-labelledby="dash-go-live-title" style="border-color: #9ad3b6;">
+        <div class="dash-card-header"><h2 id="dash-go-live-title">Setting up? Go live with a stocktake</h2></div>
+        <p style="margin: 0 0 12px; color: var(--text-secondary); font-size: 14px;">Count what you hold once, and tracing starts from today. No need to rebuild past batches.</p>
+        <a class="btn btn-primary" href="/core/go-live">Start the go-live stocktake</a>
+      </section>
+      <script>
+        (function () {
+          fetch('/api/core/go-live', { credentials: 'include', headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+              var card = document.querySelector('[data-dashboard-go-live]');
+              if (card && d && !d.go_live_date) card.hidden = false;
+            })
+            .catch(function () {});
+        })();
+      </script>
+      {% endif %}
       <section class="dash-card dash-attention-card" aria-labelledby="dashboard-attention-title">
         <div class="dash-card-header">
           <div>

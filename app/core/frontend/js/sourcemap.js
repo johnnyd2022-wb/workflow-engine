@@ -894,6 +894,18 @@
 
     area.appendChild(smBuildImpactHeader(tracedItem, groups));
 
+    // Plan 1.3: opening stock was counted at go-live, so the trace starts there.
+    const opening = allItems.filter(item => item && item.extra_data && item.extra_data.opening_stock);
+    if (opening.length) {
+      const asOf = opening[0].extra_data.opening_as_of;
+      const note = document.createElement('p');
+      note.className = 'sm-opening-note';
+      note.style.cssText = 'margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #eef4ff; color: #1f3a68; font-size: 13px;';
+      note.textContent = 'Opening stock' + (asOf ? ' counted at go-live on ' + new Date(asOf).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ' counted at go-live') +
+        '. History before then wasn\'t recorded; production and sales from that date on are traced.';
+      area.appendChild(note);
+    }
+
     if (!productionConnections.length && !sales.length) {
       const lone = document.createElement('div');
       lone.className = 'sm-lone-item';
