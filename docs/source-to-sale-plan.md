@@ -551,7 +551,7 @@ any time.
 - [ ] **4.7 Fix the visual bugs.** *S*
   - [x] a. Sidebar background stops at viewport height on long pages (white below it). (!327)
   - [x] b. The floating blue menu toggle overlaps the sidebar edge. (!327)
-  - [ ] c. CRM widget control icons render as missing-glyph boxes.
+  - [x] c. CRM widget control icons render as missing-glyph boxes. (!328)
 - [x] d. `/settings` requests a resource that returns 404. (!389)
   - [x] e. Forms asking for raw UUIDs (Customs "Core source references") — pick records
     instead. (!330)
