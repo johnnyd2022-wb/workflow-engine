@@ -86,11 +86,13 @@ def test_np2_workspace_register_and_sign_off(np2_org, db):
     assert (
         page.status_code == 200 and b"NATIONAL PROGRAMME 2" in page.data and b'data-programme-short="NP2"' in page.data
     )
+    assert b"data-verification-root" in page.data  # 2.2's verification panel serves NP2 too
     check = client.get("/compliant/nz-alcohol/np3-audit/check/water-activity-control")
     assert check.status_code == 200 and b"NATIONAL PROGRAMME 2 / CHECK DETAIL" in check.data
 
     summary = run_check(org.id, db).data["workspace_summary"]
     assert summary["module_name"] == "NP2" and summary["action_label"] == "Open NP2"
+    assert "milestone" in summary  # 2.2's next-verification line, whichever programme
 
 
 def test_np1_has_no_process_control_cards(np2_org):
