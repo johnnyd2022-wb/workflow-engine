@@ -616,12 +616,14 @@ def reconcile(session, org_id: UUID, stocktake: Stocktake) -> dict:
         .order_by(StocktakeLine.id)
     )
     resolved: dict = {}
-    for res in (
+    done = (
         session.query(StocktakeResolution)
         .join(StocktakeLine, StocktakeLine.id == StocktakeResolution.line_id)
         .filter(StocktakeLine.stocktake_id == stocktake.id, StocktakeResolution.reason != "investigating")
         .order_by(StocktakeResolution.id)
-    ):
+        .all()
+    )
+    for res in done:
         signed = _d(res.quantity) * (-1 if res.reason in SHORTFALL_REASONS else 1)
         resolved[res.line_id] = resolved.get(res.line_id, Decimal("0")) + signed
     for line, item in current:
