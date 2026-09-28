@@ -163,6 +163,43 @@ Small, and everything else builds on it.
       hash stored): the app has no email sender yet. Swap in email when one exists.
     - Only c. (custom roles) is left.
 
+
+- [ ] **0.5 Sign in with Google, linked to existing accounts.** *M*
+  - Why: most producers already live in Google Workspace. One click to sign in, one less
+    password, and Google's 2-Step Verification instead of a second code.
+  - Evidence (28 Sep 2026): password + TOTP only (`app/api/routes/auth_routes.py`); no
+    OAuth/OIDC code or dependency; invites are one-time links (0.4g).
+  - Change:
+    - [ ] a. **OpenID Connect with Google** (Authlib): authorisation code + PKCE, `state`
+      and `nonce`, ID token checked for `iss`, `aud`, expiry and `email_verified`.
+      Client ID and secret per environment in KeePassXC (local) and CI variables;
+      redirect URIs for local, test and production; CSP and cookie settings reviewed.
+    - [ ] b. **Linking to the local account.** A `user_identities` table (provider,
+      Google `sub`, email at link time). After the first link, sign-in matches on `sub`,
+      never on email, so a later email change can't hijack an account. The first link:
+      - automatic when the verified Google email equals an active user's email **and**
+        Google is the authority for that address (a Workspace account, i.e. the token's
+        `hd` claim matches the email's domain, or `@gmail.com`);
+      - otherwise (a personal Google account on a non-Google domain) the person links it
+        once from their account settings while signed in with their password, because a
+        lookalike Google account could otherwise claim the address.
+    - [ ] c. **No accounts from nowhere.** Google never creates a user or an org on its
+      own. It can accept a pending invite (0.4g) for the invited address.
+    - [ ] d. **2FA.** Google's ID token doesn't reliably say whether 2-Step Verification
+      was used, so it can't prove it. Per org, an owner can choose "trust Google sign-in
+      as the second factor for @our-domain" after enforcing 2-Step Verification in their
+      Workspace admin console; otherwise the TOTP step still follows for roles that need
+      2FA (0.2). **Founder decision:** the default (recommended: TOTP still required until
+      the owner opts in).
+    - [ ] e. **Everything else still applies:** deactivated users, Auditor expiry, lockouts
+      and the audit log ("signed in with Google"). Account settings show linked sign-in
+      methods; unlinking needs a password to remain, so nobody locks themselves out.
+    - [ ] f. **Tests:** token verification mocked at the boundary; linking rules
+      (Workspace, gmail, personal-domain refusal, `sub` match after an email change);
+      2FA policy per org; no account creation.
+  - Done when: johnny@whistlebird.co.nz clicks "Sign in with Google", lands in the same
+    account as before, and an unlinked lookalike Google account can't get in.
+
 ---
 
 ## Phase 1: Traceability you can stake a recall on
@@ -309,7 +346,7 @@ want it, and never produce a recall list that can't be trusted.
 Finish the NZ Alcohol module so compliance outputs come from production and sales
 records, not from people typing figures in.
 
-- [x] **2.1 Excise per period from linked sales and removals.** *High · L* (!MR)
+- [x] **2.1 Excise per period from linked sales and removals.** *High · L* (!409)
   - Status: not built; the current Customs page is placeholder data. Avoid what the
     placeholder does: a second ABV list separate from the final-step ABV (so it shows
     "0.0000 LAL"), botanicals offered as alcohol products, fields asking for
@@ -641,6 +678,110 @@ Starts once Phases 1 and 2 hold up with a second producer.
   - Change: plans built from Production, a compliance pack for the producer's type, and
     the Xero sales link, in line with the existing feature subscriptions.
 
+
+---
+
+## Phase 7: More than one site, and making for others
+
+Added 28 Sep 2026 at the founder's request. Both items are bigger than anything above;
+build them after Phases 1 and 2 hold up with a second producer, and split each into MRs
+by its sub-items. Settle the founder questions at the top of each before starting.
+
+- [ ] **7.1 Multiple sites.** *High · L+*
+  - Why: producers grow into a second site: a bond store or off-site storage area, a
+    cellar door or shop, a co-packer, a 3PL. Stock moves between them, and Customs, food
+    safety and liquor licensing all attach to a **site**, not to the business.
+  - Evidence (28 Sep 2026): one org is one site. 2.1 added stock locations with an
+    "inside the licensed area" flag and moves between them (`stock_locations_bp`), so a
+    rep's car or an event can be a location, but there is no site, no transit, no
+    receipt, and no per-site excise, registration or licence.
+  - Founder questions first:
+    - Which sites do you expect for Whistlebird and the next producers (bond store,
+      cellar door, 3PL, shared/contract facility)?
+    - Is each site its own Customs licence (CCA) with its own excise entries, or one
+      licence covering several areas?
+    - Do staff work at one site (and should only see its stock), or across all?
+  - Change:
+    - [ ] a. **Sites.** Name, address and kind (manufacturing, off-site storage/bond,
+      cellar door or retail, warehouse/3PL, event), with the registrations that attach to
+      a site: Customs CCA licence (type and number: licensed manufacturing area or
+      off-site storage area), food-safety registration (NP/FCP, number, verifier; 2.2
+      becomes per registration), and liquor licence (the 2.5 register gains a site).
+      Today's stock locations become places within a site (bays, tanks, a van); "inside
+      the licensed area" comes from the site's CCA.
+    - [ ] b. **Transfers with transit and receipt.** Dispatch (what, from where, carrier,
+      consignment note) → in transit (on nobody's shelf, still on the books) → received,
+      with short, over or damaged quantities resolved like stocktake differences (2.6).
+      A printable transfer docket. Batch IDs and lineage travel with the stock, so a
+      recall still traces through a transfer.
+    - [ ] c. **Drag to move.** A stock board by site and location: drag a lot (or part of
+      one) to another location or site to start a move or transfer; scan to pick and
+      receive on a phone (4.6).
+    - [ ] d. **Duty follows the licence.** CCA to CCA moves duty-suspended only with
+      Customs' prior approval for underbond movement, recorded with its reference; to a
+      place outside any CCA (cellar door, a customer) is a removal in the excise entry for
+      the licence it left (2.1). Each CCA licence gets its own excise drafts, lodgements
+      and stocktakes (2.6). Confirm the approval process and records with Customs.
+    - [ ] e. **Make, count and sell by site.** Batches start at a site and consume that
+      site's stock; stocktakes per site; each sales channel (or Xero tracking category)
+      maps to the site it ships from, so FIFO matches from the right shelf (1.1).
+    - [ ] f. **Staff by site.** A role can be limited to some sites (extends 0.4/0.4c),
+      enforced on the server like every other permission.
+    - [ ] g. **Reports by site:** stock position, transfers in transit, and each site's
+      compliance status on the dashboard.
+  - Done when: a pallet moves from the distillery to the bond store and on to the cellar
+    door, every screen agrees where it is at each step, the right licence's excise entry
+    shows the removal, and a recall of that batch lists the cellar door's sales.
+
+- [ ] **7.2 Contract manufacturing with a customer portal.** *High · L+*
+  - Why: many producers make for others (a gin for a bar group, a beer for a brand
+    owner). Customers want to know where their order is without emailing or phoning; a
+    shared, live view builds trust and cuts admin.
+  - Evidence (28 Sep 2026): no notion of a customer order in production, of stock owned by
+    someone else, or of an external user; every user belongs to one org with a staff
+    role.
+  - Founder questions first:
+    - Do customers supply materials (spirit, botanicals, labels) that stay theirs, or
+      does the producer buy everything and invoice?
+    - Who holds the Customs licence and pays duty on contract goods, and do finished goods
+      go to the customer's own CCA underbond?
+    - What may a customer see: stages and dates only, or batch IDs, ABV, QC results and
+      photos? Never recipes or process design unless the producer shares them.
+    - Are customers ever biz-e producers themselves (so their own trace and recall could
+      include contract batches)?
+  - Change:
+    - [ ] a. **Contract customers and orders.** A contract customer (linked to the CRM
+      contact where there is one); orders with product, quantity, spec or recipe version,
+      due date and status; each order linked to the batches (executions) that make it.
+    - [ ] b. **Customer-owned stock.** Lots can belong to a contract customer:
+      free-issue materials in, finished goods out. They're kept out of the producer's own
+      stock value and can only be used for that customer's orders; received and
+      dispatched like any stock, with lineage intact.
+    - [ ] c. **Progress without typing it twice.** Milestones (materials received,
+      scheduled, in production, QC passed, packed, ready, dispatched) come from the
+      batch's own steps and stock movements, with the producer choosing which steps show
+      and what they're called.
+    - [ ] d. **The portal.** Customer users sign in (0.5 Google sign-in works here too) to
+      a slim, branded view of **their** orders only: a timeline, batch IDs, shared
+      results (e.g. ABV, certificate of analysis), documents, and approvals the producer
+      asks for (sample, label proof). One comment thread per order, so questions live
+      next to the order instead of in email. Notifications by email once the app can
+      send email (0.4g still uses invite links).
+    - [ ] e. **Isolation by design.** Portal users are a separate kind of user with no
+      staff permissions; every portal query is scoped to the customer's orders on the
+      server; a test walks every portal route with a second customer and expects 403/404.
+      Producer data (other customers, recipes, costs, sales) is never reachable.
+    - [ ] f. **Duty and compliance for contract goods.** Record who is liable for excise
+      on each order and whether goods leave underbond to the customer's CCA (7.1d);
+      recall exports name the brand owner; the customer can download the trace for their
+      batches.
+    - [ ] g. **Later: org to org.** When the customer also uses biz-e, link the two orgs
+      with an explicit, revocable grant so contract batches appear in the customer's own
+      trace and recall. Cross-tenant, so it needs its own design review first.
+  - Done when: a customer signs in, sees their order move from "materials received" to
+    "dispatched" with the batch ID and ABV, approves a label proof, and can't see anything
+    else in the producer's org.
+
 ---
 
 ## Order
@@ -661,6 +802,10 @@ Starts once Phases 1 and 2 hold up with a second producer.
 7. **Phase 4** on the corrected data; 4.1 and 4.7 can go first at any time.
 8. **Phase 5** throughout, carving each slice before a plan item changes it (5.1d).
 9. **Phase 6** once a second producer works. Generalise from two real producers, not one.
+10. **0.5 Google sign-in** at any time; it's independent. Settle the 2FA default (0.5d)
+    first.
+11. **Phase 7** after Phase 6's second producer, sites (7.1) before contract manufacturing
+    (7.2), since contract goods move between sites and licences.
 
 ## Sources
 
@@ -678,5 +823,11 @@ change.
 - NZ Customs, [Excise duty remissions](https://www.customs.govt.nz/business/excise/excise-duty/excise-duty-remissions):
   damaged, destroyed, lost, stolen and faulty goods; form NZCS 277.
 - NZ Customs, [Pay excise duty and other charges](https://www.customs.govt.nz/business/excise/pay-excise-duty-and-other-charges/).
+- NZ Customs, [Moving products excise-unpaid](https://www.customs.govt.nz/business/excise/alcohol-and-excise/moving-products-excise-unpaid)
+  and [Customs-controlled areas](https://www.customs.govt.nz/business/customs-controlled-areas):
+  CCA-to-CCA transfers without duty need prior approval, with records of every movement
+  (7.1d). Checked 28 Sep 2026.
+- Google, [OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect):
+  ID token claims (`sub`, `email_verified`, `hd`) for 0.5.
 - [Sale and Supply of Alcohol Act 2012](https://www.legislation.govt.nz/act/public/2012/0120/latest/DLM3339333.html)
   and its regulations, for 2.5.
