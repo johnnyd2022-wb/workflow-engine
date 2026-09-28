@@ -1,7 +1,7 @@
 """Persist explicit production demand without reserving stock.
 
 Revision ID: planner_demands_001
-Revises: custom_roles_001
+Revises: multiple_sites_001
 """
 
 import sqlalchemy as sa
@@ -9,7 +9,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 revision = "planner_demands_001"
-down_revision = "custom_roles_001"
+down_revision = "multiple_sites_001"
 branch_labels = None
 depends_on = None
 
