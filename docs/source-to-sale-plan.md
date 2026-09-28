@@ -687,6 +687,63 @@ Starts once Phases 1 and 2 hold up with a second producer.
 
 ---
 
+## Phase 7: Multiple sites (7.1 scope)
+
+This branch carries the 7.1 scope from !421. The other Phase 7 items remain in that
+plan branch and are delivered separately.
+
+- [ ] **7.1 Multiple sites.** *High · L+*
+  - Why: a producer grows into a second site (a bond store or off-site storage area, a
+    cellar door, a warehouse or 3PL, a shared facility) and needs to run the business
+    across them. Customs, food safety and liquor licensing attach to premises, so they
+    have to know which site stock and production are at.
+  - Evidence (28 Sep 2026): one org is one site. 2.1 added stock locations with an
+    "inside the licensed area" flag and moves between them (`stock_locations_bp`), but
+    there is no site, no transit or receipt, and no per-site registration or licence.
+  - Change:
+    - [ ] a. **Switch it on.** An org setting "multiple sites". Off (the default) keeps
+      everything exactly as today. On, the org defines its sites (name, address, kind:
+      manufacturing, storage/bond, cellar door or retail, warehouse/3PL, event) and one
+      is the default. Existing stock and executions go to the default site.
+    - [ ] b. **Tag, don't fork.** Inventory items and executions carry a site. Stock
+      locations (2.1) become places within a site. Screens and APIs filter by site; every
+      total can be shown per site or for the whole business. No separate database or org
+      per site.
+    - [ ] c. **Registrations belong to sites, as the business has them.** Each site can
+      be linked to zero or more registrations: a Customs CCA licence (one licence may
+      cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
+      registration), a liquor licence (2.5 register gains the site). "Inside a licensed
+      area" comes from the site's CCA, replacing the manual flag.
+    - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
+      consignment note) → in transit (on the books, on no shelf) → received, with short,
+      over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
+      lineage travel with the stock, so a recall still traces through a move. Drag a lot
+      (or part of one) between sites or locations on a stock board, or scan to pick and
+      receive on a phone (4.6). A printable transfer docket.
+    - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
+      "stock movement" seam in the Compliant platform (like workflow rules and stock
+      measures, see `docs/compliant-core-contract.md`), a module can require fields,
+      block a move, or raise an alert. NZ Alcohol:
+      - CCA to CCA without duty needs Customs' prior approval for underbond movement:
+        the move asks for the approval reference and records both licences;
+      - out of a CCA to a site without one (a cellar door) is a removal in the excise
+        entry of the licence it left (2.1);
+      - into a site with no food registration covering the activity, or with no liquor
+        licence for selling, raises a finding.
+    - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
+      stock; stocktakes per site or per licence (2.6); each sales channel or Xero
+      tracking category maps to the site it ships from, so FIFO matches from the right
+      shelf (1.1); excise drafts per CCA licence.
+    - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
+      enforced on the server like every other permission.
+  - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
+    a bond store (licence B, with the underbond approval recorded) and on to a cellar door
+    (no CCA, so it's a removal on licence B's excise draft); every screen agrees where it
+    is at each step; and a recall of that batch lists the cellar door's sales. With
+    multiple sites off, nothing changes.
+
+---
+
 ## Order
 
 1. **Phase 0.** Require 2FA and get `main` green now; the database split is planned for

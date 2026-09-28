@@ -3,7 +3,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, ForeignKeyConstraint, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -26,9 +26,15 @@ class Execution(TenantScoped, Base):
     """Execution model representing a runtime instance of a process"""
 
     __tablename__ = "executions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "site_id"], ["sites.org_id", "sites.id"], name="fk_executions_org_site", ondelete="RESTRICT"
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     process_id = Column(UUID(as_uuid=True), ForeignKey("processes.id"), nullable=False, index=True)
+    site_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     status = Column(Enum(ExecutionStatus, name="execution_status"), default=ExecutionStatus.PENDING, nullable=False)
     total_steps = Column(Integer, nullable=True)  # Snapshot of step count at creation for progress calculation
     started_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

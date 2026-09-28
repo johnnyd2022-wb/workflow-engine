@@ -197,6 +197,9 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.list_system_findings", None, ANY_WORKSPACE),
     ("core.get_changes", None, ANY_WORKSPACE),  # live-sync feed used across workspaces
     # --- people, organisation and maintenance
+    ("sites.list_sites", _READ, ("inventory.view", "production.view", "settings.manage")),
+    ("sites.site_position", _READ, "inventory.view"),
+    ("sites.*", None, "settings.manage"),
     ("org.*", None, "users.manage"),
     ("people_pages.*", None, "users.manage"),
     ("initialize", None, "settings.manage"),
