@@ -680,106 +680,183 @@ Starts once Phases 1 and 2 hold up with a second producer.
 
 ---
 
-## Phase 7: More than one site, and making for others
+## Phase 7: More than one site, making for others, and planning the work
 
-Added 28 Sep 2026 at the founder's request. Both items are bigger than anything above;
-build them after Phases 1 and 2 hold up with a second producer, and split each into MRs
-by its sub-items. Settle the founder questions at the top of each before starting.
+Added 28 Sep 2026 at the founder's request. biz-e is premium source-to-sale tracing and
+compliance-first operational software for physical manufacturing, starting with NZ
+alcohol: the national programmes (MPI), council, Customs and liquor licensing are
+first-principles integrations with Core, not add-ons. Each item below follows that rule:
+Core records what happens (where stock is, what was made, for whom, when), and the
+compliance modules enforce their rules on those facts. Build these after Phases 1 and 2
+hold up with a second producer, and split each into MRs by its sub-items.
+
+Founder decisions for this phase:
+
+| Topic | Decision |
+| --- | --- |
+| Sites and licences | Business-specific. A site may have its own Customs licence (CCA), share one, or have none; the same for food registrations and liquor licences. The system adapts to whatever the business has; nothing assumes one licence per site. |
+| Multi-site shape | Opt-in. When switched on, inventory items and manufacturing events (executions) are tagged to a site, and stock can move between sites. When stock moves, the compliance modules enforce their rules (e.g. Customs requirements for moving goods between CCAs). Single-site producers see no change. |
+| Contract materials | Either way, seamlessly: the customer supplies materials, the producer does, or a mix, per order. |
+| Contract duty | Either way, seamlessly: whoever the contract says is liable. The system records it per order and the excise module follows it. |
+| Scheduling | A high-level planner for small and mid-sized producers, not per-workstation or IoT scheduling. |
 
 - [ ] **7.1 Multiple sites.** *High · L+*
-  - Why: producers grow into a second site: a bond store or off-site storage area, a
-    cellar door or shop, a co-packer, a 3PL. Stock moves between them, and Customs, food
-    safety and liquor licensing all attach to a **site**, not to the business.
+  - Why: a producer grows into a second site (a bond store or off-site storage area, a
+    cellar door, a warehouse or 3PL, a shared facility) and needs to run the business
+    across them. Customs, food safety and liquor licensing attach to premises, so they
+    have to know which site stock and production are at.
   - Evidence (28 Sep 2026): one org is one site. 2.1 added stock locations with an
-    "inside the licensed area" flag and moves between them (`stock_locations_bp`), so a
-    rep's car or an event can be a location, but there is no site, no transit, no
-    receipt, and no per-site excise, registration or licence.
-  - Founder questions first:
-    - Which sites do you expect for Whistlebird and the next producers (bond store,
-      cellar door, 3PL, shared/contract facility)?
-    - Is each site its own Customs licence (CCA) with its own excise entries, or one
-      licence covering several areas?
-    - Do staff work at one site (and should only see its stock), or across all?
+    "inside the licensed area" flag and moves between them (`stock_locations_bp`), but
+    there is no site, no transit or receipt, and no per-site registration or licence.
   - Change:
-    - [ ] a. **Sites.** Name, address and kind (manufacturing, off-site storage/bond,
-      cellar door or retail, warehouse/3PL, event), with the registrations that attach to
-      a site: Customs CCA licence (type and number: licensed manufacturing area or
-      off-site storage area), food-safety registration (NP/FCP, number, verifier; 2.2
-      becomes per registration), and liquor licence (the 2.5 register gains a site).
-      Today's stock locations become places within a site (bays, tanks, a van); "inside
-      the licensed area" comes from the site's CCA.
-    - [ ] b. **Transfers with transit and receipt.** Dispatch (what, from where, carrier,
-      consignment note) → in transit (on nobody's shelf, still on the books) → received,
-      with short, over or damaged quantities resolved like stocktake differences (2.6).
-      A printable transfer docket. Batch IDs and lineage travel with the stock, so a
-      recall still traces through a transfer.
-    - [ ] c. **Drag to move.** A stock board by site and location: drag a lot (or part of
-      one) to another location or site to start a move or transfer; scan to pick and
-      receive on a phone (4.6).
-    - [ ] d. **Duty follows the licence.** CCA to CCA moves duty-suspended only with
-      Customs' prior approval for underbond movement, recorded with its reference; to a
-      place outside any CCA (cellar door, a customer) is a removal in the excise entry for
-      the licence it left (2.1). Each CCA licence gets its own excise drafts, lodgements
-      and stocktakes (2.6). Confirm the approval process and records with Customs.
-    - [ ] e. **Make, count and sell by site.** Batches start at a site and consume that
-      site's stock; stocktakes per site; each sales channel (or Xero tracking category)
-      maps to the site it ships from, so FIFO matches from the right shelf (1.1).
-    - [ ] f. **Staff by site.** A role can be limited to some sites (extends 0.4/0.4c),
+    - [ ] a. **Switch it on.** An org setting "multiple sites". Off (the default) keeps
+      everything exactly as today. On, the org defines its sites (name, address, kind:
+      manufacturing, storage/bond, cellar door or retail, warehouse/3PL, event) and one
+      is the default. Existing stock and executions go to the default site.
+    - [ ] b. **Tag, don't fork.** Inventory items and executions carry a site. Stock
+      locations (2.1) become places within a site. Screens and APIs filter by site; every
+      total can be shown per site or for the whole business. No separate database or org
+      per site.
+    - [ ] c. **Registrations belong to sites, as the business has them.** Each site can
+      be linked to zero or more registrations: a Customs CCA licence (one licence may
+      cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
+      registration), a liquor licence (2.5 register gains the site). "Inside a licensed
+      area" comes from the site's CCA, replacing the manual flag.
+    - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
+      consignment note) → in transit (on the books, on no shelf) → received, with short,
+      over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
+      lineage travel with the stock, so a recall still traces through a move. Drag a lot
+      (or part of one) between sites or locations on a stock board, or scan to pick and
+      receive on a phone (4.6). A printable transfer docket.
+    - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
+      "stock movement" seam in the Compliant platform (like workflow rules and stock
+      measures, see `docs/compliant-core-contract.md`), a module can require fields,
+      block a move, or raise an alert. NZ Alcohol:
+      - CCA to CCA without duty needs Customs' prior approval for underbond movement:
+        the move asks for the approval reference and records both licences;
+      - out of a CCA to a site without one (a cellar door) is a removal in the excise
+        entry of the licence it left (2.1);
+      - into a site with no food registration covering the activity, or with no liquor
+        licence for selling, raises a finding.
+    - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
+      stock; stocktakes per site or per licence (2.6); each sales channel or Xero
+      tracking category maps to the site it ships from, so FIFO matches from the right
+      shelf (1.1); excise drafts per CCA licence.
+    - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
       enforced on the server like every other permission.
-    - [ ] g. **Reports by site:** stock position, transfers in transit, and each site's
-      compliance status on the dashboard.
-  - Done when: a pallet moves from the distillery to the bond store and on to the cellar
-    door, every screen agrees where it is at each step, the right licence's excise entry
-    shows the removal, and a recall of that batch lists the cellar door's sales.
+  - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
+    a bond store (licence B, with the underbond approval recorded) and on to a cellar door
+    (no CCA, so it's a removal on licence B's excise draft); every screen agrees where it
+    is at each step; and a recall of that batch lists the cellar door's sales. With
+    multiple sites off, nothing changes.
 
 - [ ] **7.2 Contract manufacturing with a customer portal.** *High · L+*
   - Why: many producers make for others (a gin for a bar group, a beer for a brand
-    owner). Customers want to know where their order is without emailing or phoning; a
-    shared, live view builds trust and cuts admin.
-  - Evidence (28 Sep 2026): no notion of a customer order in production, of stock owned by
-    someone else, or of an external user; every user belongs to one org with a staff
-    role.
-  - Founder questions first:
-    - Do customers supply materials (spirit, botanicals, labels) that stay theirs, or
-      does the producer buy everything and invoice?
-    - Who holds the Customs licence and pays duty on contract goods, and do finished goods
-      go to the customer's own CCA underbond?
-    - What may a customer see: stages and dates only, or batch IDs, ABV, QC results and
-      photos? Never recipes or process design unless the producer shares them.
-    - Are customers ever biz-e producers themselves (so their own trace and recall could
-      include contract batches)?
+    owner). Customers want to see where their order is without emailing or phoning. A
+    live, trustworthy view builds the relationship and cuts admin on both sides.
+  - Evidence (28 Sep 2026): no customer order in production, no stock owned by someone
+    else, no external user; every user belongs to one org with a staff role.
   - Change:
     - [ ] a. **Contract customers and orders.** A contract customer (linked to the CRM
-      contact where there is one); orders with product, quantity, spec or recipe version,
-      due date and status; each order linked to the batches (executions) that make it.
-    - [ ] b. **Customer-owned stock.** Lots can belong to a contract customer:
-      free-issue materials in, finished goods out. They're kept out of the producer's own
-      stock value and can only be used for that customer's orders; received and
-      dispatched like any stock, with lineage intact.
-    - [ ] c. **Progress without typing it twice.** Milestones (materials received,
+      contact where there is one) and orders: product, quantity, spec or recipe version,
+      due date, status. Each order links to the batches (executions) that make it, and
+      the scheduler (7.3) plans them.
+    - [ ] b. **Materials either way.** Per order line: supplied by the customer
+      (free-issue: received as lots owned by the customer, kept out of the producer's own
+      stock value, usable only for that customer's orders), by the producer, or a mix.
+      Lineage stays intact either way, so a recall works across both.
+    - [ ] c. **Duty either way.** Per order: who is liable for excise (the producer as
+      licensee, the customer as licensee, or goods leaving underbond to the customer's
+      CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the
+      order shows who pays.
+    - [ ] d. **Progress without typing it twice.** Milestones (materials received,
       scheduled, in production, QC passed, packed, ready, dispatched) come from the
-      batch's own steps and stock movements, with the producer choosing which steps show
-      and what they're called.
-    - [ ] d. **The portal.** Customer users sign in (0.5 Google sign-in works here too) to
-      a slim, branded view of **their** orders only: a timeline, batch IDs, shared
-      results (e.g. ABV, certificate of analysis), documents, and approvals the producer
-      asks for (sample, label proof). One comment thread per order, so questions live
-      next to the order instead of in email. Notifications by email once the app can
-      send email (0.4g still uses invite links).
-    - [ ] e. **Isolation by design.** Portal users are a separate kind of user with no
+      batch's own steps and stock movements. The producer chooses which steps show and
+      what they're called.
+    - [ ] e. **The portal.** Customer users sign in (0.5 Google sign-in works here too) to
+      a slim, branded portal of **their** current and past orders only. For each order,
+      the ten things that matter most to a brand owner:
+      1. **Where it's up to:** the current stage and step, with progress through the
+         whole run.
+      2. **When it'll be ready:** the planned and forecast ready date from the scheduler
+         (7.3), and why it moved if it did.
+      3. **How much:** ordered, in production, finished, dispatched and still to come.
+      4. **Their batches:** batch IDs and bottling dates made for the order.
+      5. **Quality:** actual ABV against spec, QC checks passed, and shared lab
+         results or certificates of analysis.
+      6. **Their materials:** customer-supplied materials received, used and left.
+      7. **Yield:** planned against actual output and losses, if the producer shares it.
+      8. **Delivery:** dispatch date, carrier, consignment note, and duty status
+         (duty-paid or underbond to their licence).
+      9. **Documents:** label proofs, the trace for their batches (recall-ready), and
+         compliance certificates.
+      10. **What's waiting on them:** approvals (sample, label proof), questions, and a
+         timeline of events and messages, one thread per order.
+      Past orders keep the same view, with a "reorder" request. Email notifications
+      once the app can send email (0.4g still uses invite links).
+    - [ ] f. **Isolation by design.** Portal users are a separate kind of user with no
       staff permissions; every portal query is scoped to the customer's orders on the
       server; a test walks every portal route with a second customer and expects 403/404.
-      Producer data (other customers, recipes, costs, sales) is never reachable.
-    - [ ] f. **Duty and compliance for contract goods.** Record who is liable for excise
-      on each order and whether goods leave underbond to the customer's CCA (7.1d);
-      recall exports name the brand owner; the customer can download the trace for their
-      batches.
+      Other customers, recipes, costs and the producer's sales are never reachable.
     - [ ] g. **Later: org to org.** When the customer also uses biz-e, link the two orgs
       with an explicit, revocable grant so contract batches appear in the customer's own
       trace and recall. Cross-tenant, so it needs its own design review first.
   - Done when: a customer signs in, sees their order move from "materials received" to
-    "dispatched" with the batch ID and ABV, approves a label proof, and can't see anything
-    else in the producer's org.
+    "dispatched" with batch IDs, ABV and a ready date that tracks the schedule, approves a
+    label proof, and can't see anything else in the producer's org; the same order works
+    whether the customer or the producer supplied the materials and paid the duty.
+
+- [ ] **7.3 A planner that drives the day's work.** *High · L*
+  - Why: orders come in, stock has to be made, and someone has to decide what gets made
+    when. Owners want to turn up, see today's priorities, and trust the dates they give
+    customers, without a spreadsheet or a per-machine scheduling system.
+  - Evidence (28 Sep 2026): Core has tasks, and 4.5 plans a "today's work" dashboard, but
+    nothing turns demand into planned batches or forecasts when stock will be ready.
+    Items already carry the dates a planner needs: output ready dates and expiry dates
+    (`app/core/backend/checks/output_ready_date_check.py`).
+  - Shape (the parts of ERP planning that fit a small producer): a master schedule of
+    what to make and when, a material check against stock (MRP-lite), a rough-cut
+    capacity check rather than finite scheduling per workstation, and promise dates
+    (available-to-promise). Dates are planned backwards from when an order is due and
+    forwards from today, and the planner always says why a date is what it is.
+  - Change:
+    - [ ] a. **Demand.** Sales orders and contract orders (7.2) with due dates, plus
+      optional stock targets (a minimum or reorder level per product, per site with 7.1)
+      and a simple forecast (e.g. average sales over the last n weeks). Pre-sales count as
+      demand (1.1).
+    - [ ] b. **What to make.** Net requirements = demand − stock on hand − stock already
+      in production (and allocated), per product. Each shortfall becomes a **planned
+      batch** of the workflow that makes it, rounded to its usual batch size.
+    - [ ] c. **How long it takes.** Each workflow step gets an expected duration and any
+      waiting time (e.g. maceration 7 days, resting before bottling); the output ready
+      date rules already in Core apply. From these, a planned batch gets a start and a
+      ready date: backwards from the order's due date, or forwards from today when it's
+      already late.
+    - [ ] d. **Will we have the materials?** Each planned batch checks its inputs: on
+      hand, arriving (expected supplier deliveries, a small new record), or made by another planned
+      batch. It respects ready dates (not usable until ready) and expiry dates (use
+      first-expiring stock first, and never plan to use a lot after it expires). A
+      shortage moves the date and says which input caused it.
+    - [ ] e. **Can we do it?** Rough capacity per site: a few resource groups the owner
+      names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
+      week, and the steps that use them. The planner flags overloaded days and offers to
+      move lower-priority batches; it doesn't try to optimise every minute.
+    - [ ] f. **The daily driver.** A plan board (week and month) with a priority list for
+      today: drag a batch to move it, pin a date so the planner won't move it, change a
+      priority. When reality changes (a batch finishes late, a ready date or expiry is
+      flagged, an order is added or cancelled, stock is short), the planner re-plans what
+      isn't pinned and lists what moved and why. Planned batches start as real
+      executions from the board, and today's list feeds the dashboard (4.5).
+    - [ ] g. **Promise dates.** For a new order, "when can we deliver n?" from stock on
+      hand, then what's planned, then capacity (available-to-promise). The same forecast
+      ready date feeds the portal (7.2e) and the order.
+    - [ ] h. **Compliance in the plan.** Planned work respects what the modules require:
+      a batch needing a site's CCA or food registration is planned only at a site that has
+      it (7.1c); a verification visit (2.2) or stocktake (2.6) can block a day.
+  - Done when: a new order for 600 bottles shows a promise date in seconds; the planner
+    lays out the batches, flags a botanical short for the second one and moves its date;
+    the owner pins the first, drags the second, and the next morning the dashboard shows
+    today's priorities, with the order's forecast date updated in the customer's portal.
 
 ---
 
@@ -803,8 +880,9 @@ by its sub-items. Settle the founder questions at the top of each before startin
 9. **Phase 6** once a second producer works. Generalise from two real producers, not one.
 10. **0.5 Google sign-in** at any time; it's independent. Settle the 2FA default (0.5d)
     first.
-11. **Phase 7** after Phase 6's second producer, sites (7.1) before contract manufacturing
-    (7.2), since contract goods move between sites and licences.
+11. **Phase 7** after Phase 6's second producer. 7.3 (planner) can start first: it
+    needs only Core and gives contract orders (7.2) their dates. Then sites (7.1), then
+    contract manufacturing (7.2), since contract goods move between sites and licences.
 
 ## Sources
 
@@ -826,6 +904,11 @@ change.
   and [Customs-controlled areas](https://www.customs.govt.nz/business/customs-controlled-areas):
   CCA-to-CCA transfers without duty need prior approval, with records of every movement
   (7.1d). Checked 28 Sep 2026.
+- Planning concepts for 7.3: MRPeasy, [What is a master production schedule](https://www.mrpeasy.com/blog/what-is-master-production-schedule/)
+  (MPS and available-to-promise); User Solutions, [Rough-cut capacity planning](https://usersolutions.com/blog/rough-cut-capacity-planning);
+  Nexelem, [Finite vs infinite capacity planning](https://nexelem.com/en/blog/finite-vs-infinite-capacity-planning-which-approach-fits-your-factory/);
+  BrewPlanner, [Brewery production scheduling](https://brewplanner.com/blog/how-to-build-a-brewery-production-schedule-that-maximizes-tank-utilization)
+  (backward-scheduled tank timelines).
 - Google, [OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect):
   ID token claims (`sub`, `email_verified`, `hd`) for 0.5.
 - [Sale and Supply of Alcohol Act 2012](https://www.legislation.govt.nz/act/public/2012/0120/latest/DLM3339333.html)
