@@ -7,6 +7,10 @@
   {# CSS extracted to core2.css and loaded globally in base_spa.html for HTMX boost compatibility. #}
 {% endblock %}
 
+{% block topbar %}
+  {% if not core2_focus %}{{ super() }}{% endif %}
+{% endblock %}
+
 {% block content %}
         {% set core2_focus_mode = core2_focus if core2_focus is defined else '' %}
         <div class="max-content">
