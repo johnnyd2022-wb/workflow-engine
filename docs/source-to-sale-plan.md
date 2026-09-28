@@ -91,6 +91,8 @@ Small, and everything else builds on it.
     database.
   - Remaining work: schedule backups and rehearse a restore before the first paying
     customer.
+  - [x] Backup CLI, nightly timer template and isolated restore rehearsal tooling
+    (!416); synthetic rehearsal passed. Production scheduling/rehearsal remain.
   - Done when: the test suite cannot reach a real tenant, and a restore has been
     rehearsed.
 
