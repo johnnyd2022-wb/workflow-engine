@@ -261,6 +261,10 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_api.update_abv_rules", None, "compliance.manage"),
     ("compliant.compliant_api.update_np3_check_settings", None, "compliance.manage"),
     ("compliant.compliant_verification.update_verification_registration", None, "compliance.manage"),  # 2.2
+    # liquor licensing register (2.5): the log and check records are compliance.record
+    ("compliant.compliant_licensing.add_log_entry", None, "compliance.record"),
+    ("compliant.compliant_licensing.*", _READ, "compliance.view"),
+    ("compliant.compliant_licensing.*", None, "compliance.manage"),
     ("compliant.compliant_api.create_alcohol_product", None, "compliance.manage"),
     ("compliant.compliant_pages.nz_alcohol_configuration", None, "compliance.manage"),
     ("compliant.*", _READ, "compliance.view"),

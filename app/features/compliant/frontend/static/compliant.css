@@ -155,3 +155,31 @@ html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui
 .verification-new-action { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: end; }
 .verification-remove { background: none; border: 0; color: #b42318; font-size: 1.2rem; cursor: pointer; padding: 8px 4px; }
 @media (max-width: 700px) { .verification-new-action { grid-template-columns: 1fr 1fr; } .verification-head { flex-direction: column; } }
+/* Liquor licensing register (plan 2.5) */
+.licensing-shell [hidden] { display: none !important; }
+.licensing-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.licensing-pack { display: inline-block; padding: 10px 14px; border-radius: 9px; background: #0d6c6a; color: #fff; font-weight: 700; text-decoration: none; }
+.licensing-panel { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.licensing-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.licensing-card { border: 1px solid #dce4e9; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.licensing-card h3 { margin: 0; font-size: 1rem; }
+.licensing-card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: .85rem; }
+.licensing-card dt { color: #5d6778; }
+.licensing-card dd { margin: 0; }
+.licensing-card .licensing-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.licensing-state { align-self: flex-start; padding: 3px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: #d9efe6; color: #17603f; }
+.licensing-state--due, .licensing-state--attention { background: #fdf0d5; color: #7a4b00; }
+.licensing-state--late, .licensing-state--expired, .licensing-state--overdue, .licensing-state--missing { background: #fbe0dd; color: #8c1d13; }
+.licensing-state--ended { background: #eef2f1; color: #5d6778; }
+.licensing-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.licensing-form .span-2 { grid-column: 1 / -1; }
+.licensing-form label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 700; }
+.licensing-form fieldset { border: 0; margin: 0; padding: 0; }
+.licensing-form fieldset label { flex-direction: row; align-items: center; gap: 6px; font-weight: 600; }
+.licensing-add summary { cursor: pointer; font-weight: 700; }
+.licensing-add[open] summary { margin-bottom: 12px; }
+.licensing-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.licensing-check { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #dce4e9; border-radius: 9px; }
+.licensing-check div { display: flex; flex-direction: column; gap: 3px; }
+.licensing-check small { color: #5d6778; }
+@media (max-width: 700px) { .licensing-form { grid-template-columns: 1fr; } .licensing-check { flex-direction: column; align-items: flex-start; } }

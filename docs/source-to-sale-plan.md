@@ -401,7 +401,7 @@ records, not from people typing figures in.
   - Done when: switching on any part of NZ Alcohol shows the right required fields on the
     right steps, with no change to anyone's workflow.
 
-- [ ] **2.5 Liquor licensing (basic).** *M*
+- [x] **2.5 Liquor licensing (basic).** *M*
   - Scope: Sale and Supply of Alcohol Act 2012 obligations for producers who sell (cellar
     door, online, events). The first version is a register with reminders and checks, on
     the existing NP3 patterns (checks, evidence, review reminders, training register).
@@ -410,26 +410,41 @@ records, not from people typing figures in.
     (`.claude/agents/outputs/whistlebird-licence-dossier.html`) is a worked example of
     one producer's process.
   - Change:
-    - [ ] a. **Licence register:** type (on, off, club, special), endorsements (e.g. s 40
+    - [x] a. **Licence register:** type (on, off, club, special), endorsements (e.g. s 40
       remote seller), number, issuing DLC, issue and expiry dates, conditions (sale and
       delivery hours), premises. Reminders far enough ahead of expiry to lodge the renewal
       in time (confirm the lead time with the DLC), and for annual fees.
-    - [ ] b. **Special licences** for events: date, venue, conditions, manager on duty.
-    - [ ] c. **Manager register:** certified managers with certificate number, issuing
+    - [x] b. **Special licences** for events: date, venue, conditions, manager on duty.
+    - [x] c. **Manager register:** certified managers with certificate number, issuing
       DLC, expiry and renewal reminders.
-    - [ ] d. **Recurring checks with evidence:**
+    - [x] d. **Recurring checks with evidence:**
       - the licence and the manager on duty are displayed where required;
       - host responsibility or social responsibility policy, and the alcohol management
         plan, are current;
       - staff training (reuse the NP3 training register);
       - for remote sellers: licence details shown on the website, and age verification
         and delivery conditions followed.
-    - [ ] e. **Incident and refusal log:** ID refusals, intoxication refusals, incidents,
+    - [x] e. **Incident and refusal log:** ID refusals, intoxication refusals, incidents,
       controlled purchase operations. This is what an inspector asks to see.
     - [ ] f. **Links to Core and Sales where cheap:** e.g. flag a delivery recorded outside
       licensed delivery hours, if order times are available.
   - Done when: licence and certificate dates never lapse unnoticed, and an inspector's
     request for policies, training and incident records is one download.
+  - As built (!MR2.5): NZ Alcohol → Licensing (shown when a licence type is set in
+    Configuration). Licence register with endorsements, DLC, dates, sale and delivery hours
+    and conditions; the renew-by date is 20 working days before expiry counted as s 5 of
+    the Act defines working days (weekends, national holidays including Matariki,
+    Mondayisation, 20 Dec-15 Jan), reminded from 60 days before it, then "late: file with a
+    waiver", then expired. Annual fee reminders 30 days ahead. Special licences with the
+    event, dates and manager on duty. Managers' certificates reminded 60 days before expiry
+    until renewal is lodged. The liquor-licence framework gains checks for displays, the
+    host/social responsibility policy and AMP, and remote-seller website duties; licence
+    scope, renewal and certified managers are proven by the register everywhere
+    (overview included). Incident and refusal log. "Download inspector pack" is one PDF:
+    licences, managers, checks with evidence, staff training (the shared competency
+    register) and the log.
+  - f is not built: Xero invoices carry a date but no order time, so a delivery outside
+    licensed hours can't be detected yet. Revisit if an order source with times is added.
 
 - [x] **2.6 Customs stocktake: count reality and reconcile it to lodged duty.** *High · L*
   - Why: at a Customs audit the officer asks for sales data and for where every product is
