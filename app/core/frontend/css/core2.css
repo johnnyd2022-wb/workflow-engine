@@ -482,13 +482,6 @@ button.core2-hub-card {
   padding: 8px 12px;
   font-size: 0.8rem;
 }
-.core2-live-inv__receive-btn {
-  min-height: 38px;
-  padding: 8px 13px;
-  background: #2BC4A2;
-  border-color: #2BC4A2;
-  color: #083b35;
-}
 .core2-live-inv__snapshot {
   border: 1px solid var(--border-default, #e5e7eb);
   border-radius: 14px;
@@ -976,10 +969,6 @@ button.core2-hub-card {
   .core2-live-inv__mode .flow-mode-segment {
     flex: 1 1 0;
     white-space: nowrap;
-  }
-  .core2-live-inv__receive-btn {
-    width: 100%;
-    justify-content: center;
   }
   .core2-live-inv__snapshot-main {
     grid-template-columns: repeat(2, minmax(0, 1fr));

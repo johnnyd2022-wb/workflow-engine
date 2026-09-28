@@ -536,7 +536,8 @@ any time.
 - [ ] **4.4 One route to each job.** *S*
   - [x] a. "Trace" and Source Map links use the single `/core/sourcemap` page
     (`core.sourcemap`). (!391)
-  - [ ] b. "Add to inventory" and "+ Receive stock" do the same job; keep one.
+  - [x] b. The redundant "+ Receive stock" action is removed; "Add to inventory"
+    retains the manual, CSV and barcode choices. (!392)
   - [ ] c. Pages have three back controls (top-bar arrow, "← Back to …" link, sidebar);
     keep one.
   - [x] d. Old URLs redirect to their intended destinations in
