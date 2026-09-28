@@ -134,7 +134,7 @@ Small, and everything else builds on it.
       on hand; no recipes or process design), Auditor (read-only and time-limited, for a
       verifier visit). On migration, ADMIN becomes Owner/Admin and MEMBER becomes a
       "Staff" role with today's access, so nothing changes for current users.
-    - [x] c. (!MR0.4c) **Custom roles later:** clone a built-in role and tick permissions.
+    - [x] c. (!419) **Custom roles later:** clone a built-in role and tick permissions.
     - [x] d. (!333) **Server-side, default deny.** Every route declares
       `@requires_permission(...)`. A test walks Flask's URL map and fails if any route
       lacks a declaration; public routes are an explicit allow-list. Nav and buttons hide
@@ -161,7 +161,7 @@ Small, and everything else builds on it.
     - Owner is Admin plus the last-admin rule; no separate Owner role yet.
     - "Invite by email" is an invite **link** the admin sends (7 days, one use, only a
       hash stored): the app has no email sender yet. Swap in email when one exists.
-    - c. (!MR0.4c): People → Custom roles. Clone any built-in role except Admin, name it,
+    - c. (!419): People → Custom roles. Clone any built-in role except Admin, name it,
       tick permissions; changing a role changes it for everyone who holds it, and a role
       in use can't be deleted. Custom roles can grant anything Staff can; users.manage,
       settings.manage and compliance.manage stay with Admins (those routes also check the
