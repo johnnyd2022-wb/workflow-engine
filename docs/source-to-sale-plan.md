@@ -115,6 +115,8 @@ Small, and everything else builds on it.
   - [x] d. Run end-to-end tests in merge request pipelines, independently of
     relevant-test selection. (!324)
   - [ ] e. Block merges while `main` is red.
+    - [x] Repair the main image-build runner and document Docker socket access (!422);
+      full main build/publication validation follows merge.
   - Done when: a fresh clone passes lint and every test on the first run.
 
 - [ ] **0.4 Team roles and permissions.** *Critical · L*
