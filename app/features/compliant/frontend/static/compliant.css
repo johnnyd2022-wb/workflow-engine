@@ -126,3 +126,11 @@ html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui
 .excise-setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 16px; margin-top: 10px; }
 .excise-product strong { min-width: 12rem; }
 .excise-check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+/* NZ Alcohol tabs: tabs keep their full label (the shared segmented control lets them
+   shrink to nothing), and on a phone they wrap onto a second row instead of clipping. */
+.compliant-section-tabs .flow-mode-segment { flex: 0 0 auto; min-width: auto; text-align: center; }
+@media (max-width: 560px) {
+  .compliant-section-tabs .flow-mode-segmented { display: flex; flex-wrap: wrap; width: 100%; overflow: visible; gap: 3px; }
+  .compliant-section-tabs .flow-mode-segment { flex: 1 1 auto; }
+  .compliant-section-tabs .flow-mode-segment + .flow-mode-segment { border-left: 0; }
+}
