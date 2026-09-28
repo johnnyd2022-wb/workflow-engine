@@ -24,6 +24,15 @@ without a movement provider denies the operation. Providers must not commit or
 mutate inventory. Core must call them before dispatch, receipt and loss confirmation;
 this initial provider MR does not wire routes or enable multi-site operations.
 
+## Approval form projection
+
+`movement_requirements(db, org_id)` returns fresh `fields` and an optional
+`authority_permission`. Each field has name, text/select/date type, label, required
+flag and optional value/label choices. Core renders this contract and submits these
+values as the approval mapping; it must enforce the returned permission on the server
+when recording module authority. This keeps industry choices out of Core templates.
+An unsupported enabled module additionally returns `blocked: true`.
+
 ## NZ Alcohol initial policy
 
 The policy uses dated, exact-area CCA coverage and active product profiles. Missing

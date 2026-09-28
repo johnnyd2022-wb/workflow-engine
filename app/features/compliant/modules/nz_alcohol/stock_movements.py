@@ -55,6 +55,41 @@ def _licence(row):
 class NZAlcoholMovementPolicy:
     module_id = "nz_alcohol"
 
+    def requirements(self):
+        return {
+            "authority_permission": "compliance.manage",
+            "fields": [
+                {
+                    "name": "authority",
+                    "type": "select",
+                    "label": "Movement authority",
+                    "required": True,
+                    "options": [
+                        {"value": "same_legal_entity", "label": "CCA licences held by the same legal entity"},
+                        {"value": "prior_customs_approval", "label": "Prior Customs approval"},
+                    ],
+                },
+                {
+                    "name": "reference",
+                    "type": "text",
+                    "label": "Customs approval reference (when required)",
+                    "required": False,
+                },
+                {
+                    "name": "approved_on",
+                    "type": "date",
+                    "label": "Customs approval date (when required)",
+                    "required": False,
+                },
+                {
+                    "name": "evidence_reference",
+                    "type": "text",
+                    "label": "Authority evidence reference",
+                    "required": True,
+                },
+            ],
+        }
+
     def evaluate(self, session, org_id, context):
         if context.operation not in {"dispatch", "receipt", "loss"}:
             return _deny("Unknown stock movement operation")
@@ -68,17 +103,18 @@ class NZAlcoholMovementPolicy:
             return _deny("A finite positive quantity and unit are required")
         if not _text(context.product_name):
             return _deny("A valid product name is required")
-        product = (
+        products = (
             session.query(AlcoholProductProfile)
             .filter(
                 AlcoholProductProfile.org_id == org_id,
-                AlcoholProductProfile.inventory_name == _base_name(context.product_name),
                 AlcoholProductProfile.is_active.is_(True),
             )
-            .one_or_none()
+            .all()
         )
-        if product is None:
+        matching = [p for p in products if p.inventory_name.casefold() == _base_name(context.product_name).casefold()]
+        if len(matching) != 1:
             return _deny("Classify this product's Customs treatment before transferring it")
+        product = matching[0]
         if context.operation == "loss":
             return _deny("Transit loss needs Customs accounting before it can be confirmed")
         destination = licence_for_area(
