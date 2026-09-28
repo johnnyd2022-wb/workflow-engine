@@ -687,6 +687,66 @@ Starts once Phases 1 and 2 hold up with a second producer.
 
 ---
 
+## Phase 7: Planner implementation
+
+- [ ] **7.3 A planner that drives the day's work.** *High · L*
+  - Why: orders come in, stock has to be made, and someone has to decide what gets made
+    when. Owners want to turn up, see today's priorities, and trust the dates they give
+    customers, without a spreadsheet or a per-machine scheduling system.
+  - Evidence (28 Sep 2026): Core has tasks, and 4.5 plans a "today's work" dashboard, but
+    nothing turns demand into planned batches or forecasts when stock will be ready.
+    Items already carry the dates a planner needs: output ready dates and expiry dates
+    (`app/core/backend/checks/output_ready_date_check.py`).
+  - Shape (the parts of ERP planning that fit a small producer): a master schedule of
+    what to make and when, a material check against stock (MRP-lite), a rough-cut
+    capacity check rather than finite scheduling per workstation, and promise dates
+    (available-to-promise). Dates are planned backwards from when an order is due and
+    forwards from today, and the planner always says why a date is what it is.
+  - Change:
+    - [ ] a. **Demand.** Sales orders and contract orders (7.2) with due dates, plus
+      optional stock targets (a minimum or reorder level per product, per site with 7.1)
+      and a simple forecast (e.g. average sales over the last n weeks). Pre-sales count as
+      demand (1.1).
+      - [x] Explicit demand workspace: quantities, output units, due dates, priority,
+        cancellation, tenant isolation and staff audit (!425); sales/contract adapters,
+        forecasts and stock targets remain.
+    - [ ] b. **What to make.** Net requirements = demand − stock on hand − stock already
+      in production (and allocated), per product. Each shortfall becomes a **planned
+      batch** of the workflow that makes it, rounded to its usual batch size.
+    - [ ] c. **How long it takes.** Each workflow step gets an expected duration and any
+      waiting time (e.g. maceration 7 days, resting before bottling); the output ready
+      date rules already in Core apply. From these, a planned batch gets a start and a
+      ready date: backwards from the order's due date, or forwards from today when it's
+      already late.
+    - [ ] d. **Will we have the materials?** Each planned batch checks its inputs: on
+      hand, arriving (expected supplier deliveries, a small new record), or made by another planned
+      batch. It respects ready dates (not usable until ready) and expiry dates (use
+      first-expiring stock first, and never plan to use a lot after it expires). A
+      shortage moves the date and says which input caused it.
+    - [ ] e. **Can we do it?** Rough capacity per site: a few resource groups the owner
+      names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
+      week, and the steps that use them. The planner flags overloaded days and offers to
+      move lower-priority batches; it doesn't try to optimise every minute.
+    - [ ] f. **The daily driver.** A plan board (week and month) with a priority list for
+      today: drag a batch to move it, pin a date so the planner won't move it, change a
+      priority. When reality changes (a batch finishes late, a ready date or expiry is
+      flagged, an order is added or cancelled, stock is short), the planner re-plans what
+      isn't pinned and lists what moved and why. Planned batches start as real
+      executions from the board, and today's list feeds the dashboard (4.5).
+    - [ ] g. **Promise dates.** For a new order, "when can we deliver n?" from stock on
+      hand, then what's planned, then capacity (available-to-promise). The same forecast
+      ready date feeds the portal (7.2e) and the order.
+    - [ ] h. **Compliance in the plan.** Planned work respects what the modules require:
+      a batch needing a site's CCA or food registration is planned only at a site that has
+      it (7.1c); a verification visit (2.2) or stocktake (2.6) can block a day.
+  - Done when: a new order for 600 bottles shows a promise date in seconds; the planner
+    lays out the batches, flags a botanical short for the second one and moves its date;
+    the owner pins the first, drags the second, and the next morning the dashboard shows
+    today's priorities, with the order's forecast date updated in the customer's portal.
+
+
+---
+
 ## Order
 
 1. **Phase 0.** Require 2FA and get `main` green now; the database split is planned for
