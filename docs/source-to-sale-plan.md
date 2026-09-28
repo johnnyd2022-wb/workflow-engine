@@ -121,7 +121,7 @@ Small, and everything else builds on it.
       full main build/publication validation follows merge.
   - Done when: a fresh clone passes lint and every test on the first run.
 
-- [ ] **0.4 Team roles and permissions.** *Critical · L*
+- [x] **0.4 Team roles and permissions.** *Critical · L*
   - Evidence: two roles, `UserRole.ADMIN` and `MEMBER` (`app/core/db/models/user.py:14`).
     11 routes check a role with `requires_role`, all admin-only. No CRM or sales route
     checks one, so every member sees revenue, customers and invoices. `/org/users` can
@@ -138,7 +138,7 @@ Small, and everything else builds on it.
       on hand; no recipes or process design), Auditor (read-only and time-limited, for a
       verifier visit). On migration, ADMIN becomes Owner/Admin and MEMBER becomes a
       "Staff" role with today's access, so nothing changes for current users.
-    - [ ] c. **Custom roles later:** clone a built-in role and tick permissions.
+    - [x] c. (!419) **Custom roles later:** clone a built-in role and tick permissions.
     - [x] d. (!333) **Server-side, default deny.** Every route declares
       `@requires_permission(...)`. A test walks Flask's URL map and fails if any route
       lacks a declaration; public routes are an explicit allow-list. Nav and buttons hide
@@ -165,7 +165,12 @@ Small, and everything else builds on it.
     - Owner is Admin plus the last-admin rule; no separate Owner role yet.
     - "Invite by email" is an invite **link** the admin sends (7 days, one use, only a
       hash stored): the app has no email sender yet. Swap in email when one exists.
-    - Only c. (custom roles) is left.
+    - c. (!419): People → Custom roles. Clone any built-in role except Admin, name it,
+      tick permissions; changing a role changes it for everyone who holds it, and a role
+      in use can't be deleted. Custom roles can grant anything Staff can; users.manage,
+      settings.manage and compliance.manage stay with Admins (those routes also check the
+      Admin role). A person with a custom role carries its base role, so time limits
+      (Auditor-based roles) and role checks behave as for that role.
 
 - [ ] **0.5 Sign in with Google, linked to existing accounts.** *M*
   - Why: most producers already live in Google Workspace. One click to sign in, one less

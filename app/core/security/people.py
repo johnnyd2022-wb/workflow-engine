@@ -13,10 +13,15 @@ from zoneinfo import ZoneInfo
 
 from app.core.db.models.user import User, UserRole
 from app.core.security.access_policy import (
+    CUSTOM_ROLE_BASES,
+    GRANTABLE,
+    PERMISSIONS,
     ROLE_DESCRIPTIONS,
     ROLE_LABELS,
+    ROLE_PERMISSIONS,
     access_expired,
     permissions_for,
+    role_label_for,
 )
 
 INVITE_VALID_FOR = timedelta(days=7)
@@ -29,10 +34,33 @@ class PeopleError(ValueError):
     """A request that breaks one of the rules below; the message is safe to show."""
 
 
-def role_options() -> list[dict]:
-    return [
-        {"value": role.value, "label": ROLE_LABELS[role], "description": ROLE_DESCRIPTIONS[role]} for role in UserRole
+CUSTOM_PREFIX = "custom:"
+
+
+def role_options(custom_roles: list | None = None) -> list[dict]:
+    """Built-in roles, then the organisation's custom roles (plan 0.4c)."""
+    options = [
+        {
+            "value": role.value,
+            "label": ROLE_LABELS[role],
+            "description": ROLE_DESCRIPTIONS[role],
+            "needs_expiry": role == UserRole.AUDITOR,
+            "custom": False,
+        }
+        for role in UserRole
     ]
+    for custom in custom_roles or []:
+        base = UserRole(custom.base_role)
+        options.append(
+            {
+                "value": f"{CUSTOM_PREFIX}{custom.id}",
+                "label": custom.name,
+                "description": custom.description or f"Custom role based on {ROLE_LABELS[base]}.",
+                "needs_expiry": base == UserRole.AUDITOR,
+                "custom": True,
+            }
+        )
+    return options
 
 
 def parse_role(value) -> UserRole:
@@ -40,6 +68,54 @@ def parse_role(value) -> UserRole:
         return UserRole(str(value or "").strip().lower())
     except ValueError:
         raise PeopleError(f"Unknown role: {value!r}") from None
+
+
+def parse_role_choice(value, custom_roles: list) -> tuple[UserRole, object | None]:
+    """A built-in role value, or ``custom:<id>`` for one of this organisation's roles."""
+    text = str(value or "").strip()
+    if text.startswith(CUSTOM_PREFIX):
+        wanted = text[len(CUSTOM_PREFIX) :]
+        custom = next((r for r in custom_roles if str(r.id) == wanted), None)
+        if custom is None:
+            raise PeopleError("Unknown role")
+        return UserRole(custom.base_role), custom
+    return parse_role(text), None
+
+
+def role_value(user: User) -> str:
+    custom_id = getattr(user, "custom_role_id", None)
+    return f"{CUSTOM_PREFIX}{custom_id}" if custom_id else user.role.value
+
+
+def validate_custom_role(data: dict, existing_names: set[str]) -> dict:
+    """Name, base role (any built-in but Admin) and the permissions ticked for it."""
+    name = " ".join(str(data.get("name") or "").split())[:100]
+    if not name:
+        raise PeopleError("Give the role a name.")
+    if name.casefold() in existing_names or name.casefold() in {label.casefold() for label in ROLE_LABELS.values()}:
+        raise PeopleError(f"There's already a role called {name}.")
+    try:
+        base = UserRole(str(data.get("base_role") or ""))
+    except ValueError:
+        raise PeopleError("Pick the built-in role to start from.") from None
+    if base not in CUSTOM_ROLE_BASES:
+        raise PeopleError("Admin can't be customised. Start from another role.")
+    permissions = data.get("permissions")
+    if permissions is None:
+        permissions = sorted(ROLE_PERMISSIONS[base] & GRANTABLE)
+    if not isinstance(permissions, list) or any(p not in PERMISSIONS for p in permissions):
+        raise PeopleError("Unknown permission")
+    refused = sorted(set(permissions) - GRANTABLE)
+    if refused:
+        raise PeopleError(f"Only admins can have {', '.join(refused)}.")
+    if not permissions:
+        raise PeopleError("Tick at least one permission.")
+    description = " ".join(str(data.get("description") or "").split())[:500] or None
+    return {"name": name, "base_role": base.value, "permissions": sorted(set(permissions)), "description": description}
+
+
+def permission_catalogue() -> list[dict]:
+    return [{"key": key, "description": text, "grantable": key in GRANTABLE} for key, text in PERMISSIONS.items()]
 
 
 def parse_access_expiry(value, role: UserRole, now: datetime | None = None) -> datetime | None:
@@ -129,8 +205,8 @@ def serialize_person(user: User) -> dict:
         "first_name": first,
         "last_name": last,
         "display_name": display,
-        "role": user.role.value,
-        "role_label": ROLE_LABELS.get(user.role, user.role.value),
+        "role": role_value(user),
+        "role_label": role_label_for(user),
         "is_active": user.is_active,
         "status": status,
         "two_factor_enabled": bool(user.two_factor_enabled),
