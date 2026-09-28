@@ -155,6 +155,10 @@ def create_app():
     from app.core.backend.stock_locations import stock_locations_bp
 
     app.register_blueprint(stock_locations_bp)
+    # Stocktakes (plan 2.6).
+    from app.core.backend.stocktake import stocktake_bp
+
+    app.register_blueprint(stocktake_bp)
 
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;

@@ -35,10 +35,15 @@ logger = get_logger(__name__)
 
 api_bp = Blueprint("compliant_api", __name__)
 
-# Excise settings live on the Customs page, which the main configuration form doesn't
+# Excise and stocktake settings live on their own pages, which the main configuration form doesn't
 # send, so a save of that form keeps them. (ABV rules are carried by configuration.js
 # instead, because the Whistlebird replay relies on a PUT replacing them wholesale.)
-_SUBFEATURE_SETTINGS = ("excise_frequency", "excise_tracking_from")
+_SUBFEATURE_SETTINGS = (
+    "excise_frequency",
+    "excise_tracking_from",
+    "stocktake_frequency",
+    "stocktake_bulk_tolerance_percent",
+)
 _RECORD_TYPES = {"attestation", "reading", "lodgement", "competency", "incident"}
 _RECORD_STATUSES = {"complete", "failed", "open", "superseded"}
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
