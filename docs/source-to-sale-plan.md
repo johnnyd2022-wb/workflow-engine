@@ -402,13 +402,23 @@ records, not from people typing figures in.
     "remind me from" date. g: rules checked against customs.govt.nz on 25 Sep 2026
     (Sources); public holidays aren't counted in the due date, and the page says so.
 
-- [ ] **2.2 Track verifications from visit to next due date.** *High · M*
+- [x] **2.2 Track verifications from visit to next due date.** *High · M*
   - Evidence: after a passed verification the NP3 page still says "Verification ready",
     and there's nowhere to record the outcome.
   - Change: record each verification (date, verifier, outcome, corrective actions with
     owners and due dates); work out the next verification from the programme's frequency
     and show it on the dashboard.
   - Done when: the app always knows the current verification status and next due date.
+  - As built (!413): NP3 page (and the NP1/NP2 page) → Verification. Each visit records
+    date, verifier, agency, report reference, outcome (and, when unacceptable, whether the
+    business is willing and able to comply) and corrective actions with owners and due
+    dates. The next date follows MPI's national-programme frequency steps (Food
+    Regulations 94: 3 months to 3 years, or none): the app suggests the step the rules
+    give and records what the verifier actually set, including a date from their report.
+    Before any verification, the registration date gives the initial due date (6 weeks
+    new; 1 year NP1/NP2, 6 months NP3 existing). Alerts 60 days before the due date and a
+    week before each action; the dashboard module card carries the next date as a
+    milestone (rendered by !412). Recording a visit clears the booked-visit fields.
 
 - [ ] **2.3 Make evidence counts consistent and clickable.** *S*
   - Evidence: "38 evidence ready" appears next to "0 active evidence files" on the NP3
