@@ -160,6 +160,10 @@ def create_app():
 
     app.register_blueprint(stocktake_bp)
 
+    from app.features.contract_manufacturing.routes.orders import bp as contracts_bp
+
+    app.register_blueprint(contracts_bp)
+
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
     # see .agents/specs/process_templates.md's "no new feature flag" ASSUMPTION).
