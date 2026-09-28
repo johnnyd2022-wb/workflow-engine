@@ -112,8 +112,8 @@ Small, and everything else builds on it.
   - [x] c. (!323) Fix `CLAUDE.md` drift: test DB password (now `$POSTGRES_PASSWORD_TEST`), test
     counts, DAG code location (`CLAUDE.md` says `app/features/workflow_engine/`; it's
     `app/core/backend/dagtraversal.py`).
-  - [ ] d. Run end-to-end tests in merge request pipelines (currently skipped by
-    relevant-test selection).
+  - [x] d. Run end-to-end tests in merge request pipelines, independently of
+    relevant-test selection. (!324)
   - [ ] e. Block merges while `main` is red.
   - Done when: a fresh clone passes lint and every test on the first run.
 

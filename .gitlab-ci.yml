@@ -213,8 +213,44 @@ relevant_tests:
     - merge_requests
   allow_failure: false
 
+# Plan 0.3d: browser smoke flows must pass before an MR can merge. Broader
+# browser regressions remain tracked under the parent 0.3 main-green work.
+mr_e2e:
+  stage: test
+  image: python:3.14-bookworm
+  services:
+    - name: postgres:16
+      alias: postgres
+      command: ["postgres", "-c", "max_connections=200"]
+  variables:
+    ENVIRONMENT: test
+    POSTGRES_DB: workflow-engine-test
+    POSTGRES_USER: workflow_rw
+    POSTGRES_PASSWORD: secret
+    POSTGRES_HOST_AUTH_METHOD: trust
+  before_script:
+    - pip install "uv==${UV_VERSION}"
+    - uv sync --extra dev
+    - apt-get update -o Acquire::AllowInsecureRepositories=true -qq
+    - apt-get install -y -qq postgresql-client curl openssl ca-certificates
+    - chmod +x ci/*.sh
+    - ./ci/setup_database.sh
+    - |
+      for attempt in 1 2 3; do
+        uv run playwright install --with-deps chromium && break
+        if [ "$attempt" -eq 3 ]; then exit 1; fi
+        sleep "$((attempt * 15))"
+      done
+    - mkdir -p app/tls
+    - openssl req -x509 -newkey rsa:4096 -nodes -keyout app/tls/app_cert.key -out app/tls/app_cert.pem -days 1 -subj "/CN=localhost" 2>/dev/null
+  script:
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_smoke.py -v
+  only:
+    - merge_requests
+  allow_failure: false
+
 # The exhaustive suite is the post-merge release gate. It runs before the build/deploy
-# stages on main; merge requests use relevant_tests above for faster feedback.
+# stages on main; merge requests run selected regressions and browser smoke above.
 unit_tests:
   stage: test
   image: python:3.14-bookworm
