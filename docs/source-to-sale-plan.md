@@ -827,11 +827,15 @@ Founder decisions for this phase:
     - [ ] b. **What to make.** Net requirements = demand − stock on hand − stock already
       in production (and allocated), per product. Each shortfall becomes a **planned
       batch** of the workflow that makes it, rounded to its usual batch size.
+      - [x] Net-requirements engine: eligible stock/WIP, batch rounding and
+        owner/site/unit separation (!423); persistence and order adapters remain.
     - [ ] c. **How long it takes.** Each workflow step gets an expected duration and any
       waiting time (e.g. maceration 7 days, resting before bottling); the output ready
       date rules already in Core apply. From these, a planned batch gets a start and a
       ready date: backwards from the order's due date, or forwards from today when it's
       already late.
+      - [x] Timing engine: DAG critical path including waits, backwards dates and
+        late-date reasons (!423); workflow settings and readiness adapters remain.
     - [ ] d. **Will we have the materials?** Each planned batch checks its inputs: on
       hand, arriving (expected supplier deliveries, a small new record), or made by another planned
       batch. It respects ready dates (not usable until ready) and expiry dates (use
