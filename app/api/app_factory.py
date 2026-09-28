@@ -161,8 +161,11 @@ def create_app():
     app.register_blueprint(stocktake_bp)
 
     from app.features.planning.routes import planning_bp
+    from app.features.sites.routes import sites_bp
 
     app.register_blueprint(planning_bp)
+    app.register_blueprint(sites_bp)
+
 
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
@@ -408,6 +411,9 @@ def create_app():
     setup_two_factor_policy(app)
     # After tenant context: reads g.current_user. Every endpoint must be in POLICY.
     setup_access_policy(app)
+    from app.features.sites.routes import install_site_request_validation
+
+    install_site_request_validation(app)
     setup_session_security(app)
     setup_observability(app)
 

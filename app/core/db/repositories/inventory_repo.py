@@ -37,6 +37,7 @@ def _item_snapshot(item: InventoryItem) -> dict:
     return {
         "id": str(item.id),
         "org_id": str(item.org_id),
+        "site_id": str(item.site_id) if item.site_id else None,
         "name": item.name,
         "quantity": str(item.quantity),
         "unit": item.unit,
@@ -199,6 +200,7 @@ class InventoryRepository:
         commit: bool = True,
         write_reason: InventoryQuantityWriteReason = InventoryQuantityWriteReason.REPOSITORY_CREATE,
         location_id: UUID | None = None,
+        site_id: UUID | None = None,
     ) -> InventoryItem:
         """Create a new inventory item. If commit=False, caller is responsible for commit."""
         with start_span(
@@ -231,6 +233,7 @@ class InventoryRepository:
                     source_step_name=source_step_name,
                     extra_data=extra_data or {},
                     location_id=location_id,
+                    site_id=site_id,
                 )
                 item.display_label = _build_display_label(item)
                 self.db.add(item)
@@ -782,6 +785,7 @@ class InventoryRepository:
         process_id: UUID | None = None,
         limit: int | None = None,
         cursor: tuple | None = None,
+        site_id: UUID | None = None,
     ) -> list[InventoryItem]:
         """List inventory items for an organisation, optionally filtered by type or process.
 
@@ -792,6 +796,8 @@ class InventoryRepository:
         from sqlalchemy import tuple_ as _tuple
 
         query = self.db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
+        if site_id is not None:
+            query = query.filter(InventoryItem.site_id == site_id)
         if inventory_type:
             query = query.filter(InventoryItem.inventory_type == inventory_type)
         if process_id:

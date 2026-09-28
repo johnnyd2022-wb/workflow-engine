@@ -61,6 +61,7 @@ how they get carved.
 | designing a process, the create wizard, steps, reordering, step docs | process-design |
 | running a batch, completing a step, DAG, evidence upload | execution |
 | stock levels, adding/adjusting items, CSV import, barcodes, units | inventory |
+| sites, multiple sites setting, physical stock and execution tags | sites |
 | disposal, waste, writing stock off | wastage |
 | untracked stock, matching, "the numbers don't line up" | reconciliation |
 | expired materials, findings, system status, notifications, compliance | compliance-checks |
@@ -80,6 +81,21 @@ how they get carved.
 | entered demand, material feasibility, capacity, stock risk | planning (planned) |
 | rule templates, automated alerts, overdue chases, automation worker | automations (planned) |
 | performance cockpit, metric definitions, business trends | dashboard (planned extension) |
+
+## sites
+
+subscription: core (enterprise operations planned)
+layer: domain
+flag: Organisation.multiple_sites_enabled (default off)
+routes: /core/sites, /api/core/sites, /api/core/sites/settings, /api/core/sites/<site_id>, /api/core/sites/<site_id>/position
+backend: app/features/sites/routes.py; app/features/sites/service.py; app/core/db/site_guard.py
+models: Site; site_id tags on InventoryItem, Execution, StockLocation
+frontend: app/features/sites/frontend/templates/sites/sites.html; app/features/sites/frontend/static/sites.js
+tests: tests/test_sites.py
+depends on: platform, identity, inventory, execution
+depended on by: contract manufacturing and planning (planned)
+invariant: additional-site operations stay closed until stock consumption, FIFO, transfers and compliance enforce site scope; existing physical tags cannot be edited as moves
+status: plan 7.1a/b foundations only; see docs/multiple-sites-foundations.md
 
 ## Customer-value programme — delivery status
 

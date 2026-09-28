@@ -58,7 +58,9 @@ class ExecutionRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_execution(self, org_id: UUID, process_id: UUID, commit: bool = True) -> Execution:
+    def create_execution(
+        self, org_id: UUID, process_id: UUID, commit: bool = True, site_id: UUID | None = None
+    ) -> Execution:
         """Create a new execution and initialize execution steps.
 
         This operation is fully transactional - either all execution steps are created
@@ -78,7 +80,9 @@ class ExecutionRepository:
                     raise ValueError(f"Process {process_id} not found or does not belong to org {org_id}")
 
                 # Create execution
-                execution = Execution(org_id=org_id, process_id=process_id, status=ExecutionStatus.PENDING)
+                execution = Execution(
+                    org_id=org_id, process_id=process_id, status=ExecutionStatus.PENDING, site_id=site_id
+                )
                 self.db.add(execution)
                 self.db.flush()
                 _ = execution.id
@@ -184,6 +188,7 @@ class ExecutionRepository:
         status: ExecutionStatus | None = None,
         limit: int | None = None,
         cursor: tuple[datetime, UUID] | None = None,
+        site_id: UUID | None = None,
     ) -> list[Execution]:
         """List executions for an organisation, optionally filtered by process or status.
 
@@ -198,6 +203,8 @@ class ExecutionRepository:
         )
         if process_id:
             query = query.filter(Execution.process_id == process_id)
+        if site_id is not None:
+            query = query.filter(Execution.site_id == site_id)
         if status:
             query = query.filter(Execution.status == status)
         if cursor is not None:

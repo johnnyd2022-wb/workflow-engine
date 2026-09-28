@@ -5,6 +5,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.db.models.organisation import Organisation, OrganisationStatus
+from app.core.db.models.site import Site
+from app.core.security.tenant_scope import unscoped
 
 
 class OrganisationRepository:
@@ -20,6 +22,12 @@ class OrganisationRepository:
         self.db.flush()  # Flush to get the ID without committing
         # Access id to ensure it's loaded
         _ = org.id
+        # The structural default exists even while the opt-in is off, so concurrent
+        # stock writes never race enabling's default-site backfill. This new tenant
+        # cannot inherit a different request's tenant context during signup/setup.
+        with unscoped():
+            self.db.add(Site(org_id=org.id, name="Main site", kind="manufacturing", is_default=True))
+            self.db.flush()
         self.db.commit()
         return org
 
