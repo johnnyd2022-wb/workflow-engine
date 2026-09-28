@@ -36,7 +36,13 @@ def _np3_system_alerts(queue: list[dict], overall_alert: dict | None) -> list[di
     return alerts
 
 
-def _np3_workspace_summary(health: dict) -> dict:
+def _verification_milestone(session: Session, org_id: UUID, profile) -> dict | None:
+    from app.features.compliant.modules.nz_alcohol import verification
+
+    return verification.milestone(verification.status(session, org_id, profile, date.today()))
+
+
+def _np3_workspace_summary(health: dict, milestone: dict | None = None) -> dict:
     """Describe NP3 health for the generic shared-Dashboard workspace contract."""
     evidence_ready = int(health.get("ok") or 0)
     needs_attention = int(health.get("needs_attention") or 0)
@@ -52,6 +58,7 @@ def _np3_workspace_summary(health: dict) -> dict:
         "evidence_ready": evidence_ready,
         "needs_attention": needs_attention,
         "overdue": int(health.get("overdue") or 0),
+        "milestone": milestone,  # plan 2.2: next verification, always on screen
     }
 
 
@@ -117,7 +124,9 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
             "attention_controls": attention_controls,
             "np3_health": health,
             "np3_work_queue": queue,
-            "workspace_summary": _np3_workspace_summary(health) if health else None,
+            "workspace_summary": _np3_workspace_summary(health, _verification_milestone(session, org_id, profile))
+            if health
+            else None,
             "system_finding": system_finding,
             "system_alerts": system_alerts,
         },
@@ -223,8 +232,37 @@ def run_stocktake_check(org_id: UUID, session: Session) -> CheckResult:
     )
 
 
+VERIFICATION_CHECK_ID = "compliant.nz_alcohol.verification"
+
+
+def run_verification_check(org_id: UUID, session: Session) -> CheckResult:
+    """Plan 2.2: the next verification coming due, and corrective actions due."""
+    from app.features.compliant.modules.nz_alcohol import verification
+
+    profile = ComplianceService(session).get_profile(org_id)
+    if profile is None or not profile.enabled:
+        return CheckResult(check_id=VERIFICATION_CHECK_ID, flagged=False, data={})
+    alerts = verification.alerts(verification.status(session, org_id, profile, date.today()), date.today())
+    if not alerts:
+        return CheckResult(check_id=VERIFICATION_CHECK_ID, flagged=False, data={})
+    return CheckResult(
+        check_id=VERIFICATION_CHECK_ID,
+        flagged=True,
+        message=alerts[0]["title"],
+        data={
+            "system_finding": {
+                "category": "Food safety verification",
+                "action": {"href": "/compliant/nz-alcohol/food-safety#verification", "label": "Open verification"},
+                "details": alerts,
+            },
+            "system_alerts": alerts,
+        },
+    )
+
+
 def register_checks(runner) -> None:
     if config.compliant_enabled:
         runner.register_check(CHECK_ID, run_check)
         runner.register_check(EXCISE_CHECK_ID, run_excise_check)
         runner.register_check(STOCKTAKE_CHECK_ID, run_stocktake_check)
+        runner.register_check(VERIFICATION_CHECK_ID, run_verification_check)

@@ -290,8 +290,8 @@
     renderCoreStats();
     renderPrep();
     date.textContent = audit.verification && audit.verification.date
-      ? 'Verification date: ' + audit.verification.date
-      : 'Set the verification date in Configuration.';
+      ? 'Verification visit booked: ' + audit.verification.date
+      : 'No verification visit booked. Add one in Configuration when your verifier confirms it.';
     root.setAttribute('aria-busy', 'false');
   }
   fetch('/api/compliant/np3-audit').then(function (response) {
