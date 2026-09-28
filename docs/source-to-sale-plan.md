@@ -327,6 +327,7 @@ records, not from people typing figures in.
   - Change: record each verification (date, verifier, outcome, corrective actions with
     owners and due dates); work out the next verification from the programme's frequency
     and show it on the dashboard.
+  - [x] Dashboard validates and renders a module-owned next-date milestone. (!412)
   - Done when: the app always knows the current verification status and next due date.
 
 - [x] **2.3 Make evidence counts consistent and clickable.** *S* (!347)
