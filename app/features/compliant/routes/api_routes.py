@@ -43,6 +43,8 @@ _SUBFEATURE_SETTINGS = (
     "excise_tracking_from",
     "stocktake_frequency",
     "stocktake_bulk_tolerance_percent",
+    "np_registered_on",
+    "np_registered_as",
 )
 _RECORD_TYPES = {"attestation", "reading", "lodgement", "competency", "incident"}
 _RECORD_STATUSES = {"complete", "failed", "open", "superseded"}

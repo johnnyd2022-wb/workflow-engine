@@ -100,6 +100,7 @@ def test_np3_emits_the_dashboard_workspace_summary_contract():
         "evidence_ready": 4,
         "needs_attention": 34,
         "overdue": 2,
+        "milestone": None,
     }
 
 
