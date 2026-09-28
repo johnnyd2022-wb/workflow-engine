@@ -36,9 +36,10 @@ from app.features.compliant.modules.nz_alcohol.catalogue import (
 )
 from app.features.compliant.modules.nz_alcohol.councils import TRADE_WASTE_CATALOGUES, council_catalogue
 from app.features.compliant.modules.nz_alcohol.live_evidence import derive_np3_core_evidence
+from app.features.compliant.modules.nz_alcohol.national_programmes import GUIDANCE
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
-    NP3_AUDIT_CATEGORIES,
     PREPARATION_ITEMS,
+    audit_categories,
     build_guided_steps,
     build_np3_audit_rows,
     prioritise_work_queue,
@@ -756,10 +757,11 @@ class ComplianceService:
         # The tailored NP3 register considers structured logs and evidence derived
         # from Core. Project that exact health into the module summary rather than
         # showing the generic catalogue count beside a different NP3 audit count.
-        if profile is not None and profile.enabled and (profile.settings or {}).get("food_control_programme") == "np3":
+        programme = (profile.settings or {}).get("food_control_programme") if profile is not None else None
+        if profile is not None and profile.enabled and programme in ("np1", "np2", "np3"):
             np3_health = self.np3_audit(org_id)["health"]
             for framework in frameworks:
-                if framework["slug"] == "np3-food-control":
+                if framework["slug"] == f"{programme}-food-control":
                     framework["np3_audit_health"] = np3_health
                     framework["evidence_coverage"] = np3_audit_coverage(np3_health)
                     framework["summary_health"] = module_summary_health(
@@ -808,9 +810,12 @@ class ComplianceService:
         """Return the upcoming-verification checklist and only its linked evidence."""
         profile = self.get_profile(org_id)
         settings = profile.settings or {} if profile else {}
-        if profile is not None and profile.enabled and settings.get("food_control_programme", "np3") != "np3":
-            raise ValueError("Select National Programme 3 in Configuration to use the NP3 audit plan")
-        records = self.records(org_id, "np3-food-control") if profile and profile.enabled else []
+        programme = settings.get("food_control_programme", "np3")
+        if profile is not None and profile.enabled and programme not in ("np1", "np2", "np3"):
+            raise ValueError("Select a national programme in Configuration to use the verification workspace")
+        if programme not in ("np1", "np2", "np3"):
+            programme = "np3"
+        records = self.records(org_id, f"{programme}-food-control") if profile and profile.enabled else []
         derived_evidence, live_summary = (
             derive_np3_core_evidence(self.session, org_id) if profile and profile.enabled else ([], {})
         )
@@ -829,7 +834,7 @@ class ComplianceService:
             if profile and profile.enabled
             else []
         )
-        rows = build_np3_audit_rows(records, derived_evidence, staff=staff)
+        rows = build_np3_audit_rows(records, derived_evidence, staff=staff, programme=programme)
         review_interval_months = settings.get("np3_review_interval_months", 6)
         check_review_intervals = settings.get("np3_check_review_intervals", {})
         for row in rows:
@@ -919,6 +924,10 @@ class ComplianceService:
             {
                 "org_name": self.session.query(Organisation.name).filter(Organisation.id == org_id).scalar()
                 or "Organisation",
+                "programme": programme,
+                "programme_label": GUIDANCE[programme]["label"],
+                "programme_short": GUIDANCE[programme]["short"],
+                "guidance_url": GUIDANCE[programme]["url"],
                 "verification": {
                     "date": settings.get("np3_verification_date"),
                     "verifier": settings.get("np3_verifier_name"),
@@ -928,7 +937,7 @@ class ComplianceService:
                 "preparation_items": PREPARATION_ITEMS,
                 "categories": [
                     {"key": f"section-{index}", "title": category}
-                    for index, (category, _topics) in enumerate(NP3_AUDIT_CATEGORIES)
+                    for index, (category, _topics) in enumerate(audit_categories(programme))
                 ],
                 "rows": rows,
                 "counts": counts,

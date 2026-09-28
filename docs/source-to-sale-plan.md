@@ -426,20 +426,37 @@ records, not from people typing figures in.
   - Change: define ready, needs evidence and overdue once; every count links to the
     records behind it; remove panels with nothing in them.
 
-- [ ] **2.4 Finish the NZ Alcohol module on one pattern.** *L*
+- [x] **2.4 Finish the NZ Alcohol module on one pattern.** *L*
   - Direction: NZ Alcohol = NP1, NP2, NP3, Customs and liquor licensing. Each part plugs
     into Core like ABV does: when switched on, it adds required fields to the relevant
     steps, and producers keep their existing processes.
   - Change:
-    - [ ] a. Document the Compliant → Core contract (step-scoped prompts, completion
+    - [x] a. Document the Compliant → Core contract (step-scoped prompts, completion
       constraints, how steps are matched) so every part is built to it. Starting point:
       `app/features/compliant/platform/workflow_rules.py`.
-    - [ ] b. Build NP1 and NP2 alongside NP3, selected by the existing food-safety
+    - [x] b. Build NP1 and NP2 alongside NP3, selected by the existing food-safety
       programme setting.
-    - [ ] c. Starter pack for each producer type (spirits, beer, wine, cider, mead, RTD):
+    - [x] c. Starter pack for each producer type (spirits, beer, wine, cider, mead, RTD):
       a workflow template plus the fields and checks that type needs, preconfigured.
   - Done when: switching on any part of NZ Alcohol shows the right required fields on the
     right steps, with no change to anyone's workflow.
+  - As built (!MR2.4):
+    - a. `docs/compliant-core-contract.md`: the composition root, workflow rules (prompts,
+      `prompt_value` / `active_evidence` constraints, step scoping, final-step and
+      output-name matching), the check contract (alerts, findings, workspace summary and
+      milestone), module pages and access policy, and a checklist for a new part.
+    - b. NP1 and NP2 now use the NP3 verification workspace, selected by the programme
+      setting. Their checks are MPI's December 2025 guidance cards (NP2 adds cooking or
+      pasteurising, defrosting/reheating, water activity and pickling/fermenting), mapped
+      to the same check ids, so playbooks, logs, training and the evidence register all
+      work. Labels, guidance links, alerts and the dashboard card follow the programme.
+      MPI puts brewing, distilling and alcoholic-beverage manufacture under NP3; NP1/NP2
+      fit producers that only store, distribute or sell packaged or chilled food.
+    - c. Starter packs on "Start from a template": spirits, beer, wine, cider, mead and
+      RTD, each a chained receive-to-package workflow (created as a draft, once). Applying
+      one adds the product type (so its frameworks apply) and requires ABV on the final
+      product, and lists the checks that matter for that product. Staff without
+      `compliance.manage` get the workflow but not the compliance changes.
 
 - [ ] **2.5 Liquor licensing (basic).** *M*
   - Scope: Sale and Supply of Alcohol Act 2012 obligations for producers who sell (cellar
