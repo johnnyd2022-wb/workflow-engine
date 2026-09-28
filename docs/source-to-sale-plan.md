@@ -440,7 +440,7 @@ records, not from people typing figures in.
       a workflow template plus the fields and checks that type needs, preconfigured.
   - Done when: switching on any part of NZ Alcohol shows the right required fields on the
     right steps, with no change to anyone's workflow.
-  - As built (!MR2.4):
+  - As built (!418):
     - a. `docs/compliant-core-contract.md`: the composition root, workflow rules (prompts,
       `prompt_value` / `active_evidence` constraints, step scoping, final-step and
       output-name matching), the check contract (alerts, findings, workspace summary and
