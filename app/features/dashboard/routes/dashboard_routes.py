@@ -6,10 +6,10 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from flask import g, jsonify, render_template, request
 from sqlalchemy import func
-from zoneinfo import ZoneInfo
 
 from app.core.db import db_session
 from app.core.db.models.entity_event import EntityEvent
@@ -214,9 +214,8 @@ def _dashboard_event_log_period(
     )
     sale_events_q = q.filter(is_sale_adjustment)
     sale_sync_job_ids = sale_events_q.with_entities(sync_job_expr).distinct()
-    completed_sync_without_sales = (
-        (EntityEvent.event_type == "crm_xero.sync_completed")
-        & (sync_job_expr.is_(None) | ~sync_job_expr.in_(sale_sync_job_ids))
+    completed_sync_without_sales = (EntityEvent.event_type == "crm_xero.sync_completed") & (
+        sync_job_expr.is_(None) | ~sync_job_expr.in_(sale_sync_job_ids)
     )
     q = q.filter(~completed_sync_without_sales)
     raw_total = q.count()
@@ -284,7 +283,7 @@ def _dashboard_event_log_period(
         details = []
         for line in sales_by_line.values():
             batch_text = ", ".join(
-                f"{('batch ' + name) if name != 'unlabelled batch' else name} " f"({format(quantity.normalize(), 'f')})"
+                f"{('batch ' + name) if name != 'unlabelled batch' else name} ({format(quantity.normalize(), 'f')})"
                 for name, quantity in sorted(line["batches"].items())
             )
             quantity = line["quantity_sold"] or sum(line["batches"].values(), Decimal("0"))
@@ -586,6 +585,30 @@ def _dashboard_operations_weekly_summary(org_id: UUID, session, now_dt: datetime
     }
 
 
+def _dashboard_module_milestone(value: Any) -> dict[str, Any] | None:
+    """Validate an optional module-owned date without interpreting its domain."""
+    if not isinstance(value, dict):
+        return None
+    label = value.get("label")
+    overdue = value.get("overdue")
+    raw_date = value.get("date")
+    if not isinstance(label, str) or not label.strip() or not isinstance(overdue, bool):
+        return None
+    if raw_date is not None:
+        if not isinstance(raw_date, str):
+            return None
+        try:
+            if date.fromisoformat(raw_date).isoformat() != raw_date:
+                return None
+        except ValueError:
+            return None
+    milestone = {"label": label.strip(), "date": raw_date, "overdue": overdue}
+    detail = value.get("detail")
+    if isinstance(detail, str) and detail.strip():
+        milestone["detail"] = detail.strip()
+    return milestone
+
+
 def _dashboard_module_workspace_summaries(check_results: list[Any], workspace: str) -> list[dict[str, Any]]:
     """Project module-owned Dashboard summaries without knowing module check IDs."""
     summaries = []
@@ -611,6 +634,9 @@ def _dashboard_module_workspace_summaries(check_results: list[Any], workspace: s
                     "overdue": max(0, int(summary.get("overdue") or 0)),
                 }
             )
+            milestone = _dashboard_module_milestone(summary.get("milestone"))
+            if milestone is not None:
+                summaries[-1]["milestone"] = milestone
         except (TypeError, ValueError):
             continue
     return summaries
