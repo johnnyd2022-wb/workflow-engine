@@ -385,6 +385,7 @@ class InventoryRepository:
         reference: str | None = None,
         source_output_id: UUID | None = None,
         commit: bool = True,
+        site_id: UUID | None = None,
     ) -> list[dict]:
         """Consume `quantity` units of the FINAL_PRODUCT item(s) named `name`, draining
         the oldest label/lot batch first -- `extra_data.batch_number` ascending (a batch
@@ -400,6 +401,9 @@ class InventoryRepository:
         needed = _parse_quantity(quantity)
         if needed is None or not needed.is_finite() or needed <= 0:
             raise ValueError("quantity must be a positive finite number")
+        from app.core.db.site_operations import resolve_site
+
+        selected_site = resolve_site(self.db, org_id, site_id)
 
         with start_span(
             "inventory.consume_fifo",
@@ -427,6 +431,8 @@ class InventoryRepository:
             )
             if source_output_id is not None:
                 items = items.filter(InventoryItem.source_output_id == source_output_id)
+            if selected_site is not None:
+                items = items.filter(InventoryItem.site_id == selected_site)
             items = items.all()
             # Plan 1.2: counted goods move in whole units and a unit is never split between
             # batches. A lot left holding a fraction (old data) gives up only its whole units;
@@ -495,6 +501,7 @@ class InventoryRepository:
         quantity: str | Decimal,
         reference: str | None = None,
         commit: bool = True,
+        site_id: UUID | None = None,
     ) -> dict:
         """Take ``quantity`` from one chosen final-product lot (plan 1.1 manual matching).
 
@@ -503,6 +510,9 @@ class InventoryRepository:
         amount = _parse_quantity(quantity)
         if amount is None or not amount.is_finite() or amount <= 0:
             raise ValueError("quantity must be a positive finite number")
+        from app.core.db.site_operations import resolve_site
+
+        selected_site = resolve_site(self.db, org_id, site_id)
         item = (
             self.db.query(InventoryItem)
             .filter(
@@ -515,6 +525,8 @@ class InventoryRepository:
         )
         if item is None:
             raise ValueError("That batch isn't a finished product in this organisation")
+        if selected_site is not None and item.site_id != selected_site:
+            raise ValueError("That batch does not belong to the shipping site")
         _require_whole_count(amount, item.unit, item.name)
         current = parse_stored_quantity_to_decimal(item.quantity)
         usable = current.to_integral_value(rounding=ROUND_FLOOR) if is_count_unit(item.unit) else current
