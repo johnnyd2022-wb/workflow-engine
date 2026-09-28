@@ -191,3 +191,5 @@ html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui
 .licensing-check div { display: flex; flex-direction: column; gap: 3px; }
 .licensing-check small { color: #5d6778; }
 @media (max-width: 700px) { .licensing-form { grid-template-columns: 1fr; } .licensing-check { flex-direction: column; align-items: flex-start; } }
+.licensing-shell .np3-training-table { position: relative; overflow-x: auto; }
+.licensing-shell p, .licensing-shell dd { overflow-wrap: anywhere; }
