@@ -265,6 +265,19 @@ NZ_ALCOHOL_FRAMEWORKS = (
                 "service-practices",
                 "Keep training and incident evidence for age, intoxication and responsible-service controls.",
             ),
+            (
+                "licence-displayed",
+                "Display the licence, and the name of the manager on duty, where the Act and the licence require.",
+            ),
+            (
+                "responsibility-policy",
+                "Keep the host or social responsibility policy and the alcohol management plan current.",
+            ),
+            (
+                "remote-seller-website",
+                "Remote sellers: show the licence details on the website, and follow age verification and "
+                "delivery conditions.",
+            ),
         ),
     },
     {
@@ -362,6 +375,9 @@ CONTROL_REQUIREMENTS = {
     ("liquor-licence", "certified-manager"): {"record_types": ("competency",), "evidence": True, "due_date": True},
     ("liquor-licence", "licence-renewal"): {"evidence": True, "due_date": True},
     ("liquor-licence", "service-practices"): {"evidence": True},
+    ("liquor-licence", "licence-displayed"): {"evidence": True, "due_date": True},
+    ("liquor-licence", "responsibility-policy"): {"evidence": True, "due_date": True},
+    ("liquor-licence", "remote-seller-website"): {"evidence": True, "due_date": True},
 }
 
 
