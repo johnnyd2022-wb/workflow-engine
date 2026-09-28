@@ -687,6 +687,70 @@ Starts once Phases 1 and 2 hold up with a second producer.
 
 ---
 
+## Phase 7: More than one site, making for others, and planning the work
+
+- [ ] **7.2 Contract manufacturing with a customer portal.** *High · L+*
+  - Why: many producers make for others (a gin for a bar group, a beer for a brand
+    owner). Customers want to see where their order is without emailing or phoning. A
+    live, trustworthy view builds the relationship and cuts admin on both sides.
+  - Evidence (28 Sep 2026): no customer order in production, no stock owned by someone
+    else, no external user; every user belongs to one org with a staff role.
+  - Change:
+    - [ ] a. **Contract customers and orders.** A contract customer (linked to the CRM
+      contact where there is one) and orders: product, quantity, spec or recipe version,
+      due date, status. Each order links to the batches (executions) that make it, and
+      the scheduler (7.3) plans them.
+      - [x] Staff customer/order/line/batch foundation (!426): per-line specification,
+        stored recipe version and output reference, linked batch counts, and per-line
+        materials/per-order duty declarations. Scheduler integration remains 7.3;
+        materials ownership and excise behaviour remain 7.2b/c.
+    - [ ] b. **Materials either way.** Per order line: supplied by the customer
+      (free-issue: received as lots owned by the customer, kept out of the producer's own
+      stock value, usable only for that customer's orders), by the producer, or a mix.
+      Lineage stays intact either way, so a recall works across both.
+    - [ ] c. **Duty either way.** Per order: who is liable for excise (the producer as
+      licensee, the customer as licensee, or goods leaving underbond to the customer's
+      CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the
+      order shows who pays.
+    - [ ] d. **Progress without typing it twice.** Milestones (materials received,
+      scheduled, in production, QC passed, packed, ready, dispatched) come from the
+      batch's own steps and stock movements. The producer chooses which steps show and
+      what they're called.
+    - [ ] e. **The portal.** Customer users sign in (0.5 Google sign-in works here too) to
+      a slim, branded portal of **their** current and past orders only. For each order,
+      the ten things that matter most to a brand owner:
+      1. **Where it's up to:** the current stage and step, with progress through the
+         whole run.
+      2. **When it'll be ready:** the planned and forecast ready date from the scheduler
+         (7.3), and why it moved if it did.
+      3. **How much:** ordered, in production, finished, dispatched and still to come.
+      4. **Their batches:** batch IDs and bottling dates made for the order.
+      5. **Quality:** actual ABV against spec, QC checks passed, and shared lab
+         results or certificates of analysis.
+      6. **Their materials:** customer-supplied materials received, used and left.
+      7. **Yield:** planned against actual output and losses, if the producer shares it.
+      8. **Delivery:** dispatch date, carrier, consignment note, and duty status
+         (duty-paid or underbond to their licence).
+      9. **Documents:** label proofs, the trace for their batches (recall-ready), and
+         compliance certificates.
+      10. **What's waiting on them:** approvals (sample, label proof), questions, and a
+         timeline of events and messages, one thread per order.
+      Past orders keep the same view, with a "reorder" request. Email notifications
+      once the app can send email (0.4g still uses invite links).
+    - [ ] f. **Isolation by design.** Portal users are a separate kind of user with no
+      staff permissions; every portal query is scoped to the customer's orders on the
+      server; a test walks every portal route with a second customer and expects 403/404.
+      Other customers, recipes, costs and the producer's sales are never reachable.
+    - [ ] g. **Later: org to org.** When the customer also uses biz-e, link the two orgs
+      with an explicit, revocable grant so contract batches appear in the customer's own
+      trace and recall. Cross-tenant, so it needs its own design review first.
+  - Done when: a customer signs in, sees their order move from "materials received" to
+    "dispatched" with batch IDs, ABV and a ready date that tracks the schedule, approves a
+    label proof, and can't see anything else in the producer's org; the same order works
+    whether the customer or the producer supplied the materials and paid the duty.
+
+---
+
 ## Order
 
 1. **Phase 0.** Require 2FA and get `main` green now; the database split is planned for
