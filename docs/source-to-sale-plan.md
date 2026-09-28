@@ -163,7 +163,6 @@ Small, and everything else builds on it.
       hash stored): the app has no email sender yet. Swap in email when one exists.
     - Only c. (custom roles) is left.
 
-
 - [ ] **0.5 Sign in with Google, linked to existing accounts.** *M*
   - Why: most producers already live in Google Workspace. One click to sign in, one less
     password, and Google's 2-Step Verification instead of a second code.
