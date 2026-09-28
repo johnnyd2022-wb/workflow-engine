@@ -575,10 +575,10 @@ split.
     `backend.py` is now 6,784 lines, and `.agents/feature-index.md` still says "Last
     verified: 2026-07-28". `create-process-modal.js` is 6,895 lines.
   - Change:
-    - [ ] a. Refresh `.agents/feature-index.md` against today's code (backend line ranges
+    - [x] a. Refresh `.agents/feature-index.md` against today's code (backend line ranges
       have shifted by about 1,000 lines). Add the staleness check the slicing plan left
       open (§6 item 1): a script that checks every `routes:` entry against the live URL
-      map.
+      map. (!326)
     - [x] b. **Stop the growth first:** a CI ratchet that fails if
       `app/core/backend/backend.py` gets longer. New routes go in the owning slice. (!321)
     - [ ] c. Carve in the slicing plan's Phase 1 order: reconciliation → wastage →
