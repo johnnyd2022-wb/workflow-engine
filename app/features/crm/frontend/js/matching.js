@@ -48,15 +48,22 @@ function crmMatching() {
         const phrase = line.description || line.item_code || '';
         return `/crm/configuration?map=${encodeURIComponent(phrase)}`;
       }
+      if (line.reason === 'invalid_quantity') return '/crm';
       return '/core/inventory/add';
     },
 
     fixLabel(line) {
-      return line.reason === 'unmapped' ? 'Map product' : 'Receive stock';
+      if (line.reason === 'unmapped') return 'Map product';
+      if (line.reason === 'invalid_quantity') return 'Review invoice';
+      return 'Receive stock';
     },
 
     unmatchedReason(line) {
       if (line.reason === 'unmapped') return 'No product mapping';
+      if (line.reason === 'invalid_quantity') return 'Invoice line has no valid positive quantity';
+      if (line.reason === 'awaiting_assignment') return 'Waiting for a batch choice';
+      if (line.reason === 'awaiting_replay') return 'Stock is available; matching needs to be re-run';
+      if (line.reason === 'allocation_mismatch') return `Needs ${line.quantity || '—'}; ${line.available} allocated to batches`;
       return `Needs ${line.quantity || '—'}; ${line.available} available`;
     },
 

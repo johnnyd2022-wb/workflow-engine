@@ -352,17 +352,23 @@ class SalesTraceabilityService:
         go_live = self._go_live_date(org_id)
         config = self.config_repo.get_for_org(org_id)
         strict = True if config is None else bool(config.strict_mapping)
+        strategy = (config.matching_strategy if config is not None else "fifo") or "fifo"
         mappings = (
             self.db.query(ProductMapping)
             .filter(ProductMapping.org_id == org_id, ProductMapping.is_active.is_(True))
             .all()
         )
-        allocated = {
-            (a.xero_invoice_id, a.xero_line_key)
-            for a in self.db.query(SalesFifoAllocation.xero_invoice_id, SalesFifoAllocation.xero_line_key)
+        allocated: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+        for invoice_id, line_key, amount in (
+            self.db.query(
+                SalesFifoAllocation.xero_invoice_id,
+                SalesFifoAllocation.xero_line_key,
+                SalesFifoAllocation.quantity,
+            )
             .filter(SalesFifoAllocation.org_id == org_id)
             .all()
-        }
+        ):
+            allocated[(invoice_id, line_key)] += Decimal(str(amount))
         invoices = (
             self.db.query(XeroInvoice)
             .filter(XeroInvoice.org_id == org_id)
@@ -397,11 +403,48 @@ class SalesTraceabilityService:
             lines = lines_by_invoice.get(invoice.id, [])
             for index, line in enumerate(lines):
                 line_key = (line.xero_line_item_id or f"position:{index + 1}").strip()
-                if (invoice.xero_invoice_id, line_key) in allocated:
-                    continue
                 match = self._find_mapping(line, mappings, strict)
                 quantity = _positive_quantity(line.quantity)
+                existing = allocated.get((invoice.xero_invoice_id, line_key))
+                if existing is not None:
+                    # Removing a mapping does not undo historical allocations, but an
+                    # allocation for only part of an otherwise valid line is a gap.
+                    if match is None or quantity is None or existing == quantity * int(match.units_per_line or 1):
+                        continue
+                    rows.append(
+                        {
+                            "invoice_id": invoice.xero_invoice_id,
+                            "line_key": line_key,
+                            "invoice_number": invoice.invoice_number,
+                            "invoice_date": invoice.date.isoformat() if invoice.date else None,
+                            "description": line.description,
+                            "item_code": line.item_code,
+                            "product_name": match.biz_e_product_name,
+                            "quantity": f"{(quantity * int(match.units_per_line or 1)).normalize():f}",
+                            "available": f"{existing.normalize():f}",
+                            "reason": "allocation_mismatch",
+                        }
+                    )
+                    if len(rows) >= limit:
+                        return rows
+                    continue
                 if quantity is None:
+                    rows.append(
+                        {
+                            "invoice_id": invoice.xero_invoice_id,
+                            "line_key": line_key,
+                            "invoice_number": invoice.invoice_number,
+                            "invoice_date": invoice.date.isoformat() if invoice.date else None,
+                            "description": line.description,
+                            "item_code": line.item_code,
+                            "product_name": None,
+                            "quantity": str(line.quantity),
+                            "available": "0",
+                            "reason": "invalid_quantity",
+                        }
+                    )
+                    if len(rows) >= limit:
+                        return rows
                     continue
                 reason = "unmapped"
                 product_name = None
@@ -431,8 +474,9 @@ class SalesTraceabilityService:
                         # Earlier unallocated invoice lines would consume this stock
                         # first during replay. Reserve it before assessing later lines.
                         stock_cache[stock_key] = available - needed
-                        continue
-                    reason = "no_stock"
+                        reason = "awaiting_assignment" if strategy == "manual" else "awaiting_replay"
+                    else:
+                        reason = "no_stock"
                 else:
                     reason = "unmapped"
                 rows.append(

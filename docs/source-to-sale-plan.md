@@ -346,6 +346,9 @@ want it, and never produce a recall list that can't be trusted.
     failure becomes a system finding with a fix action (see
     `docs/system-findings-module-contract.md`).
   - Done when: the checks run in CI (5.2) and nightly on live tenants.
+  - [x] Implement stock arithmetic, counted-unit and unmatched-sale findings, CI tests,
+    and the production timer definition. (!406)
+  - [ ] Enable and verify the timer on every production Docker host after deployment.
 
 ---
 
@@ -720,6 +723,7 @@ split.
 - [ ] **5.2 Run the stock checks as tests.** *S*
   - Change: the 1.7 checks as tests, plus a mock-recall scenario and a Customs stocktake
     scenario (2.6) in the end-to-end suite.
+  - [x] Stock arithmetic, matching queue, and finding contract tests. (!406)
 
 - [ ] **5.3 Keep tooling in proportion.** *S*
   - Evidence: 40 report categories under `.agents/reports/`, plus several watchers and
