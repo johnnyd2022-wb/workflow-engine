@@ -39,6 +39,7 @@ from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.compliant.models.compliance_profile import ComplianceProfile
 from app.features.compliant.models.compliance_record import ComplianceRecord
 from app.features.compliant.models.compliance_report import ComplianceReport
+from app.features.compliant.models.customs_premises import CustomsCoverage, CustomsLicence
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.operational_cases.models.operational_case import OperationalCase
 from app.features.operational_cases.models.operational_case_event import OperationalCaseEvent
