@@ -198,6 +198,7 @@ class InventoryRepository:
         extra_data: dict | None = None,
         commit: bool = True,
         write_reason: InventoryQuantityWriteReason = InventoryQuantityWriteReason.REPOSITORY_CREATE,
+        location_id: UUID | None = None,
     ) -> InventoryItem:
         """Create a new inventory item. If commit=False, caller is responsible for commit."""
         with start_span(
@@ -229,6 +230,7 @@ class InventoryRepository:
                     source_output_id=source_output_id,
                     source_step_name=source_step_name,
                     extra_data=extra_data or {},
+                    location_id=location_id,
                 )
                 item.display_label = _build_display_label(item)
                 self.db.add(item)
@@ -536,6 +538,137 @@ class InventoryRepository:
         if commit:
             self.db.commit()
         return {"inventory_item_id": str(item.id), "quantity_consumed": str(amount), "unit": item.unit}
+
+    def move_lot(
+        self,
+        org_id: UUID,
+        item_id: UUID,
+        quantity: str | Decimal,
+        to_location_id: UUID | None,
+        occurred_on,
+        note: str | None = None,
+        user_id: UUID | None = None,
+        commit: bool = True,
+    ):
+        """Move part (or all) of a lot to another location (plan 2.1).
+
+        The moved quantity becomes a new lot with the same name, batch and lineage at the
+        destination; the source lot keeps the rest. Crossing out of the licensed area is
+        recorded as direction "out" (an excise removal), crossing back in as "in".
+        Returns ``(new_item, transfer)``.
+        """
+        from app.core.db.models.stock_location import StockLocation, StockTransfer
+
+        amount = _parse_quantity(quantity)
+        if amount is None or not amount.is_finite() or amount <= 0:
+            raise ValueError("quantity must be more than 0")
+        item = self.get_inventory_item_by_id_for_update(item_id, org_id)
+        if item is None:
+            raise ValueError("Stock not found")
+        _require_whole_count(amount, item.unit, item.name)
+        current = parse_stored_quantity_to_decimal(item.quantity)
+        if amount > current:
+            raise ValueError(f"Only {current.normalize():f} {item.unit} of {item.name} to move")
+        if to_location_id == item.location_id:
+            raise ValueError("The stock is already there")
+
+        def licensed(location_id) -> bool:
+            if location_id is None:
+                return True
+            loc = (
+                self.db.query(StockLocation)
+                .filter(StockLocation.id == location_id, StockLocation.org_id == org_id)
+                .one_or_none()
+            )
+            if loc is None:
+                raise ValueError("Location not found")
+            return bool(loc.inside_licensed_area)
+
+        was_in, now_in = licensed(item.location_id), licensed(to_location_id)
+        direction = "out" if was_in and not now_in else ("in" if now_in and not was_in else "internal")
+
+        quantity_before = str(current)
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
+            item.quantity = coerce_stored_quantity(current - amount)
+            self.db.flush()
+        # Same batch already at the destination (e.g. moving stock back): add to it.
+        existing = None
+        if item.supplier_batch_number:
+            existing = (
+                self.db.query(InventoryItem)
+                .filter(
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.name == item.name,
+                    InventoryItem.supplier_batch_number == item.supplier_batch_number,
+                    InventoryItem.location_id.is_(None)
+                    if to_location_id is None
+                    else InventoryItem.location_id == to_location_id,
+                    InventoryItem.id != item.id,
+                )
+                .with_for_update()
+                .one_or_none()
+            )
+        if existing is not None:
+            with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
+                existing.quantity = coerce_stored_quantity(parse_stored_quantity_to_decimal(existing.quantity) + amount)
+                self.db.flush()
+            new_item = existing
+        else:
+            new_item = None
+        extra = dict(item.extra_data or {})
+        extra["moved_from_item_id"] = str(item.id)
+        new_item = new_item or self.create_inventory_item(
+            org_id=org_id,
+            name=item.name,
+            quantity=amount,
+            unit=item.unit,
+            inventory_type=item.inventory_type,
+            supplier=item.supplier,
+            barcode=item.barcode,
+            purchase_date=item.purchase_date,
+            supplier_batch_number=item.supplier_batch_number,
+            expiry_date=item.expiry_date,
+            source_execution_id=item.source_execution_id,
+            source_execution_step_id=item.source_execution_step_id,
+            source_output_id=item.source_output_id,
+            source_step_name=item.source_step_name,
+            extra_data=extra,
+            commit=False,
+            write_reason=InventoryQuantityWriteReason.STOCK_TRANSFER,
+            location_id=to_location_id,
+        )
+        transfer = StockTransfer(
+            org_id=org_id,
+            from_item_id=item.id,
+            to_item_id=new_item.id,
+            from_location_id=item.location_id,
+            to_location_id=to_location_id,
+            quantity=amount,
+            unit=item.unit,
+            direction=direction,
+            occurred_on=occurred_on,
+            note=(note or "").strip()[:500] or None,
+            created_by_user_id=user_id,
+        )
+        self.db.add(transfer)
+        EventWriter(self.db, org_id).emit(
+            event_type="inventory_item.quantity_adjusted",
+            entity_type="inventory_item",
+            entity_id=item.id,
+            payload={
+                **_item_snapshot(item),
+                "quantity_before": quantity_before,
+                "quantity_after": str(item.quantity),
+                "delta": str(-amount),
+                "reason": "stock_transfer",
+                "reference": f"moved to {new_item.id}",
+            },
+            diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+        )
+        self.db.flush()
+        if commit:
+            self.db.commit()
+        return new_item, transfer
 
     def reverse_final_product_fifo_consumption(
         self,

@@ -123,6 +123,34 @@ def run_check(org_id: UUID, session: Session) -> CheckResult:
     )
 
 
+EXCISE_CHECK_ID = "compliant.nz_alcohol.excise"
+
+
+def run_excise_check(org_id: UUID, session: Session) -> CheckResult:
+    """Plan 2.1: an excise entry (or nil return) to lodge, until it's recorded as lodged."""
+    from app.features.compliant.modules.nz_alcohol import excise
+
+    profile = ComplianceService(session).get_profile(org_id)
+    alert = excise.reminder(session, org_id, profile) if profile is not None and profile.enabled else None
+    if alert is None:
+        return CheckResult(check_id=EXCISE_CHECK_ID, flagged=False, data={})
+    overdue = alert.pop("overdue")
+    return CheckResult(
+        check_id=EXCISE_CHECK_ID,
+        flagged=True,
+        message=alert["title"],
+        data={
+            "system_finding": {
+                "category": "Customs excise" + (" (overdue)" if overdue else ""),
+                "action": {"href": alert["href"], "label": "Open excise"},
+                "details": [alert],
+            },
+            "system_alerts": [alert],
+        },
+    )
+
+
 def register_checks(runner) -> None:
     if config.compliant_enabled:
         runner.register_check(CHECK_ID, run_check)
+        runner.register_check(EXCISE_CHECK_ID, run_excise_check)

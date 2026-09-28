@@ -309,7 +309,7 @@ want it, and never produce a recall list that can't be trusted.
 Finish the NZ Alcohol module so compliance outputs come from production and sales
 records, not from people typing figures in.
 
-- [ ] **2.1 Excise per period from linked sales and removals.** *High · L*
+- [x] **2.1 Excise per period from linked sales and removals.** *High · L* (!MR)
   - Status: not built; the current Customs page is placeholder data. Avoid what the
     placeholder does: a second ABV list separate from the final-step ABV (so it shows
     "0.0000 LAL"), botanicals offered as alcohol products, fields asking for
@@ -324,34 +324,43 @@ records, not from people typing figures in.
     - A **nil return** is required for a period with no removals.
     - Records are kept for at least 7 years, in New Zealand or with approved cloud storage.
   - Change:
-    - [ ] a. **Excise products** are final-step outputs flagged as alcohol products (the ABV
+    - [x] a. **Excise products** are final-step outputs flagged as alcohol products (the ABV
       rule already identifies them). Each has a pack volume (e.g. 700 mL), the ABV
       recorded on its final step, and a Customs tariff item. Only these are offered for
       mapping, never raw materials.
-    - [ ] b. **Removals, not only sales.** Each period's lines come from stock leaving the
+    - [x] b. **Removals, not only sales.** Each period's lines come from stock leaving the
       licensed area: Xero sales dispatched straight from it (the default, and for many
       producers all of it), plus stock moved to an outside location (a sales rep, an
       event, samples). A later sale from a rep's stock links to the original removal and
       isn't counted twice. This needs stock locations in inventory; check what Core has
       today.
-    - [ ] c. **Lines calculated automatically for each period**, grouped by product and
+    - [x] c. **Lines calculated automatically for each period**, grouped by product and
       tariff item: units × volume × ABV = LAL, then LAL × rate = duty. Each line drills
       down to its batches and invoices or movements. The rate table is editable and
       dated, because rates change every 1 July.
-    - [ ] d. **Lodgement period** is configurable (monthly, six-monthly, twelve-monthly) to
+    - [x] d. **Lodgement period** is configurable (monthly, six-monthly, twelve-monthly) to
       match the org's Customs approval.
-    - [ ] e. **Lodgement reminder:** at the start of the month after each period, a system
+    - [x] e. **Lodgement reminder:** at the start of the month after each period, a system
       alert such as "Excise entry for September 2026 due 21 Oct: 412.6 LAL, $x" (or
       "nil return due"). It stays until someone with `customs.lodge` confirms it's
       lodged, with the date and optionally the entry number or confirmation. An overdue
       entry escalates. Confirming locks that period's figures as a snapshot.
-    - [ ] f. **Changes after lodging** never rewrite a lodged period. A removal recorded
+    - [x] f. **Changes after lodging** never rewrite a lodged period. A removal recorded
       late, or a correction, is carried into the next open period's draft as an
       adjustment noting the period it belongs to.
-    - [ ] g. Check entry fields and the rate table against current Customs guidance before
+    - [x] g. Check entry fields and the rate table against current Customs guidance before
       building. This plan is not tax advice.
   - Done when: each period is lodged from the draft (or as a nil return) and confirmed in
     the app, and nobody opens a spreadsheet.
+  - As built (!409): Customs page → Excise. Stock locations are a Core concept
+    (`stock_locations`, `stock_transfers`, `inventory_items.location_id`; no location = the
+    main licensed area), with a "move stock" action that splits a lot and records the
+    direction (out = removal, in = possible credit, never auto-claimed). Batch uniqueness
+    is now per location. Rates are dated per tariff item. Lodged periods are locked
+    snapshots; late removals carry into the next open period once. The reminder is a
+    system finding (`compliant.nz_alcohol.excise`) and only starts from the
+    "remind me from" date. g: rules checked against customs.govt.nz on 25 Sep 2026
+    (Sources); public holidays aren't counted in the due date, and the page says so.
 
 - [ ] **2.2 Track verifications from visit to next due date.** *High · M*
   - Evidence: after a passed verification the NP3 page still says "Verification ready",
