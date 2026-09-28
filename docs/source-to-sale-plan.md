@@ -462,7 +462,7 @@ records, not from people typing figures in.
 
     Customs' published guidance doesn't cover surpluses. Confirm how Customs treats
     surpluses, and duty-paid stock coming back into the licensed area, before building.
-  - As built (!MR2.6): Core → Stocktake (`/core/stocktake`, `stocktake_bp`). The stock
+  - As built (!410): Core → Stocktake (`/core/stocktake`, `stocktake_bp`). The stock
     position lists finished goods and work in progress by place and batch with LAL, and
     downloads as CSV together with the lodged entries. The schedule (monthly, quarterly,
     six-monthly, annual; default annual, anchored on the last stocktake or the go-live
