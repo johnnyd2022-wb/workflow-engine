@@ -100,10 +100,44 @@ ROLE_DESCRIPTIONS: dict[UserRole, str] = {
 }
 
 
+# Custom roles (plan 0.4c) can grant anything Staff can. People, organisation settings and
+# compliance configuration stay with Admins: those routes also check the Admin role itself.
+ADMIN_ONLY = frozenset({"users.manage", "settings.manage", "compliance.manage"})
+GRANTABLE = _ALL - ADMIN_ONLY
+CUSTOM_ROLE_BASES = tuple(role for role in UserRole if role != UserRole.ADMIN)
+
+
+def _custom_role(user):
+    role_id = getattr(user, "custom_role_id", None)
+    if role_id is None:
+        return None
+    from sqlalchemy.orm import object_session
+
+    from app.core.db.models.org_role import OrgRole
+
+    session = object_session(user)
+    role = session.get(OrgRole, role_id) if session is not None else None
+    return role if role is not None and role.org_id == getattr(user, "org_id", None) else False
+
+
 def permissions_for(user) -> frozenset[str]:
     if user is None:
         return frozenset()
+    custom = _custom_role(user)
+    if custom is False:  # a custom role we can't load: deny rather than fall back
+        return frozenset()
+    if custom is not None:
+        return frozenset(custom.permissions or ()) & GRANTABLE
     return ROLE_PERMISSIONS.get(getattr(user, "role", None), frozenset())
+
+
+def role_label_for(user) -> str | None:
+    if user is None:
+        return None
+    custom = _custom_role(user)
+    if custom:
+        return custom.name
+    return ROLE_LABELS.get(user.role, getattr(user.role, "value", None))
 
 
 def has_permission(user, *required: str) -> bool:
