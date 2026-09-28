@@ -140,6 +140,16 @@ def create_app():
     # Register multi-tenant blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(invite_bp)
+    from app.features.google_sign_in.oidc import setup_google_oidc
+    from app.features.google_sign_in.routes import google_auth_bp
+
+    setup_google_oidc(app, config)
+    app.register_blueprint(google_auth_bp)
+
+    @app.context_processor
+    def _inject_google_sign_in():
+        return {"google_sign_in_enabled": app.config.get("GOOGLE_SIGN_IN_ENABLED", False)}
+
     app.register_blueprint(org_bp)
     app.register_blueprint(people_pages)
 

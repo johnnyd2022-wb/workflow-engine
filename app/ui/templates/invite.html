@@ -48,6 +48,15 @@
         <h1>Join {{ org_name }}</h1>
         <p class="who">You've been invited as <strong>{{ role_label }}</strong> for <strong>{{ email }}</strong>. Choose a password to finish setting up your account.</p>
       </div>
+      {% if google_sign_in_enabled %}
+      <!-- Flask-WTF uses the csrf_token hidden field below; this Django-only rule does not recognize it. -->
+      <form action="/auth/google/invite" method="post"> <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="token" value="{{ token }}">
+        <button type="submit">Join with Google</button>
+        <p class="hint">Use the invited Gmail or Google Workspace address. For another address, choose a password below, then link Google in Settings.</p>
+      </form>
+      {% endif %}
       <form data-invite-form novalidate>
         <div class="row">
           <label>First name<input name="first_name" id="invite-first-name" value="{{ first_name }}" autocomplete="given-name"></label>

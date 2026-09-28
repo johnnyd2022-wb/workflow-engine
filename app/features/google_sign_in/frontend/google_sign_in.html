@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>Sign in · biz-e</title>
+  <style>
+    body { margin:0; padding:24px; font:16px/1.5 system-ui,sans-serif; background:#f4f6f5; color:#16211e; }
+    main { margin:10vh auto; max-width:26rem; padding:24px; background:white; border:1px solid #d9e0dd; border-radius:12px; }
+    form { display:grid; gap:16px; } input,button { font:inherit; padding:12px; border-radius:8px; }
+    input { border:1px solid #d9e0dd; } button { background:#1d6b58; color:white; border:0; cursor:pointer; }
+    [hidden] { display:none; } .error { color:#a8322b; } a { color:#1d6b58; }
+  </style>
+</head>
+<body><main>
+  <h1>Sign in</h1>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if requires_2fa %}
+  <p>Google confirmed your account. Enter your authenticator code or a backup code to finish signing in.</p>
+  <form id="google-totp-form">
+    <label for="code">Authenticator or backup code</label>
+    <input id="code" name="code" autocomplete="one-time-code" maxlength="8" required autofocus>
+    <button type="submit">Continue</button>
+    <p id="challenge-error" class="error" role="alert" hidden></p>
+  </form>
+  <script>
+    document.getElementById('google-totp-form').addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const error = document.getElementById('challenge-error');
+      const button = this.querySelector('button');
+      button.disabled = true;
+      try {
+        const response = await fetch('/auth/verify-2fa', {method:'POST', credentials:'same-origin',
+          headers:{'Content-Type':'application/json', 'X-CSRFToken':{{ csrf_token()|tojson }}},
+          body:JSON.stringify({token:document.getElementById('code').value.trim()})});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to verify code.');
+        window.location.href = '/dashboard';
+      } catch (err) { error.textContent = err.message; error.hidden = false; }
+      finally { button.disabled = false; }
+    });
+  </script>
+  {% endif %}
+  <p><a href="/?login=1">Return to sign in</a></p>
+</main></body></html>

@@ -20,6 +20,7 @@ from app.core.db.models.system_findings_cache import SystemFindingsCache
 from app.core.db.models.trusted_device import TrustedDevice
 from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
 from app.core.db.models.user import User
+from app.core.db.models.user_identity import UserIdentity
 
 __all__ = [
     "OrgRole",
@@ -32,6 +33,7 @@ __all__ = [
     "ProcessStepDocument",
     "Organisation",
     "User",
+    "UserIdentity",
     "AuditLog",
     "EntityEvent",
     "EntityEventSummary",

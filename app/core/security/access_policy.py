@@ -184,6 +184,14 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("auth.check_password_policy", None, PUBLIC),
     ("auth.accept_invite", None, PUBLIC),
     ("invite.accept_invite_page", None, PUBLIC),
+    ("google_auth.start", frozenset({"POST"}), PUBLIC),
+    ("google_auth.invite", frozenset({"POST"}), PUBLIC),
+    ("google_auth.callback", frozenset({"GET"}), PUBLIC),
+    ("google_auth.challenge", frozenset({"GET"}), PUBLIC),
+    ("google_auth.link", frozenset({"POST"}), SIGNED_IN),
+    ("google_auth.unlink", frozenset({"POST"}), SIGNED_IN),
+    ("google_auth.methods", frozenset({"GET"}), SIGNED_IN),
+    ("google_auth.set_password", frozenset({"POST"}), SIGNED_IN),
     # --- your own account, and pages every role lands on
     ("auth.*", None, SIGNED_IN),
     ("dashboard", None, SIGNED_IN),  # /dashboard -> /core/dashboard
