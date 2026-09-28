@@ -260,9 +260,38 @@ def run_verification_check(org_id: UUID, session: Session) -> CheckResult:
     )
 
 
+LICENSING_CHECK_ID = "compliant.nz_alcohol.licensing"
+
+
+def run_licensing_check(org_id: UUID, session: Session) -> CheckResult:
+    """Plan 2.5: licence renewals, managers' certificates, annual fees, events and check reviews."""
+    from app.features.compliant.modules.nz_alcohol import licensing
+
+    profile = ComplianceService(session).get_profile(org_id)
+    if profile is None or not profile.enabled:
+        return CheckResult(check_id=LICENSING_CHECK_ID, flagged=False, data={})
+    alerts = licensing.alerts(session, org_id, date.today())
+    if not alerts:
+        return CheckResult(check_id=LICENSING_CHECK_ID, flagged=False, data={})
+    return CheckResult(
+        check_id=LICENSING_CHECK_ID,
+        flagged=True,
+        message=alerts[0]["title"],
+        data={
+            "system_finding": {
+                "category": "Alcohol licensing",
+                "action": {"href": "/compliant/nz-alcohol/licensing", "label": "Open licensing"},
+                "details": alerts,
+            },
+            "system_alerts": alerts,
+        },
+    )
+
+
 def register_checks(runner) -> None:
     if config.compliant_enabled:
         runner.register_check(CHECK_ID, run_check)
         runner.register_check(EXCISE_CHECK_ID, run_excise_check)
         runner.register_check(STOCKTAKE_CHECK_ID, run_stocktake_check)
         runner.register_check(VERIFICATION_CHECK_ID, run_verification_check)
+        runner.register_check(LICENSING_CHECK_ID, run_licensing_check)

@@ -21,7 +21,12 @@ def _food_safety_programme(settings: dict | None) -> str:
 def _nz_alcohol_template_context(**context):
     profile = ComplianceService(db_session()).get_profile(UUID(g.org_id))
     settings = profile.settings if profile else {}
-    return {"active_page": "compliant", "food_control_programme": _food_safety_programme(settings), **context}
+    return {
+        "active_page": "compliant",
+        "food_control_programme": _food_safety_programme(settings),
+        "liquor_licensing": bool((settings or {}).get("liquor_licence_types")),
+        **context,
+    }
 
 
 @page_bp.route("/compliant", methods=["GET"])

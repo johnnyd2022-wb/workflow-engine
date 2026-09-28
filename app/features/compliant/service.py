@@ -596,6 +596,14 @@ class ComplianceService:
                 reason = "Recorded value exceeds configured limit"
             return {"control_id": control_id, "state": "attention", "reason": reason, "record_count": len(relevant)}
 
+        # Licence scope, renewal and certified managers are proven by the licensing register.
+        if framework["slug"] == "liquor-licence":
+            from app.features.compliant.modules.nz_alcohol.licensing import derived_control_state
+
+            derived = derived_control_state(self.session, profile.org_id, control_id, today)
+            if derived is not None:
+                return {"control_id": control_id, **derived, "record_count": len(relevant)}
+
         # The two controls below can prove their setup from trusted core/CRM data.
         if control_id == "product-mapping":
             mapping_count = len(self.product_profiles(profile.org_id))
