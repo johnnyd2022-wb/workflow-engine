@@ -714,6 +714,9 @@ plan branch and are delivered separately.
       cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
       registration), a liquor licence (2.5 register gains the site). "Inside a licensed
       area" comes from the site's CCA, replacing the manual flag.
+      - [x] Customs licence register and dated, nonoverlapping site/location coverage (!430).
+        Food/liquor registration links and movement-policy replacement of the manual
+        flag remain open.
     - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
       consignment note) → in transit (on the books, on no shelf) → received, with short,
       over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
