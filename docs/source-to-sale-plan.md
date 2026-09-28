@@ -621,6 +621,12 @@ any time.
     describes the app's structure: "Business control tower", "See the whole business. Act
     in the right workspace.", "Dashboard gives you the signal…", "DO THE WORK / Choose a
     workspace", "CONTEXT, NOT A TO-DO LIST", "Use trends to understand the picture…".
+  - Follow-up (!432): the same treatment on the remaining pages. Illustration strips are
+    removed from Product workflows, Active batches, Live inventory, Settings,
+    Integrations, Notifications, the inventory add/view/dispose pages, batch start and
+    process flow (four banner partials deleted). "Create product workflow" sits beside
+    its title. The shared page header and the Production hub's title and action are
+    left-aligned, without the decorative circle.
 
 - [x] **4.2 One design system.** *High · L* (!396)
   - Evidence: three distinct visual styles.
@@ -638,7 +644,7 @@ any time.
   - [ ] c. No trailing zeros ("30", not "30.0000"), including activity entries.
   - [ ] d. Fix "5 active batchs".
 
-- [ ] **4.4 One route to each job.** *S*
+- [x] **4.4 One route to each job.** *S* (a–d: !390–!393)
   - [x] a. "Trace" and Source Map links use the single `/core/sourcemap` page
     (`core.sourcemap`). (!391)
   - [x] b. The redundant "+ Receive stock" action is removed; "Add to inventory"
@@ -664,11 +670,11 @@ any time.
     one-handed at 390 px, with tests at that width. (The bottom nav on phone is already
     right; keep it.)
 
-- [ ] **4.7 Fix the visual bugs.** *S*
+- [x] **4.7 Fix the visual bugs.** *S* (a–f: !327–!330, !389)
   - [x] a. Sidebar background stops at viewport height on long pages (white below it). (!327)
   - [x] b. The floating blue menu toggle overlaps the sidebar edge. (!327)
   - [x] c. CRM widget control icons render as missing-glyph boxes. (!328)
-- [x] d. `/settings` requests a resource that returns 404. (!389)
+  - [x] d. `/settings` requests a resource that returns 404. (!389)
   - [x] e. Forms asking for raw UUIDs (Customs "Core source references") — pick records
     instead. (!330)
   - [x] f. The Compliance workspaces page is one card on an empty screen; fold it into

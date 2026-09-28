@@ -3173,3 +3173,27 @@ body.core2-sheet-open {
 .core2-suppliers-form__error { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: rgba(239, 68, 68, 0.12); }
 .core2-suppliers-form__field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; font-weight: 600; }
 .core2-suppliers-form__field input, .core2-suppliers-form__field textarea { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--border-default, #d1d5db); border-radius: 8px; background: var(--bg-input, transparent); color: inherit; }
+
+/* Plan 4.1: the hub header is the title and its main action, left-aligned, without the
+   decorative circle above the action. */
+#core2-hub-title {
+  text-align: left;
+  margin: 0.25rem 0 0.5rem;
+}
+.core2-journey-primary__circle {
+  display: none;
+}
+.core2-journey-primary,
+.core2-journey-primary-bundle {
+  align-self: flex-start;
+  align-items: flex-start;
+  margin-left: 0;
+  margin-right: 0;
+}
+@media (max-width: 767px) {
+  #core2-journey-actions > .core2-journey > .core2-journey-primary,
+  #core2-journey-actions > .core2-journey > .core2-journey-primary-bundle {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
