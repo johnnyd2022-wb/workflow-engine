@@ -151,17 +151,17 @@
           {% endif %}
 
           {% if crm_enabled and can('sales.view') %}
-          <a class="dash-workspace-card" href="/crm" aria-label="Open CRM workspace">
-            <span class="dash-workspace-card__eyebrow">CRM</span>
+          <a class="dash-workspace-card" href="/crm" aria-label="Open Sales workspace">
+            <span class="dash-workspace-card__eyebrow">Sales</span>
             <h3>Manage customers and commitments</h3>
             <p data-dashboard-crm-summary>Loading customer commitments...</p>
-            <span class="dash-workspace-card__link">Open CRM <span aria-hidden="true">→</span></span>
+            <span class="dash-workspace-card__link">Open Sales <span aria-hidden="true">→</span></span>
           </a>
           {% elif not crm_enabled %}
-          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="CRM workspace availability">
-            <span class="dash-workspace-card__eyebrow">CRM</span>
+          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Sales workspace availability">
+            <span class="dash-workspace-card__eyebrow">Sales</span>
             <h3>Manage customers and commitments</h3>
-            <p data-dashboard-crm-summary>CRM is not enabled for this organisation.</p>
+            <p data-dashboard-crm-summary>Sales is not enabled for this organisation.</p>
             <span class="dash-workspace-card__link">Not enabled</span>
           </article>
           {% endif %}
