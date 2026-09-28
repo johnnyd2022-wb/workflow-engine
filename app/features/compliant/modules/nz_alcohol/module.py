@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.backend.corechecks import CheckResult
+from app.features.compliance_checks.routes.corechecks import CheckResult
 from app.features.compliant.service import ComplianceService
 from app.utils.config_loader import config
 

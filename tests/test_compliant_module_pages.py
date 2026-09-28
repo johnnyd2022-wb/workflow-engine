@@ -4,8 +4,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.core.backend.corechecks import CheckResult
-from app.core.backend.system_status import _signals_from_results
+from app.features.compliance_checks.routes.corechecks import CheckResult
+from app.features.compliance_checks.system_status import _signals_from_results
 from app.features.compliant.modules.nz_alcohol.catalogue import control_reference, framework_applies
 from app.features.compliant.modules.nz_alcohol.module import _np3_workspace_summary
 from app.features.compliant.modules.nz_alcohol.np3_audit import (

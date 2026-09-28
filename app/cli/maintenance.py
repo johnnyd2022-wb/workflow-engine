@@ -29,12 +29,11 @@ def warm_system_findings(since_days: int) -> None:
     from sqlalchemy import text
     from sqlalchemy.orm import configure_mappers
 
-    from app.core.backend.system_findings_cache import prewarm
-
     # No create_app() here, so import the model modules whose mappers the checks touch
     # (models/__init__.py doesn't pull these two in; the web app gets them via backend.py).
     from app.core.db.models import inventory_movement as _im  # noqa: F401
     from app.core.db.models import inventory_wastage as _iw  # noqa: F401
+    from app.features.compliance_checks.system_findings_cache import prewarm
 
     configure_mappers()
     db = db_session()

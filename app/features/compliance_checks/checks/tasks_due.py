@@ -6,8 +6,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.backend.corechecks import CheckResult
 from app.core.backend.tasks import task_due_summary
+from app.features.compliance_checks.routes.corechecks import CheckResult
 
 CHECK_ID = "tasks_due"
 

@@ -80,7 +80,7 @@ def _result_to_dict(r) -> dict:
 
 
 def _dict_to_result(d: dict):
-    from app.core.backend.corechecks import CheckResult
+    from app.features.compliance_checks.routes.corechecks import CheckResult
 
     return CheckResult(
         check_id=d["check_id"], flagged=bool(d.get("flagged")), message=d.get("message"), data=d.get("data")
@@ -112,7 +112,7 @@ def _compute_expensive(org_id: UUID, session) -> tuple[list[dict], bool]:
     """
     from flask import json as flask_json
 
-    from app.core.backend.corechecks import CoreChecksRunner
+    from app.features.compliance_checks.routes.corechecks import CoreChecksRunner
 
     runner = CoreChecksRunner(org_id=org_id, session=session)
     out = []
@@ -138,7 +138,7 @@ def _run_live(org_id: UUID, session) -> list:
     A check that raises is appended as a flagged 'Check failed' result (same as
     ``CoreChecksRunner.run_all_checks()``), never dropped.
     """
-    from app.core.backend.corechecks import CoreChecksRunner
+    from app.features.compliance_checks.routes.corechecks import CoreChecksRunner
 
     runner = CoreChecksRunner(org_id=org_id, session=session)
     results = []
@@ -281,7 +281,7 @@ def get_or_compute(org_id: UUID, session) -> dict:
     trimmed to what the banner renders."""
     from flask import json as flask_json
 
-    from app.core.backend.system_status import build_system_status_payload
+    from app.features.compliance_checks.system_status import build_system_status_payload
 
     results = get_check_results(org_id, session)
 
