@@ -631,12 +631,16 @@ Starts once Phases 1 and 2 hold up with a second producer.
     gets: a real recall trace, an NP3 evidence pack and an excise draft.
 
 - [ ] **6.2 Pilot a second producer of a different type.** *High · M*
+  - Preparation: `docs/second-producer-pilot.md` defines the session and evidence;
+    producer selection and the real pilot remain open.
   - Change: onboard a brewery or winery through the go-live stocktake (1.3); measure time
     to first traced sale; record every point where they needed help.
   - Done when: they reach a traced sale in one sitting, and their questions become the
     next items in this plan.
 
 - [ ] **6.3 Price by what's included.** *S*
+  - Preparation: inclusion/terms decision sheet in `docs/second-producer-pilot.md`;
+    prices require founder approval.
   - Change: plans built from Production, a compliance pack for the producer's type, and
     the Xero sales link, in line with the existing feature subscriptions.
 
