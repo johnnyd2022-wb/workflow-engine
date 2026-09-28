@@ -544,7 +544,7 @@ any time.
     tables, status badges) used by all three; migrate each area as it's touched.
 
 - [ ] **4.3 Use words and numbers producers use.** *S*
-  - [ ] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
+  - [x] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
     Compliance; pages and cards say Compliant), CRM → **Sales**.
   - [ ] b. Durations in days ("22 days"), not hours ("Started 535h 54m ago").
   - [ ] c. No trailing zeros ("30", not "30.0000"), including activity entries.

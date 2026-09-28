@@ -1,6 +1,6 @@
 {% extends "shared/base_spa.html" %}
 
-{% block title %}Core{% endblock %}
+{% block title %}Production{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Modern Process Hub for managing manufacturing workflows and executions">
@@ -59,7 +59,7 @@
             <h1 id="core2-hub-title" class="page-title">
               {% if core2_focus_mode == 'inventory_live' %}Live inventory
               {% elif core2_focus_mode == 'active_batches_live' %}Active batches
-              {% else %}Core
+              {% else %}Production
               {% endif %}
             </h1>
           </section>
@@ -69,8 +69,8 @@
           </section>
 
           {% if core2_focus_mode == '' %}
-          <section class="spa-form-section core2-main-tabs-wrap" aria-label="Core sections">
-            <div class="flow-mode-segmented core2-main-tabs" role="tablist" aria-label="Core pages">
+          <section class="spa-form-section core2-main-tabs-wrap" aria-label="Production sections">
+            <div class="flow-mode-segmented core2-main-tabs" role="tablist" aria-label="Production pages">
               <button id="core2-tab-overview" type="button" class="flow-mode-segment flow-mode-segment--active" data-core2-tab-target="overview" role="tab" aria-controls="core2-panel-overview" aria-selected="true" tabindex="0">Overview</button>
               <button id="core2-tab-inventory" type="button" class="flow-mode-segment" data-core2-tab-target="inventory" role="tab" aria-controls="core2-panel-inventory" aria-selected="false" tabindex="-1">Inventory</button>
               <button id="core2-tab-workflows" type="button" class="flow-mode-segment" data-core2-tab-target="workflows" role="tab" aria-controls="core2-panel-workflows" aria-selected="false" tabindex="-1">Product workflows</button>
@@ -86,7 +86,7 @@
                     <h2 id="core2-overview-summary-title" class="spa-form-section-title">Overview</h2>
                   </div>
                 </div>
-                <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Core metrics">
+                <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Production metrics">
                 <div class="core2-stats-hybrid__cell">
                   <div class="core2-stats-hybrid__label">Product workflows</div>
                   <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>

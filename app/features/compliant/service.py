@@ -175,7 +175,7 @@ def build_priority_actions(
         return [
             {
                 "kind": "profile",
-                "title": "Tell Compliant what you make",
+                "title": "Tell Compliance what you make",
                 "description": "Choose your alcohol products to see only the frameworks that apply.",
                 "value": "Unlock your personalised compliance plan in under a minute.",
             }
@@ -196,8 +196,8 @@ def build_priority_actions(
         actions.append(
             {
                 "kind": "product",
-                "title": f"Map {len(unmapped)} product{'s' if len(unmapped) != 1 else ''} already found in Core",
-                "description": "Add ABV once and Compliant turns future production and wastage movements into live LAL evidence.",
+                "title": f"Map {len(unmapped)} product{'s' if len(unmapped) != 1 else ''} already found in Production",
+                "description": "Add ABV once and Compliance turns future production and wastage movements into live LAL evidence.",
                 "value": "Unlock live Customs production evidence.",
                 "suggestions": unmapped[:5],
             }
@@ -207,7 +207,7 @@ def build_priority_actions(
             {
                 "kind": "product",
                 "title": "Map your first alcohol product",
-                "description": "Set its ABV and Compliant will start deriving LAL from Core movements.",
+                "description": "Set its ABV and Compliance will start deriving LAL from Production movements.",
                 "value": "Start the live Customs view.",
             }
         )
@@ -419,7 +419,7 @@ class ComplianceService:
                 "records_linked_to_core": linked_records,
                 "completed_core_steps_with_captured_data": completed_prompt_steps,
                 "active_core_evidence_files": active_evidence_files,
-                "scope": "Customs production and wastage LAL is derived from Core inventory movements; other obligations are evidence-led until their data capture is connected.",
+                "scope": "Customs production and wastage LAL is derived from Production inventory movements; other obligations are evidence-led until their data capture is connected.",
             }
         )
 
@@ -462,7 +462,7 @@ class ComplianceService:
                     "id": step.id,
                     "execution_id": step.execution_id,
                     "kind": "execution-step",
-                    "title": f"Completed Core step: {step_name}",
+                    "title": f"Completed Production step: {step_name}",
                     "created_at": step.completed_at,
                 }
             )
@@ -965,7 +965,7 @@ class ComplianceService:
             raise ValueError("Unknown framework")
         profile = self.get_profile(org_id)
         if profile is None or not profile.enabled:
-            raise ValueError("Compliant is not enabled for this organisation")
+            raise ValueError("Compliance is not enabled for this organisation")
         # Reject an inapplicable-but-real framework before any query: applicability is a
         # pure function of the profile's settings and the static catalogue, so it costs
         # nothing to check first and it saves every caller of a known-inapplicable slug

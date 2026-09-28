@@ -168,7 +168,7 @@ def np3_audit():
             "Status",
             "Evidence records",
             "Evidence references",
-            "Core source IDs",
+            "Production record IDs",
             "Last recorded",
         ]
     )
@@ -216,7 +216,7 @@ def update_np3_check_settings(control_id: str):
         return jsonify({"error": "review_interval_months must be 1, 3, 6, or 12"}), 400
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
-        return jsonify({"error": "Configure Compliant before changing NP3 check settings"}), 409
+        return jsonify({"error": "Configure Compliance before changing NP3 check settings"}), 409
     settings = dict(profile.settings or {})
     intervals = dict(settings.get("np3_check_review_intervals") or {})
     intervals[control_id] = data["review_interval_months"]
@@ -261,13 +261,13 @@ def attest_np3_check():
         return jsonify({"error": "source_refs must be a list of at most 30 strings"}), 400
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
-        return jsonify({"error": "Configure Compliant before signing off NP3 checks"}), 409
+        return jsonify({"error": "Configure Compliance before signing off NP3 checks"}), 409
     if (profile.settings or {}).get("food_control_programme", "np3") != "np3":
         return jsonify({"error": "Select National Programme 3 in Configuration before signing off checks"}), 409
     invalid_source_refs = _service().invalid_core_source_references(_org_id(), source_refs)
     if invalid_source_refs:
         logger.warning("access_denied", reason="source_ref_not_in_org", feature="compliant", org_id=str(_org_id()))
-        return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
+        return jsonify({"error": "Each Production record reference must be a record in this organisation"}), 400
     evidence_fields = data.get("evidence_fields") or {}
     allowed_evidence_fields = {field["key"] for field in evidence_playbook(control_id)["fields"]}
     if (
@@ -450,7 +450,7 @@ def update_abv_rules():
         return jsonify({"error": error}), 400
     profile = _service().get_profile(_org_id())
     if profile is None:
-        return jsonify({"error": "Configure Compliant before adding ABV rules"}), 409
+        return jsonify({"error": "Configure Compliance before adding ABV rules"}), 409
     cleaned = [{"pattern": rule["pattern"].strip(), "match_type": rule["match_type"]} for rule in rules]
     _service().upsert_profile(_org_id(), {"settings": {**(profile.settings or {}), ABV_RULES_SETTING: cleaned}})
     log_action("update", "compliance_profile", profile.id, {ABV_RULES_SETTING: len(cleaned)})
@@ -647,7 +647,7 @@ def create_record():
         return jsonify({"error": "period_end cannot be before period_start"}), 400
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
-        return jsonify({"error": "Configure Compliant before adding records"}), 409
+        return jsonify({"error": "Configure Compliance before adding records"}), 409
     requirements = capture_requirements(framework_slug, control_id, profile.settings or {})
     if requirements.get("record_types") and record_data["record_type"] not in requirements["record_types"]:
         allowed = ", ".join(requirements["record_types"])
@@ -659,7 +659,7 @@ def create_record():
     if requirements.get("evidence") and not record_data["evidence_reference"]:
         return jsonify({"error": "This control requires an evidence reference"}), 400
     if requirements.get("source_refs") and not record_data["source_refs"]:
-        return jsonify({"error": "This control requires a linked Core source reference"}), 400
+        return jsonify({"error": "This control requires a linked Production record reference"}), 400
     invalid_source_refs = _service().invalid_core_source_references(_org_id(), record_data["source_refs"])
     if invalid_source_refs:
         # A source_ref that parses as a UUID but doesn't resolve inside this org is a
@@ -674,7 +674,7 @@ def create_record():
             org_id=str(_org_id()),
             invalid_source_refs=invalid_source_refs,
         )
-        return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
+        return jsonify({"error": "Each Production record reference must be a record in this organisation"}), 400
     missing_fields = [
         field for field in requirements.get("fields", ()) if not record_data.get(field) and not details.get(field)
     ]

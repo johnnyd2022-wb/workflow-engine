@@ -507,15 +507,15 @@ NP3_LOG_TEMPLATES: dict[str, dict[str, Any]] = {
         "manufacturing_process_description",
         "Manufacturing process description",
         "One entry per product line, describing how it's made from raw ingredients to "
-        "finished product. If the process is modelled in Core, reference that instead of "
+        "finished product. If the process is modelled in Production, reference that instead of "
         "duplicating the step list here.",
         "attestation",
         (
             {"key": "event_date", "label": "Last reviewed", "type": "date", "required": True},
-            {"key": "product_or_process", "label": "Product or Core process", "type": "text", "required": True},
+            {"key": "product_or_process", "label": "Product or Production process", "type": "text", "required": True},
             {
                 "key": "process_reference",
-                "label": "Where the process description is kept (or the Core process name)",
+                "label": "Where the process description is kept (or the Production process name)",
                 "type": "text",
                 "required": True,
             },
@@ -796,30 +796,30 @@ NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
     "trace-and-recall": (
         {
             "title": "Source Map traceability",
-            "detail": "Use the product-to-input trace in Core for live lineage. The mock-recall register records the exercise result and elapsed time once.",
+            "detail": "Use the product-to-input trace in Production for live lineage. The mock-recall register records the exercise result and elapsed time once.",
             "workspace_url": "/core/sourcemap?show=check-needed",
             "workspace_label": "Open Source Map trace",
         },
     ),
     "documentation-record-keeping": (
         {
-            "title": "Core execution records",
-            "detail": "Completed step data and active evidence files remain in Core; the NP3 review only confirms that the record set is accessible and retained.",
+            "title": "Production execution records",
+            "detail": "Completed step data and active evidence files remain in Production; the NP3 review only confirms that the record set is accessible and retained.",
             "workspace_url": "/core/executions/live",
             "workspace_label": "Open execution evidence",
         },
     ),
     "suppliers-and-purchasing": (
         {
-            "title": "Core inventory supplier data",
-            "detail": "Supplier identity belongs on the raw-material record in Core. Review supplier approval here rather than creating a second stock register.",
+            "title": "Production inventory supplier data",
+            "detail": "Supplier identity belongs on the raw-material record in Production. Review supplier approval here rather than creating a second stock register.",
             "workspace_url": "/core/inventory/view",
             "workspace_label": "Open inventory records",
         },
     ),
     "receiving-food": (
         {
-            "title": "Core inventory receiving details",
+            "title": "Production inventory receiving details",
             "detail": "Supplier, supplier batch and purchase date are reused from inventory. The receiving log adds only the condition/temperature and accept, hold or reject decision.",
             "workspace_url": "/core/inventory/add/manual",
             "workspace_label": "Add or review inventory",
@@ -835,15 +835,15 @@ NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
     ),
     "time-temperature-processing": (
         {
-            "title": "Core workflow evidence",
-            "detail": "When NP3 workflow evidence is enabled, Core execution steps prompt for the operational evidence. The log records the critical result and deviation decision.",
+            "title": "Production workflow evidence",
+            "detail": "When NP3 workflow evidence is enabled, Production execution steps prompt for the operational evidence. The log records the critical result and deviation decision.",
             "workspace_url": "/core/executions/live",
             "workspace_label": "Open live executions",
         },
     ),
     "cooling-freezing": (
         {
-            "title": "Core workflow evidence",
+            "title": "Production workflow evidence",
             "detail": "Use the execution record for the batch workflow; retain the cooling/freezing observation and any deviation only once in this check register.",
             "workspace_url": "/core/executions/live",
             "workspace_label": "Open live executions",
@@ -851,55 +851,55 @@ NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
     ),
     "display-temperature": (
         {
-            "title": "Core tasks",
-            "detail": "Use a recurring Core task to prompt the display check. This register retains the actual measured result and corrective action.",
+            "title": "Production tasks",
+            "detail": "Use a recurring Production task to prompt the display check. This register retains the actual measured result and corrective action.",
             "workspace_url": "/core?tab=tasks",
-            "workspace_label": "Open Core tasks",
+            "workspace_label": "Open Production tasks",
         },
     ),
     "cleaning-and-hygiene": (
         {
-            "title": "Core tasks",
-            "detail": "Schedule cleaning verification in Core Tasks; record the inspection result and correction here, not in a duplicate task note.",
+            "title": "Production tasks",
+            "detail": "Schedule cleaning verification in Production tasks; record the inspection result and correction here, not in a duplicate task note.",
             "workspace_url": "/core?tab=tasks",
-            "workspace_label": "Open Core tasks",
+            "workspace_label": "Open Production tasks",
         },
     ),
     "calibration": (
         {
-            "title": "Core tasks",
-            "detail": "Use a recurring Core task for each calibration due date. This register holds the device result and any out-of-tolerance action.",
+            "title": "Production tasks",
+            "detail": "Use a recurring Production task for each calibration due date. This register holds the device result and any out-of-tolerance action.",
             "workspace_url": "/core?tab=tasks",
-            "workspace_label": "Open Core tasks",
+            "workspace_label": "Open Production tasks",
         },
     ),
     "pest-animal-control": (
         {
-            "title": "Core tasks",
-            "detail": "Schedule inspections or contractor visits in Core Tasks; record findings, treatment and close-out in this audit-ready log.",
+            "title": "Production tasks",
+            "detail": "Schedule inspections or contractor visits in Production tasks; record findings, treatment and close-out in this audit-ready log.",
             "workspace_url": "/core?tab=tasks",
-            "workspace_label": "Open Core tasks",
+            "workspace_label": "Open Production tasks",
         },
     ),
     "maintenance": (
         {
-            "title": "Core tasks",
-            "detail": "Plan maintenance in Core Tasks and retain the food-safety release decision with the check evidence.",
+            "title": "Production tasks",
+            "detail": "Plan maintenance in Production tasks and retain the food-safety release decision with the check evidence.",
             "workspace_url": "/core?tab=tasks",
-            "workspace_label": "Open Core tasks",
+            "workspace_label": "Open Production tasks",
         },
     ),
     "water-supply": (
         {
-            "title": "Core tasks",
-            "detail": "Use Core Tasks to schedule the next supplier or self-supply review. The water register retains the test/check result and any corrective action.",
+            "title": "Production tasks",
+            "detail": "Use Production tasks to schedule the next supplier or self-supply review. The water register retains the test/check result and any corrective action.",
             "workspace_url": "/core?tab=tasks",
-            "workspace_label": "Open Core tasks",
+            "workspace_label": "Open Production tasks",
         },
     ),
     "food-labelling-advertising": (
         {
-            "title": "Core workflow evidence",
+            "title": "Production workflow evidence",
             "detail": "Use the production workflow for the batch context; the packaging and label register retains the current label version, review and pre-visit submission once.",
             "workspace_url": "/core/executions/live",
             "workspace_label": "Open live executions",
@@ -907,7 +907,7 @@ NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
     ),
     "water-activity-control": (
         {
-            "title": "Core workflow evidence",
+            "title": "Production workflow evidence",
             "detail": "Use the batch execution for the product context; this register retains the measured water-activity result once per applicable batch.",
             "workspace_url": "/core/executions/live",
             "workspace_label": "Open live executions",
@@ -915,7 +915,7 @@ NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
     ),
     "acidification-fermentation-control": (
         {
-            "title": "Core workflow evidence",
+            "title": "Production workflow evidence",
             "detail": "Use the batch execution for the product context; this register retains the applicable pH result once per batch.",
             "workspace_url": "/core/executions/live",
             "workspace_label": "Open live executions",
@@ -931,32 +931,32 @@ NP3_CORE_CONNECTIONS: dict[str, tuple[dict[str, str], ...]] = {
     ),
     "corrective-actions": (
         {
-            "title": "Core tasks",
-            "detail": "Assign corrective work in Core Tasks, then keep the containment, cause and verification record here as the single audit trail.",
+            "title": "Production tasks",
+            "detail": "Assign corrective work in Production tasks, then keep the containment, cause and verification record here as the single audit trail.",
             "workspace_url": "/core?tab=tasks",
-            "workspace_label": "Open Core tasks",
+            "workspace_label": "Open Production tasks",
         },
     ),
     "manufacturing-process-description": (
         {
-            "title": "Core processes",
-            "detail": "Every process in Core is already its own step-by-step manufacturing description -- open the process instead of writing a second one.",
+            "title": "Production processes",
+            "detail": "Every Production process is already its own step-by-step manufacturing description -- open the process instead of writing a second one.",
             "workspace_url": "/core/flows",
-            "workspace_label": "Open Core processes",
+            "workspace_label": "Open Production processes",
         },
     ),
     "food-contact-equipment-cleaning": (
         {
-            "title": "Core processes",
+            "title": "Production processes",
             "detail": "A process's step names are a ready-made starting list of the food-contact equipment used to make it (for example a Distilling or Fermenting step names the still or fermenter).",
             "workspace_url": "/core/flows",
-            "workspace_label": "Open Core processes",
+            "workspace_label": "Open Production processes",
         },
         {
-            "title": "Core tasks",
-            "detail": "Schedule the cleaning check as a recurring Core task; keep the result and any correction in this register.",
+            "title": "Production tasks",
+            "detail": "Schedule the cleaning check as a recurring Production task; keep the result and any correction in this register.",
             "workspace_url": "/core?tab=tasks",
-            "workspace_label": "Open Core tasks",
+            "workspace_label": "Open Production tasks",
         },
     ),
 }
@@ -1090,11 +1090,11 @@ NP3_EVIDENCE_PLAYBOOKS = {
             "Kept current when the process changes",
         ),
         (
-            ("process_or_product", "Product or Core process this describes"),
+            ("process_or_product", "Product or Production process this describes"),
             ("last_reviewed", "Date the description was last reviewed"),
         ),
         reference_notes=(
-            "If the process is modelled in Core, that step-by-step workflow already is your "
+            "If the process is modelled in Production, that step-by-step workflow already is your "
             "manufacturing process description -- open the process there rather than writing a "
             "second copy.",
         ),

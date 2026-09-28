@@ -74,14 +74,14 @@
   }
 
   function connectedEvidence(check) {
-    var section = card('CONNECTED EVIDENCE', 'What Core can already show');
+    var section = card('CONNECTED EVIDENCE', 'What Production can already show');
     var evidence = check.derived_evidence || [];
     var titles = check.evidence_titles || [];
     var connections = (check.evidence_playbook || {}).core_connections || [];
     if (!evidence.length && !titles.length && !connections.length) {
       section.appendChild(text(
         'p',
-        'There is no linked Core evidence for this check yet. That is normal for policy and people controls; record the tailored evidence in the review below.'
+        'There is no linked Production evidence for this check yet. That is normal for policy and people controls; record the tailored evidence in the review below.'
       ));
       return section;
     }
@@ -94,7 +94,7 @@
         var link = document.createElement('a');
         link.href = item.workspace_url;
         link.setAttribute('hx-boost', 'false');
-        link.textContent = item.workspace_label || 'Open Core';
+        link.textContent = item.workspace_label || 'Open Production';
         line.appendChild(link);
       }
       list.appendChild(line);
@@ -108,7 +108,7 @@
         var link = document.createElement('a');
         link.href = item.workspace_url;
         link.setAttribute('hx-boost', 'false');
-        link.textContent = item.workspace_label || 'Open Core';
+        link.textContent = item.workspace_label || 'Open Production';
         line.appendChild(link);
       }
       list.appendChild(line);
@@ -208,7 +208,7 @@
     evidence.placeholder = 'Enter a supporting record reference';
     form.appendChild(reviewField(
       'Supporting record reference (optional)',
-      'Add one extra file, log, SOP, certificate or Core record that supports this sign-off.',
+      'Add one extra file, log, SOP, certificate or Production record that supports this sign-off.',
       'SOP-FS-04, revision 7 / Quality drive',
       evidence
     ));

@@ -66,7 +66,7 @@
       <section class="spa-form-section spa-page-hero dash-page-hero" aria-labelledby="dashboard-page-title">
         <p class="dash-eyebrow">BUSINESS CONTROL TOWER</p>
         <h1 class="page-title" id="dashboard-page-title">See the whole business. Act in the right workspace.</h1>
-        <p class="page-subtitle">Dashboard brings together Core operations, Compliant evidence, and CRM commitments. Resolve the work in its specialist workspace.</p>
+        <p class="page-subtitle">Dashboard brings together Core operations, Compliance evidence, and CRM commitments. Resolve the work in its specialist workspace.</p>
         <p class="dash-refresh">Last refresh: <span data-dashboard-date>now</span></p>
       </section>
 
@@ -109,7 +109,7 @@
           </div>
           <a href="/core/notifications">Review findings</a>
         </div>
-        <p class="dash-caption">Prioritised signals from Core, Compliant, and CRM. Open an item to resolve it where the work lives.</p>
+        <p class="dash-caption">Prioritised signals from Core, Compliance, and CRM. Open an item to resolve it where the work lives.</p>
         <ul class="dash-list" data-action-list>
           <li class="dash-empty">Loading cross-business priorities...</li>
         </ul>
@@ -125,43 +125,43 @@
         </div>
         <div class="dash-workspace-grid">
           {% if can('production.view', 'inventory.view') %}
-          <a class="dash-workspace-card" href="/core" aria-label="Open Core operations workspace">
+          <a class="dash-workspace-card" href="/core" aria-label="Open Production operations workspace">
             <span class="dash-workspace-card__eyebrow">CORE</span>
             <h3>Run production and inventory</h3>
             <p data-dashboard-core-summary>Loading operations summary...</p>
-            <span class="dash-workspace-card__link">Open Core <span aria-hidden="true">→</span></span>
+            <span class="dash-workspace-card__link">Open Production <span aria-hidden="true">→</span></span>
           </a>
           {% endif %}
 
           {% if compliant_subscribed and can('compliance.view') %}
-          <a class="dash-workspace-card" href="/compliant" hx-boost="false" data-dashboard-compliant-card aria-label="Open Compliant evidence workspace">
-            <span class="dash-workspace-card__eyebrow">COMPLIANT</span>
+          <a class="dash-workspace-card" href="/compliant" hx-boost="false" data-dashboard-compliant-card aria-label="Open Compliance evidence workspace">
+            <span class="dash-workspace-card__eyebrow">COMPLIANCE</span>
             <h3>Prove compliance with evidence</h3>
             <p data-dashboard-compliant-summary>Loading evidence summary...</p>
             <div class="dash-compliant-health" data-dashboard-compliant-health hidden aria-live="polite"></div>
-            <span class="dash-workspace-card__link" data-dashboard-compliant-link>Open Compliant <span aria-hidden="true">→</span></span>
+            <span class="dash-workspace-card__link" data-dashboard-compliant-link>Open Compliance <span aria-hidden="true">→</span></span>
           </a>
           {% elif not compliant_subscribed %}
-          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Compliant workspace availability">
-            <span class="dash-workspace-card__eyebrow">COMPLIANT</span>
+          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Compliance workspace availability">
+            <span class="dash-workspace-card__eyebrow">COMPLIANCE</span>
             <h3>Prove compliance with evidence</h3>
-            <p data-dashboard-compliant-summary>Compliant is not enabled for this organisation.</p>
+            <p data-dashboard-compliant-summary>Compliance is not enabled for this organisation.</p>
             <span class="dash-workspace-card__link">Not enabled</span>
           </article>
           {% endif %}
 
           {% if crm_enabled and can('sales.view') %}
-          <a class="dash-workspace-card" href="/crm" aria-label="Open CRM workspace">
-            <span class="dash-workspace-card__eyebrow">CRM</span>
+          <a class="dash-workspace-card" href="/crm" aria-label="Open Sales workspace">
+            <span class="dash-workspace-card__eyebrow">Sales</span>
             <h3>Manage customers and commitments</h3>
             <p data-dashboard-crm-summary>Loading customer commitments...</p>
-            <span class="dash-workspace-card__link">Open CRM <span aria-hidden="true">→</span></span>
+            <span class="dash-workspace-card__link">Open Sales <span aria-hidden="true">→</span></span>
           </a>
           {% elif not crm_enabled %}
-          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="CRM workspace availability">
-            <span class="dash-workspace-card__eyebrow">CRM</span>
+          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Sales workspace availability">
+            <span class="dash-workspace-card__eyebrow">Sales</span>
             <h3>Manage customers and commitments</h3>
-            <p data-dashboard-crm-summary>CRM is not enabled for this organisation.</p>
+            <p data-dashboard-crm-summary>Sales is not enabled for this organisation.</p>
             <span class="dash-workspace-card__link">Not enabled</span>
           </article>
           {% endif %}
@@ -198,7 +198,7 @@
           <p class="dash-kpi-value" data-kpi-active-batches>0</p>
           <p class="dash-kpi-meta">Currently in progress</p>
           <div class="dash-kpi-spark" data-kpi-spark="active_batches"></div>
-          <a class="dash-kpi-link" href="/core">Open Core</a>
+          <a class="dash-kpi-link" href="/core">Open Production</a>
         </article>
 
         {% if crm_enabled and can('sales.view') %}
