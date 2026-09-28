@@ -24,6 +24,8 @@ class MovementPolicyProvider(Protocol):
 
     def evaluate(self, session, org_id, context) -> MovementDecision: ...
 
+    def requirements(self) -> dict: ...
+
 
 def _providers():
     from app.features.compliant.modules.nz_alcohol.stock_movements import NZAlcoholMovementPolicy
@@ -40,3 +42,14 @@ def evaluate_stock_movement(session, org_id, context) -> MovementDecision:
     if provider is None:
         return MovementDecision(False, "The configured compliance module has no stock movement policy")
     return provider.evaluate(session, org_id, context)
+
+
+def movement_requirements(session, org_id):
+    """Generic form projection; installed modules own field names, copy and choices."""
+    profile = session.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None or not profile.enabled:
+        return {"fields": [], "authority_permission": None}
+    provider = next((p for p in _providers() if p.module_id == profile.industry_module), None)
+    if provider is None:
+        return {"fields": [], "authority_permission": "compliance.manage", "blocked": True}
+    return provider.requirements()

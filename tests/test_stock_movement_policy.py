@@ -11,7 +11,7 @@ import pytest
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.models.compliance_profile import ComplianceProfile
 from app.features.compliant.modules.nz_alcohol import premises
-from app.features.compliant.platform.stock_movements import evaluate_stock_movement
+from app.features.compliant.platform.stock_movements import evaluate_stock_movement, movement_requirements
 from tests.test_customs_premises import coverage_data, licence_data, world  # noqa: F401
 
 
@@ -148,3 +148,26 @@ def test_no_module_is_unrestricted_but_unknown_configured_module_is_closed(db, w
     db.add(ComplianceProfile(org_id=orgs[0].id, enabled=True, industry_module="unsupported"))
     db.flush()
     assert not evaluate_stock_movement(db, orgs[0].id, None).allowed
+
+
+def test_product_matching_uses_excise_casefold_and_rejects_ambiguous_profiles(db, movement):
+    org, context, _, _ = movement
+    context.product_name = "GIN"
+    assert evaluate_stock_movement(db, org, context).allowed
+    db.add(AlcoholProductProfile(org_id=org, inventory_name="gin", product_type="spirits"))
+    db.flush()
+    assert not evaluate_stock_movement(db, org, context).allowed
+
+
+def test_requirements_are_module_owned_and_fresh_per_request(db, movement):
+    org, _, _, _ = movement
+    first = movement_requirements(db, org)
+    assert first["authority_permission"] == "compliance.manage"
+    assert {field["name"] for field in first["fields"]} == {
+        "authority",
+        "reference",
+        "approved_on",
+        "evidence_reference",
+    }
+    first["fields"][0]["options"].clear()
+    assert len(movement_requirements(db, org)["fields"][0]["options"]) == 2
