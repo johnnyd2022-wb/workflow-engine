@@ -430,7 +430,7 @@ records, not from people typing figures in.
       licensed delivery hours, if order times are available.
   - Done when: licence and certificate dates never lapse unnoticed, and an inspector's
     request for policies, training and incident records is one download.
-  - As built (!MR2.5): NZ Alcohol → Licensing (shown when a licence type is set in
+  - As built (!414): NZ Alcohol → Licensing (shown when a licence type is set in
     Configuration). Licence register with endorsements, DLC, dates, sale and delivery hours
     and conditions; the renew-by date is 20 working days before expiry counted as s 5 of
     the Act defines working days (weekends, national holidays including Matariki,
