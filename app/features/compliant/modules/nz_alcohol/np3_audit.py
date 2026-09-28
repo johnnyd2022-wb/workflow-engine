@@ -1687,17 +1687,32 @@ def build_training_matrix(log_entries: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def audit_categories(programme: str = "np3") -> tuple:
+    """NP3 uses the verifier's topic list; NP1 and NP2 use MPI's guidance cards (plan 2.4b)."""
+    from app.features.compliant.modules.nz_alcohol import national_programmes
+
+    return {
+        "np1": national_programmes.NP1_AUDIT_CATEGORIES,
+        "np2": national_programmes.NP2_AUDIT_CATEGORIES,
+    }.get(programme, NP3_AUDIT_CATEGORIES)
+
+
 def build_np3_audit_rows(
     records: list[Any],
     derived_evidence: list[dict[str, Any]] | None = None,
     staff: list[dict[str, Any]] | None = None,
+    programme: str = "np3",
 ) -> list[dict[str, Any]]:
-    """Join NP3 topics to manual evidence and provenance-rich Core observations."""
+    """Join a national programme's topics to manual evidence and provenance-rich Core observations."""
+    from app.features.compliant.modules.nz_alcohol.national_programmes import GUIDANCE, framework_slug
+
     today = date.today()
     derived_evidence = derived_evidence or []
-    controls = dict((framework_by_slug("np3-food-control") or {}).get("controls", ()))
+    slug = framework_slug(programme)
+    guidance = GUIDANCE[programme]
+    controls = dict((framework_by_slug(slug) or {}).get("controls", ()))
     rows: list[dict[str, Any]] = []
-    for category_index, (category, topics) in enumerate(NP3_AUDIT_CATEGORIES):
+    for category_index, (category, topics) in enumerate(audit_categories(programme)):
         category_key = f"section-{category_index}"
         for control_id, topic in topics:
             playbook = evidence_playbook(control_id)
@@ -1723,7 +1738,7 @@ def build_np3_audit_rows(
             review_due_date = getattr(latest_attestation, "due_date", None)
             guidance_update_required = bool(
                 latest_attestation
-                and (latest_attestation.details or {}).get("np3_guidance_version") != NP3_GUIDANCE_VERSION
+                and (latest_attestation.details or {}).get("np3_guidance_version") != guidance["version"]
             )
             state = "ready" if current or derived else "attention" if failed else "missing"
             # A recorded failure remains an attention item even when another Core fact is
@@ -1757,9 +1772,11 @@ def build_np3_audit_rows(
                     "category": category,
                     "category_key": category_key,
                     "control_id": control_id,
-                    "source_reference": control_reference("np3-food-control", control_id),
-                    "guidance_url": playbook["guidance_url"],
-                    "guidance_version": NP3_GUIDANCE_VERSION,
+                    "source_reference": control_reference(slug, control_id),
+                    # NP3 playbooks link to pages of the NP3 guidance; other programmes link
+                    # to their own guidance document.
+                    "guidance_url": playbook["guidance_url"] if programme == "np3" else guidance["url"],
+                    "guidance_version": guidance["version"],
                     "requirement_summary": controls.get(control_id, topic),
                     "evidence_playbook": playbook,
                     "topic": topic,

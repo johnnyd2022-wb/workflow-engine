@@ -135,7 +135,7 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "activeCategory" in audit_script
     assert "np3-evidence-options" in audit_script
     assert "data-np3-control-detail" not in audit
-    assert ">NP3</strong>" in audit
+    assert ">{{ programme_short }}</strong>" in audit  # NP1, NP2 or NP3 (plan 2.4b)
     assert "np3-overview-panels" in audit
     assert audit.index("np3-overview-panels") < audit.index("np3-audit-layout")
     assert (

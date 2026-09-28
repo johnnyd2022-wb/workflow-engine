@@ -186,6 +186,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.process_docs_inline", None, "production.design"),
     ("core.process_docs_delete", None, "production.design"),
     ("process_templates.process_templates_api.copy_process_template", None, "production.design"),
+    ("process_templates.process_templates_api.apply_starter_pack", None, "production.design"),  # plan 2.4c
     ("process_templates.*", _READ, "production.design"),
     # --- recording production
     ("core.create_execution", None, "production.record"),

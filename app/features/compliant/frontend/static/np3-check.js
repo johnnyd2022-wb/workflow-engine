@@ -3,6 +3,8 @@
 
   var root = document.querySelector('[data-np3-check-root]');
   if (!root) return;
+  // NP1, NP2 and NP3 share this workspace (plan 2.4b).
+  var NP = root.dataset.programmeShort || 'NP3';
 
   var controlId = root.dataset.controlId;
   var error = root.querySelector('[data-np3-check-error]');
@@ -48,7 +50,7 @@
     link.href = check.guidance_url;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    link.textContent = 'Open “' + (check.source_reference || plan.section || 'NP3 guidance') + '” in the official NP3 guidance ↗';
+    link.textContent = 'Open “' + (check.source_reference || plan.section || NP + ' guidance') + '” in the official ' + NP + ' guidance ↗';
     section.appendChild(link);
 
     var show = document.createElement('details');
@@ -220,7 +222,7 @@
     checkBox.required = true;
     confirmation.appendChild(checkBox);
     confirmation.appendChild(document.createTextNode(
-      ' I reviewed the relevant evidence and confirm it is fit for purpose against the current NP3 guidance.'
+      ' I reviewed the relevant evidence and confirm it is fit for purpose against the current ' + NP + ' guidance.'
     ));
     form.appendChild(confirmation);
 
