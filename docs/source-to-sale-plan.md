@@ -373,7 +373,7 @@ records, not from people typing figures in.
     owners and due dates); work out the next verification from the programme's frequency
     and show it on the dashboard.
   - Done when: the app always knows the current verification status and next due date.
-  - As built (!MR2.2): NP3 page (and the NP1/NP2 page) → Verification. Each visit records
+  - As built (!413): NP3 page (and the NP1/NP2 page) → Verification. Each visit records
     date, verifier, agency, report reference, outcome (and, when unacceptable, whether the
     business is willing and able to comply) and corrective actions with owners and due
     dates. The next date follows MPI's national-programme frequency steps (Food
