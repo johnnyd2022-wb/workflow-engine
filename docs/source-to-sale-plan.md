@@ -352,7 +352,7 @@ records, not from people typing figures in.
       building. This plan is not tax advice.
   - Done when: each period is lodged from the draft (or as a nil return) and confirmed in
     the app, and nobody opens a spreadsheet.
-  - As built (!MR): Customs page → Excise. Stock locations are a Core concept
+  - As built (!409): Customs page → Excise. Stock locations are a Core concept
     (`stock_locations`, `stock_transfers`, `inventory_items.location_id`; no location = the
     main licensed area), with a "move stock" action that splits a lot and records the
     direction (out = removal, in = possible credit, never auto-claimed). Batch uniqueness
