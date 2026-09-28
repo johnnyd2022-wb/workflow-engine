@@ -1,0 +1,26 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Production demand | biz-e{% endblock %}
+{% block head_extras %}{{ super() }}
+<link rel="stylesheet" href="{{ url_for('planning.static', filename='demand.css') }}">
+{% endblock %}
+{% block content %}
+<main class="planning-demand" data-planning-root>
+  <header><h1>Production demand</h1><p>What needs making, and when it is due.</p></header>
+  <p role="alert" data-planning-error hidden></p>
+  {% if can('production.record') %}
+  <form data-demand-form class="planning-form" hx-boost="false">
+    <label>Order or demand reference<input name="reference" required maxlength="200"></label>
+    <label>Product output<select name="source_output_id" required data-output-select></select></label>
+    <label>Quantity<input name="quantity" required inputmode="decimal" type="number" min="0.0001" step="0.0001"></label>
+    <label>Due date<input name="due_date" required type="date"></label>
+    <label>Priority (0–100)<input name="priority" type="number" min="0" max="100" step="1" value="0" required></label>
+    <button type="submit">Add demand</button>
+  </form>
+  {% endif %}
+  <p data-planning-empty hidden>No production demand yet.</p>
+  <section aria-label="Production demand" data-demand-list data-can-record="{{ 'true' if can('production.record') else 'false' }}"></section>
+</main>
+{% endblock %}
+{% block scripts %}{{ super() }}
+<script src="{{ url_for('planning.static', filename='demand.js') }}"></script>
+{% endblock %}

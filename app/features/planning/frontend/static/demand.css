@@ -1,0 +1,9 @@
+.planning-demand { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+.planning-form { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin: 1.5rem 0; }
+.planning-form label { display: grid; gap: .4rem; flex: 1 1 180px; min-width: 0; }
+.planning-form input, .planning-form select { width: 100%; box-sizing: border-box; min-width: 0; padding: .6rem; }
+.planning-form button, .planning-demand article button { padding: .6rem .9rem; }
+.planning-demand article { display: flex; flex-wrap: wrap; gap: .7rem 1.5rem; align-items: center; border-top: 1px solid #d9dfdf; padding: 1rem 0; overflow-wrap: anywhere; }
+.planning-demand article h2 { flex: 1 1 200px; font-size: 1.05rem; margin: 0; }
+.planning-demand article p { margin: 0; }
+.planning-demand [role="alert"] { color: #a12525; }
