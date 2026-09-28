@@ -559,3 +559,52 @@ def test_dashboard_summary_route_skips_non_dict_task_and_revenue_rows(db, flask_
         db.query(User).filter(User.org_id == org.id).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()
+
+
+@pytest.mark.parametrize("role_name", ["PRODUCTION", "COMPLIANCE"])
+def test_dashboard_carve_does_not_read_sales_without_permission(db, flask_app, monkeypatch, role_name):
+    from app.core.db.models.user import UserRole
+    from app.features.dashboard.routes import dashboard_routes
+
+    org = OrganisationFactory()
+    db.commit()
+    client = _authed_dashboard_client(flask_app, db, org.id)
+    user = db.query(User).filter(User.org_id == org.id).one()
+    user.role = getattr(UserRole, role_name)
+    db.commit()
+    calls = []
+
+    def forbidden_overview(self, org_id):
+        calls.append(org_id)
+        return {"current_month_revenue": 999.0}
+
+    monkeypatch.setattr(dashboard_routes, "config", SimpleNamespace(crm_enabled=True, compliant_enabled=True))
+    monkeypatch.setattr(CRMService, "get_overview", forbidden_overview)
+    try:
+        response = client.get("/api/core/dashboard/summary")
+        assert response.status_code == 200
+        assert calls == []
+        assert response.get_json()["sales"]["enabled"] is False
+    finally:
+        db.query(AuditLog).filter(AuditLog.org_id == org.id).delete(synchronize_session=False)
+        db.query(User).filter(User.org_id == org.id).delete(synchronize_session=False)
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_dashboard_carve_does_not_query_compliance_without_permission(monkeypatch):
+    from flask import Flask, g
+
+    from app.core.db.models.user import UserRole
+    from app.features.dashboard.routes import dashboard_routes
+
+    class ForbiddenSession:
+        def query(self, *args, **kwargs):
+            pytest.fail("No compliance query is allowed for a sales-only user")
+
+    monkeypatch.setattr(dashboard_routes, "config", SimpleNamespace(compliant_enabled=True))
+    with Flask(__name__).test_request_context():
+        g.current_user = SimpleNamespace(role=UserRole.SALES)
+        result = dashboard_routes._dashboard_compliant_workspace_summary(uuid4(), ForbiddenSession())
+    assert result["available"] is False
+    assert result["modules"] == []

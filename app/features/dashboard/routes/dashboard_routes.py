@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from flask import g, jsonify, render_template, request
 from sqlalchemy import func
-from zoneinfo import ZoneInfo
 
 from app.core.db import db_session
 from app.core.db.models.entity_event import EntityEvent
@@ -17,7 +17,7 @@ from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
-from app.core.security.permissions import requires_auth
+from app.core.security.permissions import has_permission, requires_auth
 from app.features.activity_log.routes.activity_routes import _human_summary
 from app.observability import get_logger
 from app.utils.config_loader import config
@@ -520,7 +520,7 @@ def _dashboard_compliant_workspace_summary(
         "attention_count": 0,
         "modules": [],
     }
-    if not config.compliant_enabled:
+    if not config.compliant_enabled or not has_permission(g.current_user, "compliance.view"):
         return unavailable
 
     try:
@@ -677,11 +677,11 @@ def get_dashboard_summary():
     # mutations, pre-warmed by the warm-system-findings job); the cheap checks run live.
     # Same result set as CoreChecksRunner.run_all_checks() without the ~640ms DAG cost on
     # every landing-page load.
-    from app.core.backend.system_findings_cache import get_check_results
+    from app.features.compliance_checks.system_findings_cache import get_check_results
 
     check_results = get_check_results(org_id, db_session)
 
-    from app.core.backend.system_status import build_system_status_payload
+    from app.features.compliance_checks.system_status import build_system_status_payload
 
     system_status = build_system_status_payload(org_id, db_session, check_results)
     compliance = _dashboard_build_compliance_summary(check_results, system_status)
@@ -721,7 +721,7 @@ def get_dashboard_summary():
     }
     revenue_daily_mtd: list[dict[str, Any]] = []
 
-    if config.crm_enabled:
+    if config.crm_enabled and has_permission(g.current_user, "sales.view"):
         try:
             from app.features.crm.services.crm_service import CRMService
 
