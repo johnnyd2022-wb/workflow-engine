@@ -46,12 +46,20 @@
     return new Blob([bytes], { type: mime || 'application/octet-stream' });
   }
 
+  function escapeHtmlForText(text) {
+    if (text == null) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   window.ProcessModalUtils = Object.freeze({
     summaryInputDisplayName,
     summaryOutputDisplayName,
     isCustomExecutionPrompt,
     countLabeledExecutionPrompts,
     normalisePromptOptions,
-    base64ToBlob
+    base64ToBlob,
+    escapeHtmlForText
   });
 })();
