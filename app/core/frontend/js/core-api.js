@@ -12,6 +12,10 @@ function _getRumTraceHeaders(url, method) {
     }
 }
 
+// Full-page navigation cancels outstanding fetches. Mark that lifecycle so those
+// cancellations do not appear as application network failures in the old page.
+window.addEventListener('pagehide', function () { window.__coreApiPageUnloading = true; });
+
 window.CoreAPI = window.CoreAPI || {
     baseURL: '/api/core',
     _inFlightGets: new Map(),
@@ -75,6 +79,9 @@ window.CoreAPI = window.CoreAPI || {
                 // navigation (SPA nav cancels in-flight fetches). Not an error worth
                 // logging -- surface it like any other abort.
                 if (parseErr && parseErr.name === 'AbortError') throw parseErr;
+                if (window.__coreApiPageUnloading && parseErr && parseErr.name === 'TypeError') {
+                    throw new DOMException('Request cancelled by navigation', 'AbortError');
+                }
                 console.error(`API request failed: ${endpoint} - invalid JSON`, parseErr);
                 throw new Error(response.ok ? 'Invalid response from server.' : `Server error (${response.status}). Please try again.`);
             }
@@ -91,6 +98,9 @@ window.CoreAPI = window.CoreAPI || {
         } catch (error) {
             if (error && error.name === 'AbortError') {
                 throw error;
+            }
+            if (window.__coreApiPageUnloading && error && error.name === 'TypeError') {
+                throw new DOMException('Request cancelled by navigation', 'AbortError');
             }
             console.error(`API request failed: ${endpoint}`, error);
             if (error && error.name === 'TypeError') {

@@ -724,9 +724,7 @@ class DAGTracer:
         )
         steps_by_id = {s.id: s for s in steps}
         executions = (
-            self.session.query(Execution)
-            .filter(Execution.id.in_(exec_ids), Execution.org_id == self.org_id)
-            .all()
+            self.session.query(Execution).filter(Execution.id.in_(exec_ids), Execution.org_id == self.org_id).all()
             if exec_ids
             else []
         )

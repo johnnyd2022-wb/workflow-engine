@@ -1,0 +1,144 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Stocktake{% endblock %}
+
+{% block body_class %}stocktake-page{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Where every product is, count it, and resolve every difference">
+  <style>
+    .st-shell { display: flex; flex-direction: column; gap: 18px; padding-block: 24px 56px; max-width: 72rem; }
+    .st-shell [hidden] { display: none !important; }
+    .st-head h1 { margin: 0; font-size: 26px; color: var(--text-primary); }
+    .st-head p { margin: 6px 0 0; color: var(--text-secondary); font-size: 15px; max-width: 66ch; line-height: 1.5; }
+    .st-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+    .st-card h2 { margin: 0; font-size: 17px; color: var(--text-primary); }
+    .st-card h3 { margin: 4px 0 0; font-size: 14px; color: var(--text-primary); }
+    .st-hint { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; max-width: 72ch; }
+    .st-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .st-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .st-field input, .st-field select { font: inherit; font-weight: 400; font-size: 14px; padding: 8px 10px; border-radius: var(--radius-md);
+      border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); min-width: 0; }
+    .st-message { padding: 12px 14px; border-radius: var(--radius-md); font-size: 14px; }
+    .st-message--error { background: var(--error-bg, #fef2f2); color: var(--error, #b42318); border: 1px solid var(--error, #b42318); }
+    .st-message--ok { background: #e3f4ec; color: #17603f; border: 1px solid #9ad3b6; }
+    .st-table-wrap { overflow-x: auto; }
+    .st-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .st-table th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); padding: 8px 10px; border-bottom: 1px solid var(--border-default); }
+    .st-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-variant-numeric: tabular-nums; vertical-align: top; }
+    .st-num { text-align: right; }
+    .st-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg-secondary, #eef2f1); color: var(--text-primary); }
+    .st-chip--warn { background: #fdf0d5; color: #7a4b00; }
+    .st-chip--ok { background: #d9efe6; color: #17603f; }
+    .st-chip--bad { background: #fbe0dd; color: #8c1d13; }
+    .st-lines { display: flex; flex-direction: column; gap: 8px; }
+    .st-place { margin: 10px 0 2px; font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+    .st-line { border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 10px 12px; display: grid;
+      grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
+    .st-line--open { border-color: #e0a100; }
+    .st-line-name { font-weight: 600; color: var(--text-primary); }
+    .st-line-meta { font-size: 13px; color: var(--text-secondary); }
+    .st-count { display: flex; gap: 6px; align-items: center; }
+    .st-count input { width: 6.5rem; font: inherit; font-size: 16px; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid var(--border-default);
+      background: var(--bg-card); color: var(--text-primary); text-align: right; }
+    .st-resolve { grid-column: 1 / -1; border-top: 1px dashed var(--border-default); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .st-part { display: grid; grid-template-columns: 1.6fr .6fr 1.2fr .9fr 1.4fr auto; gap: 8px; align-items: end; }
+    .st-done-list { margin: 0; padding-left: 1.1em; font-size: 13px; color: var(--text-secondary); }
+    .st-link-btn { background: none; border: 0; color: var(--azure-blue); cursor: pointer; font: inherit; font-size: 13px; padding: 6px 0; text-decoration: underline; align-self: flex-start; }
+    .st-remove { background: none; border: 0; color: var(--error, #b42318); cursor: pointer; font-size: 18px; line-height: 1; padding: 8px 4px; }
+    .st-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+    .st-list a { color: var(--azure-blue); }
+    @media (max-width: 720px) {
+      .st-part { grid-template-columns: 1fr 1fr; }
+      .st-line { grid-template-columns: 1fr; }
+      .st-count input { width: 100%; }
+    }
+  </style>
+{% endblock %}
+
+{% block topbar %}{% endblock %}
+
+{% block content %}
+  <div class="max-content st-shell" data-stocktake-root
+       data-can-adjust="{{ '1' if can('inventory.adjust') else '0' }}"
+       data-can-manage="{{ '1' if can('compliance.manage') else '0' }}">
+    <header class="st-head">
+      <h1>Stocktake</h1>
+      <p>Where every product is right now, a count against it, and a reason for every difference. Resolving a difference records the real stock movement, so anything built on stock movements (such as a duty return) follows on its own.</p>
+    </header>
+
+    <div class="st-message" data-st-message role="status" hidden></div>
+
+    <section class="st-card" data-st-home aria-labelledby="st-schedule-title">
+      <h2 id="st-schedule-title">Schedule</h2>
+      <p class="st-hint" data-st-schedule-text>Loading…</p>
+      <div class="st-row" data-st-schedule-form hidden>
+        <label class="st-field">Count every
+          <select data-st-frequency>
+            <option value="monthly">Month</option>
+            <option value="quarterly">Quarter</option>
+            <option value="six_monthly">Six months</option>
+            <option value="annual">Year</option>
+          </select>
+        </label>
+        <label class="st-field">Bulk tolerance (%)
+          <input type="number" min="0" max="5" step="0.1" data-st-tolerance>
+        </label>
+        <button type="button" class="btn btn-secondary" data-st-save-schedule>Save</button>
+      </div>
+      <div class="st-row" data-st-start-actions hidden>
+        <button type="button" class="btn btn-primary" data-st-start="scheduled">Start stocktake</button>
+        <button type="button" class="btn btn-secondary" data-st-start="customs_visit">Inspector is here</button>
+      </div>
+    </section>
+
+    <section class="st-card" data-st-home data-st-variances-wrap hidden aria-labelledby="st-variances-title">
+      <h2 id="st-variances-title">Differences still open</h2>
+      <ul class="st-list" data-st-variances></ul>
+    </section>
+
+    <section class="st-card" data-st-home aria-labelledby="st-position-title">
+      <div class="st-row" style="justify-content: space-between; align-items: center">
+        <h2 id="st-position-title">Stock position</h2>
+        <a class="btn btn-secondary" href="/api/core/stock-position?format=csv" download>Download (CSV)</a>
+      </div>
+      <p class="st-hint" data-st-position-hint>Finished goods and work in progress by place and batch.</p>
+      <div data-st-position>Loading…</div>
+    </section>
+
+    <section class="st-card" data-st-home data-st-history-wrap hidden aria-labelledby="st-history-title">
+      <h2 id="st-history-title">Stocktakes</h2>
+      <ul class="st-list" data-st-history></ul>
+    </section>
+
+    <section class="st-card" data-st-count-view hidden aria-labelledby="st-count-title">
+      <div class="st-row" style="justify-content: space-between; align-items: center">
+        <h2 id="st-count-title" data-st-count-title>Count</h2>
+        <button type="button" class="st-link-btn" data-st-back>Back to stocktakes</button>
+      </div>
+      <p class="st-hint" data-st-count-summary></p>
+      <label class="st-field">Find a line (scan or type a batch or product)
+        <input type="search" data-st-find autocomplete="off" inputmode="search">
+      </label>
+      <div class="st-lines" data-st-lines></div>
+      <div class="st-row" data-st-complete-wrap hidden>
+        <button type="button" class="btn btn-primary" data-st-complete>Finish stocktake</button>
+      </div>
+    </section>
+
+    <section class="st-card" data-st-recon-view hidden aria-labelledby="st-recon-title">
+      <h2 id="st-recon-title">Reconciliation</h2>
+      <p class="st-hint" data-st-recon-hint></p>
+      <div class="st-table-wrap"><table class="st-table">
+        <thead><tr><th scope="col">Product</th><th scope="col" class="st-num">Opening</th><th scope="col" class="st-num">Produced and in</th>
+          <th scope="col" class="st-num">Removed</th><th scope="col" class="st-num">Losses</th><th scope="col" class="st-num">Expected</th>
+          <th scope="col" class="st-num">Counted</th><th scope="col" class="st-num">Difference</th><th scope="col" class="st-num">Explained</th><th scope="col" class="st-num" data-st-recon-declared hidden></th></tr></thead>
+        <tbody data-st-recon-rows></tbody>
+      </table></div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/stocktake.js"></script>
+{% endblock %}
