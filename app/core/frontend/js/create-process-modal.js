@@ -4276,34 +4276,16 @@
 
 
 
+  const persistStepOrder = window.ProcessModalStepOrder.create({
+    getCoreApi: function() { return typeof CoreAPI === 'undefined' ? null : CoreAPI; },
+    getCreatedSteps: function() { return createdSteps; },
+    sortStepsForDisplay,
+    reloadSteps: function() { return mergeProcessStepsFromApiForCurrentProcess(function() { return true; }); },
+    refreshSummaries: function() { return updateStepSummaries(); }
+  });
+
   async function persistStepOrderIfPossible() {
-    const pid = new URLSearchParams(window.location.search || '').get('id');
-    if (!pid || typeof CoreAPI === 'undefined' || !CoreAPI.reorderSteps) return;
-    const ordered = sortStepsForDisplay(createdSteps).filter(function(s) { return s && s.id; });
-    const orders = ordered.map(function(s) { return s.id; });
-    // Reorder's concurrency token is the newest step updated_at across the process.
-    const expectedUpdatedAt = ordered
-      .map(function(s) { return s.updated_at; })
-      .filter(Boolean)
-      .sort()
-      .pop();
-    try {
-      await CoreAPI.reorderSteps(pid, orders, expectedUpdatedAt);
-    } catch (e) {
-      if (typeof CoreAPI !== 'undefined' && CoreAPI.isStaleWrite && CoreAPI.isStaleWrite(e)) {
-        if (window.showNotification) {
-          window.showNotification(
-            'warning',
-            'Changed elsewhere',
-            'Someone else changed this process’s steps. Reloading the current order.'
-          );
-        }
-        await mergeProcessStepsFromApiForCurrentProcess(function() { return true; });
-        if (typeof updateStepSummaries === 'function') await updateStepSummaries();
-        return;
-      }
-      console.warn('persistStepOrderIfPossible failed', e);
-    }
+    return persistStepOrder();
   }
 
   async function mergeProcessStepsFromApiForSummary(isCurrent) {

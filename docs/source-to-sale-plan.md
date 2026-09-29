@@ -752,6 +752,7 @@ split.
         - [x] Extract summary-step session selection and enrichment helpers into `process-modal-summary-session.js` (!371).
         - [x] Extract step-summary expand/collapse behavior into `process-modal-step-summary-ui.js` (!372).
         - [x] Extract process-step summary rendering and reorder UI into `process-modal-step-summary.js` (!373).
+        - [x] Extract process-step order persistence and stale-write recovery into `process-modal-step-order.js` (!374).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
