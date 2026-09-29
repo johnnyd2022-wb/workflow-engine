@@ -2,7 +2,6 @@
 
 import base64
 import functools
-import hashlib
 import json
 import os
 from datetime import UTC, datetime, timedelta
@@ -44,6 +43,7 @@ from app.core.backend.event_writer import EventWriter
 from app.core.backend.evidence import evidence_routes
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
 from app.core.backend.process_docs import process_docs_routes
+from app.core.backend.static_assets import core_asset_directory, core_asset_version
 from app.core.backend.step_outputs import apply_whole_unit_rules, parse_output_batch_number
 from app.core.db import SessionLocal, db_session
 from app.core.db.models.execution import Execution, ExecutionStatus
@@ -207,21 +207,7 @@ def _asset_version() -> str:
     ships changed assets busts the browser and CDN cache -- these routes send
     ``Cache-Control: public, max-age=3600`` on otherwise-stable paths, so without this a
     freshly rendered page can run hour-old JS that predates the endpoints it calls."""
-    h = hashlib.blake2b(digest_size=8)
-    frontend = os.path.join(os.path.dirname(__file__), "..", "frontend")
-    for sub in ("js", "css", "inventory_static", "img"):
-        directory = os.path.join(frontend, sub)
-        try:
-            names = sorted(os.listdir(directory))
-        except OSError:
-            continue
-        for name in names:
-            try:
-                st = os.stat(os.path.join(directory, name))
-            except OSError:
-                continue
-            h.update(f"{name}:{int(st.st_mtime)}:{st.st_size}\n".encode())
-    return h.hexdigest()
+    return core_asset_version()
 
 
 _VERSIONED_STATIC_ENDPOINTS = frozenset(
@@ -1175,7 +1161,9 @@ def serve_core_js(filename):
     if not filename.lower().endswith(".js"):
         abort(400, "Invalid file type")
 
-    core_frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "js")
+    core_frontend_dir = core_asset_directory("js", filename)
+    if core_frontend_dir is None:
+        abort(404, "File not found")
     # Use safe_join for validation only (not for file access)
     safe_path = safe_join(core_frontend_dir, filename)
     if safe_path is None:
@@ -1219,7 +1207,9 @@ def serve_core_css(filename):
     if not filename.lower().endswith(".css"):
         abort(400, "Invalid file type")
 
-    core_frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "css")
+    core_frontend_dir = core_asset_directory("css", filename)
+    if core_frontend_dir is None:
+        abort(404, "File not found")
     # Use safe_join for validation only (not for file access)
     safe_path = safe_join(core_frontend_dir, filename)
     if safe_path is None:

@@ -255,16 +255,19 @@ the first specification in progress; none of these additions is claimed built.
 
 Backend slicing is mechanical. Frontend has one real obstacle:
 
-`/core/static/js/<filename>` (`backend.py:1043`) serves from a single flat directory,
-`app/core/frontend/js/`, with a filename whitelist and no subdirectories. Same for css, img
-and inventory. Every template references assets by bare filename. **The moment JS moves
-into `app/features/<slice>/frontend/js/`, every one of those references 404s.**
+`/static/js/<filename>` (`app/core/backend/backend.py`, `serve_core_js`) serves from the
+flat directory `app/core/frontend/js/`, with a filename whitelist and no subdirectories.
+Same for css, img and inventory. Every template references assets by bare filename. **The
+moment JS moves into `app/features/<slice>/frontend/js/`, every one of those references
+404s.**
 
 Options, in order of preference:
 
-1. **Asset registry** — a dict of `filename → owning slice dir`, built at import time by
-   scanning registered slices. Serving route stays one route, keeps its traversal guards
-   and whitelist, gains a lookup. Templates don't change. ~40 lines. Recommended.
+1. **Asset registry** — a dict of `filename → owning slice dir`, rebuilt at import time
+   when a Core route-owning slice registers its public flat `frontend/js` and `frontend/css`
+   directories. Serving routes stay in place, keep their traversal and extension guards,
+   and gain a registry lookup. WhiteNoise receives only those explicit public directories.
+   Templates don't change. Recommended.
 2. **Per-slice static routes** — each blueprint declares `static_folder`. More Flask-native
    but changes every URL in every template, and CSP/cache headers get duplicated.
 3. **Build step** — collect assets into one output dir. Introduces a build to a repo that
