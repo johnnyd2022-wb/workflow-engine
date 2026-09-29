@@ -1,0 +1,58 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Contract orders · biz-e{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}
+{% block content %}
+<main class="contract-workspace">
+  <header><h1>Contract orders</h1><p>Orders made for your customers.</p></header>
+  <p class="contract-error" role="alert" hidden></p>
+  <section class="contract-card">
+    <h2>Orders</h2>
+    {% if orders %}
+    <div class="contract-table"><table><thead><tr><th>Order</th><th>Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
+    {% for order in orders %}
+    <tr><td><a href="{{ url_for('contracts.order_page', order_id=order.id) }}" hx-boost="false">{{ order.reference }}</a></td>
+      <td>{{ order.customer_name }}</td><td>{{ order.due_date }}</td><td>{{ order.status|capitalize }}</td>
+      <td>{% for line in order.lines %}{{ line.quantity }} {{ line.unit }} {{ line.product_name }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>
+    {% endfor %}
+    </tbody></table></div>
+    {% else %}<p>No contract orders yet.</p>{% endif %}
+  </section>
+  {% if can('sales.record') %}
+  <section class="contract-card">
+    <h2>New order</h2>
+    <form hx-boost="false" data-contract-api="/api/core/contract-orders" data-method="POST" data-create-order>
+      <label>Customer<select name="customer_id" required><option value="">Choose a customer</option>{% for customer in customers if customer.is_active %}<option value="{{ customer.id }}">{{ customer.name }}</option>{% endfor %}</select></label>
+      <label>Order reference<input name="reference" maxlength="100" required></label>
+      <label>Due date<input name="due_date" type="date" required></label>
+      <label>Status<select name="status"><option value="draft">Draft</option><option value="confirmed">Confirmed</option></select></label>
+      <label>Duty responsibility<select name="duty_responsibility" required><option value="">Choose responsibility</option><option value="producer_licensee">Producer as licensee</option><option value="customer_licensee">Customer as licensee</option><option value="customer_underbond">Underbond to customer's CCA</option></select></label>
+      <label>Customer CCA reference<input name="customer_cca_reference" maxlength="255"></label>
+      {% set line_prefix = 'line.' %}{% include "contracts/_line_fields.html" %}
+      <button class="btn btn-primary" type="submit">Create order</button>
+    </form>
+  </section>
+  <section class="contract-card">
+    <h2>New contract customer</h2>
+    <form hx-boost="false" data-contract-api="/api/core/contract-customers" data-method="POST">
+      <label>Customer or brand name<input name="name" maxlength="255" required></label>
+      <label>CRM contact<select name="crm_contact_id"><option value="">No CRM contact</option>{% for contact in crm_contacts %}<option value="{{ contact.id }}">{{ contact.name }}</option>{% endfor %}</select></label>
+      <button class="btn btn-primary" type="submit">Add customer</button>
+    </form>
+  </section>
+  {% endif %}
+  {% if can('sales.view') %}
+  <section class="contract-card"><h2>Contract customers</h2>
+    {% for customer in customers %}
+    <form hx-boost="false" data-contract-api="/api/core/contract-customers/{{ customer.id }}" data-method="PATCH">
+      <label>Name<input name="name" maxlength="255" value="{{ customer.name }}" required {% if not can('sales.record') %}readonly{% endif %}></label>
+      {% if can('sales.record') %}
+      <label>CRM contact<select name="crm_contact_id"><option value="">No CRM contact</option>{% for contact in crm_contacts %}<option value="{{ contact.id }}" {% if customer.crm_contact_id == contact.id %}selected{% endif %}>{{ contact.name }}</option>{% endfor %}</select></label>
+      <label>Access to new orders<select name="is_active"><option value="true" {% if customer.is_active %}selected{% endif %}>Active</option><option value="false" {% if not customer.is_active %}selected{% endif %}>Inactive</option></select></label>
+      <button class="btn" type="submit">Save customer</button>
+      {% endif %}
+    </form>{% else %}<p>No contract customers yet.</p>{% endfor %}
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('contracts.static', filename='orders.js') }}"></script>{% endblock %}

@@ -78,13 +78,6 @@ html[data-spa-theme="dark"] #page-content .workflow-dashboard.dashboard-v3 {
   font-size: clamp(1.3rem, 2vw, 2rem);
 }
 
-.dashboard-v3 .dash-page-hero .page-subtitle {
-  margin: 6px 0 0;
-  color: var(--dash-text-soft);
-  font-size: 0.9rem;
-  max-width: 760px;
-}
-
 .dashboard-v3 .dash-eyebrow {
   margin: 0 0 5px;
   color: var(--dash-accent);
@@ -224,6 +217,11 @@ html[data-spa-theme="dark"] .dashboard-v3 .dash-workspace-card--unavailable {
   overflow: hidden;
   border-radius: 999px;
   background: var(--dash-border);
+}
+
+.dashboard-v3 .dash-compliant-health__milestone--overdue {
+  color: var(--dash-warning, #b45309);
+  font-weight: 700;
 }
 
 .dashboard-v3 .dash-compliant-health__progress span {

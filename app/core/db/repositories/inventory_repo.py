@@ -385,14 +385,17 @@ class InventoryRepository:
         reference: str | None = None,
         source_output_id: UUID | None = None,
         commit: bool = True,
+        sale_context: dict | None = None,
+        correlation_id: UUID | None = None,
+        site_id: UUID | None = None,
     ) -> list[dict]:
         """Consume `quantity` units of the FINAL_PRODUCT item(s) named `name`, draining
         the oldest label/lot batch first -- `extra_data.batch_number` ascending (a batch
         with no number sorts last), ties broken by `purchase_date`/`created_at` -- and
         splitting across items when a batch boundary falls mid-request.
 
-        This is the landing point for sales-driven consumption (e.g. a future Xero
-        invoice sync): batch numbers are assigned once, at production time (see
+        This is the landing point for sales-driven consumption (including Xero invoice
+        sync): batch numbers are assigned once, at production time (see
         scripts/whistlebird_replay_timeline.py's batch-splitting at Labelling), and this
         is the only place they get drained. Nothing is partially consumed if on-hand
         stock across all matching items is short -- raises ValueError instead.
@@ -400,6 +403,9 @@ class InventoryRepository:
         needed = _parse_quantity(quantity)
         if needed is None or not needed.is_finite() or needed <= 0:
             raise ValueError("quantity must be a positive finite number")
+        from app.core.db.site_operations import resolve_site
+
+        selected_site = resolve_site(self.db, org_id, site_id)
 
         with start_span(
             "inventory.consume_fifo",
@@ -427,6 +433,8 @@ class InventoryRepository:
             )
             if source_output_id is not None:
                 items = items.filter(InventoryItem.source_output_id == source_output_id)
+            if selected_site is not None:
+                items = items.filter(InventoryItem.site_id == selected_site)
             items = items.all()
             # Plan 1.2: counted goods move in whole units and a unit is never split between
             # batches. A lot left holding a fraction (old data) gives up only its whole units;
@@ -480,8 +488,15 @@ class InventoryRepository:
                             "delta": str(-take),
                             "reason": "sales_fifo_consumption",
                             "reference": reference,
+                            "sale": {
+                                **(sale_context or {}),
+                                "batch_number": batch_number,
+                                "quantity_from_batch": str(take),
+                                "unit": item.unit,
+                            },
                         },
                         diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+                        correlation_id=correlation_id,
                     )
                     remaining -= take
             if commit:
@@ -495,6 +510,7 @@ class InventoryRepository:
         quantity: str | Decimal,
         reference: str | None = None,
         commit: bool = True,
+        site_id: UUID | None = None,
     ) -> dict:
         """Take ``quantity`` from one chosen final-product lot (plan 1.1 manual matching).
 
@@ -503,6 +519,9 @@ class InventoryRepository:
         amount = _parse_quantity(quantity)
         if amount is None or not amount.is_finite() or amount <= 0:
             raise ValueError("quantity must be a positive finite number")
+        from app.core.db.site_operations import resolve_site
+
+        selected_site = resolve_site(self.db, org_id, site_id)
         item = (
             self.db.query(InventoryItem)
             .filter(
@@ -515,6 +534,8 @@ class InventoryRepository:
         )
         if item is None:
             raise ValueError("That batch isn't a finished product in this organisation")
+        if selected_site is not None and item.site_id != selected_site:
+            raise ValueError("That batch does not belong to the shipping site")
         _require_whole_count(amount, item.unit, item.name)
         current = parse_stored_quantity_to_decimal(item.quantity)
         usable = current.to_integral_value(rounding=ROUND_FLOOR) if is_count_unit(item.unit) else current
@@ -680,6 +701,8 @@ class InventoryRepository:
         quantity: str | Decimal,
         reference: str | None = None,
         commit: bool = True,
+        sale_context: dict | None = None,
+        correlation_id: UUID | None = None,
     ) -> dict:
         """Restore a previously recorded FIFO sale allocation to its original stock item.
 
@@ -719,8 +742,15 @@ class InventoryRepository:
                     "delta": str(amount),
                     "reason": "sales_fifo_reversal",
                     "reference": reference,
+                    "sale": {
+                        **(sale_context or {}),
+                        "quantity_from_batch": str(amount),
+                        "unit": item.unit,
+                        "batch_number": (item.extra_data or {}).get("batch_number"),
+                    },
                 },
                 diff={"quantity": {"before": str(quantity_before), "after": str(item.quantity)}},
+                correlation_id=correlation_id,
             )
         if commit:
             self.db.commit()

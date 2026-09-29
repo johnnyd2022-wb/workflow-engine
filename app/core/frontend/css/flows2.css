@@ -142,6 +142,7 @@
       color: var(--text-secondary, #6b7280);
       font-size: 12px;
     }
+    .flows2-inv-upstream-step__late { color: #92400e; font-weight: 700; }
     .flows2-inv-kv {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);

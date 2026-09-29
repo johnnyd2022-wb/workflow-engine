@@ -9,6 +9,7 @@ function crmMatching() {
     mode: 'fifo',
     pending: [],
     toAssign: [],
+    unmatched: [],
     picker: null, // { line, batches: [{...candidate, pick}], error }
 
     async init() {
@@ -24,6 +25,7 @@ function crmMatching() {
         this.mode = data.mode;
         this.pending = data.pending_review || [];
         this.toAssign = data.to_assign || [];
+        this.unmatched = data.unmatched || [];
       } catch (e) {
         this.error = e.message;
       } finally {
@@ -39,6 +41,30 @@ function crmMatching() {
       if (!iso) return '—';
       const d = new Date(iso);
       return isNaN(d) ? iso : d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+    },
+
+    fixLink(line) {
+      if (line.reason === 'unmapped') {
+        const phrase = line.description || line.item_code || '';
+        return `/crm/configuration?map=${encodeURIComponent(phrase)}`;
+      }
+      if (line.reason === 'invalid_quantity') return '/crm';
+      return '/core/inventory/add';
+    },
+
+    fixLabel(line) {
+      if (line.reason === 'unmapped') return 'Map product';
+      if (line.reason === 'invalid_quantity') return 'Review invoice';
+      return 'Receive stock';
+    },
+
+    unmatchedReason(line) {
+      if (line.reason === 'unmapped') return 'No product mapping';
+      if (line.reason === 'invalid_quantity') return 'Invoice line has no valid positive quantity';
+      if (line.reason === 'awaiting_assignment') return 'Waiting for a batch choice';
+      if (line.reason === 'awaiting_replay') return 'Stock is available; matching needs to be re-run';
+      if (line.reason === 'allocation_mismatch') return `Needs ${line.quantity || '—'}; ${line.available} allocated to batches`;
+      return `Needs ${line.quantity || '—'}; ${line.available} available`;
     },
 
     async confirm(line) {

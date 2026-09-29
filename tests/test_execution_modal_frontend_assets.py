@@ -143,9 +143,7 @@ def test_select_prompts_render_configured_choices_with_legacy_fallback():
     prompt_renderer = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "execution-render-prompts.js").read_text(
         encoding="utf-8"
     )
-    builder = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "create-process-modal.js").read_text(
-        encoding="utf-8"
-    )
+    builder = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "create-process-modal.js").read_text(encoding="utf-8")
     assert "guided-prompt-options" in builder
     assert "normalisePromptOptions" in builder
     assert "prompt.options" in prompt_renderer
@@ -164,11 +162,11 @@ def test_compliant_workflow_extensions_are_additive_to_every_execution_prompt_su
 
 
 def test_core_enforces_generic_compliance_requirements_without_module_knowledge():
-    backend = (_REPO_ROOT / "app" / "core" / "backend" / "backend.py").read_text(encoding="utf-8")
-    assert "completion_constraints" in backend
-    assert 'requirement == "active_evidence"' in backend
-    assert "NP3" not in backend
-    assert "nz_alcohol" not in backend
+    execution_routes = (_REPO_ROOT / "app" / "core" / "backend" / "execution_routes.py").read_text(encoding="utf-8")
+    assert "completion_constraints" in execution_routes
+    assert 'requirement == "active_evidence"' in execution_routes
+    assert "NP3" not in execution_routes
+    assert "nz_alcohol" not in execution_routes
 
 
 def test_execution_modal_calls_render_prompts_api():
