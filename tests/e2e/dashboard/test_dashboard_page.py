@@ -62,7 +62,7 @@ def test_dashboard_distinguishes_the_control_tower_from_workspaces(logged_in_pag
     page.wait_for_load_state("networkidle")
 
     expect(page.locator("#dashboard-attention-title")).to_have_text("Needs attention")
-    expect(page.locator("#dashboard-workspaces-title")).to_have_text("Choose a workspace")
+    expect(page.locator("#dashboard-workspaces-title")).to_have_text("Workspaces")
     expect(page.locator('a.dash-workspace-card[href="/core"]')).to_be_visible()
     expect(page.locator('a.dash-workspace-card[href="/crm"]')).to_be_visible()
     expect(page.locator("[data-dashboard-core-summary]")).not_to_contain_text("Loading")

@@ -189,8 +189,8 @@ def test_freshness_rolls_over_at_nz_midnight(db, authed, monkeypatch):
     assert calls["n"] == 2
 
 
-def test_only_the_dag_check_is_cached_cheap_checks_run_every_request(db, authed, monkeypatch):
-    """The expensive (expired_materials) slice is cached; every other check runs live on
+def test_full_org_checks_are_cached_cheap_checks_run_every_request(db, authed, monkeypatch):
+    """The full-org checks are cached; cheap checks run live on
     each request so the banner reflects time-sensitive checks (output_expiry etc.) in
     real time."""
     org, client = authed
@@ -207,6 +207,7 @@ def test_only_the_dag_check_is_cached_cheap_checks_run_every_request(db, authed,
     assert exp["n"] == 1, "expensive slice recomputed more than once despite a fresh cache"
     assert live["n"] == 3, "cheap checks did not run on every request"
     assert "expired_materials" in {r["check_id"] for r in _cache_row(db, org.id).payload["results"]}
+    assert "inventory.stock_integrity" in {r["check_id"] for r in _cache_row(db, org.id).payload["results"]}
 
 
 def test_cache_is_per_org(db, flask_app):
@@ -253,7 +254,13 @@ def test_banner_payload_is_slimmed(db, authed):
                 "message": "1 expired raw material with stock",
                 "data": {
                     "expired_raw_materials": [
-                        {"id": "r1", "name": "juniper", "expiry_date": "2025-01-01", "supplier": "ACME", "quantity": "3.0"}
+                        {
+                            "id": "r1",
+                            "name": "juniper",
+                            "expiry_date": "2025-01-01",
+                            "supplier": "ACME",
+                            "quantity": "3.0",
+                        }
                     ],
                     "impacted_items": [
                         {"id": "w1", "name": "batch", "expired_raw_material_id": "r1", "extra_data": {"big": "x" * 500}}
@@ -328,7 +335,7 @@ def test_prewarm_populates_a_fresh_row_without_a_request(db, authed):
     org, _client = authed
     assert _cache_row(db, org.id) is None
 
-    sfc.prewarm(org.id, db)
+    assert sfc.prewarm(org.id, db) is True
 
     db.expire_all()
     row = _cache_row(db, org.id)
@@ -394,8 +401,7 @@ def test_cached_check_failure_is_returned_visible_and_not_frozen_into_cache(db, 
     # The banner/findings list still shows it (get_or_compute path).
     payload = sfc.get_or_compute(org.id, db)
     assert any(
-        f["check_id"] == "expired_materials" and f["text"].startswith("Check failed")
-        for f in payload["findings"]
+        f["check_id"] == "expired_materials" and f["text"].startswith("Check failed") for f in payload["findings"]
     ), "the failed cached check disappeared from the banner findings"
 
 
@@ -404,7 +410,7 @@ def test_prewarm_does_not_cache_a_failed_slice(db, authed, monkeypatch):
     from app.features.compliance_checks.routes.corechecks import CoreChecksRunner
 
     monkeypatch.setattr(CoreChecksRunner, "run_check", _raise_for("expired_materials"))
-    sfc.prewarm(org.id, db)
+    assert sfc.prewarm(org.id, db) is False
     db.expire_all()
     assert _cache_row(db, org.id) is None
 

@@ -91,8 +91,10 @@ class CoreChecksRunner:
         # Product modules register through this public composition seam.  The runner
         # deliberately knows no industry-specific IDs or data shapes.
         from app.features.compliant.platform.registry import register_enabled_module_checks
+        from app.features.inventory.checks.stock_integrity import CHECK_ID, run_stock_integrity_check
 
         register_enabled_module_checks(self)
+        self.register_check(CHECK_ID, run_stock_integrity_check)
 
     def register_check(self, check_id: str, fn: CheckFn) -> None:
         """Register a check so it can be run via run_check(check_id)."""

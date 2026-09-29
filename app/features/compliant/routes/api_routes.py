@@ -18,6 +18,7 @@ from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
 from app.features.compliant.models import ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
+from app.features.compliant.modules.nz_alcohol.national_programmes import GUIDANCE
 from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook, np3_log_template
 from app.features.compliant.modules.nz_alcohol.workflow_rules import (
     ABV_RULES_SETTING,
@@ -34,6 +35,18 @@ from app.observability import get_logger
 logger = get_logger(__name__)
 
 api_bp = Blueprint("compliant_api", __name__)
+
+# Excise and stocktake settings live on their own pages, which the main configuration form doesn't
+# send, so a save of that form keeps them. (ABV rules are carried by configuration.js
+# instead, because the Whistlebird replay relies on a PUT replacing them wholesale.)
+_SUBFEATURE_SETTINGS = (
+    "excise_frequency",
+    "excise_tracking_from",
+    "stocktake_frequency",
+    "stocktake_bulk_tolerance_percent",
+    "np_registered_on",
+    "np_registered_as",
+)
 _RECORD_TYPES = {"attestation", "reading", "lodgement", "competency", "incident"}
 _RECORD_STATUSES = {"complete", "failed", "open", "superseded"}
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
@@ -54,6 +67,16 @@ def _csv_safe(value):
     if text.startswith(_CSV_FORMULA_PREFIXES):
         return "'" + text
     return text
+
+
+_NP_PROGRAMMES = ("np1", "np2", "np3")
+
+
+def _np_programme() -> str:
+    """The org's national programme; the verification workspace serves NP1, NP2 and NP3 (plan 2.4b)."""
+    profile = _service().get_profile(_org_id())
+    programme = ((profile.settings or {}) if profile else {}).get("food_control_programme", "np3")
+    return programme if programme in _NP_PROGRAMMES else "np3"
 
 
 def _service() -> ComplianceService:
@@ -158,7 +181,7 @@ def np3_audit():
             "Status",
             "Evidence records",
             "Evidence references",
-            "Core source IDs",
+            "Production record IDs",
             "Last recorded",
         ]
     )
@@ -199,14 +222,14 @@ def np3_audit_check(control_id: str):
 @requires_auth
 @requires_role(UserRole.ADMIN)
 def update_np3_check_settings(control_id: str):
-    if control_id not in dict((framework_by_slug("np3-food-control") or {}).get("controls", ())):
+    if control_id not in dict((framework_by_slug(f"{_np_programme()}-food-control") or {}).get("controls", ())):
         return jsonify({"error": "Unknown NP3 check"}), 404
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or data.get("review_interval_months") not in _NP3_REVIEW_INTERVALS:
         return jsonify({"error": "review_interval_months must be 1, 3, 6, or 12"}), 400
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
-        return jsonify({"error": "Configure Compliant before changing NP3 check settings"}), 409
+        return jsonify({"error": "Configure Compliance before changing NP3 check settings"}), 409
     settings = dict(profile.settings or {})
     intervals = dict(settings.get("np3_check_review_intervals") or {})
     intervals[control_id] = data["review_interval_months"]
@@ -224,7 +247,7 @@ def attest_np3_check():
     if not isinstance(data, dict):
         return jsonify({"error": "JSON object required"}), 400
     control_id = str(data.get("control_id") or "")
-    framework = framework_by_slug("np3-food-control") or {}
+    framework = framework_by_slug(f"{_np_programme()}-food-control") or {}
     controls = dict(framework.get("controls", ()))
     if control_id not in controls:
         return jsonify({"error": "Unknown NP3 check"}), 400
@@ -251,13 +274,13 @@ def attest_np3_check():
         return jsonify({"error": "source_refs must be a list of at most 30 strings"}), 400
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
-        return jsonify({"error": "Configure Compliant before signing off NP3 checks"}), 409
-    if (profile.settings or {}).get("food_control_programme", "np3") != "np3":
-        return jsonify({"error": "Select National Programme 3 in Configuration before signing off checks"}), 409
+        return jsonify({"error": "Configure Compliance before signing off checks"}), 409
+    if (profile.settings or {}).get("food_control_programme", "np3") not in _NP_PROGRAMMES:
+        return jsonify({"error": "Select a national programme in Configuration before signing off checks"}), 409
     invalid_source_refs = _service().invalid_core_source_references(_org_id(), source_refs)
     if invalid_source_refs:
         logger.warning("access_denied", reason="source_ref_not_in_org", feature="compliant", org_id=str(_org_id()))
-        return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
+        return jsonify({"error": "Each Production record reference must be a record in this organisation"}), 400
     evidence_fields = data.get("evidence_fields") or {}
     allowed_evidence_fields = {field["key"] for field in evidence_playbook(control_id)["fields"]}
     if (
@@ -271,11 +294,11 @@ def attest_np3_check():
         _org_id(),
         g.current_user.id,
         {
-            "framework_slug": "np3-food-control",
+            "framework_slug": framework["slug"],
             "control_id": control_id,
             "record_type": "attestation",
             "status": "complete",
-            "title": f"NP3 review: {controls[control_id]}",
+            "title": f"{GUIDANCE[_np_programme()]['short']} review: {controls[control_id]}",
             "due_date": _add_months(today, review_interval_months),
             "evidence_reference": evidence_reference,
             "source_refs": source_refs,
@@ -288,7 +311,7 @@ def attest_np3_check():
             },
         },
     )
-    log_action("create", "compliance_record", record.id, {"framework": "np3-food-control", "control": control_id})
+    log_action("create", "compliance_record", record.id, {"framework": framework["slug"], "control": control_id})
     return jsonify({"record": serialise_record(record)}), 201
 
 
@@ -297,7 +320,7 @@ def attest_np3_check():
 def add_np3_check_log(control_id: str):
     """Append a control-specific operational log entry from the check workspace."""
     template = np3_log_template(control_id)
-    framework = framework_by_slug("np3-food-control") or {}
+    framework = framework_by_slug(f"{_np_programme()}-food-control") or {}
     controls = dict(framework.get("controls", ()))
     if control_id not in controls or template is None:
         return jsonify({"error": "This NP3 check does not have a built-in log"}), 404
@@ -345,8 +368,12 @@ def add_np3_check_log(control_id: str):
         if employee is None:
             return jsonify({"error": "Employee must be an active user in this organisation"}), 400
     profile = _service().get_profile(_org_id())
-    if profile is None or not profile.enabled or (profile.settings or {}).get("food_control_programme", "np3") != "np3":
-        return jsonify({"error": "Configure National Programme 3 before adding a log entry"}), 409
+    if (
+        profile is None
+        or not profile.enabled
+        or (profile.settings or {}).get("food_control_programme", "np3") not in _NP_PROGRAMMES
+    ):
+        return jsonify({"error": "Configure a national programme before adding a log entry"}), 409
     status = "open" if normalised.get("result") == "action-required" else "complete"
     if status == "open" and not (normalised.get("corrective_action") or normalised.get("cause_and_action")):
         return jsonify({"error": "Describe the corrective action when follow-up is required"}), 400
@@ -355,11 +382,11 @@ def add_np3_check_log(control_id: str):
         _org_id(),
         g.current_user.id,
         {
-            "framework_slug": "np3-food-control",
+            "framework_slug": framework["slug"],
             "control_id": control_id,
             "record_type": template["record_type"],
             "status": status,
-            "title": f"NP3 log: {template['title']}",
+            "title": f"{GUIDANCE[_np_programme()]['short']} log: {template['title']}",
             "period_start": event_date,
             "due_date": _add_months(event_date, 1) if status == "open" else None,
             "owner_user_id": owner_user_id,
@@ -374,7 +401,7 @@ def add_np3_check_log(control_id: str):
         "create",
         "compliance_record",
         record.id,
-        {"framework": "np3-food-control", "control": control_id, "log": template["key"]},
+        {"framework": framework["slug"], "control": control_id, "log": template["key"]},
     )
     return jsonify({"record": serialise_record(record)}), 201
 
@@ -440,7 +467,7 @@ def update_abv_rules():
         return jsonify({"error": error}), 400
     profile = _service().get_profile(_org_id())
     if profile is None:
-        return jsonify({"error": "Configure Compliant before adding ABV rules"}), 409
+        return jsonify({"error": "Configure Compliance before adding ABV rules"}), 409
     cleaned = [{"pattern": rule["pattern"].strip(), "match_type": rule["match_type"]} for rule in rules]
     _service().upsert_profile(_org_id(), {"settings": {**(profile.settings or {}), ABV_RULES_SETTING: cleaned}})
     log_action("update", "compliance_profile", profile.id, {ABV_RULES_SETTING: len(cleaned)})
@@ -470,7 +497,7 @@ def update_profile():
         if check_intervals is not None and (
             not isinstance(check_intervals, dict)
             or not all(
-                key in dict((framework_by_slug("np3-food-control") or {}).get("controls", ()))
+                key in dict((framework_by_slug(f"{_np_programme()}-food-control") or {}).get("controls", ()))
                 and value in _NP3_REVIEW_INTERVALS
                 for key, value in check_intervals.items()
             )
@@ -485,6 +512,15 @@ def update_profile():
         workflow_settings_error = validate_workflow_settings(settings)
         if workflow_settings_error:
             return jsonify({"error": workflow_settings_error}), 400
+    if settings is not None:
+        # Settings owned by their own screens (ABV rules, excise) survive a save of the
+        # main configuration form, which doesn't send them; they're only changed when a
+        # request includes them.
+        existing = getattr(_service().get_profile(_org_id()), "settings", None) or {}
+        for key in _SUBFEATURE_SETTINGS:
+            if key not in settings and key in existing:
+                settings[key] = existing[key]
+        data = {**data, "settings": settings}
     profile = _service().upsert_profile(_org_id(), data)
     log_action("update", "compliance_profile", profile.id, {"enabled": profile.enabled})
     return jsonify({"profile": _service().overview(_org_id())["profile"]}), 200
@@ -501,7 +537,8 @@ def list_alcohol_products():
                     "id": str(product.id),
                     "inventory_name": product.inventory_name,
                     "product_type": product.product_type,
-                    "abv_percent": str(product.abv_percent),
+                    "abv_percent": str(product.abv_percent) if product.abv_percent is not None else None,
+                    "pack_volume_ml": str(product.pack_volume_ml) if product.pack_volume_ml is not None else None,
                     "customs_product_code": product.customs_product_code,
                     "is_active": product.is_active,
                 }
@@ -627,7 +664,7 @@ def create_record():
         return jsonify({"error": "period_end cannot be before period_start"}), 400
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
-        return jsonify({"error": "Configure Compliant before adding records"}), 409
+        return jsonify({"error": "Configure Compliance before adding records"}), 409
     requirements = capture_requirements(framework_slug, control_id, profile.settings or {})
     if requirements.get("record_types") and record_data["record_type"] not in requirements["record_types"]:
         allowed = ", ".join(requirements["record_types"])
@@ -639,7 +676,7 @@ def create_record():
     if requirements.get("evidence") and not record_data["evidence_reference"]:
         return jsonify({"error": "This control requires an evidence reference"}), 400
     if requirements.get("source_refs") and not record_data["source_refs"]:
-        return jsonify({"error": "This control requires a linked Core source reference"}), 400
+        return jsonify({"error": "This control requires a linked Production record reference"}), 400
     invalid_source_refs = _service().invalid_core_source_references(_org_id(), record_data["source_refs"])
     if invalid_source_refs:
         # A source_ref that parses as a UUID but doesn't resolve inside this org is a
@@ -654,7 +691,7 @@ def create_record():
             org_id=str(_org_id()),
             invalid_source_refs=invalid_source_refs,
         )
-        return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
+        return jsonify({"error": "Each Production record reference must be a record in this organisation"}), 400
     missing_fields = [
         field for field in requirements.get("fields", ()) if not record_data.get(field) and not details.get(field)
     ]
@@ -749,3 +786,245 @@ def get_report(report_id: str):
             headers={"Content-Disposition": f'attachment; filename="{report.framework_slug}-audit-pack.csv"'},
         )
     return jsonify({"id": str(report.id), "checksum_sha256": report.checksum_sha256, "payload": report.payload}), 200
+
+
+# ------------------------------------------------------------------
+# Excise (plan 2.1): per-period lines from removals, lodgement, rates, products
+# ------------------------------------------------------------------
+
+
+def _excise_cfg():
+    from app.features.compliant.modules.nz_alcohol import excise
+
+    return excise, excise.settings_for(_service().get_profile(_org_id()))
+
+
+def _parse_iso(value, field):
+    try:
+        return date.fromisoformat(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValueError(f"{field} must be a date like 2026-10-01") from None
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise", methods=["GET"])
+@requires_auth
+def get_excise_period():
+    excise, cfg = _excise_cfg()
+    try:
+        day = _parse_iso(request.args["period"], "period") if request.args.get("period") else None
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if day is None:
+        day = excise.previous_period(excise.period_for(date.today(), cfg["frequency"])[0], cfg["frequency"])[0]
+    return jsonify({"settings": cfg, "draft": excise.draft(db_session, _org_id(), day, cfg["frequency"])}), 200
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise/periods", methods=["GET"])
+@requires_auth
+def list_excise_periods():
+    """The current period and the last eleven, newest first, with lodged status."""
+    from app.features.compliant.models.excise import ExciseLodgement
+
+    excise, cfg = _excise_cfg()
+    lodged = {
+        r.period_start: r for r in db_session.query(ExciseLodgement).filter(ExciseLodgement.org_id == _org_id()).all()
+    }
+    start = excise.period_for(date.today(), cfg["frequency"])[0]
+    rows = []
+    for _ in range(12):
+        s0, e0 = excise.period_for(start, cfg["frequency"])
+        rec = lodged.get(s0)
+        rows.append(
+            {
+                "period_start": s0.isoformat(),
+                "label": excise.period_label(s0, e0),
+                "due": excise.entry_due(e0).isoformat(),
+                "open": date.today() < e0,
+                "status": "lodged" if rec else "not lodged",
+                "lodged_on": rec.lodged_on.isoformat() if rec else None,
+                "nil_return": bool(rec.nil_return) if rec else None,
+                "total_lal": (rec.snapshot or {}).get("total_lal") if rec else None,
+            }
+        )
+        start = excise.previous_period(s0, cfg["frequency"])[0]
+    return jsonify({"settings": cfg, "periods": rows}), 200
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise/settings", methods=["PUT"])
+@requires_auth
+def update_excise_settings():
+    excise, _cfg = _excise_cfg()
+    data = request.get_json(silent=True) or {}
+    frequency = data.get("frequency", "monthly")
+    if frequency not in excise.FREQUENCIES:
+        return jsonify({"error": "frequency must be monthly, six_monthly or twelve_monthly"}), 400
+    tracking = data.get("tracking_from")
+    try:
+        tracking = _parse_iso(tracking, "tracking_from").isoformat() if tracking else None
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    profile = _service().get_profile(_org_id())
+    if profile is None:
+        return jsonify({"error": "Configure Compliant before setting up excise"}), 409
+    settings = {**(profile.settings or {}), "excise_frequency": frequency, "excise_tracking_from": tracking}
+    _service().upsert_profile(_org_id(), {"settings": settings})
+    log_action(
+        "update", "compliance_profile", profile.id, {"excise_frequency": frequency, "excise_tracking_from": tracking}
+    )
+    return jsonify({"settings": excise.settings_for(_service().get_profile(_org_id()))}), 200
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise/lodge", methods=["POST"])
+@requires_auth
+def lodge_excise_period():
+    excise, cfg = _excise_cfg()
+    data = request.get_json(silent=True) or {}
+    try:
+        start = _parse_iso(data.get("period_start"), "period_start")
+        lodged_on = _parse_iso(data.get("lodged_on") or date.today().isoformat(), "lodged_on")
+        record = excise.lodge(
+            db_session, _org_id(), start, cfg["frequency"], lodged_on, data.get("entry_reference"), g.current_user.id
+        )
+        db_session.commit()
+    except ValueError as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 400
+    except IntegrityError:
+        db_session.rollback()
+        return jsonify({"error": "That period is already recorded as lodged."}), 409
+    log_action(
+        "lodge_excise",
+        "organisation",
+        _org_id(),
+        {
+            "period_start": record.period_start.isoformat(),
+            "nil_return": record.nil_return,
+            "total_lal": (record.snapshot or {}).get("total_lal"),
+        },
+    )
+    return jsonify({"draft": excise.draft(db_session, _org_id(), start, cfg["frequency"])}), 201
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise/rates", methods=["GET"])
+@requires_auth
+def list_excise_rates():
+    from app.features.compliant.models.excise import ExciseRate
+
+    rows = (
+        db_session.query(ExciseRate)
+        .filter(ExciseRate.org_id == _org_id())
+        .order_by(ExciseRate.tariff_item.asc(), ExciseRate.effective_from.desc())
+        .all()
+    )
+    return jsonify(
+        {
+            "rates": [
+                {
+                    "id": str(r.id),
+                    "tariff_item": r.tariff_item,
+                    "description": r.description,
+                    "rate_per_lal": f"{Decimal(str(r.rate_per_lal)).normalize():f}",
+                    "effective_from": r.effective_from.isoformat(),
+                }
+                for r in rows
+            ]
+        }
+    ), 200
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise/rates", methods=["POST"])
+@requires_auth
+def add_excise_rate():
+    from app.features.compliant.models.excise import ExciseRate
+
+    data = request.get_json(silent=True) or {}
+    tariff = str(data.get("tariff_item") or "").strip()
+    if not tariff or len(tariff) > 100:
+        return jsonify({"error": "tariff_item is required (up to 100 characters)"}), 400
+    try:
+        rate = Decimal(str(data.get("rate_per_lal")))
+        effective = _parse_iso(data.get("effective_from"), "effective_from")
+    except (InvalidOperation, ValueError) as e:
+        return jsonify({"error": str(e) if isinstance(e, ValueError) else "rate_per_lal must be a number"}), 400
+    if not rate.is_finite() or rate < 0:
+        return jsonify({"error": "rate_per_lal must be 0 or more"}), 400
+    db_session.add(
+        ExciseRate(
+            org_id=_org_id(),
+            tariff_item=tariff,
+            rate_per_lal=rate,
+            effective_from=effective,
+            description=(str(data.get("description") or "").strip()[:255] or None),
+        )
+    )
+    try:
+        db_session.commit()
+    except IntegrityError:
+        db_session.rollback()
+        return jsonify({"error": "A rate for that tariff item already starts on that date"}), 409
+    return list_excise_rates()
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise/products", methods=["GET"])
+@requires_auth
+def list_excise_products():
+    """Final outputs of every workflow, with their excise setup (pack volume, tariff item)."""
+    from app.core.backend.go_live import workflow_outputs
+
+    profiles = {p.inventory_name.casefold(): p for p in _service().product_profiles(_org_id())}
+    rows = []
+    for output in workflow_outputs(db_session, _org_id())["final_outputs"]:
+        p = profiles.get(output["name"].casefold())
+        rows.append(
+            {
+                "name": output["name"],
+                "unit": output["unit"],
+                "workflow": output["workflow"],
+                "configured": p is not None,
+                "pack_volume_ml": f"{Decimal(str(p.pack_volume_ml)).normalize():f}"
+                if p is not None and p.pack_volume_ml
+                else None,
+                "tariff_item": p.customs_product_code if p is not None else None,
+                "abv_fallback": f"{Decimal(str(p.abv_percent)).normalize():f}"
+                if p is not None and p.abv_percent is not None
+                else None,
+            }
+        )
+    return jsonify({"products": rows}), 200
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise/products", methods=["PUT"])
+@requires_auth
+def save_excise_product():
+    from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    try:
+        volume = Decimal(str(data["pack_volume_ml"])) if data.get("pack_volume_ml") not in (None, "") else None
+        abv = Decimal(str(data["abv_fallback"])) if data.get("abv_fallback") not in (None, "") else None
+    except InvalidOperation:
+        return jsonify({"error": "Pack volume and ABV must be numbers"}), 400
+    if volume is not None and not (0 < volume <= 100000):
+        return jsonify({"error": "Pack volume must be more than 0 mL"}), 400
+    if abv is not None and not (0 <= abv <= 100):
+        return jsonify({"error": "ABV must be between 0 and 100"}), 400
+    tariff = str(data.get("tariff_item") or "").strip()[:100] or None
+    profile = (
+        db_session.query(AlcoholProductProfile)
+        .filter(AlcoholProductProfile.org_id == _org_id(), AlcoholProductProfile.inventory_name == name)
+        .one_or_none()
+    )
+    if profile is None:
+        profile = AlcoholProductProfile(
+            org_id=_org_id(), inventory_name=name, product_type=str(data.get("product_type") or "spirits")[:40]
+        )
+        db_session.add(profile)
+    profile.pack_volume_ml = volume
+    profile.abv_percent = abv
+    profile.customs_product_code = tariff
+    profile.is_active = True
+    db_session.commit()
+    return list_excise_products()

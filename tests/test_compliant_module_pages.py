@@ -100,6 +100,7 @@ def test_np3_emits_the_dashboard_workspace_summary_contract():
         "evidence_ready": 4,
         "needs_attention": 34,
         "overdue": 2,
+        "milestone": None,
     }
 
 
@@ -120,13 +121,13 @@ def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
     # The Flask app's Jinja root is app/ui/templates.  Guard the template it actually
     # renders, rather than the separately served /ui/shared asset directory.
     sidebar = (ROOT / "app" / "ui" / "templates" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")
-    assert tabs.count('hx-boost="false"') == 4
+    assert tabs.count('hx-boost="false"') == 5  # every tab, including Licensing (plan 2.5)
     assert 'href="/compliant" hx-boost="false"' in sidebar
     assert 'href="/api/compliant/np3-audit?format=csv" hx-boost="false"' in audit
     assert 'href="/api/compliant/np3-audit?format=pdf" hx-boost="false"' in audit
 
 
-def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeholders():
+def test_food_safety_tab_tracks_the_configured_programme_for_np1_np2_and_np3():
     tabs = (
         ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_nz_alcohol_tabs.html"
     ).read_text(encoding="utf-8")
@@ -134,17 +135,6 @@ def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeho
     configuration = (ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "configuration.js").read_text(
         encoding="utf-8"
     )
-    placeholder = (
-        ROOT
-        / "app"
-        / "features"
-        / "compliant"
-        / "frontend"
-        / "templates"
-        / "compliant"
-        / "food_safety_coming_soon.html"
-    ).read_text(encoding="utf-8")
-
     assert _food_safety_programme({"food_control_programme": "np1"}) == "np1"
     assert _food_safety_programme({"food_control_programme": "np2"}) == "np2"
     assert _food_safety_programme({"food_control_programme": "unexpected"}) == "np3"
@@ -154,7 +144,8 @@ def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeho
     assert 'route("/compliant/nz-alcohol/food-safety"' in routes
     assert 'route("/compliant/nz-alcohol/customs"' in routes
     assert "updateFoodSafetyTab" in configuration
-    assert "support is coming soon" in placeholder
+    # NP1 and NP2 use the same verification workspace as NP3 (plan 2.4b), not a placeholder.
+    assert 'if programme in {"np1", "np2", "np3"}' in routes
 
 
 def test_selected_national_programme_is_the_only_programme_in_the_plan():

@@ -55,6 +55,11 @@
       message.hidden = !text;
     }
 
+    function needsExpiry(value) {
+      var r = state.roles.find(function (x) { return x.value === value; });
+      return !!(r && r.needs_expiry);
+    }
+
     function roleLabel(value) {
       var r = state.roles.find(function (x) { return x.value === value; });
       return r ? r.label : value;
@@ -81,7 +86,7 @@
     function syncRoleHint() {
       var r = state.roles.find(function (x) { return x.value === roleSelect.value; });
       roleHint.textContent = r ? r.description : '';
-      expiryField.hidden = roleSelect.value !== 'auditor';
+      expiryField.hidden = !needsExpiry(roleSelect.value);
     }
 
     function statusCell(p) {
@@ -163,6 +168,7 @@
         state.roles = data.roles || [];
         renderRoleGuide();
         render();
+        loadCustomRoles();
       } catch (err) {
         rows.replaceChildren();
         say(err.message, false);
@@ -192,7 +198,7 @@
 
     async function changeRole(p, sel) {
       var body = { role: sel.value };
-      if (sel.value === 'auditor') {
+      if (needsExpiry(sel.value)) {
         var until = await askExpiry(p);
         if (!until) { sel.value = p.role; return; }
         body.access_expires_at = until;
@@ -273,7 +279,7 @@
         last_name: (fd.get('last_name') || '').trim(),
         role: fd.get('role')
       };
-      if (body.role === 'auditor') body.access_expires_at = fd.get('access_expires_at') || '';
+      if (needsExpiry(body.role)) body.access_expires_at = fd.get('access_expires_at') || '';
       if (!body.email) { formError.textContent = 'Enter their email address.'; formError.hidden = false; return; }
       try {
         var data = await api('POST', '/org/users', body);
@@ -287,6 +293,116 @@
         formError.hidden = false;
       }
     });
+
+    // --- custom roles (plan 0.4c) ------------------------------------------------------
+    var rolesRoot = $(root, '[data-custom-roles]');
+    var rolesState = null;
+
+    function el(tag, attrs, kids) {
+      var n = document.createElement(tag);
+      Object.keys(attrs || {}).forEach(function (k) {
+        if (k === 'text') n.textContent = attrs[k];
+        else if (k === 'className') n.className = attrs[k];
+        else n.setAttribute(k, attrs[k]);
+      });
+      (kids || []).forEach(function (c) { if (c) n.append(c); });
+      return n;
+    }
+
+    async function loadCustomRoles() {
+      if (!rolesRoot || !state.me || (state.me.permissions || []).indexOf('users.manage') === -1) return;
+      try { renderCustomRoles(await api('GET', '/org/roles')); } catch (err) { say(err.message, false); }
+    }
+
+    async function refreshAfterRoleChange(data) {
+      renderCustomRoles(data);
+      var users = await api('GET', '/org/users');
+      state.people = users.users || [];
+      state.roles = users.roles || [];
+      renderRoleGuide();
+      render();
+    }
+
+    function permissionBoxes(selected) {
+      var box = el('div', { className: 'people-perms' });
+      rolesState.permissions.forEach(function (p) {
+        var input = el('input', { type: 'checkbox', value: p.key });
+        input.checked = selected.indexOf(p.key) !== -1;
+        if (!p.grantable) { input.disabled = true; input.checked = false; }
+        box.append(el('label', { className: 'people-perm' + (p.grantable ? '' : ' people-perm--admin') }, [
+          input, el('span', {}, [el('strong', { text: p.key }), document.createTextNode(' ' + p.description + (p.grantable ? '' : ' (admins only)'))])
+        ]));
+      });
+      return box;
+    }
+
+    function ticked(box) {
+      return Array.prototype.filter.call(box.querySelectorAll('input[type="checkbox"]'), function (i) { return i.checked; })
+        .map(function (i) { return i.value; });
+    }
+
+    function renderCustomRoles(data) {
+      rolesState = data;
+      rolesRoot.hidden = false;
+      var list = $(rolesRoot, '[data-custom-role-list]');
+      list.replaceChildren();
+      if (!data.custom_roles.length) list.append(el('p', { className: 'people-hint', text: 'No custom roles yet.' }));
+      data.custom_roles.forEach(function (r) {
+        var base = data.built_in.find(function (b) { return b.value === r.base_role; });
+        var details = el('details', { className: 'people-custom-role' });
+        details.append(el('summary', {}, [el('strong', { text: r.name }),
+          document.createTextNode(' · from ' + (base ? base.label : r.base_role) + ' · ' + r.permissions.length + ' permissions · ' + r.holders + (r.holders === 1 ? ' person' : ' people'))]));
+        var name = el('input', { value: r.name, maxlength: '100', 'aria-label': 'Role name' });
+        var boxes = permissionBoxes(r.permissions);
+        var save = el('button', { type: 'button', className: 'btn btn-primary', text: 'Save' });
+        save.addEventListener('click', async function () {
+          try { await refreshAfterRoleChange(await api('PATCH', '/org/roles/' + r.id, { name: name.value, permissions: ticked(boxes) })); say(name.value + ' saved. Everyone with it has the new permissions.', true); }
+          catch (err) { say(err.message, false); }
+        });
+        var del = el('button', { type: 'button', className: 'btn btn-secondary', text: 'Delete' });
+        del.disabled = r.holders > 0;
+        if (r.holders > 0) del.title = 'Give its people another role first';
+        del.addEventListener('click', async function () {
+          if (!window.confirm('Delete the role ' + r.name + '?')) return;
+          try { await refreshAfterRoleChange(await api('DELETE', '/org/roles/' + r.id)); say(r.name + ' deleted.', true); }
+          catch (err) { say(err.message, false); }
+        });
+        details.append(el('label', { className: 'people-field' }, [document.createTextNode('Name'), name]), boxes,
+          el('div', { className: 'people-dialog-actions' }, [del, save]));
+        list.append(details);
+      });
+
+      var base = $(rolesRoot, '[data-custom-role-base]');
+      if (!base.options.length) {
+        data.built_in.filter(function (b) { return b.can_clone; }).forEach(function (b) {
+          base.append(el('option', { value: b.value, text: b.label }));
+        });
+        base.value = 'production';
+      }
+      var slot = $(rolesRoot, '[data-custom-role-perms]');
+      function reseed() {
+        var b = data.built_in.find(function (x) { return x.value === base.value; });
+        slot.replaceChildren(permissionBoxes(b ? b.clone_permissions : []));
+      }
+      base.onchange = reseed;
+      reseed();
+    }
+
+    if (rolesRoot) {
+      $(rolesRoot, '[data-custom-role-form]').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var f = e.target;
+        var boxes = $(rolesRoot, '[data-custom-role-perms] .people-perms');
+        try {
+          await refreshAfterRoleChange(await api('POST', '/org/roles', {
+            name: f.name.value, base_role: f.base_role.value, description: f.description.value, permissions: ticked(boxes)
+          }));
+          say(f.name.value + ' created. Pick it as anyone\'s role above.', true);
+          f.reset();
+          f.closest('details').open = false;
+        } catch (err) { say(err.message, false); }
+      });
+    }
 
     load();
   }

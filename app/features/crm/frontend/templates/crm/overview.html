@@ -1,11 +1,11 @@
 {% extends "shared/base_spa.html" %}
-{% block title %}CRM{% endblock %}
+{% block title %}Sales{% endblock %}
 {% block body_class %}crm-page{% endblock %}
 {% block head_extras %}{% endblock %}
 
 {% block content %}
 <div class="max-content crm-root" x-data="crmOverview()" x-init="init()">
-  {% set crm_heading = "CRM" %}
+  {% set crm_heading = "Sales" %}
   {% set crm_subtitle = "Sales performance and customer insights" %}
   {% include "crm/_crm_banner.html" %}
   {% set active_crm_tab = "overview" %}
