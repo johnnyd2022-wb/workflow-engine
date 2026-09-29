@@ -129,9 +129,17 @@
 
   /** Processes + executions + activity feed: needed for trace views and the Activity
    *  tab, not for first paint. Fetched once, after the browse grid has rendered. */
+  /* Roles without production access (e.g. Sales) see stock and traces but not batches
+     or the activity feed; the server refuses those anyway (plan 0.4). */
+  function smCanSeeProduction() {
+    const el = document.querySelector('[data-sm-can-production]');
+    return !el || el.dataset.smCanProduction !== 'false';
+  }
+
   async function smLoadSecondaryData() {
     if (_smSecondaryLoaded) return;
     _smSecondaryLoaded = true;
+    if (!smCanSeeProduction()) return;
     const [processesData, executionsData, activityData] = await Promise.all([
       CoreAPI.getProcesses(true).catch(() => ({ processes: [] })),
       CoreAPI.getExecutions().catch(() => ({ executions: [] })),
@@ -167,7 +175,7 @@
       { key: 'batches',   label: 'Batches' },
       { key: 'suppliers', label: 'Suppliers' },
       { key: 'activity',  label: 'Activity' },
-    ];
+    ].filter(t => smCanSeeProduction() || (t.key !== 'batches' && t.key !== 'activity'));
 
     const tabStrip = document.createElement('div');
     tabStrip.className = 'sm-browse-seg';
@@ -888,6 +896,18 @@
     const sharedSourceIds = new Set([...rawCountMap.entries()].filter(([, c]) => c > 1).map(([id]) => id));
 
     area.appendChild(smBuildImpactHeader(tracedItem, groups));
+
+    // Plan 1.3: opening stock was counted at go-live, so the trace starts there.
+    const opening = allItems.filter(item => item && item.extra_data && item.extra_data.opening_stock);
+    if (opening.length) {
+      const asOf = opening[0].extra_data.opening_as_of;
+      const note = document.createElement('p');
+      note.className = 'sm-opening-note';
+      note.style.cssText = 'margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #eef4ff; color: #1f3a68; font-size: 13px;';
+      note.textContent = 'Opening stock' + (asOf ? ' counted at go-live on ' + new Date(asOf).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ' counted at go-live') +
+        '. History before then wasn\'t recorded; production and sales from that date on are traced.';
+      area.appendChild(note);
+    }
 
     if (!productionConnections.length && !sales.length) {
       const lone = document.createElement('div');
@@ -1803,7 +1823,10 @@
       const invoice = sale.invoice_number || sale.xero_invoice_id || 'Xero invoice';
       const customer = sale.customer_name ? ' · ' + sale.customer_name : '';
       const saleDate = sale.sale_date ? ' · ' + smFmtDate(sale.sale_date) : '';
-      meta.textContent = invoice + customer + saleDate;
+      // Plan 1.1: a pre-sale (filled from a batch made after the invoice) is normal; say so.
+      const flags = [sale.presold ? 'pre-sold' : '', sale.match_status === 'pending_review' ? 'awaiting review' : '']
+        .filter(Boolean).join(', ');
+      meta.textContent = invoice + customer + saleDate + (flags ? ' · ' + flags : '');
       row.append(title, meta);
       section.appendChild(row);
     });

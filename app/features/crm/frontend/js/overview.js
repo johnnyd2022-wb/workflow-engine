@@ -85,7 +85,7 @@ function crmOverview() {
         this.loadWidgetLayout();
         await this.refreshCustomWidgets();
       } catch (e) {
-        this.error = e.message || 'Failed to load CRM overview.';
+        this.error = e.message || 'Failed to load Sales overview.';
       } finally {
         this.loading = false;
         await this.$nextTick();

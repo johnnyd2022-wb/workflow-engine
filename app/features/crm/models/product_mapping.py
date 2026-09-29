@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
@@ -24,6 +24,8 @@ class ProductMapping(TenantScoped, Base):
     xero_description_pattern = Column(String(500), nullable=False)
     match_type = Column(String(50), nullable=False, default="exact")  # exact | contains | alias
     is_active = Column(Boolean, nullable=False, default=True)
+    # Stock units one invoice-line quantity takes: 6 for "Case of 6". Plan 1.2.
+    units_per_line = Column(Integer, nullable=False, default=1, server_default="1")
     notes = Column(Text, nullable=True)
     created_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)

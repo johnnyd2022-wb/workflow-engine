@@ -2,7 +2,7 @@
 status: reviewed
 name: Compliance / system findings checks (expired materials, untracked items, output expiry, output ready date)
 slug: compliance-checks
-blueprint: core_bp — `app/core/backend/corechecks.py` registers routes on `core_bp`;
+blueprint: core_bp — `app/features/compliance_checks/routes/corechecks.py` registers routes on `core_bp`;
   page route in `app/core/backend/backend.py`
 url_prefix: /api/core, /core
 
