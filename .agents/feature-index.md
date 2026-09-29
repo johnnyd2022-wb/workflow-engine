@@ -62,6 +62,7 @@ how they get carved.
 | running a batch, completing a step, DAG, evidence upload | execution |
 | stock levels, adding/adjusting items, CSV import, barcodes, units | inventory |
 | sites, multiple sites setting, physical stock and execution tags | sites |
+| dispatch, transit, partial receipt, transfer docket | site-transfers |
 | disposal, waste, writing stock off | wastage |
 | untracked stock, matching, "the numbers don't line up" | reconciliation |
 | expired materials, findings, system status, notifications, compliance | compliance-checks |
@@ -81,6 +82,15 @@ how they get carved.
 | entered demand, material feasibility, capacity, stock risk | planning (planned) |
 | rule templates, automated alerts, overdue chases, automation worker | automations (planned) |
 | performance cockpit, metric definitions, business trends | dashboard (planned extension) |
+
+## site-transfers
+
+- **subscription:** core · **layer:** domain
+- **purpose:** Recorded producer-owned dispatch, transit, partial receipt and confirmed losses; internal operational release stays off.
+- **entry points:** `/core/site-transfers`, `/api/core/site-transfers*`; blueprint `app/features/site_transfers/routes.py`.
+- **state/writes:** `SiteStockTransfer`, `SiteStockReceipt`, immutable inventory receipt proofs; `app/features/site_transfers/service.py` owns atomic movement accounting.
+- **dependencies:** Sites, inventory, generic Compliant stock movement decisions/field metadata; industry rules remain module-owned.
+- **depended on by:** inventory shelf identity, FIFO, lineage tracing and future customer ownership/CCA attribution.
 
 ## sites
 
