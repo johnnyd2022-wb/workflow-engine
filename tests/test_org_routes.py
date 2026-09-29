@@ -430,11 +430,13 @@ def test_delete_user_failure_returns_generic_error(org_world, monkeypatch):
 
 
 def test_forbidden_role_check_logs_access_denied(org_world, monkeypatch):
-    """observability: @requires_role must log an access_denied warning, not fail silently."""
-    from app.core.security import permissions
+    """observability: a refused request must log an access_denied warning, not fail
+    silently. Since plan 0.4 the access policy refuses before @requires_role runs, so the
+    warning comes from the policy, naming the permission that was missing."""
+    from app.core.security import access_policy
 
     calls = []
-    monkeypatch.setattr(permissions.logger, "warning", lambda event, **kw: calls.append((event, kw)))
+    monkeypatch.setattr(access_policy.logger, "warning", lambda event, **kw: calls.append((event, kw)))
 
     resp = org_world["member_client"].post("/org/users", json={"email": "x@test.com", "password": PASSWORD})
     assert resp.status_code == 403
@@ -442,8 +444,9 @@ def test_forbidden_role_check_logs_access_denied(org_world, monkeypatch):
     assert len(calls) == 1
     event, kw = calls[0]
     assert event == "access_denied"
-    assert kw["reason"] == "role_not_allowed"
-    assert kw["path"] == "/org/users"
+    assert kw["reason"] == "missing_permission"
+    assert kw["endpoint"] == "org.create_user"
+    assert kw["required"] == "users.manage"
     assert kw["user_role"] == "member"
 
 

@@ -84,7 +84,7 @@ server up)
 | # | Flow | App area | Test file(s) | Status | Notes |
 |---|---|---|---|---|---|
 | 20 | Dashboard summary | core_bp `/core/dashboard` | test_dashboard_summary.py | covered | Batch 6 re-assessment: `test_dashboard_operations_summary_org_isolated` already proves cross-org isolation; task/compliance/action-board summaries covered too. Original "no cross-org test" note was wrong |
-| 21 | Core system checks | `app/core/backend/corechecks.py` | test_corechecks.py | covered | 23 tests |
+| 21 | Core system checks | `app/features/compliance_checks/routes/corechecks.py` | test_corechecks.py | covered | 23 tests |
 | 22 | Frontend asset/guards (execution modal, batches) | core frontend JS/templates | test_execution_modal_frontend_assets.py, test_batches_refactor_frontend_guards.py, test_execution_shared_utils_js.py | covered | asset-presence + guard tests |
 | 23 | Observability (logging/tracing/telemetry ingress/CLI) | `app/observability/*` | test_observability_*.py (10 files) | covered | broad; owned jointly with observability skill |
 
