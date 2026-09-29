@@ -428,7 +428,7 @@ records, not from people typing figures in.
     week before each action; the dashboard module card carries the next date as a
     milestone (rendered by !412). Recording a visit clears the booked-visit fields.
 
-- [ ] **2.3 Make evidence counts consistent and clickable.** *S*
+- [x] **2.3 Make evidence counts consistent and clickable.** *S* (!347)
   - Evidence: "38 evidence ready" appears next to "0 active evidence files" on the NP3
     page, and the "Guided next steps" panel is empty.
   - Change: define ready, needs evidence and overdue once; every count links to the
