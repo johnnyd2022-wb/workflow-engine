@@ -716,8 +716,9 @@ plan branch and are delivered separately.
       area" comes from the site's CCA, replacing the manual flag.
       - [x] Customs licence register and dated, nonoverlapping site/location coverage (!430).
       - [x] Explicit liquor-licence site assignment and tenant validation (!435).
-        Food registration links and movement-policy replacement of the manual flag
-        remain open.
+      - [x] Explicit food-registration/activity scope and isolated per-registration NP
+        verification histories (!439). FCP verification automation and movement-policy
+        replacement of the manual flag remain open.
     - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
       consignment note) → in transit (on the books, on no shelf) → received, with short,
       over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
