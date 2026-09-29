@@ -130,6 +130,14 @@ EXCLUDE_GLOBS = (
     # "cross-tenant"). A deferred *bug fix* in a review report is still swept; a
     # deferred product *decision* in a roadmap is not.
     "!docs/customer-value-execution-plan-*.md",
+    # Architecture/contract reference doc ("How Compliant plugs into Core"), the same
+    # genre as .agents/conventions.md above -- it documents how the seam works, not a
+    # findings tracker. Its "Conventions:" bullet list sits under a "## Checks: alerts,
+    # findings and the dashboard" heading, where the bare word "findings" (naming a data
+    # type the seam produces, not a section of open issues) opened a `finding` section and
+    # swept three descriptive convention bullets ("href is always a same-origin path",
+    # etc.) as P0 security findings in the first real sweep of this file.
+    "!docs/compliant-core-contract.md",
 )
 
 # ---------------------------------------------------------------------------
@@ -237,6 +245,26 @@ CLOSED_HEADING_RE = re.compile(
 # Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
 # not trip CLOSED_HEADING_RE; those headings are explicitly saying the opposite.
 NEGATED_CLOSURE_RE = re.compile(r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved)\b", re.I)
+
+# A checked checkbox or checkmark in a heading's own title -- this repo's numbered
+# work-item convention ("### 1. Slim the `system-findings` banner payload -- `[x]`
+# (commit: ...)"), used verbatim across docs/workflows-load-performance.md,
+# docs/live-sync-architecture.md, docs/aer-architecture-review.md, and elsewhere.
+# Unlike CLOSED_HEADING_RE's textual cues, several real headings in that convention mark
+# done status *only* via this mark, with no "fixed"/"done"/"closed" word anywhere in the
+# title (the prose right below carries that instead) -- so the textual check alone missed
+# them. It mattered because one such heading's own title contains "system-findings", which
+# \bfindings?\b reads as an open `finding` section: without this, its already-shipped
+# "original plan" bullets re-entered the worklist every sweep. An *unchecked* `[ ]` must
+# not match -- that means still open.
+CLOSED_HEADING_MARKER_RE = re.compile(r"[✅✔]|`?\[[xX]\]`?")
+
+
+def _heading_declares_closed(title: str) -> bool:
+    if NEGATED_CLOSURE_RE.search(title):
+        return False
+    return bool(CLOSED_HEADING_RE.search(title) or CLOSED_HEADING_MARKER_RE.search(title))
+
 
 # A file path, optionally with a line or line-range, as this repo writes them in prose:
 # `backend.py:2679`, `app/utils/config_loader.py:153-155`, `inventory_quantity_guard.py:57-70`.
@@ -660,7 +688,7 @@ def parse_doc(path: Path) -> list[Item]:
         heading = HEADING_RE.match(line)
         if heading:
             level, title = len(heading.group(1)), heading.group(2)
-            declares_closed = CLOSED_HEADING_RE.search(title) and not NEGATED_CLOSURE_RE.search(title)
+            declares_closed = _heading_declares_closed(title)
             # A level-1 heading is this repo's document title, written once, never a
             # section marker -- and since a level-1 section can only be closed by another
             # level-1 heading, a title that happens to contain a trigger word (e.g. this
@@ -914,7 +942,7 @@ def _parse_mr_description(desc: str, pseudo_path: str) -> list[Item]:
         heading = HEADING_RE.match(line)
         if heading:
             level, title = len(heading.group(1)), heading.group(2)
-            declares_closed = CLOSED_HEADING_RE.search(title) and not NEGATED_CLOSURE_RE.search(title)
+            declares_closed = _heading_declares_closed(title)
             # See parse_doc's matching comment: a level-1 heading must never open a
             # section, or a title-word match becomes unclosable for the rest of the text.
             kind = (

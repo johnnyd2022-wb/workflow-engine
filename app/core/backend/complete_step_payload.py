@@ -7,6 +7,7 @@ Trace/audit keys in execution_data are still stripped in backend after validatio
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -49,6 +50,7 @@ class CompleteStepRequestBody(BaseModel):
     actual_inputs: list[Any] = Field(default_factory=list)
     actual_outputs: list[Any] = Field(default_factory=list)
     execution_data: dict[str, Any] = Field(default_factory=dict)
+    occurred_at: datetime | None = None
     allow_consumption_override: bool = False
 
 
