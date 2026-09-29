@@ -53,6 +53,7 @@ def list_customers():
         sort_dir=sort_dir,
         page=page,
         page_size=page_size,
+        missing_contact=request.args.get("missing_contact") == "1",
     )
     return jsonify(result), 200
 

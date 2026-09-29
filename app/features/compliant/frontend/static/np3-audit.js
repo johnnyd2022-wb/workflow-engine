@@ -3,6 +3,8 @@
 
   var root = document.querySelector('[data-np3-audit-root]');
   if (!root) return;
+  // NP1, NP2 and NP3 share this workspace (plan 2.4b).
+  var NP = root.dataset.programmeShort || 'NP3';
 
   var error = root.querySelector('[data-np3-error]');
   var date = root.querySelector('[data-np3-date]');
@@ -72,13 +74,13 @@
     details.appendChild(text('summary', 'Show guidance and evidence options'));
     var body = document.createElement('div');
     body.className = 'np3-evidence-options__body';
-    body.appendChild(text('p', 'The official guidance is mapped to “' + (plan.section || row.source_reference || 'NP3 guidance') + '”.'));
+    body.appendChild(text('p', 'The official guidance is mapped to “' + (plan.section || row.source_reference || NP + ' guidance') + '”.'));
     var link = document.createElement('a');
     link.className = 'np3-inline-link';
     link.href = row.guidance_url;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    link.textContent = 'Open the official NP3 section ↗';
+    link.textContent = 'Open the official ' + NP + ' section ↗';
     body.appendChild(link);
     if ((plan.proof || []).length) {
       var list = document.createElement('ul');
@@ -99,14 +101,14 @@
     details.className = 'np3-topic np3-topic--' + stateClass(row);
     var heading = document.createElement('summary');
     var copy = document.createElement('span');
-    copy.appendChild(text('strong', row.topic || row.control_title || 'NP3 check'));
+    copy.appendChild(text('strong', row.topic || row.control_title || NP + ' check'));
     copy.appendChild(text('span', row.requirement_summary || row.summary || '', 'np3-topic-action'));
     heading.appendChild(copy);
     heading.appendChild(text('span', stateLabel(row), 'np3-state'));
     details.appendChild(heading);
     var detail = document.createElement('div');
     detail.className = 'np3-topic__detail';
-    detail.appendChild(text('p', row.requirement_summary || 'Review this NP3 requirement and its evidence.'));
+    detail.appendChild(text('p', row.requirement_summary || 'Review this ' + NP + ' requirement and its evidence.'));
     detail.appendChild(text('p', 'MPI section: ' + (row.source_reference || (row.evidence_playbook || {}).section || 'National Programme 3 guidance'), 'np3-guidance-reference'));
     if (row.guidance_update) detail.appendChild(text('p', row.guidance_update, 'np3-guidance-alert'));
     detail.appendChild(guidance(row));
@@ -167,7 +169,7 @@
     var list = document.createElement('div');
     list.className = 'np3-topic-list';
     if (visibleRows.length) visibleRows.forEach(function (row) { list.appendChild(topic(row)); });
-    else list.appendChild(text('p', searching ? 'No NP3 checks match this search.' : 'No checks in this section match the selected health view. Choose another status above to see the full register.'));
+    else list.appendChild(text('p', searching ? 'No ' + NP + ' checks match this search.' : 'No checks in this section match the selected health view. Choose another status above to see the full register.'));
     section.appendChild(list);
     categoryRoot.appendChild(section);
   }
@@ -193,7 +195,7 @@
       var track = document.createElement('div');
       track.className = 'np3-health-progress__track';
       track.setAttribute('role', 'progressbar');
-      track.setAttribute('aria-label', 'NP3 evidence readiness');
+      track.setAttribute('aria-label', NP + ' evidence readiness');
       track.setAttribute('aria-valuemin', '0');
       track.setAttribute('aria-valuemax', '100');
       track.setAttribute('aria-valuenow', String(percent));
@@ -295,10 +297,10 @@
     root.setAttribute('aria-busy', 'false');
   }
   fetch('/api/compliant/np3-audit').then(function (response) {
-    if (!response.ok) throw new Error('Could not load the NP3 audit register');
+    if (!response.ok) throw new Error('Could not load the ' + NP + ' audit register');
     return response.json();
   }).then(function (data) { audit = data; render(); }).catch(function (err) {
     root.setAttribute('aria-busy', 'false');
-    showError(err.message || 'Could not load the NP3 audit register');
+    showError(err.message || 'Could not load the ' + NP + ' audit register');
   });
 }());

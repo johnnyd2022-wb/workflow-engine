@@ -4,8 +4,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.core.backend.corechecks import CheckResult
-from app.core.backend.system_status import _signals_from_results
+from app.features.compliance_checks.routes.corechecks import CheckResult
+from app.features.compliance_checks.system_status import _signals_from_results
 from app.features.compliant.modules.nz_alcohol.catalogue import control_reference, framework_applies
 from app.features.compliant.modules.nz_alcohol.module import _np3_workspace_summary
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
@@ -127,7 +127,7 @@ def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
     assert 'href="/api/compliant/np3-audit?format=pdf" hx-boost="false"' in audit
 
 
-def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeholders():
+def test_food_safety_tab_tracks_the_configured_programme_for_np1_np2_and_np3():
     tabs = (
         ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_nz_alcohol_tabs.html"
     ).read_text(encoding="utf-8")
@@ -135,17 +135,6 @@ def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeho
     configuration = (ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "configuration.js").read_text(
         encoding="utf-8"
     )
-    placeholder = (
-        ROOT
-        / "app"
-        / "features"
-        / "compliant"
-        / "frontend"
-        / "templates"
-        / "compliant"
-        / "food_safety_coming_soon.html"
-    ).read_text(encoding="utf-8")
-
     assert _food_safety_programme({"food_control_programme": "np1"}) == "np1"
     assert _food_safety_programme({"food_control_programme": "np2"}) == "np2"
     assert _food_safety_programme({"food_control_programme": "unexpected"}) == "np3"
@@ -155,7 +144,8 @@ def test_food_safety_tab_tracks_the_configured_programme_and_has_np1_np2_placeho
     assert 'route("/compliant/nz-alcohol/food-safety"' in routes
     assert 'route("/compliant/nz-alcohol/customs"' in routes
     assert "updateFoodSafetyTab" in configuration
-    assert "support is coming soon" in placeholder
+    # NP1 and NP2 use the same verification workspace as NP3 (plan 2.4b), not a placeholder.
+    assert 'if programme in {"np1", "np2", "np3"}' in routes
 
 
 def test_selected_national_programme_is_the_only_programme_in_the_plan():

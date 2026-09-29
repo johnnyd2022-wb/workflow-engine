@@ -16,57 +16,8 @@
 {% block content %}
   <div class="workflow-dashboard dashboard-v3" data-dashboard-root>
     <div class="dashboard-shell">
-      <div class="spa-hub-yellow-sleeve">
-        <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
-          <div class="inventory-spa-header__banner" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;max-height:120px;">
-              <defs>
-                <linearGradient id="dash-line-a" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="#3b82f6"/>
-                  <stop offset="100%" stop-color="#2DD4BF"/>
-                </linearGradient>
-                <linearGradient id="dash-line-b" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="#2DD4BF"/>
-                  <stop offset="100%" stop-color="#22c55e"/>
-                </linearGradient>
-                <linearGradient id="dash-node-a" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#60a5fa"/>
-                  <stop offset="100%" stop-color="#2563eb"/>
-                </linearGradient>
-                <linearGradient id="dash-node-b" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#5eead4"/>
-                  <stop offset="100%" stop-color="#0f766e"/>
-                </linearGradient>
-                <linearGradient id="dash-node-c" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#4ade80"/>
-                  <stop offset="100%" stop-color="#15803d"/>
-                </linearGradient>
-                <filter id="dash-soft" x="-20%" y="-20%" width="140%" height="140%">
-                  <feDropShadow dx="0" dy="2" stdDeviation="2.2" flood-opacity="0.14"/>
-                </filter>
-              </defs>
-              <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
-              <path d="M28 52 C 55 36, 75 60, 100 52" stroke="url(#dash-line-a)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.9" stroke-dasharray="5,3"/>
-              <path d="M100 52 C 125 44, 145 68, 172 52" stroke="url(#dash-line-b)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.9" stroke-dasharray="5,3"/>
-              <g filter="url(#dash-soft)">
-                <circle cx="28" cy="52" r="16" fill="url(#dash-node-a)"/>
-                <circle cx="100" cy="52" r="18" fill="url(#dash-node-b)"/>
-                <circle cx="172" cy="52" r="16" fill="url(#dash-node-c)"/>
-              </g>
-              <path d="M23 53l5-9 5 9h-3l2 8h-8l2-8h-3z" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round" opacity="0.92"/>
-              <circle cx="100" cy="52" r="7" fill="none" stroke="#fff" stroke-width="1.8" opacity="0.92"/>
-              <path d="M100 47v10M95.5 50h9M96 55h8" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity="0.92"/>
-              <rect x="165" y="46" width="14" height="12" rx="2.5" fill="none" stroke="#fff" stroke-width="1.8" opacity="0.92"/>
-              <path d="M165 50h14M168 46v-2.5M176 46v-2.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity="0.92"/>
-            </svg>
-          </div>
-        </div>
-      </div>
-
       <section class="spa-form-section spa-page-hero dash-page-hero" aria-labelledby="dashboard-page-title">
-        <p class="dash-eyebrow">BUSINESS CONTROL TOWER</p>
-        <h1 class="page-title" id="dashboard-page-title">See the whole business. Act in the right workspace.</h1>
-        <p class="page-subtitle">Dashboard brings together Core operations, Compliant evidence, and CRM commitments. Resolve the work in its specialist workspace.</p>
+        <h1 class="page-title" id="dashboard-page-title">Dashboard</h1>
         <p class="dash-refresh">Last refresh: <span data-dashboard-date>now</span></p>
       </section>
 
@@ -104,12 +55,10 @@
       <section class="dash-card dash-attention-card" aria-labelledby="dashboard-attention-title">
         <div class="dash-card-header">
           <div>
-            <p class="dash-eyebrow">CROSS-BUSINESS QUEUE</p>
             <h2 id="dashboard-attention-title">Needs attention</h2>
           </div>
           <a href="/core/notifications">Review findings</a>
         </div>
-        <p class="dash-caption">Prioritised signals from Core, Compliant, and CRM. Open an item to resolve it where the work lives.</p>
         <ul class="dash-list" data-action-list>
           <li class="dash-empty">Loading cross-business priorities...</li>
         </ul>
@@ -118,50 +67,48 @@
       <section class="dash-workspace-section" aria-labelledby="dashboard-workspaces-title">
         <div class="dash-section-heading">
           <div>
-            <p class="dash-eyebrow">DO THE WORK</p>
-            <h2 id="dashboard-workspaces-title">Choose a workspace</h2>
+            <h2 id="dashboard-workspaces-title">Workspaces</h2>
           </div>
-          <p>Dashboard gives you the signal. These workspaces hold the detailed tools and records.</p>
         </div>
         <div class="dash-workspace-grid">
           {% if can('production.view', 'inventory.view') %}
-          <a class="dash-workspace-card" href="/core" aria-label="Open Core operations workspace">
+          <a class="dash-workspace-card" href="/core" aria-label="Open Production operations workspace">
             <span class="dash-workspace-card__eyebrow">CORE</span>
             <h3>Run production and inventory</h3>
             <p data-dashboard-core-summary>Loading operations summary...</p>
-            <span class="dash-workspace-card__link">Open Core <span aria-hidden="true">→</span></span>
+            <span class="dash-workspace-card__link">Open Production <span aria-hidden="true">→</span></span>
           </a>
           {% endif %}
 
           {% if compliant_subscribed and can('compliance.view') %}
-          <a class="dash-workspace-card" href="/compliant" hx-boost="false" data-dashboard-compliant-card aria-label="Open Compliant evidence workspace">
-            <span class="dash-workspace-card__eyebrow">COMPLIANT</span>
+          <a class="dash-workspace-card" href="/compliant" hx-boost="false" data-dashboard-compliant-card aria-label="Open Compliance evidence workspace">
+            <span class="dash-workspace-card__eyebrow">COMPLIANCE</span>
             <h3>Prove compliance with evidence</h3>
             <p data-dashboard-compliant-summary>Loading evidence summary...</p>
             <div class="dash-compliant-health" data-dashboard-compliant-health hidden aria-live="polite"></div>
-            <span class="dash-workspace-card__link" data-dashboard-compliant-link>Open Compliant <span aria-hidden="true">→</span></span>
+            <span class="dash-workspace-card__link" data-dashboard-compliant-link>Open Compliance <span aria-hidden="true">→</span></span>
           </a>
           {% elif not compliant_subscribed %}
-          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Compliant workspace availability">
-            <span class="dash-workspace-card__eyebrow">COMPLIANT</span>
+          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Compliance workspace availability">
+            <span class="dash-workspace-card__eyebrow">COMPLIANCE</span>
             <h3>Prove compliance with evidence</h3>
-            <p data-dashboard-compliant-summary>Compliant is not enabled for this organisation.</p>
+            <p data-dashboard-compliant-summary>Compliance is not enabled for this organisation.</p>
             <span class="dash-workspace-card__link">Not enabled</span>
           </article>
           {% endif %}
 
           {% if crm_enabled and can('sales.view') %}
-          <a class="dash-workspace-card" href="/crm" aria-label="Open CRM workspace">
-            <span class="dash-workspace-card__eyebrow">CRM</span>
+          <a class="dash-workspace-card" href="/crm" aria-label="Open Sales workspace">
+            <span class="dash-workspace-card__eyebrow">Sales</span>
             <h3>Manage customers and commitments</h3>
             <p data-dashboard-crm-summary>Loading customer commitments...</p>
-            <span class="dash-workspace-card__link">Open CRM <span aria-hidden="true">→</span></span>
+            <span class="dash-workspace-card__link">Open Sales <span aria-hidden="true">→</span></span>
           </a>
           {% elif not crm_enabled %}
-          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="CRM workspace availability">
-            <span class="dash-workspace-card__eyebrow">CRM</span>
+          <article class="dash-workspace-card dash-workspace-card--unavailable" aria-label="Sales workspace availability">
+            <span class="dash-workspace-card__eyebrow">Sales</span>
             <h3>Manage customers and commitments</h3>
-            <p data-dashboard-crm-summary>CRM is not enabled for this organisation.</p>
+            <p data-dashboard-crm-summary>Sales is not enabled for this organisation.</p>
             <span class="dash-workspace-card__link">Not enabled</span>
           </article>
           {% endif %}
@@ -171,10 +118,8 @@
       <section class="dash-signals-section" aria-labelledby="dashboard-signals-title">
         <div class="dash-section-heading">
           <div>
-            <p class="dash-eyebrow">CONTEXT, NOT A TO-DO LIST</p>
             <h2 id="dashboard-signals-title">Business signals</h2>
           </div>
-          <p>Use trends to understand the picture; use the attention queue and workspaces to take action.</p>
         </div>
       <div class="dash-kpi-grid" aria-label="Business signals">
         <article class="dash-kpi-card">
@@ -198,11 +143,11 @@
           <p class="dash-kpi-value" data-kpi-active-batches>0</p>
           <p class="dash-kpi-meta">Currently in progress</p>
           <div class="dash-kpi-spark" data-kpi-spark="active_batches"></div>
-          <a class="dash-kpi-link" href="/core">Open Core</a>
+          <a class="dash-kpi-link" href="/core">Open Production</a>
         </article>
 
         {% if crm_enabled and can('sales.view') %}
-        <article class="dash-kpi-card">
+        <article class="dash-kpi-card" data-kpi-revenue-goal-card>
           <p class="dash-kpi-label">Monthly revenue goal</p>
           <p class="dash-kpi-value" data-kpi-revenue-goal>n/a</p>
           <p class="dash-kpi-meta">Baseline attainment (month-to-date)</p>
@@ -278,8 +223,8 @@
           <div class="dash-stat-rows">
             <div class="dash-stat-row"><span>Revenue month-to-date</span><strong data-sales-revenue-mtd>$0</strong></div>
             <div class="dash-stat-row"><span>Revenue baseline target</span><strong data-sales-baseline-target>$0</strong></div>
-            <div class="dash-stat-row"><span>Revenue variance vs baseline</span><strong data-sales-baseline-variance>n/a</strong></div>
-            <div class="dash-stat-row"><span>Revenue month-on-month change</span><strong data-sales-mom>n/a</strong></div>
+            <div class="dash-stat-row" data-sales-baseline-variance-row hidden><span>Revenue variance vs baseline</span><strong data-sales-baseline-variance></strong></div>
+            <div class="dash-stat-row" data-sales-mom-row hidden><span>Revenue month-on-month change</span><strong data-sales-mom></strong></div>
           </div>
           <p class="dash-caption" data-sales-caption>Define a baseline in CRM Configuration to track attainment.</p>
         </section>

@@ -149,7 +149,7 @@
   }
   function renderSelectedCoreSources() {
     var target = root.querySelector('[data-core-source-selected]'); clear(target);
-    if (!selectedCoreSources.size) { target.textContent = 'No Core records selected.'; return; }
+    if (!selectedCoreSources.size) { target.textContent = 'No Production records selected.'; return; }
     selectedCoreSources.forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button';
       button.textContent = 'Remove ' + item.title;
@@ -164,7 +164,7 @@
   function renderCoreSourcePicker(candidates, append) {
     var target = root.querySelector('[data-core-source-picker]');
     if (!append) clear(target);
-    if (!candidates.length && !append) { target.textContent = 'No Core records found.'; renderSelectedCoreSources(); return; }
+    if (!candidates.length && !append) { target.textContent = 'No Production records found.'; renderSelectedCoreSources(); return; }
     candidates.forEach(function (item) {
       var label = document.createElement('label'); label.className = 'core-source-picker__choice';
       var checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.name = 'core_source_ref'; checkbox.value = item.id;
@@ -173,7 +173,7 @@
         var form = root.querySelector('[data-record-form]');
         if (checkbox.checked && selectedCoreSources.size >= 30) {
           checkbox.checked = false;
-          showError('Choose at most 30 Core source records.');
+          showError('Choose at most 30 Production records.');
           return;
         }
         if (checkbox.checked) selectedCoreSources.set(item.id, item);

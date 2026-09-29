@@ -1,0 +1,8 @@
+{% extends "portal/base.html" %}{% block title %}Your orders · Customer portal{% endblock %}{% block content %}<h1>Your orders</h1>{% for category in ['Current orders','Past orders'] %}<section>
+<h2>{{ category }}</h2>{% set state=namespace(found=false) %}{% for order in orders if (order.status in ['completed','cancelled']) == (category == 'Past orders') %}{% set state.found=true %}<article>
+<h3>
+<a href="/portal/orders/{{ order.order_id }}">{{ order.reference }}</a>
+</h3>
+<p>{{ order.producer_name }} · {{ order.status|capitalize }} · Due {{ order.due_date }}</p>
+<p>{{ order.progress.stage_label or 'Progress not shared yet' }}</p>
+</article>{% endfor %}{% if not state.found %}<p>No shared {{ category|lower }} yet.</p>{% endif %}</section>{% endfor %}{% endblock %}
