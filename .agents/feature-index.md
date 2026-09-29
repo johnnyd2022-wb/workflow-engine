@@ -297,7 +297,8 @@ do not introduce reverse imports into existing domain code.
       - /core/inventory/dispose
       - /core/inventory/dispose/confirm
       - /api/core/inventory/wastage
-    backend:  app/core/backend/backend.py:3526-3541 (advisory lock), :3542-3946 (record+list)
+    backend:  app/features/wastage/routes/wastage_routes.py (disposal pages, advisory lock,
+              record+list routes; registered on core_bp)
               app/core/utils/inventory_wastage_quantity.py (89)
     models:   InventoryWastage
     repos:    wastage_repo
@@ -308,7 +309,7 @@ do not introduce reverse imports into existing domain code.
     depended on by:  compliance-checks, dashboard
 
     - Idempotency is a Postgres advisory lock keyed on batch hash
-      (_pg_advisory_lock_wastage_idempotency, backend.py:3526) — not the ApiIdempotencyKey
+      (_pg_advisory_lock_wastage_idempotency, wastage_routes.py) — not the ApiIdempotencyKey
       table the rest of the app uses. Two different mechanisms; don't assume one.
     - Separate table and separate compliance meaning from an inventory adjustment. Writing
       stock off is not the same event as correcting a count.
@@ -351,9 +352,10 @@ do not introduce reverse imports into existing domain code.
       - /api/core/inventory/untracked-items
       - /api/core/inventory/output-expiry
       - /api/core/inventory/output-ready-date
-    backend:  app/core/backend/corechecks.py (281 — CoreChecksRunner + registry)
-              app/core/backend/checks/
-              app/core/backend/system_status.py (269)
+    backend:  app/features/compliance_checks/routes/corechecks.py (CoreChecksRunner + registry)
+              app/features/compliance_checks/checks/{output_ready_date_check,output_expiry_check,
+                untracked_items (265),expired_materials (114)}.py
+              app/features/compliance_checks/{system_findings_cache,system_status}.py
               app/core/domain/{expiry_rules,ready_date_rules,expiry_ready_date_rules}.py
     frontend: frontend/notifications/notifications.html,
               js/system-findings-notifications.js (1148), js/system-findings-banner.js (513),
@@ -416,7 +418,9 @@ do not introduce reverse imports into existing domain code.
       - /api/core/entities/<entity_type>/<entity_id>/summary
       - /api/core/entities/activity
       - /api/core/changes
-    backend:  app/core/backend/backend.py:5791-6569 (event→human diff rendering)
+    backend:  app/features/activity_log/routes/activity_routes.py (event→human diff
+              rendering and three read routes; registered on core_bp)
+              app/core/backend/changes_feed.py (polled change feed; registered on core_bp)
               app/core/backend/event_writer.py (497) — WRITER, belongs to platform
               app/core/utils/{emit_event,log_action}.py
     models:   EntityEvent, EntityEventSummary, AuditLog
@@ -428,7 +432,7 @@ do not introduce reverse imports into existing domain code.
 
     - Split of responsibility: EventWriter is platform (every slice emits events); reading
       the stream back as human-readable history is this slice. Writer down, reader up.
-    - _merge_inventory_legacy_audit (backend.py:6342) blends pre-event-sourcing AuditLog
+    - _merge_inventory_legacy_audit (activity_routes.py) blends pre-event-sourcing AuditLog
       rows into the modern EntityEvent stream. There are two historical formats in play.
     - Much of the block is diff humanisation (_smart_list_diff_rows, _human_summary,
       _fmt_field_value). Presentation logic in the API layer — a candidate for a service.

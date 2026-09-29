@@ -91,6 +91,8 @@ Small, and everything else builds on it.
     database.
   - Remaining work: schedule backups and rehearse a restore before the first paying
     customer.
+  - [x] Backup CLI, nightly timer template and isolated restore rehearsal tooling
+    (!416); synthetic rehearsal passed. Production scheduling/rehearsal remain.
   - Done when: the test suite cannot reach a real tenant, and a restore has been
     rehearsed.
 
@@ -112,9 +114,11 @@ Small, and everything else builds on it.
   - [x] c. (!323) Fix `CLAUDE.md` drift: test DB password (now `$POSTGRES_PASSWORD_TEST`), test
     counts, DAG code location (`CLAUDE.md` says `app/features/workflow_engine/`; it's
     `app/core/backend/dagtraversal.py`).
-  - [ ] d. Run end-to-end tests in merge request pipelines (currently skipped by
-    relevant-test selection).
+  - [x] d. Run end-to-end tests in merge request pipelines, independently of
+    relevant-test selection. (!324)
   - [ ] e. Block merges while `main` is red.
+    - [x] Repair the main image-build runner and document Docker socket access (!422);
+      full main build/publication validation follows merge.
   - Done when: a fresh clone passes lint and every test on the first run.
 
 - [x] **0.4 Team roles and permissions.** *Critical · L*
@@ -167,6 +171,42 @@ Small, and everything else builds on it.
       settings.manage and compliance.manage stay with Admins (those routes also check the
       Admin role). A person with a custom role carries its base role, so time limits
       (Auditor-based roles) and role checks behave as for that role.
+
+- [ ] **0.5 Sign in with Google, linked to existing accounts.** *M*
+  - Why: most producers already live in Google Workspace. One click to sign in, one less
+    password, and Google's 2-Step Verification instead of a second code.
+  - Evidence (28 Sep 2026): password + TOTP only (`app/api/routes/auth_routes.py`); no
+    OAuth/OIDC code or dependency; invites are one-time links (0.4g).
+  - Change:
+    - [ ] a. **OpenID Connect with Google** (Authlib): authorisation code + PKCE, `state`
+      and `nonce`, ID token checked for `iss`, `aud`, expiry and `email_verified`.
+      Client ID and secret per environment in KeePassXC (local) and CI variables;
+      redirect URIs for local, test and production; CSP and cookie settings reviewed.
+    - [ ] b. **Linking to the local account.** A `user_identities` table (provider,
+      Google `sub`, email at link time). After the first link, sign-in matches on `sub`,
+      never on email, so a later email change can't hijack an account. The first link:
+      - automatic when the verified Google email equals an active user's email **and**
+        Google is the authority for that address (a Workspace account, i.e. the token's
+        `hd` claim matches the email's domain, or `@gmail.com`);
+      - otherwise (a personal Google account on a non-Google domain) the person links it
+        once from their account settings while signed in with their password, because a
+        lookalike Google account could otherwise claim the address.
+    - [ ] c. **No accounts from nowhere.** Google never creates a user or an org on its
+      own. It can accept a pending invite (0.4g) for the invited address.
+    - [ ] d. **2FA.** Google's ID token doesn't reliably say whether 2-Step Verification
+      was used, so it can't prove it. Per org, an owner can choose "trust Google sign-in
+      as the second factor for @our-domain" after enforcing 2-Step Verification in their
+      Workspace admin console; otherwise the TOTP step still follows for roles that need
+      2FA (0.2). **Founder decision:** the default (recommended: TOTP still required until
+      the owner opts in).
+    - [ ] e. **Everything else still applies:** deactivated users, Auditor expiry, lockouts
+      and the audit log ("signed in with Google"). Account settings show linked sign-in
+      methods; unlinking needs a password to remain, so nobody locks themselves out.
+    - [ ] f. **Tests:** token verification mocked at the boundary; linking rules
+      (Workspace, gmail, personal-domain refusal, `sub` match after an email change);
+      2FA policy per org; no account creation.
+  - Done when: johnny@whistlebird.co.nz clicks "Sign in with Google", lands in the same
+    account as before, and an unlinked lookalike Google account can't get in.
 
 ---
 
@@ -306,6 +346,9 @@ want it, and never produce a recall list that can't be trusted.
     failure becomes a system finding with a fix action (see
     `docs/system-findings-module-contract.md`).
   - Done when: the checks run in CI (5.2) and nightly on live tenants.
+  - [x] Implement stock arithmetic, counted-unit and unmatched-sale findings, CI tests,
+    and the production timer definition. (!406)
+  - [ ] Enable and verify the timer on every production Docker host after deployment.
 
 ---
 
@@ -314,7 +357,7 @@ want it, and never produce a recall list that can't be trusted.
 Finish the NZ Alcohol module so compliance outputs come from production and sales
 records, not from people typing figures in.
 
-- [x] **2.1 Excise per period from linked sales and removals.** *High · L* (!MR)
+- [x] **2.1 Excise per period from linked sales and removals.** *High · L* (!409)
   - Status: not built; the current Customs page is placeholder data. Avoid what the
     placeholder does: a second ABV list separate from the final-step ABV (so it shows
     "0.0000 LAL"), botanicals offered as alcohol products, fields asking for
@@ -391,20 +434,37 @@ records, not from people typing figures in.
   - Change: define ready, needs evidence and overdue once; every count links to the
     records behind it; remove panels with nothing in them.
 
-- [ ] **2.4 Finish the NZ Alcohol module on one pattern.** *L*
+- [x] **2.4 Finish the NZ Alcohol module on one pattern.** *L*
   - Direction: NZ Alcohol = NP1, NP2, NP3, Customs and liquor licensing. Each part plugs
     into Core like ABV does: when switched on, it adds required fields to the relevant
     steps, and producers keep their existing processes.
   - Change:
-    - [ ] a. Document the Compliant → Core contract (step-scoped prompts, completion
+    - [x] a. Document the Compliant → Core contract (step-scoped prompts, completion
       constraints, how steps are matched) so every part is built to it. Starting point:
       `app/features/compliant/platform/workflow_rules.py`.
-    - [ ] b. Build NP1 and NP2 alongside NP3, selected by the existing food-safety
+    - [x] b. Build NP1 and NP2 alongside NP3, selected by the existing food-safety
       programme setting.
-    - [ ] c. Starter pack for each producer type (spirits, beer, wine, cider, mead, RTD):
+    - [x] c. Starter pack for each producer type (spirits, beer, wine, cider, mead, RTD):
       a workflow template plus the fields and checks that type needs, preconfigured.
   - Done when: switching on any part of NZ Alcohol shows the right required fields on the
     right steps, with no change to anyone's workflow.
+  - As built (!418):
+    - a. `docs/compliant-core-contract.md`: the composition root, workflow rules (prompts,
+      `prompt_value` / `active_evidence` constraints, step scoping, final-step and
+      output-name matching), the check contract (alerts, findings, workspace summary and
+      milestone), module pages and access policy, and a checklist for a new part.
+    - b. NP1 and NP2 now use the NP3 verification workspace, selected by the programme
+      setting. Their checks are MPI's December 2025 guidance cards (NP2 adds cooking or
+      pasteurising, defrosting/reheating, water activity and pickling/fermenting), mapped
+      to the same check ids, so playbooks, logs, training and the evidence register all
+      work. Labels, guidance links, alerts and the dashboard card follow the programme.
+      MPI puts brewing, distilling and alcoholic-beverage manufacture under NP3; NP1/NP2
+      fit producers that only store, distribute or sell packaged or chilled food.
+    - c. Starter packs on "Start from a template": spirits, beer, wine, cider, mead and
+      RTD, each a chained receive-to-package workflow (created as a draft, once). Applying
+      one adds the product type (so its frameworks apply) and requires ABV on the final
+      product, and lists the checks that matter for that product. Staff without
+      `compliance.manage` get the workflow but not the compliance changes.
 
 - [x] **2.5 Liquor licensing (basic).** *M*
   - Scope: Sale and Supply of Alcohol Act 2012 obligations for producers who sell (cellar
@@ -532,7 +592,7 @@ Sales matter here because they finish the trace. Make them readable and complete
   - Change: log sales as "Sold 6 × Wildflower (batch 044), INV-0386, Eastbourne Sports
     Club"; show each sync as one entry with a count that expands.
 
-- [ ] **3.3 A queue for unmatched sales.** *S*
+- [x] **3.3 A queue for unmatched sales.** *S* (!386)
   - Change: invoice lines with no product mapping, or that can't be filled from any stock
     (1.1d), become tasks with a direct fix.
 
@@ -552,7 +612,7 @@ Sales matter here because they finish the trace. Make them readable and complete
 Start after Phase 1 so redesigned screens show correct numbers; 4.1 and 4.7 can start at
 any time.
 
-- [ ] **4.1 Put data at the top of every page.** *High · S*
+- [x] **4.1 Put data at the top of every page.** *High · S* (!395)
   - Evidence: every Core and CRM page (dashboard, product workflows, active batches, live
     inventory, source map, CRM) opens with a decorative three-node illustration and a
     centred description, about 400 px on desktop. On a phone the dashboard's whole first
@@ -561,6 +621,12 @@ any time.
     describes the app's structure: "Business control tower", "See the whole business. Act
     in the right workspace.", "Dashboard gives you the signal…", "DO THE WORK / Choose a
     workspace", "CONTEXT, NOT A TO-DO LIST", "Use trends to understand the picture…".
+  - Follow-up (!432): the same treatment on the remaining pages. Illustration strips are
+    removed from Product workflows, Active batches, Live inventory, Settings,
+    Integrations, Notifications, the inventory add/view/dispose pages, batch start and
+    process flow (four banner partials deleted). "Create product workflow" sits beside
+    its title. The shared page header and the Production hub's title and action are
+    left-aligned, without the decorative circle.
 
 - [x] **4.2 One design system.** *High · L* (!396)
   - Evidence: three distinct visual styles.
@@ -572,18 +638,20 @@ any time.
     tables, status badges) used by all three; migrate each area as it's touched.
 
 - [ ] **4.3 Use words and numbers producers use.** *S*
-  - [ ] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
+  - [x] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
     Compliance; pages and cards say Compliant), CRM → **Sales**.
   - [ ] b. Durations in days ("22 days"), not hours ("Started 535h 54m ago").
   - [ ] c. No trailing zeros ("30", not "30.0000"), including activity entries.
   - [ ] d. Fix "5 active batchs".
 
-- [ ] **4.4 One route to each job.** *S*
+- [x] **4.4 One route to each job.** *S* (a–d: !390–!393)
   - [x] a. "Trace" and Source Map links use the single `/core/sourcemap` page
     (`core.sourcemap`). (!391)
-  - [ ] b. "Add to inventory" and "+ Receive stock" do the same job; keep one.
-  - [ ] c. Pages have three back controls (top-bar arrow, "← Back to …" link, sidebar);
-    keep one.
+  - [x] b. The redundant "+ Receive stock" action is removed; "Add to inventory"
+    retains the manual, CSV and barcode choices. (!392)
+  - [x] c. Focused Core pages and Task settings retain their destination-specific back
+    links without a duplicate generic top-bar arrow; the sidebar remains primary
+    navigation. (!393)
   - [x] d. Old URLs redirect to their intended destinations in
     `app/features/compliant/routes/page_routes.py` and `app/core/backend/backend.py`
     (!390).
@@ -602,15 +670,15 @@ any time.
     one-handed at 390 px, with tests at that width. (The bottom nav on phone is already
     right; keep it.)
 
-- [ ] **4.7 Fix the visual bugs.** *S*
+- [x] **4.7 Fix the visual bugs.** *S* (a–f: !327–!330, !389)
   - [x] a. Sidebar background stops at viewport height on long pages (white below it). (!327)
   - [x] b. The floating blue menu toggle overlaps the sidebar edge. (!327)
   - [x] c. CRM widget control icons render as missing-glyph boxes. (!328)
-- [x] d. `/settings` requests a resource that returns 404. (!389)
+  - [x] d. `/settings` requests a resource that returns 404. (!389)
   - [x] e. Forms asking for raw UUIDs (Customs "Core source references") — pick records
     instead. (!330)
-  - [ ] f. The Compliance workspaces page is one card on an empty screen; fold it into
-    NZ Alcohol or give it content.
+  - [x] f. The Compliance workspaces page is one card on an empty screen; fold it into
+    NZ Alcohol or give it content. (!329)
 
 ---
 
@@ -640,6 +708,9 @@ split.
       process-design → execution. One slice per MR, pure moves with no behaviour change,
       with the e2e suite as the safety net.
       - [x] Reconciliation pure move. (!331)
+      - [x] Wastage pure move. (!332)
+      - [x] Compliance-checks pure move. (!334)
+      - [x] Activity-log pure move. (!335)
     - [ ] d. **Carve before you change:** when an item in this plan needs substantial work
       in a slice that still lives in `backend.py`, carve that slice first in its own MR,
       then make the change in its new home. Likely pulls: 1.2, 1.3, 1.6 and 2.6 →
@@ -659,6 +730,7 @@ split.
 - [ ] **5.2 Run the stock checks as tests.** *S*
   - Change: the 1.7 checks as tests, plus a mock-recall scenario and a Customs stocktake
     scenario (2.6) in the end-to-end suite.
+  - [x] Stock arithmetic, matching queue, and finding contract tests. (!406)
 
 - [ ] **5.3 Keep tooling in proportion.** *S*
   - Evidence: 40 report categories under `.agents/reports/`, plus several watchers and
@@ -676,18 +748,41 @@ Starts once Phases 1 and 2 hold up with a second producer.
     gets: a real recall trace, an NP3 evidence pack and an excise draft.
 
 - [ ] **6.2 Pilot a second producer of a different type.** *High · M*
+  - [x] Preparation (!417): `docs/second-producer-pilot.md` defines the session and evidence;
+    producer selection and the real pilot remain open.
   - Change: onboard a brewery or winery through the go-live stocktake (1.3); measure time
     to first traced sale; record every point where they needed help.
   - Done when: they reach a traced sale in one sitting, and their questions become the
     next items in this plan.
 
 - [ ] **6.3 Price by what's included.** *S*
+  - [x] Preparation (!417): inclusion/terms decision sheet in `docs/second-producer-pilot.md`;
+    prices require founder approval.
   - Change: plans built from Production, a compliance pack for the producer's type, and
     the Xero sales link, in line with the existing feature subscriptions.
 
+
 ---
 
-## Phase 7: Multiple sites and planner
+## Phase 7: More than one site, making for others, and planning the work
+
+Added 28 Sep 2026 at the founder's request. biz-e is premium source-to-sale tracing and
+compliance-first operational software for physical manufacturing, starting with NZ
+alcohol: the national programmes (MPI), council, Customs and liquor licensing are
+first-principles integrations with Core, not add-ons. Each item below follows that rule:
+Core records what happens (where stock is, what was made, for whom, when), and the
+compliance modules enforce their rules on those facts. Build these after Phases 1 and 2
+hold up with a second producer, and split each into MRs by its sub-items.
+
+Founder decisions for this phase:
+
+| Topic | Decision |
+| --- | --- |
+| Sites and licences | Business-specific. A site may have its own Customs licence (CCA), share one, or have none; the same for food registrations and liquor licences. The system adapts to whatever the business has; nothing assumes one licence per site. |
+| Multi-site shape | Opt-in. When switched on, inventory items and manufacturing events (executions) are tagged to a site, and stock can move between sites. When stock moves, the compliance modules enforce their rules (e.g. Customs requirements for moving goods between CCAs). Single-site producers see no change. |
+| Contract materials | Either way, seamlessly: the customer supplies materials, the producer does, or a mix, per order. |
+| Contract duty | Either way, seamlessly: whoever the contract says is liable. The system records it per order and the excise module follows it. |
+| Scheduling | A high-level planner for small and mid-sized producers, not per-workstation or IoT scheduling. |
 
 - [ ] **7.1 Multiple sites.** *High · L+*
   - Why: a producer grows into a second site (a bond store or off-site storage area, a
@@ -739,6 +834,62 @@ Starts once Phases 1 and 2 hold up with a second producer.
     is at each step; and a recall of that batch lists the cellar door's sales. With
     multiple sites off, nothing changes.
 
+- [ ] **7.2 Contract manufacturing with a customer portal.** *High · L+*
+  - Why: many producers make for others (a gin for a bar group, a beer for a brand
+    owner). Customers want to see where their order is without emailing or phoning. A
+    live, trustworthy view builds the relationship and cuts admin on both sides.
+  - Evidence (28 Sep 2026): no customer order in production, no stock owned by someone
+    else, no external user; every user belongs to one org with a staff role.
+  - Change:
+    - [ ] a. **Contract customers and orders.** A contract customer (linked to the CRM
+      contact where there is one) and orders: product, quantity, spec or recipe version,
+      due date, status. Each order links to the batches (executions) that make it, and
+      the scheduler (7.3) plans them.
+    - [ ] b. **Materials either way.** Per order line: supplied by the customer
+      (free-issue: received as lots owned by the customer, kept out of the producer's own
+      stock value, usable only for that customer's orders), by the producer, or a mix.
+      Lineage stays intact either way, so a recall works across both.
+    - [ ] c. **Duty either way.** Per order: who is liable for excise (the producer as
+      licensee, the customer as licensee, or goods leaving underbond to the customer's
+      CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the
+      order shows who pays.
+    - [ ] d. **Progress without typing it twice.** Milestones (materials received,
+      scheduled, in production, QC passed, packed, ready, dispatched) come from the
+      batch's own steps and stock movements. The producer chooses which steps show and
+      what they're called.
+    - [ ] e. **The portal.** Customer users sign in (0.5 Google sign-in works here too) to
+      a slim, branded portal of **their** current and past orders only. For each order,
+      the ten things that matter most to a brand owner:
+      1. **Where it's up to:** the current stage and step, with progress through the
+         whole run.
+      2. **When it'll be ready:** the planned and forecast ready date from the scheduler
+         (7.3), and why it moved if it did.
+      3. **How much:** ordered, in production, finished, dispatched and still to come.
+      4. **Their batches:** batch IDs and bottling dates made for the order.
+      5. **Quality:** actual ABV against spec, QC checks passed, and shared lab
+         results or certificates of analysis.
+      6. **Their materials:** customer-supplied materials received, used and left.
+      7. **Yield:** planned against actual output and losses, if the producer shares it.
+      8. **Delivery:** dispatch date, carrier, consignment note, and duty status
+         (duty-paid or underbond to their licence).
+      9. **Documents:** label proofs, the trace for their batches (recall-ready), and
+         compliance certificates.
+      10. **What's waiting on them:** approvals (sample, label proof), questions, and a
+         timeline of events and messages, one thread per order.
+      Past orders keep the same view, with a "reorder" request. Email notifications
+      once the app can send email (0.4g still uses invite links).
+    - [ ] f. **Isolation by design.** Portal users are a separate kind of user with no
+      staff permissions; every portal query is scoped to the customer's orders on the
+      server; a test walks every portal route with a second customer and expects 403/404.
+      Other customers, recipes, costs and the producer's sales are never reachable.
+    - [ ] g. **Later: org to org.** When the customer also uses biz-e, link the two orgs
+      with an explicit, revocable grant so contract batches appear in the customer's own
+      trace and recall. Cross-tenant, so it needs its own design review first.
+  - Done when: a customer signs in, sees their order move from "materials received" to
+    "dispatched" with batch IDs, ABV and a ready date that tracks the schedule, approves a
+    label proof, and can't see anything else in the producer's org; the same order works
+    whether the customer or the producer supplied the materials and paid the duty.
+
 - [ ] **7.3 A planner that drives the day's work.** *High · L*
   - Why: orders come in, stock has to be made, and someone has to decide what gets made
     when. Owners want to turn up, see today's priorities, and trust the dates they give
@@ -763,11 +914,15 @@ Starts once Phases 1 and 2 hold up with a second producer.
     - [ ] b. **What to make.** Net requirements = demand − stock on hand − stock already
       in production (and allocated), per product. Each shortfall becomes a **planned
       batch** of the workflow that makes it, rounded to its usual batch size.
+      - [x] Net-requirements engine: eligible stock/WIP, batch rounding and
+        owner/site/unit separation (!423); persistence and order adapters remain.
     - [ ] c. **How long it takes.** Each workflow step gets an expected duration and any
       waiting time (e.g. maceration 7 days, resting before bottling); the output ready
       date rules already in Core apply. From these, a planned batch gets a start and a
       ready date: backwards from the order's due date, or forwards from today when it's
       already late.
+      - [x] Timing engine: DAG critical path including waits, backwards dates and
+        late-date reasons (!423); workflow settings and readiness adapters remain.
     - [ ] d. **Will we have the materials?** Each planned batch checks its inputs: on
       hand, arriving (expected supplier deliveries, a small new record), or made by another planned
       batch. It respects ready dates (not usable until ready) and expiry dates (use
@@ -794,8 +949,6 @@ Starts once Phases 1 and 2 hold up with a second producer.
     the owner pins the first, drags the second, and the next morning the dashboard shows
     today's priorities, with the order's forecast date updated in the customer's portal.
 
-
-
 ---
 
 ## Order
@@ -816,6 +969,11 @@ Starts once Phases 1 and 2 hold up with a second producer.
 7. **Phase 4** on the corrected data; 4.1 and 4.7 can go first at any time.
 8. **Phase 5** throughout, carving each slice before a plan item changes it (5.1d).
 9. **Phase 6** once a second producer works. Generalise from two real producers, not one.
+10. **0.5 Google sign-in** at any time; it's independent. Settle the 2FA default (0.5d)
+    first.
+11. **Phase 7** after Phase 6's second producer. 7.3 (planner) can start first: it
+    needs only Core and gives contract orders (7.2) their dates. Then sites (7.1), then
+    contract manufacturing (7.2), since contract goods move between sites and licences.
 
 ## Sources
 
@@ -833,5 +991,16 @@ change.
 - NZ Customs, [Excise duty remissions](https://www.customs.govt.nz/business/excise/excise-duty/excise-duty-remissions):
   damaged, destroyed, lost, stolen and faulty goods; form NZCS 277.
 - NZ Customs, [Pay excise duty and other charges](https://www.customs.govt.nz/business/excise/pay-excise-duty-and-other-charges/).
+- NZ Customs, [Moving products excise-unpaid](https://www.customs.govt.nz/business/excise/alcohol-and-excise/moving-products-excise-unpaid)
+  and [Customs-controlled areas](https://www.customs.govt.nz/business/customs-controlled-areas):
+  CCA-to-CCA transfers without duty need prior approval, with records of every movement
+  (7.1d). Checked 28 Sep 2026.
+- Planning concepts for 7.3: MRPeasy, [What is a master production schedule](https://www.mrpeasy.com/blog/what-is-master-production-schedule/)
+  (MPS and available-to-promise); User Solutions, [Rough-cut capacity planning](https://usersolutions.com/blog/rough-cut-capacity-planning);
+  Nexelem, [Finite vs infinite capacity planning](https://nexelem.com/en/blog/finite-vs-infinite-capacity-planning-which-approach-fits-your-factory/);
+  BrewPlanner, [Brewery production scheduling](https://brewplanner.com/blog/how-to-build-a-brewery-production-schedule-that-maximizes-tank-utilization)
+  (backward-scheduled tank timelines).
+- Google, [OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect):
+  ID token claims (`sub`, `email_verified`, `hd`) for 0.5.
 - [Sale and Supply of Alcohol Act 2012](https://www.legislation.govt.nz/act/public/2012/0120/latest/DLM3339333.html)
   and its regulations, for 2.5.
