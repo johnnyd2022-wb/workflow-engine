@@ -38,6 +38,7 @@ def _item_snapshot(item: InventoryItem) -> dict:
         "id": str(item.id),
         "org_id": str(item.org_id),
         "site_id": str(item.site_id) if item.site_id else None,
+        "transfer_receipt_id": str(item.transfer_receipt_id) if item.transfer_receipt_id else None,
         "name": item.name,
         "quantity": str(item.quantity),
         "unit": item.unit,
@@ -201,6 +202,7 @@ class InventoryRepository:
         write_reason: InventoryQuantityWriteReason = InventoryQuantityWriteReason.REPOSITORY_CREATE,
         location_id: UUID | None = None,
         site_id: UUID | None = None,
+        transfer_receipt_id: UUID | None = None,
     ) -> InventoryItem:
         """Create a new inventory item. If commit=False, caller is responsible for commit."""
         with start_span(
@@ -234,6 +236,7 @@ class InventoryRepository:
                     extra_data=extra_data or {},
                     location_id=location_id,
                     site_id=site_id,
+                    transfer_receipt_id=transfer_receipt_id,
                 )
                 item.display_label = _build_display_label(item)
                 self.db.add(item)
@@ -572,7 +575,18 @@ class InventoryRepository:
         recorded as direction "out" (an excise removal), crossing back in as "in".
         Returns ``(new_item, transfer)``.
         """
+        from app.core.db.models.organisation import Organisation
         from app.core.db.models.stock_location import StockLocation, StockTransfer
+        from app.core.db.site_operations import resolve_site
+
+        resolve_site(self.db, org_id)  # Hold organisation settings before stock locks.
+        mode = (
+            self.db.query(Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled)
+            .filter(Organisation.id == org_id)
+            .one()
+        )
+        if mode.multiple_sites_enabled and mode.multiple_site_operations_enabled:
+            raise ValueError("Moving between sites or places requires a recorded dispatch and receipt")
 
         amount = _parse_quantity(quantity)
         if amount is None or not amount.is_finite() or amount <= 0:
@@ -580,6 +594,12 @@ class InventoryRepository:
         item = self.get_inventory_item_by_id_for_update(item_id, org_id)
         if item is None:
             raise ValueError("Stock not found")
+        if item.transfer_receipt_id:
+            raise ValueError("Received fragments require a recorded dispatch and receipt to move")
+        if getattr(item, "contract_customer_id", None) is not None or (item.extra_data or {}).get(
+            "contract_customer_id"
+        ):
+            raise ValueError("Customer-owned movements require a recorded ownership-aware transfer")
         _require_whole_count(amount, item.unit, item.name)
         current = parse_stored_quantity_to_decimal(item.quantity)
         if amount > current:
@@ -597,15 +617,14 @@ class InventoryRepository:
             )
             if loc is None:
                 raise ValueError("Location not found")
+            if loc.site_id != item.site_id:
+                raise ValueError("Moving between sites requires a recorded dispatch and receipt")
             return bool(loc.inside_licensed_area)
 
         was_in, now_in = licensed(item.location_id), licensed(to_location_id)
         direction = "out" if was_in and not now_in else ("in" if now_in and not was_in else "internal")
 
         quantity_before = str(current)
-        with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
-            item.quantity = coerce_stored_quantity(current - amount)
-            self.db.flush()
         # Same batch already at the destination (e.g. moving stock back): add to it.
         existing = None
         if item.supplier_batch_number:
@@ -615,14 +634,69 @@ class InventoryRepository:
                     InventoryItem.org_id == org_id,
                     InventoryItem.name == item.name,
                     InventoryItem.supplier_batch_number == item.supplier_batch_number,
+                    InventoryItem.site_id == item.site_id,
+                    InventoryItem.unit == item.unit,
+                    InventoryItem.inventory_type == item.inventory_type,
+                    InventoryItem.supplier == item.supplier,
+                    InventoryItem.purchase_date == item.purchase_date,
+                    InventoryItem.expiry_date == item.expiry_date,
+                    InventoryItem.source_execution_id == item.source_execution_id,
+                    InventoryItem.source_execution_step_id == item.source_execution_step_id,
+                    InventoryItem.source_output_id == item.source_output_id,
+                    InventoryItem.source_step_name == item.source_step_name,
+                    InventoryItem.transfer_receipt_id.is_(None),
+                    self.db.query(StockTransfer.id)
+                    .filter(
+                        StockTransfer.org_id == org_id,
+                        or_(
+                            and_(StockTransfer.from_item_id == item.id, StockTransfer.to_item_id == InventoryItem.id),
+                            and_(StockTransfer.to_item_id == item.id, StockTransfer.from_item_id == InventoryItem.id),
+                        ),
+                    )
+                    .exists(),
                     InventoryItem.location_id.is_(None)
                     if to_location_id is None
                     else InventoryItem.location_id == to_location_id,
                     InventoryItem.id != item.id,
                 )
                 .with_for_update()
-                .one_or_none()
+                .order_by(InventoryItem.id)
+                .first()
             )
+        if existing is not None:
+
+            def identity_extra(lot):
+                return {
+                    key: value
+                    for key, value in (lot.extra_data or {}).items()
+                    if key not in {"moved_from_item_id", "original_barcode"}
+                }
+
+            if getattr(existing, "contract_customer_id", None) is not None or identity_extra(
+                existing
+            ) != identity_extra(item):
+                existing = None
+        if existing is None and item.supplier_batch_number:
+            occupied = (
+                self.db.query(InventoryItem.id)
+                .filter(
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.site_id == item.site_id,
+                    InventoryItem.name == item.name,
+                    InventoryItem.supplier_batch_number == item.supplier_batch_number,
+                    InventoryItem.location_id.is_(None)
+                    if to_location_id is None
+                    else InventoryItem.location_id == to_location_id,
+                    InventoryItem.transfer_receipt_id.is_(None),
+                    InventoryItem.id != item.id,
+                )
+                .first()
+            )
+            if occupied is not None:
+                raise ValueError("Destination has a different lot identity; use recorded dispatch and receipt")
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
+            item.quantity = coerce_stored_quantity(current - amount)
+            self.db.flush()
         if existing is not None:
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
                 existing.quantity = coerce_stored_quantity(parse_stored_quantity_to_decimal(existing.quantity) + amount)
@@ -632,6 +706,7 @@ class InventoryRepository:
             new_item = None
         extra = dict(item.extra_data or {})
         extra["moved_from_item_id"] = str(item.id)
+        extra["original_barcode"] = item.barcode or extra.get("original_barcode")
         new_item = new_item or self.create_inventory_item(
             org_id=org_id,
             name=item.name,
@@ -639,7 +714,7 @@ class InventoryRepository:
             unit=item.unit,
             inventory_type=item.inventory_type,
             supplier=item.supplier,
-            barcode=item.barcode,
+            barcode=None,
             purchase_date=item.purchase_date,
             supplier_batch_number=item.supplier_batch_number,
             expiry_date=item.expiry_date,
@@ -651,6 +726,7 @@ class InventoryRepository:
             commit=False,
             write_reason=InventoryQuantityWriteReason.STOCK_TRANSFER,
             location_id=to_location_id,
+            site_id=item.site_id,
         )
         transfer = StockTransfer(
             org_id=org_id,

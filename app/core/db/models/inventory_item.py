@@ -3,7 +3,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, ForeignKeyConstraint, Numeric, String
+from sqlalchemy import Column, Date, DateTime, ForeignKey, ForeignKeyConstraint, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -33,6 +33,13 @@ class InventoryItem(TenantScoped, Base):
 
     __tablename__ = "inventory_items"
     __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_inventory_items_org_id"),
+        UniqueConstraint("org_id", "transfer_receipt_id", name="uq_inventory_transfer_receipt"),
+        ForeignKeyConstraint(
+            ["org_id", "transfer_receipt_id"],
+            ["site_stock_receipts.org_id", "site_stock_receipts.id"],
+            name="fk_inventory_transfer_receipt",
+        ),
         ForeignKeyConstraint(
             ["org_id", "site_id"], ["sites.org_id", "sites.id"], name="fk_inventory_items_org_site", ondelete="RESTRICT"
         ),
@@ -60,6 +67,7 @@ class InventoryItem(TenantScoped, Base):
     location_id = Column(UUID(as_uuid=True), ForeignKey("stock_locations.id", ondelete="RESTRICT"), nullable=True)
     # Nullable for new single-site stock; enabling sites backfills the default site.
     site_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    transfer_receipt_id = Column(UUID(as_uuid=True), nullable=True)
     purchase_date = Column(Date, nullable=True)
     supplier_batch_number = Column(String(255), nullable=True)
     expiry_date = Column(Date, nullable=True)

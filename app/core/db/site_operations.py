@@ -18,6 +18,7 @@ def resolve_site(session, org_id, site_id=None):
             Organisation.id, Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled
         )
         .filter(Organisation.id == org_id)
+        .with_for_update(read=True)
         .one_or_none()
     )
     if org is None:
@@ -44,7 +45,12 @@ def resolve_site(session, org_id, site_id=None):
 
 
 def validate_execution_inputs(session, execution, actual_inputs, actual_outputs):
-    org = session.query(Organisation.multiple_sites_enabled).filter(Organisation.id == execution.org_id).one()
+    org = (
+        session.query(Organisation.multiple_sites_enabled)
+        .filter(Organisation.id == execution.org_id)
+        .with_for_update(read=True)
+        .one()
+    )
     if not org.multiple_sites_enabled:
         return
     site_id = resolve_site(session, execution.org_id, execution.site_id)
