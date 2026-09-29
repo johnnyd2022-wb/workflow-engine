@@ -28,7 +28,12 @@ uv run workflow init-db      # create schema
 uv run workflow upgrade-db   # run pending migrations
 ```
 
-The test PostgreSQL instance runs on port 8401 (`workflow-engine-test` DB, user `workflow_rw`, password `secret`).
+The test PostgreSQL instance runs on port 8401 (`workflow-engine-test` DB, user `workflow_rw`).
+`docker-compose.test.yml` sets the password `secret`, but Postgres only applies that when the
+volume is first created — an existing volume keeps whatever it was initialised with. The app
+doesn't need it spelled out: it loads DB credentials from KeePassXC locally, or from
+`POSTGRES_PASSWORD` / `POSTGRES_PASSWORD_TEST` (`app/utils/config_loader.py:213`). For
+`psql`, use `PGPASSWORD="$POSTGRES_PASSWORD_TEST"`.
 
 ## Architecture
 
@@ -51,11 +56,15 @@ HTTP Request
 - `org_routes` – `/org/*` organisation management
 - `core_bp` – `/api/core/*` and `/core/*` — processes, executions, inventory (always active)
 - `crm_bp` – `/crm/*` — customer management, Xero invoicing (feature flag: `crm_enabled`)
-- `workflow_engine_bp` – `/workflow-engine/*` — lineage tracing (feature flag: `workflow_engine_enabled`)
+- `compliant` – `/compliant/*`, `/api/compliant/*` — compliance modules, NZ Alcohol first (feature flag: `compliant_enabled`, plus a per-org subscription)
+- `operational_cases` – `/core/cases/*`, `/api/core/cases/*` — operational cases (always mounted; access gated per org)
+- `process_templates` – industry workflow template catalogue (always mounted; exposure gated per org)
+
+`/workflow-engine/*` is a retired URL prefix (the app now lives under `/core/*`) and `workflow_engine_enabled` is read but never consulted — see `.agents/plans/feature-slicing-plan.md`. Lineage tracing is `/api/core/inventory/trace/*` and `/api/core/sourcemap/*`.
 
 ### Key subsystems
 
-**Execution & DAG**: Processes are defined as DAGs of steps. `app/features/workflow_engine/dagtraversal.py` walks them. `ApiIdempotencyKey` prevents duplicate operations. `workflow_execution_lineage` tracks parent-child execution relationships.
+**Execution & DAG**: Processes are defined as DAGs of steps. `app/core/backend/dagtraversal.py` walks them. `ApiIdempotencyKey` prevents duplicate operations. `workflow_execution_lineage` tracks parent-child execution relationships.
 
 **Inventory**: Quantity writes require an `InventoryQuantityWriteReason` enum value (guards against untracked mutations). Unit conversion utilities live in `app/core/utils/`. Wastage is tracked in a separate table with batch-based entry hashing for idempotency.
 

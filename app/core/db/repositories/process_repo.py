@@ -500,10 +500,7 @@ class ProcessRepository:
 
             # Lock all steps for this process to prevent concurrent reorder collisions.
             locked = (
-                self.db.query(Step.id, Step.updated_at)
-                .filter(Step.process_id == process_id)
-                .with_for_update()
-                .all()
+                self.db.query(Step.id, Step.updated_at).filter(Step.process_id == process_id).with_for_update().all()
             )
             locked_ids = {row.id for row in locked}
             if not locked_ids:
