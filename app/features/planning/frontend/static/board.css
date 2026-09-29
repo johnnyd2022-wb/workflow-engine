@@ -3,6 +3,9 @@
 .production-board [role="alert"] { color: #a12525; }
 .board-toolbar, .board-settings { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin: 1rem 0; }
 .board-toolbar label, .board-settings > label { display: grid; flex: 1 1 160px; gap: .4rem; min-width: 0; }
+.board-capacity form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin: .75rem 0; }
+.board-capacity form label { display: grid; flex: 1 1 160px; gap: .4rem; min-width: 0; }
+.board-capacity [data-capacity-results] { max-width: 75ch; }
 .production-board input, .production-board select { width: 100%; box-sizing: border-box; min-width: 0; padding: .55rem; }
 .production-board button { padding: .6rem .8rem; white-space: normal; }
 .board-settings fieldset, .board-settings > p { flex-basis: 100%; min-width: 0; }

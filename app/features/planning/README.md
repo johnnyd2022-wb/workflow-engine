@@ -9,6 +9,10 @@ The exact-lot material observation adapter is documented in
 On-hand observations remain unresolved for planning without authoritative
 commitments, holds, ownership and readiness.
 
+The site resource load view is documented in
+[planner-capacity-observations.md](../../../docs/planner-capacity-observations.md).
+It flags overloaded days but does not reserve capacity or publish a ready date.
+
 The first slice is an arithmetic engine for roadmap 7.3b/c. It calculates net
 requirements, rounds shortfalls to configured batch sizes, and dates batches using
 the workflow's critical path. These dates are theoretical lead-time dates until the
