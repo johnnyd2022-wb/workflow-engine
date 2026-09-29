@@ -335,6 +335,9 @@ want it, and never produce a recall list that can't be trusted.
     "entered later" badge when they differ by more than a day; keep an edit history on
     each record.
   - Done when: every late entry is visibly marked and every edit is traceable.
+  - [x] Separate occurrence and entry times; mark entries over 24 hours late in
+    execution and trace views. (!407)
+  - [ ] Expose a traceable edit history for completed step records.
 
 - [x] **1.6 Show one stock number everywhere.** *High · S* (!404)
   - Evidence: a Source Map card shows one lot's quantity (`sourcemap.js`, primary lot)

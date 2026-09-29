@@ -634,13 +634,19 @@
       executionData.completed_by = user.username;
       executionData.completed_by_email = user.email;
       executionData.completed_by_user_id = user.id || '';
-      executionData.completed_at = new Date().toISOString();
+      var occurredInput = modal.querySelector('#execute-step-occurred-at');
+      var occurredValue = occurredInput && occurredInput.value ? new Date(occurredInput.value) : null;
+      if (occurredValue && Number.isNaN(occurredValue.getTime())) {
+        showNotification('error', 'Invalid time', 'Enter a valid time for when this step happened.');
+        return;
+      }
 
       // Complete the step (send allow_consumption_override when user confirmed "Use anyway" for not-ready items)
       const completeResult = await CoreAPI.completeStep(executionId, executionStepId, {
         actual_inputs: actualInputs,
         actual_outputs: actualOutputs,
         execution_data: executionData,
+        occurred_at: occurredValue ? occurredValue.toISOString() : undefined,
         allow_consumption_override: allowConsumptionOverride || undefined
       });
       

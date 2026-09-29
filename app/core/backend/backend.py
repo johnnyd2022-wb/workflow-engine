@@ -185,19 +185,19 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
         k: v for k, v in execution_data.items() if k not in _EXECUTION_DATA_TRACE_KEYS and v is not None and v != ""
     }
     trace = {}
-    if execution_data.get("completed_by") is not None:
-        trace["completed_by"] = execution_data["completed_by"]
-    if execution_data.get("completed_by_email") is not None:
-        trace["completed_by_email"] = execution_data["completed_by_email"]
+    for key in ("completed_by", "completed_by_email"):
+        if execution_data.get(key) is not None:
+            trace[key] = execution_data[key]
     completed_ts = execution_data.get("completed_at")
     if completed_ts is not None:
         trace["completed_at"] = _to_iso_timestamp(completed_ts)
     elif completed_at is not None:
         trace["completed_at"] = _to_iso_timestamp(completed_at)
-    if execution_data.get("execution_errors") is not None:
-        trace["execution_errors"] = execution_data["execution_errors"]
-    if execution_data.get("execution_warnings") is not None:
-        trace["execution_warnings"] = execution_data["execution_warnings"]
+    if execution_data.get("entered_at") is not None:
+        trace["entered_at"] = _to_iso_timestamp(execution_data["entered_at"])
+    for key in ("execution_errors", "execution_warnings"):
+        if execution_data.get(key) is not None:
+            trace[key] = execution_data[key]
     return prompts, trace
 
 

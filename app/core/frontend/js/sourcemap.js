@@ -497,13 +497,14 @@
       const detailId = `sm-act-tl-${idx}`;
 
       const stepsHtml = group.steps.map(step => {
-        const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
-          ? step.tos[0].step_data.completed_at : null;
+        const stepData = step.tos.length && step.tos[0].step_data ? step.tos[0].step_data : null;
+        const stepDate = stepData ? stepData.completed_at : null;
         return `
           <div class="sm-timeline-step-row">
             <span class="sm-timeline-label">Step</span>
             ${step.stepName ? `<span class="sm-timeline-step-name">${smEsc(step.stepName)}</span>` : '<span class="sm-timeline-step-name">—</span>'}
             ${stepDate ? `<span class="sm-timeline-step-date">${smFmtDate(stepDate)}</span>` : ''}
+            ${stepData && stepData.entered_later ? `<span class="sm-entered-later" title="Entered ${smEsc(smFmtDate(stepData.entered_at))}">Entered later</span>` : ''}
           </div>`;
       }).join('');
 
@@ -995,14 +996,14 @@
         const isTracedHere = tracedItemId && (
           step.froms.some(i => i.id === tracedItemId) || step.tos.some(i => i.id === tracedItemId)
         );
-        const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
-          ? step.tos[0].step_data.completed_at
-          : null;
+        const stepData = step.tos.length && step.tos[0].step_data ? step.tos[0].step_data : null;
+        const stepDate = stepData ? stepData.completed_at : null;
         return `
           <div class="sm-timeline-step-row">
             <span class="sm-timeline-label">Step</span>
             ${step.stepName ? `<span class="sm-timeline-step-name">${smEsc(step.stepName)}</span>` : ''}
             ${stepDate ? `<span class="sm-timeline-step-date">${smFmtDate(stepDate)}</span>` : ''}
+            ${stepData && stepData.entered_later ? `<span class="sm-entered-later" title="Entered ${smEsc(smFmtDate(stepData.entered_at))}">Entered later</span>` : ''}
             ${isTracedHere ? '<span class="sm-tl-traced-here">traced here</span>' : ''}
           </div>`;
       }).join('');
@@ -1162,9 +1163,8 @@
           const isTracedHere = tracedItemId && (
             step.froms.some(i => i.id === tracedItemId) || step.tos.some(i => i.id === tracedItemId)
           );
-          const stepDate = step.tos.length && step.tos[0].step_data && step.tos[0].step_data.completed_at
-            ? step.tos[0].step_data.completed_at
-            : null;
+          const stepData = step.tos.length && step.tos[0].step_data ? step.tos[0].step_data : null;
+          const stepDate = stepData ? stepData.completed_at : null;
           const stepLabel = document.createElement('div');
           stepLabel.className = 'sm-tree-step-label';
           // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
@@ -1172,6 +1172,7 @@
             <span class="sm-tree-group__label-tag">Step</span>
             ${step.stepName ? `<span class="sm-tree-step-name">${smEsc(step.stepName)}</span>` : ''}
             ${stepDate ? `<span class="sm-timeline-step-date">${smFmtDate(stepDate)}</span>` : ''}
+            ${stepData && stepData.entered_later ? `<span class="sm-entered-later" title="Entered ${smEsc(smFmtDate(stepData.entered_at))}">Entered later</span>` : ''}
             ${isTracedHere ? '<span class="sm-tl-traced-here">traced here</span>' : ''}
           `;
           stepLi.appendChild(stepLabel);

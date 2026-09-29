@@ -2015,6 +2015,18 @@ html[data-spa-theme="dark"] .sm-act-type-btn--active { background: var(--color-p
   flex-shrink: 0;
 }
 
+.sm-entered-later {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+html[data-spa-theme="dark"] .sm-entered-later { background: #451a03; color: #fcd34d; }
+
 .sm-tl-traced-here {
   font-size: 9px;
   font-weight: 700;

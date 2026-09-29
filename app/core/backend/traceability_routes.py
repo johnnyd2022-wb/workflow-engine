@@ -13,6 +13,7 @@ from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.models.process import Process
+from app.core.domain.execution_entry_timing import entry_timing
 from app.core.security.permissions import requires_auth
 from app.core.utils.inventory_quantity import quantity_to_api_str
 from app.features.activity_log.routes.activity_routes import _human_summary
@@ -96,6 +97,7 @@ def _hydrate_step_data(items: list[dict], db_session, org_id: UUID) -> None:
         _item["step_data"] = (
             {
                 "completed_at": _to_iso_timestamp(_s.completed_at),
+                **entry_timing(_s.completed_at, _s.execution_data),
                 "actual_inputs": _s.actual_inputs,
                 "actual_outputs": _s.actual_outputs,
             }
@@ -132,6 +134,7 @@ def _trace_step_summaries(items: list[dict], db_session, org_id: UUID) -> list[d
             "step_name": step.step.name if step.step else None,
             "step_number": step.step_number,
             "completed_at": _to_iso_timestamp(step.completed_at),
+            **entry_timing(step.completed_at, step.execution_data),
         }
         for step in traced_steps
     ]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -30,6 +30,7 @@ from app.core.db.models.inventory_item import InventoryItem, InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
+from app.core.domain.execution_entry_timing import entry_timing
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_dates
 from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS
 from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration_to_timedelta
@@ -53,6 +54,7 @@ _EXECUTION_DATA_TRACE_KEYS = {
     "completed_by_email",
     "completed_by_user_id",
     "completed_at",
+    "entered_at",
     "execution_errors",
     "execution_warnings",
 }
@@ -417,6 +419,7 @@ def register_routes(
                     "execution_data": es.execution_data or {},
                     "started_at": es.started_at.isoformat() if es.started_at else None,
                     "completed_at": es.completed_at.isoformat() if es.completed_at else None,
+                    **entry_timing(es.completed_at, es.execution_data),
                     "step_name": es.step.name if es.step else None,
                     "step_inputs": es.step.inputs or [] if es.step else [],
                     "step_outputs": es.step.outputs or [] if es.step else [],
@@ -478,6 +481,7 @@ def register_routes(
                     "execution_data": es.execution_data or {},
                     "started_at": es.started_at.isoformat() if es.started_at else None,
                     "completed_at": es.completed_at.isoformat() if es.completed_at else None,
+                    **entry_timing(es.completed_at, es.execution_data),
                     "step_name": es.step.name if es.step else None,
                     "step_inputs": es.step.inputs or [] if es.step else [],
                     "step_outputs": es.step.outputs or [] if es.step else [],
@@ -534,6 +538,7 @@ def register_routes(
                     "execution_data": es.execution_data or {},
                     "started_at": es.started_at.isoformat() if es.started_at else None,
                     "completed_at": es.completed_at.isoformat() if es.completed_at else None,
+                    **entry_timing(es.completed_at, es.execution_data),
                     "step_name": es.step.name if es.step else None,
                     "step_inputs": es.step.inputs or [] if es.step else [],
                     "step_outputs": es.step.outputs or [] if es.step else [],
@@ -643,6 +648,13 @@ def register_routes(
                 }
             ), 400
         allow_consumption_override = parsed_body.allow_consumption_override
+        occurred_at = parsed_body.occurred_at
+        if occurred_at is not None:
+            if occurred_at.tzinfo is None or occurred_at.utcoffset() is None:
+                return jsonify({"error": "occurred_at must include a timezone"}), 400
+            occurred_at = occurred_at.astimezone(UTC)
+            if occurred_at > datetime.now(UTC) + timedelta(minutes=5):
+                return jsonify({"error": "occurred_at cannot be in the future"}), 400
 
         # Get current user from Flask g and always store in execution_data for accuracy
         # TODO: execution_data is becoming a structured contract with known fields:
@@ -719,6 +731,7 @@ def register_routes(
                 actual_outputs=actual_outputs,
                 execution_data=execution_data,
                 commit=False,
+                completed_at_override=occurred_at,
             )
 
             if not execution_step:
@@ -1279,6 +1292,7 @@ def register_routes(
                 "id": str(execution_step.id),
                 "status": execution_step.status.value,
                 "completed_at": execution_step.completed_at.isoformat() if execution_step.completed_at else None,
+                "entered_at": (execution_step.execution_data or {}).get("entered_at"),
             }
             if execution_warnings:
                 response_data["execution_warnings"] = execution_warnings

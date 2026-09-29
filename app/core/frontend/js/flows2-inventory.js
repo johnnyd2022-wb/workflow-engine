@@ -628,8 +628,14 @@
         if (step.completed_at) {
           const completed = document.createElement('p');
           completed.className = 'flows2-inv-upstream-step__meta';
-          completed.textContent = `Completed: ${flows2InvFormatDate(step.completed_at)}`;
+          completed.textContent = `Happened: ${flows2InvFormatDate(step.completed_at)}`;
           box.appendChild(completed);
+        }
+        if (step.entered_later) {
+          const late = document.createElement('p');
+          late.className = 'flows2-inv-upstream-step__meta flows2-inv-upstream-step__late';
+          late.textContent = `Entered later · ${flows2InvFormatDate(step.entered_at)}`;
+          box.appendChild(late);
         }
         section.appendChild(box);
       });
