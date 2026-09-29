@@ -92,13 +92,17 @@ def publish_order(db, org_id, actor_id, order_id, data):
     document_ids = data.get("document_ids", [])
     if not isinstance(document_ids, list) or len(document_ids) > 50:
         raise OrderError("document_ids must be a list of up to 50 shared documents")
+    requested_ids = list(dict.fromkeys(identifier(v, "document_id") for v in document_ids))
+    document_rows = (
+        db.query(PortalDocument)
+        .filter_by(org_id=org_id, order_id=order.id, customer_id=order.customer_id, revoked_at=None)
+        .filter(PortalDocument.id.in_(requested_ids))
+        .all()
+    )
+    documents_by_id = {row.id: row for row in document_rows}
     documents = []
-    for document_id in dict.fromkeys(identifier(v, "document_id") for v in document_ids):
-        row = (
-            db.query(PortalDocument)
-            .filter_by(org_id=org_id, order_id=order.id, customer_id=order.customer_id, id=document_id, revoked_at=None)
-            .first()
-        )
+    for document_id in requested_ids:
+        row = documents_by_id.get(document_id)
         if row is None:
             raise OrderError("Shared document not found for this order", 404)
         documents.append(document_dto(row))
@@ -113,7 +117,8 @@ def publish_order(db, org_id, actor_id, order_id, data):
         except (TypeError, ValueError):
             raise OrderError("Bottling dates must be YYYY-MM-DD") from None
     now = datetime.now(UTC)
-    organisation = db.query(Organisation).filter_by(id=org_id).one()
+    # Organisation is the tenant root: its primary key is the org ID, not an org_id column.
+    organisation = db.query(Organisation).filter_by(id=org_id).one()  # nosemgrep: filter-by-missing-org-id
     revision = (
         db.query(func.max(PortalPublication.revision)).filter_by(org_id=org_id, order_id=order.id).scalar() or 0
     ) + 1

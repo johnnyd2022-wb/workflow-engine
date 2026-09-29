@@ -149,7 +149,11 @@ def authenticate(db, data):
     now = datetime.now(UTC)
     with unscoped():
         principal = (
-            db.query(PortalPrincipal).filter_by(customer_id=customer_id, email=email).with_for_update().first()
+            # Customer IDs are globally unique. The public login has no org before lookup.
+            db.query(PortalPrincipal)
+            .filter(PortalPrincipal.customer_id == customer_id, PortalPrincipal.email == email)
+            .with_for_update()
+            .first()
             if customer_id
             else None
         )
@@ -185,7 +189,13 @@ def authenticate(db, data):
 def resolve_session(db, raw):
     now = datetime.now(UTC)
     with unscoped():
-        row = db.query(PortalSession).filter_by(token_hash=token_hash(raw), revoked_at=None).with_for_update().first()
+        # A random token hash is globally unique; the session supplies the org scope.
+        row = (
+            db.query(PortalSession)
+            .filter(PortalSession.token_hash == token_hash(raw), PortalSession.revoked_at.is_(None))
+            .with_for_update()
+            .first()
+        )
         if row is None or row.expires_at <= now or row.last_seen_at <= now - SESSION_IDLE:
             raise OrderError("Portal session has expired", 401)
         principal = db.query(PortalPrincipal).filter_by(org_id=row.org_id, id=row.principal_id, is_active=True).first()

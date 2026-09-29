@@ -19,6 +19,7 @@ from app.features.contract_manufacturing.models.portal import (
     PortalSession,
 )
 from app.features.contract_manufacturing.portal_security import COOKIE_NAME, PORTAL_ENDPOINTS
+from app.features.contract_manufacturing.routes import portal as portal_routes
 from app.features.contract_manufacturing.services.portal_auth import token_hash
 from tests.factories import UserFactory
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixtures
@@ -27,10 +28,18 @@ from tests.test_contract_orders import _customer, _login, _order, world  # noqa:
 PASSWORD = "A-portal-password-2026"
 
 
+def _portal_limiters(app):
+    """The app's limiter and the one the portal routes were decorated with. They are the
+    same object in production, but test_auth_rate_limit_gating reloads auth_routes, which
+    leaves routes imported before the reload bound to the previous Limiter."""
+    return {id(limiter): limiter for limiter in (app.limiter, portal_routes.limiter)}.values()
+
+
 @pytest.fixture
 def portal_world(world, db):  # noqa: F811 -- imported fixture
-    limiter_was_enabled = world["app"].limiter.enabled
-    world["app"].limiter.enabled = False
+    limiters = [(limiter, limiter.enabled) for limiter in _portal_limiters(world["app"])]
+    for limiter, _ in limiters:
+        limiter.enabled = False
     customers = [
         _customer(world["clients"][0], "Brand A"),
         _customer(world["clients"][0], "Brand B"),
@@ -39,7 +48,8 @@ def portal_world(world, db):  # noqa: F811 -- imported fixture
     orders = [_order(world["clients"][0 if i < 2 else 1], customer["id"]) for i, customer in enumerate(customers)]
     world.update(customers=customers, orders=orders)
     yield world
-    world["app"].limiter.enabled = limiter_was_enabled  # shared app: later suites expect a live limiter
+    for limiter, was_enabled in limiters:  # shared app: later suites expect a live limiter
+        limiter.enabled = was_enabled
     db.rollback()
     org_ids = [org.id for org in world["orgs"]]
     for model in (PortalSession, PortalInvite, PortalPublication, PortalDocument, PortalPrincipal):
@@ -337,15 +347,17 @@ def test_account_throttle_and_real_ip_rate_limit(portal_world, db):
     principal.locked_until = datetime.now(UTC) - timedelta(seconds=1)
     db.commit()
     assert client.post("/portal/api/login", json={**body, "password": PASSWORD}).status_code == 200
-    w["app"].limiter.enabled = True
-    w["app"].limiter.storage.reset()
+    for limiter in _portal_limiters(w["app"]):
+        limiter.enabled = True
+        limiter.storage.reset()
     stranger = _client(w)
     statuses = [
         stranger.post("/portal/api/login", json={**body, "email": f"unknown{n}@brand.test"}).status_code
         for n in range(11)
     ]
     assert statuses[:10] == [401] * 10 and statuses[-1] == 429
-    w["app"].limiter.enabled = False
+    for limiter in _portal_limiters(w["app"]):
+        limiter.enabled = False
 
 
 def test_staff_sharing_permissions_and_cross_tenant_references(portal_world, db):
@@ -458,7 +470,7 @@ def test_linked_batch_ids_are_copied_without_private_execution_data(portal_world
     process, _, _ = _recipe(db, org_id, "Secret botanical recipe")
     batch = ExecutionRepository(db).create_execution(org_id=org_id, process_id=process.id)
     step = db.query(ExecutionStep).filter_by(org_id=org_id, execution_id=batch.id).first()
-    step.execution_data = {"secret_supplier_cost": "999", "recipe_instructions": "Private juniper proportion"}
+    step.execution_data = {"secret_supplier_cost": "Cost-999.97", "recipe_instructions": "Private juniper proportion"}
     db.commit()
     order = w["orders"][0]
     response = w["clients"][0].post(
@@ -470,7 +482,8 @@ def test_linked_batch_ids_are_copied_without_private_execution_data(portal_world
     client = _accept(w)
     body = client.get(f"/portal/api/orders/{order['id']}").get_json()["order"]
     assert body["batches"]["items"] == [{"batch_id": str(batch.id), "bottling_date": "2026-12-01"}]
-    assert all(value not in str(body) for value in ("999", "Private juniper", "Secret botanical"))
+    # Distinctive markers: a bare "999" also occurs by chance inside random UUIDs/timestamps.
+    assert all(value not in str(body) for value in ("Cost-999.97", "Private juniper", "Secret botanical"))
 
 
 def test_document_opt_in_withdrawal_formats_and_immutable_copy(portal_world, db):
