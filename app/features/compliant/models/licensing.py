@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Boolean, Column, Date, ForeignKey, String, Text, Time
+from sqlalchemy import TIMESTAMP, Boolean, Column, Date, ForeignKey, ForeignKeyConstraint, String, Text, Time
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.db.models.models import Base
@@ -11,9 +11,15 @@ from app.core.utils.time import utc_now
 
 class LiquorLicence(Base):
     __tablename__ = "liquor_licences"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "site_id"], ["sites.org_id", "sites.id"], name="fk_liquor_licence_site", ondelete="RESTRICT"
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     kind = Column(String(10), nullable=False)
     licence_number = Column(String(100), nullable=True)
     issuing_dlc = Column(String(255), nullable=True)
