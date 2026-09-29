@@ -75,7 +75,7 @@
 
         var rows = (actionBoard && Array.isArray(actionBoard.items)) ? actionBoard.items : [];
         if (rows.length === 0) {
-            list.innerHTML = '<li class="dash-empty">No critical actions right now.</li>';
+            list.innerHTML = '<li class="dash-empty">Nothing needs attention right now.</li>';
             return;
         }
 
@@ -363,6 +363,8 @@
         setText(root, '[data-kpi-tasks-week]', tasks.due_this_week_count || 0);
         setText(root, '[data-kpi-overdue]', tasks.overdue_count || 0);
         setText(root, '[data-kpi-throughput-vs-last-week]', formatPct(operations.completed_vs_last_week_pct));
+        var throughputCard = byData(root, '[data-kpi-throughput-card]');
+        if (throughputCard) throughputCard.hidden = operations.completed_vs_last_week_pct == null;
 
         renderSparkLine(root, 'operator_actions', insightSeries.operator_actions_week);
         renderSparkLine(root, 'open_action_items', insightSeries.open_action_items);

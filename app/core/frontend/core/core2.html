@@ -555,7 +555,7 @@
       const title = document.getElementById('core2-health-sheet-title');
       if (!overlay || !body || !title) return;
 
-      title.textContent = core2HealthCollapsedTitle(state || 'healthy');
+      title.textContent = core2HealthCollapsedTitle(state || 'healthy', signals || []);
       body.innerHTML = '';
       body.appendChild(buildCore2HealthCategoryNav(state || 'healthy', signals || []));
       overlay.hidden = false;
@@ -1012,9 +1012,12 @@
     };
 
     /** Collapsed health line: binary user-facing copy (severity remains on bar color). */
-    function core2HealthCollapsedTitle(state) {
+    function core2HealthCollapsedTitle(state, signals) {
       if (state === 'healthy') return 'System Healthy';
-      return 'System Issues Detected';
+      var issue = (signals || []).find(function (signal) {
+        return signal && signal.has_issue && typeof signal.message === 'string' && signal.message.trim();
+      });
+      return issue ? issue.message : 'Review production integrity';
     }
 
     function core2SignalToNotifyCategory(signalCategory) {
@@ -1229,7 +1232,7 @@
 
         const titleH = document.createElement('div');
         titleH.className = 'core2-journey-system-health-title core2-journey-system-health-title--' + state;
-        titleH.textContent = core2HealthCollapsedTitle(state);
+        titleH.textContent = core2HealthCollapsedTitle(state, signals);
         barRootH.appendChild(titleH);
 
         const barH = document.createElement('div');
