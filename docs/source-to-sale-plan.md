@@ -916,6 +916,9 @@ Founder decisions for this phase:
       batch** of the workflow that makes it, rounded to its usual batch size.
       - [x] Net-requirements engine: eligible stock/WIP, batch rounding and
         owner/site/unit separation (!423); persistence and order adapters remain.
+      - [x] Persisted physical batches from explicit manual production demand,
+        frozen quantity/unit/site snapshots and repeat-request protection (!440);
+        inventory netting and order/target adapters remain.
     - [ ] c. **How long it takes.** Each workflow step gets an expected duration and any
       waiting time (e.g. maceration 7 days, resting before bottling); the output ready
       date rules already in Core apply. From these, a planned batch gets a start and a
@@ -923,6 +926,9 @@ Founder decisions for this phase:
       already late.
       - [x] Timing engine: DAG critical path including waits, backwards dates and
         late-date reasons (!423); workflow settings and readiness adapters remain.
+      - [x] Workflow batch-size settings and explicit step duration/wait snapshots,
+        fixed output-ready timing and exact workflow-version pinning (!440);
+        unknown readiness stays unknown and delivery forecasts remain unpublished.
     - [ ] d. **Will we have the materials?** Each planned batch checks its inputs: on
       hand, arriving (expected supplier deliveries, a small new record), or made by another planned
       batch. It respects ready dates (not usable until ready) and expiry dates (use
@@ -938,6 +944,10 @@ Founder decisions for this phase:
       flagged, an order is added or cancelled, stock is short), the planner re-plans what
       isn't pinned and lists what moved and why. Planned batches start as real
       executions from the board, and today's list feeds the dashboard (4.5).
+      - [x] Responsive week/month/day board with priority, pin/unpin, explicit date
+        changes and cancellation, revisions, audit and a guarded idempotent start
+        seam (!440); trusted start checks, drag, automatic replan and dashboard
+        integration remain.
     - [ ] g. **Promise dates.** For a new order, "when can we deliver n?" from stock on
       hand, then what's planned, then capacity (available-to-promise). The same forecast
       ready date feeds the portal (7.2e) and the order.
