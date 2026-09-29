@@ -36,3 +36,12 @@
 .pt-advisory { font-size: 0.8125rem; color: var(--text-secondary, #6b7280); background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md, 8px); padding: 10px 12px; margin: 12px 0; }
 .pt-preview-list { font-size: 0.8125rem; margin: 8px 0; padding-left: 18px; }
 .pt-use-template-btn { margin-top: 12px; }
+
+/* Starter packs (plan 2.4c) */
+.pt-packs { margin-bottom: 24px; }
+.pt-packs[hidden] { display: none; }
+.pt-packs h2 { font-size: 1.125rem; margin: 0 0 6px 0; }
+.pt-packs .pt-tagline { margin-bottom: 14px; }
+.pt-pack-card { cursor: default; }
+.pt-pack-card .btn { align-self: flex-start; margin-top: auto; }
+.pt-single-title { margin-top: 24px !important; }
