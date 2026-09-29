@@ -28,6 +28,7 @@ from app.core.db.models.process_version import ProcessVersion
 from app.features.crm.models.xero_tenant import XeroTenant
 from app.features.crm.models.xero_oauth_token import XeroOAuthToken
 from app.features.crm.models.xero_contact import XeroContact
+from app.features.contract_manufacturing.models.portal import PortalDocument, PortalInvite, PortalPrincipal, PortalPublication, PortalSession  # noqa: F401
 from app.features.contract_manufacturing.models import ContractCustomer, ContractOrder, ContractOrderLine, ContractOrderExecution
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem

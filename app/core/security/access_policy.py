@@ -156,6 +156,7 @@ def access_expired(user, now: datetime | None = None) -> bool:
 # --- the policy table --------------------------------------------------------------------
 
 PUBLIC = "public"  # anyone, signed in or not
+PORTAL_SIGNED_IN = "portal_signed_in"  # separate principal; enforced by requires_portal
 SIGNED_IN = "signed_in"  # any signed-in user, whatever their role
 
 _READ = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -187,6 +188,27 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("auth.check_password_policy", None, PUBLIC),
     ("auth.accept_invite", None, PUBLIC),
     ("invite.accept_invite_page", None, PUBLIC),
+    # Portal entry routes remain CSRF protected. Authenticated routes have a portal
+    # decorator; this requirement can never be satisfied by a staff role.
+    ("contract_portal.login_page", None, PUBLIC),
+    ("contract_portal.invite_page", None, PUBLIC),
+    ("contract_portal.login", None, PUBLIC),
+    ("contract_portal.accept", None, PUBLIC),
+    ("contract_portal.home", None, PORTAL_SIGNED_IN),
+    ("contract_portal.order_page", None, PORTAL_SIGNED_IN),
+    ("contract_portal.list_orders", None, PORTAL_SIGNED_IN),
+    ("contract_portal.get_order", None, PORTAL_SIGNED_IN),
+    ("contract_portal.download_document", None, PORTAL_SIGNED_IN),
+    ("contract_portal.logout", None, PORTAL_SIGNED_IN),
+    ("contracts.portal_sharing_page", None, ("production.record", "users.manage")),
+    ("contracts.portal_list_people", None, "users.manage"),
+    ("contracts.portal_issue_invite", None, "users.manage"),
+    ("contracts.portal_revoke_invite", None, "users.manage"),
+    ("contracts.portal_revoke_person", None, "users.manage"),
+    ("contracts.portal_publish_order", None, "production.record"),
+    ("contracts.portal_unpublish_order", None, "production.record"),
+    ("contracts.portal_upload_document", None, "production.record"),
+    ("contracts.portal_revoke_document", None, "production.record"),
     # --- your own account, and pages every role lands on
     ("auth.*", None, SIGNED_IN),
     ("dashboard", None, SIGNED_IN),  # /dashboard -> /core/dashboard
@@ -343,7 +365,7 @@ def allows(user, endpoint: str, method: str) -> bool:
     requirement = requirement_for(endpoint, method)
     if requirement == PUBLIC:
         return True
-    if requirement == DENY or user is None:
+    if requirement in (DENY, PORTAL_SIGNED_IN) or user is None:
         return False
     if requirement == SIGNED_IN:
         return True
