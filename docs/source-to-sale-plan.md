@@ -657,7 +657,7 @@ any time.
     `app/features/compliant/routes/page_routes.py` and `app/core/backend/backend.py`
     (!390).
 
-- [ ] **4.5 Make the dashboard today's work list.** *High · M*
+- [x] **4.5 Make the dashboard today's work list.** *High · M* (!350)
   - Evidence: a "−100% batch completion vs last week" tile computed against a zero base;
     a sign-in ("Logged in with password from 127.0.0.1") shown as the day's featured
     event; several "n/a" tiles; a "System Issues Detected" banner on Core pages with no
@@ -734,10 +734,13 @@ split.
     scenario (2.6) in the end-to-end suite.
   - [x] Stock arithmetic, matching queue, and finding contract tests. (!406)
 
-- [ ] **5.3 Keep tooling in proportion.** *S*
-  - Evidence: 40 report categories under `.agents/reports/`, plus several watchers and
-    sweeps, for one customer.
-  - Change: keep the tools that change decisions; retire the rest.
+- [x] **5.3 Keep tooling in proportion.** *S* (!351)
+  - Evidence: `.agents/reports/` has 33 directories, alongside 11 watcher/sweep scripts.
+  - Change: keep the tools that change decisions; retire the rest. Review on 26 Sep 2026
+    found no unreferenced automation: the six watch/sweep flows are wired to explicit
+    setup docs, state, and/or test coverage. The report directories are versioned
+    engineering findings and decision history, not runtime tooling. Retain them; no
+    deletion is justified by this review.
 
 ---
 

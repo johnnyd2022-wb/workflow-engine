@@ -202,6 +202,7 @@ def _dashboard_event_log_period(
         session.query(EntityEvent)
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= period_start, EntityEvent.created_at < period_end)
+        .filter(EntityEvent.event_type.notin_(["user.login", "user.login_failed"]))
     )
     sync_job_expr = EntityEvent.payload["sync_job_id"].astext
     is_sale_adjustment = (
@@ -211,6 +212,12 @@ def _dashboard_event_log_period(
         )
         & sync_job_expr.isnot(None)
     )
+    sale_events_q = q.filter(is_sale_adjustment)
+    sale_sync_job_ids = sale_events_q.with_entities(sync_job_expr).distinct()
+    completed_sync_without_sales = (EntityEvent.event_type == "crm_xero.sync_completed") & (
+        sync_job_expr.is_(None) | ~sync_job_expr.in_(sale_sync_job_ids)
+    )
+    q = q.filter(~completed_sync_without_sales)
     raw_total = q.count()
     sale_events_q = q.filter(is_sale_adjustment)
     sale_event_count = sale_events_q.count()
@@ -428,6 +435,7 @@ def _dashboard_event_counts_by_day(
         )
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= start_dt, EntityEvent.created_at < end_dt)
+        .filter(EntityEvent.event_type.notin_(["user.login", "user.login_failed"]))
     )
     if actor_type:
         q = q.filter(EntityEvent.actor_type == actor_type)
@@ -691,7 +699,13 @@ def _dashboard_compliant_workspace_summary(
 
 
 def _dashboard_build_action_board(
-    tasks_summary: dict[str, Any], compliance: dict[str, Any], compliant_workspace: dict[str, Any] | None = None
+    tasks_summary: dict[str, Any],
+    compliance: dict[str, Any],
+    compliant_workspace: dict[str, Any] | None = None,
+    *,
+    check_results: list[Any] | None = None,
+    stalled_batches: int = 0,
+    today: date | None = None,
 ) -> dict[str, Any]:
     findings = (compliance or {}).get("findings") or {}
     output_expiry = findings.get("output_expiry") or {}
@@ -739,6 +753,22 @@ def _dashboard_build_action_board(
             "workspace": "Sales",
         },
         {
+            "key": "tasks_due_today",
+            "label": "Customer tasks due today",
+            "count": (tasks_summary or {}).get("due_today_count") or 0,
+            "severity": "medium",
+            "href": "/crm/tasks",
+            "workspace": "Sales",
+        },
+        {
+            "key": "stalled_batches",
+            "label": "Production batches idle for more than 48 hours",
+            "count": stalled_batches,
+            "severity": "medium",
+            "href": "/core/executions/live",
+            "workspace": "Production",
+        },
+        {
             "key": "compliant_evidence",
             "label": "Compliance evidence records needing attention",
             "count": (compliant_workspace or {}).get("attention_count") or 0,
@@ -747,6 +777,31 @@ def _dashboard_build_action_board(
             "workspace": "Compliance",
         },
     ]
+
+    today = today or date.today()
+    for result in check_results or []:
+        data = result.data if isinstance(getattr(result, "data", None), dict) else {}
+        alerts = data.get("system_alerts") if isinstance(data, dict) else None
+        for alert in alerts if isinstance(alerts, list) else []:
+            if not isinstance(alert, dict):
+                continue
+            due = _dashboard_parse_due_date(alert.get("due_date"))
+            if due is None or due > today + timedelta(days=30):
+                continue
+            href = alert.get("href")
+            if not isinstance(href, str) or not href.startswith("/") or href.startswith("//"):
+                href = "/core/notifications"
+            due_label = "overdue" if due < today else "due " + due.isoformat()
+            candidates.append(
+                {
+                    "key": "compliance_due_" + str(alert.get("id") or len(candidates)),
+                    "label": str(alert.get("title") or "Compliance review") + " · " + due_label,
+                    "count": 1,
+                    "severity": "high" if due < today else "medium",
+                    "href": href,
+                    "workspace": "Compliance",
+                }
+            )
 
     severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
     items = [item for item in candidates if (item.get("count") or 0) > 0]
@@ -796,6 +851,7 @@ def get_dashboard_summary():
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= week_start, EntityEvent.created_at < next_week_start)
         .filter(EntityEvent.actor_type == "user")
+        .filter(EntityEvent.event_type.notin_(["user.login", "user.login_failed"]))
         .count()
     )
     audit_log = {
@@ -870,7 +926,14 @@ def get_dashboard_summary():
         db_session,
         module_summaries=_dashboard_module_workspace_summaries(check_results, "compliant"),
     )
-    action_board = _dashboard_build_action_board(tasks_summary, compliance, compliant_workspace)
+    action_board = _dashboard_build_action_board(
+        tasks_summary,
+        compliance,
+        compliant_workspace,
+        check_results=check_results,
+        stalled_batches=int(operations_week_summary.get("stalled_active_over_48h") or 0),
+        today=today,
+    )
     operator_series = _dashboard_series_from_date_counts(
         _dashboard_event_counts_by_day(org_id, db_session, week_start, next_week_start, actor_type="user"),
         start_day=week_start.date(),
