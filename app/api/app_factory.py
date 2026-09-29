@@ -160,6 +160,10 @@ def create_app():
 
     app.register_blueprint(stocktake_bp)
 
+    from app.features.contract_manufacturing.routes.orders import bp as contracts_bp
+
+    app.register_blueprint(contracts_bp)
+
     from app.features.planning.routes import planning_bp
 
     app.register_blueprint(planning_bp)

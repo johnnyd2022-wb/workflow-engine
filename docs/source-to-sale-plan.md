@@ -846,6 +846,10 @@ Founder decisions for this phase:
       contact where there is one) and orders: product, quantity, spec or recipe version,
       due date, status. Each order links to the batches (executions) that make it, and
       the scheduler (7.3) plans them.
+      - [x] Staff customer/order/line/batch foundation (!426): per-line specification,
+        stored recipe version and output reference, linked batch counts, and per-line
+        materials/per-order duty declarations. Scheduler integration remains 7.3;
+        materials ownership and excise behaviour remain 7.2b/c.
     - [ ] b. **Materials either way.** Per order line: supplied by the customer
       (free-issue: received as lots owned by the customer, kept out of the producer's own
       stock value, usable only for that customer's orders), by the producer, or a mix.

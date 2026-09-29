@@ -269,6 +269,21 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.trace_*", None, "inventory.view"),
     ("stock_locations.*", _READ, "inventory.view"),  # plan 2.1
     ("stock_locations.*", None, "inventory.adjust"),
+    # Contract orders (7.2a): production sees order demand, never CRM contact details;
+    # Sales sees commercial lines, with recipe/spec references removed by the DTO.
+    ("contracts.list_customers", None, "sales.view"),
+    ("contracts.create_customer", None, "sales.record"),
+    ("contracts.update_customer", None, "sales.record"),
+    ("contracts.list_orders", None, ("sales.view", "production.view")),
+    ("contracts.get_order", None, ("sales.view", "production.view")),
+    ("contracts.home", None, ("sales.view", "production.view")),
+    ("contracts.order_page", None, ("sales.view", "production.view")),
+    ("contracts.create_order", None, "sales.record"),
+    ("contracts.update_order", None, "sales.record"),
+    ("contracts.create_line", None, "sales.record"),
+    ("contracts.update_line", None, "sales.record"),
+    ("contracts.link_batch", None, "production.record"),
+    ("contracts.unlink_batch", None, "production.record"),
     ("stocktake.update_stocktake_settings", None, "compliance.manage"),  # plan 2.6
     ("stocktake.*", _READ, "inventory.view"),
     ("stocktake.*", None, "inventory.adjust"),
