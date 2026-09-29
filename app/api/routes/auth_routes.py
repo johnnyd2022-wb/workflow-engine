@@ -21,7 +21,7 @@ from app.core.db.models.trusted_device import TrustedDevice
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.trusted_device_repo import TrustedDeviceRepository
 from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
-from app.core.security.access_policy import ROLE_LABELS, access_expired
+from app.core.security.access_policy import access_expired, role_label_for
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
 from app.core.security.people import PeopleError, hash_invite_token, permission_list, validate_new_password
@@ -133,7 +133,8 @@ def get_rate_limit_key():
 
 
 # Create a limiter instance with custom key function (will be initialized with app in app_factory)
-# No default limits: rate limiting is applied only to login and signup endpoints.
+# No default limits: rate limiting is applied only to routes carrying an explicit
+# @limiter.limit (login, signup, accept-invite, verify-2fa, some CM portal routes, telemetry).
 limiter = Limiter(key_func=get_rate_limit_key)
 
 # Pending 2FA session expiry (Using 5 minutes as default)
@@ -737,7 +738,7 @@ def accept_invite_page(token: str):
         context.update(
             email=user.email,
             org_name=org.name if org else "",
-            role_label=ROLE_LABELS.get(user.role, user.role.value),
+            role_label=role_label_for(user),
             first_name=user.first_name or "",
             last_name=user.last_name or "",
         )
@@ -811,7 +812,7 @@ def get_current_user():
         "two_factor_enabled": g.current_user.two_factor_enabled if g.current_user else False,
         "two_factor_required": two_factor_required(g.current_user),
         "two_factor_enrollment_required": enrollment_required(g.current_user),
-        "role_label": ROLE_LABELS.get(g.current_user.role, g.user_role) if g.current_user else None,
+        "role_label": role_label_for(g.current_user) if g.current_user else None,
         "permissions": permission_list(g.current_user) if g.current_user else [],
         "access_expires_at": (
             g.current_user.access_expires_at.isoformat()

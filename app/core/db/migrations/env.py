@@ -28,6 +28,8 @@ from app.core.db.models.process_version import ProcessVersion
 from app.features.crm.models.xero_tenant import XeroTenant
 from app.features.crm.models.xero_oauth_token import XeroOAuthToken
 from app.features.crm.models.xero_contact import XeroContact
+from app.features.contract_manufacturing.models.portal import PortalDocument, PortalInvite, PortalPrincipal, PortalPublication, PortalSession  # noqa: F401
+from app.features.contract_manufacturing.models import ContractCustomer, ContractOrder, ContractOrderLine, ContractOrderExecution
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
 from app.features.crm.models.xero_sync_job import XeroSyncJob
@@ -44,6 +46,7 @@ from app.features.operational_cases.models.operational_case import OperationalCa
 from app.features.operational_cases.models.operational_case_event import OperationalCaseEvent
 from app.features.operational_cases.models.operational_case_link import OperationalCaseLink
 from app.utils.config_loader import config
+from app.features.planning.models import PlanningDemand
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

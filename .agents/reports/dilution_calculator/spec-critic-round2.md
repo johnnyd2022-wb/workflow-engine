@@ -47,7 +47,9 @@ All 8 are substantively closed:
    error to accommodate.
 5. **Response schema unspecified** → mostly closed (see residual below). Field names for
    all four echoed values, `solved_field`, `solved_value`, `water_to_add_ml`,
-   `water_to_add_naive_ml`, `disclaimer` are all now named in AC1.
+   `water_to_add_naive_ml`, `disclaimer` are all now named in AC1. The "residual" is this
+   round's GAP 2 (rounding/precision), which round 3 closes with `VERDICT: sound`.
+   (verified 2026-09-30 by findings-sweep)
 6. **`starting_abv=0` dead-end boundary uncalled-out** → closed, AC5 now states explicitly
    that it's always-rejected-downstream and that `final_abv=0` solved from `starting_abv=0`
    round-tripping is an intentionally-allowed degenerate case.

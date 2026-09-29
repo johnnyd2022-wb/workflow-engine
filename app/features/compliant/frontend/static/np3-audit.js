@@ -3,6 +3,8 @@
 
   var root = document.querySelector('[data-np3-audit-root]');
   if (!root) return;
+  // NP1, NP2 and NP3 share this workspace (plan 2.4b).
+  var NP = root.dataset.programmeShort || 'NP3';
 
   var error = root.querySelector('[data-np3-error]');
   var date = root.querySelector('[data-np3-date]');
@@ -20,6 +22,8 @@
   var activeCategory;
   var activeFilter = 'all';
   var searchQuery = '';
+  var initialFilter = new URLSearchParams(window.location.search).get('filter');
+  if (['ok', 'attention', 'overdue', 'due-soon', 'remediation'].includes(initialFilter)) activeFilter = initialFilter;
 
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
   function text(tag, value, className) {
@@ -72,13 +76,13 @@
     details.appendChild(text('summary', 'Show guidance and evidence options'));
     var body = document.createElement('div');
     body.className = 'np3-evidence-options__body';
-    body.appendChild(text('p', 'The official guidance is mapped to “' + (plan.section || row.source_reference || 'NP3 guidance') + '”.'));
+    body.appendChild(text('p', 'The official guidance is mapped to “' + (plan.section || row.source_reference || NP + ' guidance') + '”.'));
     var link = document.createElement('a');
     link.className = 'np3-inline-link';
     link.href = row.guidance_url;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    link.textContent = 'Open the official NP3 section ↗';
+    link.textContent = 'Open the official ' + NP + ' section ↗';
     body.appendChild(link);
     if ((plan.proof || []).length) {
       var list = document.createElement('ul');
@@ -99,14 +103,14 @@
     details.className = 'np3-topic np3-topic--' + stateClass(row);
     var heading = document.createElement('summary');
     var copy = document.createElement('span');
-    copy.appendChild(text('strong', row.topic || row.control_title || 'NP3 check'));
+    copy.appendChild(text('strong', row.topic || row.control_title || NP + ' check'));
     copy.appendChild(text('span', row.requirement_summary || row.summary || '', 'np3-topic-action'));
     heading.appendChild(copy);
     heading.appendChild(text('span', stateLabel(row), 'np3-state'));
     details.appendChild(heading);
     var detail = document.createElement('div');
     detail.className = 'np3-topic__detail';
-    detail.appendChild(text('p', row.requirement_summary || 'Review this NP3 requirement and its evidence.'));
+    detail.appendChild(text('p', row.requirement_summary || 'Review this ' + NP + ' requirement and its evidence.'));
     detail.appendChild(text('p', 'MPI section: ' + (row.source_reference || (row.evidence_playbook || {}).section || 'National Programme 3 guidance'), 'np3-guidance-reference'));
     if (row.guidance_update) detail.appendChild(text('p', row.guidance_update, 'np3-guidance-alert'));
     detail.appendChild(guidance(row));
@@ -151,10 +155,10 @@
     var category = (audit.categories || []).filter(function (item) { return item.key === activeCategory; })[0];
     if (!category) return;
     var searching = Boolean(searchQuery);
-    var allRows = searching ? (audit.rows || []) : (rowsByCategory[category.key] || []);
+    var allRows = searching || activeFilter !== 'all' ? (audit.rows || []) : (rowsByCategory[category.key] || []);
     var matchingRows = allRows.filter(matchesSearch);
     var visibleRows = matchingRows.filter(matchesFilter);
-    activeCategoryHeading.textContent = searching ? 'Search results' : category.title;
+    activeCategoryHeading.textContent = searching ? 'Search results' : activeFilter !== 'all' ? 'Checks matching this health view' : category.title;
     var section = document.createElement('section');
     section.className = 'np3-category';
     section.id = 'np3-category-panel';
@@ -167,7 +171,7 @@
     var list = document.createElement('div');
     list.className = 'np3-topic-list';
     if (visibleRows.length) visibleRows.forEach(function (row) { list.appendChild(topic(row)); });
-    else list.appendChild(text('p', searching ? 'No NP3 checks match this search.' : 'No checks in this section match the selected health view. Choose another status above to see the full register.'));
+    else list.appendChild(text('p', searching ? 'No ' + NP + ' checks match this search.' : 'No checks in this section match the selected health view. Choose another status above to see the full register.'));
     section.appendChild(list);
     categoryRoot.appendChild(section);
   }
@@ -193,7 +197,7 @@
       var track = document.createElement('div');
       track.className = 'np3-health-progress__track';
       track.setAttribute('role', 'progressbar');
-      track.setAttribute('aria-label', 'NP3 evidence readiness');
+      track.setAttribute('aria-label', NP + ' evidence readiness');
       track.setAttribute('aria-valuemin', '0');
       track.setAttribute('aria-valuemax', '100');
       track.setAttribute('aria-valuenow', String(percent));
@@ -252,13 +256,15 @@
     var stats = audit.core_evidence || {};
     var live = stats.live_np3_evidence || {};
     var data = [
-      [live.dag_traced_final_products || 0, 'traceable product batches'],
-      [stats.completed_core_steps_with_captured_data || 0, 'completed execution records'],
-      [stats.active_core_evidence_files || 0, 'active evidence files'],
-      [live.supplier_identified_materials || 0, 'material records with supplier']
+      [live.dag_traced_final_products || 0, 'traceable product batches', '/core/inventory/live'],
+      [stats.completed_core_steps_with_captured_data || 0, 'completed execution records', '/core/executions/live'],
+      [stats.active_core_evidence_files || 0, 'active files attached to executions', '/core/executions/live'],
+      [live.supplier_identified_materials || 0, 'material records with supplier', '/core/inventory/live']
     ];
     data.forEach(function (item) {
-      var stat = document.createElement('div');
+      var stat = document.createElement('a');
+      stat.href = item[2];
+      stat.setAttribute('hx-boost', 'false');
       stat.appendChild(text('strong', String(item[0])));
       stat.appendChild(text('span', item[1]));
       coreStats.appendChild(stat);
@@ -290,15 +296,15 @@
     renderCoreStats();
     renderPrep();
     date.textContent = audit.verification && audit.verification.date
-      ? 'Verification date: ' + audit.verification.date
-      : 'Set the verification date in Configuration.';
+      ? 'Verification visit booked: ' + audit.verification.date
+      : 'No verification visit booked. Add one in Configuration when your verifier confirms it.';
     root.setAttribute('aria-busy', 'false');
   }
   fetch('/api/compliant/np3-audit').then(function (response) {
-    if (!response.ok) throw new Error('Could not load the NP3 audit register');
+    if (!response.ok) throw new Error('Could not load the ' + NP + ' audit register');
     return response.json();
   }).then(function (data) { audit = data; render(); }).catch(function (err) {
     root.setAttribute('aria-busy', 'false');
-    showError(err.message || 'Could not load the NP3 audit register');
+    showError(err.message || 'Could not load the ' + NP + ' audit register');
   });
 }());

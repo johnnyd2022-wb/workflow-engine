@@ -382,14 +382,16 @@ class InventoryRepository:
         reference: str | None = None,
         source_output_id: UUID | None = None,
         commit: bool = True,
+        sale_context: dict | None = None,
+        correlation_id: UUID | None = None,
     ) -> list[dict]:
         """Consume `quantity` units of the FINAL_PRODUCT item(s) named `name`, draining
         the oldest label/lot batch first -- `extra_data.batch_number` ascending (a batch
         with no number sorts last), ties broken by `purchase_date`/`created_at` -- and
         splitting across items when a batch boundary falls mid-request.
 
-        This is the landing point for sales-driven consumption (e.g. a future Xero
-        invoice sync): batch numbers are assigned once, at production time (see
+        This is the landing point for sales-driven consumption (including Xero invoice
+        sync): batch numbers are assigned once, at production time (see
         scripts/whistlebird_replay_timeline.py's batch-splitting at Labelling), and this
         is the only place they get drained. Nothing is partially consumed if on-hand
         stock across all matching items is short -- raises ValueError instead.
@@ -477,8 +479,15 @@ class InventoryRepository:
                             "delta": str(-take),
                             "reason": "sales_fifo_consumption",
                             "reference": reference,
+                            "sale": {
+                                **(sale_context or {}),
+                                "batch_number": batch_number,
+                                "quantity_from_batch": str(take),
+                                "unit": item.unit,
+                            },
                         },
                         diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+                        correlation_id=correlation_id,
                     )
                     remaining -= take
             if commit:
@@ -677,6 +686,8 @@ class InventoryRepository:
         quantity: str | Decimal,
         reference: str | None = None,
         commit: bool = True,
+        sale_context: dict | None = None,
+        correlation_id: UUID | None = None,
     ) -> dict:
         """Restore a previously recorded FIFO sale allocation to its original stock item.
 
@@ -716,8 +727,15 @@ class InventoryRepository:
                     "delta": str(amount),
                     "reason": "sales_fifo_reversal",
                     "reference": reference,
+                    "sale": {
+                        **(sale_context or {}),
+                        "quantity_from_batch": str(amount),
+                        "unit": item.unit,
+                        "batch_number": (item.extra_data or {}).get("batch_number"),
+                    },
                 },
                 diff={"quantity": {"before": str(quantity_before), "after": str(item.quantity)}},
+                correlation_id=correlation_id,
             )
         if commit:
             self.db.commit()
