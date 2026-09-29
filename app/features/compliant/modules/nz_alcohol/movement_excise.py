@@ -374,3 +374,39 @@ def cca_movement_register(session, org_id, start, end):
             "Levies/GST",
         ],
     }
+
+
+def cca_period_review(session, org_id, licence_id, start, end):
+    """Review one source CCA's observed movements without creating a tax entry.
+
+    Unassigned movements are always surfaced, since their source may be this CCA.
+    An empty review is never evidence for a nil return.
+    """
+    from app.features.compliant.models.customs_premises import CustomsLicence
+
+    # Validate the period even when the licence has no movement rows.
+    register = cca_movement_register(session, org_id, start, end)
+    licence = (
+        session.query(CustomsLicence)
+        .filter(
+            CustomsLicence.org_id == org_id, CustomsLicence.id == licence_id, CustomsLicence.kind.in_(("lma", "oss"))
+        )
+        .one_or_none()
+    )
+    if licence is None:
+        raise ValueError("Choose an LMA or OSS licence belonging to this business")
+    observed = next((row for row in register["licences"] if row["source_cca"].get("id") == str(licence.id)), None)
+    movements = observed["movements"] if observed else []
+    return {
+        "source_cca": {"id": str(licence.id), "number": licence.number, "name": licence.name, "kind": licence.kind},
+        "period_start": register["period_start"],
+        "period_end_exclusive": register["period_end_exclusive"],
+        "movements": movements,
+        "observed_excise_duty": observed["observed_excise_duty"] if observed else "0",
+        "unassigned_movements": register["unresolved_movements"],
+        "other_source_cca_count": len(register["licences"]) - int(observed is not None),
+        "remaining_sources": register["remaining_sources"],
+        "complete_lodgement": False,
+        "nil_return": None,
+        "total_duty": None,
+    }

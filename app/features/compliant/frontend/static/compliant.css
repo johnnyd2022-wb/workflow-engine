@@ -98,6 +98,9 @@ html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui
 .compliant-record-panel .core-source-search button{grid-column:auto}
 .compliant-record-panel fieldset.span-2{min-width:0}
 /* Excise workspace (plan 2.1) */
+.cca-period-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.cca-period-form label { display: flex; flex-direction: column; gap: 4px; min-width: min(100%, 11rem); }
+.cca-period-review [data-cca-period-results] { overflow-wrap: anywhere; }
 .excise-panel { display: flex; flex-direction: column; gap: 14px; }
 .excise-panel [hidden] { display: none !important; }
 .excise-head { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-start; }
