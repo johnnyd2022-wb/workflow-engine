@@ -22,6 +22,7 @@ from app.core.db.models.execution_step import ExecutionStep, ExecutionStepStatus
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.organisation import Organisation
+from app.core.db.models.process import Process
 from app.core.db.models.step import Step
 from app.core.db.models.user import User
 from app.features.compliant.models import AlcoholProductProfile, ComplianceProfile, ComplianceRecord, ComplianceReport
@@ -35,9 +36,10 @@ from app.features.compliant.modules.nz_alcohol.catalogue import (
 )
 from app.features.compliant.modules.nz_alcohol.councils import TRADE_WASTE_CATALOGUES, council_catalogue
 from app.features.compliant.modules.nz_alcohol.live_evidence import derive_np3_core_evidence
+from app.features.compliant.modules.nz_alcohol.national_programmes import GUIDANCE
 from app.features.compliant.modules.nz_alcohol.np3_audit import (
-    NP3_AUDIT_CATEGORIES,
     PREPARATION_ITEMS,
+    audit_categories,
     build_guided_steps,
     build_np3_audit_rows,
     prioritise_work_queue,
@@ -174,7 +176,7 @@ def build_priority_actions(
         return [
             {
                 "kind": "profile",
-                "title": "Tell Compliant what you make",
+                "title": "Tell Compliance what you make",
                 "description": "Choose your alcohol products to see only the frameworks that apply.",
                 "value": "Unlock your personalised compliance plan in under a minute.",
             }
@@ -195,8 +197,8 @@ def build_priority_actions(
         actions.append(
             {
                 "kind": "product",
-                "title": f"Map {len(unmapped)} product{'s' if len(unmapped) != 1 else ''} already found in Core",
-                "description": "Add ABV once and Compliant turns future production and wastage movements into live LAL evidence.",
+                "title": f"Map {len(unmapped)} product{'s' if len(unmapped) != 1 else ''} already found in Production",
+                "description": "Add ABV once and Compliance turns future production and wastage movements into live LAL evidence.",
                 "value": "Unlock live Customs production evidence.",
                 "suggestions": unmapped[:5],
             }
@@ -206,7 +208,7 @@ def build_priority_actions(
             {
                 "kind": "product",
                 "title": "Map your first alcohol product",
-                "description": "Set its ABV and Compliant will start deriving LAL from Core movements.",
+                "description": "Set its ABV and Compliance will start deriving LAL from Production movements.",
                 "value": "Start the live Customs view.",
             }
         )
@@ -418,7 +420,7 @@ class ComplianceService:
                 "records_linked_to_core": linked_records,
                 "completed_core_steps_with_captured_data": completed_prompt_steps,
                 "active_core_evidence_files": active_evidence_files,
-                "scope": "Customs production and wastage LAL is derived from Core inventory movements; other obligations are evidence-led until their data capture is connected.",
+                "scope": "Customs production and wastage LAL is derived from Production inventory movements; other obligations are evidence-led until their data capture is connected.",
             }
         )
 
@@ -461,13 +463,94 @@ class ComplianceService:
                     "id": step.id,
                     "execution_id": step.execution_id,
                     "kind": "execution-step",
-                    "title": f"Completed Core step: {step_name}",
+                    "title": f"Completed Production step: {step_name}",
                     "created_at": step.completed_at,
                 }
             )
             for step, step_name in steps
         ]
         return (file_candidates + step_candidates)[:8]
+
+    def search_core_sources(self, org_id: UUID, kind: str, query: str, offset: int) -> dict[str, Any]:
+        """Page through selectable Core records, always scoped to the current tenant."""
+        limit = 20
+        pattern = f"%{query.replace('\\', r'\\').replace('%', r'\%').replace('_', r'\_')}%"
+        if kind == "file":
+            rows = (
+                self.session.query(ExecutionEvidence)
+                .filter(
+                    ExecutionEvidence.org_id == org_id,
+                    ExecutionEvidence.evidence_status == EVIDENCE_STATUS_ACTIVE,
+                    ExecutionEvidence.file_name.ilike(pattern, escape="\\"),
+                )
+                .order_by(ExecutionEvidence.created_at.desc(), ExecutionEvidence.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+                .all()
+            )
+            sources = [
+                {"id": row.id, "kind": kind, "title": row.file_name, "created_at": row.created_at}
+                for row in rows[:limit]
+            ]
+        elif kind == "execution-step":
+            rows = (
+                self.session.query(ExecutionStep, Step.name)
+                .join(Step, Step.id == ExecutionStep.step_id)
+                .filter(
+                    ExecutionStep.org_id == org_id,
+                    Step.org_id == org_id,
+                    ExecutionStep.status == ExecutionStepStatus.COMPLETED,
+                    Step.name.ilike(pattern, escape="\\"),
+                )
+                .order_by(ExecutionStep.completed_at.desc(), ExecutionStep.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+                .all()
+            )
+            sources = [
+                {"id": step.id, "kind": kind, "title": f"Completed Core step: {name}", "created_at": step.completed_at}
+                for step, name in rows[:limit]
+            ]
+        elif kind == "execution":
+            rows = (
+                self.session.query(Execution, Process.name)
+                .join(Process, Process.id == Execution.process_id)
+                .filter(Execution.org_id == org_id, Process.org_id == org_id, Process.name.ilike(pattern, escape="\\"))
+                .order_by(Execution.created_at.desc(), Execution.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+                .all()
+            )
+            sources = [
+                {"id": execution.id, "kind": kind, "title": f"Execution: {name}", "created_at": execution.created_at}
+                for execution, name in rows[:limit]
+            ]
+        elif kind == "movement":
+            rows = (
+                self.session.query(InventoryMovement, InventoryItem.name)
+                .join(InventoryItem, InventoryItem.id == InventoryMovement.inventory_item_id)
+                .filter(
+                    InventoryMovement.org_id == org_id,
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.name.ilike(pattern, escape="\\"),
+                )
+                .order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+                .all()
+            )
+            sources = [
+                {
+                    "id": movement.id,
+                    "kind": kind,
+                    "title": f"{movement.movement_type.title()} · {name} · {movement.quantity} {movement.unit}",
+                    "created_at": movement.created_at,
+                }
+                for movement, name in rows[:limit]
+            ]
+        else:
+            raise ValueError("Unknown Core source type")
+        return {"sources": _iso(sources), "has_more": len(rows) > limit}
 
     def customs_reconciliation(self, org_id: UUID) -> dict[str, Any]:
         """Calculate litres of alcohol from profiled production and wastage movements.
@@ -513,6 +596,14 @@ class ComplianceService:
             elif breached:
                 reason = "Recorded value exceeds configured limit"
             return {"control_id": control_id, "state": "attention", "reason": reason, "record_count": len(relevant)}
+
+        # Licence scope, renewal and certified managers are proven by the licensing register.
+        if framework["slug"] == "liquor-licence":
+            from app.features.compliant.modules.nz_alcohol.licensing import derived_control_state
+
+            derived = derived_control_state(self.session, profile.org_id, control_id, today)
+            if derived is not None:
+                return {"control_id": control_id, **derived, "record_count": len(relevant)}
 
         # The two controls below can prove their setup from trusted core/CRM data.
         if control_id == "product-mapping":
@@ -668,18 +759,17 @@ class ComplianceService:
         frameworks = self.evaluate(org_id, records=records, reconciliation=reconciliation)
         for framework in frameworks:
             overdue = sum(
-                1
-                for control in framework["controls"]
-                if str(control.get("reason") or "").startswith("Overdue since")
+                1 for control in framework["controls"] if str(control.get("reason") or "").startswith("Overdue since")
             )
             framework["summary_health"] = module_summary_health(framework["evidence_coverage"], overdue=overdue)
         # The tailored NP3 register considers structured logs and evidence derived
         # from Core. Project that exact health into the module summary rather than
         # showing the generic catalogue count beside a different NP3 audit count.
-        if profile is not None and profile.enabled and (profile.settings or {}).get("food_control_programme") == "np3":
+        programme = (profile.settings or {}).get("food_control_programme") if profile is not None else None
+        if profile is not None and profile.enabled and programme in ("np1", "np2", "np3"):
             np3_health = self.np3_audit(org_id)["health"]
             for framework in frameworks:
-                if framework["slug"] == "np3-food-control":
+                if framework["slug"] == f"{programme}-food-control":
                     framework["np3_audit_health"] = np3_health
                     framework["evidence_coverage"] = np3_audit_coverage(np3_health)
                     framework["summary_health"] = module_summary_health(
@@ -728,9 +818,12 @@ class ComplianceService:
         """Return the upcoming-verification checklist and only its linked evidence."""
         profile = self.get_profile(org_id)
         settings = profile.settings or {} if profile else {}
-        if profile is not None and profile.enabled and settings.get("food_control_programme", "np3") != "np3":
-            raise ValueError("Select National Programme 3 in Configuration to use the NP3 audit plan")
-        records = self.records(org_id, "np3-food-control") if profile and profile.enabled else []
+        programme = settings.get("food_control_programme", "np3")
+        if profile is not None and profile.enabled and programme not in ("np1", "np2", "np3"):
+            raise ValueError("Select a national programme in Configuration to use the verification workspace")
+        if programme not in ("np1", "np2", "np3"):
+            programme = "np3"
+        records = self.records(org_id, f"{programme}-food-control") if profile and profile.enabled else []
         derived_evidence, live_summary = (
             derive_np3_core_evidence(self.session, org_id) if profile and profile.enabled else ([], {})
         )
@@ -749,7 +842,7 @@ class ComplianceService:
             if profile and profile.enabled
             else []
         )
-        rows = build_np3_audit_rows(records, derived_evidence, staff=staff)
+        rows = build_np3_audit_rows(records, derived_evidence, staff=staff, programme=programme)
         review_interval_months = settings.get("np3_review_interval_months", 6)
         check_review_intervals = settings.get("np3_check_review_intervals", {})
         for row in rows:
@@ -850,6 +943,10 @@ class ComplianceService:
             {
                 "org_name": self.session.query(Organisation.name).filter(Organisation.id == org_id).scalar()
                 or "Organisation",
+                "programme": programme,
+                "programme_label": GUIDANCE[programme]["label"],
+                "programme_short": GUIDANCE[programme]["short"],
+                "guidance_url": GUIDANCE[programme]["url"],
                 "verification": {
                     "date": settings.get("np3_verification_date"),
                     "verifier": settings.get("np3_verifier_name"),
@@ -859,7 +956,7 @@ class ComplianceService:
                 "preparation_items": PREPARATION_ITEMS,
                 "categories": [
                     {"key": f"section-{index}", "title": category}
-                    for index, (category, _topics) in enumerate(NP3_AUDIT_CATEGORIES)
+                    for index, (category, _topics) in enumerate(audit_categories(programme))
                 ],
                 "rows": rows,
                 "counts": counts,
@@ -896,7 +993,7 @@ class ComplianceService:
             raise ValueError("Unknown framework")
         profile = self.get_profile(org_id)
         if profile is None or not profile.enabled:
-            raise ValueError("Compliant is not enabled for this organisation")
+            raise ValueError("Compliance is not enabled for this organisation")
         # Reject an inapplicable-but-real framework before any query: applicability is a
         # pure function of the profile's settings and the static catalogue, so it costs
         # nothing to check first and it saves every caller of a known-inapplicable slug
