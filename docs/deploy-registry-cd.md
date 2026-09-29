@@ -54,6 +54,32 @@ done silently. Until then, "promoted" means: built from the same commit, in the 
 pipeline, moments apart — a large improvement over today's host-side rebuild, but not
 byte-identical to what gets shipped to prod.
 
+## Image builds use the existing deployment runner
+
+`docker_build_publish` runs on the `deploy-target` shell executor with the host
+Docker socket. The ordinary Docker executor is unprivileged, so a Docker-in-Docker
+service cannot run there. This follows the [GitLab shell-executor Docker build pattern](https://docs.gitlab.com/ci/docker/using_docker_build/#use-the-shell-executor). Main-only builds retain the same test/production image
+tags and downstream deployment gates. A resource group serialises image builds
+across pipelines, and registry credentials use a temporary private Docker config
+removed on exit.
+
+The deployment runner starts shell jobs as `gitlab-runner`. After recreating its
+container, ensure that user belongs to the mounted socket's numeric group:
+
+```bash
+docker cp scripts/setup_runner_docker_access.sh gitlab-runner:/tmp/setup_runner_docker_access.sh
+docker exec gitlab-runner bash /tmp/setup_runner_docker_access.sh
+docker exec --user gitlab-runner --env DOCKER_API_VERSION=1.43 gitlab-runner docker version
+```
+
+The setup adds that user to the socket's group and verifies access; it does not
+change socket permissions or restart running jobs. This is host Docker access,
+which grants control of host containers: keep the runner scoped to trusted jobs.
+The ordinary MR jobs retain the Docker executor without a host socket mount.
+Group membership is in the runner container's writable layer, so rerun setup
+when that container is recreated. The Docker CLI and runner API1.43 setting must
+also remain configured as described below.
+
 ## Runner setup — done
 
 The `deploy-target` tag is a real, registered runner, not a placeholder: a second

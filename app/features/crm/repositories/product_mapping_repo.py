@@ -20,6 +20,7 @@ class ProductMappingRepository:
         match_type: str = "exact",
         notes: str | None = None,
         created_by_user_id: UUID | None = None,
+        units_per_line: int = 1,
     ) -> ProductMapping:
         mapping = ProductMapping(
             org_id=org_id,
@@ -29,6 +30,7 @@ class ProductMappingRepository:
             match_type=match_type,
             notes=notes,
             created_by_user_id=created_by_user_id,
+            units_per_line=units_per_line,
         )
         self.db.add(mapping)
         return mapping

@@ -91,7 +91,7 @@ items, correct dates/names, 0 console errors.
 
 <details><summary>original plan</summary>
 
-**Files:** `app/core/backend/system_findings_cache.py` (or `corechecks.py` route),
+**Files:** `app/features/compliance_checks/system_findings_cache.py` (or `corechecks.py` route),
 `app/core/frontend/js/system-findings-banner.js`, `tests/test_system_findings_cache.py`,
 `tests/test_corechecks_routes.py`.
 

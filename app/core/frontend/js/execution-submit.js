@@ -601,6 +601,11 @@
           unit: (outputDef ? (outputDef.unit || 'units') : 'units').trim()
         };
         if (untrackedItemId) outPayload.untracked_item_id = untrackedItemId;
+        // Part-filled remainder -> Library stock in mL (plan 1.2).
+        const libraryInput = Array.from(modal.querySelectorAll('.execute-output-library-input')).find(function(el) {
+          return (el.dataset.outputId || '').trim() === outputId;
+        });
+        if (libraryInput && libraryInput.value.trim() !== '') outPayload.library_remainder_ml = libraryInput.value.trim();
         // If expiry is set during execution, capture operator selection for backend persistence (logic in core-api.js)
         if (typeof window.applyExecutionOutputExpiryToPayload === 'function') {
           window.applyExecutionOutputExpiryToPayload(modal, outputId, outputDef, outPayload);
