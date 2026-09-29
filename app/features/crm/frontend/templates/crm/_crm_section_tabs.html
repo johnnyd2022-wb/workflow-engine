@@ -1,5 +1,5 @@
-<nav class="crm-section-tabs" aria-label="CRM sections">
-  <div class="flow-mode-segmented" role="tablist" aria-label="CRM pages">
+<nav class="crm-section-tabs" aria-label="Sales sections">
+  <div class="flow-mode-segmented ui-tabs" role="tablist" aria-label="Sales pages">
     <a
       href="/crm"
       role="tab"
@@ -18,6 +18,12 @@
       aria-selected="{{ 'true' if active_crm_tab == 'tasks' else 'false' }}"
       class="flow-mode-segment{% if active_crm_tab == 'tasks' %} flow-mode-segment--active{% endif %}"
     >Tasks</a>
+    <a
+      href="/crm/matching"
+      role="tab"
+      aria-selected="{{ 'true' if active_crm_tab == 'matching' else 'false' }}"
+      class="flow-mode-segment{% if active_crm_tab == 'matching' %} flow-mode-segment--active{% endif %}"
+    >Batch matching</a>
     <a
       href="/crm/configuration"
       role="tab"
