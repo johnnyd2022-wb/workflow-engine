@@ -732,6 +732,8 @@ split.
       - [x] Register public Core JS/CSS assets by owning slice before any asset moves.
         (!352)
       - [ ] Split `create-process-modal.js` internally as part of process-design.
+        - [x] Extract pure process-modal helpers into `process-modal-utils.js` (!357).
+        - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
   - Done when: `backend.py` holds only shell code, and every slice in the feature index
