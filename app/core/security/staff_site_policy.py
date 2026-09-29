@@ -57,7 +57,7 @@ def setup_staff_site_policy(app):
         # alone cannot grant access: every registry entry is still blocked.
         classification = coverage_for(request.endpoint, request.method)
         code = "site_scope_invalid" if scope.mode == "deny" else "site_scope_not_available"
-        if SELECTED_SITE_ROLES_ACTIVE and classification == "scoped":
+        if scope.mode == "selected" and SELECTED_SITE_ROLES_ACTIVE and classification == "scoped":
             # Future handlers require subject authorization; none are registered here.
             return None
         return jsonify(
