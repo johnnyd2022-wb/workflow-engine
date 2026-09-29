@@ -71,11 +71,12 @@
   function formatDurationMs(ms) {
     var safe = Math.max(0, Number(ms || 0));
     var mins = Math.floor(safe / 60000);
+    if (mins < 1) return 'Less than a minute';
+    var days = Math.floor(mins / 1440);
+    if (days > 0) return pluralise(days, 'day');
     var hours = Math.floor(mins / 60);
-    var remMins = mins % 60;
-    if (hours <= 0) return remMins + 'm';
-    if (remMins <= 0) return hours + 'h';
-    return hours + 'h ' + remMins + 'm';
+    if (hours > 0) return pluralise(hours, 'hour');
+    return pluralise(mins, 'minute');
   }
 
   function sortSteps(steps) {
