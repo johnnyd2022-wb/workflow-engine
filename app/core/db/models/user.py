@@ -3,7 +3,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -46,6 +46,15 @@ class User(TenantScoped, Base):
     # Time-limited access (e.g. an Auditor for a verification visit). After this moment
     # the account can't sign in or use an existing session.
     access_expires_at = Column(DateTime(timezone=True), nullable=True)
+    # A custom role (plan 0.4c) replaces the built-in role's permissions; ``role`` then
+    # holds the built-in role it was cloned from.
+    # org_roles.created_by_user_id points back at users, so this side is created with ALTER
+    # (use_alter) to keep metadata table ordering acyclic; the name matches the migration's.
+    custom_role_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("org_roles.id", ondelete="RESTRICT", use_alter=True, name="users_custom_role_id_fkey"),
+        nullable=True,
+    )
     # Pending invite: SHA-256 of the one-time setup token, and when it stops working.
     invite_token_hash = Column(String(64), nullable=True, unique=True, index=True)
     invite_expires_at = Column(DateTime(timezone=True), nullable=True)

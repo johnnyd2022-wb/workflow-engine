@@ -91,6 +91,8 @@ Small, and everything else builds on it.
     database.
   - Remaining work: schedule backups and rehearse a restore before the first paying
     customer.
+  - [x] Backup CLI, nightly timer template and isolated restore rehearsal tooling
+    (!416); synthetic rehearsal passed. Production scheduling/rehearsal remain.
   - Done when: the test suite cannot reach a real tenant, and a restore has been
     rehearsed.
 
@@ -115,9 +117,11 @@ Small, and everything else builds on it.
   - [x] d. Run end-to-end tests in merge request pipelines, independently of
     relevant-test selection. (!324)
   - [ ] e. Block merges while `main` is red.
+    - [x] Repair the main image-build runner and document Docker socket access (!422);
+      full main build/publication validation follows merge.
   - Done when: a fresh clone passes lint and every test on the first run.
 
-- [ ] **0.4 Team roles and permissions.** *Critical · L*
+- [x] **0.4 Team roles and permissions.** *Critical · L*
   - Evidence: two roles, `UserRole.ADMIN` and `MEMBER` (`app/core/db/models/user.py:14`).
     11 routes check a role with `requires_role`, all admin-only. No CRM or sales route
     checks one, so every member sees revenue, customers and invoices. `/org/users` can
@@ -134,7 +138,7 @@ Small, and everything else builds on it.
       on hand; no recipes or process design), Auditor (read-only and time-limited, for a
       verifier visit). On migration, ADMIN becomes Owner/Admin and MEMBER becomes a
       "Staff" role with today's access, so nothing changes for current users.
-    - [ ] c. **Custom roles later:** clone a built-in role and tick permissions.
+    - [x] c. (!419) **Custom roles later:** clone a built-in role and tick permissions.
     - [x] d. (!333) **Server-side, default deny.** Every route declares
       `@requires_permission(...)`. A test walks Flask's URL map and fails if any route
       lacks a declaration; public routes are an explicit allow-list. Nav and buttons hide
@@ -161,7 +165,12 @@ Small, and everything else builds on it.
     - Owner is Admin plus the last-admin rule; no separate Owner role yet.
     - "Invite by email" is an invite **link** the admin sends (7 days, one use, only a
       hash stored): the app has no email sender yet. Swap in email when one exists.
-    - Only c. (custom roles) is left.
+    - c. (!419): People → Custom roles. Clone any built-in role except Admin, name it,
+      tick permissions; changing a role changes it for everyone who holds it, and a role
+      in use can't be deleted. Custom roles can grant anything Staff can; users.manage,
+      settings.manage and compliance.manage stay with Admins (those routes also check the
+      Admin role). A person with a custom role carries its base role, so time limits
+      (Auditor-based roles) and role checks behave as for that role.
 
 - [ ] **0.5 Sign in with Google, linked to existing accounts.** *M*
   - Why: most producers already live in Google Workspace. One click to sign in, one less
@@ -337,6 +346,9 @@ want it, and never produce a recall list that can't be trusted.
     failure becomes a system finding with a fix action (see
     `docs/system-findings-module-contract.md`).
   - Done when: the checks run in CI (5.2) and nightly on live tenants.
+  - [x] Implement stock arithmetic, counted-unit and unmatched-sale findings, CI tests,
+    and the production timer definition. (!406)
+  - [ ] Enable and verify the timer on every production Docker host after deployment.
 
 ---
 
@@ -398,13 +410,23 @@ records, not from people typing figures in.
     "remind me from" date. g: rules checked against customs.govt.nz on 25 Sep 2026
     (Sources); public holidays aren't counted in the due date, and the page says so.
 
-- [ ] **2.2 Track verifications from visit to next due date.** *High · M*
+- [x] **2.2 Track verifications from visit to next due date.** *High · M*
   - Evidence: after a passed verification the NP3 page still says "Verification ready",
     and there's nowhere to record the outcome.
   - Change: record each verification (date, verifier, outcome, corrective actions with
     owners and due dates); work out the next verification from the programme's frequency
     and show it on the dashboard.
   - Done when: the app always knows the current verification status and next due date.
+  - As built (!413): NP3 page (and the NP1/NP2 page) → Verification. Each visit records
+    date, verifier, agency, report reference, outcome (and, when unacceptable, whether the
+    business is willing and able to comply) and corrective actions with owners and due
+    dates. The next date follows MPI's national-programme frequency steps (Food
+    Regulations 94: 3 months to 3 years, or none): the app suggests the step the rules
+    give and records what the verifier actually set, including a date from their report.
+    Before any verification, the registration date gives the initial due date (6 weeks
+    new; 1 year NP1/NP2, 6 months NP3 existing). Alerts 60 days before the due date and a
+    week before each action; the dashboard module card carries the next date as a
+    milestone (rendered by !412). Recording a visit clears the booked-visit fields.
 
 - [ ] **2.3 Make evidence counts consistent and clickable.** *S*
   - Evidence: "38 evidence ready" appears next to "0 active evidence files" on the NP3
@@ -412,22 +434,39 @@ records, not from people typing figures in.
   - Change: define ready, needs evidence and overdue once; every count links to the
     records behind it; remove panels with nothing in them.
 
-- [ ] **2.4 Finish the NZ Alcohol module on one pattern.** *L*
+- [x] **2.4 Finish the NZ Alcohol module on one pattern.** *L*
   - Direction: NZ Alcohol = NP1, NP2, NP3, Customs and liquor licensing. Each part plugs
     into Core like ABV does: when switched on, it adds required fields to the relevant
     steps, and producers keep their existing processes.
   - Change:
-    - [ ] a. Document the Compliant → Core contract (step-scoped prompts, completion
+    - [x] a. Document the Compliant → Core contract (step-scoped prompts, completion
       constraints, how steps are matched) so every part is built to it. Starting point:
       `app/features/compliant/platform/workflow_rules.py`.
-    - [ ] b. Build NP1 and NP2 alongside NP3, selected by the existing food-safety
+    - [x] b. Build NP1 and NP2 alongside NP3, selected by the existing food-safety
       programme setting.
-    - [ ] c. Starter pack for each producer type (spirits, beer, wine, cider, mead, RTD):
+    - [x] c. Starter pack for each producer type (spirits, beer, wine, cider, mead, RTD):
       a workflow template plus the fields and checks that type needs, preconfigured.
   - Done when: switching on any part of NZ Alcohol shows the right required fields on the
     right steps, with no change to anyone's workflow.
+  - As built (!418):
+    - a. `docs/compliant-core-contract.md`: the composition root, workflow rules (prompts,
+      `prompt_value` / `active_evidence` constraints, step scoping, final-step and
+      output-name matching), the check contract (alerts, findings, workspace summary and
+      milestone), module pages and access policy, and a checklist for a new part.
+    - b. NP1 and NP2 now use the NP3 verification workspace, selected by the programme
+      setting. Their checks are MPI's December 2025 guidance cards (NP2 adds cooking or
+      pasteurising, defrosting/reheating, water activity and pickling/fermenting), mapped
+      to the same check ids, so playbooks, logs, training and the evidence register all
+      work. Labels, guidance links, alerts and the dashboard card follow the programme.
+      MPI puts brewing, distilling and alcoholic-beverage manufacture under NP3; NP1/NP2
+      fit producers that only store, distribute or sell packaged or chilled food.
+    - c. Starter packs on "Start from a template": spirits, beer, wine, cider, mead and
+      RTD, each a chained receive-to-package workflow (created as a draft, once). Applying
+      one adds the product type (so its frameworks apply) and requires ABV on the final
+      product, and lists the checks that matter for that product. Staff without
+      `compliance.manage` get the workflow but not the compliance changes.
 
-- [ ] **2.5 Liquor licensing (basic).** *M*
+- [x] **2.5 Liquor licensing (basic).** *M*
   - Scope: Sale and Supply of Alcohol Act 2012 obligations for producers who sell (cellar
     door, online, events). The first version is a register with reminders and checks, on
     the existing NP3 patterns (checks, evidence, review reminders, training register).
@@ -436,47 +475,62 @@ records, not from people typing figures in.
     (`.claude/agents/outputs/whistlebird-licence-dossier.html`) is a worked example of
     one producer's process.
   - Change:
-    - [ ] a. **Licence register:** type (on, off, club, special), endorsements (e.g. s 40
+    - [x] a. **Licence register:** type (on, off, club, special), endorsements (e.g. s 40
       remote seller), number, issuing DLC, issue and expiry dates, conditions (sale and
       delivery hours), premises. Reminders far enough ahead of expiry to lodge the renewal
       in time (confirm the lead time with the DLC), and for annual fees.
-    - [ ] b. **Special licences** for events: date, venue, conditions, manager on duty.
-    - [ ] c. **Manager register:** certified managers with certificate number, issuing
+    - [x] b. **Special licences** for events: date, venue, conditions, manager on duty.
+    - [x] c. **Manager register:** certified managers with certificate number, issuing
       DLC, expiry and renewal reminders.
-    - [ ] d. **Recurring checks with evidence:**
+    - [x] d. **Recurring checks with evidence:**
       - the licence and the manager on duty are displayed where required;
       - host responsibility or social responsibility policy, and the alcohol management
         plan, are current;
       - staff training (reuse the NP3 training register);
       - for remote sellers: licence details shown on the website, and age verification
         and delivery conditions followed.
-    - [ ] e. **Incident and refusal log:** ID refusals, intoxication refusals, incidents,
+    - [x] e. **Incident and refusal log:** ID refusals, intoxication refusals, incidents,
       controlled purchase operations. This is what an inspector asks to see.
     - [ ] f. **Links to Core and Sales where cheap:** e.g. flag a delivery recorded outside
       licensed delivery hours, if order times are available.
   - Done when: licence and certificate dates never lapse unnoticed, and an inspector's
     request for policies, training and incident records is one download.
+  - As built (!414): NZ Alcohol → Licensing (shown when a licence type is set in
+    Configuration). Licence register with endorsements, DLC, dates, sale and delivery hours
+    and conditions; the renew-by date is 20 working days before expiry counted as s 5 of
+    the Act defines working days (weekends, national holidays including Matariki,
+    Mondayisation, 20 Dec-15 Jan), reminded from 60 days before it, then "late: file with a
+    waiver", then expired. Annual fee reminders 30 days ahead. Special licences with the
+    event, dates and manager on duty. Managers' certificates reminded 60 days before expiry
+    until renewal is lodged. The liquor-licence framework gains checks for displays, the
+    host/social responsibility policy and AMP, and remote-seller website duties; licence
+    scope, renewal and certified managers are proven by the register everywhere
+    (overview included). Incident and refusal log. "Download inspector pack" is one PDF:
+    licences, managers, checks with evidence, staff training (the shared competency
+    register) and the log.
+  - f is not built: Xero invoices carry a date but no order time, so a delivery outside
+    licensed hours can't be detected yet. Revisit if an order source with times is added.
 
-- [ ] **2.6 Customs stocktake: count reality and reconcile it to lodged duty.** *High · L*
+- [x] **2.6 Customs stocktake: count reality and reconcile it to lodged duty.** *High · L*
   - Why: at a Customs audit the officer asks for sales data and for where every product is
     right now (e.g. "VAT57 and VAT59 in tank, 43 bottles of Solstice on the shelf"), then
     counts the shelf to check. Customs requires stocktakes at least once a year.
     Discrepancies must be investigated and resolved, and a confirmed unexplained loss is
     dutiable and must be reported to Customs.
   - Change:
-    - [ ] a. **Stock position:** where everything is, by location and batch. Bulk stock in
+    - [x] a. **Stock position:** where everything is, by location and batch. Bulk stock in
       tanks in litres, ABV and LAL; packaged goods by product and batch; for the licensed
       area and each outside location. Exportable for a visit together with the lodged
       periods.
-    - [ ] b. **Stocktake schedule:** configurable frequency (monthly, quarterly,
+    - [x] b. **Stocktake schedule:** configurable frequency (monthly, quarterly,
       six-monthly or annual; Customs' minimum is annual) with a reminder, plus an
       on-demand "Customs is here" count.
-    - [ ] c. **Count screen** (reuses the stocktake from 1.3f): the expected quantity for
+    - [x] c. **Count screen** (reuses the stocktake from 1.3f): the expected quantity for
       each line; type the count or scan; variance per line in units and LAL. Works on a
       phone during the visit.
-    - [ ] d. **Reconciliation per product:** opening + produced − removed − approved losses
+    - [x] d. **Reconciliation per product:** opening + produced − removed − approved losses
       = expected closing, tied back to the lodged entries.
-    - [ ] e. **Resolve variances** as below. Nothing blocks work; unresolved variances stay
+    - [x] e. **Resolve variances** as below. Nothing blocks work; unresolved variances stay
       on the alert list with their LAL and potential duty.
   - Resolving a variance takes one tap, with the most likely reason suggested first. A
     variance can be split across reasons (e.g. 4 with a rep, 3 broken).
@@ -498,6 +552,21 @@ records, not from people typing figures in.
 
     Customs' published guidance doesn't cover surpluses. Confirm how Customs treats
     surpluses, and duty-paid stock coming back into the licensed area, before building.
+  - As built (!410): Core → Stocktake (`/core/stocktake`, `stocktake_bp`). The stock
+    position lists finished goods and work in progress by place and batch with LAL, and
+    downloads as CSV together with the lodged entries. The schedule (monthly, quarterly,
+    six-monthly, annual; default annual, anchored on the last stocktake or the go-live
+    date) raises a reminder 14 days before it's due; "Customs is here" starts an
+    on-demand count. Each line's expected quantity is taken when it's counted, so sales
+    during a count aren't variances; bulk liquid matches within a tolerance (default
+    0.5%), bottles never do. Every difference is resolved into ordinary dated stock
+    operations as in the tables above (moves, wastage, adjustments), so excise follows
+    on its own; system places "Removed without a sale record" and "Unaccounted loss"
+    (outside the licensed area) make those dutiable removals. Unresolved and
+    investigating lines stay on the alert list with LAL and duty. Core reaches LAL and
+    duty only through a generic stock-measure seam in the Compliant platform, so Core
+    names no industry. Surpluses are recorded and flagged to raise with Customs, never
+    credited automatically, pending Customs' confirmation of how they treat them.
   - Principles: every resolution is a dated adjustment recording who and why, never an
     overwrite. Bulk liquid can have a configurable measurement tolerance (e.g. ±0.5% of
     volume); packaged units have none.
@@ -523,7 +592,7 @@ Sales matter here because they finish the trace. Make them readable and complete
   - Change: log sales as "Sold 6 × Wildflower (batch 044), INV-0386, Eastbourne Sports
     Club"; show each sync as one entry with a count that expands.
 
-- [ ] **3.3 A queue for unmatched sales.** *S*
+- [x] **3.3 A queue for unmatched sales.** *S* (!386)
   - Change: invoice lines with no product mapping, or that can't be filled from any stock
     (1.1d), become tasks with a direct fix.
 
@@ -543,7 +612,7 @@ Sales matter here because they finish the trace. Make them readable and complete
 Start after Phase 1 so redesigned screens show correct numbers; 4.1 and 4.7 can start at
 any time.
 
-- [ ] **4.1 Put data at the top of every page.** *High · S*
+- [x] **4.1 Put data at the top of every page.** *High · S* (!395)
   - Evidence: every Core and CRM page (dashboard, product workflows, active batches, live
     inventory, source map, CRM) opens with a decorative three-node illustration and a
     centred description, about 400 px on desktop. On a phone the dashboard's whole first
@@ -552,6 +621,12 @@ any time.
     describes the app's structure: "Business control tower", "See the whole business. Act
     in the right workspace.", "Dashboard gives you the signal…", "DO THE WORK / Choose a
     workspace", "CONTEXT, NOT A TO-DO LIST", "Use trends to understand the picture…".
+  - Follow-up (!432): the same treatment on the remaining pages. Illustration strips are
+    removed from Product workflows, Active batches, Live inventory, Settings,
+    Integrations, Notifications, the inventory add/view/dispose pages, batch start and
+    process flow (four banner partials deleted). "Create product workflow" sits beside
+    its title. The shared page header and the Production hub's title and action are
+    left-aligned, without the decorative circle.
 
 - [x] **4.2 One design system.** *High · L* (!396)
   - Evidence: three distinct visual styles.
@@ -563,18 +638,20 @@ any time.
     tables, status badges) used by all three; migrate each area as it's touched.
 
 - [ ] **4.3 Use words and numbers producers use.** *S*
-  - [ ] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
+  - [x] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
     Compliance; pages and cards say Compliant), CRM → **Sales**.
   - [ ] b. Durations in days ("22 days"), not hours ("Started 535h 54m ago").
   - [ ] c. No trailing zeros ("30", not "30.0000"), including activity entries.
   - [ ] d. Fix "5 active batchs".
 
-- [ ] **4.4 One route to each job.** *S*
+- [x] **4.4 One route to each job.** *S* (a–d: !390–!393)
   - [x] a. "Trace" and Source Map links use the single `/core/sourcemap` page
     (`core.sourcemap`). (!391)
-  - [ ] b. "Add to inventory" and "+ Receive stock" do the same job; keep one.
-  - [ ] c. Pages have three back controls (top-bar arrow, "← Back to …" link, sidebar);
-    keep one.
+  - [x] b. The redundant "+ Receive stock" action is removed; "Add to inventory"
+    retains the manual, CSV and barcode choices. (!392)
+  - [x] c. Focused Core pages and Task settings retain their destination-specific back
+    links without a duplicate generic top-bar arrow; the sidebar remains primary
+    navigation. (!393)
   - [x] d. Old URLs redirect to their intended destinations in
     `app/features/compliant/routes/page_routes.py` and `app/core/backend/backend.py`
     (!390).
@@ -593,15 +670,15 @@ any time.
     one-handed at 390 px, with tests at that width. (The bottom nav on phone is already
     right; keep it.)
 
-- [ ] **4.7 Fix the visual bugs.** *S*
+- [x] **4.7 Fix the visual bugs.** *S* (a–f: !327–!330, !389)
   - [x] a. Sidebar background stops at viewport height on long pages (white below it). (!327)
   - [x] b. The floating blue menu toggle overlaps the sidebar edge. (!327)
   - [x] c. CRM widget control icons render as missing-glyph boxes. (!328)
-- [x] d. `/settings` requests a resource that returns 404. (!389)
+  - [x] d. `/settings` requests a resource that returns 404. (!389)
   - [x] e. Forms asking for raw UUIDs (Customs "Core source references") — pick records
     instead. (!330)
-  - [ ] f. The Compliance workspaces page is one card on an empty screen; fold it into
-    NZ Alcohol or give it content.
+  - [x] f. The Compliance workspaces page is one card on an empty screen; fold it into
+    NZ Alcohol or give it content. (!329)
 
 ---
 
@@ -632,6 +709,8 @@ split.
       with the e2e suite as the safety net.
       - [x] Reconciliation pure move. (!331)
       - [x] Wastage pure move. (!332)
+      - [x] Compliance-checks pure move. (!334)
+      - [x] Activity-log pure move. (!335)
     - [ ] d. **Carve before you change:** when an item in this plan needs substantial work
       in a slice that still lives in `backend.py`, carve that slice first in its own MR,
       then make the change in its new home. Likely pulls: 1.2, 1.3, 1.6 and 2.6 →
@@ -651,6 +730,7 @@ split.
 - [ ] **5.2 Run the stock checks as tests.** *S*
   - Change: the 1.7 checks as tests, plus a mock-recall scenario and a Customs stocktake
     scenario (2.6) in the end-to-end suite.
+  - [x] Stock arithmetic, matching queue, and finding contract tests. (!406)
 
 - [ ] **5.3 Keep tooling in proportion.** *S*
   - Evidence: 40 report categories under `.agents/reports/`, plus several watchers and
@@ -668,12 +748,16 @@ Starts once Phases 1 and 2 hold up with a second producer.
     gets: a real recall trace, an NP3 evidence pack and an excise draft.
 
 - [ ] **6.2 Pilot a second producer of a different type.** *High · M*
+  - [x] Preparation (!417): `docs/second-producer-pilot.md` defines the session and evidence;
+    producer selection and the real pilot remain open.
   - Change: onboard a brewery or winery through the go-live stocktake (1.3); measure time
     to first traced sale; record every point where they needed help.
   - Done when: they reach a traced sale in one sitting, and their questions become the
     next items in this plan.
 
 - [ ] **6.3 Price by what's included.** *S*
+  - [x] Preparation (!417): inclusion/terms decision sheet in `docs/second-producer-pilot.md`;
+    prices require founder approval.
   - Change: plans built from Production, a compliance pack for the producer's type, and
     the Xero sales link, in line with the existing feature subscriptions.
 

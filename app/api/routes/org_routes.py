@@ -6,8 +6,9 @@ from uuid import UUID
 from flask import Blueprint, g, jsonify, render_template, request
 
 from app.core.db import db_session
+from app.core.db.models.org_role import OrgRole
 from app.core.db.models.organisation import OrganisationStatus
-from app.core.db.models.user import UserRole
+from app.core.db.models.user import User, UserRole
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
 from app.core.security.auth_service import AuthService
@@ -17,9 +18,12 @@ from app.core.security.people import (
     invite_is_pending,
     issue_invite,
     parse_access_expiry,
-    parse_role,
+    parse_role_choice,
+    permission_catalogue,
     role_options,
+    role_value,
     serialize_person,
+    validate_custom_role,
     validate_new_password,
 )
 from app.core.security.permissions import requires_auth, requires_org_scope, requires_role
@@ -151,7 +155,7 @@ def list_users():
     try:
         users = UserRepository(db).list_users_for_org(g.current_org_id, active_only=False)
         people = sorted((serialize_person(u) for u in users), key=lambda p: p["display_name"].lower())
-        return jsonify({"users": people, "roles": role_options()}), 200
+        return jsonify({"users": people, "roles": role_options(_custom_roles(db))}), 200
     except Exception:
         logger.exception("Error listing users")
         return jsonify({"error": "Failed to list users"}), 500
@@ -188,7 +192,7 @@ def create_user():
 
     db = db_session()
     try:
-        role = parse_role(data.get("role", "member"))
+        role, custom = parse_role_choice(data.get("role", "member"), _custom_roles(db))
         expires = parse_access_expiry(data.get("access_expires_at"), role)
         if password:
             validate_new_password(password)
@@ -211,6 +215,7 @@ def create_user():
             return jsonify({"error": str(e)}), 400
 
         user.access_expires_at = expires
+        user.custom_role_id = custom.id if custom is not None else None
         token = None if password else issue_invite(user)
         db.commit()
 
@@ -218,7 +223,7 @@ def create_user():
             "create",
             "user",
             user.id,
-            {"email": email, "role": role.value, "invited": token is not None},
+            {"email": email, "role": role_value(user), "invited": token is not None},
             g.current_org_id,
             g.current_user.id,
         )
@@ -267,7 +272,9 @@ def update_user(user_id: str):
         if not target:
             return jsonify({"error": "User not found"}), 404
 
-        role = parse_role(data["role"]) if "role" in data else None
+        role, custom = parse_role_choice(data["role"], _custom_roles(db)) if "role" in data else (None, None)
+        if "role" in data and target.id == g.current_user.id and str(data["role"]).strip() != role_value(target):
+            raise PeopleError("You can't change your own role. Ask another admin.")
         is_active = data.get("is_active") if "is_active" in data else None
         if is_active is not None and not isinstance(is_active, bool):
             return jsonify({"error": "is_active must be true or false"}), 400
@@ -279,7 +286,7 @@ def update_user(user_id: str):
 
         effective_role = role or target.role
         before = {
-            "role": target.role.value,
+            "role": role_value(target),
             "is_active": target.is_active,
             "access_expires_at": target.access_expires_at.isoformat() if target.access_expires_at else None,
         }
@@ -287,6 +294,7 @@ def update_user(user_id: str):
             target.access_expires_at = parse_access_expiry(data.get("access_expires_at"), effective_role)
         if role is not None:
             target.role = role
+            target.custom_role_id = custom.id if custom is not None else None
         if is_active is not None:
             target.is_active = is_active
         db.commit()
@@ -374,3 +382,148 @@ def delete_user(user_id: str):
         db.rollback()
         logger.exception("Error deleting user")
         return jsonify({"error": "Failed to delete user"}), 500
+
+
+# --- custom roles (plan 0.4c) ---------------------------------------------------------------
+
+
+def _custom_roles(db) -> list:
+    return db.query(OrgRole).filter(OrgRole.org_id == g.current_org_id).order_by(OrgRole.name.asc()).limit(100).all()
+
+
+def _serialize_role(role: OrgRole, holders: int) -> dict:
+    return {
+        "id": str(role.id),
+        "value": f"custom:{role.id}",
+        "name": role.name,
+        "description": role.description,
+        "base_role": role.base_role,
+        "permissions": list(role.permissions or []),
+        "holders": holders,
+    }
+
+
+def _roles_body(db) -> dict:
+    from sqlalchemy import func
+
+    from app.core.security.access_policy import CUSTOM_ROLE_BASES, GRANTABLE, ROLE_LABELS, ROLE_PERMISSIONS
+
+    customs = _custom_roles(db)
+    counts = dict(
+        db.query(User.custom_role_id, func.count(User.id))
+        .filter(User.org_id == g.current_org_id, User.custom_role_id.isnot(None))
+        .group_by(User.custom_role_id)
+        .all()
+    )
+    return {
+        "custom_roles": [_serialize_role(r, counts.get(r.id, 0)) for r in customs],
+        "built_in": [
+            {
+                "value": role.value,
+                "label": ROLE_LABELS[role],
+                "permissions": sorted(ROLE_PERMISSIONS[role]),
+                "can_clone": role in CUSTOM_ROLE_BASES,
+                "clone_permissions": sorted(ROLE_PERMISSIONS[role] & GRANTABLE),
+            }
+            for role in UserRole
+        ],
+        "permissions": permission_catalogue(),
+    }
+
+
+@org_bp.route("/roles", methods=["GET"])
+@requires_auth
+@requires_role(UserRole.ADMIN)
+@requires_org_scope
+def list_roles():
+    return jsonify(_roles_body(db_session())), 200
+
+
+@org_bp.route("/roles", methods=["POST"])
+@requires_auth
+@requires_role(UserRole.ADMIN)
+@requires_org_scope
+def create_role():
+    """Clone a built-in role and tick its permissions (admin only)."""
+    data = _json_body()
+    if data is None:
+        return jsonify({"error": "JSON body required"}), 400
+    db = db_session()
+    try:
+        values = validate_custom_role(data, {r.name.casefold() for r in _custom_roles(db)})
+        role = OrgRole(org_id=g.current_org_id, created_by_user_id=g.current_user.id, **values)
+        db.add(role)
+        db.commit()
+    except PeopleError as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 400
+    log_action("create", "org_role", role.id, values, g.current_org_id, g.current_user.id)
+    return jsonify(_roles_body(db)), 201
+
+
+def _load_role(db, role_id: str):
+    try:
+        rid = UUID(role_id)
+    except ValueError:
+        return None
+    return db.query(OrgRole).filter(OrgRole.id == rid, OrgRole.org_id == g.current_org_id).one_or_none()
+
+
+@org_bp.route("/roles/<role_id>", methods=["PATCH"])
+@requires_auth
+@requires_role(UserRole.ADMIN)
+@requires_org_scope
+def update_role(role_id: str):
+    """Rename a custom role or change its permissions; everyone holding it changes at once."""
+    data = _json_body()
+    if data is None:
+        return jsonify({"error": "JSON body required"}), 400
+    db = db_session()
+    role = _load_role(db, role_id)
+    if role is None:
+        return jsonify({"error": "Role not found"}), 404
+    try:
+        others = {r.name.casefold() for r in _custom_roles(db) if r.id != role.id}
+        values = validate_custom_role(
+            {
+                "name": data.get("name", role.name),
+                "base_role": role.base_role,  # the base can't change: it's what holders carry
+                "permissions": data.get("permissions", role.permissions),
+                "description": data.get("description", role.description),
+            },
+            others,
+        )
+        before = {"name": role.name, "permissions": list(role.permissions or [])}
+        role.name, role.permissions, role.description = values["name"], values["permissions"], values["description"]
+        db.commit()
+    except PeopleError as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 400
+    log_action(
+        "update",
+        "org_role",
+        role.id,
+        {"before": before, "after": {"name": role.name, "permissions": role.permissions}},
+        g.current_org_id,
+        g.current_user.id,
+    )
+    return jsonify(_roles_body(db)), 200
+
+
+@org_bp.route("/roles/<role_id>", methods=["DELETE"])
+@requires_auth
+@requires_role(UserRole.ADMIN)
+@requires_org_scope
+def delete_role(role_id: str):
+    db = db_session()
+    role = _load_role(db, role_id)
+    if role is None:
+        return jsonify({"error": "Role not found"}), 404
+    holders = db.query(User.id).filter(User.org_id == g.current_org_id, User.custom_role_id == role.id).count()
+    if holders:
+        return jsonify({"error": f"{holders} person(s) still have this role. Give them another role first."}), 409
+    name = role.name
+    db.delete(role)
+    db.commit()
+    log_action("delete", "org_role", UUID(role_id), {"name": name}, g.current_org_id, g.current_user.id)
+    return jsonify(_roles_body(db)), 200

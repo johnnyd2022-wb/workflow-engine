@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 from uuid import uuid4
 
-from app.core.backend.corechecks import CoreChecksRunner
+from app.features.compliance_checks.routes.corechecks import CoreChecksRunner
 from app.features.compliant.frameworks import NZ_ALCOHOL_FRAMEWORKS, framework_by_slug
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_for_profile
 from app.features.compliant.modules.nz_alcohol.councils import TRADE_WASTE_CATALOGUES

@@ -332,6 +332,59 @@ def _s(value) -> str:
     return f"{Decimal(str(value)).normalize():f}"
 
 
+def measure(session: Session, org_id: UUID, pairs: list, on: date) -> list[dict]:
+    """Litres, ABV, LAL and duty at ``on`` for (item, quantity) pairs: stocktake lines, stock position.
+
+    Fields are None where they can't be worked out (not an excise product, no pack volume,
+    no ABV, or no rate), so callers show a gap instead of a wrong number.
+    """
+    profiles = {
+        p.inventory_name.casefold(): p
+        for p in session.query(AlcoholProductProfile).filter(AlcoholProductProfile.org_id == org_id).all()
+        if p.is_active
+    }
+    rates = session.query(ExciseRate).filter(ExciseRate.org_id == org_id).all()
+    out = []
+    for item, quantity in pairs:
+        profile = profiles.get(_base_name(item.name).casefold())
+        qty = Decimal(str(quantity))
+        if not qty.is_finite():
+            out.append({"litres": None, "abv_percent": None, "lal": None, "duty": None})
+            continue
+        litres = _litres(abs(qty), item.unit, profile)
+        abv = _lot_abv(session, item, profile)
+        lal = (litres * abv / 100).quantize(_Q4, ROUND_HALF_UP) if litres is not None and abv is not None else None
+        rate = _rate_for(rates, profile.customs_product_code if profile else None, on) if profile else None
+        duty = (
+            (lal * Decimal(str(rate.rate_per_lal))).quantize(_Q2, ROUND_HALF_UP) if lal is not None and rate else None
+        )
+        sign = -1 if qty < 0 else 1
+        out.append(
+            {
+                "litres": _s(sign * litres.quantize(_Q4, ROUND_HALF_UP)) if litres is not None else None,
+                "abv_percent": _s(abv) if abv is not None else None,
+                "lal": _s(sign * lal) if lal is not None else None,
+                "duty": f"{sign * duty:f}" if duty is not None else None,  # keeps cents: 138.20
+            }
+        )
+    return out
+
+
+def lodged_between(session: Session, org_id: UUID, start: date | None, end: date) -> dict:
+    """LAL per product in lodged entries whose period starts in [start, end), incl. carried adjustments."""
+    query = session.query(ExciseLodgement).filter(ExciseLodgement.org_id == org_id, ExciseLodgement.period_start < end)
+    if start is not None:
+        query = query.filter(ExciseLodgement.period_start >= start)
+    out: dict = {}
+    for lodgement in query.all():
+        snap = lodgement.snapshot or {}
+        for line in snap.get("lines", []):
+            out[line["product"]] = out.get(line["product"], Decimal("0")) + Decimal(str(line["lal"]))
+        for adj in snap.get("adjustments", []):
+            out[adj["product"]] = out.get(adj["product"], Decimal("0")) + Decimal(str(adj["lal"]))
+    return {k: _s(v) for k, v in out.items()}
+
+
 # --- drafts, lodging, reminders ---------------------------------------------------------------
 
 
