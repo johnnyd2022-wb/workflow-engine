@@ -129,8 +129,13 @@
         if (prompt.type === 'evidence') {
           inputHtml = `
             <div class="execute-evidence-upload" data-step-id="${currentStepId || ''}" style="border: 2px dashed var(--border-default); border-radius: var(--radius-lg); padding: 16px; background: var(--bg-secondary, #f9fafb);">
-              <p style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-secondary);">Photos or PDFs (JPEG, PNG, PDF, max 10MB)</p>
-              <input type="file" class="execute-evidence-file-input" accept="image/jpeg,image/png,application/pdf" multiple style="display: block; margin-bottom: 8px;">
+              <p style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-secondary);">Tap to take a photo or choose photos/PDFs (JPEG, PNG, PDF, max 10MB)</p>
+              <label>Choose photos or PDFs
+                <input type="file" class="execute-evidence-file-input" accept="image/jpeg,image/png,application/pdf" multiple style="display: block; margin-bottom: 8px;">
+              </label>
+              <label>Take a photo
+                <input type="file" class="execute-evidence-file-input" accept="image/*" capture="environment" style="display: block; margin-bottom: 8px;">
+              </label>
               <div class="execute-evidence-error" style="display:none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert"></div>
               <div class="execute-evidence-list" style="margin-top: 12px;"></div>
             </div>
@@ -168,7 +173,7 @@
         if (prompt.type === 'evidence') {
           const uploadZone = promptSection.querySelector('.execute-evidence-upload');
           const listEl = promptSection.querySelector('.execute-evidence-list');
-          const fileInput = promptSection.querySelector('.execute-evidence-file-input');
+          const fileInputs = promptSection.querySelectorAll('.execute-evidence-file-input');
           const errEl = promptSection.querySelector('.execute-evidence-error');
           function renderEvidenceList(items) {
             if (!listEl) return;
@@ -246,8 +251,8 @@
           renderPendingFiles();
           var pending0 = (ses.pendingEvidenceFilesByStepId && ses.pendingEvidenceFilesByStepId.get(currentStepId)) || [];
           uploadZone.dataset.evidenceCount = String((evidenceListForStep.length || 0) + (pending0.length || 0));
-          if (fileInput) {
-            fileInput.addEventListener('change', async function() {
+          fileInputs.forEach(function(fileInput) {
+            fileInput.addEventListener('change', function() {
               if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
               var files = this.files;
               if (!files || !files.length || !currentStepId) return;
@@ -266,7 +271,7 @@
               if (uploadZone) uploadZone.dataset.evidenceCount = String((evidenceListForStep.length || 0) + (pending.length || 0));
               this.value = '';
             });
-          }
+          });
         } else {
           const promptInput = promptSection.querySelector('.execute-prompt-input');
           if (promptInput) {
