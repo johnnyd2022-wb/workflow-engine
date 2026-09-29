@@ -765,6 +765,7 @@ split.
         - [x] Extract inline-document and pending-upload restoration into `process-modal-doc-restore.js` (!384).
         - [x] Extract restored input-tab and prompt-mode controls into `process-modal-restore-controls.js` (!385).
         - [x] Extract previous-step output options into `process-modal-previous-outputs.js` (!400).
+        - [x] Extract compact inventory loading and cache into `process-modal-inventory-loader.js` (!401).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
