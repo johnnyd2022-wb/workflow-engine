@@ -470,7 +470,7 @@ def test_linked_batch_ids_are_copied_without_private_execution_data(portal_world
     process, _, _ = _recipe(db, org_id, "Secret botanical recipe")
     batch = ExecutionRepository(db).create_execution(org_id=org_id, process_id=process.id)
     step = db.query(ExecutionStep).filter_by(org_id=org_id, execution_id=batch.id).first()
-    step.execution_data = {"secret_supplier_cost": "999", "recipe_instructions": "Private juniper proportion"}
+    step.execution_data = {"secret_supplier_cost": "Cost-999.97", "recipe_instructions": "Private juniper proportion"}
     db.commit()
     order = w["orders"][0]
     response = w["clients"][0].post(
@@ -482,7 +482,8 @@ def test_linked_batch_ids_are_copied_without_private_execution_data(portal_world
     client = _accept(w)
     body = client.get(f"/portal/api/orders/{order['id']}").get_json()["order"]
     assert body["batches"]["items"] == [{"batch_id": str(batch.id), "bottling_date": "2026-12-01"}]
-    assert all(value not in str(body) for value in ("999", "Private juniper", "Secret botanical"))
+    # Distinctive markers: a bare "999" also occurs by chance inside random UUIDs/timestamps.
+    assert all(value not in str(body) for value in ("Cost-999.97", "Private juniper", "Secret botanical"))
 
 
 def test_document_opt_in_withdrawal_formats_and_immutable_copy(portal_world, db):
