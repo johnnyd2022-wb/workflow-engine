@@ -5,6 +5,7 @@
 {% endblock %}
 {% block content %}
 <main class="planning-demand" data-planning-root>
+  <nav><a href="{{ url_for('planning.planner_board') }}" hx-boost="false">Production board</a></nav>
   <header><h1>Production demand</h1><p>What needs making, and when it is due.</p></header>
   <p role="alert" data-planning-error hidden></p>
   {% if can('production.record') %}
