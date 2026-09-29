@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app.core.db.models.execution import Execution
 from app.core.db.models.inventory_item import InventoryItem
@@ -52,6 +52,18 @@ def configure(session, org_id, enabled):
     if not isinstance(enabled, bool):
         raise SiteScopeError("enabled must be true or false")
     org = locked_org(session, org_id)
+    if not enabled and org.multiple_site_operations_enabled:
+        session.query(Site).filter(Site.org_id == org_id).order_by(Site.id).with_for_update().populate_existing().all()
+        additional = select(Site.id).where(Site.org_id == org_id, Site.is_default.is_(False))
+
+        def has_additional(model):
+            return (
+                session.query(model.id).filter(model.org_id == org_id, model.site_id.in_(additional)).first()
+                is not None
+            )
+
+        if has_additional(StockLocation) or has_additional(Execution) or has_additional(InventoryItem):
+            raise SiteScopeError("Multiple sites cannot switch off while additional-site operational records exist")
     if enabled:
         default = ensure_default(session, org_id)
 
@@ -160,5 +172,5 @@ def overview(session, org_id):
         "enabled": bool(org.multiple_sites_enabled),
         "sites": [serialise(site) for site in sites] if org.multiple_sites_enabled else [],
         "kinds": KINDS,
-        "additional_site_operations_available": False,
+        "additional_site_operations_available": bool(org.multiple_site_operations_enabled),
     }

@@ -1,0 +1,48 @@
+{% extends "shared/base_spa.html" %}{% block title %}{{ order.reference }} · Portal sharing{% endblock %}{% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}{% block content %}<main class="contract-workspace">
+<a href="{{ url_for('contracts.order_page',order_id=order.id) }}" hx-boost="false">{{ order.reference }}</a>
+<h1>Customer portal sharing</h1>
+<p>{{ order.customer.name }}</p>
+<p class="contract-error" role="alert" hidden>
+</p>
+<p data-invite-result class="ph-no-capture ph-mask rr-block" hidden>
+</p>
+{% if can('production.record') %}<section class="contract-card">
+<h2>Publish an order update</h2>
+<p>Only the selected facts and documents are copied to the portal. Shared ABV and progress are producer-entered facts. Ready dates, QC status and stock quantities are unavailable until their source integrations are ready.</p>{% if publication %}<p>Last revision: {{ publication.revision }} · {% if publication.revoked_at %}Withdrawn{% else %}Shared{% endif %}</p>{% endif %}<form hx-boost="false" data-sharing-api="/api/core/contract-orders/{{ order.id }}/portal-publications" data-publication>
+<label>Stage to share<input name="stage_label" maxlength="100">
+</label>
+<label>Step to share<input name="step_label" maxlength="100">
+</label>
+<label>Progress (%)<input name="progress_percent" type="number" min="0" max="100" step="0.0001">
+</label>
+<label>Actual ABV to share (%)<input name="actual_abv" type="number" min="0" max="100" step="0.0001">
+</label>
+<label>Specification ABV to share (%)<input name="spec_abv" type="number" min="0" max="100" step="0.0001">
+</label>
+<fieldset>
+<legend>Documents to share in this update</legend>{% for document in documents %}<label>
+<input type="checkbox" name="document_ids" value="{{ document.id }}">{{ document.title }}</label>{% else %}<p>Upload a document below first.</p>{% endfor %}</fieldset>
+<button type="submit" class="btn btn-primary">Publish update</button>
+</form>{% if publication and not publication.revoked_at %}<button type="button" class="btn" data-sharing-delete="/api/core/contract-orders/{{ order.id }}/portal-publications">Withdraw order from portal</button>{% endif %}</section>
+<section class="contract-card">
+<h2>Copy a document for sharing</h2>
+<form hx-boost="false" data-sharing-api="/api/core/contract-orders/{{ order.id }}/portal-documents" data-upload>
+<label>Document title<input name="title" maxlength="255" required>
+</label>
+<label>File (up to 5 MB)<input type="file" name="document" accept="application/pdf,image/png,image/jpeg,text/plain" required>
+</label>
+<button type="submit" class="btn">Upload copy</button>
+</form>{% for document in documents %}<p>{{ document.title }} <button type="button" class="btn" data-sharing-delete="/api/core/contract-orders/{{ order.id }}/portal-documents/{{ document.id }}">Withdraw document</button>
+</p>{% endfor %}</section>{% endif %}
+{% if can('users.manage') %}<section class="contract-card">
+<h2>Invite a customer user</h2>
+<p>Invitations expire after 72 hours. Copy the link and provide it to the named person. Their account has access only to this customer's shared orders.</p>
+<form hx-boost="false" data-sharing-api="/api/core/contract-customers/{{ order.customer_id }}/portal-invites" data-invite>
+<label>Email<input type="email" name="email" maxlength="255" required>
+</label>
+<button type="submit" class="btn">Create invitation</button>
+</form>
+<p>Sign-in link: <a href="/portal/login?customer={{ order.customer_id }}" hx-boost="false">Customer portal sign-in</a>
+</p>{% for invite in people.invitations %}<p>{{ invite.email }} · Pending until {{ invite.expires_at }} <button type="button" class="btn" data-sharing-delete="/api/core/contract-customers/{{ order.customer_id }}/portal-invites/{{ invite.id }}">Revoke invitation</button>
+</p>{% endfor %}{% for person in people.people %}<p>{{ person.email }} · {% if person.is_active %}Active <button type="button" class="btn" data-sharing-delete="/api/core/contract-customers/{{ order.customer_id }}/portal-people/{{ person.id }}">Revoke access</button>{% else %}Revoked{% endif %}</p>{% endfor %}</section>{% endif %}</main>{% endblock %}{% block scripts %}<script src="{{ url_for('contracts.static', filename='sharing.js') }}">
+</script>{% endblock %}

@@ -2,8 +2,12 @@
 
 from urllib.parse import urlsplit
 
+import pytest
+
 from tests.test_licensing import _licence, flask_app, world  # noqa: F401
 from tests.test_site_licensing import extra_site
+
+pytestmark = pytest.mark.e2e
 
 
 def test_phone_assigns_site_and_displays_hostile_name_as_text(world, browser):  # noqa: F811

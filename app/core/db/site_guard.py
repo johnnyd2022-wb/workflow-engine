@@ -34,7 +34,6 @@ def _before_flush(session, _flush_context, _instances):
     if not affected:
         return
     org_ids = {obj.org_id for obj in affected}
-    organisations = {row.id: row for row in session.query(Organisation).filter(Organisation.id.in_(org_ids))}
     # Share-lock registration rows while assigning tags. A concurrent default change
     # takes an exclusive lock before checking occupancy, so it cannot strand new stock
     # at what has just become an additional (not operational yet) site.
@@ -45,6 +44,14 @@ def _before_flush(session, _flush_context, _instances):
         .order_by(Site.org_id, Site.id)
         .with_for_update(read=True)
         .populate_existing()
+    }
+    # Read scalar flags after acquiring the site locks. An opt-out transaction can
+    # have changed them while this flush was waiting; identity-map values may be old.
+    organisations = {
+        row.id: row
+        for row in session.query(
+            Organisation.id, Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled
+        ).filter(Organisation.id.in_(org_ids))
     }
     defaults = {row.org_id: row for row in sites.values() if row.is_default}
     location_ids = {obj.location_id for obj in affected if isinstance(obj, InventoryItem) and obj.location_id}
@@ -83,13 +90,18 @@ def _before_flush(session, _flush_context, _instances):
             raise SiteScopeError("A site tag cannot be changed: moving stock requires a recorded transfer")
         if org.multiple_sites_enabled and (default is None or not default.is_active):
             raise SiteScopeError("An active default site is required")
-        if obj.site_id is None and default is not None:
-            obj.site_id = default.id
+        if obj.site_id is None:
+            producing_execution = (
+                executions.get((org_id, obj.source_execution_id)) if isinstance(obj, InventoryItem) else None
+            )
+            obj.site_id = (
+                producing_execution.site_id if producing_execution is not None else (default.id if default else None)
+            )
         if obj.site_id is not None:
             site = sites.get((org_id, obj.site_id))
             if site is None or not site.is_active:
                 raise SiteScopeError("Site must be active and belong to this organisation")
-            if not site.is_default:
+            if not site.is_default and not (org.multiple_sites_enabled and org.multiple_site_operations_enabled):
                 raise SiteScopeError("Operations at additional sites are not available yet")
         if isinstance(obj, InventoryItem) and obj.location_id is not None:
             location = locations.get((org_id, obj.location_id))

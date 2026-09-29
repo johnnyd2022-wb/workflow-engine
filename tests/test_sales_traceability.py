@@ -139,6 +139,82 @@ def test_reconcile_allocates_oldest_batches_idempotently_and_reverses_voided_sal
     assert _stock_by_batch(db, sales_org.id) == {1: Decimal("500.0000"), 2: Decimal("500.0000")}
 
 
+def test_invoice_trace_items_include_all_allocated_lots_and_are_tenant_scoped(db, sales_org):
+    from flask import Flask, g
+
+    from app.features.crm.routes.api_routes import get_invoice_trace_items
+
+    product = "Invoice trace stock"
+    inventory = InventoryRepository(db)
+    lots = [
+        inventory.create_inventory_item(
+            sales_org.id,
+            name=product,
+            quantity="2",
+            unit="units",
+            inventory_type="final_product",
+            extra_data={"batch_number": number},
+        )
+        for number in (1, 2)
+    ]
+    _add_mapping(db, sales_org.id, product=product, pattern=product)
+    _add_sale(db, sales_org.id, invoice_id="trace-invoice", description=product, quantity="3")
+    SalesTraceabilityService(db).reconcile_org(sales_org.id)
+
+    app = Flask(__name__)
+    with app.test_request_context("/api/crm/invoices/trace-invoice/trace-items"):
+        g.org_id = str(sales_org.id)
+        response, status = get_invoice_trace_items.__wrapped__("trace-invoice")
+        assert status == 200
+        assert response.get_json()["inventory_item_ids"] == sorted(str(item.id) for item in lots)
+
+        g.org_id = str(uuid4())
+        _, status = get_invoice_trace_items.__wrapped__("trace-invoice")
+        assert status == 404
+
+
+def test_unmatched_queue_accounts_for_earlier_pending_sales(db, sales_org):
+    product = "Queue stock - final product"
+    InventoryRepository(db).create_inventory_item(
+        sales_org.id,
+        name=product,
+        quantity="5",
+        unit="units",
+        inventory_type="final_product",
+    )
+    _add_mapping(db, sales_org.id, product=product, pattern="Queue stock")
+    _add_sale(db, sales_org.id, invoice_id="queue-first", description="Queue stock", quantity="3")
+    _add_sale(db, sales_org.id, invoice_id="queue-second", description="Queue stock", quantity="3")
+
+    unmatched = SalesTraceabilityService(db).review_queue(sales_org.id)["unmatched"]
+
+    assert len(unmatched) == 2
+    assert unmatched[0]["invoice_id"] == "queue-first"
+    assert unmatched[0]["reason"] == "awaiting_replay"
+    assert unmatched[1]["invoice_id"] == "queue-second"
+    assert unmatched[1]["reason"] == "no_stock"
+    assert unmatched[1]["available"] == "2"
+
+
+def test_unmatched_queue_names_partial_batch_allocation(db, sales_org):
+    product = "Partially matched final product"
+    InventoryRepository(db).create_inventory_item(
+        sales_org.id, name=product, quantity="5", unit="units", inventory_type="final_product"
+    )
+    _add_mapping(db, sales_org.id, product=product, pattern="Partially matched")
+    _add_sale(db, sales_org.id, invoice_id="partial-line", description="Partially matched", quantity="3")
+    assert SalesTraceabilityService(db).reconcile_org(sales_org.id)["allocated"] == 1
+    allocation = db.query(SalesFifoAllocation).filter(SalesFifoAllocation.org_id == sales_org.id).one()
+    allocation.quantity = Decimal("2")
+    db.flush()
+
+    unmatched = SalesTraceabilityService(db).review_queue(sales_org.id)["unmatched"]
+
+    assert len(unmatched) == 1
+    assert unmatched[0]["reason"] == "allocation_mismatch"
+    assert unmatched[0]["available"] == "2"
+
+
 def test_reconcile_leaves_unmapped_and_insufficient_sales_unchanged(db, sales_org):
     product = "Solstice - final product"
     InventoryRepository(db).create_inventory_item(
@@ -362,7 +438,7 @@ def test_invoice_sync_returns_fifo_reconciliation_summary(db, sales_org, monkeyp
     monkeypatch.setattr(
         SalesTraceabilityService,
         "reconcile_org",
-        lambda _self, _org_id: {"allocated": 2, "unmapped": 1, "insufficient_stock": 3},
+        lambda _self, _org_id, *, sync_job_id=None: {"allocated": 2, "unmapped": 1, "insufficient_stock": 3},
     )
     api = SimpleNamespace(get_all_invoices=lambda **_kwargs: [])
 
