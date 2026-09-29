@@ -120,6 +120,7 @@ class CRMService:
         sort_dir: str = "asc",
         page: int = 1,
         page_size: int = 50,
+        missing_contact: bool = False,
     ) -> dict:
         contacts, total = self.contact_repo.list_paginated(
             org_id=org_id,
@@ -129,6 +130,7 @@ class CRMService:
             sort_dir=sort_dir,
             page=page,
             page_size=page_size,
+            missing_contact=missing_contact,
         )
         return {
             "customers": [_serialise_contact(c) for c in contacts],
@@ -876,6 +878,7 @@ class CRMService:
         top_customers = self.invoice_repo.customer_sales_breakdown(org_id, top_n=200)
         product_sales_summary = self.invoice_repo.product_sales_summary(org_id)
         authorised_customer_count = self.invoice_repo.authorised_customer_count(org_id)
+        contact_completeness = self.contact_repo.contact_completeness_for_org(org_id)
         top_customers_by_product = self.invoice_repo.top_customers_by_product(org_id, limit_products=50)
 
         tasks = self.task_repo.list_for_org(org_id)
@@ -910,6 +913,7 @@ class CRMService:
             "product_sales_summary": product_sales_summary,
             "top_customers": top_customers,
             "authorised_customer_count": authorised_customer_count,
+            "contact_completeness": contact_completeness,
             "top_customers_by_product": top_customers_by_product,
             "monthly_trend": monthly_trend,
             "open_tasks": [_serialise_task(task, db=self.db) for task in open_tasks],
