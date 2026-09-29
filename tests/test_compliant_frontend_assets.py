@@ -73,7 +73,9 @@ def test_core_renders_module_defined_system_finding_contracts_without_module_bra
 
 def test_core_hub_consolidates_findings_inside_its_system_issues_health_bar():
     core_hub = (_REPO_ROOT / "app" / "core" / "frontend" / "core" / "core2.html").read_text(encoding="utf-8")
-    system_status = (_REPO_ROOT / "app" / "core" / "backend" / "system_status.py").read_text(encoding="utf-8")
+    system_status = (_REPO_ROOT / "app" / "features" / "compliance_checks" / "system_status.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "{% include 'shared/system-findings-banner.html' %}" not in core_hub
     assert "MODULE_SYSTEM_FINDING" in system_status
@@ -133,7 +135,7 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "activeCategory" in audit_script
     assert "np3-evidence-options" in audit_script
     assert "data-np3-control-detail" not in audit
-    assert ">NP3</strong>" in audit
+    assert ">{{ programme_short }}</strong>" in audit  # NP1, NP2 or NP3 (plan 2.4b)
     assert "np3-overview-panels" in audit
     assert audit.index("np3-overview-panels") < audit.index("np3-audit-layout")
     assert (

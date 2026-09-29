@@ -9,16 +9,6 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from app.core.backend.checks.expired_materials import run_expired_materials_check
-from app.core.backend.checks.output_expiry_check import run_output_expiry_check
-from app.core.backend.checks.output_ready_date_check import run_output_ready_date_check
-from app.core.backend.checks.untracked_items import run_untracked_items_check
-from app.core.backend.corechecks import CheckResult, CoreChecksRunner, get_system_findings_by_item
-from app.core.backend.system_status import (
-    build_system_status_payload,
-    compute_onboarding_complete,
-    derive_health_state,
-)
 from app.core.db import db_session
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
@@ -38,6 +28,16 @@ from app.core.domain.ready_date_rules import (
     VALID_READY_DATE_UNITS,
     assert_warning_within_ready_period,
     duration_to_timedelta,
+)
+from app.features.compliance_checks.checks.expired_materials import run_expired_materials_check
+from app.features.compliance_checks.checks.output_expiry_check import run_output_expiry_check
+from app.features.compliance_checks.checks.output_ready_date_check import run_output_ready_date_check
+from app.features.compliance_checks.checks.untracked_items import run_untracked_items_check
+from app.features.compliance_checks.routes.corechecks import CheckResult, CoreChecksRunner, get_system_findings_by_item
+from app.features.compliance_checks.system_status import (
+    build_system_status_payload,
+    compute_onboarding_complete,
+    derive_health_state,
 )
 from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
 from tests.factories import InventoryItemFactory

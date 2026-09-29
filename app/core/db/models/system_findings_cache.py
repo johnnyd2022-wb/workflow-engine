@@ -5,7 +5,7 @@ material -- ~1.3s / hundreds of queries for a real org, on a route the /core pag
 every load. This table holds the last computed result so the common path is a single
 indexed row read. It is invalidated (``stale = true``) by EventWriter on any
 inventory/execution/process mutation, and recomputed lazily, once, on the next request
-(single-flight via a pg advisory lock in app/core/backend/system_findings_cache.py).
+(single-flight via a pg advisory lock in app/features/compliance_checks/system_findings_cache.py).
 """
 
 import uuid
