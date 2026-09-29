@@ -166,7 +166,6 @@ def create_app():
     app.register_blueprint(planning_bp)
     app.register_blueprint(sites_bp)
 
-
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
     # see .agents/specs/process_templates.md's "no new feature flag" ASSUMPTION).
