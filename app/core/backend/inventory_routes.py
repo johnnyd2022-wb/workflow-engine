@@ -10,9 +10,7 @@ from flask import g, jsonify, render_template, request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
-from app.core.backend import corechecks
 from app.core.backend.event_writer import EventWriter
-from app.core.backend.reconciliation_service import _find_producing_step
 from app.core.db import db_session
 from app.core.db.models.entity_event_summary import EntityEventSummary
 from app.core.db.models.execution import Execution
@@ -30,6 +28,8 @@ from app.core.utils.inventory_quantity import (
     parse_stored_quantity_to_decimal,
     quantity_to_api_str,
 )
+from app.features.compliance_checks.routes import corechecks
+from app.features.reconciliation.service import _find_producing_step
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -185,8 +185,8 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
         # System findings per item (all checks) for UI: red border + reasons in dropdown
         findings_by_id = corechecks.get_system_findings_by_item(org_id, db_session)
 
-        from app.core.backend.checks.output_ready_date_check import get_operator_ready_instant_for_item
         from app.core.db.models.inventory_item import InventoryItem
+        from app.features.compliance_checks.checks.output_ready_date_check import get_operator_ready_instant_for_item
 
         # One query for all producing steps (avoids N+1 hydration + ready-date lookups).
         # JOIN Execution + filter org_id: bounded by step_ids (inventory row count), no materialized list of all org executions.
