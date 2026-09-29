@@ -284,6 +284,10 @@
           }
         }
         var expiryReadyValidationErrorHtml = (expiryInputHtml && readyDateHtml) ? ('<div class="execute-output-expiry-ready-validation-error" data-output-id="' + escapeHtml(outputId) + '" style="display: none; margin-top: 8px; padding: 10px 12px; background: hsl(0, 93%, 94%); border: 1px solid var(--error, #ef4444); border-radius: var(--radius-md); color: #b91c1c; font-size: 13px; font-weight: 500;" role="alert" aria-live="polite"></div>') : '';
+        // Counted outputs (bottles, cans...) are whole numbers; a part-filled remainder goes
+        // to Library stock in mL (plan 1.2). Mirrors COUNT_UNITS in unit_conversion.py.
+        var countedOutput = ['units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers', 'bottles', 'cans', 'kegs', 'cases']
+          .indexOf(String(output.unit || 'units').trim().toLowerCase()) !== -1;
         // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through escapeHtml()
         outputSection.innerHTML = `
           ${customExpiryHtml}
@@ -295,8 +299,10 @@
               ${escapeHtml(output.name)}
               <span style="color: var(--text-secondary); font-weight: normal;">(Expected: ${escapeHtml(output.quantity || '0')} ${escapeHtml(output.unit || '')})</span>
             </label>
-            <input type="number" class="spa-inp execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${escapeHtml(output.quantity || '0')}" value="${escapeHtml(output.quantity || '')}" step="0.01" min="0">
-            <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Actual produced quantity (override if different from expected)</p>
+            <input type="number" class="spa-inp execute-output-quantity-input" data-output-id="${escapeHtml(outputId)}" placeholder="${escapeHtml(output.quantity || '0')}" value="${escapeHtml(output.quantity || '')}" step="${countedOutput ? '1' : '0.01'}" min="0"${countedOutput ? ' inputmode="numeric"' : ''}>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">${countedOutput ? 'Full ' + escapeHtml(output.unit || 'units') + ' only (whole numbers)' : 'Actual produced quantity (override if different from expected)'}</p>
+            ${countedOutput ? `<label style="display: block; font-size: 13px; font-weight: 500; color: var(--text-primary); margin: 10px 0 6px;">Part-filled, in mL <span style="color: var(--text-secondary); font-weight: normal;">(optional, goes to Library stock)</span></label>
+            <input type="number" class="spa-inp execute-output-library-input" data-output-id="${escapeHtml(outputId)}" placeholder="0" step="1" min="0" inputmode="numeric">` : ''}
             <input type="hidden" class="execute-reconcile-untracked-value" data-output-id="${escapeHtml(outputId)}" value="${escapeHtml(defaultId)}">
           </div>
         `;
