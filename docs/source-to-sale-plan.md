@@ -926,6 +926,10 @@ Founder decisions for this phase:
       batch. It respects ready dates (not usable until ready) and expiry dates (use
       first-expiring stock first, and never plan to use a lot after it expires). A
       shortage moves the date and says which input caused it.
+      - [x] Material availability engine: per-physical-batch recipes, explicit known
+        supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
+        uncovered shortages (!428). Expected-delivery records, DB adapters,
+        dependent-production planning and forecast integration remain.
     - [ ] e. **Can we do it?** Rough capacity per site: a few resource groups the owner
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to
