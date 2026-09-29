@@ -2,8 +2,12 @@
 
 from urllib.parse import urlsplit
 
+import pytest
+
 from tests.test_compliant_routes import flask_app  # noqa: F401
 from tests.test_food_registrations import clients, registration_data  # noqa: F401
+
+pytestmark = pytest.mark.e2e
 
 
 def test_phone_registration_scope_and_verification_context(clients, browser):  # noqa: F811
