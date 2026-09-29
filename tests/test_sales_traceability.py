@@ -139,6 +139,40 @@ def test_reconcile_allocates_oldest_batches_idempotently_and_reverses_voided_sal
     assert _stock_by_batch(db, sales_org.id) == {1: Decimal("500.0000"), 2: Decimal("500.0000")}
 
 
+def test_invoice_trace_items_include_all_allocated_lots_and_are_tenant_scoped(db, sales_org):
+    from flask import Flask, g
+
+    from app.features.crm.routes.api_routes import get_invoice_trace_items
+
+    product = "Invoice trace stock"
+    inventory = InventoryRepository(db)
+    lots = [
+        inventory.create_inventory_item(
+            sales_org.id,
+            name=product,
+            quantity="2",
+            unit="units",
+            inventory_type="final_product",
+            extra_data={"batch_number": number},
+        )
+        for number in (1, 2)
+    ]
+    _add_mapping(db, sales_org.id, product=product, pattern=product)
+    _add_sale(db, sales_org.id, invoice_id="trace-invoice", description=product, quantity="3")
+    SalesTraceabilityService(db).reconcile_org(sales_org.id)
+
+    app = Flask(__name__)
+    with app.test_request_context("/api/crm/invoices/trace-invoice/trace-items"):
+        g.org_id = str(sales_org.id)
+        response, status = get_invoice_trace_items.__wrapped__("trace-invoice")
+        assert status == 200
+        assert response.get_json()["inventory_item_ids"] == sorted(str(item.id) for item in lots)
+
+        g.org_id = str(uuid4())
+        _, status = get_invoice_trace_items.__wrapped__("trace-invoice")
+        assert status == 404
+
+
 def test_unmatched_queue_accounts_for_earlier_pending_sales(db, sales_org):
     product = "Queue stock - final product"
     InventoryRepository(db).create_inventory_item(
