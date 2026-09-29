@@ -223,22 +223,17 @@
             || (it.supplier || '').toLowerCase().includes(q);
         });
 
-        // Group by name, show type breakdown
-        const byName = new Map();
-        items.forEach(it => {
-          if (!it.name) return;
-          if (!byName.has(it.name)) byName.set(it.name, []);
-          byName.get(it.name).push(it);
-        });
+        // Use the same stock-line key as Live Inventory: name, type and unit.
+        const stockGroups = window.InventoryStockSummary.group(items);
 
-        if (!byName.size) {
+        if (!stockGroups.length) {
           grid.innerHTML = smBrowseEmpty(q ? `No inventory items matching "${q}"` : 'No inventory items found.');
           return;
         }
 
-        [...byName.entries()]
-          .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()))
-          .forEach(([name, group]) => grid.appendChild(smBuildInventoryBrowseCard(name, group)));
+        stockGroups
+          .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+          .forEach(group => grid.appendChild(smBuildInventoryBrowseCard(group.name, group.lots)));
         break;
       }
 
@@ -396,20 +391,18 @@
   }
 
   function smBuildInventoryBrowseCard(name, group) {
-    const typeOrder = { raw_material: 0, work_in_progress: 1, final_product: 2 };
-    const sorted = [...group].sort((a, b) => (typeOrder[a.inventory_type] || 0) - (typeOrder[b.inventory_type] || 0));
-    const primary = sorted.find(it => !it._oos) || sorted[0];
+    const inStock = group.filter(it => !it._oos && window.InventoryStockSummary.isVisible(it));
+    const primary = inStock[0] || group[0];
     const typeClass = smTypeClass(primary.inventory_type);
-    const inStock = group.filter(it => !it._oos);
     const hasCheck = group.some(it => smIsCheckNeeded(it.id));
 
     const card = document.createElement('div');
     card.className = 'sm-browse-card sm-browse-card--inventory' + (hasCheck ? ' sm-browse-card--check' : '');
 
-    const qtyParts = [];
-    if (primary.quantity != null) qtyParts.push(`${smFmtQty(primary.quantity)}${primary.unit ? ' ' + primary.unit : ''}`);
-    const batchText = primary.supplier_batch_number ? `Batch ${primary.supplier_batch_number}` : '';
-    const supplierText = primary.supplier || '';
+    const total = inStock.reduce((sum, item) => sum + window.InventoryStockSummary.onHand(item), 0);
+    const totalText = `${window.InventoryStockSummary.format(total)}${primary.unit ? ' ' + primary.unit : ''}`;
+    const batchText = group.length === 1 && primary.supplier_batch_number ? `Batch ${primary.supplier_batch_number}` : '';
+    const supplierText = group.length === 1 ? (primary.supplier || '') : '';
 
     // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
     card.innerHTML = `
@@ -418,10 +411,10 @@
         ${hasCheck ? '<span class="sm-check-pill">⚠</span>' : ''}
       </div>
       <div class="sm-browse-card__name">${smEsc(name)}</div>
-      ${qtyParts.length ? `<div class="sm-browse-card__meta">${smEsc(qtyParts.join(' · '))}</div>` : ''}
+      <div class="sm-browse-card__meta">${smEsc(totalText)}</div>
       ${batchText ? `<div class="sm-browse-card__meta sm-browse-card__meta--muted">${smEsc(batchText)}</div>` : ''}
       ${supplierText ? `<div class="sm-browse-card__meta sm-browse-card__meta--muted">${smEsc(supplierText)}</div>` : ''}
-      ${inStock.length > 1 ? `<div class="sm-browse-card__count">${inStock.length} lots in stock</div>` : ''}
+      <div class="sm-browse-card__count">${inStock.length} ${inStock.length === 1 ? 'lot' : 'lots'} in stock</div>
     `;
 
     card.addEventListener('click', () => {

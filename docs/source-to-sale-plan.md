@@ -336,7 +336,7 @@ want it, and never produce a recall list that can't be trusted.
     each record.
   - Done when: every late entry is visibly marked and every edit is traceable.
 
-- [ ] **1.6 Show one stock number everywhere.** *High · S*
+- [x] **1.6 Show one stock number everywhere.** *High · S* (!404)
   - Evidence: a Source Map card shows one lot's quantity (`sourcemap.js`, primary lot)
     while Live Inventory shows the total for the same product.
   - Change: one shared calculation; cards show the total and the number of lots.
