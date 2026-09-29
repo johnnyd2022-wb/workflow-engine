@@ -276,7 +276,7 @@ def _dashboard_event_log_period(
         details = []
         for line in sales_by_line.values():
             batch_text = ", ".join(
-                f"{('batch ' + name) if name != 'unlabelled batch' else name} " f"({format(quantity.normalize(), 'f')})"
+                f"{('batch ' + name) if name != 'unlabelled batch' else name} ({format(quantity.normalize(), 'f')})"
                 for name, quantity in sorted(line["batches"].items())
             )
             quantity = line["quantity_sold"] or sum(line["batches"].values(), Decimal("0"))
