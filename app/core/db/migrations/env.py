@@ -30,6 +30,7 @@ from app.features.crm.models.xero_oauth_token import XeroOAuthToken
 from app.features.crm.models.xero_contact import XeroContact
 from app.features.contract_manufacturing.models.portal import PortalDocument, PortalInvite, PortalPrincipal, PortalPublication, PortalSession  # noqa: F401
 from app.features.contract_manufacturing.models import ContractCustomer, ContractOrder, ContractOrderLine, ContractOrderExecution
+from app.features.contract_manufacturing.models.material_receipt import ContractMaterialReceipt  # noqa: F401
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
 from app.features.crm.models.xero_sync_job import XeroSyncJob

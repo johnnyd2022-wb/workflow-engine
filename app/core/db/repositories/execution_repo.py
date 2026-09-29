@@ -367,8 +367,14 @@ class ExecutionRepository:
             if execution_id is not None and execution.id != execution_id:
                 raise ValueError("Step does not belong to this execution")
             from app.core.db.site_operations import validate_execution_inputs
+            from app.features.contract_manufacturing.services.materials import (
+                resolve_execution_material_scope,
+                validate_execution_materials,
+            )
 
+            resolve_execution_material_scope(self.db, org_id, execution.id)
             validate_execution_inputs(self.db, execution, actual_inputs, actual_outputs)
+            validate_execution_materials(self.db, org_id, execution.id, actual_inputs, actual_outputs)
             if span is not None:
                 span.set_attribute("execution_id", str(execution.id))
                 span.set_attribute("step_number", execution_step.step_number)

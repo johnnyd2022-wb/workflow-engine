@@ -221,8 +221,17 @@ def dispatch(session, org_id, actor_id, key, data, policy):
     )
     if item is None:
         raise TransferError("Source stock not found")
-    if getattr(item, "contract_customer_id", None) is not None or (item.extra_data or {}).get("contract_customer_id"):
-        raise TransferError("Customer-owned transfers are not available yet")
+    if "contract_customer_id" in (item.extra_data or {}):
+        raise TransferError("Legacy customer ownership must be resolved before transfer")
+    if item.contract_customer_id is not None:
+        enabled = (
+            session.query(Organisation.contract_materials_enabled)
+            .filter(Organisation.id == org_id)
+            .with_for_update(read=True)
+            .scalar()
+        )
+        if not enabled:
+            raise TransferError("Customer material operations are switched off")
     source_site = resolve_site(session, org_id, item.site_id)
     destination_site = resolve_site(session, org_id, _id(data.get("destination_site_id")))
     destination_location = _id(data["destination_location_id"]) if data.get("destination_location_id") else None
@@ -242,7 +251,7 @@ def dispatch(session, org_id, actor_id, key, data, policy):
     }
     snapshot = _item_snapshot(item)
     snapshot["barcode"] = item.barcode or (item.extra_data or {}).get("original_barcode")
-    snapshot["contract_customer_id"] = None
+    snapshot["contract_customer_id"] = str(item.contract_customer_id) if item.contract_customer_id else None
     snapshot["source_site"] = {
         "id": str(source_site),
         "name": sites[source_site].name,
@@ -408,6 +417,9 @@ def receive(session, org_id, actor_id, transfer_id, key, data, policy):
                 site_id=transfer.destination_site_id,
                 location_id=transfer.destination_location_id,
                 transfer_receipt_id=receipt.id,
+                contract_customer_id=_id(source["contract_customer_id"])
+                if source.get("contract_customer_id")
+                else None,
                 extra_data={
                     **source.get("extra_data", {}),
                     "moved_from_item_id": str(transfer.source_item_id),

@@ -2874,7 +2874,7 @@ def complete_step(execution_id: str, execution_step_id: str):
                     extra["surplus_to_live"] = rec_result.get("surplus", "")
                     output_params["extra_data"] = extra
 
-                inventory_repo.create_inventory_item(**output_params)
+                inventory_repo.create_inventory_item(**output_params, commit=False)
 
             # Single commit for all inventory operations
             db_session.commit()
