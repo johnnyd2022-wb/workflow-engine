@@ -17,6 +17,8 @@
   var declaredLalField = root.querySelector('[data-declared-lal-field]');
   var evidenceHeading = root.querySelector('[data-evidence-control-heading]');
   var evidenceSummary = root.querySelector('[data-evidence-control-summary]');
+  var selectedCoreSources = new Map();
+  var coreSourceOffset = 0;
 
   function showError(message) {
     errorEl.textContent = message || '';
@@ -138,7 +140,7 @@
     controlSelect.dispatchEvent(new Event('change'));
   }
   function renderProductSuggestions(reconciliation) {
-    var target = root.querySelector('[data-product-suggestions]'); clear(target);
+    var target = root.querySelector('[data-product-suggestions]'); if (!target) return; clear(target);
     var names = reconciliation.unprofiled_inventory_names || [];
     if (!names.length) return;
     var intro = document.createElement('strong'); intro.textContent = 'Detected in Core — map with one click:'; target.appendChild(intro);
@@ -147,19 +149,57 @@
       button.addEventListener('click', function () { root.querySelector('[data-product-form]').inventory_name.value = name; root.querySelector('[data-product-form]').abv_percent.focus(); }); target.appendChild(button);
     });
   }
-  function renderExistingEvidence(evidence) {
-    var target = root.querySelector('[data-existing-evidence]'); clear(target);
-    if (!evidence.length) { target.textContent = 'When your team uploads proof to a Core execution, it will appear here to reuse.'; return; }
-    var intro = document.createElement('strong'); intro.textContent = 'Reuse proof already in Core:'; target.appendChild(intro);
-    evidence.forEach(function (item) {
-      var button = document.createElement('button'); button.type = 'button'; button.className = 'evidence-choice'; button.textContent = 'Use ' + item.title;
+  function renderSelectedCoreSources() {
+    var target = root.querySelector('[data-core-source-selected]'); clear(target);
+    if (!selectedCoreSources.size) { target.textContent = 'No Production records selected.'; return; }
+    selectedCoreSources.forEach(function (item) {
+      var button = document.createElement('button'); button.type = 'button';
+      button.textContent = 'Remove ' + item.title;
       button.addEventListener('click', function () {
-        var form = root.querySelector('[data-record-form]');
-        form.evidence_reference.value = item.title;
-        form.source_refs.value = form.source_refs.value ? form.source_refs.value + ', ' + item.id : item.id;
-        form.title.focus();
-      }); target.appendChild(button);
+        selectedCoreSources.delete(item.id);
+        root.querySelectorAll('input[name="core_source_ref"]').forEach(function (input) { if (input.value === item.id) input.checked = false; });
+        renderSelectedCoreSources();
+      });
+      target.appendChild(button);
     });
+  }
+  function renderCoreSourcePicker(candidates, append) {
+    var target = root.querySelector('[data-core-source-picker]');
+    if (!append) clear(target);
+    if (!candidates.length && !append) { target.textContent = 'No Production records found.'; renderSelectedCoreSources(); return; }
+    candidates.forEach(function (item) {
+      var label = document.createElement('label'); label.className = 'core-source-picker__choice';
+      var checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.name = 'core_source_ref'; checkbox.value = item.id;
+      checkbox.checked = selectedCoreSources.has(item.id);
+      checkbox.addEventListener('change', function () {
+        var form = root.querySelector('[data-record-form]');
+        if (checkbox.checked && selectedCoreSources.size >= 30) {
+          checkbox.checked = false;
+          showError('Choose at most 30 Production records.');
+          return;
+        }
+        if (checkbox.checked) selectedCoreSources.set(item.id, item);
+        else selectedCoreSources.delete(item.id);
+        if (checkbox.checked && item.kind === 'file' && !form.evidence_reference.value) form.evidence_reference.value = item.title;
+        renderSelectedCoreSources();
+      });
+      label.appendChild(checkbox);
+      var date = item.created_at ? new Date(item.created_at).toLocaleString() : '';
+      label.appendChild(document.createTextNode(' ' + item.title + ' (' + item.kind.replace(/-/g, ' ') + (date ? ' · ' + date : '') + ')'));
+      target.appendChild(label);
+    });
+    renderSelectedCoreSources();
+  }
+  async function searchCoreSources(append) {
+    var kind = root.querySelector('[data-core-source-kind]').value;
+    var query = root.querySelector('[data-core-source-query]').value.trim();
+    var offset = append ? coreSourceOffset : 0;
+    try {
+      var result = await api('/api/compliant/core-sources?kind=' + encodeURIComponent(kind) + '&q=' + encodeURIComponent(query) + '&offset=' + offset);
+      renderCoreSourcePicker(result.sources || [], append);
+      coreSourceOffset = offset + (result.sources || []).length;
+      root.querySelector('[data-core-source-more]').hidden = !result.has_more;
+    } catch (err) { showError(err.message); }
   }
   function renderRecords(records) {
     var target = root.querySelector('[data-recent-records]'); clear(target);
@@ -168,7 +208,7 @@
     var body = document.createElement('tbody'); records.forEach(function (record) { var tr = document.createElement('tr'); [record.framework_slug, record.control_id, record.title, record.status, record.evidence_reference || '—'].forEach(function (value) { var td = document.createElement('td'); td.textContent = value; tr.appendChild(td); }); body.appendChild(tr); }); table.appendChild(body); target.appendChild(table);
   }
   function renderProducts(products) {
-    var target = root.querySelector('[data-alcohol-products]'); clear(target);
+    var target = root.querySelector('[data-alcohol-products]'); if (!target) return; clear(target);
     if (!products.length) { target.textContent = 'No alcohol product profiles yet — unprofiled production will be shown as a reconciliation gap.'; return; }
     var list = document.createElement('ul');
     products.forEach(function (product) { var item = document.createElement('li'); item.textContent = product.inventory_name + ' · ' + product.product_type + ' · ' + product.abv_percent + '% ABV'; list.appendChild(item); });
@@ -185,9 +225,10 @@
       return;
     }
     var reconciliation = overview.customs_reconciliation || {};
-    root.querySelector('[data-customs-reconciliation]').textContent = 'Live calculated: ' + (reconciliation.production_litres_of_alcohol || '0') + ' LAL produced, ' + (reconciliation.wastage_litres_of_alcohol || '0') + ' LAL wasted. ' + (reconciliation.unprofiled_movement_count || 0) + ' movement(s) need a product profile.';
+    var reconEl = root.querySelector('[data-customs-reconciliation]');
+    if (reconEl) reconEl.textContent = 'Live calculated: ' + (reconciliation.production_litres_of_alcohol || '0') + ' LAL produced, ' + (reconciliation.wastage_litres_of_alcohol || '0') + ' LAL wasted. ' + (reconciliation.unprofiled_movement_count || 0) + ' movement(s) need a product profile.';
     renderProductSuggestions(reconciliation);
-    renderExistingEvidence(overview.core_proof_candidates || []);
+    searchCoreSources(false);
     populateControls();
     var control = new URLSearchParams(window.location.search).get('control');
     if (control) selectControl(control);
@@ -225,14 +266,21 @@
     }
   }
   var recordForm = root.querySelector('[data-record-form]');
+  if (recordForm) {
+    root.querySelector('[data-core-source-search]').addEventListener('click', function () { searchCoreSources(false); });
+    root.querySelector('[data-core-source-more]').addEventListener('click', function () { searchCoreSources(true); });
+    root.querySelector('[data-core-source-query]').addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); searchCoreSources(false); }
+    });
+  }
   if (recordForm) recordForm.addEventListener('submit', async function (event) {
-    event.preventDefault(); var form = event.currentTarget; var refs = form.source_refs.value.split(',').map(function (value) { return value.trim(); }).filter(Boolean);
+    event.preventDefault(); var form = event.currentTarget; var refs = Array.from(selectedCoreSources.keys());
     var reviewMonths = Number(form.review_interval_months.value || 0);
     var dueDate = form.due_date.value || null;
     if (!dueDate && reviewMonths) { var next = new Date(); next.setMonth(next.getMonth() + reviewMonths); dueDate = next.toISOString().slice(0, 10); }
     var data = { framework_slug: form.framework_slug.value, control_id: form.control_id.value, record_type: form.record_type.value, status: form.status.value, title: form.title.value, period_start: form.period_start.value || null, period_end: form.period_end.value || null, due_date: dueDate, measured_value: form.measured_value.value || null, limit_value: form.limit_value.value || null, declared_litres_of_alcohol: form.declared_litres_of_alcohol.value || null, evidence_reference: form.evidence_reference.value || null, source_refs: refs, details: reviewMonths ? { review_interval_months: reviewMonths } : {} };
     setSubmitting(form, true);
-    try { showError(''); await api('/api/compliant/records', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(data) }); form.reset(); await load(); }
+    try { showError(''); await api('/api/compliant/records', { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(data) }); form.reset(); selectedCoreSources.clear(); await load(); }
     catch (err) { showError(err.message); }
     finally { setSubmitting(form, false); }
   });
