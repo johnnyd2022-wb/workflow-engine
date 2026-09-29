@@ -1,0 +1,10 @@
+[Unit]
+Description=Workflow Engine private PostgreSQL backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+EnvironmentFile=/etc/workflow-engine/database-backup.env
+ExecStart=/usr/bin/python3 ${WORKFLOW_CHECKOUT}/scripts/database_recovery.py backup --container ${WORKFLOW_DB_CONTAINER} --database ${WORKFLOW_DB_NAME} --user ${WORKFLOW_DB_USER} --directory ${WORKFLOW_BACKUP_DIRECTORY}

@@ -150,7 +150,8 @@ deployment:
    observed repro are in F6 of `.agents/reports/auth/security-audit.md`. Needs a policy
    decision before code — whether a 2FA failure feeds the existing login lockout or gets
    its own counter, and at what limits — then `fix-bug` with a failing repro test first.
-   Not started.
+   **Patched 2026-09-25** (plan item 0.2): its own counter ending the pending session after
+   five wrong codes, plus 5/minute and 20/hour keyed on the account. Details in F6.
 
 Credential/certificate rotation needs the credential owner and deployment access; do not
 attempt it from an engineering worktree. Pair the code change with verification of HTTPS,
