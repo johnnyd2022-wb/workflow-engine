@@ -315,26 +315,31 @@ want it, and never produce a recall list that can't be trusted.
     steps appear out of order, there's no export, and lots with 0 units are listed under
     "In stock" in the batch picker.
   - Change:
-    - [ ] a. Header shows product, the org's batch ID, ABV and bottling date.
-    - [ ] b. Summary line such as "48 sold to 8 customers · 30 on hand", with pre-sold
+    - [x] a. Header shows product, the org's batch ID, ABV and bottling date.
+    - [x] b. Summary line such as "48 sold to 8 customers · 30 on hand", with pre-sold
       sales marked.
-    - [ ] c. Per customer: quantity, invoices, dates and contact details, with a warning
+    - [x] c. Per customer: quantity, invoices, dates and contact details, with a warning
       where contact details are missing.
-    - [ ] d. Steps listed in process order.
-    - [ ] e. CSV and PDF export.
-    - [ ] f. Trace can start from a supplier lot (forward) or an invoice (backward).
-    - [ ] g. Sold-out lots under their own heading, not "In stock".
+    - [x] d. Steps listed in process order.
+    - [x] e. CSV and PDF export.
+    - [ ] f. Trace can start from:
+      - [x] a supplier lot (forward).
+      - [x] an invoice (backward).
+    - [x] g. Sold-out lots under their own heading, not "In stock".
   - Done when: the timed mock recall is under 5 minutes.
 
-- [ ] **1.5 Show when something happened and when it was entered.** *High · M*
+- [x] **1.5 Show when something happened and when it was entered.** *High · M* (!407, !408)
   - Evidence: a step entered days later looks the same as one recorded live, which
     undermines an auditor's trust in the whole record.
   - Change: store both the time a step happened and the time it was entered; show an
     "entered later" badge when they differ by more than a day; keep an edit history on
     each record.
   - Done when: every late entry is visibly marked and every edit is traceable.
+  - [x] Separate occurrence and entry times; mark entries over 24 hours late in
+    execution and trace views. (!407)
+  - [x] Expose a traceable edit history for completed step records. (!408)
 
-- [ ] **1.6 Show one stock number everywhere.** *High · S*
+- [x] **1.6 Show one stock number everywhere.** *High · S* (!404)
   - Evidence: a Source Map card shows one lot's quantity (`sourcemap.js`, primary lot)
     while Live Inventory shows the total for the same product.
   - Change: one shared calculation; cards show the total and the number of lots.
@@ -416,6 +421,7 @@ records, not from people typing figures in.
   - Change: record each verification (date, verifier, outcome, corrective actions with
     owners and due dates); work out the next verification from the programme's frequency
     and show it on the dashboard.
+  - [x] Dashboard validates and renders a module-owned next-date milestone. (!412)
   - Done when: the app always knows the current verification status and next due date.
   - As built (!413): NP3 page (and the NP1/NP2 page) → Verification. Each visit records
     date, verifier, agency, report reference, outcome (and, when unacceptable, whether the
@@ -713,6 +719,10 @@ split.
       - [x] Compliance-checks pure move. (!334)
       - [x] Activity-log pure move. (!335)
       - [x] Dashboard pure move. (!339)
+      - [x] Traceability pure move. (!353)
+      - [x] Inventory pure move. (!354)
+      - [x] Process-design pure move. (!355)
+      - [x] Execution pure move. (!356)
     - [ ] d. **Carve before you change:** when an item in this plan needs substantial work
       in a slice that still lives in `backend.py`, carve that slice first in its own MR,
       then make the change in its new home. Likely pulls: 1.2, 1.3, 1.6 and 2.6 →
@@ -721,9 +731,39 @@ split.
     - [ ] e. **New work starts in its slice:** roles and permissions (0.4) in
       platform/identity; Customs (2.1, 2.6) and licensing (2.5) in
       `app/features/compliant/modules/nz_alcohol/`; matching modes (1.1) in crm.
-    - [ ] f. **Frontend after backend:** the asset registry (slicing plan §3, option 1)
-      before any JS moves; split `create-process-modal.js` internally as part of
-      process-design.
+    - [ ] f. **Frontend after backend:**
+      - [x] Register public Core JS/CSS assets by owning slice before any asset moves.
+        (!352)
+      - [ ] Split `create-process-modal.js` internally as part of process-design.
+        - [x] Extract pure process-modal helpers into `process-modal-utils.js` (!357).
+        - [x] Extract process-modal session/API mappers into `process-modal-mappers.js` (!358).
+        - [x] Extract wizard session recovery into `process-modal-session.js` (!359).
+        - [x] Extract process-modal mode controls into `process-modal-controls.js` (!360).
+        - [x] Extract step-document UI into `process-modal-docs.js` (!361).
+        - [x] Extract process-modal summary helpers into `process-modal-summary-utils.js` (!362).
+        - [x] Extract the summary/compliance panel into `process-modal-summary.js` (!362).
+        - [x] Extract step merge and ordering helpers into `process-modal-step-data.js` (!363).
+        - [x] Extract input/output row UI helpers into `process-modal-rows.js` (!364).
+        - [x] Extract inventory-card display helpers into `process-modal-inventory-cards.js` (!365).
+        - [x] Extract SPA payload serialization and preservation helpers into `process-modal-spa-payloads.js` (!366).
+        - [x] Extract prompt editor helpers into `process-modal-prompts.js` (!367).
+        - [x] Extract API-step wizard-session payload mapping into `process-modal-api-session.js` (!368).
+        - [x] Extract virtual summary-step construction into `process-modal-session-summary.js` (!370).
+        - [x] Extract summary-step session selection and enrichment helpers into `process-modal-summary-session.js` (!371).
+        - [x] Extract step-summary expand/collapse behavior into `process-modal-step-summary-ui.js` (!372).
+        - [x] Extract process-step summary rendering and reorder UI into `process-modal-step-summary.js` (!373).
+        - [x] Extract process-step order persistence and stale-write recovery into `process-modal-step-order.js` (!374).
+        - [x] Extract the `?edit=<stepId>` resume flow into `process-modal-deep-link-edit.js` (!375).
+        - [x] Extract process wizard step display updates into `process-modal-navigation.js` (!376).
+        - [x] Extract the existing-process step list renderer into `process-modal-existing-steps.js` (!377).
+        - [x] Extract process-overview and forward/back wizard actions into `process-modal-navigation-actions.js` (!378).
+        - [x] Extract inventory and fixed-expiry validation adapters into `process-modal-validation.js` (!379).
+        - [x] Extract SPA wizard form-state serialization into `process-modal-spa-payloads.js` (!380).
+        - [x] Extract cleared wizard draft payload construction into `process-modal-spa-payloads.js` (!381).
+        - [x] Extract output payload restoration into `process-modal-output-restore.js` (!382).
+        - [x] Extract prompt-list restoration into `process-modal-prompt-restore.js` (!383).
+        - [x] Extract inline-document and pending-upload restoration into `process-modal-doc-restore.js` (!384).
+        - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
   - Done when: `backend.py` holds only shell code, and every slice in the feature index
