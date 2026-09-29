@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <title>{% if valid %}Join {{ org_name }}{% else %}Invite link{% endif %} · biz-e</title>
+  <style>
+    :root { --bg: #f4f6f5; --card: #ffffff; --ink: #16211e; --muted: #56645f; --line: #d9e0dd;
+            --accent: #1d6b58; --accent-ink: #ffffff; --error: #a8322b; --error-bg: #f7e3e1; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1513; --card: #17201d; --ink: #e6ecea; --muted: #9aa8a3; --line: #2a3531;
+              --accent: #5cc2a3; --accent-ink: #0f1513; --error: #ef7d73; --error-bg: #331d1b; color-scheme: dark; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px;
+           background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { width: 100%; max-width: 26rem; background: var(--card); border: 1px solid var(--line);
+           border-radius: 12px; padding: 28px 24px; display: flex; flex-direction: column; gap: 16px; }
+    .brand { font-weight: 700; letter-spacing: .01em; }
+    .brand::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                     background: var(--accent); margin-right: 8px; vertical-align: middle; }
+    h1 { margin: 0; font-size: 22px; line-height: 1.25; }
+    p { margin: 0; color: var(--muted); }
+    form { display: flex; flex-direction: column; gap: 12px; }
+    label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
+    input { font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+            background: var(--card); color: var(--ink); }
+    input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    button, .button { font: inherit; font-weight: 600; padding: 11px 14px; border-radius: 8px; border: 0;
+             background: var(--accent); color: var(--accent-ink); cursor: pointer; text-align: center; text-decoration: none; }
+    button[disabled] { opacity: .6; cursor: default; }
+    .hint { font-size: 13px; font-weight: 400; color: var(--muted); }
+    .warnings { margin: 0; padding-left: 1.1em; font-size: 13px; color: var(--muted); }
+    .error { background: var(--error-bg); color: var(--error); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+    .who { font-size: 14px; }
+    .who strong { color: var(--ink); }
+    @media (max-width: 420px) { .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">biz-e</div>
+    {% if valid %}
+      <div data-invite-form-wrap>
+        <h1>Join {{ org_name }}</h1>
+        <p class="who">You've been invited as <strong>{{ role_label }}</strong> for <strong>{{ email }}</strong>. Choose a password to finish setting up your account.</p>
+      </div>
+      <form data-invite-form novalidate>
+        <div class="row">
+          <label>First name<input name="first_name" id="invite-first-name" value="{{ first_name }}" autocomplete="given-name"></label>
+          <label>Last name<input name="last_name" id="invite-last-name" value="{{ last_name }}" autocomplete="family-name"></label>
+        </div>
+        <label>Password
+          <input type="password" name="password" id="invite-password" required minlength="8" autocomplete="new-password">
+          <span class="hint">At least 8 characters.</span>
+        </label>
+        <ul class="warnings" data-invite-warnings hidden></ul>
+        <label>Confirm password
+          <input type="password" name="password_confirm" id="invite-password-confirm" required autocomplete="new-password">
+        </label>
+        <div class="error" data-invite-error role="alert" hidden></div>
+        <button type="submit">Create my account</button>
+      </form>
+      <div data-invite-done hidden>
+        <h1>Your account is ready</h1>
+        <p>Sign in with <strong>{{ email }}</strong> and your new password.</p>
+        <p style="margin-top:16px"><a class="button" href="/?login=1">Sign in</a></p>
+      </div>
+      <script>
+        (function () {
+          var form = document.querySelector('[data-invite-form]');
+          var error = document.querySelector('[data-invite-error]');
+          var warnings = document.querySelector('[data-invite-warnings]');
+          var token = {{ token|tojson }};
+          var pw = document.getElementById('invite-password');
+          var timer = null;
+          pw.addEventListener('input', function () {
+            clearTimeout(timer);
+            timer = setTimeout(async function () {
+              if (!pw.value) { warnings.hidden = true; return; }
+              try {
+                var r = await fetch('/auth/password-policy-check', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ password: pw.value }) });
+                var d = await r.json();
+                warnings.replaceChildren();
+                (d.warnings || []).forEach(function (w) { var li = document.createElement('li'); li.textContent = w; warnings.append(li); });
+                warnings.hidden = !(d.warnings || []).length;
+              } catch (_) { warnings.hidden = true; }
+            }, 400);
+          });
+          form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            error.hidden = true;
+            var fd = new FormData(form);
+            var button = form.querySelector('button[type="submit"]');
+            button.disabled = true;
+            try {
+              var r = await fetch('/auth/accept-invite', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: token, password: fd.get('password'), password_confirm: fd.get('password_confirm'),
+                                       first_name: fd.get('first_name'), last_name: fd.get('last_name') })
+              });
+              var d = {};
+              try { d = await r.json(); } catch (_) {}
+              if (!r.ok) throw new Error(d.error || 'Something went wrong. Please try again.');
+              form.hidden = true;
+              document.querySelector('[data-invite-form-wrap]').hidden = true;
+              document.querySelector('[data-invite-done]').hidden = false;
+            } catch (err) {
+              error.textContent = err.message;
+              error.hidden = false;
+              button.disabled = false;
+            }
+          });
+        })();
+      </script>
+    {% else %}
+      <h1>This invite link doesn't work</h1>
+      <p>It may have expired (links last 7 days), already been used, or been replaced by a newer one. Ask your organisation's admin to send you a new link.</p>
+    {% endif %}
+  </main>
+</body>
+</html>

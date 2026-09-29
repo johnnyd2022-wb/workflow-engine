@@ -176,13 +176,17 @@ def rules_for_profile(profile: ComplianceProfile | None) -> tuple[WorkflowRule, 
             else "Upload a photo or PDF against this Core step. It will be linked to the NP3 evidence register."
         )
         constraints = (
-            WorkflowConstraint(
-                requirement="active_evidence",
-                code="compliance_requirement_not_met",
-                message="An active evidence file is required before completing this step.",
-                action="Upload a photo or PDF in the NP3 operational evidence section.",
-            ),
-        ) if required else ()
+            (
+                WorkflowConstraint(
+                    requirement="active_evidence",
+                    code="compliance_requirement_not_met",
+                    message="An active evidence file is required before completing this step.",
+                    action="Upload a photo or PDF in the NP3 operational evidence section.",
+                ),
+            )
+            if required
+            else ()
+        )
         return (
             WorkflowRule(
                 rule_id=_NP3_EVIDENCE_RULE_ID,

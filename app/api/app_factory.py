@@ -10,8 +10,10 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api.middleware.session_security import setup_session_security
 from app.api.middleware.tenant_context import setup_tenant_context
-from app.api.routes.auth_routes import auth_bp
-from app.api.routes.org_routes import org_bp
+from app.api.routes.auth_routes import auth_bp, invite_bp
+from app.api.routes.org_routes import org_bp, people_pages
+from app.core.security.access_policy import setup_access_policy
+from app.core.security.two_factor_policy import resolve_require_admin_2fa, setup_two_factor_policy
 from app.observability import (
     configure_logging,
     configure_metrics,
@@ -88,6 +90,13 @@ def create_app():
     app.config["PERMANENT_SESSION_LIFETIME"] = 30 * 24 * 3600  # 30 days (max session lifetime)
     app.config.setdefault("ENFORCE_HTTPS", True)
 
+    # Plan 0.2: admins must use 2FA. Only local/test may opt out (their scripted admin
+    # logins have no authenticator); any other environment enforces it whatever the ini
+    # says, so a copied config can't switch it off in production.
+    app.config["REQUIRE_ADMIN_2FA"] = resolve_require_admin_2fa(
+        config.environment, config.getboolean("app", "require_admin_2fa", fallback=True)
+    )
+
     # Shared CI runners can step their wall clock backwards by a few seconds. Keep this
     # bounded workaround test-only so deployed session expiry remains strictly enforced.
     if config.environment == "test":
@@ -130,12 +139,26 @@ def create_app():
 
     # Register multi-tenant blueprints
     app.register_blueprint(auth_bp)
+    app.register_blueprint(invite_bp)
     app.register_blueprint(org_bp)
+    app.register_blueprint(people_pages)
 
     # Register core blueprint
     from app.core.backend.backend import core_bp
 
     app.register_blueprint(core_bp)
+    # Go-live stocktake (plan 1.3), kept out of core_bp / backend.py.
+    from app.core.backend.go_live import go_live_bp
+
+    app.register_blueprint(go_live_bp)
+    # Stock locations and moves (plan 2.1), kept out of core_bp / backend.py.
+    from app.core.backend.stock_locations import stock_locations_bp
+
+    app.register_blueprint(stock_locations_bp)
+    # Stocktakes (plan 2.6).
+    from app.core.backend.stocktake import stocktake_bp
+
+    app.register_blueprint(stocktake_bp)
 
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
@@ -377,6 +400,10 @@ def create_app():
 
     # Set up middleware
     setup_tenant_context(app)
+    # After tenant context: the policy reads g.current_user.
+    setup_two_factor_policy(app)
+    # After tenant context: reads g.current_user. Every endpoint must be in POLICY.
+    setup_access_policy(app)
     setup_session_security(app)
     setup_observability(app)
 
