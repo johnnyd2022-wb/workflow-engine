@@ -769,3 +769,11 @@ exhaustive coverage.
   worktrees (one in flight) every time `review-feature` or `entrypoint` runs, and writes the
   line itself — never hand-edit `reviewed:`. See the field's own description above for the
   three states it can hold.
+
+### Staff site roles (7.1g foundation, activation closed)
+
+- Model/migration: `org_role.py`, `org_role_site.py`, `staff_site_roles_001.py`.
+- Admin configuration: `staff_site_roles.py`, `/org/roles`, existing People role editor.
+- Authorization: `staff_site_scope.py`, `staff_site_policy.py`, static endpoint registry.
+- Existing all-site access preserved; selected assignment and every sensitive handler
+  remain closed. Activation audit: `docs/staff-site-role-foundations.md`.
