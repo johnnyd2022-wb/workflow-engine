@@ -585,6 +585,30 @@ def _dashboard_operations_weekly_summary(org_id: UUID, session, now_dt: datetime
     }
 
 
+def _dashboard_module_milestone(value: Any) -> dict[str, Any] | None:
+    """Validate an optional module-owned date without interpreting its domain."""
+    if not isinstance(value, dict):
+        return None
+    label = value.get("label")
+    overdue = value.get("overdue")
+    raw_date = value.get("date")
+    if not isinstance(label, str) or not label.strip() or not isinstance(overdue, bool):
+        return None
+    if raw_date is not None:
+        if not isinstance(raw_date, str):
+            return None
+        try:
+            if date.fromisoformat(raw_date).isoformat() != raw_date:
+                return None
+        except ValueError:
+            return None
+    milestone = {"label": label.strip(), "date": raw_date, "overdue": overdue}
+    detail = value.get("detail")
+    if isinstance(detail, str) and detail.strip():
+        milestone["detail"] = detail.strip()
+    return milestone
+
+
 def _dashboard_module_workspace_summaries(check_results: list[Any], workspace: str) -> list[dict[str, Any]]:
     """Project module-owned Dashboard summaries without knowing module check IDs."""
     summaries = []
@@ -610,6 +634,9 @@ def _dashboard_module_workspace_summaries(check_results: list[Any], workspace: s
                     "overdue": max(0, int(summary.get("overdue") or 0)),
                 }
             )
+            milestone = _dashboard_module_milestone(summary.get("milestone"))
+            if milestone is not None:
+                summaries[-1]["milestone"] = milestone
         except (TypeError, ValueError):
             continue
     return summaries

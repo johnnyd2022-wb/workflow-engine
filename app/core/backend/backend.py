@@ -2,7 +2,6 @@
 
 import base64
 import functools
-import hashlib
 import os
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -33,7 +32,7 @@ from app.core.backend import (
 )
 from app.core.backend.evidence import evidence_routes
 from app.core.backend.process_docs import process_docs_routes
-from app.core.backend.static_assets import core_asset_directory, iter_core_assets
+from app.core.backend.static_assets import core_asset_directory, core_asset_version
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.inventory_item import InventoryType
@@ -121,27 +120,7 @@ def _asset_version() -> str:
     ships changed assets busts the browser and CDN cache -- these routes send
     ``Cache-Control: public, max-age=3600`` on otherwise-stable paths, so without this a
     freshly rendered page can run hour-old JS that predates the endpoints it calls."""
-    h = hashlib.blake2b(digest_size=8)
-    frontend = os.path.join(os.path.dirname(__file__), "..", "frontend")
-    for kind, name, directory in iter_core_assets():
-        try:
-            st = (directory / name).stat()
-        except OSError:
-            continue
-        h.update(f"{kind}/{name}:{int(st.st_mtime)}:{st.st_size}\n".encode())
-    for sub in ("inventory_static", "img"):
-        directory = os.path.join(frontend, sub)
-        try:
-            names = sorted(os.listdir(directory))
-        except OSError:
-            continue
-        for name in names:
-            try:
-                st = os.stat(os.path.join(directory, name))
-            except OSError:
-                continue
-            h.update(f"{name}:{int(st.st_mtime)}:{st.st_size}\n".encode())
-    return h.hexdigest()
+    return core_asset_version()
 
 
 _VERSIONED_STATIC_ENDPOINTS = frozenset(
@@ -207,10 +186,9 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
         k: v for k, v in execution_data.items() if k not in _EXECUTION_DATA_TRACE_KEYS and v is not None and v != ""
     }
     trace = {}
-    if execution_data.get("completed_by") is not None:
-        trace["completed_by"] = execution_data["completed_by"]
-    if execution_data.get("completed_by_email") is not None:
-        trace["completed_by_email"] = execution_data["completed_by_email"]
+    for key in ("completed_by", "completed_by_email"):
+        if execution_data.get(key) is not None:
+            trace[key] = execution_data[key]
     completed_ts = execution_data.get("completed_at")
     if completed_ts is not None:
         trace["completed_at"] = _to_iso_timestamp(completed_ts)
@@ -218,10 +196,9 @@ def _split_execution_data(execution_data: dict | None, completed_at=None):
         trace["completed_at"] = _to_iso_timestamp(completed_at)
     if execution_data.get("entered_at") is not None:
         trace["entered_at"] = _to_iso_timestamp(execution_data["entered_at"])
-    if execution_data.get("execution_errors") is not None:
-        trace["execution_errors"] = execution_data["execution_errors"]
-    if execution_data.get("execution_warnings") is not None:
-        trace["execution_warnings"] = execution_data["execution_warnings"]
+    for key in ("execution_errors", "execution_warnings"):
+        if execution_data.get(key) is not None:
+            trace[key] = execution_data[key]
     return prompts, trace
 
 

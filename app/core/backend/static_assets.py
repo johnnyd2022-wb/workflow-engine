@@ -8,6 +8,8 @@ serving rules.
 
 from __future__ import annotations
 
+import hashlib
+import os
 from pathlib import Path
 
 _APP_DIR = Path(__file__).resolve().parents[2]
@@ -105,3 +107,28 @@ def iter_core_assets() -> tuple[tuple[str, str, Path], ...]:
     return tuple(
         (kind, filename, directory) for kind in _KINDS for filename, directory in sorted(_ASSET_REGISTRY[kind].items())
     )
+
+
+def core_asset_version() -> str:
+    """Digest of Core's public assets (name + mtime + size) behind the ``?v=`` cache-bust;
+    see ``app.core.backend.backend._asset_version``."""
+    h = hashlib.blake2b(digest_size=8)
+    for kind, name, directory in iter_core_assets():
+        try:
+            st = (directory / name).stat()
+        except OSError:
+            continue
+        h.update(f"{kind}/{name}:{int(st.st_mtime)}:{st.st_size}\n".encode())
+    for sub in ("inventory_static", "img"):
+        directory = os.path.join(_CORE_FRONTEND_DIR, sub)
+        try:
+            names = sorted(os.listdir(directory))
+        except OSError:
+            continue
+        for name in names:
+            try:
+                st = os.stat(os.path.join(directory, name))
+            except OSError:
+                continue
+            h.update(f"{name}:{int(st.st_mtime)}:{st.st_size}\n".encode())
+    return h.hexdigest()
