@@ -14,8 +14,10 @@ from app.core.db import db_session
 from app.core.security.entitlements import org_has_feature
 from app.core.security.permissions import requires_auth
 from app.features.compliant.routes.api_routes import api_bp
+from app.features.compliant.routes.licensing_routes import licensing_bp
 from app.features.compliant.routes.page_routes import page_bp
 from app.features.compliant.routes.tools_routes import tools_bp
+from app.features.compliant.routes.verification_routes import verification_bp
 from app.observability import get_logger
 from app.utils.config_loader import config
 
@@ -29,6 +31,8 @@ def create_compliant_blueprint() -> Blueprint:
     bp.register_blueprint(api_bp)
     bp.register_blueprint(page_bp)
     bp.register_blueprint(tools_bp)
+    bp.register_blueprint(verification_bp)
+    bp.register_blueprint(licensing_bp)
     root = os.path.dirname(os.path.abspath(__file__))
 
     @bp.before_request

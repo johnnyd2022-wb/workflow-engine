@@ -20,7 +20,10 @@ class AlcoholProductProfile(Base):
     org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
     inventory_name = Column(String(255), nullable=False)
     product_type = Column(String(40), nullable=False)
-    abv_percent = Column(Numeric(7, 4), nullable=False)
+    # Fallback only (plan 2.1): the batch's final-step ABV is the source when recorded.
+    abv_percent = Column(Numeric(7, 4), nullable=True)
+    # Pack size for litres of alcohol, e.g. 700 for a 700 mL bottle.
+    pack_volume_ml = Column(Numeric(10, 2), nullable=True)
     customs_product_code = Column(String(100), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
