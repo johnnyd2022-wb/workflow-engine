@@ -1,6 +1,8 @@
 """CRMService — high-level CRM queries, notes, tasks, and product mapping."""
 
 from datetime import date
+from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
@@ -17,6 +19,7 @@ from app.features.crm.repositories.xero_invoice_repo import XeroInvoiceRepositor
 from app.features.crm.repositories.xero_sync_job_repo import XeroSyncJobRepository
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
 from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
+from app.features.crm.services.sales_traceability_service import SalesTraceabilityService
 from app.features.crm.services.xero_oauth_service import XeroOAuthService, XeroTokenExpiredError
 from app.observability import get_logger, start_span
 
@@ -120,6 +123,7 @@ class CRMService:
         sort_dir: str = "asc",
         page: int = 1,
         page_size: int = 50,
+        missing_contact: bool = False,
     ) -> dict:
         contacts, total = self.contact_repo.list_paginated(
             org_id=org_id,
@@ -129,6 +133,7 @@ class CRMService:
             sort_dir=sort_dir,
             page=page,
             page_size=page_size,
+            missing_contact=missing_contact,
         )
         return {
             "customers": [_serialise_contact(c) for c in contacts],
@@ -830,13 +835,14 @@ class CRMService:
                 descending=descending,
             )
         if entity == "products":
-            return self.invoice_repo.top_products(
+            products, _, _ = self._top_mapped_products(
                 org_id,
                 limit=limit,
                 start_date=start_date,
                 end_date=end_date,
                 descending=descending,
             )
+            return products
         return self.invoice_repo.customer_sales_breakdown(
             org_id,
             top_n=limit,
@@ -847,6 +853,76 @@ class CRMService:
 
     def churn_risk(self, org_id: UUID) -> list[dict]:
         return self.invoice_repo.churn_risk_data(org_id)
+
+    def _top_mapped_products(
+        self,
+        org_id: UUID,
+        *,
+        limit: int | None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        descending: bool = True,
+    ) -> tuple[list[dict], list[dict], int]:
+        config = self.traceability_repo.get_for_org(org_id)
+        strict = True if config is None else bool(config.strict_mapping)
+        mappings = self.mapping_repo.list_for_org(org_id)
+        raw_rows = self.invoice_repo.top_products(
+            org_id,
+            limit=None,
+            start_date=start_date,
+            end_date=end_date,
+            descending=True,
+        )
+        products: dict[str, dict] = {}
+        unmapped: list[dict] = []
+        for row in raw_rows:
+            match = SalesTraceabilityService._find_mapping(
+                SimpleNamespace(description=row["description"], item_code=row["item_code"]), mappings, strict
+            )
+            entry = {
+                "item_code": row["item_code"],
+                "description": row["description"],
+                "total_qty": row["total_qty"],
+                "total_revenue": row["total_revenue"],
+            }
+            if match is None:
+                unmapped.append(entry)
+                continue
+
+            key = match.biz_e_product_name.casefold()
+            product = products.setdefault(
+                key,
+                {
+                    "description": match.biz_e_product_name,
+                    "item_code": None,
+                    "total_qty": Decimal("0"),
+                    "total_revenue": Decimal("0"),
+                    "xero_items": [],
+                    "_codes": set(),
+                },
+            )
+            # A Xero line can represent a case while the mapped product is counted
+            # in bottles. Keep grouped quantities in the product's stock units.
+            units_per_line = int(getattr(match, "units_per_line", 1) or 1)
+            product["total_qty"] += Decimal(str(row["total_qty"])) * units_per_line
+            product["total_revenue"] += Decimal(str(row["total_revenue"]))
+            product["xero_items"].append(entry)
+            if row["item_code"]:
+                product["_codes"].add(row["item_code"])
+
+        ranked_products = list(products.values())
+        ranked_products.sort(
+            key=lambda item: (item["total_revenue"], item["description"].casefold()), reverse=descending
+        )
+        for product in ranked_products:
+            product["item_code"] = ", ".join(sorted(product.pop("_codes"), key=str.casefold)) or None
+            product["total_qty"] = float(product["total_qty"])
+            product["total_revenue"] = float(product["total_revenue"])
+            product["xero_items"].sort(
+                key=lambda item: ((item["item_code"] or "").casefold(), (item["description"] or "").casefold())
+            )
+        unmapped.sort(key=lambda item: item["total_revenue"], reverse=True)
+        return ranked_products[:limit] if limit is not None else ranked_products, unmapped[:20], len(unmapped)
 
     def get_overview(self, org_id: UUID) -> dict:
         from datetime import date, timedelta
@@ -872,10 +948,11 @@ class CRMService:
         monthly_trend = sorted(
             self.invoice_repo.monthly_sales_totals(org_id, months=6), key=lambda row: row["month"] or ""
         )
-        top_products = self.invoice_repo.top_products(org_id, limit=200)
+        top_products, unmapped_products, unmapped_products_count = self._top_mapped_products(org_id, limit=200)
         top_customers = self.invoice_repo.customer_sales_breakdown(org_id, top_n=200)
         product_sales_summary = self.invoice_repo.product_sales_summary(org_id)
         authorised_customer_count = self.invoice_repo.authorised_customer_count(org_id)
+        contact_completeness = self.contact_repo.contact_completeness_for_org(org_id)
         top_customers_by_product = self.invoice_repo.top_customers_by_product(org_id, limit_products=50)
 
         tasks = self.task_repo.list_for_org(org_id)
@@ -907,9 +984,12 @@ class CRMService:
             "outstanding_invoice_count": outstanding["invoice_count"],
             "revenue_vs_last_month_pct": revenue_vs_last_month_pct,
             "top_products": top_products,
+            "unmapped_products": unmapped_products,
+            "unmapped_products_count": unmapped_products_count,
             "product_sales_summary": product_sales_summary,
             "top_customers": top_customers,
             "authorised_customer_count": authorised_customer_count,
+            "contact_completeness": contact_completeness,
             "top_customers_by_product": top_customers_by_product,
             "monthly_trend": monthly_trend,
             "open_tasks": [_serialise_task(task, db=self.db) for task in open_tasks],

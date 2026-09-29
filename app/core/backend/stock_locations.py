@@ -64,7 +64,12 @@ def create_location():
     )
     if exists:
         return jsonify({"error": "A location with that name already exists"}), 409
-    loc = StockLocation(org_id=_org_id(), name=name, inside_licensed_area=bool(data.get("inside_licensed_area")))
+    loc = StockLocation(
+        org_id=_org_id(),
+        name=name,
+        inside_licensed_area=bool(data.get("inside_licensed_area")),
+        site_id=getattr(g, "validated_site_id", None),
+    )
     db_session.add(loc)
     db_session.commit()
     log_action("create", "stock_location", loc.id, {"name": name, "inside_licensed_area": loc.inside_licensed_area})

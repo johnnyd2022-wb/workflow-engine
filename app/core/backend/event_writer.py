@@ -9,7 +9,8 @@ Key rules:
 - entity_event_summaries is upserted in the same transaction immediately after
   the event is written. Never update summaries in a separate transaction.
 - actor_id/actor_label are pulled from Flask g (set by tenant_context middleware).
-- correlation_id is pulled from g.correlation_id (set per-request in middleware).
+- correlation_id is supplied by a workflow when several events form one operation;
+  otherwise it is pulled from g.correlation_id (set per-request in middleware).
 """
 
 from __future__ import annotations
@@ -146,11 +147,12 @@ class EventWriter:
         actor_id: UUID | None = None,
         actor_label: str | None = None,
         actor_type: str = "user",
+        correlation_id: UUID | None = None,
     ) -> EntityEvent:
         """Write one event and upsert the entity summary. Caller owns the transaction."""
         resolved_actor_id = actor_id or _safe_uuid(_get_g_attr("user_id"))
         resolved_actor_label = actor_label or _get_g_attr("user_email")
-        correlation_id = _get_g_attr("correlation_id") or uuid4()
+        resolved_correlation_id = correlation_id or _get_g_attr("correlation_id") or uuid4()
 
         event = EntityEvent(
             org_id=self.org_id,
@@ -167,7 +169,7 @@ class EventWriter:
             payload=payload,
             diff=diff,
             causation_id=causation_id,
-            correlation_id=correlation_id,
+            correlation_id=resolved_correlation_id,
             request_metadata=_request_metadata(),
             created_at=datetime.now(UTC),
         )
@@ -182,7 +184,7 @@ class EventWriter:
 
         # Invalidate the per-org system-findings cache for mutations the check suite reads
         # (inventory/execution/process). Guarded inside mark_stale -- never fails the write.
-        from app.core.backend.system_findings_cache import mark_stale
+        from app.features.compliance_checks.system_findings_cache import mark_stale
 
         mark_stale(self.session, self.org_id, event_type)
         return event

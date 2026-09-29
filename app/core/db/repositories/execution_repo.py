@@ -332,6 +332,7 @@ class ExecutionRepository:
         execution_data: dict | None = None,
         commit: bool = True,
         completed_at_override: datetime | None = None,
+        execution_id: UUID | None = None,
     ) -> ExecutionStep | None:
         """Complete an execution step and advance execution.
 
@@ -363,6 +364,11 @@ class ExecutionRepository:
                 return None
 
             execution = execution_step.execution
+            if execution_id is not None and execution.id != execution_id:
+                raise ValueError("Step does not belong to this execution")
+            from app.core.db.site_operations import validate_execution_inputs
+
+            validate_execution_inputs(self.db, execution, actual_inputs, actual_outputs)
             if span is not None:
                 span.set_attribute("execution_id", str(execution.id))
                 span.set_attribute("step_number", execution_step.step_number)
@@ -398,10 +404,9 @@ class ExecutionRepository:
             execution_step.status = ExecutionStepStatus.COMPLETED
             execution_step.actual_inputs = actual_inputs or []
             execution_step.actual_outputs = actual_outputs or []
-            execution_step.execution_data = execution_data or {}
-            execution_step.completed_at = (
-                completed_at_override if completed_at_override is not None else datetime.now(UTC)
-            )
+            entered_at = datetime.now(UTC)
+            execution_step.execution_data = {**(execution_data or {}), "entered_at": entered_at.isoformat()}
+            execution_step.completed_at = completed_at_override if completed_at_override is not None else entered_at
 
             # Advance execution: mark next steps as ready
             self._advance_execution(execution)
@@ -431,6 +436,7 @@ class ExecutionRepository:
                     "items_produced": items_produced,
                     "evidence_ids": evidence_ids,
                     "completed_at": execution_step.completed_at.isoformat() if execution_step.completed_at else None,
+                    "entered_at": entered_at.isoformat(),
                 },
             )
 

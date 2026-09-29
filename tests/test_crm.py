@@ -15,6 +15,7 @@ import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -45,6 +46,7 @@ def _latest_event(db, org_id, event_type: str) -> EntityEvent | None:
 
 def test_overview_sales_summaries_cover_all_authorised_sales(db, org):
     """Footer summaries must not inherit the configurable Top-N display limit."""
+    from app.features.crm.models.product_mapping import ProductMapping
     from app.features.crm.models.xero_contact import XeroContact
     from app.features.crm.models.xero_invoice import XeroInvoice
     from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
@@ -126,6 +128,22 @@ def test_overview_sales_summaries_cover_all_authorised_sales(db, org):
             quantity=Decimal("50"),
             amount=Decimal("500"),
         )
+        db.add_all(
+            [
+                ProductMapping(
+                    org_id=org.id,
+                    biz_e_product_name="Wildflower Gin",
+                    xero_description_pattern="Wildflower Gin",
+                    match_type="exact",
+                ),
+                ProductMapping(
+                    org_id=org.id,
+                    biz_e_product_name="Tonic Water",
+                    xero_description_pattern="Tonic Water",
+                    match_type="exact",
+                ),
+            ]
+        )
         db.commit()
 
         overview = CRMService(db).get_overview(org.id)
@@ -134,6 +152,10 @@ def test_overview_sales_summaries_cover_all_authorised_sales(db, org):
         assert overview["authorised_customer_count"] == 2
         assert {row["description"] for row in overview["top_products"]} == {"Wildflower Gin", "Tonic Water"}
     finally:
+        db.query(ProductMapping).filter(
+            ProductMapping.org_id == org.id,
+            ProductMapping.biz_e_product_name.in_(["Wildflower Gin", "Tonic Water"]),
+        ).delete(synchronize_session=False)
         db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.org_id == org.id).delete(synchronize_session=False)
         db.query(XeroInvoice).filter(XeroInvoice.org_id == org.id).delete(synchronize_session=False)
         db.query(XeroContact).filter(XeroContact.org_id == org.id).delete(synchronize_session=False)
@@ -150,6 +172,38 @@ def test_overview_invoice_download_uses_the_pdf_endpoint():
     assert "application/json;charset=utf-8" not in overview_js
     assert '@click.stop="viewInvoice(inv)"' in overview_template
     assert "Download PDF" in overview_template
+
+
+def test_mapped_product_quantities_use_pack_size():
+    from app.features.crm.services.crm_service import CRMService
+
+    class InvoiceRows:
+        def top_products(self, *_args, **_kwargs):
+            return [
+                {"item_code": "CASE", "description": "Case of gin", "total_qty": 2, "total_revenue": 120},
+                {"item_code": "BOTTLE", "description": "Gin bottle", "total_qty": 1, "total_revenue": 12},
+            ]
+
+    mappings = [
+        SimpleNamespace(
+            xero_description_pattern="Case of gin", match_type="exact", biz_e_product_name="Gin", units_per_line=6
+        ),
+        SimpleNamespace(
+            xero_description_pattern="Gin bottle", match_type="exact", biz_e_product_name="Gin", units_per_line=1
+        ),
+    ]
+    service = CRMService.__new__(CRMService)
+    service.traceability_repo = SimpleNamespace(get_for_org=lambda _org_id: None)
+    service.mapping_repo = SimpleNamespace(list_for_org=lambda _org_id: mappings)
+    service.invoice_repo = InvoiceRows()
+
+    products, unmapped, count = service._top_mapped_products(uuid4(), limit=8)
+
+    assert products[0]["description"] == "Gin"
+    assert products[0]["total_qty"] == 13.0
+    assert products[0]["total_revenue"] == 132.0
+    assert unmapped == []
+    assert count == 0
 
 
 @pytest.fixture()

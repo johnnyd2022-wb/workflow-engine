@@ -97,11 +97,11 @@ def derive_np3_core_evidence(session: Session, org_id: UUID) -> tuple[list[dict[
             observations.append(
                 _observation(
                     "trace-and-recall",
-                    f"Core DAG trace across {len(final_products)} final-product batch(es)",
+                    f"Production trace across {len(final_products)} final-product batch(es)",
                     "core-dag",
                     refs,
                     max((item.updated_at for item in final_products), default=None),
-                    f"{len(trace.nodes)} inventory nodes and {len(trace.edges)} lineage edges are connected in Core.",
+                    f"{len(trace.nodes)} inventory nodes and {len(trace.edges)} lineage edges are connected in Production.",
                 )
             )
 
@@ -122,11 +122,11 @@ def derive_np3_core_evidence(session: Session, org_id: UUID) -> tuple[list[dict[
         observations.append(
             _observation(
                 "documentation-record-keeping",
-                f"{len(recorded_steps)} completed Core step record(s) with operational data",
+                f"{len(recorded_steps)} completed Production step record(s) with operational data",
                 "core-execution",
                 _limited_ids(step.id for step in recorded_steps),
                 max((step.completed_at for step in recorded_steps), default=None),
-                "Completed step inputs, outputs or execution prompts are retained in Core.",
+                "Completed step inputs, outputs or execution prompts are retained in Production.",
             )
         )
 
@@ -144,11 +144,11 @@ def derive_np3_core_evidence(session: Session, org_id: UUID) -> tuple[list[dict[
         observations.append(
             _observation(
                 "documentation-record-keeping",
-                f"{len(active_files)} active Core evidence file(s)",
+                f"{len(active_files)} active Production evidence file(s)",
                 "core-evidence-file",
                 _limited_ids(file.id for file in active_files),
                 max((file.created_at for file in active_files), default=None),
-                "Files remain stored and integrity-checked by Core evidence storage.",
+                "Files remain stored and integrity-checked by Production evidence storage.",
             )
         )
 
@@ -171,7 +171,7 @@ def derive_np3_core_evidence(session: Session, org_id: UUID) -> tuple[list[dict[
                 "core-inventory",
                 _limited_ids(item.id for item in supplied_materials),
                 max((item.updated_at for item in supplied_materials), default=None),
-                "Core inventory records preserve the supplier attached to each material entry.",
+                "Production inventory records preserve the supplier attached to each material entry.",
             )
         )
     received_materials = [
@@ -187,7 +187,7 @@ def derive_np3_core_evidence(session: Session, org_id: UUID) -> tuple[list[dict[
                 "core-inventory",
                 _limited_ids(item.id for item in received_materials),
                 max((item.updated_at for item in received_materials), default=None),
-                "Core inventory records preserve supplier, supplier batch and purchase date for these entries.",
+                "Production inventory records preserve supplier, supplier batch and purchase date for these entries.",
             )
         )
 

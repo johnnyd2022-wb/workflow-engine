@@ -913,9 +913,7 @@ class TestCompletedAtTimestamp:
         assert loaded.completed_at is not None
         assert isinstance(loaded.completed_at, datetime)
         # completed_at may be timezone-naive UTC; compare in UTC
-        completed_utc = (
-            loaded.completed_at if loaded.completed_at.tzinfo else loaded.completed_at.replace(tzinfo=UTC)
-        )
+        completed_utc = loaded.completed_at if loaded.completed_at.tzinfo else loaded.completed_at.replace(tzinfo=UTC)
         assert (
             before <= completed_utc <= after + timedelta(seconds=5)
         ), "completed_at should be within a few seconds of test run"
@@ -1150,7 +1148,6 @@ class TestCustomExpiryWarningNotExceedDuration:
 
         from flask import g
 
-        from app.core.backend.backend import complete_step
         from app.core.db.repositories.user_repo import UserRepository
 
         org_id = demo_data["org_id"]
@@ -1225,6 +1222,7 @@ class TestCustomExpiryWarningNotExceedDuration:
         app = Flask(__name__)
         app.secret_key = "test-secret"
         app.register_blueprint(core_bp)
+        complete_step = app.view_functions["core.complete_step"]
         with app.app_context():
             with app.test_request_context(
                 path,
@@ -1276,7 +1274,6 @@ class TestConsumptionOnlyStepCompletion:
 
         from flask import g
 
-        from app.core.backend.backend import complete_step
         from app.core.db.models.inventory_item import InventoryItem
         from app.core.db.repositories.user_repo import UserRepository
 
@@ -1327,6 +1324,7 @@ class TestConsumptionOnlyStepCompletion:
             app = Flask(__name__)
             app.secret_key = "test-secret"
             app.register_blueprint(core_bp)
+            complete_step = app.view_functions["core.complete_step"]
             with app.app_context(), app.test_request_context(
                 path, method="POST", data=json.dumps(payload), content_type="application/json"
             ):
@@ -1667,7 +1665,7 @@ class TestRegressionSafeguards:
 
         from flask import Flask, g
 
-        from app.core.backend.backend import complete_step, core_bp
+        from app.core.backend.backend import core_bp
         from app.core.db.repositories.user_repo import UserRepository
         from app.core.security.auth_service import AuthService
 
@@ -1695,6 +1693,7 @@ class TestRegressionSafeguards:
         app = Flask(__name__)
         app.secret_key = "test-secret"
         app.register_blueprint(core_bp)
+        complete_step = app.view_functions["core.complete_step"]
         with app.app_context():
             with app.test_request_context(
                 f"/api/core/executions/{execution.id}/steps/{step_id}/complete",
@@ -1716,9 +1715,9 @@ class TestRegressionSafeguards:
         db.expire_all()
         reloaded = repo.get_execution_with_steps(execution.id, org_id)
         step = next(es for es in reloaded.execution_steps if es.id == step_id)
-        assert step.execution_data.get("execution_warnings") == body["execution_warnings"], (
-            "execution_warnings from the response were not persisted to execution_data"
-        )
+        assert (
+            step.execution_data.get("execution_warnings") == body["execution_warnings"]
+        ), "execution_warnings from the response were not persisted to execution_data"
 
 
 @pytest.fixture
@@ -1830,9 +1829,7 @@ class TestCompletedExecutionPageIndex:
     def test_index_exists_with_the_expected_shape(self, db):
         from sqlalchemy import text
 
-        indexdef = db.execute(
-            text("SELECT indexdef FROM pg_indexes WHERE indexname = :n"), {"n": self._INDEX}
-        ).scalar()
+        indexdef = db.execute(text("SELECT indexdef FROM pg_indexes WHERE indexname = :n"), {"n": self._INDEX}).scalar()
         assert indexdef, f"{self._INDEX} is missing -- migration exec_completed_page_idx_001 not applied"
         # Column order + per-column direction: equality on (org_id, process_id, status)
         # then ORDER BY created_at DESC, id DESC -- exactly what execution_repo.
