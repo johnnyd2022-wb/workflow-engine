@@ -3,7 +3,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, Date, DateTime, Enum, String
+from sqlalchemy import Boolean, Column, Date, DateTime, Enum, String
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
@@ -30,6 +30,9 @@ class Organisation(Base):
     # Plan 1.3: traceability starts here (go-live stocktake). Earlier sales are reported
     # but not matched to batches. None until the organisation goes live.
     go_live_date = Column(Date, nullable=True)
+    multiple_sites_enabled = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Internal staged release; transfer/module integration activates this after guards.
+    multiple_site_operations_enabled = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 

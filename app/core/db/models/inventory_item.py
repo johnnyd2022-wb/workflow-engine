@@ -3,7 +3,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Numeric, String
+from sqlalchemy import Column, Date, DateTime, ForeignKey, ForeignKeyConstraint, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -32,6 +32,28 @@ class InventoryItem(TenantScoped, Base):
     """
 
     __tablename__ = "inventory_items"
+    __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_inventory_items_org_id"),
+        UniqueConstraint("org_id", "transfer_receipt_id", name="uq_inventory_transfer_receipt"),
+        ForeignKeyConstraint(
+            ["org_id", "transfer_receipt_id"],
+            ["site_stock_receipts.org_id", "site_stock_receipts.id"],
+            name="fk_inventory_transfer_receipt",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "site_id"], ["sites.org_id", "sites.id"], name="fk_inventory_items_org_site", ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "location_id"],
+            ["stock_locations.org_id", "stock_locations.id"],
+            name="fk_inventory_org_location",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "site_id", "location_id"],
+            ["stock_locations.org_id", "stock_locations.site_id", "stock_locations.id"],
+            name="fk_inventory_site_location",
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
@@ -43,6 +65,9 @@ class InventoryItem(TenantScoped, Base):
     barcode = Column(String(255), nullable=True, index=True)  # Product identity; reused across stock entries
     # Plan 2.1: where the lot is. None = the main licensed (Customs-controlled) area.
     location_id = Column(UUID(as_uuid=True), ForeignKey("stock_locations.id", ondelete="RESTRICT"), nullable=True)
+    # Nullable for new single-site stock; enabling sites backfills the default site.
+    site_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    transfer_receipt_id = Column(UUID(as_uuid=True), nullable=True)
     purchase_date = Column(Date, nullable=True)
     supplier_batch_number = Column(String(255), nullable=True)
     expiry_date = Column(Date, nullable=True)
