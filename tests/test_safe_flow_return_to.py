@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.core.backend.backend import _safe_flow_return_to
+from app.core.backend.execution_routes import _safe_flow_return_to
 
 PROCESS_ID = "3e4e9666-2536-4545-821b-fb4945b54872"
 EXPECTED_DEFAULT = f"/core/flows?id={PROCESS_ID}"

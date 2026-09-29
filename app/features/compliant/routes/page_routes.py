@@ -21,7 +21,12 @@ def _food_safety_programme(settings: dict | None) -> str:
 def _nz_alcohol_template_context(**context):
     profile = ComplianceService(db_session()).get_profile(UUID(g.org_id))
     settings = profile.settings if profile else {}
-    return {"active_page": "compliant", "food_control_programme": _food_safety_programme(settings), **context}
+    return {
+        "active_page": "compliant",
+        "food_control_programme": _food_safety_programme(settings),
+        "liquor_licensing": bool((settings or {}).get("liquor_licence_types")),
+        **context,
+    }
 
 
 @page_bp.route("/compliant", methods=["GET"])
@@ -80,10 +85,8 @@ def nz_alcohol_np3_audit():
 def nz_alcohol_food_safety():
     context = _nz_alcohol_template_context(active_compliant_tab="food-safety")
     programme = context["food_control_programme"]
-    if programme == "np3":
-        return render_template("compliant/np3_audit.html", **context)
-    if programme in {"np1", "np2"}:
-        return render_template("compliant/food_safety_coming_soon.html", **context)
+    if programme in {"np1", "np2", "np3"}:  # one verification workspace for every programme (plan 2.4b)
+        return render_template("compliant/np3_audit.html", **_programme_labels(programme), **context)
     return redirect("/compliant/nz-alcohol/configuration", code=302)
 
 
@@ -91,9 +94,17 @@ def nz_alcohol_food_safety():
 @requires_auth
 def nz_alcohol_np3_audit_check(control_id: str):
     context = _nz_alcohol_template_context(active_compliant_tab="food-safety", control_id=control_id)
-    if context["food_control_programme"] != "np3":
+    programme = context["food_control_programme"]
+    if programme not in {"np1", "np2", "np3"}:
         return redirect("/compliant/nz-alcohol/food-safety", code=302)
-    return render_template("compliant/np3_check.html", **context)
+    return render_template("compliant/np3_check.html", **_programme_labels(programme), **context)
+
+
+def _programme_labels(programme: str) -> dict:
+    from app.features.compliant.modules.nz_alcohol.national_programmes import GUIDANCE
+
+    guidance = GUIDANCE[programme]
+    return {"programme_label": guidance["label"], "programme_short": guidance["short"], "guidance_url": guidance["url"]}
 
 
 @page_bp.route("/compliant/nz-alcohol/configuration", methods=["GET"])
