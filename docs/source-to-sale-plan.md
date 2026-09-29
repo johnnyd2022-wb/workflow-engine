@@ -839,13 +839,20 @@ Founder decisions for this phase:
       - [x] Module-owned destination activity/food/liquor missing-record findings on
         authorised dispatch and receipt, with dated immutable evidence and periodic
         review (!441). Other movement authorities and excise accounting remain open.
+      - [x] Producer-liable tested-spirits home removal records a frozen CCA, LAL,
+        configured rate and excise-due fact at dispatch; partial receipt does not
+        create a second charge (!446). Other products, customer duty and operational
+        release remain open.
     - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
       - [x] Source-CCA movement register and frozen tested-spirits/LAL measurement
-        basis (!442). Physical removal authorisation, contract duty, complete
-        per-CCA drafts/lodgement and release remain open.
+        basis (!442). Other physical removal authorities, customer contract duty,
+        complete per-CCA drafts/lodgement and release remain open.
+      - [x] Refuse the legacy location-based nil return and lodgement after multi-site
+        opt-in, and show observed producer home-removal excise by source CCA without
+        claiming a complete entry (!446). Full per-CCA entry/lodgement remains open.
       - [x] Guard prerequisite: production inputs/output reconciliation match the
         persisted execution site, outputs inherit it, and FIFO/manual sales use the
         shipping/default site (!429). Additional-site release remains internally
