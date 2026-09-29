@@ -1,6 +1,6 @@
 """Unit conversion utilities for inventory and execution quantities"""
 
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from app.core.utils.inventory_quantity import STORAGE_QUANTIZE_EXP
 
@@ -41,6 +41,11 @@ CONVERSION_FACTORS = {
     "boxes": None,
     "pallets": None,
     "containers": None,
+    # Drinks packaging (plan 1.2): counted, so always whole numbers.
+    "bottles": None,
+    "cans": None,
+    "kegs": None,
+    "cases": None,
 }
 
 # Display labels for UI (dropdowns, etc.). Keys must match CONVERSION_FACTORS.
@@ -69,6 +74,10 @@ UNIT_DISPLAY_LABELS = {
     "boxes": "Boxes",
     "pallets": "Pallets",
     "containers": "Containers",
+    "bottles": "Bottles",
+    "cans": "Cans",
+    "kegs": "Kegs",
+    "cases": "Cases",
 }
 
 # Ensure units and labels stay in sync (fail fast if someone adds a unit but forgets a label).
@@ -83,7 +92,7 @@ if set(UNIT_DISPLAY_LABELS) != set(CONVERSION_FACTORS):
 MASS_UNITS = {"kg", "g", "mg", "lb", "oz", "ton", "tonne"}
 VOLUME_UNITS = {"l", "ml", "gal", "m3", "ft3"}
 LENGTH_UNITS = {"m", "cm", "mm", "ft", "in"}
-COUNT_UNITS = {"units", "pcs", "pieces", "boxes", "pallets", "containers"}
+COUNT_UNITS = {"units", "pcs", "pieces", "boxes", "pallets", "containers", "bottles", "cans", "kegs", "cases"}
 
 
 def normalize_unit(unit: str) -> str:
@@ -244,3 +253,25 @@ def convert_to_inventory_unit_decimal(quantity: Decimal, quantity_unit: str, inv
         ValueError: If units are not compatible
     """
     return convert_quantity_decimal(quantity, quantity_unit, inventory_unit)
+
+
+def is_count_unit(unit: str | None) -> bool:
+    """Counted goods (bottles, cans, units...) as opposed to measured ones (L, g...)."""
+    return normalize_unit(unit or "") in COUNT_UNITS
+
+
+def whole_count_error(quantity, unit: str | None, what: str = "Quantity") -> str | None:
+    """The message to show when a counted quantity isn't a whole number, else None.
+
+    Plan 1.2: nobody can sell half a bottle, and FIFO must never split one between batches.
+    """
+    if not is_count_unit(unit):
+        return None
+    try:
+        value = Decimal(str(quantity))
+    except (InvalidOperation, ValueError, TypeError):
+        return None  # other validation reports malformed numbers
+    if not value.is_finite() or value == value.to_integral_value():
+        return None
+    label = (unit or "units").strip()
+    return f"{what}: {label} are counted in whole numbers, not {value.normalize():f}."
