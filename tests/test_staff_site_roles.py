@@ -59,6 +59,9 @@ def test_endpoint_registry_covers_live_methods_and_new_routes_deny(flask_app):
     assert set(ENDPOINT_COVERAGE.values()) == {"blocked"}
     assert coverage_for("core.new_export", "GET") == "unclassified"
     assert coverage_for("core.get_inventory", "HEAD") == coverage_for("core.get_inventory", "GET")
+    assert coverage_for("compliant.compliant_cca_movements.get_period_review", "GET") == "blocked"
+    assert coverage_for("planning.get_capacity", "GET") == "blocked"
+    assert coverage_for("planning.save_capacity", "POST") == "blocked"
 
 
 def test_default_all_preserves_existing_assignment(org, db, flask_app):
