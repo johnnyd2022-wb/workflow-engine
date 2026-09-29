@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
-from app.core.db.models.process import Process
+from app.core.db.models.process import Process, ProcessCategory
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.features.compliant.service import ComplianceService
 from app.features.process_templates.catalog import registry
@@ -195,3 +195,110 @@ def emit_template_selected(session: Session, org_id: UUID, template_id: str) -> 
         payload={"template_id": template_id},
     )
     session.commit()
+
+
+# --- starter packs (plan 2.4c) ---------------------------------------------------------------
+
+
+def _pack_summary(pack) -> dict:
+    from app.features.compliant.platform.presets import describe_checks
+
+    titles = describe_checks([cid for cid, _why in pack.key_checks])
+    return {
+        "id": pack.id,
+        "product_type": pack.product_type,
+        "name": pack.name,
+        "description": pack.description,
+        "steps": [s.name for s in pack.steps],
+        "final_output": pack.final_output,
+        "key_checks": [
+            {"control_id": cid, "title": titles.get(cid) or cid, "why": why} for cid, why in pack.key_checks
+        ],
+        "advisory": registry.TEMPLATE_CUSTOMISE_ADVISORY,
+    }
+
+
+def list_starter_packs(session: Session, org_id: UUID) -> list[dict]:
+    from app.features.process_templates.catalog.starter_packs import STARTER_PACKS
+
+    families = set(_resolve_permitted_families(session, org_id))
+    return [_pack_summary(p) for p in STARTER_PACKS if p.family in families]
+
+
+def apply_starter_pack(session: Session, org_id: UUID, pack_id: str, configure_compliance: bool) -> dict | None:
+    """Create the pack's workflow (once) and, if allowed, preconfigure its compliance fields."""
+    from uuid import uuid4
+
+    from app.features.compliant.platform.presets import apply_product_preset
+    from app.features.process_templates.catalog.starter_packs import get_pack
+
+    pack = get_pack(pack_id)
+    if pack is None or pack.family not in set(_resolve_permitted_families(session, org_id)):
+        return None
+    existing = session.query(Process).filter(Process.org_id == org_id, Process.name == pack.name).first()
+    created = existing is None
+    process = existing
+    if created:
+        repo = ProcessRepository(session)
+        process = repo.create_process(
+            org_id=org_id,
+            name=pack.name,
+            description=f"{pack.description}\n\nCreated from the {pack.product_type} starter pack.",
+            category=ProcessCategory.MANUFACTURING,
+            is_draft=True,
+        )
+        previous = None
+        for index, step in enumerate(pack.steps, start=1):
+            inputs = []
+            if step.takes_previous and previous is not None:
+                inputs.append(
+                    {
+                        "name": previous["name"],
+                        "source_output_id": previous["id"],
+                        "quantity": 1,
+                        "unit": previous["unit"],
+                        "requires_inventory_selection": True,
+                        "is_variable": False,
+                    }
+                )
+            inputs += [
+                {
+                    "name": i.name,
+                    "quantity": 1,
+                    "unit": i.unit,
+                    "requires_inventory_selection": i.requires_inventory_selection,
+                }
+                for i in step.inputs
+            ]
+            output = {"id": str(uuid4()), "name": step.output.name, "quantity": 1, "unit": step.output.unit}
+            repo.add_step(
+                process_id=process.id,
+                org_id=org_id,
+                step_number=index,
+                position=index * 1000,
+                name=step.name,
+                description=step.description,
+                inputs=inputs,
+                outputs=[output],
+                execution_prompts=[
+                    {"label": p.label, "type": p.type, "unit": p.unit, "required": p.required} for p in step.prompts
+                ],
+            )
+            previous = output
+    changes = (
+        apply_product_preset(session, org_id, pack.product_type, [pack.final_output]) if configure_compliance else []
+    )
+    EventWriter(session, org_id).emit(
+        event_type="process_templates.starter_pack_applied",
+        entity_type="process",
+        entity_id=process.id,
+        payload={"pack_id": pack.id, "created": created, "compliance_changes": len(changes)},
+    )
+    session.commit()
+    return {
+        "process_id": str(process.id),
+        "created": created,
+        "compliance_changes": changes,
+        "compliance_skipped": not configure_compliance,
+        **_pack_summary(pack),
+    }

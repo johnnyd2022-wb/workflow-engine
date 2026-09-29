@@ -145,15 +145,11 @@ deploy_prod() {
     fi
 }
 
-# Function to restore test database
+# Production data must never be restored into the ordinary test database.
 restore_test_db() {
-    print_status "Restoring production database to test environment..."
-    check_directory
-
-    chmod +x scripts/db_restore.sh
-    ./scripts/db_restore.sh
-
-    print_success "Test database restored successfully!"
+    print_status "Use the isolated restore rehearsal described in docs/database-recovery.md"
+    echo "scripts/db_restore.sh ARCHIVE.dump EVIDENCE.json"
+    return 2
 }
 
 # Function to show status of all environments
@@ -336,7 +332,7 @@ show_help() {
     echo "  local       Run local environment (python3 app.py)"
     echo "  test        Deploy to test environment (Docker) - includes Semgrep + API tests"
     echo "  prod        Deploy to production environment (Docker) - includes Semgrep + API tests"
-    echo "  restore-db  Restore production DB to test environment"
+    echo "  restore-db  See isolated database recovery rehearsal instructions"
     echo "  status      Show status of all environments"
     echo "  tests       Run API integration tests only"
     echo "  compliance  Run Semgrep alias compliance tests only"

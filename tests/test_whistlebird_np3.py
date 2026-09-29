@@ -87,11 +87,17 @@ def _manifest(**overrides):
 def test_committed_manifest_is_valid():
     manifest = np3.load_np3_manifest()
 
-    assert len(manifest.attestations) == 38
+    assert len(manifest.attestations) == 39
     assert len(manifest.logs) == 62
+    policy = next(record for record in manifest.attestations if record.control_id == "recall-policy")
+    assert policy.evidence_fields["policy_reference"] == "docs/whistlebird-recall-policy.md"
+    assert policy.signed_on == date(2026, 9, 23)
+    assert policy.due_date == date(2027, 9, 23)
+    assert policy.evidence_fields["last_policy_review"] == "2026-09-23"
+    assert (Path(__file__).parents[1] / policy.evidence_fields["policy_reference"]).is_file()
     training = [record for record in manifest.logs if record.control_id == "staff-competency"]
-    # 2 staff x 9 supplied register items x 3 annual dates, plus both staff trained on the
-    # written recall policy the NP3 verifier asked for (2026-09-23).
+    # 2 staff x 9 supplied register items x 3 annual dates, plus the two recall
+    # procedure training records dated 2026-09-23.
     assert len(training) == 56
     assert {record.event_date.isoformat() for record in training} == {
         "2024-02-02",
@@ -425,21 +431,44 @@ def test_manifest_is_accepted_by_the_real_routes_and_dated_explicitly(db, np3_or
 
 
 def test_committed_manifest_replays_all_review_placeholders(db, np3_org):
-    manifest = np3.load_np3_manifest()
+    # User emails are globally unique, and the test DB may already contain the
+    # Whistlebird tenant. Keep its evidence unchanged while giving this org its own users.
+    data = copy.deepcopy(np3.load_np3_manifest().raw)
+    email_map = {}
+    for member in data["staff"]:
+        original = member["email"]
+        member["email"] = f"np3-{uuid4().hex[:12]}@test.com"
+        email_map[original] = member["email"]
+    for entry in data["logs"]:
+        fields = entry["fields"]
+        if "employee_email" in fields:
+            fields["employee_email"] = email_map[fields["employee_email"]]
+    manifest = np3.parse_np3_manifest(data)
 
     counts = _replay(np3_org, manifest)
     updated = np3.correct_np3_timestamps(np3_org["url"], np3_org["name"], manifest)
     report = np3.verify_np3(np3_org["url"], np3_org["name"], manifest)
 
-    assert counts == {"staff": 2, "profile": 1, "attestations": 38, "logs": 62, "skipped": 0}
-    assert updated == 100
+    assert counts == {"staff": 2, "profile": 1, "attestations": 39, "logs": 62, "skipped": 0}
+    assert updated == 101
     assert report == {
-        "np3_record_count": {"expected": 100, "actual": 100},
-        "np3_record_content": {"expected": 100, "actual": 100},
+        "np3_record_count": {"expected": 101, "actual": 101},
+        "np3_record_content": {"expected": 101, "actual": 101},
         "np3_staff": {"expected": 2, "actual": 2},
         "np3_profile": {"expected": 1, "actual": 1},
         "np3_date_mismatches": 0,
     }
+    policy_dates = db.execute(
+        text(
+            "SELECT (r.created_at AT TIME ZONE 'Pacific/Auckland')::date, "
+            "(a.timestamp AT TIME ZONE 'Pacific/Auckland')::date "
+            "FROM compliance_records r JOIN audit_logs a ON a.entity_id = r.id "
+            "WHERE r.org_id = :org AND r.control_id = 'recall-policy' "
+            "AND a.org_id = :org AND a.entity = 'compliance_record' AND a.action = 'create'"
+        ),
+        {"org": np3_org["org"].id},
+    ).one()
+    assert policy_dates == (date(2026, 9, 23), date(2026, 9, 23))
 
 
 def test_replay_is_idempotent(db, np3_org):
