@@ -1082,6 +1082,9 @@ plan branch and are delivered separately.
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] Source-CCA movement register and frozen tested-spirits/LAL measurement
+        basis (!442). Physical removal authorisation, contract duty, complete
+        per-CCA drafts/lodgement and release remain open.
       - [x] Guard prerequisite: production inputs/output reconciliation match the
         persisted execution site, outputs inherit it, and FIFO/manual sales use the
         shipping/default site (!429). Additional-site release remains internally
