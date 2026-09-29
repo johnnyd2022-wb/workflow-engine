@@ -255,7 +255,7 @@ def test_ac14_evidence_upload_succeeds_and_becomes_downloadable(logged_in_page: 
     _open_batch_start(page, pid, eid)
     expect(page.locator("#exec-step-subtitle")).to_contain_text("Photo Step")
 
-    file_input = page.locator(".execute-evidence-file-input")
+    file_input = page.locator(".execute-evidence-file-input").first
     expect(file_input).to_be_attached()
     file_input.set_input_files(files=[{"name": "proof.png", "mimeType": "image/png", "buffer": PNG_BYTES}])
     expect(page.get_by_text("proof.png")).to_be_visible()
@@ -274,6 +274,42 @@ def test_ac14_evidence_upload_succeeds_and_becomes_downloadable(logged_in_page: 
     download = page.request.get(f"/api/core/evidence/{evidence[0]['id']}/download")
     assert download.status == 200, download.text()
     assert download.body() == PNG_BYTES
+
+
+def test_production_step_and_barcode_fit_phone_width(logged_in_page: Page):
+    """Recording, evidence picking, and barcode continuation remain reachable at 390 px."""
+    page = logged_in_page
+    page.set_viewport_size({"width": 390, "height": 844})
+    pid = _create_process(page, "E2E Phone Production")
+    _add_step(
+        page,
+        pid,
+        1,
+        "Phone Photo Step",
+        execution_prompts=[{"type": "evidence", "label": "Photo evidence", "required": False}],
+    )
+    eid = _start_execution(page, pid)
+    _open_batch_start(page, pid, eid)
+    expect(page.locator("#exec-step-subtitle")).to_contain_text("Phone Photo Step")
+
+    record = page.locator("#batch-start-record-btn")
+    expect(record).to_be_visible()
+    box = record.bounding_box()
+    assert box and box["height"] >= 44 and box["x"] >= 0 and box["x"] + box["width"] <= 390
+    assert box["y"] >= 0 and box["y"] + box["height"] <= 844 - 66
+
+    pickers = page.locator(".execute-evidence-file-input")
+    expect(pickers).to_have_count(2)
+    assert "application/pdf" in pickers.first.get_attribute("accept")
+    assert pickers.first.get_attribute("capture") is None
+    assert pickers.nth(1).get_attribute("capture") == "environment"
+
+    page.goto("/core/inventory/add/barcode")
+    page.wait_for_load_state("networkidle")
+    continue_button = page.locator("#barcode-continue-btn")
+    expect(continue_button).to_be_visible()
+    box = continue_button.bounding_box()
+    assert box and box["height"] >= 44 and box["x"] >= 0 and box["x"] + box["width"] <= 390
 
 
 def test_ac14_evidence_upload_rejects_disallowed_file_type(logged_in_page: Page):
@@ -295,7 +331,7 @@ def test_ac14_evidence_upload_rejects_disallowed_file_type(logged_in_page: Page)
     _open_batch_start(page, pid, eid)
     expect(page.locator("#exec-step-subtitle")).to_contain_text("Photo Step")
 
-    file_input = page.locator(".execute-evidence-file-input")
+    file_input = page.locator(".execute-evidence-file-input").first
     # accept="image/jpeg,image/png,application/pdf" on the input is a client hint only; a real
     # attacker (or a careless operator on a renamed file) bypasses it trivially, which is exactly
     # why the server sniffs magic bytes rather than trusting Content-Type. set_input_files does

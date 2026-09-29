@@ -22,9 +22,11 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='base-spa.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='spa-theme.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='design-system.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='execution-modal.css') }}">
   {# Execute-step page: scoped to .batch-start-spa so safe to load globally (needed for HTMX swaps). #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batch-start.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='production-floor-phone.css') }}">
   {# Executions get Compliant/NP3/CRM's light card styling regardless of the site-wide dark/light
      toggle -- scoped to #execute-step-modal.exec-modal so it's inert everywhere else. Loaded last
      of the execution sheets so its token overrides win. #}
@@ -363,6 +365,7 @@
   <script src="{{ url_for('crm.serve_crm_js', filename='tasks-calendar.js') }}" defer></script>
   <script src="{{ url_for('crm.serve_crm_js', filename='configuration.js') }}" defer></script>
   <script src="{{ url_for('crm.serve_crm_js', filename='integrations.js') }}" defer></script>
+  <script src="{{ url_for('crm.serve_crm_js', filename='matching.js') }}" defer></script>
   {% endif %}
   <script src="{{ url_for('core.serve_core_js', filename='alpinejs.min.js') }}" defer></script>
 
