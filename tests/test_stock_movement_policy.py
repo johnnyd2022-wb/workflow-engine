@@ -169,7 +169,12 @@ def test_requirements_are_module_owned_and_fresh_per_request(db, movement):
         "reference",
         "approved_on",
         "evidence_reference",
+        "measured_abv_percent",
+        "measurement_method",
+        "measured_on",
+        "measurement_reference",
+        "volume_reference",
     }
     next(field for field in first["fields"] if field["name"] == "authority")["options"].clear()
     fresh = movement_requirements(db, org)
-    assert len(next(field for field in fresh["fields"] if field["name"] == "authority")["options"]) == 2
+    assert len(next(field for field in fresh["fields"] if field["name"] == "authority")["options"]) == 3
