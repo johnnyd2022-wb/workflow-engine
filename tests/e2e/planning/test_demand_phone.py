@@ -6,8 +6,12 @@ installed and skips with a reason when it isn't.
 
 from urllib.parse import urlsplit
 
+import pytest
+
 from tests.features.planning.test_demand import demand_clients, demand_world  # noqa: F401 -- fixture re-export
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-export
+
+pytestmark = pytest.mark.e2e
 
 
 def test_phone_workspace_creates_and_cancels_demand_without_overflow(demand_clients, browser):  # noqa: F811
