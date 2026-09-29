@@ -481,12 +481,18 @@ checks NP3 record count, content, staff, profile and dates.
 evidence is projected live from the Core DAG once the Core replay has run.
 
 The committed `whistlebird-np3-evidence-source.json` carries Whistlebird's real NP3 answers:
-each of the 38 checks' `how_we_meet` text is the founder's own wording (2026-09-21), and
-the annual training register is a declarative schedule. `annual_training` lists the dates
-and the training `categories` (keys from `NP3_TRAINING_CATEGORIES` in
-`app/features/compliant/modules/nz_alcohol/np3_audit.py`); the replay expands them for
-each `staff` member into one log per category, person and date, in the staff-competency
-register's format (`training_topic` category, `employee_name` as a human name, `event_date`).
+the original 38 checks' `how_we_meet` text is the founder's own wording (2026-09-21), and
+the written recall procedure is `docs/whistlebird-recall-policy.md` and the
+`recall-policy` attestation references it. Johnny Dempsey and Nikolai Scott each have a
+completed `recall-policy-procedures` entry dated 2026-09-23 alongside their other
+training records. The policy attestation and their training share that date; the replay
+timestamp pass applies it to the compliance record and its creation audit log. Training
+entries use the staff-competency register's format (`training_topic` category,
+`employee_name` as a human name, `event_date`). The optional `annual_training` manifest
+section can expand listed
+dates and categories (keys from `NP3_TRAINING_CATEGORIES` in
+`app/features/compliant/modules/nz_alcohol/np3_audit.py`) into records for each staff
+member; the committed Whistlebird manifest uses explicit training logs instead.
 Staff therefore need a `name`; the timestamp pass sets it as the user's first/last name.
 Evidence fields the answers do not state are left blank rather than invented, and the old
 `REVIEW PLACEHOLDER` example logs are gone -- real events are entered in the app and
