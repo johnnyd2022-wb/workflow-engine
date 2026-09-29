@@ -42,11 +42,21 @@ Run pytest from the host with **`ENVIRONMENT` unset**. It resolves to `local`
 `ENVIRONMENT=test` from a host shell **hangs**: `test.ini` targets
 `host.docker.internal`, which only resolves for the test app running inside Docker.
 
-Expect `730 passed, 30 skipped` with no dev server running. The 30 skips are the
-live-server 2FA suites (`pytest.mark.live_server`), which auto-skip with a reason unless
-`uv run workflow start` is up — start it and they run. See the **suite-warden** skill.
+The suite is about 2,400 tests (2026-09-25: `2384 passed, 5 skipped, 7 failed` with
+`uv run workflow start` up and Playwright's Chromium installed). With no dev server, the
+live-server suites (`pytest.mark.live_server`) and the e2e tests auto-skip with a reason
+instead. The 7 failures on plain `main` that day were all known and environmental — five
+e2e tests (`tests/e2e/…`, not run by CI's relevant-test selection), the NP3 replay test
+(collides with the real Whistlebird tenant in the shared local DB), and `test_ac9` (an
+untracked `app/features/dilution_calculator/` left in one checkout). Don't pin an exact
+count here again; it rots. See the **suite-warden** skill.
 
-The test PostgreSQL instance runs on port 8401 (`workflow-engine-test` DB, user `workflow_rw`, password `secret`).
+The test PostgreSQL instance runs on port 8401 (`workflow-engine-test` DB, user `workflow_rw`).
+`docker-compose.test.yml` sets the password `secret`, but Postgres only applies that when the
+volume is first created — an existing volume keeps whatever it was initialised with. The app
+doesn't need it spelled out: it loads DB credentials from KeePassXC locally, or from
+`POSTGRES_PASSWORD` / `POSTGRES_PASSWORD_TEST` (`app/utils/config_loader.py:213`). For
+`psql`, use `PGPASSWORD="$POSTGRES_PASSWORD_TEST"`.
 
 ## Architecture
 
@@ -69,11 +79,15 @@ HTTP Request
 - `org_routes` – `/org/*` organisation management
 - `core_bp` – `/api/core/*` and `/core/*` — processes, executions, inventory (always active)
 - `crm_bp` – `/crm/*` — customer management, Xero invoicing (feature flag: `crm_enabled`)
-- `workflow_engine_bp` – `/workflow-engine/*` — lineage tracing (feature flag: `workflow_engine_enabled`)
+- `compliant` – `/compliant/*`, `/api/compliant/*` — compliance modules, NZ Alcohol first (feature flag: `compliant_enabled`, plus a per-org subscription)
+- `operational_cases` – `/core/cases/*`, `/api/core/cases/*` — operational cases (always mounted; access gated per org)
+- `process_templates` – industry workflow template catalogue (always mounted; exposure gated per org)
+
+`/workflow-engine/*` is a retired URL prefix (the app now lives under `/core/*`) and `workflow_engine_enabled` is read but never consulted — see `.agents/plans/feature-slicing-plan.md`. Lineage tracing is `/api/core/inventory/trace/*` and `/api/core/sourcemap/*`.
 
 ### Key subsystems
 
-**Execution & DAG**: Processes are defined as DAGs of steps. `app/features/workflow_engine/dagtraversal.py` walks them. `ApiIdempotencyKey` prevents duplicate operations. `workflow_execution_lineage` tracks parent-child execution relationships.
+**Execution & DAG**: Processes are defined as DAGs of steps. `app/core/backend/dagtraversal.py` walks them. `ApiIdempotencyKey` prevents duplicate operations. `workflow_execution_lineage` tracks parent-child execution relationships.
 
 **Inventory**: Quantity writes require an `InventoryQuantityWriteReason` enum value (guards against untracked mutations). Unit conversion utilities live in `app/core/utils/`. Wastage is tracked in a separate table with batch-based entry hashing for idempotency.
 

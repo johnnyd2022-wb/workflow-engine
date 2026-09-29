@@ -136,7 +136,7 @@ Scope: `app/api/routes/auth_routes.py` (1501 lines, whole file), `app/core/secur
   comment at each of the 3 sites. Did not touch the rule itself or `.semgrep/rules/learned.yml`'s
   ownership beyond this — it belongs to the other audit's finding history.
 
-- F6 [open, P0 security] `app/api/routes/auth_routes.py:707` (`verify_two_factor`) — no
+- F6 [patched 2026-09-25, plan item 0.2] `app/api/routes/auth_routes.py:707` (`verify_two_factor`) — no
   brute-force throttle on 2FA code entry. Recorded here on 2026-09-19 by a findings-sweep
   run while answering findings-index item 5c84c42e; it was not produced by a security-audit
   pass, so this audit has not triaged or graded it yet.
@@ -155,6 +155,18 @@ Scope: `app/api/routes/auth_routes.py` (1501 lines, whole file), `app/core/secur
   request rate is not measured). A fresh pending session needs a fresh `/auth/login`, which
   is itself limited to 5/min per ip:email, so this bounds the number of sessions, not the
   guesses inside each one.
+  patch (2026-09-25, with plan item 0.2): its own counter, not the login lockout. Five wrong
+  codes in one pending session end it (`MAX_2FA_FAILURES_PER_PENDING_SESSION`), so the
+  password has to be entered again, and `/auth/verify-2fa` is limited to 5/minute and
+  20/hour keyed on the pending account (`_pending_2fa_rate_limit_key`), not the IP. The
+  account key is what bounds total guesses: `/auth/login` resets the account's failure
+  counter on every correct password, so a per-session cap alone could be sidestepped by
+  logging in again. Trade-off accepted: someone who already holds the password can use up
+  the owner's 20/hour and delay their sign-in for up to an hour, which is far better than
+  unlimited guessing. The limits use the same fail-closed `USE_RELAXED_AUTH_RATE_LIMITS`
+  gate as login/signup. Regression test:
+  `tests/test_admin_2fa_policy.py::test_wrong_2fa_codes_end_the_pending_session_after_five`.
+  Original note follows.
   patch: none. Not started because it needs a policy decision, not just code — should a 2FA
   failure count toward the existing login lockout (a caller who knows the password could then
   lock the owner out), or get its own counter that ends the pending session? What limit
