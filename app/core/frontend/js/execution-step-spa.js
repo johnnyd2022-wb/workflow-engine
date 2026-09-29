@@ -3,6 +3,9 @@
 (function() {
   'use strict';
 
+  // Mirrors COUNT_UNITS in app/core/utils/unit_conversion.py (plan 1.2).
+  var COUNT_UNITS = ['units', 'pcs', 'pieces', 'boxes', 'pallets', 'containers', 'bottles', 'cans', 'kegs', 'cases'];
+
   function ensureStyles() {
     if (document.getElementById('exec-spa-picker-styles')) return;
     var style = document.createElement('style');
@@ -363,9 +366,16 @@
       html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
       outputs.forEach(function(o, idx) {
         var outId = String(o.id || o.output_id || o.name || ('out_' + idx));
+        // Counted outputs are whole numbers; part-filled goes to Library stock in mL (plan 1.2).
+        var counted = COUNT_UNITS.indexOf(String(o.unit || 'units').trim().toLowerCase()) !== -1;
         html += '<div><label class="spa-field-label">' + escapeHtml(o.name || 'Output') +
           ' <span style="color: var(--text-secondary); font-weight: 400;">(Expected: ' + escapeHtml(String(o.quantity || '0')) + ' ' + escapeHtml(o.unit || '') + ')</span></label>' +
-          '<input type="number" class="spa-inp" step="0.01" min="0" value="' + escapeHtml(String(o.quantity || '')) + '" data-output-id="' + escapeHtml(outId) + '">' +
+          '<input type="number" class="spa-inp" step="' + (counted ? '1' : '0.01') + '" min="0"' + (counted ? ' inputmode="numeric"' : '') +
+          ' value="' + escapeHtml(String(o.quantity || '')) + '" data-output-id="' + escapeHtml(outId) + '">' +
+          (counted
+            ? '<label class="spa-field-label" style="margin-top: 8px;">Part-filled, in mL <span style="color: var(--text-secondary); font-weight: 400;">(optional, goes to Library stock)</span></label>' +
+              '<input type="number" class="spa-inp" step="1" min="0" inputmode="numeric" placeholder="0" data-output-library="' + escapeHtml(outId) + '">'
+            : '') +
         '</div>';
       });
       html += '</div></div>';
@@ -542,7 +552,10 @@
           var outId = String(o.id || o.output_id || o.name || ('out_' + idx));
           var el = root.querySelector('[data-output-id="' + CSS.escape(outId) + '"]');
           var q = el ? parseFloat(el.value) : parseFloat(o.quantity || '0');
-          actualOutputs.push({ name: o.name, quantity: isNaN(q) ? 0 : q, unit: o.unit || '' });
+          var outPayload = { name: o.name, quantity: isNaN(q) ? 0 : q, unit: o.unit || '' };
+          var libEl = root.querySelector('[data-output-library="' + CSS.escape(outId) + '"]');
+          if (libEl && libEl.value.trim() !== '') outPayload.library_remainder_ml = libEl.value.trim();
+          actualOutputs.push(outPayload);
         });
 
         await CoreAPI.completeStep(executionId, readyStep.id, {

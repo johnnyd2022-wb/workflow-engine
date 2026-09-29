@@ -35,8 +35,11 @@ def test_dashboard_page_renders_for_logged_in_user(admin_page):
     expect(page.locator('script[src="/compliant/static/compliant.js"]')).to_have_count(1)
     expect(page.locator("[data-compliant-root]")).to_be_visible()
     expect(page.get_by_role("heading", name="Run your business. Know what needs proving.")).to_be_visible()
+    expect(page.get_by_role("tab", name="Customs")).to_be_visible()
+
+    response = page.goto("/compliant/nz-alcohol/customs")
+    assert response is not None and response.status == 200
     expect(page.locator("[data-record-form]")).to_be_visible()
     expect(page.locator("[data-product-form]")).to_be_visible()
-    expect(page.get_by_role("link", name="Configure NZ Alcohol")).to_be_visible()
 
     assert_clean_page(page)
