@@ -912,6 +912,10 @@ Founder decisions for this phase:
       licensee, the customer as licensee, or goods leaving underbond to the customer's
       CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the
       order shows who pays.
+      - [x] Portal declaration display (!450): publish the order's declared duty
+        responsibility and customer CCA reference in the customer-visible snapshot.
+        Dispatch, Customs treatment and payment remain unverified; this does not
+        determine excise liability or underbond authority.
     - [ ] d. **Progress without typing it twice.** Milestones (materials received,
       scheduled, in production, QC passed, packed, ready, dispatched) come from the
       batch's own steps and stock movements. The producer chooses which steps show and
