@@ -30,6 +30,7 @@ function crmConfiguration() {
       product_key: '',
       xero_description_pattern: '',
       match_type: 'exact',
+      units_per_line: 1,
       notes: '',
     },
 
@@ -49,6 +50,13 @@ function crmConfiguration() {
         this.mappings = mappings?.product_mappings || [];
         this.finalProducts = finalProducts?.final_products || [];
         this.lineItemOptions = lineItems?.line_item_options || [];
+        const mapPhrase = new URLSearchParams(window.location.search).get('map');
+        if (mapPhrase) {
+          this.mappingDraft.xero_description_pattern = mapPhrase;
+          if (!this.lineItemOptions.some((option) => (option.description || option.item_code) === mapPhrase)) {
+            this.lineItemOptions.push({ description: mapPhrase, display_label: mapPhrase });
+          }
+        }
         this.traceConfig = {
           mode: traceCfg?.matching_strategy || 'fifo',
           key: traceCfg?.matching_key || 'batch_id',
@@ -222,6 +230,7 @@ function crmConfiguration() {
         biz_e_source_output_id: product.source_output_id,
         xero_description_pattern: xero,
         match_type: this.mappingDraft.match_type === 'contains' ? 'contains' : 'exact',
+        units_per_line: Math.max(1, parseInt(this.mappingDraft.units_per_line, 10) || 1),
         notes: (this.mappingDraft.notes || '').trim() || null,
       };
       if (this.isDuplicateMapping(payload)) {
@@ -230,7 +239,7 @@ function crmConfiguration() {
       }
       this.mappingError = null;
       this.pendingMappings.push(payload);
-      this.mappingDraft = { product_key: '', xero_description_pattern: '', match_type: 'exact', notes: '' };
+      this.mappingDraft = { product_key: '', xero_description_pattern: '', match_type: 'exact', units_per_line: 1, notes: '' };
       return true;
     },
 

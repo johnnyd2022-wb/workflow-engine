@@ -788,11 +788,10 @@ def entity_activity_feed():
         }
     ), 200
 
+
 def register_routes(bp):
     """Keep activity URLs and endpoint names on the Core blueprint."""
-    bp.add_url_rule(
-        "/api/core/entities/<entity_type>/<entity_id>/story", view_func=entity_story, methods=["GET"]
-    )
+    bp.add_url_rule("/api/core/entities/<entity_type>/<entity_id>/story", view_func=entity_story, methods=["GET"])
     bp.add_url_rule(
         "/api/core/entities/<entity_type>/<entity_id>/summary", view_func=entity_summary_detail, methods=["GET"]
     )
