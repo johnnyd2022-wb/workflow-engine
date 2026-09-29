@@ -165,9 +165,11 @@ def test_requirements_are_module_owned_and_fresh_per_request(db, movement):
     assert first["authority_permission"] == "compliance.manage"
     assert {field["name"] for field in first["fields"]} == {
         "authority",
+        "destination_activity",
         "reference",
         "approved_on",
         "evidence_reference",
     }
-    first["fields"][0]["options"].clear()
-    assert len(movement_requirements(db, org)["fields"][0]["options"]) == 2
+    next(field for field in first["fields"] if field["name"] == "authority")["options"].clear()
+    fresh = movement_requirements(db, org)
+    assert len(next(field for field in fresh["fields"] if field["name"] == "authority")["options"]) == 2
