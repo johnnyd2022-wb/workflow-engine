@@ -54,7 +54,7 @@
       var emptyRow = document.createElement('tr');
       var emptyCell = document.createElement('td');
       emptyCell.colSpan = 4;
-      emptyCell.textContent = 'No workflows with a final-step output yet. Add one in Core, then come back.';
+      emptyCell.textContent = 'No workflows with a final-step output yet. Add one in Production, then come back.';
       emptyRow.appendChild(emptyCell);
       body.appendChild(emptyRow);
     }

@@ -1,12 +1,12 @@
 """Fixtures for the demo-data slice's E2E suite.
 
 `reset_demo_db`'s target org is not a throwaway per-test org (unlike `fresh_user`) — it
-is the fixed, pre-existing "Whistlebird Demo" org owning `demo@whistlebird.co.nz`
+is the fixed "Whistlebird Demo" org owning `demo@whistlebird.co.nz`
 (`app.features.demo_data.services.resetdb.DEMO_USER_EMAIL`). `demo_org_member` adds a
 disposable user to that *existing* org so a "caller who legitimately belongs to the demo
-org" can be represented once F1 (missing org check, see
-`.agents/reports/demo-data/security-audit.md`) is patched — only that user, and a
-cross-tenant `fresh_user`, should be able to trigger the reset afterward.
+org" can be represented. The fixture creates the demo org on a fresh CI database and
+removes it afterward; only that user, and a cross-tenant `fresh_user`, should be able to
+trigger the reset.
 """
 
 from __future__ import annotations
@@ -28,19 +28,22 @@ def demo_org_member(app_url):
     state a real demo-reset click leaves them in).
     """
     from app.core.db import db_session
+    from app.core.db.models.organisation import Organisation
     from app.core.db.models.user import User
     from app.core.db.repositories.user_repo import UserRepository
-    from tests.factories import DEFAULT_TEST_PASSWORD, UserFactory
+    from tests.e2e.conftest import purge_org
+    from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory, UserFactory
 
     session = db_session()
     user_repo = UserRepository(session)
     demo_user = user_repo.get_user_by_email(DEMO_USER_EMAIL)
-    assert demo_user, (
-        f"{DEMO_USER_EMAIL} does not exist in this DB — demo-data's E2E suite assumes "
-        "it was seeded already (see tests/test_corechecks.py::ensure_demo_user for how "
-        "other suites bootstrap it)"
-    )
+    created_demo_org = demo_user is None
+    if created_demo_org:
+        demo_org = OrganisationFactory(name="E2E Demo Org")
+        demo_user = UserFactory(org_id=demo_org.id, email=DEMO_USER_EMAIL)
+        session.commit()
     demo_org_id = demo_user.org_id
+    demo_user_id = demo_user.id
 
     run_id = uuid.uuid4().hex[:8]
     member = UserFactory(org_id=demo_org_id, email=f"e2e-demo-org-member-{run_id}@example.test")
@@ -54,6 +57,10 @@ def demo_org_member(app_url):
         session.rollback()
         _purge_user_only(session, member_id)
         session.query(User).filter(User.id == member_id).delete(synchronize_session=False)
+        if created_demo_org:
+            purge_org(session, demo_org_id, demo_user_id)
+            session.query(User).filter(User.id == demo_user_id).delete(synchronize_session=False)
+            session.query(Organisation).filter(Organisation.id == demo_org_id).delete(synchronize_session=False)
         session.commit()
         db_session.remove()
 
