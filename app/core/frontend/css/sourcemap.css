@@ -837,6 +837,7 @@ html[data-spa-theme="dark"] .sm-temporal-banner { background: rgba(120,53,15,0.2
 
 .sm-recall-wrap { margin-bottom: 24px; }
 .sm-recall-meta, .sm-recall-workflow { margin-bottom: 18px; }
+.sm-recall-workflow { max-width: 100%; overflow-x: auto; }
 .sm-recall-meta h2, .sm-recall-workflow h2 { font-size: 15px; margin: 0 0 8px; color: var(--text-primary, #111827); }
 .sm-recall-meta { padding: 14px; border: 1.5px solid var(--border-default, #e5e7eb); border-radius: 10px; background: var(--bg-card, #fff); }
 .sm-recall-meta dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 16px; margin: 0; }
@@ -856,6 +857,32 @@ html[data-spa-theme="dark"] .sm-temporal-banner { background: rgba(120,53,15,0.2
 .sm-recall-sales__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .sm-recall-sales__header h2 { margin: 0; }
 .sm-recall-sales__note { margin: 0 0 8px; font-size: 13px; color: #065f46; }
+.sm-recall-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 0 0 12px; }
+.sm-recall-header__product { margin: 0; color: var(--text-primary, #111827); font-size: clamp(1.25rem, 3vw, 1.8rem); }
+.sm-recall-header__batch { margin: 4px 0 0; color: var(--text-secondary, #6b7280); font-weight: 650; }
+.sm-recall-export-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sm-recall-export-actions button { min-height: 44px; }
+.sm-link-button { padding: 2px 6px; border: 0; background: transparent; color: var(--link-color, #2563eb); cursor: pointer; text-decoration: underline; }
+.sm-link-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.sm-recall-summary { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--border-default, #d1d5db); border-radius: 10px; color: var(--text-primary, #111827); background: var(--bg-card, #fff); font-weight: 700; }
+.sm-recall-sales .sm-table { min-width: 760px; }
+.sm-recall-customer--missing-contact td:last-child { color: #9a3412; font-weight: 700; }
+.sm-recall-customer--pre-sold td:first-child::after { content: ' · pre-sold'; color: #92400e; font-size: .8em; font-weight: 700; }
+@media print {
+  @page { size: landscape; margin: 12mm; }
+  body.sourcemap-page * { visibility: hidden !important; }
+  body.sourcemap-page #sm-recall-wrap,
+  body.sourcemap-page #sm-recall-wrap * { visibility: visible !important; }
+  body.sourcemap-page #sm-recall-wrap { display: block !important; position: absolute; inset: 0; width: 100%; margin: 0; }
+  body.sourcemap-page .sm-recall-export-actions,
+  body.sourcemap-page .sm-switch { display: none !important; }
+  body.sourcemap-page .sm-recall-meta,
+  body.sourcemap-page .sm-recall-workflow,
+  body.sourcemap-page .sm-recall-summary { break-inside: avoid; box-shadow: none; }
+  body.sourcemap-page .sm-table { min-width: 0; font-size: 9pt; }
+  body.sourcemap-page .sm-table th,
+  body.sourcemap-page .sm-table td { padding: 4px 6px; }
+}
 .sm-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: #065f46; }
 .sm-switch__input { appearance: none; -webkit-appearance: none; position: relative; width: 36px; height: 20px; margin: 0; border-radius: 999px; background: #9ca3af; cursor: pointer; transition: background .15s; }
 .sm-switch__input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
@@ -1987,6 +2014,18 @@ html[data-spa-theme="dark"] .sm-act-type-btn--active { background: var(--color-p
   font-style: italic;
   flex-shrink: 0;
 }
+
+.sm-entered-later {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+html[data-spa-theme="dark"] .sm-entered-later { background: #451a03; color: #fcd34d; }
 
 .sm-tl-traced-here {
   font-size: 9px;

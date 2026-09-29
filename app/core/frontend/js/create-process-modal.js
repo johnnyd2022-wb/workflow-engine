@@ -1,5 +1,104 @@
 (function() {
   'use strict';
+
+  const {
+    summaryInputDisplayName,
+    summaryOutputDisplayName,
+    isCustomExecutionPrompt,
+    countLabeledExecutionPrompts,
+    normalisePromptOptions,
+    base64ToBlob,
+    escapeHtmlForText
+  } = window.ProcessModalUtils;
+  const {
+    mapSessionInputsToApiPayloadFromRows,
+    validateInventoryInputsFromSession,
+    buildExecutionPromptsForApiFromSession,
+    wizardSessionHasDraftStepData,
+    mapSessionInputsToSummaryRows,
+    mapApiInputToWizardSessionInput,
+    mapApiOutputToWizardSessionOutput
+  } = window.ProcessModalMappers;
+  const {
+    applyProcessFlowWizardFreshStart,
+    bindProcessFlowWizardExitCleanup,
+    clearProcessFlowWizardRecoveryState,
+    getDraftKey,
+    getFlowWizardPageSlug,
+    getProcessFlowSpaStorageKey,
+    isProcessFlowSpaPage,
+    isProcessFlowWizardPage,
+    loadWizardSessionMergeBase,
+    migrateProcessFlowSpaStorage,
+    shouldMergePersistSpaFormFields,
+    PROCESS_FLOW_PENDING_NEW_STEP_KEY
+  } = window.ProcessModalSession;
+  const {
+    formatStep4ModeLabel,
+    buildOutputModeSegmentRow,
+    syncOutputExpiryModeSegments,
+    syncOutputReadyDateModeSegments,
+    initGuidedOutputsListModeSegments,
+    applyNewMaterialExecutionExplanation,
+    syncGuidedNewInputExecutionSegments,
+    buildNewMaterialExecutionTypeField,
+    initGuidedNewInputExecutionSegments,
+    syncStep4ModeSegments,
+    updateStep4SummaryBar,
+    initStep4SegmentControls
+  } = window.ProcessModalControls;
+  const {
+    syncDocInlineDisabledState,
+    ensureDocFileListener,
+    loadAttachedStepDocs,
+    getPendingGuidedDocFileUpload,
+    setPendingGuidedDocFileUpload
+  } = window.ProcessModalDocs;
+  const {
+    deriveTraceabilityModes,
+    formatTraceabilityModeLabel,
+    formatOutputExpirySummary,
+    formatOutputReadySummary,
+    buildStepSummaryWarnings
+  } = window.ProcessModalSummaryUtils;
+  const {
+    countNamedStepInputs,
+    countNamedStepOutputs,
+    mergeDraftCreatedStepsIntoApiSteps,
+    stepSortKey,
+    sortStepsForDisplay
+  } = window.ProcessModalStepData;
+  const {
+    getGuidedInputListElement,
+    getAllGuidedInputElements,
+    collectCurrentInputs,
+    collectCurrentOutputs,
+    collectCurrentPrompts,
+    collapseAllInputs,
+    collapseAllOutputs,
+    toggleInputExpand,
+    toggleOutputExpand
+  } = window.ProcessModalRows;
+  const restorePromptList = window.ProcessModalPromptRestore.create({ normalisePromptOptions });
+  const restoreDocFields = window.ProcessModalDocRestore.create({
+    syncDocInlineDisabledState,
+    setPendingGuidedDocFileUpload
+  });
+  const restoreControls = window.ProcessModalRestoreControls.create({
+    updateInputButtonsText,
+    updateOutputButtonText,
+    syncStep4ModeSegments,
+    updateStep4SummaryBar
+  });
+  const {
+    inventoryCardSummary,
+    inventoryExecutionHelperText,
+    inventoryCardMetadataHtml
+  } = window.ProcessModalInventoryCards;
+  const {
+    collectSpaWizardOutputsPayload,
+    preserveCreatedStepsIoFromPrev
+  } = window.ProcessModalSpaPayloads;
   
   let currentStep = 1;
   const totalSteps = 4;
@@ -14,435 +113,32 @@
   let isEditingExistingProcess = false; // True when modal was opened for a non-draft process with steps (show list + Edit / Add new step)
   let isStartNewOverwriteDraft = false; // True when user chose "Start New" on resume draft — save/finish should overwrite old draft steps
   let startNewOldStepIds = []; // Step IDs that existed when user clicked Start New; we delete these on save draft or finish
-  let pendingDeleteDoc = null; // { docId, row } when delete-doc-confirm modal is open
-  /** SOP file chosen on evidence page, kept for Save step after navigating to summary (small files only). */
-  let pendingGuidedDocFileUpload = null;
   let processFlowWizardInitGeneration = 0;
 
   // Get draft key for current process
-  function getDraftKey() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const processId = urlParams.get('id');
-    return `process-draft-${processId || 'new'}`;
-  }
 
-  function isProcessFlowSpaPage() {
-    const p = document.body && document.body.getAttribute('data-page');
-    return p === 'process-flow-spa' || p === 'process-flow-wizard';
-  }
 
-  function isProcessFlowWizardPage() {
-    return document.body && document.body.getAttribute('data-page') === 'process-flow-wizard';
-  }
 
-  function getFlowWizardPageSlug() {
-    return (document.body && document.body.getAttribute('data-flow-wizard-page')) || '';
-  }
 
   /** When true, serializeSpaWizardState merges missing DOM fields from session (summary page has no wizard form). */
-  function shouldMergePersistSpaFormFields() {
-    if (isProcessFlowWizardPage()) return true;
-    // Multi-route SPA: each page only mounts part of the wizard; persist must merge from session.
-    if (isProcessFlowSpaPage()) return true;
-    const slug = document.body && document.body.getAttribute('data-flow-wizard-page');
-    return slug === 'summary' || slug === 'process-overview';
-  }
 
-  function loadWizardSessionMergeBase() {
-    try {
-      const raw = sessionStorage.getItem(getProcessFlowSpaStorageKey());
-      if (!raw) return null;
-      const d = JSON.parse(raw);
-      return d && d.v === 1 ? d : null;
-    } catch (e) {
-      return null;
-    }
-  }
 
-  function applyProcessFlowWizardFreshStart() {
-    if (!isProcessFlowWizardPage()) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('fresh') !== '1') return;
-    const id = params.get('id');
-    sessionStorage.removeItem('process-flow-spa-wizard-v1-new');
-    if (id) {
-      sessionStorage.removeItem('process-flow-spa-wizard-v1-' + id);
-    }
-    params.delete('fresh');
-    const qs = params.toString();
-    window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
-  }
 
-  function getProcessFlowSpaStorageKey() {
-    const processId = new URLSearchParams(window.location.search).get('id');
-    return 'process-flow-spa-wizard-v1-' + (processId || 'new');
-  }
 
-  function clearProcessFlowWizardRecoveryState() {
-    try {
-      sessionStorage.removeItem(getProcessFlowSpaStorageKey());
-      sessionStorage.removeItem(PROCESS_FLOW_PENDING_NEW_STEP_KEY);
-    } catch (e) {}
-  }
 
-  function bindProcessFlowWizardExitCleanup() {
-    if (window._processFlowWizardExitCleanupBound) return;
-    window._processFlowWizardExitCleanupBound = true;
-    document.addEventListener('click', function(event) {
-      if (!isProcessFlowSpaPage() || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-        return;
-      }
-      const anchor = event.target && event.target.closest ? event.target.closest('a[href]') : null;
-      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
-      let destination;
-      try {
-        destination = new URL(anchor.href, window.location.href);
-      } catch (e) {
-        return;
-      }
-      if (destination.origin !== window.location.origin) {
-        clearProcessFlowWizardRecoveryState();
-        return;
-      }
-      // Retain the recovery buffer only while moving between wizard pages.
-      if (destination.pathname.indexOf('/core/flows/create/') !== 0) {
-        clearProcessFlowWizardRecoveryState();
-      }
-    }, true);
-  }
 
-  function migrateProcessFlowSpaStorage() {
-    const id = new URLSearchParams(window.location.search).get('id');
-    if (!id) return;
-    const newKey = 'process-flow-spa-wizard-v1-' + id;
-    if (sessionStorage.getItem(newKey)) return;
-    const legacy = sessionStorage.getItem('process-flow-spa-wizard-v1-new');
-    if (legacy) {
-      sessionStorage.setItem(newKey, legacy);
-    }
-  }
 
-  function collectSpaWizardOutputsPayload() {
-    const outputs = [];
-    const outputElements = document.querySelectorAll('#guided-outputs-list > div');
-    outputElements.forEach(outputEl => {
-      const name = outputEl.querySelector('.guided-output-name')?.value.trim();
-      const unitSelect = outputEl.querySelector('.guided-output-unit');
-      const unit = unitSelect ? (unitSelect.value || '').trim() : '';
-      const quantityInput = outputEl.querySelector('.guided-output-quantity');
-      const quantity = quantityInput ? (quantityInput.value || '').trim() : '';
-      if (!name || !unit) return;
-      const existingId = outputEl.dataset.outputId || null;
-      const outputId = existingId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'out-' + Date.now() + '-' + Math.random().toString(36).slice(2, 11));
-      const expiryModeEl = outputEl.querySelector('.guided-output-expiry-mode');
-      const expiryValueEl = outputEl.querySelector('.guided-output-expiry-value');
-      const expiryUnitEl = outputEl.querySelector('.guided-output-expiry-unit');
-      const warningValueEl = outputEl.querySelector('.guided-output-expiry-warning-value');
-      const warningUnitEl = outputEl.querySelector('.guided-output-expiry-warning-unit');
-      const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
-      const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
-      const readyDateUnitEl = outputEl.querySelector('.guided-output-ready-date-unit');
-      const readyDateWarnValueEl = outputEl.querySelector('.guided-output-ready-date-warning-value');
-      const readyDateWarnUnitEl = outputEl.querySelector('.guided-output-ready-date-warning-unit');
-      const expiryMode = expiryModeEl ? expiryModeEl.value : 'none';
-      const readyDateMode = readyDateModeEl ? readyDateModeEl.value : 'none';
-      const expiryValueRaw = expiryValueEl && expiryMode === 'fixed_duration' ? expiryValueEl.value.trim() : '';
-      const expiryValue = expiryValueRaw !== '' ? parseInt(expiryValueRaw, 10) : null;
-      const expiryUnit = expiryUnitEl && expiryMode === 'fixed_duration' ? ((expiryUnitEl.value || 'days') + '').trim() : 'days';
-      const warningValueRaw = warningValueEl && expiryMode === 'fixed_duration' ? warningValueEl.value.trim() : '';
-      const warningValue = warningValueRaw !== '' ? parseInt(warningValueRaw, 10) : 7;
-      const warningUnit = warningUnitEl && expiryMode === 'fixed_duration' ? ((warningUnitEl.value || 'days') + '').trim() : 'days';
-      const extra_data = {};
-      if (expiryMode === 'fixed_duration' && expiryValue > 0) {
-        extra_data.custom_expiry = {
-          enabled: true,
-          mode: 'fixed_duration',
-          duration_value: expiryValue,
-          duration_unit: (expiryUnit || 'days').trim(),
-          warning_value: (typeof warningValue === 'number' && !isNaN(warningValue) && warningValue >= 0) ? warningValue : 7,
-          warning_unit: (warningUnit || 'days').trim(),
-          expiry_at: null,
-          rule_type: 'custom_output_expiry'
-        };
-      } else if (expiryMode === 'set_at_execution') {
-        extra_data.custom_expiry = {
-          enabled: true,
-          mode: 'set_at_execution',
-          duration_value: null,
-          duration_unit: null,
-          warning_value: null,
-          warning_unit: null,
-          expiry_at: null,
-          rule_type: 'custom_output_expiry'
-        };
-      }
-      if (readyDateMode === 'fixed_duration' && readyDateValueEl && readyDateValueEl.value.trim()) {
-        const rdVal = parseInt(readyDateValueEl.value, 10);
-        if (!isNaN(rdVal) && rdVal > 0) {
-          const rdUnit = (readyDateUnitEl && readyDateUnitEl.value) ? readyDateUnitEl.value.trim() : 'days';
-          const rdWarnVal = (readyDateWarnValueEl && readyDateWarnValueEl.value.trim() !== '') ? parseInt(readyDateWarnValueEl.value, 10) : 0;
-          const rdWarnUnit = (readyDateWarnUnitEl && readyDateWarnUnitEl.value) ? readyDateWarnUnitEl.value.trim() : 'days';
-          extra_data.ready_date = {
-            enabled: true,
-            mode: 'fixed_duration',
-            duration_value: rdVal,
-            duration_unit: rdUnit,
-            warning_value: (typeof rdWarnVal === 'number' && !isNaN(rdWarnVal) && rdWarnVal >= 0) ? rdWarnVal : 0,
-            warning_unit: rdWarnUnit,
-            rule_type: 'custom_ready_date'
-          };
-        }
-      } else if (readyDateMode === 'set_at_execution') {
-        extra_data.ready_date = {
-          enabled: true,
-          mode: 'set_at_execution',
-          duration_value: null,
-          duration_unit: null,
-          warning_value: null,
-          warning_unit: null,
-          rule_type: 'custom_ready_date'
-        };
-      }
-      const outObj = {
-        id: outputId,
-        name: name,
-        unit: unit,
-        quantity: quantity ? parseFloat(quantity) : null,
-        inventory_type: (outputEl.dataset && outputEl.dataset.outputInventoryType) ? outputEl.dataset.outputInventoryType : 'work_in_progress',
-        is_variable: true,
-        requires_execution_confirmation: true
-      };
-      if (Object.keys(extra_data).length > 0) outObj.extra_data = extra_data;
-      outputs.push(outObj);
-    });
-    return outputs;
-  }
 
-  /** Summary / API rows may use alternate keys (inventory, legacy). */
-  function summaryInputDisplayName(row) {
-    if (!row) return '';
-    return String(row.name || row.input_name || row.material_name || row.item_name || '').trim();
-  }
-
-  function summaryOutputDisplayName(row) {
-    if (!row) return '';
-    return String(row.name || row.output_name || '').trim();
-  }
-
-  function isCustomExecutionPrompt(p) {
-    if (!p || !(p.label || '').trim()) return false;
-    const l = (p.label || '').trim().toLowerCase();
-    if (l === 'batch number' || l === 'evidence') return false;
-    if (p.type === 'evidence') return false;
-    return true;
-  }
-
-  /**
-   * After GET /process merges into createdSteps, persist must not wipe nested I/O that
-   * still exists in the previous session snapshot (common on summary route).
-   */
-  function preserveCreatedStepsIoFromPrev(prev, createdStepsSnapshot) {
-    if (!prev || !Array.isArray(prev.createdSteps) || !Array.isArray(createdStepsSnapshot)) {
-      return createdStepsSnapshot;
-    }
-    const prevById = new Map();
-    prev.createdSteps.forEach(function (s) {
-      if (s && s.id != null) prevById.set(String(s.id), s);
-    });
-    return createdStepsSnapshot.map(function (s) {
-      if (!s || s.id == null) return s;
-      const p = prevById.get(String(s.id));
-      if (!p) return s;
-      const o = { ...s };
-      if (countNamedStepInputs(o.inputs) === 0 && countNamedStepInputs(p.inputs) > 0) {
-        o.inputs = JSON.parse(JSON.stringify(p.inputs));
-      }
-      if (countNamedStepOutputs(o.outputs) === 0 && countNamedStepOutputs(p.outputs) > 0) {
-        o.outputs = JSON.parse(JSON.stringify(p.outputs));
-      }
-      const cpl = countLabeledExecutionPrompts(o.execution_prompts);
-      const ppl = countLabeledExecutionPrompts(p.execution_prompts);
-      if (cpl === 0 && ppl > 0) {
-        o.execution_prompts = JSON.parse(JSON.stringify(p.execution_prompts));
-      }
-      if (o.batch_number_mode == null && p.batch_number_mode != null) o.batch_number_mode = p.batch_number_mode;
-      if (o.evidence_mode == null && p.evidence_mode != null) o.evidence_mode = p.evidence_mode;
-      if (!(o.documentation_summary || '').trim() && (p.documentation_summary || '').trim()) {
-        o.documentation_summary = p.documentation_summary;
-      }
-      return o;
-    });
-  }
-
-  function countLabeledExecutionPrompts(prompts) {
-    if (!Array.isArray(prompts)) return 0;
-    return prompts.filter(function (p) {
-      return p && (p.label || '').trim();
-    }).length;
-  }
-
-  /** Keep select choices tidy and stable in the stored workflow contract. */
-  function normalisePromptOptions(options) {
-    const raw = Array.isArray(options) ? options : String(options || '').split(/\r?\n/);
-    const seen = new Set();
-    return raw.reduce(function (result, option) {
-      const value = String(option == null ? '' : option).trim();
-      if (value && !seen.has(value)) {
-        seen.add(value);
-        result.push(value);
-      }
-      return result;
-    }, []);
-  }
-
-  function serializeSpaWizardState() {
-    const merge = shouldMergePersistSpaFormFields();
-    const prev = merge ? (loadWizardSessionMergeBase() || {}) : null;
-
-    const nameEl = document.getElementById('guided-step-name');
-    const descEl = document.getElementById('guided-step-description');
-    const stepName = nameEl ? (nameEl.value || '') : (merge ? (prev.stepName || '') : '');
-    const stepDescription = descEl ? (descEl.value || '') : (merge ? (prev.stepDescription || '') : '');
-
-    let inputs;
-    if (document.getElementById('guided-inputs-list-unified')) {
-      inputs = [];
-      getAllGuidedInputElements().forEach(inputEl => {
-        const inputType = inputEl.dataset.inputType || 'new';
-        const nameInput = inputEl.querySelector('.guided-input-name');
-        let name = '';
-        if (nameInput) {
-          name = nameInput.classList.contains('searchable-dropdown-input') ? nameInput.value.trim() : nameInput.value.trim();
-        }
-        const quantityInput = inputEl.querySelector('.guided-input-quantity');
-        const quantity = quantityInput ? (quantityInput.value || '').trim() : '';
-        const unitSelect = inputEl.querySelector('.guided-input-unit');
-        const unit = unitSelect ? unitSelect.value : '';
-        const executionTypeSelect = inputEl.querySelector('.guided-input-execution-type');
-        const executionType = executionTypeSelect ? executionTypeSelect.value : 'variable';
-        const sourceOutputId = inputEl.dataset.sourceOutputId || null;
-        const previousOutputDisplayName = inputEl.dataset.previousOutputDisplayName || null;
-        const inventoryPreselected = inputType === 'inventory' && nameInput && nameInput.type === 'hidden';
-        const isPreviousOutput = !executionTypeSelect;
-        const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
-        const requiresInventorySelection = isPreviousOutput ? true : (executionType === 'variable');
-        const expectedInventoryType = inputEl.dataset.expectedInventoryType || null;
-        inputs.push({
-          inputType,
-          name,
-          quantity: quantity ? parseFloat(quantity) : null,
-          unit,
-          executionType,
-          source_output_id: sourceOutputId || undefined,
-          previousOutputDisplayName: previousOutputDisplayName || undefined,
-          expected_inventory_type: expectedInventoryType || undefined,
-          inventoryPreselected,
-          is_variable: isVariable,
-          requires_inventory_selection: requiresInventorySelection
-        });
-      });
-    } else {
-      inputs = merge ? (prev.inputs || []) : [];
-    }
-
-    let outputs;
-    if (document.getElementById('guided-outputs-list')) {
-      outputs = collectSpaWizardOutputsPayload();
-    } else {
-      outputs = merge ? (prev.outputs || []) : [];
-    }
-
-    let prompts;
-    if (document.getElementById('guided-prompts-list')) {
-      prompts = collectCurrentPrompts();
-    } else {
-      prompts = merge ? (prev.prompts || []) : [];
-    }
-
-    const batchEl = document.getElementById('guided-prompt-batch-number-mode');
-    const evEl = document.getElementById('guided-prompt-evidence-mode');
-    const batchNumberMode = batchEl ? batchEl.value : (merge ? (prev.batchNumberMode || 'optional') : 'optional');
-    const evidenceMode = evEl ? evEl.value : (merge ? (prev.evidenceMode || 'optional') : 'optional');
-
-    let inputTab = 'inventory';
-    const activeTab = document.querySelector('.flow-mode-segment[data-input-tab].flow-mode-segment--active');
-    if (activeTab && activeTab.dataset.inputTab) {
-      inputTab = activeTab.dataset.inputTab;
-    } else if (merge && prev.inputTab) {
-      inputTab = prev.inputTab;
-    }
-
-    const docInlineTitleEl = document.getElementById('guided-doc-inline-title');
-    const docInlineContentEl = document.getElementById('guided-doc-inline-content');
-    const docInlineTitle = docInlineTitleEl
-      ? docInlineTitleEl.value
-      : merge
-        ? prev.docInlineTitle || ''
-        : '';
-    const docInlineContent = docInlineContentEl
-      ? docInlineContentEl.value
-      : merge
-        ? prev.docInlineContent || ''
-        : '';
-
-    const urlPid = new URLSearchParams(window.location.search || '').get('id');
-    const processIdPersist = urlPid || (merge ? prev.processId || null : null) || null;
-
-    const workflowNameEl = document.getElementById('guided-process-workflow-name');
-    let workflowProcessName = workflowNameEl
-      ? (workflowNameEl.value || '').trim()
-      : merge && prev
-        ? (prev.workflowProcessName || '').trim()
-        : '';
-
-    let createdStepsOut = JSON.parse(JSON.stringify(createdSteps));
-    if (merge && prev) {
-      createdStepsOut = preserveCreatedStepsIoFromPrev(prev, createdStepsOut);
-    }
-
-    const slug = getFlowWizardPageSlug();
-    if (merge && prev) {
-      if (slug !== 'inputs' && inputs.length === 0 && (prev.inputs || []).length > 0) {
-        inputs = JSON.parse(JSON.stringify(prev.inputs));
-      }
-      if (slug !== 'outputs' && (!outputs || outputs.length === 0) && (prev.outputs || []).length > 0) {
-        outputs = JSON.parse(JSON.stringify(prev.outputs));
-      }
-      if (slug !== 'evidence-and-prompts' && (!prompts || prompts.length === 0) && (prev.prompts || []).length > 0) {
-        prompts = JSON.parse(JSON.stringify(prev.prompts));
-      }
-    }
-
-    let docFileUpload = null;
-    if (pendingGuidedDocFileUpload && pendingGuidedDocFileUpload.base64) {
-      docFileUpload = {
-        fileName: pendingGuidedDocFileUpload.fileName,
-        mime: pendingGuidedDocFileUpload.mime,
-        base64: pendingGuidedDocFileUpload.base64
-      };
-    } else if (merge && prev && prev.docFileUpload && prev.docFileUpload.base64) {
-      docFileUpload = JSON.parse(JSON.stringify(prev.docFileUpload));
-    }
-
-    return {
-      v: 1,
-      stepName,
-      stepDescription,
-      workflowProcessName,
-      inputs,
-      outputs,
-      prompts,
-      batchNumberMode,
-      evidenceMode,
-      inputTab,
-      editingStepId: editingStepId || null,
-      createdSteps: createdStepsOut,
-      docInlineTitle,
-      docInlineContent,
-      processId: processIdPersist,
-      docFileUpload
-    };
-  }
+  const serializeSpaWizardState = window.ProcessModalSpaPayloads.createStateSerializer({
+    shouldMergePersistSpaFormFields,
+    loadWizardSessionMergeBase,
+    getAllGuidedInputElements,
+    collectCurrentPrompts,
+    getCreatedSteps: function() { return createdSteps; },
+    getEditingStepId: function() { return editingStepId; },
+    getFlowWizardPageSlug,
+    getPendingGuidedDocFileUpload
+  });
 
   window.persistSpaWizardState = function() {
     if (!isProcessFlowSpaPage()) return;
@@ -467,143 +163,21 @@
       const prev = loadWizardSessionMergeBase() || {};
       const pid =
         new URLSearchParams(window.location.search || '').get('id') || prev.processId || null;
-      const payload = {
-        v: 1,
-        stepName: '',
-        stepDescription: '',
-        workflowProcessName: (prev.workflowProcessName != null ? String(prev.workflowProcessName) : '').trim(),
-        inputs: [],
-        outputs: [],
-        prompts: [],
-        batchNumberMode: 'optional',
-        evidenceMode: 'optional',
-        inputTab: prev.inputTab || 'inventory',
-        editingStepId: null,
-        createdSteps: Array.isArray(createdSteps) ? JSON.parse(JSON.stringify(createdSteps)) : [],
-        docInlineTitle: '',
-        docInlineContent: '',
-        processId: pid,
-        docFileUpload: null
-      };
+      const payload = window.ProcessModalSpaPayloads.buildClearedDraftPayload(
+        prev,
+        pid,
+        createdSteps
+      );
       sessionStorage.setItem(getProcessFlowSpaStorageKey(), JSON.stringify(payload));
     } catch (e) {
       console.warn('persistClearedWizardDraftState failed', e);
     }
   }
 
-  async function applyOutputPayloadToLastContainer(output) {
-    const outputContainers = document.querySelectorAll('#guided-outputs-list > div');
-    const lastOutputContainer = outputContainers[outputContainers.length - 1];
-    if (!lastOutputContainer || !output) return;
-    const nameInput = lastOutputContainer.querySelector('.guided-output-name');
-    if (nameInput) {
-      nameInput.value = output.name || '';
-      nameInput.dispatchEvent(new Event('input'));
-      nameInput.dispatchEvent(new Event('blur'));
-    }
-    const quantityInput = lastOutputContainer.querySelector('.guided-output-quantity');
-    if (quantityInput && output.quantity !== null && output.quantity !== undefined) {
-      quantityInput.value = output.quantity;
-    }
-    const unitSelect = lastOutputContainer.querySelector('.guided-output-unit');
-    if (unitSelect && output.unit) unitSelect.value = output.unit;
-    if (output.id) lastOutputContainer.dataset.outputId = output.id;
-    const nameDisplay = lastOutputContainer.querySelector('.guided-output-name-display');
-    const titleSpan = lastOutputContainer.querySelector('.guided-output-title');
-    if (nameDisplay && titleSpan && output.name) {
-      nameDisplay.textContent = output.name;
-      nameDisplay.style.display = 'inline';
-      titleSpan.style.display = 'none';
-    }
-    const ce = (output.extra_data || {}).custom_expiry;
-    const expiryModeEl = lastOutputContainer.querySelector('.guided-output-expiry-mode');
-    const expiryValueEl = lastOutputContainer.querySelector('.guided-output-expiry-value');
-    const expiryUnitEl = lastOutputContainer.querySelector('.guided-output-expiry-unit');
-    const warningValueEl = lastOutputContainer.querySelector('.guided-output-expiry-warning-value');
-    const warningUnitEl = lastOutputContainer.querySelector('.guided-output-expiry-warning-unit');
-    const expiryFieldsWrap = lastOutputContainer.querySelector('.guided-output-expiry-fields');
-    const fixedWrap = lastOutputContainer.querySelector('.guided-output-expiry-fixed-fields');
-    const execHint = lastOutputContainer.querySelector('.guided-output-expiry-exec-hint');
-    const enabled = !!(ce && ce.enabled);
-    let mode = enabled ? (ce.mode || null) : null;
-    if (enabled && !mode) {
-      mode = (ce.set_at_execution || ce.set_during_execution) ? 'set_at_execution' : 'fixed_duration';
-      if (ce.expiry_days != null) mode = 'fixed_duration';
-    }
-    if (expiryModeEl) {
-      expiryModeEl.value = enabled ? (mode || 'fixed_duration') : 'none';
-      const m = expiryModeEl.value;
-      if (expiryFieldsWrap) expiryFieldsWrap.style.display = m !== 'none' ? 'block' : 'none';
-      if (fixedWrap) fixedWrap.style.display = m === 'fixed_duration' ? 'block' : 'none';
-      if (execHint) execHint.style.display = m === 'set_at_execution' ? 'block' : 'none';
-    }
-    if (enabled) {
-      const durVal = ce.duration_value != null ? ce.duration_value : ce.expiry_days;
-      const durUnit = ce.duration_unit || 'days';
-      if (expiryValueEl && durVal != null) expiryValueEl.value = String(durVal);
-      if (expiryUnitEl && durUnit) expiryUnitEl.value = durUnit;
-      if (mode === 'fixed_duration') {
-        const warnVal = ce.warning_value != null ? ce.warning_value : ce.warning_days;
-        const warnUnit = ce.warning_unit || 'days';
-        if (warningValueEl && warnVal != null) warningValueEl.value = String(warnVal);
-        if (warningUnitEl && warnUnit) warningUnitEl.value = warnUnit;
-      } else {
-        if (warningValueEl) warningValueEl.value = '';
-        if (warningUnitEl) warningUnitEl.value = 'days';
-      }
-    }
-    const rd = (output.extra_data || {}).ready_date;
-    const readyDateModeEl = lastOutputContainer.querySelector('.guided-output-ready-date-mode');
-    const readyDateValueEl = lastOutputContainer.querySelector('.guided-output-ready-date-value');
-    const readyDateUnitEl = lastOutputContainer.querySelector('.guided-output-ready-date-unit');
-    const readyDateWarnValueEl = lastOutputContainer.querySelector('.guided-output-ready-date-warning-value');
-    const readyDateWarnUnitEl = lastOutputContainer.querySelector('.guided-output-ready-date-warning-unit');
-    const readyDateFieldsEl = lastOutputContainer.querySelector('.guided-output-ready-date-fields');
-    const readyDateFixedEl = lastOutputContainer.querySelector('.guided-output-ready-date-fixed-fields');
-    const readyDateExecHintEl = lastOutputContainer.querySelector('.guided-output-ready-date-exec-hint');
-    const readyDateWarnWrapEl = lastOutputContainer.querySelector('.guided-output-ready-date-warning-wrap');
-    const rdEnabled = !!(rd && rd.enabled);
-    let rdMode = rdEnabled ? (rd.mode || null) : null;
-    if (rdEnabled && !rdMode) {
-      rdMode = (rd.set_at_execution || rd.set_during_execution) ? 'set_at_execution' : 'fixed_duration';
-    }
-    if (readyDateModeEl) {
-      readyDateModeEl.value = rdEnabled ? (rdMode || 'fixed_duration') : 'none';
-      const rm = readyDateModeEl.value;
-      if (readyDateFieldsEl) readyDateFieldsEl.style.display = rm !== 'none' ? 'block' : 'none';
-      if (readyDateFixedEl) readyDateFixedEl.style.display = rm === 'fixed_duration' ? 'block' : 'none';
-      if (readyDateExecHintEl) readyDateExecHintEl.style.display = rm === 'set_at_execution' ? 'block' : 'none';
-      if (readyDateWarnWrapEl) readyDateWarnWrapEl.style.display = rm === 'fixed_duration' ? 'block' : 'none';
-    }
-    if (rdEnabled && rdMode === 'fixed_duration') {
-      const rdVal = rd.duration_value != null ? rd.duration_value : null;
-      const rdUnit = rd.duration_unit || 'days';
-      if (readyDateValueEl && rdVal != null) readyDateValueEl.value = String(rdVal);
-      if (readyDateUnitEl && rdUnit) readyDateUnitEl.value = rdUnit;
-      const rwVal = rd.warning_value != null ? rd.warning_value : 0;
-      const rwUnit = rd.warning_unit || 'days';
-      if (readyDateWarnValueEl) readyDateWarnValueEl.value = String(rwVal);
-      if (readyDateWarnUnitEl) readyDateWarnUnitEl.value = rwUnit;
-    }
-    const complianceWrapEl = lastOutputContainer.querySelector('.guided-output-compliance-wrap');
-    if (complianceWrapEl) {
-      const expNone = !enabled || (expiryModeEl && expiryModeEl.value === 'none');
-      const rdNone = !rdEnabled || (readyDateModeEl && readyDateModeEl.value === 'none');
-      const open = !(expNone && rdNone);
-      setTimeout(function() {
-        if (window.Alpine && typeof Alpine.$data === 'function') {
-          try {
-            const d = Alpine.$data(complianceWrapEl);
-            if (d && typeof d.advancedOpen !== 'undefined') {
-              d.advancedOpen = open;
-            }
-          } catch (e) {}
-        }
-      }, 0);
-    }
-    syncOutputExpiryModeSegments(lastOutputContainer);
-    syncOutputReadyDateModeSegments(lastOutputContainer);
-  }
+  const applyOutputPayloadToLastContainer = window.ProcessModalOutputRestore.create({
+    syncOutputExpiryModeSegments,
+    syncOutputReadyDateModeSegments
+  });
 
   window.restoreSpaWizardState = async function(options) {
     if (!isProcessFlowSpaPage()) return;
@@ -644,23 +218,7 @@
         window.history.replaceState({}, '', u);
       } catch (e) {}
     }
-    const docInlineTitleRestore = document.getElementById('guided-doc-inline-title');
-    const docInlineContentRestore = document.getElementById('guided-doc-inline-content');
-    if (docInlineTitleRestore) {
-      docInlineTitleRestore.value = data.docInlineTitle != null ? data.docInlineTitle : '';
-    }
-    if (docInlineContentRestore) {
-      docInlineContentRestore.value = data.docInlineContent != null ? data.docInlineContent : '';
-    }
-    if (typeof syncDocInlineDisabledState === 'function') syncDocInlineDisabledState();
-    pendingGuidedDocFileUpload = null;
-    if (data.docFileUpload && data.docFileUpload.base64) {
-      pendingGuidedDocFileUpload = {
-        fileName: data.docFileUpload.fileName,
-        mime: data.docFileUpload.mime,
-        base64: data.docFileUpload.base64
-      };
-    }
+    restoreDocFields(data);
     const listEl = getGuidedInputListElement('inventory');
     if (listEl) {
       listEl.innerHTML = '';
@@ -714,56 +272,8 @@
         await applyOutputPayloadToLastContainer(out);
       }
     }
-    const promptsList = document.getElementById('guided-prompts-list');
-    if (promptsList) {
-      promptsList.innerHTML = '';
-      for (const p of data.prompts || []) {
-        window.addGuidedPrompt();
-        const promptEls = document.querySelectorAll('#guided-prompts-list > div');
-        const lastP = promptEls[promptEls.length - 1];
-        if (lastP) {
-          const labelIn = lastP.querySelector('.guided-prompt-label');
-          const typeSel = lastP.querySelector('.guided-prompt-type');
-          const unitSel = lastP.querySelector('.guided-prompt-unit');
-          const reqSel = lastP.querySelector('.guided-prompt-required');
-          if (labelIn) labelIn.value = p.label || '';
-          if (typeSel) {
-            typeSel.value = p.type || 'text';
-            typeSel.dispatchEvent(new Event('change'));
-          }
-          if (unitSel) unitSel.value = p.unit || '';
-          if (reqSel) reqSel.value = p.required ? 'true' : 'false';
-          const optionsIn = lastP.querySelector('.guided-prompt-options');
-          if (optionsIn) optionsIn.value = normalisePromptOptions(p.options).join('\n');
-        }
-      }
-    }
-    const batchEl = document.getElementById('guided-prompt-batch-number-mode');
-    if (batchEl) {
-      const bm = data.batchNumberMode;
-      if (bm === 'required' || bm === 'optional' || bm === 'dont_ask') {
-        batchEl.value = bm;
-      }
-    }
-    const evEl = document.getElementById('guided-prompt-evidence-mode');
-    if (evEl) {
-      const evm = data.evidenceMode;
-      if (evm === 'required' || evm === 'optional' || evm === 'dont_ask') {
-        evEl.value = evm;
-      }
-    }
-    if (data.inputTab) {
-      const tabBtn = document.querySelector('.flow-mode-segment[data-input-tab="' + data.inputTab + '"]');
-      if (tabBtn) tabBtn.click();
-    }
-    updateInputButtonsText();
-    updateOutputButtonText();
-    syncStep4ModeSegments();
-    if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
-    requestAnimationFrame(function() {
-      syncStep4ModeSegments();
-      if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
-    });
+    restorePromptList(data.prompts || []);
+    restoreControls(data);
     isRestoringDraft = false;
   };
   
@@ -1055,111 +565,14 @@
   };
   
   // Single unified list: all inputs visible from both tabs; type stored on each card (data-input-type) for DB
-  function getGuidedInputListElement(type) {
-    return document.getElementById('guided-inputs-list-unified');
-  }
   
   // All input rows from the unified list (order preserved)
-  function getAllGuidedInputElements() {
-    const list = document.getElementById('guided-inputs-list-unified');
-    return list ? Array.from(list.querySelectorAll(':scope > div')) : [];
-  }
   
   // Collect current inputs from form (from both tabs); include requires_inventory_selection so draft restore puts them in the correct tab
-  function collectCurrentInputs() {
-    const inputs = [];
-    const inputElements = getAllGuidedInputElements();
-    inputElements.forEach(inputEl => {
-      const nameInput = inputEl.querySelector('.guided-input-name');
-      let name = '';
-      if (nameInput) {
-        if (nameInput.classList.contains('searchable-dropdown-input')) {
-          name = nameInput.value.trim();
-        } else {
-          name = nameInput.value.trim();
-        }
-      }
-      
-      const quantityInput = inputEl.querySelector('.guided-input-quantity');
-      const quantity = quantityInput ? (quantityInput.value || '').trim() : '';
-      
-      const unitSelect = inputEl.querySelector('.guided-input-unit');
-      const unit = unitSelect ? unitSelect.value : '';
-      
-      const executionTypeSelect = inputEl.querySelector('.guided-input-execution-type');
-      const executionType = executionTypeSelect ? executionTypeSelect.value : 'prompt';
-      const inputType = inputEl.dataset.inputType || (inputEl.getAttribute && inputEl.getAttribute('data-input-type')) || '';
-      const requiresInventorySelection = (inputType === 'inventory' || inputType === 'previous_output') ? true : (executionType === 'variable');
-      const isVariable = executionType === 'variable' || executionType === 'prompt';
-      const sourceOutputId = inputEl.dataset.sourceOutputId || null;
-      const expectedInventoryType = inputEl.dataset.expectedInventoryType || null;
-      
-      if (name && unit) {
-        const row = {
-          name: name,
-          quantity: quantity ? parseFloat(quantity) : null,
-          unit: unit,
-          executionType: executionType,
-          requires_inventory_selection: requiresInventorySelection,
-          is_variable: isVariable
-        };
-        if (sourceOutputId) row.source_output_id = sourceOutputId;
-        if (expectedInventoryType) row.expected_inventory_type = expectedInventoryType;
-        inputs.push(row);
-      }
-    });
-    return inputs;
-  }
   
   // Collect current outputs from form
-  function collectCurrentOutputs() {
-    const outputs = [];
-    const outputElements = document.querySelectorAll('#guided-outputs-list > div');
-    outputElements.forEach(outputEl => {
-      const name = outputEl.querySelector('.guided-output-name')?.value.trim();
-      const unitSelect = outputEl.querySelector('.guided-output-unit');
-      const unit = unitSelect ? unitSelect.value : '';
-      const quantityInput = outputEl.querySelector('.guided-output-quantity');
-      const quantity = quantityInput ? (quantityInput.value || '').trim() : '';
-      
-      if (name && unit) {
-        outputs.push({
-          name: name,
-          unit: unit,
-          quantity: quantity ? parseFloat(quantity) : null
-        });
-      }
-    });
-    return outputs;
-  }
   
   // Collect current prompts from form
-  function collectCurrentPrompts() {
-    const prompts = [];
-    const promptElements = document.querySelectorAll('#guided-prompts-list > div');
-    promptElements.forEach(promptEl => {
-      const label = promptEl.querySelector('.guided-prompt-label')?.value.trim();
-      const typeSelect = promptEl.querySelector('.guided-prompt-type');
-      const type = typeSelect ? typeSelect.value : 'text';
-      const unitSelect = promptEl.querySelector('.guided-prompt-unit');
-      const unit = unitSelect ? (unitSelect.value || '').trim() : null;
-      const requiredSelect = promptEl.querySelector('.guided-prompt-required');
-      const required = requiredSelect ? requiredSelect.value === 'true' : true;
-      const optionsInput = promptEl.querySelector('.guided-prompt-options');
-      
-      if (label) {
-        const prompt = {
-          label: label,
-          type: type,
-          unit: unit || null,
-          required: required
-        };
-        if (type === 'select') prompt.options = normalisePromptOptions(optionsInput ? optionsInput.value : []);
-        prompts.push(prompt);
-      }
-    });
-    return prompts;
-  }
   
   // Show resume draft confirmation modal (returns a promise)
   function showResumeDraftModal() {
@@ -1523,7 +936,7 @@
 
     const guidedDocFile = document.getElementById('guided-doc-file');
     if (guidedDocFile) guidedDocFile.value = '';
-    pendingGuidedDocFileUpload = null;
+    setPendingGuidedDocFileUpload(null);
     const guidedDocTitle = document.getElementById('guided-doc-inline-title');
     const guidedDocContent = document.getElementById('guided-doc-inline-content');
     if (guidedDocTitle) guidedDocTitle.value = '';
@@ -1553,813 +966,56 @@
   }
   
   // Show the "existing steps" view when editing a non-draft process (list steps with Edit + Add new step)
-  function showExistingStepsView() {
-    const existingView = document.getElementById('existing-steps-list-view');
-    const existingList = document.getElementById('existing-steps-list');
-    const indicators = document.getElementById('create-process-step-indicators');
-    if (!existingView || !existingList) return;
-    // Hide step flow UI
-    if (indicators) indicators.style.display = 'none';
-    document.querySelectorAll('.create-process-step').forEach(el => { el.style.display = 'none'; });
-    const postCreationOptions = document.getElementById('post-creation-options');
-    if (postCreationOptions) postCreationOptions.style.display = 'none';
-    const summariesContainer = document.getElementById('step-summaries-container');
-    if (summariesContainer) summariesContainer.style.display = 'none';
-    // Populate list: step name + Edit button. Use 1-based index for display (same fix as flows2) so single step shows "1" not stored step_number.
-    existingList.innerHTML = '';
-    const sortedSteps = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
-    const spaExisting = document.body && (document.body.getAttribute('data-page') === 'process-flow-spa' || document.body.getAttribute('data-page') === 'process-flow-wizard');
-    sortedSteps.forEach((step, index) => {
-      const displayNumber = index + 1;
-      const row = document.createElement('div');
-      if (spaExisting) {
-        row.style.cssText =
-          'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; background: transparent; border: none; border-radius: 0;' +
-          (index > 0 ? 'border-top: 1px solid var(--border-default, #e5e7eb);' : '');
-      } else {
-        row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md);';
-      }
-      const left = document.createElement('div');
-      left.style.cssText = 'display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;';
-      const stepNum = document.createElement('span');
-      stepNum.style.cssText = 'width: 28px; height: 28px; border-radius: 50%; background: var(--primary, #3b82f6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex-shrink: 0;';
-      stepNum.textContent = displayNumber;
-      const name = document.createElement('span');
-      name.style.cssText = 'font-size: 15px; font-weight: 600; color: var(--text-primary);';
-      name.textContent = step.name || 'Unnamed step';
-      left.appendChild(stepNum);
-      left.appendChild(name);
-      const editBtn = document.createElement('button');
-      editBtn.type = 'button';
-      editBtn.className = 'btn btn-secondary btn-sm';
-      editBtn.textContent = 'Edit';
-      editBtn.onclick = () => window.startEditingStep(step.id);
-      row.appendChild(left);
-      row.appendChild(editBtn);
-      existingList.appendChild(row);
-    });
-    existingView.style.display = 'block';
-  }
-  
+  const showExistingStepsView = window.ProcessModalExistingSteps.create({
+    getCreatedSteps: function() { return createdSteps; }
+  });
+
   // Update step display
-  function updateStepDisplay() {
-    console.log('updateStepDisplay called, currentStep:', currentStep, 'isRestoringDraft:', isRestoringDraft);
-    // When showing the step flow, hide the existing-steps list view and show indicators
-    const existingView = document.getElementById('existing-steps-list-view');
-    const indicators = document.getElementById('create-process-step-indicators');
-    if (existingView) existingView.style.display = 'none';
-    if (indicators) indicators.style.display = 'flex';
-    
-    // If we're restoring a draft and currentStep is 1, but we should be on a different step,
-    // don't update (something else will set it correctly)
-    // BUT: if isRestoringDraft is true and currentStep is already set to something other than 1, allow it
-    if (isRestoringDraft && currentStep === 1) {
-      console.warn('updateStepDisplay called with currentStep=1 during draft restoration, skipping to prevent reset');
-      return;
-    }
-    
-    // Update step indicators
-    for (let i = 1; i <= totalSteps; i++) {
-      const indicator = document.querySelector(`.step-indicator[data-step="${i}"]`);
-      if (indicator) {
-        if (i === currentStep) {
-          indicator.style.background = 'var(--primary, #3b82f6)';
-          indicator.style.color = 'white';
-          indicator.style.border = 'none';
-        } else if (i < currentStep) {
-          indicator.style.background = 'var(--success, #10b981)';
-          indicator.style.color = 'white';
-          indicator.style.border = 'none';
-        } else {
-          indicator.style.background = 'var(--bg-secondary, #f3f4f6)';
-          indicator.style.color = 'var(--text-secondary)';
-          indicator.style.border = '2px solid var(--border-default, #e5e7eb)';
-        }
-      }
-    }
-    
-    // Show/hide steps - use !important to override inline styles
-    for (let i = 1; i <= totalSteps; i++) {
-      const stepDiv = document.getElementById(`create-process-step-${i}`);
-      if (stepDiv) {
-        if (i === currentStep) {
-          stepDiv.style.display = 'block';
-          console.log(`Showing step ${i}`);
-        } else {
-          stepDiv.style.display = 'none';
-          console.log(`Hiding step ${i}`);
-        }
-      } else {
-        console.warn(`Step div not found: create-process-step-${i}`);
-      }
-    }
-    
-    // On inputs step (2): show "Outputs from previous steps" tab only if there is at least one previous step; populate lists
-    if (currentStep === 2) {
-      if (typeof window.updatePreviousOutputTabVisibility === 'function') window.updatePreviousOutputTabVisibility();
-      if (typeof window.renderInventoryItemCards === 'function') window.renderInventoryItemCards();
-      if (typeof window.renderPreviousOutputsList === 'function') window.renderPreviousOutputsList();
-      updateInputButtonsText();
-    }
-    
-    // On outputs step (3): if no outputs yet, add one so the first output is ready and expanded
-    if (currentStep === 3) {
-      const outputsList = document.getElementById('guided-outputs-list');
-      if (outputsList && outputsList.children.length === 0 && typeof window.addGuidedOutput === 'function') {
-        window.addGuidedOutput();
-      }
-      updateOutputButtonText();
-    }
+  const updateStepDisplay = window.ProcessModalNavigation.createStepDisplayUpdater({
+    getCurrentStep: function() { return currentStep; },
+    isRestoringDraft: function() { return isRestoringDraft; },
+    getEditingStepId: function() { return editingStepId; },
+    totalSteps,
+    updateInputButtonsText,
+    updateOutputButtonText,
+    loadAttachedStepDocs,
+    ensureDocFileListener,
+    syncDocInlineDisabledState,
+    syncStep4ModeSegments,
+    updateStep4SummaryBar
+  });
+  window.updateStepDisplay = updateStepDisplay;
 
-    // On step 4: show attached docs when editing a step; load list and enable delete. Disable inline fields when file is selected.
-    const attachedDocsSection = document.getElementById('guided-step-attached-docs-section');
-    const attachedDocsList = document.getElementById('guided-step-docs-list');
-    if (attachedDocsSection && attachedDocsList) {
-      if (editingStepId) {
-        attachedDocsSection.style.display = 'block';
-        loadAttachedStepDocs(editingStepId);
-      } else {
-        attachedDocsSection.style.display = 'none';
-        attachedDocsList.innerHTML = '';
-      }
-    }
-    if (currentStep === 4) {
-      ensureDocFileListener();
-      syncDocInlineDisabledState();
-      syncStep4ModeSegments();
-      updateStep4SummaryBar();
-    }
-  }
 
-  function formatStep4ModeLabel(value) {
-    if (value === 'required') return 'Required';
-    if (value === 'optional') return 'Optional';
-    return 'Off';
-  }
 
-  function buildOutputModeSegmentRow(modeKind, spec) {
-    const wrap = document.createElement('div');
-    wrap.className = 'flow-mode-segmented';
-    wrap.setAttribute('role', 'group');
-    if (spec.ariaLabel) wrap.setAttribute('aria-label', spec.ariaLabel);
-    spec.options.forEach(function(opt) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'flow-mode-segment';
-      b.setAttribute('data-output-mode-kind', modeKind);
-      b.setAttribute('data-value', opt.value);
-      b.textContent = opt.label;
-      wrap.appendChild(b);
-    });
-    return wrap;
-  }
 
-  function syncOutputExpiryModeSegments(outputRow) {
-    if (!outputRow) return;
-    const sel = outputRow.querySelector('.guided-output-expiry-mode');
-    if (!sel) return;
-    outputRow.querySelectorAll('.flow-mode-segment[data-output-mode-kind="expiry"]').forEach(function(btn) {
-      const on = btn.getAttribute('data-value') === sel.value;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-  }
 
-  function syncOutputReadyDateModeSegments(outputRow) {
-    if (!outputRow) return;
-    const sel = outputRow.querySelector('.guided-output-ready-date-mode');
-    if (!sel) return;
-    outputRow.querySelectorAll('.flow-mode-segment[data-output-mode-kind="ready_date"]').forEach(function(btn) {
-      const on = btn.getAttribute('data-value') === sel.value;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-  }
 
-  function initGuidedOutputsListModeSegments() {
-    const list = document.getElementById('guided-outputs-list');
-    if (!list || list.dataset.flowModeOutputInit === '1') return;
-    list.dataset.flowModeOutputInit = '1';
-    list.addEventListener('click', function(ev) {
-      const btn = ev.target.closest('.flow-mode-segment[data-output-mode-kind]');
-      if (!btn || !list.contains(btn)) return;
-      ev.preventDefault();
-      const row = btn.closest('[id^="guided-output-"]');
-      if (!row) return;
-      const kind = btn.getAttribute('data-output-mode-kind');
-      const val = btn.getAttribute('data-value');
-      const sel = kind === 'expiry'
-        ? row.querySelector('.guided-output-expiry-mode')
-        : row.querySelector('.guided-output-ready-date-mode');
-      if (sel && val != null) {
-        sel.value = val;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
-  }
 
-  function applyNewMaterialExecutionExplanation(explanationEl, inputId, value) {
-    const explanation = (explanationEl && explanationEl.nodeType === 1)
-      ? explanationEl
-      : document.getElementById('guided-input-explanation-' + inputId);
-    if (!explanation) return;
-    if (value === 'variable') {
-      explanation.innerHTML = '<strong>At execution:</strong> Quantity and unit are populated with these values and the operator confirms when this step is run.';
-    } else if (value === 'static') {
-      explanation.innerHTML = '<strong>Fixed:</strong> The same quantity and unit are used every execution. Operators will not be prompted to confirm when this step runs.';
-    } else {
-      explanation.innerHTML = '<strong>Prompt:</strong> Operators are prompted to enter quantity and unit each time this step runs. This option is useful when the quantity and/or unit might be variable from batch to batch.';
-    }
-  }
 
-  function syncGuidedNewInputExecutionSegments(container) {
-    if (!container || container.dataset.inputType !== 'new') return;
-    const hidden = container.querySelector('.guided-input-execution-type');
-    const inputId = container.id || '';
-    const v = hidden && hidden.value ? hidden.value : 'variable';
-    container.querySelectorAll('.flow-mode-segment[data-guided-input-exec]').forEach(function(btn) {
-      const on = btn.getAttribute('data-value') === v;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-    const explanationDiv = container.querySelector('[id^="guided-input-explanation-"]');
-    applyNewMaterialExecutionExplanation(explanationDiv, inputId, v);
-  }
 
-  function buildNewMaterialExecutionTypeField(inputId) {
-    const typeField = document.createElement('div');
-    const typeLabel = document.createElement('label');
-    typeLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-    typeLabel.textContent = 'How quantities are captured';
-    typeField.appendChild(typeLabel);
 
-    const hiddenType = document.createElement('input');
-    hiddenType.type = 'hidden';
-    hiddenType.className = 'guided-input-execution-type';
-    hiddenType.value = 'variable';
-    typeField.appendChild(hiddenType);
-
-    const segWrap = document.createElement('div');
-    segWrap.className = 'flow-mode-segmented guided-input-exec-segmented';
-    segWrap.setAttribute('role', 'group');
-    segWrap.setAttribute('aria-label', 'How quantities are captured');
-    [
-      { value: 'variable', label: 'Operator to confirm' },
-      { value: 'static', label: 'Fixed' },
-      { value: 'prompt', label: 'Prompt' }
-    ].forEach(function(opt) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'flow-mode-segment';
-      b.setAttribute('data-guided-input-exec', '1');
-      b.setAttribute('data-value', opt.value);
-      b.textContent = opt.label;
-      segWrap.appendChild(b);
-    });
-    typeField.appendChild(segWrap);
-
-    const explanationDiv = document.createElement('div');
-    explanationDiv.style.cssText = 'margin-top: 8px; padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
-    explanationDiv.id = 'guided-input-explanation-' + inputId;
-    typeField.appendChild(explanationDiv);
-
-    hiddenType.addEventListener('change', function() {
-      applyNewMaterialExecutionExplanation(explanationDiv, inputId, hiddenType.value);
-    });
-    applyNewMaterialExecutionExplanation(explanationDiv, inputId, hiddenType.value);
-
-    return typeField;
-  }
-
-  function initGuidedNewInputExecutionSegments() {
-    const list = document.getElementById('guided-inputs-list-unified');
-    if (!list || list.dataset.guidedNewExecInit === '1') return;
-    list.dataset.guidedNewExecInit = '1';
-    list.addEventListener('click', function(ev) {
-      const btn = ev.target.closest('.flow-mode-segment[data-guided-input-exec]');
-      if (!btn || !list.contains(btn)) return;
-      const row = btn.closest('[id^="guided-input-"]');
-      if (!row || row.dataset.inputType !== 'new') return;
-      ev.preventDefault();
-      const hidden = row.querySelector('.guided-input-execution-type');
-      const val = btn.getAttribute('data-value');
-      if (hidden && val != null) {
-        hidden.value = val;
-        hidden.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      syncGuidedNewInputExecutionSegments(row);
-    });
-  }
-
-  function syncStep4ModeSegments() {
-    const batchSel = document.getElementById('guided-prompt-batch-number-mode');
-    const evSel = document.getElementById('guided-prompt-evidence-mode');
-    document.querySelectorAll('#create-process-step-4 .flow-mode-segment[data-step4-mode-target="batch"]').forEach(function(btn) {
-      const on = batchSel && btn.getAttribute('data-value') === batchSel.value;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-    document.querySelectorAll('#create-process-step-4 .flow-mode-segment[data-step4-mode-target="evidence"]').forEach(function(btn) {
-      const on = evSel && btn.getAttribute('data-value') === evSel.value;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-  }
-
-  function updateStep4SummaryBar() {
-    const batchEl = document.getElementById('guided-prompt-batch-number-mode');
-    const evEl = document.getElementById('guided-prompt-evidence-mode');
-    if (!batchEl || !evEl) return;
-    const b = formatStep4ModeLabel(batchEl.value);
-    const e = formatStep4ModeLabel(evEl.value);
-    const preview = document.getElementById('step4-trace-collapsed-preview');
-    if (preview) preview.textContent = 'Batch: ' + b + ' • Evidence: ' + e;
-    const n = document.querySelectorAll('#guided-prompts-list > div').length;
-    const hint = document.getElementById('step4-prompts-section-hint');
-    if (hint) hint.textContent = n + (n === 1 ? ' prompt' : ' prompts') + ' configured';
-  }
-  window.updateStep4SummaryBar = updateStep4SummaryBar;
-
-  function initStep4SegmentControls() {
-    const root = document.getElementById('create-process-step-4');
-    if (!root || root.dataset.step4UiInit === '1') return;
-    root.dataset.step4UiInit = '1';
-    root.addEventListener('click', function(ev) {
-      const btn = ev.target.closest('.flow-mode-segment[data-step4-mode-target]');
-      if (!btn || !root.contains(btn)) return;
-      ev.preventDefault();
-      const target = btn.getAttribute('data-step4-mode-target');
-      const val = btn.getAttribute('data-value');
-      const selId = target === 'batch' ? 'guided-prompt-batch-number-mode' : 'guided-prompt-evidence-mode';
-      const sel = document.getElementById(selId);
-      if (sel && val) {
-        sel.value = val;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
-    ['guided-prompt-batch-number-mode', 'guided-prompt-evidence-mode'].forEach(function(id) {
-      const el = document.getElementById(id);
-      if (el) {
-        el.addEventListener('change', function() {
-          syncStep4ModeSegments();
-          updateStep4SummaryBar();
-        });
-      }
-    });
-    syncStep4ModeSegments();
-    updateStep4SummaryBar();
-  }
-
-  // When a file is selected for step docs, disable inline title/content so file wins and UX is clear (no silent ignore).
-  function syncDocInlineDisabledState() {
-    const docFileInput = document.getElementById('guided-doc-file');
-    const docInlineTitle = document.getElementById('guided-doc-inline-title');
-    const docInlineContent = document.getElementById('guided-doc-inline-content');
-    const hasFile = docFileInput && docFileInput.files && docFileInput.files.length > 0;
-    if (docInlineTitle) docInlineTitle.disabled = !!hasFile;
-    if (docInlineContent) docInlineContent.disabled = !!hasFile;
-  }
-  function ensureDocFileListener() {
-    const docFileInput = document.getElementById('guided-doc-file');
-    if (!docFileInput || docFileInput.dataset.flowWizardDocListener === '1') return;
-    docFileInput.dataset.flowWizardDocListener = '1';
-    docFileInput.addEventListener('change', function() {
-      syncDocInlineDisabledState();
-      pendingGuidedDocFileUpload = null;
-      const f = docFileInput.files && docFileInput.files[0];
-      if (!f) {
-        if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
-        return;
-      }
-      const maxB64 = 1.5 * 1024 * 1024;
-      if (f.size > maxB64) {
-        if (window.showNotification) {
-          window.showNotification(
-            'warning',
-            'File too large',
-            'Only files up to 1.5MB can be carried to the summary step in the browser. Use inline instructions instead, or split the document.'
-          );
-        }
-        docFileInput.value = '';
-        syncDocInlineDisabledState();
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = function() {
-        const dataUrl = reader.result;
-        const s = String(dataUrl);
-        const comma = s.indexOf(',');
-        const b64 = comma >= 0 ? s.slice(comma + 1) : '';
-        pendingGuidedDocFileUpload = {
-          fileName: f.name,
-          mime: f.type || 'application/octet-stream',
-          base64: b64
-        };
-        if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
-      };
-      reader.onerror = function() {
-        pendingGuidedDocFileUpload = null;
-      };
-      reader.readAsDataURL(f);
-    });
-  }
-  window.ensureGuidedDocFileListener = ensureDocFileListener;
 
   // Expose for SPA page so it can sync step display without opening the modal
   window.updateStepDisplay = updateStepDisplay;
 
-  // Load attached documentation for the current step (step 4) and render list with delete
-  async function loadAttachedStepDocs(stepId) {
-    const container = document.getElementById('guided-step-docs-list');
-    if (!container) return;
-    container.innerHTML = 'Loading…';
-    try {
-      const res = await CoreAPI.getStepDocumentation(stepId);
-      const docs = (res && res.documents) ? res.documents : [];
-      container.innerHTML = '';
-      if (docs.length === 0) {
-        const empty = document.createElement('p');
-        empty.style.cssText = 'color: var(--text-tertiary, #9ca3af); margin: 0; font-size: 13px;';
-        empty.textContent = 'No documentation attached.';
-        container.appendChild(empty);
-      } else {
-        docs.forEach(function(doc) {
-          const row = document.createElement('div');
-          row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--bg-card, #fff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); margin-bottom: 6px;';
-          const label = document.createElement('span');
-          label.textContent = doc.title || (doc.content_markdown ? 'Inline doc' : 'File');
-          label.style.cssText = 'flex: 1; min-width: 0; font-size: 13px; color: var(--text-primary);';
-            const delBtn = document.createElement('button');
-            delBtn.type = 'button';
-            delBtn.className = 'btn btn-secondary btn-sm';
-            delBtn.textContent = 'Delete';
-            delBtn.onclick = function() {
-              if (typeof window.showDeleteDocConfirmModal === 'function') {
-                window.showDeleteDocConfirmModal(doc.id, row);
-              } else {
-                if (confirm('Remove this documentation from the step?')) {
-                  CoreAPI.deleteProcessDoc(doc.id).then(function() {
-                    row.remove();
-                    if (window.showNotification) window.showNotification('success', 'Removed', 'Documentation removed.');
-                  }).catch(function(e) {
-                    if (window.showNotification) window.showNotification('error', 'Error', e.message || 'Could not delete.');
-                  });
-                }
-              }
-            };
-          row.appendChild(label);
-          row.appendChild(delBtn);
-          container.appendChild(row);
-        });
-      }
-    } catch (e) {
-      container.innerHTML = '';
-      const err = document.createElement('p');
-      err.style.cssText = 'color: var(--error, #dc2626); margin: 0; font-size: 13px;';
-      err.textContent = 'Could not load documentation.';
-      container.appendChild(err);
-    }
-  }
 
-  // Delete-doc confirmation modal (in-app, not browser confirm). Lazy-init listeners when modal is first shown so DOM is ready.
-  let deleteDocModalInitialized = false;
-  function ensureDeleteDocModalListeners() {
-    if (deleteDocModalInitialized) return;
-    const modalEl = document.getElementById('delete-doc-confirm-modal');
-    const cancelBtn = document.getElementById('delete-doc-confirm-cancel');
-    const removeBtn = document.getElementById('delete-doc-confirm-remove');
-    if (!modalEl || !cancelBtn || !removeBtn) return;
-    deleteDocModalInitialized = true;
-    cancelBtn.addEventListener('click', function() {
-      modalEl.style.display = 'none';
-      pendingDeleteDoc = null;
-    });
-    removeBtn.addEventListener('click', async function() {
-      if (!pendingDeleteDoc) return;
-      const { docId, row } = pendingDeleteDoc;
-      pendingDeleteDoc = null;
-      modalEl.style.display = 'none';
-      try {
-        await CoreAPI.deleteProcessDoc(docId);
-        if (row && row.parentNode) row.remove();
-        if (window.showNotification) window.showNotification('success', 'Removed', 'Documentation removed.');
-      } catch (e) {
-        if (window.showNotification) window.showNotification('error', 'Error', e.message || 'Could not delete.');
-      }
-    });
-  }
-  window.showDeleteDocConfirmModal = function(docId, row) {
-    const modalEl = document.getElementById('delete-doc-confirm-modal');
-    if (!modalEl) return;
-    ensureDeleteDocModalListeners();
-    pendingDeleteDoc = { docId, row };
-    modalEl.style.display = 'flex';
-  };
 
-  // Validate inventory inputs (quantity & unit required, quantity must be > 0)
-  function validateInventoryInputs() {
-    const list = document.getElementById('guided-inputs-list-unified');
-    if (!list) return { valid: true };
-    const rows = list.querySelectorAll(':scope > div[data-input-type="inventory"], :scope > div[data-input-type="previous_output"]');
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const quantityInput = row.querySelector('.guided-input-quantity');
-      const unitSelect = row.querySelector('.guided-input-unit');
-      if (!quantityInput && !unitSelect) continue;
-      const quantityStr = quantityInput ? (quantityInput.value || '').trim() : '';
-      const unit = unitSelect ? (unitSelect.value || '').trim() : '';
-      if (quantityStr === '' || unit === '') {
-        return {
-          valid: false,
-          message: 'Please fill Quantity and Unit for all inventory items. Both are required.'
-        };
-      }
-      const quantityNum = parseFloat(quantityStr);
-      if (isNaN(quantityNum) || quantityNum <= 0) {
-        return {
-          valid: false,
-          message: 'Quantity must be greater than 0 for all inventory items.'
-        };
-      }
-    }
-    return { valid: true };
-  }
+  const { validateInventoryInputs, validateFixedExpiryWarning } = window.ProcessModalValidation;
 
-  // Validate fixed-duration outputs: warning must not exceed expiry. Shared helper (single source of truth).
-  function validateFixedExpiryWarning(outputs) {
-    try {
-      if (window.CustomExpiryValidation && typeof window.CustomExpiryValidation.validateFixedExpiryWarning === 'function') {
-        return window.CustomExpiryValidation.validateFixedExpiryWarning(outputs);
-      }
-    } catch (e) {}
-    return { valid: true };
-  }
-  
-  /** First wizard screen (process overview): require process name, then go to step-name. */
-  window.goFromProcessOverviewToStepName = function() {
-    const el = document.getElementById('guided-process-workflow-name');
-    const name = el ? String(el.value || '').trim() : '';
-    if (!name) {
-      if (window.showNotification) {
-        window.showNotification('error', 'Process name required', 'Enter a name for this process workflow.');
-      } else {
-        alert('Please enter a process name.');
-      }
-      return;
-    }
-    if (typeof window.persistSpaWizardState === 'function') {
-      window.persistSpaWizardState();
-    }
-    window.location.href = '/core/flows/create/step-name' + (window.location.search || '');
-  };
-
-  // Navigate to next step
-  window.createProcessNextStep = function() {
-    if (currentStep === 1) {
-      // Validate step 1
-      const stepName = document.getElementById('guided-step-name').value.trim();
-      if (!stepName) {
-        if (window.showNotification) {
-          window.showNotification('error', 'Step name required', 'Please enter a step name.');
-        } else {
-          alert('Please enter a step name');
-        }
-        return;
-      }
-    }
-    if (currentStep === 2) {
-      const result = validateInventoryInputs();
-      if (!result.valid) {
-        if (window.showNotification) {
-          window.showNotification('error', 'Inventory inputs required', result.message);
-        } else {
-          alert(result.message);
-        }
-        return;
-      }
-    }
-    if (currentStep === 3) {
-      // Validate per-output custom expiry: warn-before must not exceed fixed expiry duration
-      const outputElements = document.querySelectorAll('#guided-outputs-list > div');
-      const outputsForValidation = [];
-      outputElements.forEach(function(outputEl) {
-        const name = outputEl.querySelector('.guided-output-name')?.value.trim() || '';
-        const expiryModeEl = outputEl.querySelector('.guided-output-expiry-mode');
-        const expiryValueEl = outputEl.querySelector('.guided-output-expiry-value');
-        const expiryUnitEl = outputEl.querySelector('.guided-output-expiry-unit');
-        const warningValueEl = outputEl.querySelector('.guided-output-expiry-warning-value');
-        const warningUnitEl = outputEl.querySelector('.guided-output-expiry-warning-unit');
-        const expiryMode = expiryModeEl ? expiryModeEl.value : 'none';
-        const expiryValueRaw = expiryValueEl && expiryMode === 'fixed_duration' ? expiryValueEl.value.trim() : '';
-        const expiryValue = expiryValueRaw !== '' ? parseInt(expiryValueRaw, 10) : null;
-        const expiryUnit = expiryUnitEl && expiryMode === 'fixed_duration' ? ((expiryUnitEl.value || 'days') + '').trim() : 'days';
-        const warningValueRaw = warningValueEl && expiryMode !== 'none' ? warningValueEl.value.trim() : '';
-        const warningValue = warningValueRaw !== '' ? parseInt(warningValueRaw, 10) : 7;
-        const warningUnit = warningUnitEl && expiryMode !== 'none' ? ((warningUnitEl.value || 'days') + '').trim() : 'days';
-        const outObj = { name: name };
-        if (expiryMode === 'fixed_duration' && expiryValue > 0) {
-          outObj.extra_data = {
-            custom_expiry: {
-              enabled: true,
-              mode: 'fixed_duration',
-              duration_value: expiryValue,
-              duration_unit: (expiryUnit || 'days').trim(),
-              warning_value: (typeof warningValue === 'number' && !isNaN(warningValue) && warningValue >= 0) ? warningValue : 7,
-              warning_unit: (warningUnit || 'days').trim(),
-              expiry_at: null,
-              rule_type: 'custom_output_expiry'
-            }
-          };
-        }
-        outputsForValidation.push(outObj);
-      });
-
-      const expiryValidation = validateFixedExpiryWarning(outputsForValidation);
-      if (!expiryValidation.valid) {
-        if (window.showNotification) {
-          window.showNotification('error', 'Invalid expiry settings', expiryValidation.message);
-        } else {
-          alert(expiryValidation.message);
-        }
-        // Expand + scroll to the problematic output to guide the user
-        try {
-          const match = Array.from(outputElements).find(function(el) {
-            const n = el.querySelector('.guided-output-name')?.value.trim() || '';
-            return expiryValidation.outputName && n === expiryValidation.outputName;
-          });
-          if (match) {
-            if (match.dataset && match.dataset.expanded === 'false' && typeof toggleOutputExpand === 'function') {
-              toggleOutputExpand(match.id);
-            }
-            match.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        } catch (e) {}
-        return;
-      }
-      // Validate ready date: fixed_duration requires duration > 0 and warn <= ready period
-      const readyDateValidation = window.ReadyDateValidation;
-      const validateFixedReadyDateWarning = (readyDateValidation && typeof readyDateValidation.validateFixedReadyDateWarning === 'function')
-        ? readyDateValidation.validateFixedReadyDateWarning
-        : function () { return { valid: true }; };
-      const outputsWithReadyDate = [];
-      outputElements.forEach(function (outputEl) {
-        const name = outputEl.querySelector('.guided-output-name')?.value.trim() || '';
-        const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
-        const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
-        const readyDateUnitEl = outputEl.querySelector('.guided-output-ready-date-unit');
-        const readyDateWarnValueEl = outputEl.querySelector('.guided-output-ready-date-warning-value');
-        const readyDateWarnUnitEl = outputEl.querySelector('.guided-output-ready-date-warning-unit');
-        const mode = readyDateModeEl ? readyDateModeEl.value : 'none';
-        const durationValue = (readyDateValueEl && mode === 'fixed_duration') ? parseInt(readyDateValueEl.value, 10) : null;
-        const durationUnit = (readyDateUnitEl && mode === 'fixed_duration') ? (readyDateUnitEl.value || 'days').trim() : 'days';
-        const warningValue = (readyDateWarnValueEl && mode === 'fixed_duration') ? parseInt(readyDateWarnValueEl.value, 10) : 0;
-        const warningUnit = (readyDateWarnUnitEl && mode === 'fixed_duration') ? (readyDateWarnUnitEl.value || 'days').trim() : 'days';
-        const outObj = { name: name };
-        if (mode === 'fixed_duration' && durationValue > 0) {
-          outObj.extra_data = {
-            ready_date: {
-              enabled: true,
-              mode: 'fixed_duration',
-              duration_value: durationValue,
-              duration_unit: durationUnit,
-              warning_value: (typeof warningValue === 'number' && !isNaN(warningValue) && warningValue >= 0) ? warningValue : 0,
-              warning_unit: warningUnit,
-              rule_type: 'custom_ready_date'
-            }
-          };
-        }
-        outputsWithReadyDate.push(outObj);
-      });
-      const rdValidation = validateFixedReadyDateWarning(outputsWithReadyDate);
-      if (!rdValidation.valid) {
-        if (window.showNotification) {
-          window.showNotification('error', 'Invalid ready date settings', rdValidation.message);
-        } else {
-          alert(rdValidation.message);
-        }
-        try {
-          const match = Array.from(outputElements).find(function (el) {
-            const n = el.querySelector('.guided-output-name')?.value.trim() || '';
-            return rdValidation.outputName && n === rdValidation.outputName;
-          });
-          if (match) {
-            if (match.dataset && match.dataset.expanded === 'false' && typeof toggleOutputExpand === 'function') {
-              toggleOutputExpand(match.id);
-            }
-            match.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        } catch (e) {}
-        return;
-      }
-      for (let i = 0; i < outputElements.length; i++) {
-        const outputEl = outputElements[i];
-        const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
-        const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
-        const mode = readyDateModeEl ? readyDateModeEl.value : 'none';
-        if (mode === 'fixed_duration') {
-          if (!readyDateValueEl || !readyDateValueEl.value.trim() || parseInt(readyDateValueEl.value, 10) <= 0) {
-            const outputName = outputEl.querySelector('.guided-output-name')?.value.trim() || '';
-            if (window.showNotification) {
-              window.showNotification('error', 'Ready date required', 'Output "' + outputName + '" has fixed ready date; please set a positive period.');
-            } else {
-              alert('Output "' + outputName + '" has fixed ready date; please set a positive period.');
-            }
-            try {
-              if (outputEl.dataset && outputEl.dataset.expanded === 'false' && typeof toggleOutputExpand === 'function') {
-                toggleOutputExpand(outputEl.id);
-              }
-              outputEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            } catch (e) {}
-            return;
-          }
-        }
-      }
-      // When both expiry and ready date are set (fixed duration), expiry cannot be before ready date (shared config)
-      const outputsWithBothExpiryAndReady = [];
-      outputElements.forEach(function (outputEl) {
-        const name = outputEl.querySelector('.guided-output-name')?.value.trim() || '';
-        const expiryModeEl = outputEl.querySelector('.guided-output-expiry-mode');
-        const expiryValueEl = outputEl.querySelector('.guided-output-expiry-value');
-        const expiryUnitEl = outputEl.querySelector('.guided-output-expiry-unit');
-        const expiryWarningValueEl = outputEl.querySelector('.guided-output-expiry-warning-value');
-        const expiryWarningUnitEl = outputEl.querySelector('.guided-output-expiry-warning-unit');
-        const readyDateModeEl = outputEl.querySelector('.guided-output-ready-date-mode');
-        const readyDateValueEl = outputEl.querySelector('.guided-output-ready-date-value');
-        const readyDateUnitEl = outputEl.querySelector('.guided-output-ready-date-unit');
-        const readyDateWarnValueEl = outputEl.querySelector('.guided-output-ready-date-warning-value');
-        const readyDateWarnUnitEl = outputEl.querySelector('.guided-output-ready-date-warning-unit');
-        const expiryMode = expiryModeEl ? expiryModeEl.value : 'none';
-        const readyMode = readyDateModeEl ? readyDateModeEl.value : 'none';
-        if (expiryMode !== 'fixed_duration' || readyMode !== 'fixed_duration') return;
-        const expiryValue = (expiryValueEl && expiryValueEl.value.trim()) ? parseInt(expiryValueEl.value, 10) : 0;
-        if (!expiryValue || isNaN(expiryValue)) return;
-        const expiryUnit = (expiryUnitEl && expiryUnitEl.value) || 'days';
-        const expiryWarningValue = (expiryWarningValueEl && expiryWarningValueEl.value.trim() !== '') ? parseInt(expiryWarningValueEl.value, 10) : 0;
-        const expiryWarningUnit = (expiryWarningUnitEl && expiryWarningUnitEl.value) || 'days';
-        const readyValue = (readyDateValueEl && readyDateValueEl.value.trim()) ? parseInt(readyDateValueEl.value, 10) : 0;
-        const readyUnit = (readyDateUnitEl && readyDateUnitEl.value) || 'days';
-        const readyWarningValue = (readyDateWarnValueEl && readyDateWarnValueEl.value.trim() !== '') ? parseInt(readyDateWarnValueEl.value, 10) : 0;
-        const readyWarningUnit = (readyDateWarnUnitEl && readyDateWarnUnitEl.value) || 'days';
-        outputsWithBothExpiryAndReady.push({
-          name: name,
-          extra_data: {
-            custom_expiry: { enabled: true, mode: 'fixed_duration', duration_value: expiryValue, duration_unit: expiryUnit, warning_value: isNaN(expiryWarningValue) ? 0 : expiryWarningValue, warning_unit: expiryWarningUnit },
-            ready_date: { enabled: true, mode: 'fixed_duration', duration_value: readyValue, duration_unit: readyUnit, warning_value: isNaN(readyWarningValue) ? 0 : readyWarningValue, warning_unit: readyWarningUnit }
-          }
-        });
-      });
-      if (outputsWithBothExpiryAndReady.length > 0 && window.ExpiryReadyDateValidation && typeof window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration === 'function') {
-        const erResult = window.ExpiryReadyDateValidation.validateExpiryAfterReadyDuration(outputsWithBothExpiryAndReady);
-        if (!erResult.valid) {
-          if (window.showNotification) {
-            window.showNotification('error', 'Expiry and ready date', erResult.message);
-          } else {
-            alert(erResult.message);
-          }
-          try {
-            const match = Array.from(outputElements).find(function (el) {
-              const n = el.querySelector('.guided-output-name')?.value.trim() || '';
-              return erResult.outputName && n === erResult.outputName;
-            });
-            if (match) {
-              if (match.dataset && match.dataset.expanded === 'false' && typeof toggleOutputExpand === 'function') {
-                toggleOutputExpand(match.id);
-              }
-              match.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-          } catch (e) {}
-          return;
-        }
-      }
-    }
-    
-    if (isProcessFlowSpaPage()) {
-      if (typeof window.persistSpaWizardState === 'function') {
-        window.persistSpaWizardState();
-      }
-      if (currentStep < totalSteps) {
-        const nextSlug = { 1: 'inputs', 2: 'outputs', 3: 'evidence-and-prompts' }[currentStep];
-        if (nextSlug) {
-          window.location.href = '/core/flows/create/' + nextSlug + (window.location.search || '');
-        }
-      }
-      return;
-    }
-
-    if (currentStep < totalSteps) {
-      currentStep++;
-      updateStepDisplay();
-    }
-  };
-  
-  // Navigate to previous step
-  window.createProcessPreviousStep = function() {
-    if (currentStep > 1) {
-      currentStep--;
-      updateStepDisplay();
-    }
-  };
-  
+  const processModalNavigationActions = window.ProcessModalNavigationActions.create({
+    getCurrentStep: function() { return currentStep; },
+    setCurrentStep: function(step) { currentStep = step; },
+    totalSteps,
+    validateInventoryInputs,
+    validateFixedExpiryWarning,
+    toggleOutputExpand,
+    isProcessFlowSpaPage,
+    updateStepDisplay
+  });
+  window.goFromProcessOverviewToStepName = processModalNavigationActions.goFromProcessOverviewToStepName;
+  window.createProcessNextStep = processModalNavigationActions.createProcessNextStep;
+  window.createProcessPreviousStep = processModalNavigationActions.createProcessPreviousStep;
   // Unit groups (matching flows2.html)
   const unitGroups = {
     weight: ['kg', 'g'],
@@ -2369,41 +1025,6 @@
   
   // Load inventory items (all types)
   let inventoryCache = null;
-  // Get previous step outputs for current step
-  function getPreviousStepOutputs() {
-    const previousOutputs = [];
-    
-    // Get outputs from all previously created steps
-    // createdSteps contains steps that have been created in this session
-    // Sort by step_number to ensure correct order
-    const sortedSteps = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
-    
-    sortedSteps.forEach(step => {
-      if (step.outputs && step.outputs.length > 0) {
-        step.outputs.forEach(output => {
-          if (output.name) {
-            // Ensure step_number is valid (should be from step.step_number)
-            const stepNumber = step.step_number || 0;
-            previousOutputs.push({
-              id: output.id || null,
-              name: output.name,
-              quantity: output.quantity !== null && output.quantity !== undefined ? output.quantity : null,
-              unit: output.unit || '',
-              inventory_type: output.inventory_type || null,
-              step_number: stepNumber,
-              is_previous_output: true,
-              displayName: `Step ${stepNumber}: ${output.name}`
-            });
-          }
-        });
-      }
-    });
-    
-    console.log('getPreviousStepOutputs: found', previousOutputs.length, 'outputs from', sortedSteps.length, 'steps');
-    console.log('Step numbers:', sortedSteps.map(s => s.step_number));
-    
-    return previousOutputs;
-  }
   
   async function loadInventoryItems() {
     if (inventoryCache) {
@@ -2753,92 +1374,12 @@
   }
   
   // Collapse all inputs except the specified one
-  function collapseAllInputs(exceptId = null) {
-    const allInputs = getAllGuidedInputElements();
-    allInputs.forEach(inputEl => {
-      if (inputEl.id !== exceptId) {
-        const contentArea = inputEl.querySelector('.guided-input-content');
-        const expandIcon = inputEl.querySelector('.guided-input-expand-icon');
-        const expandHint = inputEl.querySelector('.guided-input-expand-hint');
-        if (contentArea && expandIcon) {
-          contentArea.style.display = 'none';
-          expandIcon.style.transform = 'rotate(0deg)';
-          inputEl.dataset.expanded = 'false';
-          if (expandHint) expandHint.textContent = '(click to expand)';
-        }
-      }
-    });
-  }
   
   // Collapse all outputs except the specified one
-  function collapseAllOutputs(exceptId = null) {
-    const allOutputs = document.querySelectorAll('#guided-outputs-list > div');
-    allOutputs.forEach(outputEl => {
-      if (outputEl.id !== exceptId) {
-        const contentArea = outputEl.querySelector('.guided-output-content');
-        const expandIcon = outputEl.querySelector('.guided-output-expand-icon');
-        const expandHint = outputEl.querySelector('.guided-output-expand-hint');
-        if (contentArea && expandIcon) {
-          contentArea.style.display = 'none';
-          expandIcon.style.transform = 'rotate(0deg)';
-          outputEl.dataset.expanded = 'false';
-          if (expandHint) expandHint.textContent = '(click to expand)';
-        }
-      }
-    });
-  }
   
   // Toggle input expand/collapse
-  function toggleInputExpand(inputId) {
-    const inputEl = document.getElementById(inputId);
-    if (!inputEl) return;
-    
-    const contentArea = inputEl.querySelector('.guided-input-content');
-    const expandIcon = inputEl.querySelector('.guided-input-expand-icon');
-    const expandHint = inputEl.querySelector('.guided-input-expand-hint');
-    if (!contentArea || !expandIcon) return;
-    
-    const isExpanded = inputEl.dataset.expanded === 'true';
-    if (isExpanded) {
-      contentArea.style.display = 'none';
-      expandIcon.style.transform = 'rotate(0deg)';
-      inputEl.dataset.expanded = 'false';
-      if (expandHint) expandHint.textContent = '(click to expand)';
-    } else {
-      contentArea.style.display = 'block';
-      expandIcon.style.transform = 'rotate(180deg)';
-      inputEl.dataset.expanded = 'true';
-      if (expandHint) expandHint.textContent = '(click to collapse)';
-      // Collapse all other inputs
-      collapseAllInputs(inputId);
-    }
-  }
   
   // Toggle output expand/collapse
-  function toggleOutputExpand(outputId) {
-    const outputEl = document.getElementById(outputId);
-    if (!outputEl) return;
-    
-    const contentArea = outputEl.querySelector('.guided-output-content');
-    const expandIcon = outputEl.querySelector('.guided-output-expand-icon');
-    const expandHint = outputEl.querySelector('.guided-output-expand-hint');
-    if (!contentArea || !expandIcon) return;
-    
-    const isExpanded = outputEl.dataset.expanded === 'true';
-    if (isExpanded) {
-      contentArea.style.display = 'none';
-      expandIcon.style.transform = 'rotate(0deg)';
-      outputEl.dataset.expanded = 'false';
-      if (expandHint) expandHint.textContent = '(click to expand)';
-    } else {
-      contentArea.style.display = 'block';
-      expandIcon.style.transform = 'rotate(180deg)';
-      outputEl.dataset.expanded = 'true';
-      if (expandHint) expandHint.textContent = '(click to collapse)';
-      // Collapse all other outputs
-      collapseAllOutputs(outputId);
-    }
-  }
   
   // Populate a guided input container from saved step data (used when loading a step or when adding in parallel with load data).
   async function populateGuidedInputFromLoadData(container, data, type) {
@@ -3171,7 +1712,7 @@
       
       if (type === 'previous_output') {
         // Only get previous step outputs
-        const previousOutputs = getPreviousStepOutputs();
+        const previousOutputs = window.ProcessModalPreviousOutputs.getPreviousStepOutputs(createdSteps);
         
         if (previousOutputs.length === 0) {
           const messageDiv = document.createElement('div');
@@ -3532,52 +2073,6 @@
   }
   
   // Summary under item name. Raw: none (user selects at execution). Intermediate/final: process name, unit.
-  function inventoryCardSummary(item) {
-    const isRaw = (item.inventory_type || item.category) === 'raw_material';
-    if (isRaw) return '';
-    const parts = [];
-    if (item.process_name) parts.push('process name: ' + escapeHtmlForText(item.process_name));
-    if (item.unit) parts.push('unit: ' + escapeHtmlForText(item.unit));
-    return parts.join(', ');
-  }
-
-  // Helper text: all inventory categories select specific stock at execution (same behavior as raw materials).
-  function inventoryExecutionHelperText(_item) {
-    return 'You will select which batch or supplier to use when this step runs.';
-  }
-  
-  // Build full metadata block. Raw: type + helper. Intermediate/final: type, unit, process, step, made-from list + helper (no execution metadata: supplier/batch/dates/prompts/variable_output/previous_steps).
-  function inventoryCardMetadataHtml(item) {
-    const lines = [];
-    const cat = item.inventory_type || item.category;
-    if (cat) {
-      const label = cat === 'raw_material' ? 'Raw material' : cat === 'work_in_progress' ? 'Intermediate' : 'Final product';
-      lines.push('<div class="meta-line"><span class="meta-label">Type:</span> ' + escapeHtmlForText(label) + '</div>');
-    }
-    const isRaw = cat === 'raw_material';
-    if (!isRaw && item.unit != null && item.unit !== '') {
-      lines.push('<div class="meta-line"><span class="meta-label">Unit:</span> ' + escapeHtmlForText(String(item.unit)) + '</div>');
-    }
-    if (!isRaw && item.process_name) {
-      lines.push('<div class="meta-line"><span class="meta-label">Process:</span> ' + escapeHtmlForText(item.process_name) + '</div>');
-    }
-    if (!isRaw && item.source_step_name) {
-      lines.push('<div class="meta-line"><span class="meta-label">Step:</span> ' + escapeHtmlForText(item.source_step_name) + '</div>');
-    }
-    const ed = item.extra_data;
-    if (ed && typeof ed === 'object' && ed.variable_inputs && Array.isArray(ed.variable_inputs) && ed.variable_inputs.length > 0) {
-      lines.push('<div class="meta-line"><span class="meta-label">Made from:</span></div>');
-      ed.variable_inputs.forEach(function(inp, idx) {
-        const n = inp && inp.name ? inp.name : 'Input ' + (idx + 1);
-        const q = inp && inp.quantity != null ? inp.quantity : '';
-        const u = inp && inp.unit ? inp.unit : '';
-        lines.push('<div class="meta-line" style="padding-left: 12px;">' + escapeHtmlForText(n) + (q !== '' ? ' — ' + escapeHtmlForText(String(q)) + (u ? ' ' + escapeHtmlForText(u) : '') : '') + '</div>');
-      });
-    }
-    lines.push('<div class="meta-line" style="font-style: italic;">' + escapeHtmlForText(inventoryExecutionHelperText(item)) + '</div>');
-    return lines.join('');
-  }
-  
   // Inventory category (Raw / Intermediate / Final): same flow-mode-segmented control as outputs expiry / Ready date
   window.applyGuidedInventoryCategoryUI = function() {
     const cat = window._guidedInventoryCat || 'raw_material';
@@ -3808,7 +2303,7 @@
     const container = document.getElementById('guided-previous-outputs-container');
     if (!container) return;
     container.innerHTML = '';
-    const outputs = getPreviousStepOutputs();
+    const outputs = window.ProcessModalPreviousOutputs.getPreviousStepOutputs(createdSteps);
     const available = outputs.filter(function(item) {
       const displayName = item.displayName || ('Step ' + (item.step_number || '') + ': ' + item.name);
       return !selectedPreviousOutputs.has(displayName);
@@ -3840,13 +2335,6 @@
       container.appendChild(row);
     });
   };
-  
-  function escapeHtmlForText(text) {
-    if (text == null) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
   
   // Update all inventory dropdowns to exclude selected items
   function updateInventoryDropdowns() {
@@ -4566,377 +3054,14 @@
     }
   };
   
-  // Add guided execution prompt
-  window.addGuidedPrompt = function() {
-    // Collapse all existing prompts before adding a new one
-    collapseAllPrompts();
-    
-    const promptId = `guided-prompt-${Date.now()}`;
-    const promptContainer = document.createElement('div');
-    promptContainer.id = promptId;
-    promptContainer.dataset.expanded = 'true'; // New prompt starts expanded
-    promptContainer.style.cssText = 'background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); margin-bottom: 12px; overflow: hidden;';
-    
-    // Create header with expand/collapse
-    const header = document.createElement('div');
-    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 12px; cursor: pointer; background: var(--bg-secondary, #f9fafb);';
-    header.onclick = () => togglePromptExpand(promptId);
-    
-    const headerLeft = document.createElement('div');
-    headerLeft.style.cssText = 'display: flex; align-items: center; gap: 8px;';
-    
-    const expandIcon = document.createElement('svg');
-    expandIcon.className = 'guided-prompt-expand-icon';
-    expandIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    expandIcon.setAttribute('width', '16');
-    expandIcon.setAttribute('height', '16');
-    expandIcon.setAttribute('viewBox', '0 0 24 24');
-    expandIcon.setAttribute('fill', 'none');
-    expandIcon.setAttribute('stroke', 'currentColor');
-    expandIcon.setAttribute('stroke-width', '2');
-    expandIcon.setAttribute('stroke-linecap', 'round');
-    expandIcon.setAttribute('stroke-linejoin', 'round');
-    expandIcon.style.cssText = 'transition: transform 0.2s; transform: rotate(180deg);';
-    expandIcon.innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
-    headerLeft.appendChild(expandIcon);
-    
-    const titleSpan = document.createElement('span');
-    titleSpan.className = 'guided-prompt-title';
-    titleSpan.style.cssText = 'font-size: 14px; font-weight: 500; color: var(--text-primary);';
-    titleSpan.textContent = 'Execution Prompt';
-    headerLeft.appendChild(titleSpan);
-    
-    // Add label display that will show when collapsed
-    const labelDisplay = document.createElement('span');
-    labelDisplay.className = 'guided-prompt-label-display';
-    labelDisplay.style.cssText = 'font-size: 14px; font-weight: 500; color: var(--text-primary); display: none;';
-    labelDisplay.textContent = '';
-    headerLeft.appendChild(labelDisplay);
-    
-    // Add expand/collapse hint text
-    const expandHint = document.createElement('span');
-    expandHint.className = 'guided-prompt-expand-hint';
-    expandHint.style.cssText = 'font-size: 11px; color: var(--text-tertiary, #9ca3af); margin-left: 8px; font-style: italic;';
-    expandHint.textContent = '(click to collapse)';
-    headerLeft.appendChild(expandHint);
-    
-    header.appendChild(headerLeft);
-    
-    const removeButton = document.createElement('button');
-    removeButton.type = 'button';
-    removeButton.onclick = (e) => {
-      e.stopPropagation();
-      window.removeGuidedPrompt(promptId);
-    };
-    removeButton.style.cssText = 'padding: 4px 8px; border: none; background: transparent; color: var(--error, #ef4444); cursor: pointer; font-size: 12px;';
-    removeButton.textContent = 'Remove';
-    header.appendChild(removeButton);
-    
-    promptContainer.appendChild(header);
-    
-    // Create content area
-    const contentArea = document.createElement('div');
-    contentArea.className = 'guided-prompt-content';
-    contentArea.style.cssText = 'padding: 12px; display: block;';
-    
-    // Function to update label display
-    const updateLabelDisplay = () => {
-      const labelInput = promptContainer.querySelector('.guided-prompt-label');
-      const label = labelInput ? labelInput.value.trim() : '';
-      
-      if (label) {
-        labelDisplay.textContent = label;
-        labelDisplay.style.display = 'inline';
-        titleSpan.style.display = 'none';
-      } else {
-        labelDisplay.style.display = 'none';
-        titleSpan.style.display = 'inline';
-      }
-    };
-    
-    // Label field
-    const labelField = document.createElement('div');
-    labelField.style.marginBottom = '12px';
-    const labelLabel = document.createElement('label');
-    labelLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-    labelLabel.textContent = 'Label';
-    labelField.appendChild(labelLabel);
-    const labelInput = document.createElement('input');
-    labelInput.type = 'text';
-    labelInput.className = 'guided-prompt-label';
-    labelInput.placeholder = 'e.g., Temperature, Operator name';
-    labelInput.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px;';
-    labelInput.addEventListener('input', updateLabelDisplay);
-    labelInput.addEventListener('blur', updateLabelDisplay);
-    labelField.appendChild(labelInput);
-    contentArea.appendChild(labelField);
-    
-    // Type field
-    const typeField = document.createElement('div');
-    typeField.style.marginBottom = '12px';
-    const typeLabel = document.createElement('label');
-    typeLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-    typeLabel.textContent = 'Type';
-    typeField.appendChild(typeLabel);
-    const typeSelect = document.createElement('select');
-    typeSelect.className = 'guided-prompt-type form-select';
-    typeSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
-    const textOption = document.createElement('option');
-    textOption.value = 'text';
-    textOption.textContent = 'Text';
-    typeSelect.appendChild(textOption);
-    const numberOption = document.createElement('option');
-    numberOption.value = 'number';
-    numberOption.textContent = 'Number';
-    typeSelect.appendChild(numberOption);
-    const dateOption = document.createElement('option');
-    dateOption.value = 'date';
-    dateOption.textContent = 'Date';
-    typeSelect.appendChild(dateOption);
-    const selectOption = document.createElement('option');
-    selectOption.value = 'select';
-    selectOption.textContent = 'Select';
-    typeSelect.appendChild(selectOption);
-    typeField.appendChild(typeSelect);
-    contentArea.appendChild(typeField);
+  const processModalPromptActions = window.ProcessModalPrompts.create({
+    unitGroups,
+    updateStep4SummaryBar
+  });
+  window.addGuidedPrompt = processModalPromptActions.addGuidedPrompt;
+  window.removeGuidedPrompt = processModalPromptActions.removeGuidedPrompt;
 
-    const optionsField = document.createElement('div');
-    optionsField.className = 'guided-prompt-options-field';
-    optionsField.style.cssText = 'margin-bottom: 12px; display: none;';
-    const optionsLabel = document.createElement('label');
-    optionsLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-    optionsLabel.textContent = 'Choices (one per line)';
-    optionsField.appendChild(optionsLabel);
-    const optionsInput = document.createElement('textarea');
-    optionsInput.className = 'guided-prompt-options';
-    optionsInput.rows = 4;
-    optionsInput.placeholder = 'Pass\nHold\nRework';
-    optionsInput.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); font-size: 13px; resize: vertical;';
-    optionsField.appendChild(optionsInput);
-    const optionsHint = document.createElement('p');
-    optionsHint.style.cssText = 'margin: 4px 0 0; font-size: 11px; color: var(--text-secondary);';
-    optionsHint.textContent = 'Operators can choose only one of these values.';
-    optionsField.appendChild(optionsHint);
-    typeSelect.addEventListener('change', function() {
-      optionsField.style.display = typeSelect.value === 'select' ? 'block' : 'none';
-    });
-    contentArea.appendChild(optionsField);
-    
-    // Unit field (optional)
-    const unitField = document.createElement('div');
-    unitField.style.marginBottom = '12px';
-    const unitLabel = document.createElement('label');
-    unitLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-    unitLabel.textContent = 'Unit (optional)';
-    unitField.appendChild(unitLabel);
-    const unitSelect = document.createElement('select');
-    unitSelect.className = 'guided-prompt-unit form-select';
-    unitSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px;';
-    // Add empty option for "no unit"
-    const emptyUnitOption = document.createElement('option');
-    emptyUnitOption.value = '';
-    emptyUnitOption.textContent = 'No unit';
-    unitSelect.appendChild(emptyUnitOption);
-    // Add unit options from unitGroups (same as inputs/outputs)
-    [...unitGroups.weight, ...unitGroups.volume, ...unitGroups.count].forEach(unit => {
-      const option = document.createElement('option');
-      option.value = unit;
-      option.textContent = unit;
-      unitSelect.appendChild(option);
-    });
-    unitField.appendChild(unitSelect);
-    contentArea.appendChild(unitField);
-    
-    // Required field
-    const requiredField = document.createElement('div');
-    const requiredLabel = document.createElement('label');
-    requiredLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-    requiredLabel.textContent = 'Required';
-    requiredField.appendChild(requiredLabel);
-    const requiredSelect = document.createElement('select');
-    requiredSelect.className = 'guided-prompt-required form-select';
-    requiredSelect.style.cssText = 'width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); font-size: 13px; margin-bottom: 4px;';
-    const requiredOption = document.createElement('option');
-    requiredOption.value = 'true';
-    requiredOption.textContent = 'Required';
-    requiredSelect.appendChild(requiredOption);
-    const optionalOption = document.createElement('option');
-    optionalOption.value = 'false';
-    optionalOption.textContent = 'Optional';
-    requiredSelect.appendChild(optionalOption);
-    requiredField.appendChild(requiredSelect);
-    contentArea.appendChild(requiredField);
-    
-    promptContainer.appendChild(contentArea);
-    document.getElementById('guided-prompts-list').appendChild(promptContainer);
-    if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
-  };
-  
-  // Collapse all prompts except the specified one
-  function collapseAllPrompts(exceptId = null) {
-    const allPrompts = document.querySelectorAll('#guided-prompts-list > div');
-    allPrompts.forEach(promptEl => {
-      if (promptEl.id !== exceptId) {
-        const contentArea = promptEl.querySelector('.guided-prompt-content');
-        const expandIcon = promptEl.querySelector('.guided-prompt-expand-icon');
-        const expandHint = promptEl.querySelector('.guided-prompt-expand-hint');
-        if (contentArea && expandIcon) {
-          contentArea.style.display = 'none';
-          expandIcon.style.transform = 'rotate(0deg)';
-          promptEl.dataset.expanded = 'false';
-          if (expandHint) expandHint.textContent = '(click to expand)';
-        }
-      }
-    });
-  }
-  
-  // Toggle prompt expand/collapse
-  function togglePromptExpand(promptId) {
-    const promptEl = document.getElementById(promptId);
-    if (!promptEl) return;
-    
-    const contentArea = promptEl.querySelector('.guided-prompt-content');
-    const expandIcon = promptEl.querySelector('.guided-prompt-expand-icon');
-    const expandHint = promptEl.querySelector('.guided-prompt-expand-hint');
-    if (!contentArea || !expandIcon) return;
-    
-    const isExpanded = promptEl.dataset.expanded === 'true';
-    if (isExpanded) {
-      contentArea.style.display = 'none';
-      expandIcon.style.transform = 'rotate(0deg)';
-      promptEl.dataset.expanded = 'false';
-      if (expandHint) expandHint.textContent = '(click to expand)';
-    } else {
-      contentArea.style.display = 'block';
-      expandIcon.style.transform = 'rotate(180deg)';
-      promptEl.dataset.expanded = 'true';
-      if (expandHint) expandHint.textContent = '(click to collapse)';
-      // Collapse all other prompts
-      collapseAllPrompts(promptId);
-    }
-  }
-  
-  // Remove guided prompt
-  window.removeGuidedPrompt = function(promptId) {
-    const promptElement = document.getElementById(promptId);
-    if (promptElement) {
-      promptElement.remove();
-      if (typeof updateStep4SummaryBar === 'function') updateStep4SummaryBar();
-    }
-  };
 
-  function base64ToBlob(b64, mime) {
-    const bin = atob(b64);
-    const arr = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    return new Blob([arr], { type: mime || 'application/octet-stream' });
-  }
-
-  function mapSessionInputsToApiPayloadFromRows(rows) {
-    const inputs = [];
-    (rows || []).forEach(function(inputRow) {
-      const name = (inputRow.name || '').trim();
-      const unit = (inputRow.unit || '').trim();
-      if (!name || !unit) return;
-      const executionType = inputRow.executionType || 'variable';
-      const isPreviousOutput =
-        inputRow.inputType === 'previous_output' ||
-        (inputRow.executionType == null && inputRow.inputType !== 'inventory' && inputRow.inputType !== 'new');
-      const isVariable = isPreviousOutput ? true : executionType === 'variable' || executionType === 'prompt';
-      const requiresInventorySelection = isPreviousOutput ? true : executionType === 'variable';
-      const inputObj = {
-        name: name,
-        quantity:
-          inputRow.quantity !== null && inputRow.quantity !== undefined && inputRow.quantity !== ''
-            ? parseFloat(inputRow.quantity)
-            : null,
-        unit: unit,
-        is_variable: isVariable,
-        requires_inventory_selection: requiresInventorySelection
-      };
-      const sourceOutputId = inputRow.source_output_id || inputRow.sourceOutputId || null;
-      if (sourceOutputId) inputObj.source_output_id = sourceOutputId;
-      const expectedInv =
-        inputRow.expected_inventory_type || inputRow.expectedInventoryType || null;
-      if (expectedInv) inputObj.expected_inventory_type = expectedInv;
-      inputs.push(inputObj);
-    });
-    return inputs;
-  }
-
-  function validateInventoryInputsFromSession(session) {
-    const rows = session && Array.isArray(session.inputs) ? session.inputs : [];
-    const invRows = rows.filter(function(r) {
-      return r && (r.inputType === 'inventory' || r.inputType === 'previous_output');
-    });
-    for (let i = 0; i < invRows.length; i++) {
-      const row = invRows[i];
-      const q = row.quantity;
-      const u = (row.unit || '').trim();
-      if (u === '' || q === null || q === undefined || q === '') {
-        return {
-          valid: false,
-          message: 'Please fill Quantity and Unit for all inventory items. Both are required.'
-        };
-      }
-      const qn = typeof q === 'number' ? q : parseFloat(String(q));
-      if (isNaN(qn) || qn <= 0) {
-        return { valid: false, message: 'Quantity must be greater than 0 for all inventory items.' };
-      }
-    }
-    return { valid: true };
-  }
-
-  function buildExecutionPromptsForApiFromSession(session) {
-    const collected = [];
-    (session.prompts || []).forEach(function(p) {
-      if (!p || !(p.label || '').trim()) return;
-      const label = (p.label || '').toLowerCase();
-      const isEvidence = p.type === 'evidence' || label === 'evidence';
-      if (label === 'batch number' || isEvidence) return;
-      collected.push({
-        label: p.label,
-        type: p.type || 'text',
-        unit: p.unit || null,
-        required: p.required !== false,
-        ...(p.type === 'select' ? { options: normalisePromptOptions(p.options) } : {})
-      });
-    });
-    const batchNumberMode = session.batchNumberMode || 'dont_ask';
-    const evidenceMode = session.evidenceMode || 'dont_ask';
-    const filtered = collected.filter(function(p) {
-      const label = (p.label || '').toLowerCase();
-      const isEvidence = p.type === 'evidence' || label === 'evidence';
-      return label !== 'batch number' && !isEvidence;
-    });
-    if (batchNumberMode === 'required' || batchNumberMode === 'optional') {
-      filtered.unshift({
-        label: 'Batch number',
-        type: 'text',
-        unit: null,
-        required: batchNumberMode === 'required'
-      });
-    }
-    if (evidenceMode === 'required' || evidenceMode === 'optional') {
-      filtered.push({
-        label: 'Evidence',
-        type: 'evidence',
-        unit: null,
-        required: evidenceMode === 'required'
-      });
-    }
-    return filtered;
-  }
-
-  function wizardSessionHasDraftStepData(session) {
-    if (!session || session.v !== 1) return false;
-    const name = (session.stepName || '').trim();
-    const hasBody =
-      (session.inputs || []).length > 0 ||
-      (session.outputs || []).length > 0 ||
-      (session.prompts || []).length > 0;
-    return !!(name || hasBody);
-  }
 
   function hasPendingUnsavedWizardStepForFinish() {
     if (getFlowWizardPageSlug() === 'next-steps') {
@@ -4946,32 +3071,7 @@
     return wizardSessionHasDraftStepData(loadWizardSessionMergeBase());
   }
 
-  function buildVirtualSummaryStepFromWizardSession(session) {
-    if (!session || session.v !== 1) return null;
-    const execution_prompts = buildExecutionPromptsForApiFromSession(session);
-    const docTitle = (session.docInlineTitle || '').trim();
-    const docContent = (session.docInlineContent || '').trim();
-    const hasInline = docTitle && docContent;
-    const hasFileMeta = !!(session.docFileUpload && session.docFileUpload.base64);
-    let documentation_summary;
-    if (hasFileMeta) documentation_summary = 'SOP file attached (pending upload)';
-    else if (hasInline) documentation_summary = 'Instructions: ' + docTitle;
-    const inputsRaw = mapSessionInputsToSummaryRows(session.inputs || []);
-    return {
-      id: '__pending__',
-      step_number: null,
-      name: (session.stepName || '').trim() || 'Untitled step',
-      description: (session.stepDescription || '').trim(),
-      inputs: inputsRaw.map(function(row) {
-        return { name: row.name, quantity: row.quantity, unit: row.unit };
-      }),
-      outputs: JSON.parse(JSON.stringify(session.outputs || [])),
-      execution_prompts: execution_prompts,
-      batch_number_mode: session.batchNumberMode || 'optional',
-      evidence_mode: session.evidenceMode || 'optional',
-      documentation_summary: documentation_summary
-    };
-  }
+
 
   async function navigateProcessFlowSpaEvidenceToSummary() {
     if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
@@ -5146,7 +3246,7 @@
     // After creating a new step, clear editing id so the next wizard round (add another step)
     // does not treat the saved step as "being edited" and overwrite it via updateStep.
     editingStepId = wasEditingStepId ? saved.id : null;
-    pendingGuidedDocFileUpload = null;
+    setPendingGuidedDocFileUpload(null);
 
     if (isEditingExistingProcess) {
       isEditingExistingProcess = false;
@@ -5223,482 +3323,33 @@
     return document.body && document.body.getAttribute('data-flow-wizard-page') === 'summary';
   }
 
-  function deriveTraceabilityModes(step) {
-    let batch = step.batch_number_mode;
-    let ev = step.evidence_mode;
-    if (batch && ev) return { batch, evidence: ev };
-    const prompts = step.execution_prompts || [];
-    if (!batch) {
-      const bn = prompts.find(p => (p.label || '').toLowerCase() === 'batch number');
-      if (bn) batch = bn.required !== false ? 'required' : 'optional';
-      else batch = 'dont_ask';
-    }
-    if (!ev) {
-      const evp = prompts.find(
-        p => p.type === 'evidence' || (p.label || '').toLowerCase() === 'evidence'
-      );
-      if (evp) ev = evp.required !== false ? 'required' : 'optional';
-      else ev = 'dont_ask';
-    }
-    return { batch: batch || 'optional', evidence: ev || 'optional' };
-  }
 
-  function formatTraceabilityModeLabel(mode) {
-    if (mode === 'required') return 'Required';
-    if (mode === 'optional') return 'Optional';
-    return 'Off';
-  }
 
-  function formatOutputExpirySummary(output) {
-    const ce = (output.extra_data || {}).custom_expiry;
-    if (!ce || !ce.enabled) return 'None';
-    const mode =
-      ce.mode ||
-      (ce.set_at_execution || ce.set_during_execution ? 'set_at_execution' : 'fixed_duration');
-    if (mode === 'set_at_execution') return 'Operator defined';
-    const dv = ce.duration_value != null ? ce.duration_value : ce.expiry_days;
-    const du = (ce.duration_unit || 'days').toLowerCase();
-    if (dv != null && du) return `${dv} ${dv === 1 ? du.replace(/s$/, '') : du}`;
-    return 'Configured';
-  }
 
-  function formatOutputReadySummary(output) {
-    const rd = (output.extra_data || {}).ready_date;
-    if (!rd || !rd.enabled) return 'None';
-    const mode = rd.mode || 'fixed_duration';
-    if (mode === 'set_at_execution') return 'Operator defined';
-    const dv = rd.duration_value;
-    const du = (rd.duration_unit || 'hours').toLowerCase();
-    if (dv != null && du) return `${dv} ${dv === 1 ? du.replace(/s$/, '') : du}`;
-    return 'Configured';
-  }
 
   /**
    * Summary page: unsaved in-progress step comes only from session; saved steps from createdSteps / API.
    */
-  function resolveCurrentStepForSummary(sortedSteps) {
-    const session = loadWizardSessionMergeBase();
-    const sorted = Array.isArray(sortedSteps) ? sortedSteps : [];
-    if (!editingStepId && wizardSessionHasDraftStepData(session)) {
-      const vs = buildVirtualSummaryStepFromWizardSession(session);
-      if (vs) {
-        const displayNumber = sorted.length + 1;
-        return { step: vs, displayNumber: displayNumber, isFinalStep: true };
-      }
-    }
-    if (sorted.length === 0) {
-      return { step: null, displayNumber: 0, isFinalStep: false };
-    }
-    let idx = sorted.length - 1;
-    if (editingStepId) {
-      const found = sorted.findIndex(function (s) {
-        return String(s.id) === String(editingStepId);
-      });
-      if (found >= 0) idx = found;
-    }
-    const step = sorted[idx];
-    return {
-      step,
-      displayNumber: idx + 1,
-      isFinalStep: idx === sorted.length - 1
-    };
-  }
-
-  /** Session persist stores full I/O on createdSteps[] — more reliable than top-level inputs/outputs alone. */
-  function findSessionDraftStepForSummaryStep(session, step) {
-    if (!session || !step || step.id == null) return null;
-    const list = session.createdSteps;
-    if (!Array.isArray(list) || list.length === 0) return null;
-    const hit = list.find(function (s) {
-      return s && s.id != null && String(s.id) === String(step.id);
-    });
-    return hit || null;
-  }
-
-  function sessionTopLevelIoAppliesToStep(step, sortedSteps) {
-    const session = loadWizardSessionMergeBase();
-    if (!session || !step) return false;
-    if (String(step.id) === '__pending__') return true;
-    if (!step.id) return false;
-    // Wizard draft lives in session.inputs / session.outputs for ONE step. When editing step 1..N−1,
-    // only session.editingStepId / editingStepId identifies it — the old "last step only" fallback was
-    // wrong and caused enrichStepForSummaryFromSession to skip merging I/O for non-final steps.
-    if (editingStepId != null && editingStepId !== '') {
-      if (String(editingStepId) === String(step.id)) return true;
-    }
-    if (session.editingStepId != null && session.editingStepId !== '') {
-      return String(session.editingStepId) === String(step.id);
-    }
-    const sorted = [...sortedSteps].sort(function (a, b) {
-      return (a.step_number || 0) - (b.step_number || 0);
-    });
-    const last = sorted[sorted.length - 1];
-    return !!(last && String(last.id) === String(step.id));
-  }
-
-  function mapSessionInputsToSummaryRows(raw) {
-    if (!Array.isArray(raw)) return [];
-    const out = [];
-    raw.forEach(function (i) {
-      if (!i) return;
-      const name = summaryInputDisplayName(i);
-      if (!name) return;
-      out.push({
-        name: name,
-        quantity: i.quantity != null ? i.quantity : null,
-        unit: i.unit || ''
-      });
-    });
-    return out;
-  }
-
-  /**
-   * Summary route has no wizard DOM; GET /process may lag. Prefer session.createdSteps (full step
-   * snapshot from persist) then top-level session inputs/outputs from merge-serialize.
-   */
-  function enrichStepForSummaryFromSession(step, sortedSteps) {
-    if (!step) return step;
-    const session = loadWizardSessionMergeBase();
-    if (!session) return step;
-
-    const next = { ...step };
-    const draft = findSessionDraftStepForSummaryStep(session, step);
-
-    const inputsApi = Array.isArray(step.inputs) ? step.inputs : [];
-    let inputsNamed = inputsApi.filter(function (i) {
-      return i && summaryInputDisplayName(i);
-    });
-    const outputsApi = Array.isArray(step.outputs) ? step.outputs : [];
-    let outputsNamed = outputsApi.filter(function (o) {
-      return o && summaryOutputDisplayName(o);
-    });
-    const promptsApi = Array.isArray(step.execution_prompts) ? step.execution_prompts : [];
-    let promptsLabeled = promptsApi.filter(function (p) {
-      return p && (p.label || '').trim();
-    });
-
-    if (draft) {
-      const di = Array.isArray(draft.inputs)
-        ? draft.inputs.filter(function (i) {
-            return i && summaryInputDisplayName(i);
-          })
-        : [];
-      const dout = Array.isArray(draft.outputs)
-        ? draft.outputs.filter(function (o) {
-            return o && summaryOutputDisplayName(o);
-          })
-        : [];
-      const dp = Array.isArray(draft.execution_prompts)
-        ? draft.execution_prompts.filter(function (p) {
-            return p && (p.label || '').trim();
-          })
-        : [];
-      if (inputsNamed.length === 0 && di.length > 0) {
-        next.inputs = JSON.parse(JSON.stringify(di));
-        inputsNamed = next.inputs;
-      }
-      if (outputsNamed.length === 0 && dout.length > 0) {
-        next.outputs = JSON.parse(JSON.stringify(dout));
-        outputsNamed = next.outputs.filter(function (o) {
-          return o && summaryOutputDisplayName(o);
-        });
-      }
-      if (promptsLabeled.length === 0 && dp.length > 0) {
-        next.execution_prompts = JSON.parse(JSON.stringify(dp));
-        promptsLabeled = next.execution_prompts;
-      }
-      if (next.batch_number_mode == null && draft.batch_number_mode != null) {
-        next.batch_number_mode = draft.batch_number_mode;
-      }
-      if (next.evidence_mode == null && draft.evidence_mode != null) {
-        next.evidence_mode = draft.evidence_mode;
-      }
-      if (!(next.documentation_summary || '').trim() && (draft.documentation_summary || '').trim()) {
-        next.documentation_summary = draft.documentation_summary;
-      }
-    }
-
-    if (!sessionTopLevelIoAppliesToStep(step, sortedSteps)) {
-      if (
-        !(next.documentation_summary || '').trim() &&
-        session.editingStepId != null &&
-        String(session.editingStepId) === String(step.id)
-      ) {
-        const du = session.docFileUpload;
-        if (du && du.base64) {
-          next.documentation_summary = 'SOP file attached (pending upload)';
-        } else {
-          const dt = (session.docInlineTitle || '').trim();
-          const dc = (session.docInlineContent || '').trim();
-          if (dt && dc) {
-            next.documentation_summary = 'Instructions: ' + dt;
-          }
-        }
-      }
-      return next;
-    }
-
-    // When editing a DB-backed step, the wizard session is the source of truth for ALL editable fields
-    // on the current step (including deletions), not a "fill if empty" helper.
-    if (wizardSessionHasDraftStepData(session)) {
-      if (Object.prototype.hasOwnProperty.call(session, 'stepName')) {
-        const sn = (session.stepName || '').toString();
-        if (sn.trim() !== '' && sn !== (next.name || '')) {
-          next.name = sn;
-        }
-      }
-      if (Object.prototype.hasOwnProperty.call(session, 'stepDescription')) {
-        next.description = (session.stepDescription || '').toString();
-      }
-
-      next.inputs = mapSessionInputsToSummaryRows(session.inputs || []);
-      next.outputs = JSON.parse(
-        JSON.stringify(
-          (session.outputs || []).filter(function (o) {
-            return o && summaryOutputDisplayName(o);
-          })
-        )
+  const summarySessionHelpers = window.ProcessModalSummarySession.create({
+    loadWizardSessionMergeBase,
+    getEditingStepId: function() { return editingStepId; },
+    wizardSessionHasDraftStepData,
+    buildVirtualSummaryStepFromWizardSession: function(session) {
+      return window.ProcessModalSessionSummary.buildVirtualSummaryStepFromWizardSession(
+        session,
+        { buildExecutionPromptsForApiFromSession, mapSessionInputsToSummaryRows }
       );
-      next.execution_prompts = JSON.parse(
-        JSON.stringify(buildExecutionPromptsForApiFromSession(session))
-      );
-      if (session.batchNumberMode != null) next.batch_number_mode = session.batchNumberMode;
-      if (session.evidenceMode != null) next.evidence_mode = session.evidenceMode;
-
-      // Docs are edited on step 4; reflect pending attachments/inline edits on summary during edit.
-      const du = session.docFileUpload;
-      if (du && du.base64) {
-        next.documentation_summary = 'SOP file attached (pending upload)';
-      } else {
-        const dt = (session.docInlineTitle || '').trim();
-        const dc = (session.docInlineContent || '').trim();
-        if (dt && dc) {
-          next.documentation_summary = 'Instructions: ' + dt;
-        } else if ((next.documentation_summary || '').trim() === '') {
-          next.documentation_summary = next.documentation_summary;
-        }
-      }
-    }
-
-    return next;
-  }
+    },
+    summaryInputDisplayName,
+    summaryOutputDisplayName,
+    mapSessionInputsToSummaryRows,
+    buildExecutionPromptsForApiFromSession
+  });
+  const { resolveCurrentStepForSummary, enrichStepForSummaryFromSession } = summarySessionHelpers;
 
   /** Derived issues only — scoped to the current step (no filler when empty). */
-  function buildStepSummaryWarnings(step, isFinalStep) {
-    const warnings = [];
-    if (!step) return warnings;
-    const outputs = (step.outputs || []).filter(function (o) {
-      return o && summaryOutputDisplayName(o);
-    });
-    if (outputs.length > 0) {
-      const anyNoExpiry = outputs.some(function (o) {
-        return formatOutputExpirySummary(o) === 'None';
-      });
-      if (anyNoExpiry) warnings.push('Output has no expiry rule');
-    }
-    const tm = deriveTraceabilityModes(step);
-    if (isFinalStep && tm.batch === 'dont_ask') {
-      warnings.push('No batch / run ID tracking on final step');
-    }
-    return warnings;
-  }
 
-  async function renderCompliancePanel(sortedSteps) {
-    const panel = document.getElementById('flow-compliance-panel');
-    const heading = document.getElementById('step-summaries-heading');
-    if (!panel) return;
-    if (!isProcessFlowSummaryPage()) {
-      panel.style.display = 'none';
-      panel.innerHTML = '';
-      if (heading) {
-        heading.style.display = '';
-        heading.textContent = 'Created Steps';
-        heading.style.marginTop = '0';
-      }
-      return;
-    }
-    if (heading) {
-      heading.style.display = 'none';
-      heading.style.marginTop = '0';
-    }
-    panel.style.display = 'block';
 
-    const escHtml = function (s) {
-      return String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    };
-
-    let { step, displayNumber, isFinalStep } = resolveCurrentStepForSummary(sortedSteps);
-    if (!step) {
-      panel.innerHTML =
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0;">No step data to review.</p>';
-      return;
-    }
-    step = enrichStepForSummaryFromSession(step, sortedSteps);
-
-    const stepName = escHtml(step.name || 'Untitled step');
-    const tm = deriveTraceabilityModes(step);
-    const batchLabel = escHtml(formatTraceabilityModeLabel(tm.batch));
-    const evidenceLabel = escHtml(formatTraceabilityModeLabel(tm.evidence));
-
-    const purposeText = (step.description || '').trim();
-    let hasStepDocumentation = !!(
-      step.documentation_summary && String(step.documentation_summary).trim()
-    );
-    const stepIdForDocs =
-      step && step.id && String(step.id) !== '__pending__' ? String(step.id) : '';
-    if (
-      !hasStepDocumentation &&
-      stepIdForDocs &&
-      typeof CoreAPI !== 'undefined' &&
-      typeof CoreAPI.getStepDocumentation === 'function'
-    ) {
-      try {
-        const docRes = await CoreAPI.getStepDocumentation(stepIdForDocs);
-        const docs = docRes && Array.isArray(docRes.documents) ? docRes.documents : [];
-        if (docs.length > 0) {
-          hasStepDocumentation = true;
-        }
-      } catch (err) {
-        console.warn('Summary: could not verify step documentation', err);
-      }
-    }
-
-    const inputs = (step.inputs || []).filter(function (i) {
-      return i && summaryInputDisplayName(i);
-    });
-    const outputs = (step.outputs || []).filter(function (o) {
-      return o && summaryOutputDisplayName(o);
-    });
-    const customPrompts = (step.execution_prompts || []).filter(isCustomExecutionPrompt);
-
-    let html = '';
-    html +=
-      '<div class="flow-step-summary-page"><p class="flow-step-summary-kicker" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-secondary);margin:0 0 12px 0;">Step summary</p>';
-    html += `<div class="flow-step-summary-header" style="display:flex;align-items:center;gap:12px;margin:0 0 22px 0;flex-wrap:wrap;">`;
-    html += `<span class="flow-step-num-badge" aria-hidden="true">${displayNumber}</span>`;
-    html += `<span style="font-size:1.125rem;font-weight:600;color:var(--text-primary);line-height:1.3;">Step ${displayNumber} \u2014 ${stepName}</span>`;
-    html += '</div>';
-
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:18px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Step function</h3>';
-
-    html += '<div style="font-size:0.875rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px 0;">Inputs</div>';
-    if (inputs.length === 0) {
-      html +=
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0 0 12px 0;">None</p>';
-    } else {
-      html += '<ul class="flow-compliance-step-list" style="margin-bottom:12px;">';
-      inputs.forEach(function (input) {
-        const q =
-          input.quantity !== null && input.quantity !== undefined ? input.quantity : '';
-        const u = input.unit || '';
-        const bit = q ? ` (${q}${u ? ' ' + u : ''})` : u ? ` (${u})` : '';
-        html += `<li><span class="flow-compliance-row__text">${escHtml(summaryInputDisplayName(input) + bit)}</span></li>`;
-      });
-      html += '</ul>';
-    }
-
-    html += '<div style="font-size:0.875rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px 0;">Outputs</div>';
-    if (outputs.length === 0) {
-      html +=
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0 0 12px 0;">None</p>';
-    } else {
-      html += '<ul class="flow-compliance-step-list" style="margin-bottom:12px;">';
-      outputs.forEach(function (output) {
-        const q =
-          output.quantity !== null && output.quantity !== undefined ? output.quantity : '';
-        const u = output.unit || '';
-        const bit = q ? ` (${q}${u ? ' ' + u : ''})` : u ? ` (${u})` : '';
-        html += `<li><span class="flow-compliance-row__text">${escHtml(summaryOutputDisplayName(output) + bit)}</span></li>`;
-      });
-      html += '</ul>';
-    }
-
-    if (purposeText) {
-      html +=
-        '<div style="font-size:0.875rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px 0;">Purpose</div>';
-      html += `<p style="font-size:0.875rem;color:var(--text-primary);margin:0;line-height:1.55;">${escHtml(purposeText)}</p>`;
-    }
-    html += '</section>';
-
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:18px;border-top:1px solid var(--border-default,#e5e7eb);padding-top:16px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Traceability &amp; compliance</h3>';
-    html +=
-      '<div style="font-size:0.875rem;line-height:1.65;color:var(--text-primary);"><div><span style="color:var(--text-secondary);font-weight:500;">Batch:</span> ' +
-      batchLabel +
-      '</div><div><span style="color:var(--text-secondary);font-weight:500;">Evidence:</span> ' +
-      evidenceLabel +
-      '</div></div></section>';
-
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:18px;border-top:1px solid var(--border-default,#e5e7eb);padding-top:16px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Output rules</h3>';
-    if (outputs.length === 0) {
-      html +=
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0;">No outputs — rules apply when outputs exist.</p>';
-    } else if (outputs.length === 1) {
-      const o = outputs[0];
-      html +=
-        '<div style="font-size:0.875rem;line-height:1.65;color:var(--text-primary);"><div><span style="color:var(--text-secondary);font-weight:500;">Expiry:</span> ' +
-        escHtml(formatOutputExpirySummary(o)) +
-        '</div><div><span style="color:var(--text-secondary);font-weight:500;">Ready date:</span> ' +
-        escHtml(formatOutputReadySummary(o)) +
-        '</div></div>';
-    } else {
-      html += '<ul class="flow-compliance-step-list">';
-      outputs.forEach(function (o) {
-        const on = escHtml(summaryOutputDisplayName(o) || 'Output');
-        const ex = escHtml(formatOutputExpirySummary(o));
-        const rd = escHtml(formatOutputReadySummary(o));
-        html += `<li style="margin-bottom:8px;"><span class="flow-compliance-row__text"><strong>${on}</strong> — Expiry: ${ex}; Ready: ${rd}</span></li>`;
-      });
-      html += '</ul>';
-    }
-    html += '</section>';
-
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:18px;border-top:1px solid var(--border-default,#e5e7eb);padding-top:16px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Documentation and Custom prompts</h3>';
-    html +=
-      '<p style="font-size:0.875rem;color:var(--text-primary);margin:0 0 12px 0;line-height:1.55;"><span style="color:var(--text-secondary);font-weight:500;">Attached step documentation:</span> ' +
-      (hasStepDocumentation ? 'Yes' : 'No') +
-      '</p>';
-    if (customPrompts.length > 0) {
-      html +=
-        '<div style="font-size:0.875rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px 0;">Custom prompts</div>';
-      html += '<ul class="flow-compliance-step-list">';
-      customPrompts.forEach(function (p) {
-        const req = p.required !== false ? 'Required' : 'Optional';
-        const unit = p.unit ? `, ${escHtml(p.unit)}` : '';
-        const line = `${escHtml(p.label || '')} (${escHtml(p.type || '')}${unit}) — ${req}`;
-        html += `<li><span class="flow-compliance-row__text">${line}</span></li>`;
-      });
-      html += '</ul>';
-    }
-    html += '</section>';
-
-    const warns = buildStepSummaryWarnings(step, isFinalStep);
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:0;border-top:1px solid var(--border-default,#e5e7eb);padding-top:16px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Warnings</h3>';
-    if (warns.length === 0) {
-      html +=
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0;">No issues flagged for this step.</p>';
-    } else {
-      html +=
-        '<ul class="flow-compliance-warnings" style="margin:0;padding-left:0;list-style:none;font-size:0.875rem;line-height:1.65;">';
-      warns.forEach(function (w) {
-        html += `<li style="margin-bottom:6px;"><span aria-hidden="true">\u26A0 </span>${escHtml(w)}</li>`;
-      });
-      html += '</ul>';
-    }
-    html += '</section></div>';
-
-    panel.innerHTML = html;
-  }
-
-  const PROCESS_FLOW_PENDING_NEW_STEP_KEY = 'processFlowWizardPendingNewStep';
 
   function setPendingNewStepIntent() {
     try {
@@ -5754,58 +3405,8 @@
   /**
    * API GET may lag unsaved wizard work. Fill empty step.outputs/inputs/prompts from draft snapshots.
    */
-  function countNamedStepInputs(inputs) {
-    if (!Array.isArray(inputs)) return 0;
-    return inputs.filter(function (i) {
-      return i && summaryInputDisplayName(i);
-    }).length;
-  }
 
-  function countNamedStepOutputs(outputs) {
-    if (!Array.isArray(outputs)) return 0;
-    return outputs.filter(function (o) {
-      return o && summaryOutputDisplayName(o);
-    }).length;
-  }
 
-  function mergeDraftCreatedStepsIntoApiSteps(apiSteps, draftSteps) {
-    if (!Array.isArray(apiSteps) || apiSteps.length === 0) return apiSteps;
-    const draftById = new Map();
-    (draftSteps || []).forEach(function (s) {
-      if (s && s.id) draftById.set(String(s.id), s);
-    });
-    return apiSteps.map(function (api) {
-      const d = draftById.get(String(api.id));
-      if (!d) return { ...api };
-      const merged = { ...api };
-      const draftOut = countNamedStepOutputs(d.outputs);
-      const apiOut = countNamedStepOutputs(merged.outputs);
-      if (apiOut === 0 && draftOut > 0) {
-        merged.outputs = JSON.parse(JSON.stringify(d.outputs));
-      }
-      const draftIn = countNamedStepInputs(d.inputs);
-      const apiIn = countNamedStepInputs(merged.inputs);
-      if (apiIn === 0 && draftIn > 0) {
-        merged.inputs = JSON.parse(JSON.stringify(d.inputs));
-      }
-      const draftPrompts = Array.isArray(d.execution_prompts)
-        ? d.execution_prompts.filter(function (p) {
-            return p && (p.label || '').trim();
-          }).length
-        : 0;
-      const apiPrompts = Array.isArray(merged.execution_prompts)
-        ? merged.execution_prompts.filter(function (p) {
-            return p && (p.label || '').trim();
-          }).length
-        : 0;
-      if (apiPrompts === 0 && draftPrompts > 0) {
-        merged.execution_prompts = JSON.parse(JSON.stringify(d.execution_prompts));
-      }
-      if (merged.batch_number_mode == null && d.batch_number_mode != null) merged.batch_number_mode = d.batch_number_mode;
-      if (merged.evidence_mode == null && d.evidence_mode != null) merged.evidence_mode = d.evidence_mode;
-      return merged;
-    });
-  }
 
   /**
    * Wizard session stores current outputs under `outputs` (DOM snapshot), not always copied onto createdSteps[].
@@ -5914,54 +3515,18 @@
     }
   }
 
-  function stepSortKey(step) {
-    // Avoid JS float precision issues: treat position as a string-ish key.
-    // We only need stable ordering; server normalization keeps positions simple.
-    if (!step) return '';
-    if (step.position !== null && step.position !== undefined && step.position !== '') {
-      return String(step.position);
-    }
-    return String(step.step_number || '');
-  }
 
-  function sortStepsForDisplay(steps) {
-    return [...(steps || [])].sort(function(a, b) {
-      const ka = stepSortKey(a);
-      const kb = stepSortKey(b);
-      if (ka < kb) return -1;
-      if (ka > kb) return 1;
-      return String(a && a.id || '').localeCompare(String(b && b.id || ''));
-    });
-  }
+
+  const persistStepOrder = window.ProcessModalStepOrder.create({
+    getCoreApi: function() { return typeof CoreAPI === 'undefined' ? null : CoreAPI; },
+    getCreatedSteps: function() { return createdSteps; },
+    sortStepsForDisplay,
+    reloadSteps: function() { return mergeProcessStepsFromApiForCurrentProcess(function() { return true; }); },
+    refreshSummaries: function() { return updateStepSummaries(); }
+  });
 
   async function persistStepOrderIfPossible() {
-    const pid = new URLSearchParams(window.location.search || '').get('id');
-    if (!pid || typeof CoreAPI === 'undefined' || !CoreAPI.reorderSteps) return;
-    const ordered = sortStepsForDisplay(createdSteps).filter(function(s) { return s && s.id; });
-    const orders = ordered.map(function(s) { return s.id; });
-    // Reorder's concurrency token is the newest step updated_at across the process.
-    const expectedUpdatedAt = ordered
-      .map(function(s) { return s.updated_at; })
-      .filter(Boolean)
-      .sort()
-      .pop();
-    try {
-      await CoreAPI.reorderSteps(pid, orders, expectedUpdatedAt);
-    } catch (e) {
-      if (typeof CoreAPI !== 'undefined' && CoreAPI.isStaleWrite && CoreAPI.isStaleWrite(e)) {
-        if (window.showNotification) {
-          window.showNotification(
-            'warning',
-            'Changed elsewhere',
-            'Someone else changed this process’s steps. Reloading the current order.'
-          );
-        }
-        await mergeProcessStepsFromApiForCurrentProcess(function() { return true; });
-        if (typeof updateStepSummaries === 'function') await updateStepSummaries();
-        return;
-      }
-      console.warn('persistStepOrderIfPossible failed', e);
-    }
+    return persistStepOrder();
   }
 
   async function mergeProcessStepsFromApiForSummary(isCurrent) {
@@ -5969,436 +3534,24 @@
     await mergeProcessStepsFromApiForCurrentProcess(isCurrent);
   }
 
-  // Update step summaries display with expand/collapse
+  const processStepSummaryRenderer = window.ProcessModalStepSummary.create({
+    getCreatedSteps: function() { return createdSteps; },
+    setCreatedSteps: function(steps) { createdSteps = steps; },
+    loadWizardSessionMergeBase,
+    wizardSessionHasDraftStepData,
+    sortStepsForDisplay,
+    isProcessFlowSummaryPage,
+    resolveCurrentStepForSummary,
+    enrichStepForSummaryFromSession,
+    formatStep4ModeLabel,
+    persistStepOrderIfPossible,
+    updateStepSummaries: function() { return updateStepSummaries(); }
+  });
+
   async function updateStepSummaries() {
-    const summariesList = document.getElementById('step-summaries-list');
-    const summariesContainer = document.getElementById('step-summaries-container');
-    if (!summariesList || !summariesContainer) return;
-
-    const sessionSnap = loadWizardSessionMergeBase();
-    const hasPendingSessionStep = wizardSessionHasDraftStepData(sessionSnap);
-
-    if (createdSteps.length === 0 && !hasPendingSessionStep) {
-      summariesContainer.style.display = 'none';
-      const panel = document.getElementById('flow-compliance-panel');
-      if (panel) {
-        panel.style.display = 'none';
-        panel.innerHTML = '';
-      }
-      const summarySticky = document.getElementById('flow-wizard-summary-sticky');
-      if (summarySticky) summarySticky.style.display = 'none';
-      const heading = document.getElementById('step-summaries-heading');
-      if (heading) {
-        heading.textContent = 'Created Steps';
-        heading.style.marginTop = '0';
-      }
-      return;
-    }
-    
-    summariesContainer.style.display = 'block';
-    summariesList.innerHTML = '';
-
-    const sortedSteps = sortStepsForDisplay(createdSteps);
-    await renderCompliancePanel(sortedSteps);
-    if (isProcessFlowSummaryPage()) {
-      summariesList.style.display = 'none';
-      const summarySticky = document.getElementById('flow-wizard-summary-sticky');
-      if (summarySticky) summarySticky.style.display = createdSteps.length > 0 || hasPendingSessionStep ? '' : 'none';
-      return;
-    }
-    summariesList.style.display = '';
-
-    const spaPage = document.body && (document.body.getAttribute('data-page') === 'process-flow-spa' || document.body.getAttribute('data-page') === 'process-flow-wizard');
-    // Drag/drop reorder state (HTML5 DnD)
-    let dragStepId = null;
-
-    function onDragStart(e) {
-      const card = e.currentTarget;
-      dragStepId = card && card.dataset ? card.dataset.stepId : null;
-      try {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', dragStepId || '');
-      } catch (err) {}
-      card.classList.add('step-summary-dragging');
-    }
-
-    function onDragEnd(e) {
-      const card = e.currentTarget;
-      if (card) card.classList.remove('step-summary-dragging');
-      dragStepId = null;
-    }
-
-    async function onDropOnCard(e) {
-      e.preventDefault();
-      const targetCard = e.currentTarget;
-      const targetId = targetCard && targetCard.dataset ? targetCard.dataset.stepId : null;
-      const srcId = dragStepId || (function() { try { return e.dataTransfer.getData('text/plain'); } catch (err) { return null; } })();
-      if (!srcId || !targetId || srcId === targetId) return;
-
-      const srcIdx = createdSteps.findIndex(function(s) { return s && String(s.id) === String(srcId); });
-      const dstIdx = createdSteps.findIndex(function(s) { return s && String(s.id) === String(targetId); });
-      if (srcIdx < 0 || dstIdx < 0) return;
-
-      const moving = createdSteps[srcIdx];
-      createdSteps.splice(srcIdx, 1);
-      createdSteps.splice(dstIdx, 0, moving);
-
-      // Server will normalize positions; we only persist the new order.
-      createdSteps = [...createdSteps].map(function(s) { return { ...s }; });
-      if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
-      await persistStepOrderIfPossible();
-      await updateStepSummaries();
-    }
-
-    function onDragOver(e) {
-      e.preventDefault();
-      try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
-    }
-
-    sortedSteps.forEach((step, index) => {
-      const displayNumber = index + 1;
-      const stepId = `step-summary-${step.id || index}`;
-      const summaryCard = document.createElement('div');
-      summaryCard.id = stepId;
-      summaryCard.dataset.expanded = 'false';
-      if (step && step.id) summaryCard.dataset.stepId = step.id;
-      // Enable drag/drop reorder for persisted steps (have IDs).
-      if (step && step.id) {
-        summaryCard.setAttribute('draggable', 'true');
-        summaryCard.addEventListener('dragstart', onDragStart);
-        summaryCard.addEventListener('dragend', onDragEnd);
-        summaryCard.addEventListener('dragover', onDragOver);
-        summaryCard.addEventListener('drop', onDropOnCard);
-      }
-      if (spaPage) {
-        summaryCard.style.cssText =
-          'padding: 14px 0; border: none; border-radius: 0; background: transparent; overflow: hidden;' +
-          (index > 0 ? 'border-top: 1px solid var(--border-default, #e5e7eb);' : '');
-      } else {
-        summaryCard.style.cssText = 'background: var(--bg-card, #ffffff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); padding: 16px; overflow: hidden;';
-      }
-      
-      // Header (clickable to expand/collapse)
-      const stepHeader = document.createElement('div');
-      stepHeader.style.cssText = 'display: flex; align-items: center; gap: 12px; cursor: pointer;';
-      stepHeader.onclick = () => toggleStepSummary(stepId);
-
-      // Drag handle hint (clickable header still works; drag anywhere on card).
-      if (step && step.id) {
-        const dragHint = document.createElement('div');
-        dragHint.setAttribute('aria-hidden', 'true');
-        dragHint.style.cssText = 'color: var(--text-tertiary, #9ca3af); font-size: 16px; line-height: 1; user-select: none;';
-        dragHint.textContent = '⋮⋮';
-        stepHeader.appendChild(dragHint);
-      }
-      
-      const expandIcon = document.createElement('svg');
-      expandIcon.className = 'step-summary-expand-icon';
-      expandIcon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      expandIcon.setAttribute('width', '16');
-      expandIcon.setAttribute('height', '16');
-      expandIcon.setAttribute('viewBox', '0 0 24 24');
-      expandIcon.setAttribute('fill', 'none');
-      expandIcon.setAttribute('stroke', 'currentColor');
-      expandIcon.setAttribute('stroke-width', '2');
-      expandIcon.setAttribute('stroke-linecap', 'round');
-      expandIcon.setAttribute('stroke-linejoin', 'round');
-      expandIcon.style.cssText = 'transition: transform 0.2s; transform: rotate(0deg); color: var(--text-tertiary, #9ca3af); flex-shrink: 0;';
-      expandIcon.innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
-      stepHeader.appendChild(expandIcon);
-      
-      const stepNumber = document.createElement('div');
-      stepNumber.style.cssText = 'width: 32px; height: 32px; border-radius: 50%; background: var(--primary, #3b82f6); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; flex-shrink: 0;';
-      stepNumber.textContent = displayNumber;
-      stepHeader.appendChild(stepNumber);
-      
-      const stepInfo = document.createElement('div');
-      stepInfo.style.cssText = 'flex: 1;';
-      
-      const stepName = document.createElement('h4');
-      stepName.style.cssText = 'font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px 0;';
-      stepName.textContent = step.name;
-      stepInfo.appendChild(stepName);
-      
-      if (step.description) {
-        const stepDesc = document.createElement('p');
-        stepDesc.style.cssText = 'font-size: 13px; color: var(--text-secondary); margin: 0;';
-        stepDesc.textContent = step.description;
-        stepInfo.appendChild(stepDesc);
-      }
-      
-      stepHeader.appendChild(stepInfo);
-      summaryCard.appendChild(stepHeader);
-      
-      // Collapsed summary (always visible)
-      const collapsedSummary = document.createElement('div');
-      collapsedSummary.className = 'step-summary-collapsed';
-      collapsedSummary.style.cssText = 'margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light, #e5e7eb); font-size: 12px; color: var(--text-secondary);';
-      
-      const details = [];
-      if (step.inputs && step.inputs.length > 0) {
-        details.push(`${step.inputs.length} input${step.inputs.length > 1 ? 's' : ''}`);
-      }
-      if (step.outputs && step.outputs.length > 0) {
-        details.push(`${step.outputs.length} output${step.outputs.length > 1 ? 's' : ''}`);
-      }
-      if (step.execution_prompts && step.execution_prompts.length > 0) {
-        details.push(`${step.execution_prompts.length} prompt${step.execution_prompts.length > 1 ? 's' : ''}`);
-      }
-      
-      if (details.length > 0) {
-        collapsedSummary.textContent = details.join(' • ');
-        summaryCard.appendChild(collapsedSummary);
-      }
-      
-      // Expanded details (hidden by default)
-      const expandedDetails = document.createElement('div');
-      expandedDetails.className = 'step-summary-expanded';
-      expandedDetails.style.cssText = 'margin-top: 16px; padding-top: 16px; border-top: 2px solid var(--border-default, #e5e7eb); display: none;';
-      
-      // Inputs
-      if (step.inputs && step.inputs.length > 0) {
-        const inputsSection = document.createElement('div');
-        inputsSection.style.cssText = 'margin-bottom: 16px;';
-        const inputsTitle = document.createElement('h5');
-        inputsTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;';
-        inputsTitle.textContent = 'Inputs:';
-        inputsSection.appendChild(inputsTitle);
-        
-        step.inputs.forEach(input => {
-          const inputItem = document.createElement('div');
-          inputItem.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-sm); margin-bottom: 4px; font-size: 12px; color: var(--text-secondary);';
-          const quantity = input.quantity !== null && input.quantity !== undefined ? input.quantity : '';
-          const unit = input.unit || '';
-          inputItem.textContent = `• ${input.name}${quantity ? ` (${quantity} ${unit})` : unit ? ` (${unit})` : ''}`;
-          inputsSection.appendChild(inputItem);
-        });
-        expandedDetails.appendChild(inputsSection);
-      }
-      
-      // Outputs
-      if (step.outputs && step.outputs.length > 0) {
-        const outputsSection = document.createElement('div');
-        outputsSection.style.cssText = 'margin-bottom: 16px;';
-        const outputsTitle = document.createElement('h5');
-        outputsTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;';
-        outputsTitle.textContent = 'Outputs:';
-        outputsSection.appendChild(outputsTitle);
-        
-        step.outputs.forEach(output => {
-          const outputItem = document.createElement('div');
-          outputItem.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-sm); margin-bottom: 4px; font-size: 12px; color: var(--text-secondary);';
-          const quantity = output.quantity !== null && output.quantity !== undefined ? output.quantity : '';
-          const unit = output.unit || '';
-          outputItem.textContent = `• ${output.name}${quantity ? ` (${quantity} ${unit})` : unit ? ` (${unit})` : ''}`;
-          outputsSection.appendChild(outputItem);
-        });
-        expandedDetails.appendChild(outputsSection);
-      }
-      
-      // Prompts
-      if (step.execution_prompts && step.execution_prompts.length > 0) {
-        const promptsSection = document.createElement('div');
-        const promptsTitle = document.createElement('h5');
-        promptsTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;';
-        promptsTitle.textContent = 'Prompts:';
-        promptsSection.appendChild(promptsTitle);
-        
-        step.execution_prompts.forEach(prompt => {
-          const promptItem = document.createElement('div');
-          promptItem.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-sm); margin-bottom: 4px; font-size: 12px; color: var(--text-secondary);';
-          const unit = prompt.unit ? ` (${prompt.unit})` : '';
-          const required = prompt.required !== false ? 'Required' : 'Optional';
-          promptItem.textContent = `• ${prompt.label} - ${prompt.type}${unit} - ${required}`;
-          promptsSection.appendChild(promptItem);
-        });
-        expandedDetails.appendChild(promptsSection);
-      }
-
-      if (step.documentation_summary) {
-        const docSection = document.createElement('div');
-        docSection.style.cssText = 'margin-bottom: 16px;';
-        const docTitle = document.createElement('h5');
-        docTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;';
-        docTitle.textContent = 'Documentation:';
-        docSection.appendChild(docTitle);
-        const docItem = document.createElement('div');
-        docItem.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-sm); font-size: 12px; color: var(--text-secondary);';
-        docItem.textContent = step.documentation_summary;
-        docSection.appendChild(docItem);
-        expandedDetails.appendChild(docSection);
-      }
-
-      if (step.batch_number_mode || step.evidence_mode) {
-        const traceSection = document.createElement('div');
-        traceSection.style.cssText = 'margin-bottom: 16px;';
-        const traceTitle = document.createElement('h5');
-        traceTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 0 0 8px 0;';
-        traceTitle.textContent = 'Traceability:';
-        traceSection.appendChild(traceTitle);
-        if (step.batch_number_mode) {
-          const row = document.createElement('div');
-          row.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-sm); margin-bottom: 4px; font-size: 12px; color: var(--text-secondary);';
-          row.textContent = '• Batch / run ID: ' + formatStep4ModeLabel(step.batch_number_mode);
-          traceSection.appendChild(row);
-        }
-        if (step.evidence_mode) {
-          const row2 = document.createElement('div');
-          row2.style.cssText = 'padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-sm); margin-bottom: 4px; font-size: 12px; color: var(--text-secondary);';
-          row2.textContent = '• Evidence capture: ' + formatStep4ModeLabel(step.evidence_mode);
-          traceSection.appendChild(row2);
-        }
-        expandedDetails.appendChild(traceSection);
-      }
-
-      summaryCard.appendChild(expandedDetails);
-      summariesList.appendChild(summaryCard);
-    });
-  }
-  
-  function mapApiInputToWizardSessionInput(apiIn) {
-    if (!apiIn) {
-      return {
-        inputType: 'new',
-        name: '',
-        quantity: null,
-        unit: '',
-        executionType: 'variable',
-        inventoryPreselected: false,
-        is_variable: true,
-        requires_inventory_selection: true
-      };
-    }
-    const inputType = apiIn.source_output_id ? 'previous_output' : (apiIn.requires_inventory_selection ? 'inventory' : 'new');
-    const name = summaryInputDisplayName(apiIn);
-    let executionType = 'variable';
-    if (inputType === 'previous_output') {
-      executionType = apiIn.is_variable !== false ? 'variable' : 'static';
-    } else if (inputType === 'inventory') {
-      executionType = apiIn.requires_inventory_selection ? 'variable' : 'static';
-    } else {
-      executionType = apiIn.is_variable !== false ? 'variable' : 'static';
-    }
-    const qty = apiIn.quantity;
-    let quantity = null;
-    if (qty != null && qty !== '') {
-      const n = typeof qty === 'number' ? qty : parseFloat(String(qty).trim());
-      quantity = isNaN(n) ? null : n;
-    }
-    const isPreviousOutput = inputType === 'previous_output';
-    const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
-    const requiresInventorySelection = isPreviousOutput ? true : executionType === 'variable';
-    return {
-      inputType,
-      name,
-      quantity,
-      unit: apiIn.unit || '',
-      executionType,
-      source_output_id: apiIn.source_output_id || undefined,
-      previousOutputDisplayName:
-        apiIn.previous_output_display_name || apiIn.previousOutputDisplayName || undefined,
-      expected_inventory_type: apiIn.expected_inventory_type || undefined,
-      inventoryPreselected: false,
-      is_variable: isVariable,
-      requires_inventory_selection: requiresInventorySelection
-    };
+    return processStepSummaryRenderer.updateStepSummaries();
   }
 
-  function mapApiOutputToWizardSessionOutput(apiOut) {
-    if (!apiOut) {
-      return {
-        id: null,
-        name: '',
-        unit: '',
-        quantity: null,
-        is_variable: true,
-        requires_execution_confirmation: true
-      };
-    }
-    const qty = apiOut.quantity;
-    let quantity = null;
-    if (qty != null && qty !== '') {
-      const n = typeof qty === 'number' ? qty : parseFloat(String(qty).trim());
-      quantity = isNaN(n) ? null : n;
-    }
-    const out = {
-      id: apiOut.id || null,
-      name: summaryOutputDisplayName(apiOut),
-      unit: apiOut.unit || '',
-      quantity,
-      is_variable: apiOut.is_variable !== false,
-      requires_execution_confirmation: apiOut.requires_execution_confirmation !== false
-    };
-    if (apiOut.extra_data && typeof apiOut.extra_data === 'object') {
-      out.extra_data = JSON.parse(JSON.stringify(apiOut.extra_data));
-    }
-    return out;
-  }
-
-  /**
-   * Session v1 payload compatible with restoreSpaWizardState / serializeSpaWizardState (deep-link edit).
-   */
-  function buildSpaWizardSessionPayloadFromApiStep(step, opts) {
-    const urlPid = opts && opts.processId != null ? opts.processId : null;
-    const workflowProcessName =
-      opts && opts.workflowProcessName != null ? String(opts.workflowProcessName).trim() : '';
-    const tm = deriveTraceabilityModes(step);
-    const inputs = (step.inputs || []).map(mapApiInputToWizardSessionInput);
-    const outputs = (step.outputs || []).map(mapApiOutputToWizardSessionOutput);
-    const prompts = (step.execution_prompts || []).filter(isCustomExecutionPrompt).map(function(p) {
-      return {
-        label: (p.label || '').trim(),
-        type: p.type || 'text',
-        unit: (p.unit || '').trim(),
-        required: p.required !== false,
-        ...(p.type === 'select' ? { options: normalisePromptOptions(p.options) } : {})
-      };
-    });
-    return {
-      v: 1,
-      stepName: step.name || '',
-      stepDescription: step.description || '',
-      workflowProcessName,
-      inputs,
-      outputs,
-      prompts,
-      batchNumberMode: tm.batch,
-      evidenceMode: tm.evidence,
-      inputTab: 'inventory',
-      editingStepId: step.id || null,
-      createdSteps: JSON.parse(JSON.stringify(createdSteps)),
-      docInlineTitle: '',
-      docInlineContent: '',
-      processId: urlPid,
-      docFileUpload: null
-    };
-  }
-
-  // Toggle step summary expand/collapse
-  function toggleStepSummary(stepId) {
-    const summaryCard = document.getElementById(stepId);
-    if (!summaryCard) return;
-    
-    const expandedDetails = summaryCard.querySelector('.step-summary-expanded');
-    const collapsedSummary = summaryCard.querySelector('.step-summary-collapsed');
-    const expandIcon = summaryCard.querySelector('.step-summary-expand-icon');
-    
-    if (!expandedDetails || !expandIcon) return;
-    
-    const isExpanded = summaryCard.dataset.expanded === 'true';
-    if (isExpanded) {
-      expandedDetails.style.display = 'none';
-      if (collapsedSummary) collapsedSummary.style.display = 'block';
-      expandIcon.style.transform = 'rotate(0deg)';
-      summaryCard.dataset.expanded = 'false';
-    } else {
-      expandedDetails.style.display = 'block';
-      if (collapsedSummary) collapsedSummary.style.display = 'none';
-      expandIcon.style.transform = 'rotate(180deg)';
-      summaryCard.dataset.expanded = 'true';
-    }
-  }
-  
   // Start editing an existing step (from the "existing steps" view when editing a non-draft process)
   window.startEditingStep = async function(stepId) {
     const step = createdSteps.find(s => String(s.id) === String(stepId));
@@ -6418,53 +3571,25 @@
    * Deep-link / resume: ?edit=<stepId> on step wizard SPA pages (after mergeProcessStepsFromApiForCurrentProcess).
    * Each route mounts partial DOM; seed session from the API step then restore so inputs/outputs/evidence load correctly.
    */
-  async function applyEditStepFromUrl(stepId, isCurrent) {
-    const current = typeof isCurrent === 'function' ? isCurrent : function() { return true; };
-    if (!current()) return;
-    const step = createdSteps.find(function (s) {
-      return s && String(s.id) === String(stepId);
-    });
-    if (!step) {
-      console.warn('applyEditStepFromUrl: step not in createdSteps', stepId);
-      return;
-    }
-    const urlPid = new URLSearchParams(window.location.search || '').get('id');
-    let workflowProcessName = '';
-    if (urlPid && typeof CoreAPI !== 'undefined' && CoreAPI.getProcess) {
-      try {
-        const proc = await CoreAPI.getProcess(urlPid);
-        if (!current()) return;
-        if (proc && proc.name != null) workflowProcessName = String(proc.name).trim();
-      } catch (e) {}
-    }
-
-    editingStepId = step.id;
-    resetForm(true);
-
-    const payload = buildSpaWizardSessionPayloadFromApiStep(step, {
-      processId: urlPid,
-      workflowProcessName
-    });
-    try {
-      sessionStorage.setItem(getProcessFlowSpaStorageKey(), JSON.stringify(payload));
-    } catch (e) {
-      console.warn('applyEditStepFromUrl session seed failed', e);
-    }
-
-    if (typeof window.restoreSpaWizardState === 'function') {
-      await window.restoreSpaWizardState({ isCurrent: current });
-    }
-    if (!current()) return;
-
-    const indicators = document.getElementById('create-process-step-indicators');
-    if (indicators) indicators.style.display = 'flex';
-    const slug = document.body.getAttribute('data-flow-wizard-page');
-    const slugToStep = { 'step-name': 1, inputs: 2, outputs: 3, 'evidence-and-prompts': 4 };
-    if (slug && slugToStep[slug]) {
-      currentStep = slugToStep[slug];
-    }
-    updateStepDisplay();
-  }
+  const applyEditStepFromUrl = window.ProcessModalDeepLinkEdit.create({
+    getCoreApi: function() { return typeof CoreAPI === 'undefined' ? null : CoreAPI; },
+    getCreatedSteps: function() { return createdSteps; },
+    setEditingStepId: function(stepId) { editingStepId = stepId; },
+    resetForm,
+    buildSessionPayload: function(step, opts) {
+      return window.ProcessModalApiSession.buildSpaWizardSessionPayloadFromApiStep(step, opts, {
+        createdSteps,
+        deriveTraceabilityModes,
+        mapApiInputToWizardSessionInput,
+        mapApiOutputToWizardSessionOutput,
+        isCustomExecutionPrompt,
+        normalisePromptOptions
+      });
+    },
+    getProcessFlowSpaStorageKey,
+    setCurrentStep: function(step) { currentStep = step; },
+    updateStepDisplay
+  });
   window.applyEditStepFromUrl = applyEditStepFromUrl;
   
   // Add new step from the "existing steps" view (when editing a non-draft process)

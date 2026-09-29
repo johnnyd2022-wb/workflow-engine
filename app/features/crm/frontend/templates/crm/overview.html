@@ -477,6 +477,7 @@
                 </tbody>
               </table>
               <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+                <a class="crm-btn crm-btn--secondary crm-btn--sm" :href="'/core/sourcemap?invoice=' + encodeURIComponent(inv.xero_invoice_id)" x-show="inv.xero_invoice_id">Trace stock</a>
                 <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click.stop="viewInvoice(inv)">View</button>
                 <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click.stop="downloadInvoice(inv)" :disabled="invoiceDownloadId === inv.id">
                   <span x-text="invoiceDownloadId === inv.id ? 'Downloading…' : 'Download PDF'"></span>

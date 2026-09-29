@@ -22,6 +22,8 @@
   var activeCategory;
   var activeFilter = 'all';
   var searchQuery = '';
+  var initialFilter = new URLSearchParams(window.location.search).get('filter');
+  if (['ok', 'attention', 'overdue', 'due-soon', 'remediation'].includes(initialFilter)) activeFilter = initialFilter;
 
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
   function text(tag, value, className) {
@@ -153,10 +155,10 @@
     var category = (audit.categories || []).filter(function (item) { return item.key === activeCategory; })[0];
     if (!category) return;
     var searching = Boolean(searchQuery);
-    var allRows = searching ? (audit.rows || []) : (rowsByCategory[category.key] || []);
+    var allRows = searching || activeFilter !== 'all' ? (audit.rows || []) : (rowsByCategory[category.key] || []);
     var matchingRows = allRows.filter(matchesSearch);
     var visibleRows = matchingRows.filter(matchesFilter);
-    activeCategoryHeading.textContent = searching ? 'Search results' : category.title;
+    activeCategoryHeading.textContent = searching ? 'Search results' : activeFilter !== 'all' ? 'Checks matching this health view' : category.title;
     var section = document.createElement('section');
     section.className = 'np3-category';
     section.id = 'np3-category-panel';
@@ -254,13 +256,15 @@
     var stats = audit.core_evidence || {};
     var live = stats.live_np3_evidence || {};
     var data = [
-      [live.dag_traced_final_products || 0, 'traceable product batches'],
-      [stats.completed_core_steps_with_captured_data || 0, 'completed execution records'],
-      [stats.active_core_evidence_files || 0, 'active evidence files'],
-      [live.supplier_identified_materials || 0, 'material records with supplier']
+      [live.dag_traced_final_products || 0, 'traceable product batches', '/core/inventory/live'],
+      [stats.completed_core_steps_with_captured_data || 0, 'completed execution records', '/core/executions/live'],
+      [stats.active_core_evidence_files || 0, 'active files attached to executions', '/core/executions/live'],
+      [live.supplier_identified_materials || 0, 'material records with supplier', '/core/inventory/live']
     ];
     data.forEach(function (item) {
-      var stat = document.createElement('div');
+      var stat = document.createElement('a');
+      stat.href = item[2];
+      stat.setAttribute('hx-boost', 'false');
       stat.appendChild(text('strong', String(item[0])));
       stat.appendChild(text('span', item[1]));
       coreStats.appendChild(stat);

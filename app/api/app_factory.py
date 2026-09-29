@@ -632,9 +632,13 @@ def create_app():
         # in the Docker image the files are immutable, so scan once at boot.
         autorefresh=(config.environment == "local"),
     )
+    from app.core.backend.static_assets import core_asset_directories
+
     _core_frontend = os.path.join(app_dir, "core", "frontend")
-    app.wsgi_app.add_files(os.path.join(_core_frontend, "js"), prefix="static/js/")
-    app.wsgi_app.add_files(os.path.join(_core_frontend, "css"), prefix="static/css/")
+    for asset_dir in core_asset_directories("js"):
+        app.wsgi_app.add_files(str(asset_dir), prefix="static/js/")
+    for asset_dir in core_asset_directories("css"):
+        app.wsgi_app.add_files(str(asset_dir), prefix="static/css/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory_static"), prefix="static/inventory/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
     if crm_available:

@@ -43,13 +43,14 @@ def signed_in_response(principal, token):
             digest = None
         if digest:
             with unscoped():
-                db_session().query(PortalSession).filter_by(token_hash=digest, revoked_at=None).update(
-                    {"revoked_at": datetime.now(UTC)}, synchronize_session=False
-                )
+                # The opaque token hash is globally unique; no org is known before lookup.
+                db_session().query(PortalSession).filter(
+                    PortalSession.token_hash == digest, PortalSession.revoked_at.is_(None)
+                ).update({"revoked_at": datetime.now(UTC)}, synchronize_session=False)
             db_session().commit()
     session.clear()
-    g.pop("csrf_token", None)
     session.permanent = True
+    g.pop("csrf_token", None)
     session["portal_customer_hint"] = str(principal.customer_id)
     response = make_response(jsonify({"redirect": "/portal"}))
     response.set_cookie(
@@ -64,19 +65,19 @@ def signed_in_response(principal, token):
     return response
 
 
-@bp.get("/login")
+@bp.get("/login")  # nosemgrep: route-missing-requires-auth -- public sign-in page
 def login_page():
     return render_template(
         "portal/login.html", customer_key=request.args.get("customer") or session.get("portal_customer_hint")
     )
 
 
-@bp.get("/invite")
+@bp.get("/invite")  # nosemgrep: route-missing-requires-auth -- public invitation page
 def invite_page():
     return render_template("portal/invite.html")
 
 
-@bp.post("/api/login")
+@bp.post("/api/login")  # nosemgrep: route-missing-requires-auth -- credential exchange
 @limiter.limit("10 per minute; 50 per hour", key_func=get_remote_address)
 @handled
 def login():
@@ -85,7 +86,7 @@ def login():
     return signed_in_response(principal, raw)
 
 
-@bp.post("/api/accept")
+@bp.post("/api/accept")  # nosemgrep: route-missing-requires-auth -- invitation exchange
 @limiter.limit("10 per minute; 30 per hour", key_func=get_remote_address)
 @handled
 def accept():
@@ -103,6 +104,7 @@ def logout():
     audit(db_session(), g.portal_principal.org_id, "signed_out", g.portal_principal)
     db_session().commit()
     session.clear()
+    session.permanent = True
     g.pop("csrf_token", None)
     session["portal_customer_hint"] = str(g.portal_principal.customer_id)
     response = make_response(jsonify({"redirect": f"/portal/login?customer={g.portal_principal.customer_id}"}))

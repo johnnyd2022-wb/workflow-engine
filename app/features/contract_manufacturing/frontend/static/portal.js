@@ -14,7 +14,7 @@
     target.hidden = false;
   };
   const post = async (path, body) => {
-    const response = await fetch(path, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content}, body: JSON.stringify(body)});
+    const response = await fetch(path, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content}, body: JSON.stringify(body)}); // nosemgrep: raw-fetch-post, sequential-independent-awaits -- explicit CSRF; response body depends on fetch
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || 'Unable to continue.');
     location.assign(result.redirect);

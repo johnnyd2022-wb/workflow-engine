@@ -33,7 +33,7 @@ class SalesTraceabilityService:
         self.inventory = InventoryRepository(db)
         self.config_repo = SalesTraceabilityConfigRepository(db)
 
-    def reconcile_org(self, org_id: UUID) -> dict[str, int]:
+    def reconcile_org(self, org_id: UUID, *, sync_job_id: UUID | None = None) -> dict[str, int]:
         """Backfill and incrementally maintain FIFO allocations for all synced sales.
 
         Reconciliation intentionally examines the local invoice snapshot, rather than
@@ -52,11 +52,13 @@ class SalesTraceabilityService:
         if confirmed:
             summary["auto_confirmed"] += confirmed
         for invoice in invoices:
-            for key, value in self._reconcile_invoice(org_id, invoice).items():
+            for key, value in self._reconcile_invoice(org_id, invoice, sync_job_id=sync_job_id).items():
                 summary[key] += value
         return dict(summary)
 
-    def _reconcile_invoice(self, org_id: UUID, invoice: XeroInvoice) -> dict[str, int]:
+    def _reconcile_invoice(
+        self, org_id: UUID, invoice: XeroInvoice, *, sync_job_id: UUID | None = None
+    ) -> dict[str, int]:
         line_items = (
             self.db.query(XeroInvoiceLineItem)
             .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id == invoice.id)
@@ -67,7 +69,9 @@ class SalesTraceabilityService:
             invoice.status or ""
         ).upper() in _SALE_STATUSES
         if not active_sale:
-            restored = self._reverse_invoice_allocations(org_id, invoice.xero_invoice_id)
+            restored = self._reverse_invoice_allocations(
+                org_id, invoice.xero_invoice_id, invoice=invoice, sync_job_id=sync_job_id
+            )
             return {"reversed": restored} if restored else {}
 
         # Plan 1.3: tracing starts at go-live. An earlier sale stays in sales reporting but
@@ -88,6 +92,13 @@ class SalesTraceabilityService:
             self.db.query(ProductMapping)
             .filter(ProductMapping.org_id == org_id, ProductMapping.is_active.is_(True))
             .all()
+        )
+        contact = (
+            self.db.query(XeroContact)
+            .filter(XeroContact.org_id == org_id, XeroContact.id == invoice.contact_id)
+            .first()
+            if invoice.contact_id
+            else None
         )
         summary = defaultdict(int)
         for index, line in enumerate(line_items):
@@ -118,7 +129,7 @@ class SalesTraceabilityService:
                 summary["awaiting_assignment"] += 1
                 continue
             if existing:
-                self._reverse_allocations(existing)
+                self._reverse_allocations(existing, invoice=invoice, contact=contact, sync_job_id=sync_job_id)
             reference = _line_reference(invoice.xero_invoice_id, line_key)
             try:
                 consumed = self.inventory.consume_final_product_fifo(
@@ -127,6 +138,16 @@ class SalesTraceabilityService:
                     quantity,
                     reference=reference,
                     source_output_id=match.biz_e_source_output_id,
+                    sale_context={
+                        "product_name": match.biz_e_product_name,
+                        "action": "sale",
+                        "quantity_sold": str(quantity),
+                        "invoice_number": invoice.invoice_number or invoice.xero_invoice_id,
+                        "customer_name": contact.name if contact else "Unknown customer",
+                        "item_code": line.item_code,
+                        "sync_job_id": str(sync_job_id) if sync_job_id else None,
+                    },
+                    correlation_id=sync_job_id,
                     commit=False,
                 )
             except ValueError as exc:
@@ -597,22 +618,60 @@ class SalesTraceabilityService:
             and sum((parse_stored_quantity_to_decimal(row.quantity) for row in existing), Decimal("0")) == quantity
         )
 
-    def _reverse_invoice_allocations(self, org_id: UUID, invoice_id: str) -> int:
+    def _reverse_invoice_allocations(
+        self,
+        org_id: UUID,
+        invoice_id: str,
+        *,
+        invoice: XeroInvoice | None = None,
+        sync_job_id: UUID | None = None,
+    ) -> int:
         allocations = (
             self.db.query(SalesFifoAllocation)
             .filter(SalesFifoAllocation.org_id == org_id, SalesFifoAllocation.xero_invoice_id == invoice_id)
             .order_by(SalesFifoAllocation.created_at.desc(), SalesFifoAllocation.id.desc())
             .all()
         )
-        return self._reverse_allocations(allocations)
+        return self._reverse_allocations(allocations, invoice=invoice, sync_job_id=sync_job_id)
 
-    def _reverse_allocations(self, allocations: list[SalesFifoAllocation]) -> int:
+    def _reverse_allocations(
+        self,
+        allocations: list[SalesFifoAllocation],
+        *,
+        invoice: XeroInvoice | None = None,
+        contact: XeroContact | None = None,
+        sync_job_id: UUID | None = None,
+    ) -> int:
+        if allocations and invoice is None:
+            invoice = (
+                self.db.query(XeroInvoice)
+                .filter(
+                    XeroInvoice.org_id == allocations[0].org_id,
+                    XeroInvoice.xero_invoice_id == allocations[0].xero_invoice_id,
+                )
+                .first()
+            )
+        if invoice is not None and contact is None and invoice.contact_id:
+            contact = (
+                self.db.query(XeroContact)
+                .filter(XeroContact.org_id == invoice.org_id, XeroContact.id == invoice.contact_id)
+                .first()
+            )
         for allocation in allocations:
             self.inventory.reverse_final_product_fifo_consumption(
                 allocation.org_id,
                 allocation.inventory_item_id,
                 allocation.quantity,
                 reference=_line_reference(allocation.xero_invoice_id, allocation.xero_line_key),
+                sale_context={
+                    "product_name": allocation.product_name,
+                    "action": "reversal",
+                    "quantity_sold": str(allocation.quantity),
+                    "invoice_number": (invoice.invoice_number or invoice.xero_invoice_id) if invoice else "",
+                    "customer_name": contact.name if contact else "Unknown customer",
+                    "sync_job_id": str(sync_job_id) if sync_job_id else None,
+                },
+                correlation_id=sync_job_id,
                 commit=False,
             )
             self.db.delete(allocation)

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -201,22 +202,131 @@ def _dashboard_event_log_period(
         session.query(EntityEvent)
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= period_start, EntityEvent.created_at < period_end)
+        .filter(EntityEvent.event_type.notin_(["user.login", "user.login_failed"]))
     )
-    total = q.count()
-    events = q.order_by(EntityEvent.created_at.desc()).limit(limit).all()
+    sync_job_expr = EntityEvent.payload["sync_job_id"].astext
+    is_sale_adjustment = (
+        (EntityEvent.event_type == "inventory_item.quantity_adjusted")
+        & func.coalesce(
+            EntityEvent.payload["reason"].astext.in_(["sales_fifo_consumption", "sales_fifo_reversal"]), False
+        )
+        & sync_job_expr.isnot(None)
+    )
+    sale_events_q = q.filter(is_sale_adjustment)
+    sale_sync_job_ids = sale_events_q.with_entities(sync_job_expr).distinct()
+    completed_sync_without_sales = (EntityEvent.event_type == "crm_xero.sync_completed") & (
+        sync_job_expr.is_(None) | ~sync_job_expr.in_(sale_sync_job_ids)
+    )
+    q = q.filter(~completed_sync_without_sales)
+    raw_total = q.count()
+    sale_events_q = q.filter(is_sale_adjustment)
+    sale_event_count = sale_events_q.count()
+    events = q.filter(~is_sale_adjustment).order_by(EntityEvent.created_at.desc()).limit(limit).all()
+    sync_events = {
+        str((event.payload or {}).get("sync_job_id")): event
+        for event in events
+        if event.event_type in {"crm_xero.sync_completed", "crm_xero.sync_failed"}
+        and (event.payload or {}).get("sync_job_id")
+    }
+    sales_by_sync: dict[str, list[Any]] = {}
+    if sync_events:
+        for event in sale_events_q.filter(sync_job_expr.in_(sync_events)).order_by(EntityEvent.created_at.desc()).all():
+            sync_job_id = str((event.payload or {}).get("sync_job_id"))
+            sales_by_sync.setdefault(sync_job_id, []).append(event)
+    ordinary_events = [
+        event
+        for event in events
+        if not (
+            event.event_type in {"crm_xero.sync_completed", "crm_xero.sync_failed"}
+            and str((event.payload or {}).get("sync_job_id")) in sales_by_sync
+        )
+    ]
+
     items = [
         {
-            "id": str(ev.id),
-            "event_type": ev.event_type,
-            "summary": _human_summary(ev),
-            "at": ev.created_at.isoformat() if ev.created_at else None,
-            "actor": ev.actor_label or "System",
-            "entity_type": ev.entity_type,
-            "entity_id": str(ev.entity_id) if ev.entity_id else None,
+            "id": str(event.id),
+            "event_type": event.event_type,
+            "summary": _human_summary(event),
+            "at": event.created_at.isoformat() if event.created_at else None,
+            "actor": event.actor_label or "System",
+            "entity_type": event.entity_type,
+            "entity_id": str(event.entity_id) if event.entity_id else None,
+            "_sort_at": event.created_at,
         }
-        for ev in events
+        for event in ordinary_events
     ]
-    return {"total": total, "items": items}
+    for sync_job_id, sale_events in sales_by_sync.items():
+        sync_event = sync_events.get(sync_job_id)
+        sales_by_line: dict[tuple[str, str], dict[str, Any]] = {}
+        for event in sale_events:
+            payload = event.payload or {}
+            sale = payload.get("sale") or {}
+            reference = str(payload.get("reference") or event.id)
+            action = str(sale.get("action") or "sale")
+            line = sales_by_line.setdefault(
+                (reference, action),
+                {
+                    "action": action,
+                    "product_name": sale.get("product_name") or payload.get("name") or "product",
+                    "quantity_sold": None if action == "reversal" else sale.get("quantity_sold"),
+                    "invoice_number": sale.get("invoice_number"),
+                    "customer_name": sale.get("customer_name"),
+                    "batches": {},
+                },
+            )
+            if action == "reversal" and sale.get("quantity_sold"):
+                line["quantity_sold"] = (line["quantity_sold"] or Decimal("0")) + Decimal(str(sale["quantity_sold"]))
+            batch = str(sale.get("batch_number") or "unlabelled batch")
+            batch_quantity = Decimal(str(sale.get("quantity_from_batch") or 0))
+            line["batches"][batch] = line["batches"].get(batch, Decimal("0")) + batch_quantity
+
+        details = []
+        for line in sales_by_line.values():
+            batch_text = ", ".join(
+                f"{('batch ' + name) if name != 'unlabelled batch' else name} ({format(quantity.normalize(), 'f')})"
+                for name, quantity in sorted(line["batches"].items())
+            )
+            quantity = line["quantity_sold"] or sum(line["batches"].values(), Decimal("0"))
+            quantity_text = format(Decimal(str(quantity)).normalize(), "f")
+            text = (
+                f"{'Sale reversed' if line['action'] == 'reversal' else 'Sold'} "
+                f"{quantity_text} × {line['product_name']} ({batch_text})"
+            )
+            if line["invoice_number"]:
+                text += f", {line['invoice_number']}"
+            if line["customer_name"]:
+                text += f", {line['customer_name']}"
+            details.append(text)
+
+        event_source = sync_event or sale_events[0]
+        timestamp = max((event.created_at for event in sale_events if event.created_at), default=None)
+        if sync_event and sync_event.created_at and (timestamp is None or sync_event.created_at > timestamp):
+            timestamp = sync_event.created_at
+        failed = sync_event and sync_event.event_type == "crm_xero.sync_failed"
+        sync_summary = (
+            f"Xero sync {'failed' if failed else 'sales activity'}: "
+            f"{len(details)} sale line{'s' if len(details) != 1 else ''} across "
+            f"{len(sale_events)} batch update{'s' if len(sale_events) != 1 else ''}"
+        )
+        items.append(
+            {
+                "id": str(event_source.id),
+                "event_type": "crm_xero.sales_activity",
+                "summary": sync_summary,
+                "at": timestamp.isoformat() if timestamp else None,
+                "actor": (sync_event.actor_label if sync_event else None) or "System",
+                "entity_type": "xero_sync_job",
+                "entity_id": str(sync_event.entity_id) if sync_event else sync_job_id,
+                "details": details,
+                "_sort_at": timestamp,
+            }
+        )
+    items.sort(key=lambda item: item["_sort_at"] or datetime.min.replace(tzinfo=UTC), reverse=True)
+    total = raw_total - sale_event_count
+    return {
+        "total": total,
+        "items": [{key: value for key, value in item.items() if key != "_sort_at"} for item in items[:limit]],
+    }
 
 
 def _dashboard_operations_summary(
@@ -325,6 +435,7 @@ def _dashboard_event_counts_by_day(
         )
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= start_dt, EntityEvent.created_at < end_dt)
+        .filter(EntityEvent.event_type.notin_(["user.login", "user.login_failed"]))
     )
     if actor_type:
         q = q.filter(EntityEvent.actor_type == actor_type)
@@ -474,6 +585,30 @@ def _dashboard_operations_weekly_summary(org_id: UUID, session, now_dt: datetime
     }
 
 
+def _dashboard_module_milestone(value: Any) -> dict[str, Any] | None:
+    """Validate an optional module-owned date without interpreting its domain."""
+    if not isinstance(value, dict):
+        return None
+    label = value.get("label")
+    overdue = value.get("overdue")
+    raw_date = value.get("date")
+    if not isinstance(label, str) or not label.strip() or not isinstance(overdue, bool):
+        return None
+    if raw_date is not None:
+        if not isinstance(raw_date, str):
+            return None
+        try:
+            if date.fromisoformat(raw_date).isoformat() != raw_date:
+                return None
+        except ValueError:
+            return None
+    milestone = {"label": label.strip(), "date": raw_date, "overdue": overdue}
+    detail = value.get("detail")
+    if isinstance(detail, str) and detail.strip():
+        milestone["detail"] = detail.strip()
+    return milestone
+
+
 def _dashboard_module_workspace_summaries(check_results: list[Any], workspace: str) -> list[dict[str, Any]]:
     """Project module-owned Dashboard summaries without knowing module check IDs."""
     summaries = []
@@ -499,6 +634,9 @@ def _dashboard_module_workspace_summaries(check_results: list[Any], workspace: s
                     "overdue": max(0, int(summary.get("overdue") or 0)),
                 }
             )
+            milestone = _dashboard_module_milestone(summary.get("milestone"))
+            if milestone is not None:
+                summaries[-1]["milestone"] = milestone
         except (TypeError, ValueError):
             continue
     return summaries
@@ -588,7 +726,13 @@ def _dashboard_compliant_workspace_summary(
 
 
 def _dashboard_build_action_board(
-    tasks_summary: dict[str, Any], compliance: dict[str, Any], compliant_workspace: dict[str, Any] | None = None
+    tasks_summary: dict[str, Any],
+    compliance: dict[str, Any],
+    compliant_workspace: dict[str, Any] | None = None,
+    *,
+    check_results: list[Any] | None = None,
+    stalled_batches: int = 0,
+    today: date | None = None,
 ) -> dict[str, Any]:
     findings = (compliance or {}).get("findings") or {}
     output_expiry = findings.get("output_expiry") or {}
@@ -636,6 +780,22 @@ def _dashboard_build_action_board(
             "workspace": "Sales",
         },
         {
+            "key": "tasks_due_today",
+            "label": "Customer tasks due today",
+            "count": (tasks_summary or {}).get("due_today_count") or 0,
+            "severity": "medium",
+            "href": "/crm/tasks",
+            "workspace": "Sales",
+        },
+        {
+            "key": "stalled_batches",
+            "label": "Production batches idle for more than 48 hours",
+            "count": stalled_batches,
+            "severity": "medium",
+            "href": "/core/executions/live",
+            "workspace": "Production",
+        },
+        {
             "key": "compliant_evidence",
             "label": "Compliance evidence records needing attention",
             "count": (compliant_workspace or {}).get("attention_count") or 0,
@@ -644,6 +804,31 @@ def _dashboard_build_action_board(
             "workspace": "Compliance",
         },
     ]
+
+    today = today or date.today()
+    for result in check_results or []:
+        data = result.data if isinstance(getattr(result, "data", None), dict) else {}
+        alerts = data.get("system_alerts") if isinstance(data, dict) else None
+        for alert in alerts if isinstance(alerts, list) else []:
+            if not isinstance(alert, dict):
+                continue
+            due = _dashboard_parse_due_date(alert.get("due_date"))
+            if due is None or due > today + timedelta(days=30):
+                continue
+            href = alert.get("href")
+            if not isinstance(href, str) or not href.startswith("/") or href.startswith("//"):
+                href = "/core/notifications"
+            due_label = "overdue" if due < today else "due " + due.isoformat()
+            candidates.append(
+                {
+                    "key": "compliance_due_" + str(alert.get("id") or len(candidates)),
+                    "label": str(alert.get("title") or "Compliance review") + " · " + due_label,
+                    "count": 1,
+                    "severity": "high" if due < today else "medium",
+                    "href": href,
+                    "workspace": "Compliance",
+                }
+            )
 
     severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "informational": 4}
     items = [item for item in candidates if (item.get("count") or 0) > 0]
@@ -693,6 +878,7 @@ def get_dashboard_summary():
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= week_start, EntityEvent.created_at < next_week_start)
         .filter(EntityEvent.actor_type == "user")
+        .filter(EntityEvent.event_type.notin_(["user.login", "user.login_failed"]))
         .count()
     )
     audit_log = {
@@ -767,7 +953,14 @@ def get_dashboard_summary():
         db_session,
         module_summaries=_dashboard_module_workspace_summaries(check_results, "compliant"),
     )
-    action_board = _dashboard_build_action_board(tasks_summary, compliance, compliant_workspace)
+    action_board = _dashboard_build_action_board(
+        tasks_summary,
+        compliance,
+        compliant_workspace,
+        check_results=check_results,
+        stalled_batches=int(operations_week_summary.get("stalled_active_over_48h") or 0),
+        today=today,
+    )
     operator_series = _dashboard_series_from_date_counts(
         _dashboard_event_counts_by_day(org_id, db_session, week_start, next_week_start, actor_type="user"),
         start_day=week_start.date(),
