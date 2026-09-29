@@ -25,6 +25,12 @@
 </section>
 <section>
 <h2>8. Delivery</h2>
+{% if order.delivery.declared_duty_responsibility %}
+<p>
+  Order declaration:
+  {% if order.delivery.declared_duty_responsibility == 'producer_licensee' %}producer licensee responsible for excise{% elif order.delivery.declared_duty_responsibility == 'customer_licensee' %}customer licensee responsible for excise{% elif order.delivery.declared_duty_responsibility == 'customer_underbond' %}customer CCA underbond arrangement declared{% else %}duty responsibility unresolved{% endif %}{% if order.delivery.customer_cca_reference %} · Customer CCA reference {{ order.delivery.customer_cca_reference }}{% endif %}.
+</p>
+{% endif %}
 <p>{{ order.delivery.reason }}</p>
 </section>
 <section>

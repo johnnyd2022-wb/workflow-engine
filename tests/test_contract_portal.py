@@ -188,6 +188,12 @@ def test_immutable_projection_and_explicit_unavailable_fields(portal_world, db):
     for key in ("timing", "materials", "yield", "delivery", "waiting_on_you"):
         assert payload[key]["available"] is False
     assert payload["timing"]["forecast_ready_date"] is None and payload["quality"]["qc_passed"] is None
+    assert payload["delivery"] == {
+        "available": False,
+        "declared_duty_responsibility": "producer_licensee",
+        "customer_cca_reference": None,
+        "reason": "Dispatch, Customs treatment and payment have not been verified or shared",
+    }
     assert all(
         key not in response.get_data(as_text=True)
         for key in (
@@ -223,6 +229,32 @@ def test_immutable_projection_and_explicit_unavailable_fields(portal_world, db):
     with pytest.raises(InternalError):
         db.flush()
     db.rollback()
+
+
+@pytest.mark.parametrize("responsibility", ["producer_licensee", "customer_licensee", "customer_underbond"])
+def test_portal_shares_declared_duty_without_claiming_movement_or_payment(portal_world, responsibility):
+    w = portal_world
+    order_id = w["orders"][0]["id"]
+    reference = "CCA-<script>alert(1)</script>" if responsibility != "producer_licensee" else None
+    if reference:
+        response = w["clients"][0].patch(
+            f"/api/core/contract-orders/{order_id}",
+            json={"duty_responsibility": responsibility, "customer_cca_reference": reference},
+        )
+        assert response.status_code == 200, response.get_json()
+    _publish(w)
+    customer = _accept(w)
+    shared = customer.get(f"/portal/api/orders/{order_id}").get_json()["order"]
+    assert shared["delivery"]["declared_duty_responsibility"] == responsibility
+    assert shared["delivery"]["customer_cca_reference"] == reference
+    assert shared["delivery"]["available"] is False
+    assert "paid" not in str(shared["delivery"]).lower() and "lodged" not in str(shared["delivery"]).lower()
+    page = customer.get(f"/portal/orders/{order_id}").get_data(as_text=True)
+    assert "Order declaration:" in page and "have not been verified or shared" in page
+    assert "<script>alert(1)</script>" not in page
+    if reference:
+        assert "CCA-&lt;script&gt;alert(1)&lt;/script&gt;" in page
+    assert w["clients"][1].get(f"/api/core/contract-orders/{order_id}").status_code == 404
 
 
 def test_complete_hostile_portal_route_walk(portal_world):
@@ -534,4 +566,5 @@ def test_customer_boundary_ignores_future_private_snapshot_fields(portal_world, 
         "lines": [{**payload["quantities"]["lines"][0], "recipe_instructions": "secret"}],
     }
     payload["waiting_on_you"] = {**payload["waiting_on_you"], "messages": [{"private_notes": "secret"}]}
+    payload["delivery"] = {**payload["delivery"], "confirmed_duty_status": "secret"}
     assert "secret" not in str(publication_dto(payload))
