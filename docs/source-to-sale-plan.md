@@ -901,6 +901,11 @@ Founder decisions for this phase:
       (free-issue: received as lots owned by the customer, kept out of the producer's own
       stock value, usable only for that customer's orders), by the producer, or a mix.
       Lineage stays intact either way, so a recall works across both.
+      - [x] Trusted material-scope prerequisite (!437): locked execution/order resolver,
+        raw-material owner preflight and consistent batch-link lock ordering, with a
+        concurrent-assignment regression. Owner schema/DB guards, production hook,
+        receipts, transfer conservation and producer valuation/sales exclusions remain
+        open; customer receipts are not enabled by this prerequisite.
     - [ ] c. **Duty either way.** Per order: who is liable for excise (the producer as
       licensee, the customer as licensee, or goods leaving underbond to the customer's
       CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the

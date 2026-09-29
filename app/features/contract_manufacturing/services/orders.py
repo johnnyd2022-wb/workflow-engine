@@ -206,7 +206,7 @@ class ContractOrderService:
         query = self.db.query(ContractOrder).filter(
             ContractOrder.org_id == self.org_id, ContractOrder.id == identifier(order_id, "order_id")
         )
-        row = query.with_for_update().first() if lock else query.first()
+        row = query.with_for_update().populate_existing().first() if lock else query.first()
         if row is None:
             raise OrderError("Order not found", 404)
         return row
@@ -396,18 +396,21 @@ class ContractOrderService:
         return row
 
     def link_batch(self, order_id, line_id, execution_id):
-        order = self.order(order_id, lock=True)
-        line = self.line(order.id, line_id)
-        if order.status != "confirmed":
-            raise OrderError("Confirm the order before linking batches", 409)
+        # Production locks execution before its contract scope. Protect both an
+        # existing assignment and its absence with the same order of locks.
         execution = (
             self.db.query(Execution)
             .filter(Execution.org_id == self.org_id, Execution.id == identifier(execution_id, "execution_id"))
             .with_for_update()
+            .populate_existing()
             .first()
         )
         if execution is None:
             raise OrderError("Batch not found", 404)
+        order = self.order(order_id, lock=True)
+        line = self.line(order.id, line_id)
+        if order.status != "confirmed":
+            raise OrderError("Confirm the order before linking batches", 409)
         if execution.status in {ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}:
             raise OrderError("Failed or cancelled batches cannot be linked", 409)
         if line.process_id and line.process_id != execution.process_id:
@@ -447,6 +450,15 @@ class ContractOrderService:
         return row
 
     def unlink_batch(self, order_id, line_id, execution_id):
+        execution = (
+            self.db.query(Execution)
+            .filter(Execution.org_id == self.org_id, Execution.id == identifier(execution_id, "execution_id"))
+            .with_for_update()
+            .populate_existing()
+            .one_or_none()
+        )
+        if execution is None:
+            raise OrderError("Batch not found", 404)
         order = self.order(order_id, lock=True)
         line = self.line(order.id, line_id)
         row = (
@@ -455,18 +467,12 @@ class ContractOrderService:
                 ContractOrderExecution.org_id == self.org_id,
                 ContractOrderExecution.order_id == order.id,
                 ContractOrderExecution.line_id == line.id,
-                ContractOrderExecution.execution_id == identifier(execution_id, "execution_id"),
+                ContractOrderExecution.execution_id == execution.id,
             )
             .first()
         )
         if row is None:
             raise OrderError("Batch link not found", 404)
-        execution = (
-            self.db.query(Execution)
-            .filter(Execution.org_id == self.org_id, Execution.id == row.execution_id)
-            .with_for_update()
-            .one()
-        )
         has_work = (
             self.db.query(ExecutionStep.id)
             .filter(
