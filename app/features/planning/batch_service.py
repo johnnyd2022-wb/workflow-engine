@@ -143,6 +143,8 @@ def _workflow(db, org_id, process_id, output_id, *, cache=None):
     steps = by_process.get(process_id, [])
     if not steps or len(steps) > 200:
         raise ValueError("Workflow must contain from 1 to 200 steps")
+    if any(not isinstance(step.inputs, list) or not isinstance(step.outputs, list) for step in steps):
+        raise ValueError("Workflow input/output definitions need review")
     # Stable output IDs must map to exactly one producer across this organisation.
     producers = by_output.get(output_id, [])
     if len(producers) != 1 or producers[0][0].process_id != process_id:
@@ -305,7 +307,7 @@ def setting_dict(row):
 
 
 def save_setting(db, org_id, process_id, data):
-    _body(data, ("source_output_id", "batch_quantity", "steps", "expected_revision"))
+    _body(data, ("source_output_id", "batch_quantity", "steps", "expected_revision", "material_lots"))
     _lock_org(db, org_id)
     output_id = _id(data.get("source_output_id"))
     process, steps, output, unit, fingerprint = _workflow(db, org_id, process_id, output_id)
@@ -326,6 +328,14 @@ def save_setting(db, org_id, process_id, data):
     revision = _integer(data.get("expected_revision"), maximum=2_147_483_647)
     if revision != (row.revision if row is not None else 0):
         raise PlanningConflictError("Workflow planning settings changed; reload before saving")
+    from app.features.planning.material_adapter import validate_bindings
+
+    if "material_lots" in data:
+        snapshot["material_bindings"] = validate_bindings(db, org_id, steps, data["material_lots"])
+    elif row is not None and row.workflow_fingerprint == fingerprint:
+        snapshot["material_bindings"] = row.snapshot.get("material_bindings", [])
+    else:
+        snapshot["material_bindings"] = []
     if row is None:
         row = PlanningWorkflowSetting(org_id=org_id, process_id=process_id, source_output_id=output_id, revision=1)
         db.add(row)
@@ -360,7 +370,7 @@ def workflow_catalog(db, org_id):
             {
                 **output,
                 "process_name": process.name,
-                "steps": [{"step_id": str(step.id), "name": step.name} for step in steps],
+                "steps": [{"step_id": str(step.id), "name": step.name, "inputs": step.inputs} for step in steps],
                 "setting": setting_dict(setting) if setting else None,
                 "stale": bool(setting and setting.workflow_fingerprint != fingerprint),
             }

@@ -118,7 +118,10 @@ def planner_board():
 @requires_org_scope
 def planning_workflows():
     from app.core.db.models.site import Site
+    from app.features.planning.material_adapter import lot_catalog
     from app.features.sites.service import serialise
+
+    lots, truncated = lot_catalog(db_session, _org_id())
 
     sites = (
         db_session.query(Site)
@@ -130,6 +133,8 @@ def planning_workflows():
         {
             "workflows": batches.workflow_catalog(db_session, _org_id()),
             "sites": [serialise(site) for site in sites] if g.current_org.multiple_sites_enabled else [],
+            "material_lots": lots,
+            "material_lots_truncated": truncated,
         }
     )
 
@@ -233,3 +238,36 @@ def start_planning_batch(batch_id):
     except ValueError as exc:
         return _planning_error(exc)
     return jsonify(result), 201 if changed else 200
+
+
+@planning_bp.get("/api/core/planner/material-assessments")
+@requires_auth
+@requires_org_scope
+def get_material_assessment():
+    from app.features.planning.material_adapter import latest
+
+    return jsonify({"assessment": latest(db_session, _org_id())})
+
+
+@planning_bp.post("/api/core/planner/material-assessments")
+@requires_auth
+@requires_org_scope
+def assess_materials():
+    from app.features.planning.material_adapter import assess, latest
+
+    try:
+        row = assess(db_session, _org_id(), request.get_json(silent=True), today=date.today())
+        db_session.add(
+            AuditLog(
+                org_id=_org_id(),
+                user_id=g.current_user.id,
+                action="planning_materials_observed",
+                entity="planning_material_assessment",
+                entity_id=row.id,
+                meta_data={"sequence": row.sequence},
+            )
+        )
+        db_session.commit()
+    except (ValueError, OverflowError) as exc:
+        return _planning_error(exc)
+    return jsonify({"assessment": latest(db_session, _org_id(), assessment_id=row.id)}), 201
