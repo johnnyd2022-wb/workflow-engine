@@ -853,6 +853,10 @@ Founder decisions for this phase:
       - [x] Refuse the legacy location-based nil return and lodgement after multi-site
         opt-in, and show observed producer home-removal excise by source CCA without
         claiming a complete entry (!446). Full per-CCA entry/lodgement remains open.
+      - [x] Read-only source-CCA period review shows recognised movements, observed
+        producer excise due, unresolved records and missing accounting sources (!447).
+        Empty periods still cannot establish a nil return or total duty; complete
+        per-CCA entry and lodgement remain open.
       - [x] Guard prerequisite: production inputs/output reconciliation match the
         persisted execution site, outputs inherit it, and FIFO/manual sales use the
         shipping/default site (!429). Additional-site release remains internally
