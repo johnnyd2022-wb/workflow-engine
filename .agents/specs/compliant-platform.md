@@ -118,7 +118,7 @@ is no per-route `@requires_org_scope` call, consistent with every other blueprin
 
 ### Composition seam (`platform/registry.py`)
 - `register_enabled_module_checks(runner)` is the only function Core's `CoreChecksRunner`
-  imports from Compliant (`app/core/backend/corechecks.py:83-85`). It must not require the
+  imports from Compliant (`app/features/compliance_checks/routes/corechecks.py`). It must not require the
   runner (or Core) to know any industry-specific check ID, framework slug, or data shape —
   it delegates to whichever modules are installed (today: `nz_alcohol.module.register_checks`).
 - A check registered this way that raises is caught by `CoreChecksRunner.run_all_checks()`
