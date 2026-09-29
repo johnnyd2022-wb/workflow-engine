@@ -315,15 +315,17 @@ want it, and never produce a recall list that can't be trusted.
     steps appear out of order, there's no export, and lots with 0 units are listed under
     "In stock" in the batch picker.
   - Change:
-    - [ ] a. Header shows product, the org's batch ID, ABV and bottling date.
-    - [ ] b. Summary line such as "48 sold to 8 customers · 30 on hand", with pre-sold
+    - [x] a. Header shows product, the org's batch ID, ABV and bottling date.
+    - [x] b. Summary line such as "48 sold to 8 customers · 30 on hand", with pre-sold
       sales marked.
-    - [ ] c. Per customer: quantity, invoices, dates and contact details, with a warning
+    - [x] c. Per customer: quantity, invoices, dates and contact details, with a warning
       where contact details are missing.
-    - [ ] d. Steps listed in process order.
-    - [ ] e. CSV and PDF export.
-    - [ ] f. Trace can start from a supplier lot (forward) or an invoice (backward).
-    - [ ] g. Sold-out lots under their own heading, not "In stock".
+    - [x] d. Steps listed in process order.
+    - [x] e. CSV and PDF export.
+    - [ ] f. Trace can start from:
+      - [x] a supplier lot (forward).
+      - [x] an invoice (backward).
+    - [x] g. Sold-out lots under their own heading, not "In stock".
   - Done when: the timed mock recall is under 5 minutes.
 
 - [ ] **1.5 Show when something happened and when it was entered.** *High · M*
@@ -337,7 +339,7 @@ want it, and never produce a recall list that can't be trusted.
     execution and trace views. (!407)
   - [ ] Expose a traceable edit history for completed step records.
 
-- [ ] **1.6 Show one stock number everywhere.** *High · S*
+- [x] **1.6 Show one stock number everywhere.** *High · S* (!404)
   - Evidence: a Source Map card shows one lot's quantity (`sourcemap.js`, primary lot)
     while Live Inventory shows the total for the same product.
   - Change: one shared calculation; cards show the total and the number of lots.
@@ -419,6 +421,7 @@ records, not from people typing figures in.
   - Change: record each verification (date, verifier, outcome, corrective actions with
     owners and due dates); work out the next verification from the programme's frequency
     and show it on the dashboard.
+  - [x] Dashboard validates and renders a module-owned next-date milestone. (!412)
   - Done when: the app always knows the current verification status and next due date.
   - As built (!413): NP3 page (and the NP1/NP2 page) → Verification. Each visit records
     date, verifier, agency, report reference, outcome (and, when unacceptable, whether the
@@ -732,6 +735,15 @@ split.
       - [x] Register public Core JS/CSS assets by owning slice before any asset moves.
         (!352)
       - [ ] Split `create-process-modal.js` internally as part of process-design.
+        - [x] Extract pure process-modal helpers into `process-modal-utils.js` (!357).
+        - [x] Extract process-modal session/API mappers into `process-modal-mappers.js` (!358).
+        - [x] Extract wizard session recovery into `process-modal-session.js` (!359).
+        - [x] Extract process-modal mode controls into `process-modal-controls.js` (!360).
+        - [x] Extract step-document UI into `process-modal-docs.js` (!361).
+        - [x] Extract process-modal summary helpers into `process-modal-summary-utils.js` (!362).
+        - [x] Extract the summary/compliance panel into `process-modal-summary.js` (!362).
+        - [x] Extract step merge and ordering helpers into `process-modal-step-data.js` (!363).
+        - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
   - Done when: `backend.py` holds only shell code, and every slice in the feature index
@@ -858,6 +870,10 @@ Founder decisions for this phase:
       contact where there is one) and orders: product, quantity, spec or recipe version,
       due date, status. Each order links to the batches (executions) that make it, and
       the scheduler (7.3) plans them.
+      - [x] Staff customer/order/line/batch foundation (!426): per-line specification,
+        stored recipe version and output reference, linked batch counts, and per-line
+        materials/per-order duty declarations. Scheduler integration remains 7.3;
+        materials ownership and excise behaviour remain 7.2b/c.
     - [ ] b. **Materials either way.** Per order line: supplied by the customer
       (free-issue: received as lots owned by the customer, kept out of the producer's own
       stock value, usable only for that customer's orders), by the producer, or a mix.
@@ -921,6 +937,9 @@ Founder decisions for this phase:
       optional stock targets (a minimum or reorder level per product, per site with 7.1)
       and a simple forecast (e.g. average sales over the last n weeks). Pre-sales count as
       demand (1.1).
+      - [x] Explicit demand workspace: quantities, output units, due dates, priority,
+        cancellation, tenant isolation and staff audit (!425); sales/contract adapters,
+        forecasts and stock targets remain.
     - [ ] b. **What to make.** Net requirements = demand − stock on hand − stock already
       in production (and allocated), per product. Each shortfall becomes a **planned
       batch** of the workflow that makes it, rounded to its usual batch size.
@@ -938,6 +957,10 @@ Founder decisions for this phase:
       batch. It respects ready dates (not usable until ready) and expiry dates (use
       first-expiring stock first, and never plan to use a lot after it expires). A
       shortage moves the date and says which input caused it.
+      - [x] Material availability engine: per-physical-batch recipes, explicit known
+        supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
+        uncovered shortages (!428). Expected-delivery records, DB adapters,
+        dependent-production planning and forecast integration remain.
     - [ ] e. **Can we do it?** Rough capacity per site: a few resource groups the owner
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to

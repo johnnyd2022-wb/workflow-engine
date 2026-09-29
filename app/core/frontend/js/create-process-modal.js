@@ -1,5 +1,72 @@
 (function() {
   'use strict';
+
+  const {
+    summaryInputDisplayName,
+    summaryOutputDisplayName,
+    isCustomExecutionPrompt,
+    countLabeledExecutionPrompts,
+    normalisePromptOptions,
+    base64ToBlob
+  } = window.ProcessModalUtils;
+  const {
+    mapSessionInputsToApiPayloadFromRows,
+    validateInventoryInputsFromSession,
+    buildExecutionPromptsForApiFromSession,
+    wizardSessionHasDraftStepData,
+    mapSessionInputsToSummaryRows,
+    mapApiInputToWizardSessionInput,
+    mapApiOutputToWizardSessionOutput
+  } = window.ProcessModalMappers;
+  const {
+    applyProcessFlowWizardFreshStart,
+    bindProcessFlowWizardExitCleanup,
+    clearProcessFlowWizardRecoveryState,
+    getDraftKey,
+    getFlowWizardPageSlug,
+    getProcessFlowSpaStorageKey,
+    isProcessFlowSpaPage,
+    isProcessFlowWizardPage,
+    loadWizardSessionMergeBase,
+    migrateProcessFlowSpaStorage,
+    shouldMergePersistSpaFormFields,
+    PROCESS_FLOW_PENDING_NEW_STEP_KEY
+  } = window.ProcessModalSession;
+  const {
+    formatStep4ModeLabel,
+    buildOutputModeSegmentRow,
+    syncOutputExpiryModeSegments,
+    syncOutputReadyDateModeSegments,
+    initGuidedOutputsListModeSegments,
+    applyNewMaterialExecutionExplanation,
+    syncGuidedNewInputExecutionSegments,
+    buildNewMaterialExecutionTypeField,
+    initGuidedNewInputExecutionSegments,
+    syncStep4ModeSegments,
+    updateStep4SummaryBar,
+    initStep4SegmentControls
+  } = window.ProcessModalControls;
+  const {
+    syncDocInlineDisabledState,
+    ensureDocFileListener,
+    loadAttachedStepDocs,
+    getPendingGuidedDocFileUpload,
+    setPendingGuidedDocFileUpload
+  } = window.ProcessModalDocs;
+  const {
+    deriveTraceabilityModes,
+    formatTraceabilityModeLabel,
+    formatOutputExpirySummary,
+    formatOutputReadySummary,
+    buildStepSummaryWarnings
+  } = window.ProcessModalSummaryUtils;
+  const {
+    countNamedStepInputs,
+    countNamedStepOutputs,
+    mergeDraftCreatedStepsIntoApiSteps,
+    stepSortKey,
+    sortStepsForDisplay
+  } = window.ProcessModalStepData;
   
   let currentStep = 1;
   const totalSteps = 4;
@@ -14,113 +81,20 @@
   let isEditingExistingProcess = false; // True when modal was opened for a non-draft process with steps (show list + Edit / Add new step)
   let isStartNewOverwriteDraft = false; // True when user chose "Start New" on resume draft — save/finish should overwrite old draft steps
   let startNewOldStepIds = []; // Step IDs that existed when user clicked Start New; we delete these on save draft or finish
-  let pendingDeleteDoc = null; // { docId, row } when delete-doc-confirm modal is open
-  /** SOP file chosen on evidence page, kept for Save step after navigating to summary (small files only). */
-  let pendingGuidedDocFileUpload = null;
   let processFlowWizardInitGeneration = 0;
 
   // Get draft key for current process
-  function getDraftKey() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const processId = urlParams.get('id');
-    return `process-draft-${processId || 'new'}`;
-  }
 
-  function isProcessFlowSpaPage() {
-    const p = document.body && document.body.getAttribute('data-page');
-    return p === 'process-flow-spa' || p === 'process-flow-wizard';
-  }
 
-  function isProcessFlowWizardPage() {
-    return document.body && document.body.getAttribute('data-page') === 'process-flow-wizard';
-  }
 
-  function getFlowWizardPageSlug() {
-    return (document.body && document.body.getAttribute('data-flow-wizard-page')) || '';
-  }
 
   /** When true, serializeSpaWizardState merges missing DOM fields from session (summary page has no wizard form). */
-  function shouldMergePersistSpaFormFields() {
-    if (isProcessFlowWizardPage()) return true;
-    // Multi-route SPA: each page only mounts part of the wizard; persist must merge from session.
-    if (isProcessFlowSpaPage()) return true;
-    const slug = document.body && document.body.getAttribute('data-flow-wizard-page');
-    return slug === 'summary' || slug === 'process-overview';
-  }
 
-  function loadWizardSessionMergeBase() {
-    try {
-      const raw = sessionStorage.getItem(getProcessFlowSpaStorageKey());
-      if (!raw) return null;
-      const d = JSON.parse(raw);
-      return d && d.v === 1 ? d : null;
-    } catch (e) {
-      return null;
-    }
-  }
 
-  function applyProcessFlowWizardFreshStart() {
-    if (!isProcessFlowWizardPage()) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('fresh') !== '1') return;
-    const id = params.get('id');
-    sessionStorage.removeItem('process-flow-spa-wizard-v1-new');
-    if (id) {
-      sessionStorage.removeItem('process-flow-spa-wizard-v1-' + id);
-    }
-    params.delete('fresh');
-    const qs = params.toString();
-    window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
-  }
 
-  function getProcessFlowSpaStorageKey() {
-    const processId = new URLSearchParams(window.location.search).get('id');
-    return 'process-flow-spa-wizard-v1-' + (processId || 'new');
-  }
 
-  function clearProcessFlowWizardRecoveryState() {
-    try {
-      sessionStorage.removeItem(getProcessFlowSpaStorageKey());
-      sessionStorage.removeItem(PROCESS_FLOW_PENDING_NEW_STEP_KEY);
-    } catch (e) {}
-  }
 
-  function bindProcessFlowWizardExitCleanup() {
-    if (window._processFlowWizardExitCleanupBound) return;
-    window._processFlowWizardExitCleanupBound = true;
-    document.addEventListener('click', function(event) {
-      if (!isProcessFlowSpaPage() || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-        return;
-      }
-      const anchor = event.target && event.target.closest ? event.target.closest('a[href]') : null;
-      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
-      let destination;
-      try {
-        destination = new URL(anchor.href, window.location.href);
-      } catch (e) {
-        return;
-      }
-      if (destination.origin !== window.location.origin) {
-        clearProcessFlowWizardRecoveryState();
-        return;
-      }
-      // Retain the recovery buffer only while moving between wizard pages.
-      if (destination.pathname.indexOf('/core/flows/create/') !== 0) {
-        clearProcessFlowWizardRecoveryState();
-      }
-    }, true);
-  }
 
-  function migrateProcessFlowSpaStorage() {
-    const id = new URLSearchParams(window.location.search).get('id');
-    if (!id) return;
-    const newKey = 'process-flow-spa-wizard-v1-' + id;
-    if (sessionStorage.getItem(newKey)) return;
-    const legacy = sessionStorage.getItem('process-flow-spa-wizard-v1-new');
-    if (legacy) {
-      sessionStorage.setItem(newKey, legacy);
-    }
-  }
 
   function collectSpaWizardOutputsPayload() {
     const outputs = [];
@@ -218,25 +192,6 @@
     return outputs;
   }
 
-  /** Summary / API rows may use alternate keys (inventory, legacy). */
-  function summaryInputDisplayName(row) {
-    if (!row) return '';
-    return String(row.name || row.input_name || row.material_name || row.item_name || '').trim();
-  }
-
-  function summaryOutputDisplayName(row) {
-    if (!row) return '';
-    return String(row.name || row.output_name || '').trim();
-  }
-
-  function isCustomExecutionPrompt(p) {
-    if (!p || !(p.label || '').trim()) return false;
-    const l = (p.label || '').trim().toLowerCase();
-    if (l === 'batch number' || l === 'evidence') return false;
-    if (p.type === 'evidence') return false;
-    return true;
-  }
-
   /**
    * After GET /process merges into createdSteps, persist must not wipe nested I/O that
    * still exists in the previous session snapshot (common on summary route).
@@ -272,27 +227,6 @@
       }
       return o;
     });
-  }
-
-  function countLabeledExecutionPrompts(prompts) {
-    if (!Array.isArray(prompts)) return 0;
-    return prompts.filter(function (p) {
-      return p && (p.label || '').trim();
-    }).length;
-  }
-
-  /** Keep select choices tidy and stable in the stored workflow contract. */
-  function normalisePromptOptions(options) {
-    const raw = Array.isArray(options) ? options : String(options || '').split(/\r?\n/);
-    const seen = new Set();
-    return raw.reduce(function (result, option) {
-      const value = String(option == null ? '' : option).trim();
-      if (value && !seen.has(value)) {
-        seen.add(value);
-        result.push(value);
-      }
-      return result;
-    }, []);
   }
 
   function serializeSpaWizardState() {
@@ -414,6 +348,7 @@
     }
 
     let docFileUpload = null;
+    const pendingGuidedDocFileUpload = getPendingGuidedDocFileUpload();
     if (pendingGuidedDocFileUpload && pendingGuidedDocFileUpload.base64) {
       docFileUpload = {
         fileName: pendingGuidedDocFileUpload.fileName,
@@ -653,13 +588,13 @@
       docInlineContentRestore.value = data.docInlineContent != null ? data.docInlineContent : '';
     }
     if (typeof syncDocInlineDisabledState === 'function') syncDocInlineDisabledState();
-    pendingGuidedDocFileUpload = null;
+    setPendingGuidedDocFileUpload(null);
     if (data.docFileUpload && data.docFileUpload.base64) {
-      pendingGuidedDocFileUpload = {
+      setPendingGuidedDocFileUpload({
         fileName: data.docFileUpload.fileName,
         mime: data.docFileUpload.mime,
         base64: data.docFileUpload.base64
-      };
+      });
     }
     const listEl = getGuidedInputListElement('inventory');
     if (listEl) {
@@ -1523,7 +1458,7 @@
 
     const guidedDocFile = document.getElementById('guided-doc-file');
     if (guidedDocFile) guidedDocFile.value = '';
-    pendingGuidedDocFileUpload = null;
+    setPendingGuidedDocFileUpload(null);
     const guidedDocTitle = document.getElementById('guided-doc-inline-title');
     const guidedDocContent = document.getElementById('guided-doc-inline-content');
     if (guidedDocTitle) guidedDocTitle.value = '';
@@ -1691,370 +1626,23 @@
     }
   }
 
-  function formatStep4ModeLabel(value) {
-    if (value === 'required') return 'Required';
-    if (value === 'optional') return 'Optional';
-    return 'Off';
-  }
 
-  function buildOutputModeSegmentRow(modeKind, spec) {
-    const wrap = document.createElement('div');
-    wrap.className = 'flow-mode-segmented';
-    wrap.setAttribute('role', 'group');
-    if (spec.ariaLabel) wrap.setAttribute('aria-label', spec.ariaLabel);
-    spec.options.forEach(function(opt) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'flow-mode-segment';
-      b.setAttribute('data-output-mode-kind', modeKind);
-      b.setAttribute('data-value', opt.value);
-      b.textContent = opt.label;
-      wrap.appendChild(b);
-    });
-    return wrap;
-  }
 
-  function syncOutputExpiryModeSegments(outputRow) {
-    if (!outputRow) return;
-    const sel = outputRow.querySelector('.guided-output-expiry-mode');
-    if (!sel) return;
-    outputRow.querySelectorAll('.flow-mode-segment[data-output-mode-kind="expiry"]').forEach(function(btn) {
-      const on = btn.getAttribute('data-value') === sel.value;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-  }
 
-  function syncOutputReadyDateModeSegments(outputRow) {
-    if (!outputRow) return;
-    const sel = outputRow.querySelector('.guided-output-ready-date-mode');
-    if (!sel) return;
-    outputRow.querySelectorAll('.flow-mode-segment[data-output-mode-kind="ready_date"]').forEach(function(btn) {
-      const on = btn.getAttribute('data-value') === sel.value;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-  }
 
-  function initGuidedOutputsListModeSegments() {
-    const list = document.getElementById('guided-outputs-list');
-    if (!list || list.dataset.flowModeOutputInit === '1') return;
-    list.dataset.flowModeOutputInit = '1';
-    list.addEventListener('click', function(ev) {
-      const btn = ev.target.closest('.flow-mode-segment[data-output-mode-kind]');
-      if (!btn || !list.contains(btn)) return;
-      ev.preventDefault();
-      const row = btn.closest('[id^="guided-output-"]');
-      if (!row) return;
-      const kind = btn.getAttribute('data-output-mode-kind');
-      const val = btn.getAttribute('data-value');
-      const sel = kind === 'expiry'
-        ? row.querySelector('.guided-output-expiry-mode')
-        : row.querySelector('.guided-output-ready-date-mode');
-      if (sel && val != null) {
-        sel.value = val;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
-  }
 
-  function applyNewMaterialExecutionExplanation(explanationEl, inputId, value) {
-    const explanation = (explanationEl && explanationEl.nodeType === 1)
-      ? explanationEl
-      : document.getElementById('guided-input-explanation-' + inputId);
-    if (!explanation) return;
-    if (value === 'variable') {
-      explanation.innerHTML = '<strong>At execution:</strong> Quantity and unit are populated with these values and the operator confirms when this step is run.';
-    } else if (value === 'static') {
-      explanation.innerHTML = '<strong>Fixed:</strong> The same quantity and unit are used every execution. Operators will not be prompted to confirm when this step runs.';
-    } else {
-      explanation.innerHTML = '<strong>Prompt:</strong> Operators are prompted to enter quantity and unit each time this step runs. This option is useful when the quantity and/or unit might be variable from batch to batch.';
-    }
-  }
 
-  function syncGuidedNewInputExecutionSegments(container) {
-    if (!container || container.dataset.inputType !== 'new') return;
-    const hidden = container.querySelector('.guided-input-execution-type');
-    const inputId = container.id || '';
-    const v = hidden && hidden.value ? hidden.value : 'variable';
-    container.querySelectorAll('.flow-mode-segment[data-guided-input-exec]').forEach(function(btn) {
-      const on = btn.getAttribute('data-value') === v;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-    const explanationDiv = container.querySelector('[id^="guided-input-explanation-"]');
-    applyNewMaterialExecutionExplanation(explanationDiv, inputId, v);
-  }
 
-  function buildNewMaterialExecutionTypeField(inputId) {
-    const typeField = document.createElement('div');
-    const typeLabel = document.createElement('label');
-    typeLabel.style.cssText = 'display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;';
-    typeLabel.textContent = 'How quantities are captured';
-    typeField.appendChild(typeLabel);
 
-    const hiddenType = document.createElement('input');
-    hiddenType.type = 'hidden';
-    hiddenType.className = 'guided-input-execution-type';
-    hiddenType.value = 'variable';
-    typeField.appendChild(hiddenType);
 
-    const segWrap = document.createElement('div');
-    segWrap.className = 'flow-mode-segmented guided-input-exec-segmented';
-    segWrap.setAttribute('role', 'group');
-    segWrap.setAttribute('aria-label', 'How quantities are captured');
-    [
-      { value: 'variable', label: 'Operator to confirm' },
-      { value: 'static', label: 'Fixed' },
-      { value: 'prompt', label: 'Prompt' }
-    ].forEach(function(opt) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'flow-mode-segment';
-      b.setAttribute('data-guided-input-exec', '1');
-      b.setAttribute('data-value', opt.value);
-      b.textContent = opt.label;
-      segWrap.appendChild(b);
-    });
-    typeField.appendChild(segWrap);
 
-    const explanationDiv = document.createElement('div');
-    explanationDiv.style.cssText = 'margin-top: 8px; padding: 8px; background: var(--bg-secondary, #f9fafb); border-radius: var(--radius-md); font-size: 12px; color: var(--text-secondary); line-height: 1.4;';
-    explanationDiv.id = 'guided-input-explanation-' + inputId;
-    typeField.appendChild(explanationDiv);
 
-    hiddenType.addEventListener('change', function() {
-      applyNewMaterialExecutionExplanation(explanationDiv, inputId, hiddenType.value);
-    });
-    applyNewMaterialExecutionExplanation(explanationDiv, inputId, hiddenType.value);
 
-    return typeField;
-  }
-
-  function initGuidedNewInputExecutionSegments() {
-    const list = document.getElementById('guided-inputs-list-unified');
-    if (!list || list.dataset.guidedNewExecInit === '1') return;
-    list.dataset.guidedNewExecInit = '1';
-    list.addEventListener('click', function(ev) {
-      const btn = ev.target.closest('.flow-mode-segment[data-guided-input-exec]');
-      if (!btn || !list.contains(btn)) return;
-      const row = btn.closest('[id^="guided-input-"]');
-      if (!row || row.dataset.inputType !== 'new') return;
-      ev.preventDefault();
-      const hidden = row.querySelector('.guided-input-execution-type');
-      const val = btn.getAttribute('data-value');
-      if (hidden && val != null) {
-        hidden.value = val;
-        hidden.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      syncGuidedNewInputExecutionSegments(row);
-    });
-  }
-
-  function syncStep4ModeSegments() {
-    const batchSel = document.getElementById('guided-prompt-batch-number-mode');
-    const evSel = document.getElementById('guided-prompt-evidence-mode');
-    document.querySelectorAll('#create-process-step-4 .flow-mode-segment[data-step4-mode-target="batch"]').forEach(function(btn) {
-      const on = batchSel && btn.getAttribute('data-value') === batchSel.value;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-    document.querySelectorAll('#create-process-step-4 .flow-mode-segment[data-step4-mode-target="evidence"]').forEach(function(btn) {
-      const on = evSel && btn.getAttribute('data-value') === evSel.value;
-      btn.classList.toggle('flow-mode-segment--active', !!on);
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-  }
-
-  function updateStep4SummaryBar() {
-    const batchEl = document.getElementById('guided-prompt-batch-number-mode');
-    const evEl = document.getElementById('guided-prompt-evidence-mode');
-    if (!batchEl || !evEl) return;
-    const b = formatStep4ModeLabel(batchEl.value);
-    const e = formatStep4ModeLabel(evEl.value);
-    const preview = document.getElementById('step4-trace-collapsed-preview');
-    if (preview) preview.textContent = 'Batch: ' + b + ' • Evidence: ' + e;
-    const n = document.querySelectorAll('#guided-prompts-list > div').length;
-    const hint = document.getElementById('step4-prompts-section-hint');
-    if (hint) hint.textContent = n + (n === 1 ? ' prompt' : ' prompts') + ' configured';
-  }
-  window.updateStep4SummaryBar = updateStep4SummaryBar;
-
-  function initStep4SegmentControls() {
-    const root = document.getElementById('create-process-step-4');
-    if (!root || root.dataset.step4UiInit === '1') return;
-    root.dataset.step4UiInit = '1';
-    root.addEventListener('click', function(ev) {
-      const btn = ev.target.closest('.flow-mode-segment[data-step4-mode-target]');
-      if (!btn || !root.contains(btn)) return;
-      ev.preventDefault();
-      const target = btn.getAttribute('data-step4-mode-target');
-      const val = btn.getAttribute('data-value');
-      const selId = target === 'batch' ? 'guided-prompt-batch-number-mode' : 'guided-prompt-evidence-mode';
-      const sel = document.getElementById(selId);
-      if (sel && val) {
-        sel.value = val;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
-    ['guided-prompt-batch-number-mode', 'guided-prompt-evidence-mode'].forEach(function(id) {
-      const el = document.getElementById(id);
-      if (el) {
-        el.addEventListener('change', function() {
-          syncStep4ModeSegments();
-          updateStep4SummaryBar();
-        });
-      }
-    });
-    syncStep4ModeSegments();
-    updateStep4SummaryBar();
-  }
-
-  // When a file is selected for step docs, disable inline title/content so file wins and UX is clear (no silent ignore).
-  function syncDocInlineDisabledState() {
-    const docFileInput = document.getElementById('guided-doc-file');
-    const docInlineTitle = document.getElementById('guided-doc-inline-title');
-    const docInlineContent = document.getElementById('guided-doc-inline-content');
-    const hasFile = docFileInput && docFileInput.files && docFileInput.files.length > 0;
-    if (docInlineTitle) docInlineTitle.disabled = !!hasFile;
-    if (docInlineContent) docInlineContent.disabled = !!hasFile;
-  }
-  function ensureDocFileListener() {
-    const docFileInput = document.getElementById('guided-doc-file');
-    if (!docFileInput || docFileInput.dataset.flowWizardDocListener === '1') return;
-    docFileInput.dataset.flowWizardDocListener = '1';
-    docFileInput.addEventListener('change', function() {
-      syncDocInlineDisabledState();
-      pendingGuidedDocFileUpload = null;
-      const f = docFileInput.files && docFileInput.files[0];
-      if (!f) {
-        if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
-        return;
-      }
-      const maxB64 = 1.5 * 1024 * 1024;
-      if (f.size > maxB64) {
-        if (window.showNotification) {
-          window.showNotification(
-            'warning',
-            'File too large',
-            'Only files up to 1.5MB can be carried to the summary step in the browser. Use inline instructions instead, or split the document.'
-          );
-        }
-        docFileInput.value = '';
-        syncDocInlineDisabledState();
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = function() {
-        const dataUrl = reader.result;
-        const s = String(dataUrl);
-        const comma = s.indexOf(',');
-        const b64 = comma >= 0 ? s.slice(comma + 1) : '';
-        pendingGuidedDocFileUpload = {
-          fileName: f.name,
-          mime: f.type || 'application/octet-stream',
-          base64: b64
-        };
-        if (typeof window.persistSpaWizardState === 'function') window.persistSpaWizardState();
-      };
-      reader.onerror = function() {
-        pendingGuidedDocFileUpload = null;
-      };
-      reader.readAsDataURL(f);
-    });
-  }
-  window.ensureGuidedDocFileListener = ensureDocFileListener;
 
   // Expose for SPA page so it can sync step display without opening the modal
   window.updateStepDisplay = updateStepDisplay;
 
-  // Load attached documentation for the current step (step 4) and render list with delete
-  async function loadAttachedStepDocs(stepId) {
-    const container = document.getElementById('guided-step-docs-list');
-    if (!container) return;
-    container.innerHTML = 'Loading…';
-    try {
-      const res = await CoreAPI.getStepDocumentation(stepId);
-      const docs = (res && res.documents) ? res.documents : [];
-      container.innerHTML = '';
-      if (docs.length === 0) {
-        const empty = document.createElement('p');
-        empty.style.cssText = 'color: var(--text-tertiary, #9ca3af); margin: 0; font-size: 13px;';
-        empty.textContent = 'No documentation attached.';
-        container.appendChild(empty);
-      } else {
-        docs.forEach(function(doc) {
-          const row = document.createElement('div');
-          row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--bg-card, #fff); border: 1px solid var(--border-default, #e5e7eb); border-radius: var(--radius-md); margin-bottom: 6px;';
-          const label = document.createElement('span');
-          label.textContent = doc.title || (doc.content_markdown ? 'Inline doc' : 'File');
-          label.style.cssText = 'flex: 1; min-width: 0; font-size: 13px; color: var(--text-primary);';
-            const delBtn = document.createElement('button');
-            delBtn.type = 'button';
-            delBtn.className = 'btn btn-secondary btn-sm';
-            delBtn.textContent = 'Delete';
-            delBtn.onclick = function() {
-              if (typeof window.showDeleteDocConfirmModal === 'function') {
-                window.showDeleteDocConfirmModal(doc.id, row);
-              } else {
-                if (confirm('Remove this documentation from the step?')) {
-                  CoreAPI.deleteProcessDoc(doc.id).then(function() {
-                    row.remove();
-                    if (window.showNotification) window.showNotification('success', 'Removed', 'Documentation removed.');
-                  }).catch(function(e) {
-                    if (window.showNotification) window.showNotification('error', 'Error', e.message || 'Could not delete.');
-                  });
-                }
-              }
-            };
-          row.appendChild(label);
-          row.appendChild(delBtn);
-          container.appendChild(row);
-        });
-      }
-    } catch (e) {
-      container.innerHTML = '';
-      const err = document.createElement('p');
-      err.style.cssText = 'color: var(--error, #dc2626); margin: 0; font-size: 13px;';
-      err.textContent = 'Could not load documentation.';
-      container.appendChild(err);
-    }
-  }
 
-  // Delete-doc confirmation modal (in-app, not browser confirm). Lazy-init listeners when modal is first shown so DOM is ready.
-  let deleteDocModalInitialized = false;
-  function ensureDeleteDocModalListeners() {
-    if (deleteDocModalInitialized) return;
-    const modalEl = document.getElementById('delete-doc-confirm-modal');
-    const cancelBtn = document.getElementById('delete-doc-confirm-cancel');
-    const removeBtn = document.getElementById('delete-doc-confirm-remove');
-    if (!modalEl || !cancelBtn || !removeBtn) return;
-    deleteDocModalInitialized = true;
-    cancelBtn.addEventListener('click', function() {
-      modalEl.style.display = 'none';
-      pendingDeleteDoc = null;
-    });
-    removeBtn.addEventListener('click', async function() {
-      if (!pendingDeleteDoc) return;
-      const { docId, row } = pendingDeleteDoc;
-      pendingDeleteDoc = null;
-      modalEl.style.display = 'none';
-      try {
-        await CoreAPI.deleteProcessDoc(docId);
-        if (row && row.parentNode) row.remove();
-        if (window.showNotification) window.showNotification('success', 'Removed', 'Documentation removed.');
-      } catch (e) {
-        if (window.showNotification) window.showNotification('error', 'Error', e.message || 'Could not delete.');
-      }
-    });
-  }
-  window.showDeleteDocConfirmModal = function(docId, row) {
-    const modalEl = document.getElementById('delete-doc-confirm-modal');
-    if (!modalEl) return;
-    ensureDeleteDocModalListeners();
-    pendingDeleteDoc = { docId, row };
-    modalEl.style.display = 'flex';
-  };
 
   // Validate inventory inputs (quantity & unit required, quantity must be > 0)
   function validateInventoryInputs() {
@@ -4825,118 +4413,9 @@
     }
   };
 
-  function base64ToBlob(b64, mime) {
-    const bin = atob(b64);
-    const arr = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    return new Blob([arr], { type: mime || 'application/octet-stream' });
-  }
 
-  function mapSessionInputsToApiPayloadFromRows(rows) {
-    const inputs = [];
-    (rows || []).forEach(function(inputRow) {
-      const name = (inputRow.name || '').trim();
-      const unit = (inputRow.unit || '').trim();
-      if (!name || !unit) return;
-      const executionType = inputRow.executionType || 'variable';
-      const isPreviousOutput =
-        inputRow.inputType === 'previous_output' ||
-        (inputRow.executionType == null && inputRow.inputType !== 'inventory' && inputRow.inputType !== 'new');
-      const isVariable = isPreviousOutput ? true : executionType === 'variable' || executionType === 'prompt';
-      const requiresInventorySelection = isPreviousOutput ? true : executionType === 'variable';
-      const inputObj = {
-        name: name,
-        quantity:
-          inputRow.quantity !== null && inputRow.quantity !== undefined && inputRow.quantity !== ''
-            ? parseFloat(inputRow.quantity)
-            : null,
-        unit: unit,
-        is_variable: isVariable,
-        requires_inventory_selection: requiresInventorySelection
-      };
-      const sourceOutputId = inputRow.source_output_id || inputRow.sourceOutputId || null;
-      if (sourceOutputId) inputObj.source_output_id = sourceOutputId;
-      const expectedInv =
-        inputRow.expected_inventory_type || inputRow.expectedInventoryType || null;
-      if (expectedInv) inputObj.expected_inventory_type = expectedInv;
-      inputs.push(inputObj);
-    });
-    return inputs;
-  }
 
-  function validateInventoryInputsFromSession(session) {
-    const rows = session && Array.isArray(session.inputs) ? session.inputs : [];
-    const invRows = rows.filter(function(r) {
-      return r && (r.inputType === 'inventory' || r.inputType === 'previous_output');
-    });
-    for (let i = 0; i < invRows.length; i++) {
-      const row = invRows[i];
-      const q = row.quantity;
-      const u = (row.unit || '').trim();
-      if (u === '' || q === null || q === undefined || q === '') {
-        return {
-          valid: false,
-          message: 'Please fill Quantity and Unit for all inventory items. Both are required.'
-        };
-      }
-      const qn = typeof q === 'number' ? q : parseFloat(String(q));
-      if (isNaN(qn) || qn <= 0) {
-        return { valid: false, message: 'Quantity must be greater than 0 for all inventory items.' };
-      }
-    }
-    return { valid: true };
-  }
 
-  function buildExecutionPromptsForApiFromSession(session) {
-    const collected = [];
-    (session.prompts || []).forEach(function(p) {
-      if (!p || !(p.label || '').trim()) return;
-      const label = (p.label || '').toLowerCase();
-      const isEvidence = p.type === 'evidence' || label === 'evidence';
-      if (label === 'batch number' || isEvidence) return;
-      collected.push({
-        label: p.label,
-        type: p.type || 'text',
-        unit: p.unit || null,
-        required: p.required !== false,
-        ...(p.type === 'select' ? { options: normalisePromptOptions(p.options) } : {})
-      });
-    });
-    const batchNumberMode = session.batchNumberMode || 'dont_ask';
-    const evidenceMode = session.evidenceMode || 'dont_ask';
-    const filtered = collected.filter(function(p) {
-      const label = (p.label || '').toLowerCase();
-      const isEvidence = p.type === 'evidence' || label === 'evidence';
-      return label !== 'batch number' && !isEvidence;
-    });
-    if (batchNumberMode === 'required' || batchNumberMode === 'optional') {
-      filtered.unshift({
-        label: 'Batch number',
-        type: 'text',
-        unit: null,
-        required: batchNumberMode === 'required'
-      });
-    }
-    if (evidenceMode === 'required' || evidenceMode === 'optional') {
-      filtered.push({
-        label: 'Evidence',
-        type: 'evidence',
-        unit: null,
-        required: evidenceMode === 'required'
-      });
-    }
-    return filtered;
-  }
-
-  function wizardSessionHasDraftStepData(session) {
-    if (!session || session.v !== 1) return false;
-    const name = (session.stepName || '').trim();
-    const hasBody =
-      (session.inputs || []).length > 0 ||
-      (session.outputs || []).length > 0 ||
-      (session.prompts || []).length > 0;
-    return !!(name || hasBody);
-  }
 
   function hasPendingUnsavedWizardStepForFinish() {
     if (getFlowWizardPageSlug() === 'next-steps') {
@@ -5146,7 +4625,7 @@
     // After creating a new step, clear editing id so the next wizard round (add another step)
     // does not treat the saved step as "being edited" and overwrite it via updateStep.
     editingStepId = wasEditingStepId ? saved.id : null;
-    pendingGuidedDocFileUpload = null;
+    setPendingGuidedDocFileUpload(null);
 
     if (isEditingExistingProcess) {
       isEditingExistingProcess = false;
@@ -5223,55 +4702,9 @@
     return document.body && document.body.getAttribute('data-flow-wizard-page') === 'summary';
   }
 
-  function deriveTraceabilityModes(step) {
-    let batch = step.batch_number_mode;
-    let ev = step.evidence_mode;
-    if (batch && ev) return { batch, evidence: ev };
-    const prompts = step.execution_prompts || [];
-    if (!batch) {
-      const bn = prompts.find(p => (p.label || '').toLowerCase() === 'batch number');
-      if (bn) batch = bn.required !== false ? 'required' : 'optional';
-      else batch = 'dont_ask';
-    }
-    if (!ev) {
-      const evp = prompts.find(
-        p => p.type === 'evidence' || (p.label || '').toLowerCase() === 'evidence'
-      );
-      if (evp) ev = evp.required !== false ? 'required' : 'optional';
-      else ev = 'dont_ask';
-    }
-    return { batch: batch || 'optional', evidence: ev || 'optional' };
-  }
 
-  function formatTraceabilityModeLabel(mode) {
-    if (mode === 'required') return 'Required';
-    if (mode === 'optional') return 'Optional';
-    return 'Off';
-  }
 
-  function formatOutputExpirySummary(output) {
-    const ce = (output.extra_data || {}).custom_expiry;
-    if (!ce || !ce.enabled) return 'None';
-    const mode =
-      ce.mode ||
-      (ce.set_at_execution || ce.set_during_execution ? 'set_at_execution' : 'fixed_duration');
-    if (mode === 'set_at_execution') return 'Operator defined';
-    const dv = ce.duration_value != null ? ce.duration_value : ce.expiry_days;
-    const du = (ce.duration_unit || 'days').toLowerCase();
-    if (dv != null && du) return `${dv} ${dv === 1 ? du.replace(/s$/, '') : du}`;
-    return 'Configured';
-  }
 
-  function formatOutputReadySummary(output) {
-    const rd = (output.extra_data || {}).ready_date;
-    if (!rd || !rd.enabled) return 'None';
-    const mode = rd.mode || 'fixed_duration';
-    if (mode === 'set_at_execution') return 'Operator defined';
-    const dv = rd.duration_value;
-    const du = (rd.duration_unit || 'hours').toLowerCase();
-    if (dv != null && du) return `${dv} ${dv === 1 ? du.replace(/s$/, '') : du}`;
-    return 'Configured';
-  }
 
   /**
    * Summary page: unsaved in-progress step comes only from session; saved steps from createdSteps / API.
@@ -5336,21 +4769,6 @@
     return !!(last && String(last.id) === String(step.id));
   }
 
-  function mapSessionInputsToSummaryRows(raw) {
-    if (!Array.isArray(raw)) return [];
-    const out = [];
-    raw.forEach(function (i) {
-      if (!i) return;
-      const name = summaryInputDisplayName(i);
-      if (!name) return;
-      out.push({
-        name: name,
-        quantity: i.quantity != null ? i.quantity : null,
-        unit: i.unit || ''
-      });
-    });
-    return out;
-  }
 
   /**
    * Summary route has no wizard DOM; GET /process may lag. Prefer session.createdSteps (full step
@@ -5484,221 +4902,8 @@
   }
 
   /** Derived issues only — scoped to the current step (no filler when empty). */
-  function buildStepSummaryWarnings(step, isFinalStep) {
-    const warnings = [];
-    if (!step) return warnings;
-    const outputs = (step.outputs || []).filter(function (o) {
-      return o && summaryOutputDisplayName(o);
-    });
-    if (outputs.length > 0) {
-      const anyNoExpiry = outputs.some(function (o) {
-        return formatOutputExpirySummary(o) === 'None';
-      });
-      if (anyNoExpiry) warnings.push('Output has no expiry rule');
-    }
-    const tm = deriveTraceabilityModes(step);
-    if (isFinalStep && tm.batch === 'dont_ask') {
-      warnings.push('No batch / run ID tracking on final step');
-    }
-    return warnings;
-  }
 
-  async function renderCompliancePanel(sortedSteps) {
-    const panel = document.getElementById('flow-compliance-panel');
-    const heading = document.getElementById('step-summaries-heading');
-    if (!panel) return;
-    if (!isProcessFlowSummaryPage()) {
-      panel.style.display = 'none';
-      panel.innerHTML = '';
-      if (heading) {
-        heading.style.display = '';
-        heading.textContent = 'Created Steps';
-        heading.style.marginTop = '0';
-      }
-      return;
-    }
-    if (heading) {
-      heading.style.display = 'none';
-      heading.style.marginTop = '0';
-    }
-    panel.style.display = 'block';
 
-    const escHtml = function (s) {
-      return String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    };
-
-    let { step, displayNumber, isFinalStep } = resolveCurrentStepForSummary(sortedSteps);
-    if (!step) {
-      panel.innerHTML =
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0;">No step data to review.</p>';
-      return;
-    }
-    step = enrichStepForSummaryFromSession(step, sortedSteps);
-
-    const stepName = escHtml(step.name || 'Untitled step');
-    const tm = deriveTraceabilityModes(step);
-    const batchLabel = escHtml(formatTraceabilityModeLabel(tm.batch));
-    const evidenceLabel = escHtml(formatTraceabilityModeLabel(tm.evidence));
-
-    const purposeText = (step.description || '').trim();
-    let hasStepDocumentation = !!(
-      step.documentation_summary && String(step.documentation_summary).trim()
-    );
-    const stepIdForDocs =
-      step && step.id && String(step.id) !== '__pending__' ? String(step.id) : '';
-    if (
-      !hasStepDocumentation &&
-      stepIdForDocs &&
-      typeof CoreAPI !== 'undefined' &&
-      typeof CoreAPI.getStepDocumentation === 'function'
-    ) {
-      try {
-        const docRes = await CoreAPI.getStepDocumentation(stepIdForDocs);
-        const docs = docRes && Array.isArray(docRes.documents) ? docRes.documents : [];
-        if (docs.length > 0) {
-          hasStepDocumentation = true;
-        }
-      } catch (err) {
-        console.warn('Summary: could not verify step documentation', err);
-      }
-    }
-
-    const inputs = (step.inputs || []).filter(function (i) {
-      return i && summaryInputDisplayName(i);
-    });
-    const outputs = (step.outputs || []).filter(function (o) {
-      return o && summaryOutputDisplayName(o);
-    });
-    const customPrompts = (step.execution_prompts || []).filter(isCustomExecutionPrompt);
-
-    let html = '';
-    html +=
-      '<div class="flow-step-summary-page"><p class="flow-step-summary-kicker" style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-secondary);margin:0 0 12px 0;">Step summary</p>';
-    html += `<div class="flow-step-summary-header" style="display:flex;align-items:center;gap:12px;margin:0 0 22px 0;flex-wrap:wrap;">`;
-    html += `<span class="flow-step-num-badge" aria-hidden="true">${displayNumber}</span>`;
-    html += `<span style="font-size:1.125rem;font-weight:600;color:var(--text-primary);line-height:1.3;">Step ${displayNumber} \u2014 ${stepName}</span>`;
-    html += '</div>';
-
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:18px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Step function</h3>';
-
-    html += '<div style="font-size:0.875rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px 0;">Inputs</div>';
-    if (inputs.length === 0) {
-      html +=
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0 0 12px 0;">None</p>';
-    } else {
-      html += '<ul class="flow-compliance-step-list" style="margin-bottom:12px;">';
-      inputs.forEach(function (input) {
-        const q =
-          input.quantity !== null && input.quantity !== undefined ? input.quantity : '';
-        const u = input.unit || '';
-        const bit = q ? ` (${q}${u ? ' ' + u : ''})` : u ? ` (${u})` : '';
-        html += `<li><span class="flow-compliance-row__text">${escHtml(summaryInputDisplayName(input) + bit)}</span></li>`;
-      });
-      html += '</ul>';
-    }
-
-    html += '<div style="font-size:0.875rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px 0;">Outputs</div>';
-    if (outputs.length === 0) {
-      html +=
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0 0 12px 0;">None</p>';
-    } else {
-      html += '<ul class="flow-compliance-step-list" style="margin-bottom:12px;">';
-      outputs.forEach(function (output) {
-        const q =
-          output.quantity !== null && output.quantity !== undefined ? output.quantity : '';
-        const u = output.unit || '';
-        const bit = q ? ` (${q}${u ? ' ' + u : ''})` : u ? ` (${u})` : '';
-        html += `<li><span class="flow-compliance-row__text">${escHtml(summaryOutputDisplayName(output) + bit)}</span></li>`;
-      });
-      html += '</ul>';
-    }
-
-    if (purposeText) {
-      html +=
-        '<div style="font-size:0.875rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px 0;">Purpose</div>';
-      html += `<p style="font-size:0.875rem;color:var(--text-primary);margin:0;line-height:1.55;">${escHtml(purposeText)}</p>`;
-    }
-    html += '</section>';
-
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:18px;border-top:1px solid var(--border-default,#e5e7eb);padding-top:16px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Traceability &amp; compliance</h3>';
-    html +=
-      '<div style="font-size:0.875rem;line-height:1.65;color:var(--text-primary);"><div><span style="color:var(--text-secondary);font-weight:500;">Batch:</span> ' +
-      batchLabel +
-      '</div><div><span style="color:var(--text-secondary);font-weight:500;">Evidence:</span> ' +
-      evidenceLabel +
-      '</div></div></section>';
-
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:18px;border-top:1px solid var(--border-default,#e5e7eb);padding-top:16px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Output rules</h3>';
-    if (outputs.length === 0) {
-      html +=
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0;">No outputs — rules apply when outputs exist.</p>';
-    } else if (outputs.length === 1) {
-      const o = outputs[0];
-      html +=
-        '<div style="font-size:0.875rem;line-height:1.65;color:var(--text-primary);"><div><span style="color:var(--text-secondary);font-weight:500;">Expiry:</span> ' +
-        escHtml(formatOutputExpirySummary(o)) +
-        '</div><div><span style="color:var(--text-secondary);font-weight:500;">Ready date:</span> ' +
-        escHtml(formatOutputReadySummary(o)) +
-        '</div></div>';
-    } else {
-      html += '<ul class="flow-compliance-step-list">';
-      outputs.forEach(function (o) {
-        const on = escHtml(summaryOutputDisplayName(o) || 'Output');
-        const ex = escHtml(formatOutputExpirySummary(o));
-        const rd = escHtml(formatOutputReadySummary(o));
-        html += `<li style="margin-bottom:8px;"><span class="flow-compliance-row__text"><strong>${on}</strong> — Expiry: ${ex}; Ready: ${rd}</span></li>`;
-      });
-      html += '</ul>';
-    }
-    html += '</section>';
-
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:18px;border-top:1px solid var(--border-default,#e5e7eb);padding-top:16px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Documentation and Custom prompts</h3>';
-    html +=
-      '<p style="font-size:0.875rem;color:var(--text-primary);margin:0 0 12px 0;line-height:1.55;"><span style="color:var(--text-secondary);font-weight:500;">Attached step documentation:</span> ' +
-      (hasStepDocumentation ? 'Yes' : 'No') +
-      '</p>';
-    if (customPrompts.length > 0) {
-      html +=
-        '<div style="font-size:0.875rem;font-weight:600;color:var(--text-secondary);margin:0 0 6px 0;">Custom prompts</div>';
-      html += '<ul class="flow-compliance-step-list">';
-      customPrompts.forEach(function (p) {
-        const req = p.required !== false ? 'Required' : 'Optional';
-        const unit = p.unit ? `, ${escHtml(p.unit)}` : '';
-        const line = `${escHtml(p.label || '')} (${escHtml(p.type || '')}${unit}) — ${req}`;
-        html += `<li><span class="flow-compliance-row__text">${line}</span></li>`;
-      });
-      html += '</ul>';
-    }
-    html += '</section>';
-
-    const warns = buildStepSummaryWarnings(step, isFinalStep);
-    html +=
-      '<section class="flow-compliance__section flow-step-summary-section" style="margin-bottom:0;border-top:1px solid var(--border-default,#e5e7eb);padding-top:16px;"><h3 style="font-size:0.9375rem;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">Warnings</h3>';
-    if (warns.length === 0) {
-      html +=
-        '<p style="font-size:0.875rem;color:var(--text-tertiary);margin:0;">No issues flagged for this step.</p>';
-    } else {
-      html +=
-        '<ul class="flow-compliance-warnings" style="margin:0;padding-left:0;list-style:none;font-size:0.875rem;line-height:1.65;">';
-      warns.forEach(function (w) {
-        html += `<li style="margin-bottom:6px;"><span aria-hidden="true">\u26A0 </span>${escHtml(w)}</li>`;
-      });
-      html += '</ul>';
-    }
-    html += '</section></div>';
-
-    panel.innerHTML = html;
-  }
-
-  const PROCESS_FLOW_PENDING_NEW_STEP_KEY = 'processFlowWizardPendingNewStep';
 
   function setPendingNewStepIntent() {
     try {
@@ -5754,58 +4959,8 @@
   /**
    * API GET may lag unsaved wizard work. Fill empty step.outputs/inputs/prompts from draft snapshots.
    */
-  function countNamedStepInputs(inputs) {
-    if (!Array.isArray(inputs)) return 0;
-    return inputs.filter(function (i) {
-      return i && summaryInputDisplayName(i);
-    }).length;
-  }
 
-  function countNamedStepOutputs(outputs) {
-    if (!Array.isArray(outputs)) return 0;
-    return outputs.filter(function (o) {
-      return o && summaryOutputDisplayName(o);
-    }).length;
-  }
 
-  function mergeDraftCreatedStepsIntoApiSteps(apiSteps, draftSteps) {
-    if (!Array.isArray(apiSteps) || apiSteps.length === 0) return apiSteps;
-    const draftById = new Map();
-    (draftSteps || []).forEach(function (s) {
-      if (s && s.id) draftById.set(String(s.id), s);
-    });
-    return apiSteps.map(function (api) {
-      const d = draftById.get(String(api.id));
-      if (!d) return { ...api };
-      const merged = { ...api };
-      const draftOut = countNamedStepOutputs(d.outputs);
-      const apiOut = countNamedStepOutputs(merged.outputs);
-      if (apiOut === 0 && draftOut > 0) {
-        merged.outputs = JSON.parse(JSON.stringify(d.outputs));
-      }
-      const draftIn = countNamedStepInputs(d.inputs);
-      const apiIn = countNamedStepInputs(merged.inputs);
-      if (apiIn === 0 && draftIn > 0) {
-        merged.inputs = JSON.parse(JSON.stringify(d.inputs));
-      }
-      const draftPrompts = Array.isArray(d.execution_prompts)
-        ? d.execution_prompts.filter(function (p) {
-            return p && (p.label || '').trim();
-          }).length
-        : 0;
-      const apiPrompts = Array.isArray(merged.execution_prompts)
-        ? merged.execution_prompts.filter(function (p) {
-            return p && (p.label || '').trim();
-          }).length
-        : 0;
-      if (apiPrompts === 0 && draftPrompts > 0) {
-        merged.execution_prompts = JSON.parse(JSON.stringify(d.execution_prompts));
-      }
-      if (merged.batch_number_mode == null && d.batch_number_mode != null) merged.batch_number_mode = d.batch_number_mode;
-      if (merged.evidence_mode == null && d.evidence_mode != null) merged.evidence_mode = d.evidence_mode;
-      return merged;
-    });
-  }
 
   /**
    * Wizard session stores current outputs under `outputs` (DOM snapshot), not always copied onto createdSteps[].
@@ -5914,25 +5069,7 @@
     }
   }
 
-  function stepSortKey(step) {
-    // Avoid JS float precision issues: treat position as a string-ish key.
-    // We only need stable ordering; server normalization keeps positions simple.
-    if (!step) return '';
-    if (step.position !== null && step.position !== undefined && step.position !== '') {
-      return String(step.position);
-    }
-    return String(step.step_number || '');
-  }
 
-  function sortStepsForDisplay(steps) {
-    return [...(steps || [])].sort(function(a, b) {
-      const ka = stepSortKey(a);
-      const kb = stepSortKey(b);
-      if (ka < kb) return -1;
-      if (ka > kb) return 1;
-      return String(a && a.id || '').localeCompare(String(b && b.id || ''));
-    });
-  }
 
   async function persistStepOrderIfPossible() {
     const pid = new URLSearchParams(window.location.search || '').get('id');
@@ -5999,7 +5136,11 @@
     summariesList.innerHTML = '';
 
     const sortedSteps = sortStepsForDisplay(createdSteps);
-    await renderCompliancePanel(sortedSteps);
+    await window.ProcessModalSummary.renderCompliancePanel(sortedSteps, {
+      isProcessFlowSummaryPage,
+      resolveCurrentStepForSummary,
+      enrichStepForSummaryFromSession
+    });
     if (isProcessFlowSummaryPage()) {
       summariesList.style.display = 'none';
       const summarySticky = document.getElementById('flow-wizard-summary-sticky');
@@ -6256,84 +5397,7 @@
     });
   }
   
-  function mapApiInputToWizardSessionInput(apiIn) {
-    if (!apiIn) {
-      return {
-        inputType: 'new',
-        name: '',
-        quantity: null,
-        unit: '',
-        executionType: 'variable',
-        inventoryPreselected: false,
-        is_variable: true,
-        requires_inventory_selection: true
-      };
-    }
-    const inputType = apiIn.source_output_id ? 'previous_output' : (apiIn.requires_inventory_selection ? 'inventory' : 'new');
-    const name = summaryInputDisplayName(apiIn);
-    let executionType = 'variable';
-    if (inputType === 'previous_output') {
-      executionType = apiIn.is_variable !== false ? 'variable' : 'static';
-    } else if (inputType === 'inventory') {
-      executionType = apiIn.requires_inventory_selection ? 'variable' : 'static';
-    } else {
-      executionType = apiIn.is_variable !== false ? 'variable' : 'static';
-    }
-    const qty = apiIn.quantity;
-    let quantity = null;
-    if (qty != null && qty !== '') {
-      const n = typeof qty === 'number' ? qty : parseFloat(String(qty).trim());
-      quantity = isNaN(n) ? null : n;
-    }
-    const isPreviousOutput = inputType === 'previous_output';
-    const isVariable = isPreviousOutput ? true : (executionType === 'variable' || executionType === 'prompt');
-    const requiresInventorySelection = isPreviousOutput ? true : executionType === 'variable';
-    return {
-      inputType,
-      name,
-      quantity,
-      unit: apiIn.unit || '',
-      executionType,
-      source_output_id: apiIn.source_output_id || undefined,
-      previousOutputDisplayName:
-        apiIn.previous_output_display_name || apiIn.previousOutputDisplayName || undefined,
-      expected_inventory_type: apiIn.expected_inventory_type || undefined,
-      inventoryPreselected: false,
-      is_variable: isVariable,
-      requires_inventory_selection: requiresInventorySelection
-    };
-  }
 
-  function mapApiOutputToWizardSessionOutput(apiOut) {
-    if (!apiOut) {
-      return {
-        id: null,
-        name: '',
-        unit: '',
-        quantity: null,
-        is_variable: true,
-        requires_execution_confirmation: true
-      };
-    }
-    const qty = apiOut.quantity;
-    let quantity = null;
-    if (qty != null && qty !== '') {
-      const n = typeof qty === 'number' ? qty : parseFloat(String(qty).trim());
-      quantity = isNaN(n) ? null : n;
-    }
-    const out = {
-      id: apiOut.id || null,
-      name: summaryOutputDisplayName(apiOut),
-      unit: apiOut.unit || '',
-      quantity,
-      is_variable: apiOut.is_variable !== false,
-      requires_execution_confirmation: apiOut.requires_execution_confirmation !== false
-    };
-    if (apiOut.extra_data && typeof apiOut.extra_data === 'object') {
-      out.extra_data = JSON.parse(JSON.stringify(apiOut.extra_data));
-    }
-    return out;
-  }
 
   /**
    * Session v1 payload compatible with restoreSpaWizardState / serializeSpaWizardState (deep-link edit).

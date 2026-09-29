@@ -17,6 +17,8 @@ from app.core.backend.tasks import (
 )
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
+from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
+from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.services.crm_service import CRMService
 from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
 from app.observability import get_logger
@@ -94,6 +96,35 @@ def get_org_invoices():
     page_size = min(100, max(1, int(request.args.get("page_size", 50))))
     result = _crm_service().get_org_invoices(org_id, kind=kind, page=page, page_size=page_size)
     return jsonify(result), 200
+
+
+@api_bp.route("/api/crm/invoices/<invoice_id>/trace-items", methods=["GET"])
+@requires_auth
+def get_invoice_trace_items(invoice_id: str):
+    """Resolve every labelled stock lot allocated to one tenant's invoice."""
+    if len(invoice_id) > 128:
+        return jsonify({"error": "Invalid invoice ID"}), 400
+    org_id = UUID(g.org_id)
+    session = db_session()
+    invoice = (
+        session.query(XeroInvoice)
+        .filter(XeroInvoice.org_id == org_id, XeroInvoice.xero_invoice_id == invoice_id)
+        .first()
+    )
+    if invoice is None:
+        return jsonify({"error": "Invoice not found"}), 404
+    allocations = (
+        session.query(SalesFifoAllocation.inventory_item_id)
+        .filter(SalesFifoAllocation.org_id == org_id, SalesFifoAllocation.xero_invoice_id == invoice_id)
+        .distinct()
+        .all()
+    )
+    return jsonify(
+        {
+            "invoice_number": invoice.invoice_number or invoice.xero_invoice_id,
+            "inventory_item_ids": sorted(str(row.inventory_item_id) for row in allocations),
+        }
+    ), 200
 
 
 @api_bp.route("/api/crm/customers/<contact_id>/line-item-descriptions", methods=["GET"])
