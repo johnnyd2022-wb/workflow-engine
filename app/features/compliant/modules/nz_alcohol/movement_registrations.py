@@ -66,7 +66,7 @@ def coverage_findings(session, org_id, site_id, activity, on, transfer_id):
 
 def transfer_findings(session, org_id):
     alerts = []
-    for transfer in session.query(SiteStockTransfer).filter(SiteStockTransfer.org_id == org_id):
+    for transfer in session.query(SiteStockTransfer).filter(SiteStockTransfer.org_id == org_id).all():
         evidence = transfer.decision_snapshot or {}
         if evidence.get("policy") != "nz_alcohol_cca_1":
             continue
@@ -88,6 +88,7 @@ def transfer_findings(session, org_id):
             & (SiteStockTransfer.id == SiteStockReceipt.transfer_id),
         )
         .filter(SiteStockReceipt.org_id == org_id, SiteStockReceipt.quantity > 0)
+        .all()
     ):
         evidence = (receipt.decision_snapshot or {}).get("receipt") or {}
         if evidence.get("policy") != "nz_alcohol_cca_1":
