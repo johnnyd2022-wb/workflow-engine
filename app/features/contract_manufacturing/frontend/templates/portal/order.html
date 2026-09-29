@@ -2,7 +2,7 @@
 <p>{{ order.status|capitalize }} · Requested due date {{ order.due_date }}</p>
 <p class="shared-at">Producer shared revision {{ order.revision }} at {{ order.shared_at[:16]|replace('T',' ') }} UTC</p>
 <section>
-<h2>1. Where it's up to</h2>{% if order.progress.available %}<p>{{ order.progress.stage_label or '' }}{% if order.progress.step_label %} · {{ order.progress.step_label }}{% endif %}</p>{% if order.progress.percent is not none %}<p>{{ order.progress.percent }}% complete (shared by producer)</p>{% endif %}{% else %}<p>Progress not shared yet.</p>{% endif %}</section>
+<h2>1. Where it's up to</h2>{% if order.progress.available %}<p>{{ order.progress.stage_label or '' }}{% if order.progress.step_label %} · {{ order.progress.step_label }}{% endif %}</p>{% if order.progress.percent is not none %}<p>{{ order.progress.percent }}% {% if order.progress.milestones %}of shared milestones{% else %}complete (shared by producer){% endif %}</p>{% endif %}{% if order.progress.milestones %}<ul>{% for milestone in order.progress.milestones %}<li>Batch {{ milestone.batch_id }} · {{ milestone.label }} · {{ milestone.status|replace('_', ' ') }}</li>{% endfor %}</ul>{% endif %}{% else %}<p>Progress not shared yet.</p>{% endif %}</section>
 <section>
 <h2>2. When it'll be ready</h2>
 <p>{{ order.timing.reason }}</p>
