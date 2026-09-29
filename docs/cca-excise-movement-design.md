@@ -59,3 +59,29 @@ proof is unresolved. The result always marks the entry incomplete, with unknown
 nil-return/total-duty values and an explicit list of missing accounting sources.
 It cannot replace the lodgement screen. Access requires the existing compliance
 view permission and feature entitlement, and the organisation comes from the session.
+
+## Next integration slice (still behind the site-operations release gate)
+
+The transfer service now asks the configured module to prepare its duty context before
+locking Org/Site/Inventory rows. For an output lot, this locks Step → Execution →
+Contract Order, then the dispatch policy compares those facts with the locked source
+lot. It refuses customer-licensee and customer-underbond orders until their actual
+CCA authority is linked and verified. A customer-owned raw lot cannot enter this
+finished-spirits path.
+
+An explicit `home_consumption` authority can record a producer-liable, measured
+spirits removal from a dated LMA/OSS to an area with no dated CCA coverage. The
+dispatch stores its original measurement, rate, source CCA, physical lot, consignment
+and actor in one immutable decision alongside the stock debit. Partial receipts copy
+the original decision and do not create a second excise liability. The per-CCA
+register shows only **observed excise duty** for these dispatches; it still says
+`complete_lodgement=false`, `nil_return=null`, and `total_duty=null` because other
+taxable sources, levy and GST are not yet reconciled. Its tax status means **excise
+due**, not paid or lodged.
+
+When multiple sites are enabled, the old location-based draft cannot be recorded as
+lodged or as a nil return. Its preview displays an unresolved warning; historical
+lodged snapshots remain visible. Operational site transfers are still off by default.
+The remaining release work includes full per-CCA entries and lodgement, all removal
+sources, customer contract duty authority, paid/returned stock treatment and
+reconciliation with sales and stocktakes.

@@ -22,6 +22,8 @@ class MovementDecision:
 class MovementPolicyProvider(Protocol):
     module_id: str
 
+    def prepare(self, session, org_id, source_item_id) -> dict: ...
+
     def evaluate(self, session, org_id, context) -> MovementDecision: ...
 
     def requirements(self) -> dict: ...
@@ -42,6 +44,17 @@ def evaluate_stock_movement(session, org_id, context) -> MovementDecision:
     if provider is None:
         return MovementDecision(False, "The configured compliance module has no stock movement policy")
     return provider.evaluate(session, org_id, context)
+
+
+def prepare_stock_movement(session, org_id, source_item_id) -> dict:
+    """Resolve module facts before Core's Org/Site/Inventory row locks."""
+    profile = session.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None or not profile.enabled:
+        return {}
+    provider = next((p for p in _providers() if p.module_id == profile.industry_module), None)
+    if provider is None:
+        return {}
+    return provider.prepare(session, org_id, source_item_id)
 
 
 def movement_requirements(session, org_id):

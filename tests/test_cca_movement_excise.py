@@ -7,12 +7,15 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.db.models.stock_location import StockLocation
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.models.excise import ExciseRate
 from app.features.compliant.modules.nz_alcohol.movement_excise import (
     capture_spirits_removal_basis,
     cca_movement_register,
 )
+from app.features.compliant.platform.stock_movements import evaluate_stock_movement
+from app.features.contract_manufacturing.models.orders import ContractCustomer  # noqa: F401 -- FK mapper registration
 from tests.test_compliant_routes import flask_app  # noqa: F401
 from tests.test_customs_premises import world  # noqa: F401
 from tests.test_food_registrations import clients  # noqa: F401
@@ -57,6 +60,48 @@ def test_tested_basis_freezes_the_source_cca_measurement_and_applicable_rate(db,
     rate.rate_per_lal = 1
     context.approval["measurement_reference"] = "Edited later"
     assert json.loads(decision.evidence) == fact
+
+
+def test_home_removal_policy_requires_prelocked_producer_duty_and_exact_source(db, measured):
+    org, context, _product, _source, _rate = measured
+    shop = db.query(StockLocation).filter(StockLocation.org_id == org, StockLocation.name == "Cellar door").one()
+    context.destination_site_id = context.source_site_id
+    context.destination_location_id = shop.id
+    context.source_snapshot.update(source_execution_id=None, source_execution_step_id=None)
+    context.prepared_context = {
+        "found": True,
+        "source_item_id": str(context.source_item_id),
+        "source_execution_id": None,
+        "source_execution_step_id": None,
+        "contract_order_id": None,
+        "duty_responsibility": "producer_licensee",
+    }
+    context.approval.update(
+        authority="home_consumption",
+        destination_activity="selling",
+        evidence_reference="Reviewed excise removal",
+    )
+    decision = evaluate_stock_movement(db, org, context)
+    assert decision.allowed
+    recorded = json.loads(decision.evidence)
+    assert recorded["tax_status"] == "home_consumption_excise_due"
+    assert recorded["removal_basis"]["source_cca"]["id"] == recorded["source_licence"]["id"]
+
+    context.operation = "receipt"
+    context.receipt_id = uuid4()
+    context.quantity = Decimal("6")
+    context.dispatch_evidence = recorded
+    assert evaluate_stock_movement(db, org, context).allowed
+    context.dispatch_evidence = {**recorded, "removal_basis": {}}
+    assert not evaluate_stock_movement(db, org, context).allowed
+
+    context.operation = "dispatch"
+    context.quantity = Decimal("12")
+    context.prepared_context["duty_responsibility"] = "customer_licensee"
+    assert not evaluate_stock_movement(db, org, context).allowed
+    context.prepared_context["duty_responsibility"] = "producer_licensee"
+    context.prepared_context["source_execution_step_id"] = str(uuid4())
+    assert not evaluate_stock_movement(db, org, context).allowed
 
 
 @pytest.mark.parametrize(

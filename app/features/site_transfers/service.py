@@ -154,6 +154,7 @@ def _context(
     loss_reason=None,
     damaged_quantity=Decimal("0"),
     short_quantity=Decimal("0"),
+    prepared_context=None,
 ):
     return StockMovementContext(
         operation=operation,
@@ -178,6 +179,7 @@ def _context(
         loss_reason=loss_reason,
         damaged_quantity=damaged_quantity,
         short_quantity=short_quantity,
+        prepared_context=_freeze(prepared_context or {}),
     )
 
 
@@ -188,7 +190,7 @@ def get_transfer(session, org_id, transfer_id, lock=False):
     return query.with_for_update().populate_existing().one_or_none() if lock else query.one_or_none()
 
 
-def dispatch(session, org_id, actor_id, key, data, policy):
+def dispatch(session, org_id, actor_id, key, data, policy, prepare_context=None):
     if not isinstance(data, dict) or set(data) - {
         "source_item_id",
         "destination_site_id",
@@ -200,7 +202,9 @@ def dispatch(session, org_id, actor_id, key, data, policy):
         "approval",
     }:
         raise TransferError("Unknown dispatch field")
-    _actor_and_release(session, org_id, actor_id)
+    # Keep advisory idempotency serialization before module preparation. Contract
+    # preparation may lock Step -> Execution -> Order; the Org/Site/Inventory locks
+    # below must never precede those locks.
     key = _key_lock(session, org_id, key, "dispatch")
     request_hash = _hash(data)
     prior = (
@@ -209,9 +213,14 @@ def dispatch(session, org_id, actor_id, key, data, policy):
         .one_or_none()
     )
     if prior:
+        _actor_and_release(session, org_id, actor_id)
         if prior.request_hash != request_hash:
             raise TransferError("Idempotency key already used for different dispatch details")
         return prior, True
+    prepared = prepare_context(session, org_id, _id(data.get("source_item_id"))) if prepare_context else {}
+    if not isinstance(prepared, dict):
+        raise TransferError("Movement preparation must return a plain evidence object")
+    _actor_and_release(session, org_id, actor_id)
     item = (
         session.query(InventoryItem)
         .filter(InventoryItem.org_id == org_id, InventoryItem.id == _id(data.get("source_item_id")))
@@ -284,7 +293,10 @@ def dispatch(session, org_id, actor_id, key, data, policy):
         created_by_user_id=actor_id,
     )
     transfer.decision_snapshot = _decision(
-        policy, session, org_id, _context(transfer, "dispatch", amount, transfer.occurred_on, approval, actor_id)
+        policy,
+        session,
+        org_id,
+        _context(transfer, "dispatch", amount, transfer.occurred_on, approval, actor_id, prepared_context=prepared),
     )
     before = item.quantity
     with allow_transfer_accounting(), allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
