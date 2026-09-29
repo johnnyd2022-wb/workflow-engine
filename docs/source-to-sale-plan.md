@@ -737,7 +737,11 @@ Starts once Phases 1 and 2 hold up with a second producer.
          timeline of events and messages, one thread per order.
       Past orders keep the same view, with a "reorder" request. Email notifications
       once the app can send email (0.4g still uses invite links).
-    - [ ] f. **Isolation by design.** Portal users are a separate kind of user with no
+      - [x] Read-only portal foundation (!436): separate invitations/password sessions,
+        branded current/past published orders, shared ABV/batch dates and opt-in document
+        copies. Unavailable fields are explicit; Google, scheduler forecasts, stock,
+        duty, derived milestones, approvals/messages and reorders remain open.
+    - [x] f. **Isolation by design.** (!436) Portal users are a separate kind of user with no
       staff permissions; every portal query is scoped to the customer's orders on the
       server; a test walks every portal route with a second customer and expects 403/404.
       Other customers, recipes, costs and the producer's sales are never reachable.
