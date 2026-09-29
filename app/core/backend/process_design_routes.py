@@ -24,7 +24,7 @@ from app.observability import get_logger
 
 logger = get_logger(__name__)
 
-_PROCESS_SETTINGS_KEYS = {"fifo_auto_select"}
+_PROCESS_SETTINGS_KEYS = {"fifo_auto_select", "library_stock_name"}  # library: plan 1.2
 
 
 _FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh"}
@@ -278,6 +278,8 @@ def _validate_process_settings(raw: Any) -> tuple[dict, str | None]:
         return {}, f"settings: unknown key(s) {', '.join(unknown)}"
     if "fifo_auto_select" in raw and not isinstance(raw["fifo_auto_select"], bool):
         return {}, "settings.fifo_auto_select must be true or false"
+    if "library_stock_name" in raw and not (0 < len(str(raw["library_stock_name"] or "").strip()) <= 60):
+        return {}, "settings.library_stock_name must be 1-60 characters"
     return raw, None
 
 

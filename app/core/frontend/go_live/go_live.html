@@ -1,0 +1,120 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Go live{% endblock %}
+
+{% block body_class %}go-live-page{% endblock %}
+
+{% block head_extras %}
+  <meta name="description" content="Start tracing from today: count what you hold and go live">
+  <style>
+    .gl-shell { display: flex; flex-direction: column; gap: 18px; padding-block: 24px 56px; max-width: 64rem; }
+    .gl-shell [hidden] { display: none !important; }
+    .gl-head h1 { margin: 0; font-size: 26px; color: var(--text-primary); }
+    .gl-head p { margin: 6px 0 0; color: var(--text-secondary); font-size: 15px; max-width: 62ch; line-height: 1.5; }
+    .gl-step { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+    .gl-step-title { display: flex; align-items: baseline; gap: 10px; margin: 0; font-size: 17px; color: var(--text-primary); }
+    .gl-num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-size: 13px; font-weight: 700;
+      background: var(--bg-secondary, #eef2f1); color: var(--text-primary); flex: none; }
+    .gl-step--done .gl-num { background: #d9efe6; color: #17603f; }
+    .gl-hint { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; max-width: 70ch; }
+    .gl-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+    .gl-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .gl-field input, .gl-field select { font: inherit; font-weight: 400; font-size: 14px; padding: 8px 10px; border-radius: var(--radius-md);
+      border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); min-width: 0; }
+    .gl-product { border-top: 1px solid var(--border-default); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .gl-product:first-child { border-top: 0; padding-top: 0; }
+    .gl-product-name { font-weight: 600; color: var(--text-primary); }
+    .gl-product-meta { color: var(--text-secondary); font-size: 13px; font-weight: 400; margin-left: 6px; }
+    .gl-lot { display: grid; grid-template-columns: 1.1fr .8fr 1fr .7fr auto; gap: 8px; align-items: end; }
+    .gl-wip { display: grid; grid-template-columns: 1.6fr .8fr .7fr .7fr 1fr auto; gap: 8px; align-items: end; }
+    .gl-link-btn { background: none; border: 0; color: var(--azure-blue); cursor: pointer; font: inherit; font-size: 13px; padding: 6px 0; text-decoration: underline; justify-self: start; align-self: flex-start; }
+    .gl-remove { background: none; border: 0; color: var(--error, #b42318); cursor: pointer; font-size: 18px; line-height: 1; padding: 8px 4px; }
+    .gl-message { padding: 12px 14px; border-radius: var(--radius-md); font-size: 14px; }
+    .gl-message--error { background: var(--error-bg, #fef2f2); color: var(--error, #b42318); border: 1px solid var(--error, #b42318); }
+    .gl-message--ok { background: #e3f4ec; color: #17603f; border: 1px solid #9ad3b6; }
+    .gl-table-wrap { overflow-x: auto; }
+    .gl-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
+    .gl-table th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); padding: 8px 10px; border-bottom: 1px solid var(--border-default); }
+    .gl-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .gl-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    @media (max-width: 720px) {
+      .gl-lot, .gl-wip { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+{% endblock %}
+
+{% block topbar %}{% endblock %}
+
+{% block content %}
+  <div class="max-content gl-shell" data-go-live-root>
+    <header class="gl-head">
+      <h1>Go live</h1>
+      <p>Start tracing from today without rebuilding your history. Count what you hold once; from then on, new batches and sales are traced as they happen.</p>
+    </header>
+
+    <div class="gl-message" data-gl-message role="status" hidden></div>
+
+    <section class="gl-step" data-gl-step="date" aria-labelledby="gl-date-title">
+      <h2 class="gl-step-title" id="gl-date-title"><span class="gl-num">1</span>Go-live date</h2>
+      <p class="gl-hint">Tracing starts on this date. Sales dated earlier still show in sales reports, but aren't matched to batches: your count below already reflects them.</p>
+      <div class="gl-row">
+        <label class="gl-field">Go-live date<input type="date" id="gl-date" data-gl-date></label>
+        <button type="button" class="btn btn-primary" data-gl-save-date>Save date</button>
+      </div>
+    </section>
+
+    <section class="gl-step" data-gl-step="workflows" aria-labelledby="gl-wf-title">
+      <h2 class="gl-step-title" id="gl-wf-title"><span class="gl-num">2</span>Workflows</h2>
+      <p class="gl-hint" data-gl-workflow-summary>Loading…</p>
+      <div class="gl-actions">
+        <a class="btn btn-secondary" href="/core/flows/create/start">Add a workflow</a>
+        <a class="btn btn-secondary" href="/core/processes">See workflows</a>
+      </div>
+    </section>
+
+    <section class="gl-step" data-gl-step="count" aria-labelledby="gl-count-title">
+      <h2 class="gl-step-title" id="gl-count-title"><span class="gl-num">3</span>Count what's on hand</h2>
+      <p class="gl-hint">One entry per batch you can tell apart. Bottles are whole numbers; put a part-filled bottle under Library stock in mL. Unknown dates can stay blank.</p>
+
+      <h3 style="margin: 6px 0 0; font-size: 15px;">Finished goods</h3>
+      <div data-gl-products><p class="gl-hint">Loading…</p></div>
+
+      <h3 style="margin: 10px 0 0; font-size: 15px;">In tank or barrel</h3>
+      <p class="gl-hint">Spirit, beer or wine part-way through production. It's recorded as opening stock that your next bottling (or any later step) can use as an input.</p>
+      <div data-gl-wip-rows style="display: flex; flex-direction: column; gap: 8px;"></div>
+      <datalist id="gl-intermediate-names"></datalist>
+      <button type="button" class="gl-link-btn" data-gl-add-wip>+ Add something in tank or barrel</button>
+
+      <h3 style="margin: 10px 0 0; font-size: 15px;">Raw materials and packaging</h3>
+      <p class="gl-hint" data-gl-raw-summary>Loading…</p>
+      <div class="gl-actions">
+        <a class="btn btn-secondary" href="/core/inventory/add/manual">Add by hand</a>
+        <a class="btn btn-secondary" href="/core/inventory/add/csv">Import a spreadsheet</a>
+        <a class="btn btn-secondary" href="/core/inventory/add/barcode">Scan barcodes</a>
+      </div>
+
+      <div class="gl-message gl-message--error" data-gl-count-error hidden></div>
+      <div><button type="button" class="btn btn-primary" data-gl-save-count>Record opening stock</button></div>
+    </section>
+
+    <section class="gl-step" data-gl-step="sales" aria-labelledby="gl-sales-title">
+      <h2 class="gl-step-title" id="gl-sales-title"><span class="gl-num">4</span>Connect sales</h2>
+      <p class="gl-hint">Connect Xero so sales come in by themselves. Sales from the go-live date on are matched to your opening stock first, oldest batch first; earlier sales are kept for reporting only.</p>
+      {% if can('sales.manage') %}<div class="gl-actions"><a class="btn btn-secondary" href="/crm/configuration">Connect Xero</a></div>{% endif %}
+    </section>
+
+    <section class="gl-step" data-gl-opening-wrap hidden aria-labelledby="gl-opening-title">
+      <h2 class="gl-step-title" id="gl-opening-title">Opening stock recorded</h2>
+      <div class="gl-table-wrap">
+        <table class="gl-table">
+          <thead><tr><th scope="col">Item</th><th scope="col">Batch</th><th scope="col">Quantity</th><th scope="col">ABV</th><th scope="col">Bottled</th></tr></thead>
+          <tbody data-gl-opening-rows></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/go-live.js"></script>
+{% endblock %}

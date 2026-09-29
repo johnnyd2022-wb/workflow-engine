@@ -4,10 +4,10 @@ Owned by the e2e-playwright skill; spec at .agents/specs/playwright-e2e.md.
 
 Design decisions worth not re-deriving (spec D1-D5):
 
-- **ENVIRONMENT stays unset** (-> local.ini, test DB on :8401). `ENVIRONMENT=test` points
-  at `host.docker.internal`, which only resolves inside Docker, so it hangs from a host
-  shell. Playwright needs a host-reachable URL, so local is the only workable env. Set
-  ENVIRONMENT=test and this suite skips rather than hanging (D1).
+- **ENVIRONMENT stays unset for local runs** (-> local.ini, test DB on :8401).
+  `ENVIRONMENT=test` points at `host.docker.internal`, which only resolves inside Docker,
+  so local runs skip rather than hang. CI sets `E2E_ALLOW_TEST_INPROCESS=1` after mapping
+  test.ini to its PostgreSQL service, allowing the same in-process TLS server there.
 - **The app under test is `app.app:app`, NOT a bare `create_app()`.** `app/app.py:24`
   calls `create_app()` and then registers `/`, `/dashboard`, `/landing-diagram`,
   `/healthcheck` and `/initialize` on that instance. `create_app()` alone returns a
@@ -110,7 +110,11 @@ def _e2e_skip_reason() -> str | None:
     """The one place that decides whether E2E can run. None means go."""
     external_url = os.environ.get("E2E_BASE_URL")
 
-    if not external_url and os.getenv("ENVIRONMENT", "").lower() == "test":
+    if (
+        not external_url
+        and os.getenv("ENVIRONMENT", "").lower() == "test"
+        and os.getenv("E2E_ALLOW_TEST_INPROCESS") != "1"
+    ):
         return (
             "ENVIRONMENT=test targets host.docker.internal and hangs from a host shell; "
             "run E2E with ENVIRONMENT unset so it resolves to local (spec D1), or set "

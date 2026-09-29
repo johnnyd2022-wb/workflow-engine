@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Column, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
@@ -36,6 +36,11 @@ class SalesFifoAllocation(TenantScoped, Base):
     product_name = Column(String(500), nullable=False)
     quantity = Column(Numeric(18, 4), nullable=False)
     unit = Column(String(50), nullable=False)
+    # Plan 1.1: "confirmed" or "pending_review" (hybrid mode, until review_due_at).
+    status = Column(String(20), nullable=False, default="confirmed", server_default="confirmed")
+    # Filled from a batch made after the invoice date: a pre-sale, shown not blocked.
+    presold = Column(Boolean, nullable=False, default=False, server_default="false")
+    review_due_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
 
     def __repr__(self) -> str:

@@ -40,9 +40,7 @@ class BackupCodeRepository:
         alphabet = string.ascii_letters + string.digits
         return "".join(secrets.choice(alphabet) for _ in range(length))
 
-    def generate_and_store_codes(
-        self, org_id: UUID, user_id: UUID, count: int = 10, commit: bool = False
-    ) -> list[str]:
+    def generate_and_store_codes(self, org_id: UUID, user_id: UUID, count: int = 10, commit: bool = False) -> list[str]:
         """Generate backup codes and store them encrypted in the database
 
         Args:

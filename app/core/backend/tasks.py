@@ -113,7 +113,9 @@ def _archive_filter(model: Any, archive: str, cutoff: datetime):
     return or_(model.status.in_(OPEN_STATUSES), and_(model.status.in_(("completed", "cancelled")), closed_at >= cutoff))
 
 
-def _all_task_rows(session: Session, org_id: UUID, source: str = "all", archive: str = "active") -> list[dict[str, Any]]:
+def _all_task_rows(
+    session: Session, org_id: UUID, source: str = "all", archive: str = "active"
+) -> list[dict[str, Any]]:
     cutoff = _archive_cutoff(serialise_config(_config_row(session, org_id)))
     core_rows = (
         session.query(CoreTask)
@@ -182,7 +184,9 @@ def _parse_optional_user(session: Session, org_id: UUID, raw: Any) -> UUID | Non
         raise TaskError("assigned_to_user_id must be a UUID") from exc
     user = session.query(User).filter(User.org_id == org_id, User.id == user_id, User.is_active.is_(True)).first()
     if user is None:
-        logger.warning("access_denied", reason="task_assignee_not_active_in_org", org_id=str(org_id), user_id=str(user_id))
+        logger.warning(
+            "access_denied", reason="task_assignee_not_active_in_org", org_id=str(org_id), user_id=str(user_id)
+        )
         raise TaskError("assignee must be an active user in this organisation")
     return user_id
 
@@ -249,13 +253,19 @@ def create_task(session: Session, org_id: UUID, actor_id: UUID | None, data: dic
         event_type="core_task.created", entity_type="core_task", entity_id=task.id, payload=snapshot, actor_id=actor_id
     )
     session.commit()
-    return _serialise_core_task(task, _user_names(session, org_id, {task.assigned_to_user_id} if task.assigned_to_user_id else set()))
+    return _serialise_core_task(
+        task, _user_names(session, org_id, {task.assigned_to_user_id} if task.assigned_to_user_id else set())
+    )
 
 
-def update_task(session: Session, org_id: UUID, actor_id: UUID | None, task_id: UUID, data: dict[str, Any]) -> dict[str, Any] | None:
+def update_task(
+    session: Session, org_id: UUID, actor_id: UUID | None, task_id: UUID, data: dict[str, Any]
+) -> dict[str, Any] | None:
     task = session.query(CoreTask).filter(CoreTask.org_id == org_id, CoreTask.id == task_id).first()
     if task is None:
-        logger.warning("access_denied", reason="core_task_not_found_or_cross_org", org_id=str(org_id), task_id=str(task_id))
+        logger.warning(
+            "access_denied", reason="core_task_not_found_or_cross_org", org_id=str(org_id), task_id=str(task_id)
+        )
         return None
     before = _task_snapshot(task)
     fields = _validate_task_fields(session, org_id, data, creating=False)
@@ -276,16 +286,24 @@ def update_task(session: Session, org_id: UUID, actor_id: UUID | None, task_id: 
         actor_id=actor_id,
     )
     session.commit()
-    return _serialise_core_task(task, _user_names(session, org_id, {task.assigned_to_user_id} if task.assigned_to_user_id else set()))
+    return _serialise_core_task(
+        task, _user_names(session, org_id, {task.assigned_to_user_id} if task.assigned_to_user_id else set())
+    )
 
 
 def delete_task(session: Session, org_id: UUID, actor_id: UUID | None, task_id: UUID) -> bool:
     task = session.query(CoreTask).filter(CoreTask.org_id == org_id, CoreTask.id == task_id).first()
     if task is None:
-        logger.warning("access_denied", reason="core_task_not_found_or_cross_org", org_id=str(org_id), task_id=str(task_id))
+        logger.warning(
+            "access_denied", reason="core_task_not_found_or_cross_org", org_id=str(org_id), task_id=str(task_id)
+        )
         return False
     EventWriter(session, org_id).emit(
-        event_type="core_task.deleted", entity_type="core_task", entity_id=task.id, payload=_task_snapshot(task), actor_id=actor_id
+        event_type="core_task.deleted",
+        entity_type="core_task",
+        entity_id=task.id,
+        payload=_task_snapshot(task),
+        actor_id=actor_id,
     )
     session.delete(task)
     session.commit()
@@ -323,8 +341,13 @@ def _validate_period(value: Any, unit: Any, *, prefix: str) -> tuple[int, str]:
 
 def update_config(session: Session, org_id: UUID, data: dict[str, Any]) -> dict[str, Any]:
     allowed = {
-        "due_notifications_enabled", "notification_lead_value", "notification_lead_unit",
-        "done_archive_value", "done_archive_unit", "lane_order", "hidden_default_lanes",
+        "due_notifications_enabled",
+        "notification_lead_value",
+        "notification_lead_unit",
+        "done_archive_value",
+        "done_archive_unit",
+        "lane_order",
+        "hidden_default_lanes",
     }
     if set(data) - allowed:
         raise TaskError("unsupported configuration fields")
@@ -385,8 +408,10 @@ def task_due_summary(session: Session, org_id: UUID, today: date | None = None) 
     if config["due_notifications_enabled"]:
         lead_value = config["notification_lead_value"]
         lead_unit = config["notification_lead_unit"]
-        end = _add_months(today, lead_value) if lead_unit == "months" else date.fromordinal(
-            today.toordinal() + lead_value * (7 if lead_unit == "weeks" else 1)
+        end = (
+            _add_months(today, lead_value)
+            if lead_unit == "months"
+            else date.fromordinal(today.toordinal() + lead_value * (7 if lead_unit == "weeks" else 1))
         )
         due_soon = [row for row in rows if today <= date.fromisoformat(row["due_date"]) <= end]
     return {"due_soon_tasks": due_soon, "overdue_tasks": overdue, "notification_policy": config}
@@ -408,7 +433,9 @@ def list_lanes(session: Session, org_id: UUID, board: str) -> list[dict[str, Any
     return [_serialise_lane(row) for row in rows]
 
 
-def create_lane(session: Session, org_id: UUID, board: str, actor_id: UUID | None, data: dict[str, Any]) -> dict[str, Any]:
+def create_lane(
+    session: Session, org_id: UUID, board: str, actor_id: UUID | None, data: dict[str, Any]
+) -> dict[str, Any]:
     if board not in {"core", "crm"}:
         raise TaskError("invalid task board")
     if set(data) - {"title"}:
@@ -423,7 +450,11 @@ def create_lane(session: Session, org_id: UUID, board: str, actor_id: UUID | Non
         .first()
     )
     lane = TaskBoardLane(
-        org_id=org_id, board=board, title=title, position=(max_position[0] + 1 if max_position else 0), created_by_user_id=actor_id
+        org_id=org_id,
+        board=board,
+        title=title,
+        position=(max_position[0] + 1 if max_position else 0),
+        created_by_user_id=actor_id,
     )
     session.add(lane)
     try:
@@ -434,10 +465,16 @@ def create_lane(session: Session, org_id: UUID, board: str, actor_id: UUID | Non
     return _serialise_lane(lane)
 
 
-def update_lane(session: Session, org_id: UUID, board: str, lane_id: UUID, data: dict[str, Any]) -> dict[str, Any] | None:
+def update_lane(
+    session: Session, org_id: UUID, board: str, lane_id: UUID, data: dict[str, Any]
+) -> dict[str, Any] | None:
     if board not in {"core", "crm"} or set(data) - {"title", "position"}:
         raise TaskError("unsupported lane fields")
-    lane = session.query(TaskBoardLane).filter(TaskBoardLane.org_id == org_id, TaskBoardLane.board == board, TaskBoardLane.id == lane_id).first()
+    lane = (
+        session.query(TaskBoardLane)
+        .filter(TaskBoardLane.org_id == org_id, TaskBoardLane.board == board, TaskBoardLane.id == lane_id)
+        .first()
+    )
     if lane is None:
         return None
     if "title" in data:
@@ -479,7 +516,11 @@ def reorder_lanes(session: Session, org_id: UUID, board: str, lane_ids: list[UUI
 
 
 def delete_lane(session: Session, org_id: UUID, board: str, lane_id: UUID) -> bool:
-    lane = session.query(TaskBoardLane).filter(TaskBoardLane.org_id == org_id, TaskBoardLane.board == board, TaskBoardLane.id == lane_id).first()
+    lane = (
+        session.query(TaskBoardLane)
+        .filter(TaskBoardLane.org_id == org_id, TaskBoardLane.board == board, TaskBoardLane.id == lane_id)
+        .first()
+    )
     if lane is None:
         return False
     session.delete(lane)
@@ -487,7 +528,9 @@ def delete_lane(session: Session, org_id: UUID, board: str, lane_id: UUID) -> bo
     return True
 
 
-def assign_task_to_lane(session: Session, org_id: UUID, board: str, task_id: UUID, lane_id: UUID | None) -> dict[str, Any] | None:
+def assign_task_to_lane(
+    session: Session, org_id: UUID, board: str, task_id: UUID, lane_id: UUID | None
+) -> dict[str, Any] | None:
     if board not in {"core", "crm"}:
         raise TaskError("invalid task board")
     if board == "core":
@@ -501,7 +544,11 @@ def assign_task_to_lane(session: Session, org_id: UUID, board: str, task_id: UUI
     if task is None:
         return None
     if lane_id is not None:
-        lane = session.query(TaskBoardLane).filter(TaskBoardLane.org_id == org_id, TaskBoardLane.board == board, TaskBoardLane.id == lane_id).first()
+        lane = (
+            session.query(TaskBoardLane)
+            .filter(TaskBoardLane.org_id == org_id, TaskBoardLane.board == board, TaskBoardLane.id == lane_id)
+            .first()
+        )
         if lane is None:
             raise TaskError("lane not found")
     task.board_lane_id = lane_id
@@ -519,15 +566,17 @@ def register_routes(bp) -> None:
     @requires_auth
     def list_core_tasks():
         try:
-            return jsonify({
-                "tasks": list_tasks(
-                    db_session(),
-                    org_id(),
-                    request.args.get("source", "all"),
-                    request.args.get("status"),
-                    request.args.get("archive", "active"),
-                )
-            })
+            return jsonify(
+                {
+                    "tasks": list_tasks(
+                        db_session(),
+                        org_id(),
+                        request.args.get("source", "all"),
+                        request.args.get("status"),
+                        request.args.get("archive", "active"),
+                    )
+                }
+            )
         except TaskError as exc:
             return jsonify({"error": str(exc)}), 400
 
@@ -535,7 +584,9 @@ def register_routes(bp) -> None:
     @requires_auth
     def create_core_task():
         try:
-            task = create_task(db_session(), org_id(), UUID(g.user_id) if g.user_id else None, request.get_json(silent=True) or {})
+            task = create_task(
+                db_session(), org_id(), UUID(g.user_id) if g.user_id else None, request.get_json(silent=True) or {}
+            )
             return jsonify({"task": task}), 201
         except TaskError as exc:
             db_session().rollback()
@@ -546,7 +597,11 @@ def register_routes(bp) -> None:
     def update_core_task(task_id: str):
         try:
             task = update_task(
-                db_session(), org_id(), UUID(g.user_id) if g.user_id else None, UUID(task_id), request.get_json(silent=True) or {}
+                db_session(),
+                org_id(),
+                UUID(g.user_id) if g.user_id else None,
+                UUID(task_id),
+                request.get_json(silent=True) or {},
             )
             if task is None:
                 return jsonify({"error": "Task not found"}), 404
@@ -589,7 +644,13 @@ def register_routes(bp) -> None:
     @requires_auth
     def create_core_task_lane():
         try:
-            lane = create_lane(db_session(), org_id(), "core", UUID(g.user_id) if g.user_id else None, request.get_json(silent=True) or {})
+            lane = create_lane(
+                db_session(),
+                org_id(),
+                "core",
+                UUID(g.user_id) if g.user_id else None,
+                request.get_json(silent=True) or {},
+            )
             return jsonify({"lane": lane}), 201
         except TaskError as exc:
             return jsonify({"error": str(exc)}), 400
