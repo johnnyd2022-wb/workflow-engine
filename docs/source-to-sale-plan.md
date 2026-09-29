@@ -909,6 +909,9 @@ Founder decisions for this phase:
       optional stock targets (a minimum or reorder level per product, per site with 7.1)
       and a simple forecast (e.g. average sales over the last n weeks). Pre-sales count as
       demand (1.1).
+      - [x] Explicit demand workspace: quantities, output units, due dates, priority,
+        cancellation, tenant isolation and staff audit (!425); sales/contract adapters,
+        forecasts and stock targets remain.
     - [ ] b. **What to make.** Net requirements = demand − stock on hand − stock already
       in production (and allocated), per product. Each shortfall becomes a **planned
       batch** of the workflow that makes it, rounded to its usual batch size.

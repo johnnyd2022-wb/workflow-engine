@@ -44,6 +44,7 @@ from app.features.operational_cases.models.operational_case import OperationalCa
 from app.features.operational_cases.models.operational_case_event import OperationalCaseEvent
 from app.features.operational_cases.models.operational_case_link import OperationalCaseLink
 from app.utils.config_loader import config
+from app.features.planning.models import PlanningDemand
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
