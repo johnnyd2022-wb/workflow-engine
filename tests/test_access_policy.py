@@ -16,6 +16,7 @@ from app.core.security.access_policy import (
     DENY,
     PERMISSIONS,
     POLICY,
+    PORTAL_SIGNED_IN,
     PUBLIC,
     ROLE_PERMISSIONS,
     SIGNED_IN,
@@ -48,7 +49,7 @@ def test_policy_only_names_real_permissions():
     for _pattern, _methods, requirement in POLICY:
         required = requirement if isinstance(requirement, tuple) else (requirement,)
         for req in required:
-            assert req in PERMISSIONS or req in (PUBLIC, SIGNED_IN), req
+            assert req in PERMISSIONS or req in (PUBLIC, SIGNED_IN, PORTAL_SIGNED_IN), req
 
 
 def test_every_role_has_a_permission_set_and_admin_has_everything():

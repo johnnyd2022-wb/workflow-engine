@@ -311,7 +311,7 @@ class XeroInvoiceRepository:
     def top_products(
         self,
         org_id: UUID,
-        limit: int = 8,
+        limit: int | None = 8,
         start_date: date | None = None,
         end_date: date | None = None,
         descending: bool = True,
@@ -338,12 +338,10 @@ class XeroInvoiceRepository:
             q = q.filter(XeroInvoice.date < end_date)
 
         order_expr = total_revenue_expr.desc().nulls_last() if descending else total_revenue_expr.asc().nulls_last()
-        rows = (
-            q.group_by(XeroInvoiceLineItem.item_code, XeroInvoiceLineItem.description)
-            .order_by(order_expr)
-            .limit(limit)
-            .all()
-        )
+        q = q.group_by(XeroInvoiceLineItem.item_code, XeroInvoiceLineItem.description).order_by(order_expr)
+        if limit is not None:
+            q = q.limit(limit)
+        rows = q.all()
         return [
             {
                 "item_code": row.item_code,

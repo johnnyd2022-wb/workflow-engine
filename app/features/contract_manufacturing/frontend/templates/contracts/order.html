@@ -1,0 +1,68 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}{{ order.reference }} · Contract orders{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}
+{% block content %}
+<main class="contract-workspace">
+  <a href="{{ url_for('contracts.home') }}" hx-boost="false">Contract orders</a>
+  <header><h1>{{ order.reference }}</h1><p>{{ order.customer_name }} · Due {{ order.due_date }} · {{ order.status|capitalize }}</p></header>
+  {% if can('production.record', 'users.manage') %}<p><a href="{{ url_for('contracts.portal_sharing_page', order_id=order.id) }}" hx-boost="false">Customer portal sharing</a></p>{% endif %}
+  <p class="contract-error" role="alert" hidden></p>
+  <section class="contract-card">
+    <h2>Order details</h2>
+    <p>Duty responsibility: {{ {'producer_licensee':'Producer as licensee', 'customer_licensee':'Customer as licensee', 'customer_underbond':"Underbond to customer's CCA"}[order.duty_responsibility] }}</p>
+    {% if order.customer_cca_reference %}<p>Customer CCA: {{ order.customer_cca_reference }}</p>{% endif %}
+    {% if can('sales.record') and order.status not in ['completed','cancelled'] %}
+    {% set state = namespace(linked=false) %}{% for line in order.lines %}{% if line.batches %}{% set state.linked = true %}{% endif %}{% endfor %}
+    <form hx-boost="false" data-contract-api="/api/core/contract-orders/{{ order.id }}" data-method="PATCH">
+      <label>Order reference<input name="reference" maxlength="100" value="{{ order.reference }}" required></label>
+      <label>Due date<input name="due_date" type="date" value="{{ order.due_date }}" required></label>
+      <label>Status<select name="status">{% for status in status_choices %}<option value="{{ status }}" {% if status == order.status %}selected{% endif %}>{{ status|capitalize }}</option>{% endfor %}</select></label>
+      {% if not state.linked %}
+      <label>Duty responsibility<select name="duty_responsibility">{% for duty in duty_choices %}<option value="{{ duty }}" {% if duty == order.duty_responsibility %}selected{% endif %}>{{ {'producer_licensee':'Producer as licensee','customer_licensee':'Customer as licensee','customer_underbond':"Underbond to customer's CCA"}[duty] }}</option>{% endfor %}</select></label>
+      <label>Customer CCA reference<input name="customer_cca_reference" maxlength="255" value="{{ order.customer_cca_reference or '' }}"></label>
+      {% endif %}
+      <button class="btn" type="submit">Save order</button>
+    </form>
+    {% endif %}
+  </section>
+  {% for line in order.lines %}
+  <section class="contract-card">
+    <h2>{{ line.product_name }}</h2><p>{{ line.quantity }} {{ line.unit }} · Materials: {{ line.materials_source }}</p>
+    {% if line.spec_reference %}<p>Specification: {{ line.spec_reference }}</p>{% endif %}
+    <h3>Linked batches</h3>
+    <ul>{% for batch in line.batches %}<li>{{ batch.execution_id }} · {{ batch.status|replace('_', ' ') }}
+      {% if can('production.record') and order.status not in ['completed','cancelled'] %}
+      <button type="button" class="btn" data-contract-delete="/api/core/contract-orders/{{ order.id }}/lines/{{ line.id }}/batches/{{ batch.execution_id }}">Unlink</button>
+      {% endif %}</li>{% else %}<li>No batches linked.</li>{% endfor %}</ul>
+    {% if can('production.record') and order.status == 'confirmed' %}
+    <form hx-boost="false" data-contract-api="/api/core/contract-orders/{{ order.id }}/lines/{{ line.id }}/batches" data-method="POST">
+      <label>Batch<select name="execution_id" required><option value="">Choose a batch</option>{% for batch in available_batches %}<option value="{{ batch.id }}">{{ batch.label }}</option>{% endfor %}</select></label>
+      <button class="btn" type="submit">Link batch</button>
+    </form>
+    {% endif %}
+    {% if can('sales.record') and not line.batches and order.status not in ['completed','cancelled'] %}
+    <form hx-boost="false" data-contract-api="/api/core/contract-orders/{{ order.id }}/lines/{{ line.id }}" data-method="PATCH">
+      <label>Product<input name="product_name" value="{{ line.product_name }}" maxlength="255" required></label>
+      <label>Quantity<input name="quantity" value="{{ line.quantity }}" type="number" min="0.0001" step="0.0001" required></label>
+      <label>Unit<input name="unit" value="{{ line.unit }}" maxlength="50" required></label>
+      <label>Materials supplied by<select name="materials_source">{% for source in materials_choices %}<option value="{{ source }}" {% if source == line.materials_source %}selected{% endif %}>{{ source|capitalize }}</option>{% endfor %}</select></label>
+      {% if can('production.view') %}
+      <label>Specification reference<input name="spec_reference" maxlength="500" value="{{ line.spec_reference or '' }}"></label>
+      <label>Recipe version and product<select name="product_mapping"><option value="">Keep current mapping</option>{% for recipe in recipe_outputs %}<option value="{{ recipe.value }}">{{ recipe.label }}</option>{% endfor %}</select></label>
+      {% endif %}
+      <button class="btn" type="submit">Save line</button>
+    </form>
+    {% endif %}
+  </section>
+  {% endfor %}
+  {% if can('sales.record') and order.status not in ['completed','cancelled'] %}
+  <section class="contract-card"><h2>Add product</h2>
+    <form hx-boost="false" data-contract-api="/api/core/contract-orders/{{ order.id }}/lines" data-method="POST">
+      {% set line_prefix = '' %}{% include "contracts/_line_fields.html" %}
+      <button class="btn btn-primary" type="submit">Add product</button>
+    </form>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('contracts.static', filename='orders.js') }}"></script>{% endblock %}
