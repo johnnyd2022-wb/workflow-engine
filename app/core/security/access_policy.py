@@ -306,6 +306,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_licensing.*", None, "compliance.manage"),
     ("compliant.compliant_api.create_alcohol_product", None, "compliance.manage"),
     ("compliant.compliant_pages.nz_alcohol_configuration", None, "compliance.manage"),
+    ("compliant.compliant_cca_movements.*", _READ, "compliance.view"),
     ("compliant.compliant_food_registrations.*", _READ, "compliance.view"),
     ("compliant.compliant_food_registrations.*", None, "compliance.manage"),
     ("compliant.compliant_premises.*", _READ, "compliance.view"),
