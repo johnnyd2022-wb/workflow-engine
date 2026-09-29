@@ -5,6 +5,7 @@ from functools import wraps
 from flask import abort, g, request
 
 from app.core.db.models.user import UserRole
+from app.core.security.access_policy import has_permission as has_permission  # re-export for route modules
 from app.observability import get_logger
 
 logger = get_logger(__name__)

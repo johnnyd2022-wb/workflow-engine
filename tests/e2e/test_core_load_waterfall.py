@@ -160,7 +160,7 @@ def test_core_detail_tabs_reload_after_boosted_return(logged_in_page, tab, loade
     assert loaded_calls(calls) == first_load_count + 1, calls
 
 
-def test_core_overview_is_deterministic_and_traceability_is_progressively_disclosed(logged_in_page):
+def test_core_overview_is_deterministic_and_traceability_is_on_inventory_tab(logged_in_page):
     """A plain /core is an operational landing page, not the last browser's tab state."""
     page = logged_in_page
     page.goto("/core?tab=inventory")
@@ -174,13 +174,9 @@ def test_core_overview_is_deterministic_and_traceability_is_progressively_disclo
     assert page.locator('[data-core2-tab-panel="overview"]').is_visible()
     assert page.locator('[data-core2-tab-panel="inventory"]').is_hidden()
 
-    traceability = page.locator(".core2-overview-secondary__details")
-    assert traceability.is_visible()
-    assert traceability.evaluate("node => node.open") is False
-    assert "covered" in page.locator("#core2-overview-traceability-summary").inner_text()
-    traceability.locator("summary").click()
-    assert traceability.evaluate("node => node.open") is True
-    assert page.locator("#core2-overview-traceability").is_visible()
+    page.locator('[data-core2-tab-target="inventory"]').click()
+    assert page.locator('[data-core2-tab-panel="inventory"]').is_visible()
+    assert page.locator("#core2-inv-summary-traceable").is_visible()
 
 
 def test_core_tabs_are_keyboard_navigable(logged_in_page):
@@ -200,9 +196,9 @@ def test_core_tabs_are_keyboard_navigable(logged_in_page):
 
     page.locator("#core2-tab-inventory").press("End")
     page.wait_for_function(
-        "() => { const e = document.querySelector('[data-core2-tab-panel=\"workflows\"]'); return e && !e.hidden; }"
+        "() => { const e = document.querySelector('[data-core2-tab-panel=\"tasks\"]'); return e && !e.hidden; }"
     )
-    assert page.locator("#core2-tab-workflows").evaluate("node => document.activeElement === node")
+    assert page.locator("#core2-tab-tasks").evaluate("node => document.activeElement === node")
 
 
 def test_auth_me_is_fetched_once_per_page(logged_in_page):
@@ -219,7 +215,7 @@ def test_auth_me_is_fetched_once_per_page(logged_in_page):
         assert len(me) <= 1, f"{path}: /auth/me fetched {len(me)}x"
 
 
-def test_executions_live_reuses_hub_overview_no_heavy_lists(logged_in_page):
+def test_executions_live_loads_bounded_production_lists(logged_in_page):
     page = logged_in_page
     calls = _core_api_calls(page)
 
@@ -227,7 +223,9 @@ def test_executions_live_reuses_hub_overview_no_heavy_lists(logged_in_page):
     _wait(page)
 
     assert calls.count("hub/overview") == 1, calls
-    assert not any(c == "executions" or c.startswith("executions?") for c in calls), calls
+    assert "executions?status=in_progress&limit=100" in calls, calls
+    assert "executions?status=pending&limit=100" in calls, calls
+    assert not any(c == "executions" or (c.startswith("executions?") and "limit=" not in c) for c in calls), calls
     assert not any("include_steps=true" in c for c in calls), calls
     assert not any(c == "inventory" or c.startswith("inventory?") for c in calls), calls
 
