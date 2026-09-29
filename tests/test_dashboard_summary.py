@@ -151,7 +151,7 @@ def test_dashboard_action_board_routes_compliant_evidence_to_its_own_workspace()
 
     item = next(item for item in board["items"] if item["key"] == "compliant_evidence")
     assert item["href"] == "/compliant"
-    assert item["workspace"] == "Compliant"
+    assert item["workspace"] == "Compliance"
     assert item["count"] == 2
 
 

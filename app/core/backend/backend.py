@@ -24,18 +24,16 @@ from flask import (
     session,
 )
 from pydantic import ValidationError
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from app.api.routes.auth_routes import limiter
 from app.core.backend import (
     changes_feed,
-    corechecks,
     inventory_upload_routes,
     suppliers,
     tasks,
 )
-from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.complete_step_payload import (
     MAX_COMPLETE_STEP_CONTENT_LENGTH,
     CompleteStepRequestBody,
@@ -50,21 +48,17 @@ from app.core.backend.evidence.evidence_service import list_evidence_for_executi
 from app.core.backend.process_docs import process_docs_routes
 from app.core.backend.step_outputs import apply_whole_unit_rules, parse_output_batch_number
 from app.core.db import SessionLocal, db_session
-from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
 from app.core.db.models.entity_event import EntityEvent
 from app.core.db.models.execution import Execution, ExecutionStatus
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
-from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
-from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.process import ProcessCategory
 from app.core.db.models.step import Step
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import STALE_WRITE, ProcessRepository
-from app.core.db.repositories.wastage_repo import WastageRepository
 from app.core.domain.expiry_ready_date_rules import assert_expiry_after_ready_dates, assert_expiry_after_ready_duration
 from app.core.domain.expiry_rules import VALID_EXPIRY_UNITS, assert_warning_within_expiry
 from app.core.domain.expiry_rules import duration_to_timedelta as expiry_duration_to_timedelta
@@ -75,22 +69,21 @@ from app.core.domain.inventory_quantity_guard import (
 from app.core.security.permissions import has_permission, requires_auth, requires_role
 from app.core.utils.internal_counters import inc_counter
 from app.core.utils.inventory_quantity import (
-    assert_movement_unit_matches_item_canonical,
     coerce_stored_quantity,
     parse_stored_quantity_to_decimal,
     quantity_to_api_str,
 )
-from app.core.utils.inventory_wastage_quantity import (
-    parse_wastage_quantity,
-    parse_wastage_unit_field,
-    wastage_entries_payload_hash,
-)
 from app.core.utils.log_action import log_action
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.features.activity_log.routes import activity_routes
+from app.features.activity_log.routes.activity_routes import _human_summary
+from app.features.compliance_checks.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
+from app.features.compliance_checks.routes import corechecks
 from app.features.demo_data.routes import api_routes as demo_data_routes
 from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL
 from app.features.reconciliation.routes import reconciliation_routes
 from app.features.reconciliation.service import _find_producing_step
+from app.features.wastage.routes import wastage_routes
 from app.observability import get_logger
 from app.utils.config_loader import config
 
@@ -101,9 +94,6 @@ def _product_available(feature: str) -> bool:
     """Whether an optional product completed registration in this app instance."""
     return bool(current_app.extensions.get("product_availability", {}).get(feature, False))
 
-
-# Guardrail: batch size caps row-lock duration under concurrent SELECT ... FOR UPDATE.
-MAX_WASTAGE_BATCH_ENTRIES = 100
 
 # inventory_items.inventory_type is an unconstrained String(50); this is the only gate.
 _VALID_INVENTORY_TYPES = frozenset(t.value for t in InventoryType)
@@ -867,105 +857,6 @@ def inventory_live_view():
 def executions_live_view():
     """Dedicated active batches experience (drill-in from Core product workflows tab)."""
     return render_template("core/core2.html", active_page="core", core2_focus="active_batches_live")
-
-
-@core_bp.route("/core/inventory/dispose", methods=["GET"])
-@requires_auth
-def inventory_dispose():
-    """Full-page disposal flow for recording inventory wastage."""
-    item_ids_param = (request.args.get("item_ids") or "").strip()
-    item_ids = [v.strip() for v in item_ids_param.split(",") if v and v.strip()] if item_ids_param else []
-    return render_template("inventory/dispose.html", active_page="core", initial_item_ids=item_ids)
-
-
-@core_bp.route("/core/inventory/dispose/confirm", methods=["GET"])
-@requires_auth
-def inventory_dispose_confirm():
-    """Confirmation page for disposing a single selected quantity (no modals)."""
-    inventory_item_id = (request.args.get("inventory_item_id") or "").strip()
-    quantity_wasted_raw = (request.args.get("quantity_wasted") or "").strip()
-
-    quantity_wasted = None
-    quantity_wasted_dec = None
-    error = None
-    try:
-        if quantity_wasted_raw:
-            from decimal import Decimal
-
-            quantity_wasted_dec = Decimal(quantity_wasted_raw)
-            if quantity_wasted_dec <= 0:
-                error = "Quantity must be greater than 0."
-            else:
-                # Use float for JSON/JS submission; keep Decimal for remaining calculations.
-                quantity_wasted = float(quantity_wasted_dec)
-                # Fixed-point + trimmed trailing zeros
-                s = format(quantity_wasted_dec, "f")
-                if "." in s:
-                    s = s.rstrip("0").rstrip(".")
-    except (TypeError, ValueError, InvalidOperation):
-        # InvalidOperation matters here: `?quantity_wasted=nan` parses to Decimal("NaN"),
-        # and the `<= 0` above then raises InvalidOperation — which is NOT a ValueError,
-        # so without this the dispose-confirm page 500s on a malformed query string.
-        error = "Invalid quantity."
-
-    if not inventory_item_id:
-        error = error or "Missing inventory item id."
-
-    inventory_item_name = "item"
-    inventory_item_unit = ""
-    remaining_quantity_display = ""
-    org_id = getattr(g, "org_id", None)
-    if org_id and inventory_item_id:
-        try:
-            item_uuid = UUID(inventory_item_id)
-            item = (
-                db_session.query(InventoryItem)
-                .filter(InventoryItem.id == item_uuid, InventoryItem.org_id == org_id)
-                .first()
-            )
-            if item and getattr(item, "name", None):
-                inventory_item_name = str(item.name)
-            if item and getattr(item, "unit", None):
-                inventory_item_unit = str(item.unit)
-            if not error and item and quantity_wasted_dec is not None:
-                from decimal import Decimal
-
-                current_qty_dec = Decimal(str(item.quantity))
-                remaining_dec = current_qty_dec - quantity_wasted_dec
-                if remaining_dec < 0:
-                    remaining_dec = Decimal("0")
-                rs = format(remaining_dec, "f")
-                if "." in rs:
-                    rs = rs.rstrip("0").rstrip(".")
-                remaining_quantity_display = rs
-            elif not error:
-                # Same rationale as record_wastage's access_denied log above: this branch
-                # covers both a genuinely nonexistent id and a cross-org one indistinguishably
-                # (by design — the page must not leak which), so without a log a repeated
-                # probe of this preview page leaves no trace at all.
-                logger.warning(
-                    "access_denied",
-                    reason="inventory_item_not_found_or_cross_org",
-                    feature="wastage",
-                    org_id=str(org_id),
-                    inventory_item_id=str(item_uuid),
-                    path=request.path,
-                )
-                error = "Inventory item was not found."
-        except (ValueError, TypeError):
-            if not error:
-                error = "Invalid inventory item id."
-
-    return render_template(
-        "inventory/dispose_confirm.html",
-        active_page="core",
-        inventory_item_id=inventory_item_id,
-        inventory_item_name=inventory_item_name,
-        inventory_item_unit=inventory_item_unit,
-        remaining_quantity_display=remaining_quantity_display,
-        quantity_wasted=quantity_wasted,
-        error=error,
-    )
 
 
 @core_bp.route("/core/flows", methods=["GET"])
@@ -3116,10 +3007,10 @@ def list_inventory():
 
     from sqlalchemy.orm import joinedload
 
-    from app.core.backend.checks.output_ready_date_check import get_operator_ready_instant_for_item
     from app.core.db.models.execution import Execution
     from app.core.db.models.execution_step import ExecutionStep
     from app.core.db.models.inventory_item import InventoryItem
+    from app.features.compliance_checks.checks.output_ready_date_check import get_operator_ready_instant_for_item
 
     # One query for all producing steps (avoids N+1 hydration + ready-date lookups).
     # JOIN Execution + filter org_id: bounded by step_ids (inventory row count), no materialized list of all org executions.
@@ -3523,427 +3414,6 @@ def list_inventory():
     return jsonify(body), 200
 
 
-def _pg_advisory_lock_wastage_idempotency(session, org_id: UUID, idem_key: str) -> None:
-    """
-    Serialize idempotent wastage retries for the same org+key (PostgreSQL transaction-scoped lock).
-
-    On non-PostgreSQL dialects this is a no-op: idempotency still relies on the unique (org_id, key)
-    row and payload hash, but concurrent duplicate requests may race until commit (acceptable tradeoff).
-    """
-    bind = session.get_bind()
-    if not bind or getattr(bind.dialect, "name", None) != "postgresql":
-        return
-    digest = hashlib.sha256(f"{org_id}:{idem_key}".encode()).digest()
-    k1 = int.from_bytes(digest[0:4], "big") & 0x7FFFFFFF
-    k2 = int.from_bytes(digest[4:8], "big") & 0x7FFFFFFF
-    session.execute(text("SELECT pg_advisory_xact_lock(:k1, :k2)"), {"k1": k1, "k2": k2})
-
-
-@core_bp.route("/api/core/inventory/wastage", methods=["POST"])
-@requires_auth
-def record_wastage():
-    """
-    Record wastage for one or more inventory items.
-
-    Dual-write (same transaction): updates inventory_items.quantity, inserts inventory_wastage and
-    inventory_movements. Consistency relies on PostgreSQL transaction atomicity—do not add external I/O,
-    message publishing, or async work inside this handler's transaction; future refactors must keep all
-    three writes here or introduce explicit reconciliation.
-
-    Transaction: SessionLocal uses autocommit=False; this handler commits once at the end (success path)
-    or rollbacks on validation/exception paths. inventory_items.quantity, inventory_wastage, and
-    inventory_movements rows for the batch are persisted in that single commit (no partial apply).
-
-    Not event-sourced: inventory_items.quantity remains authoritative (mutable cache). Movements are an
-    append-only audit log alongside that state, not a derived projection that replaces quantity.
-
-    Hybrid model (Option B): ledger rows use canonical item.unit; optional converted_from_unit in metadata
-    when the client sent quantity_unit. WASTAGE movements link source_wastage_id -> inventory_wastage.id
-    (unique) to prevent double ledger rows.
-
-    Drift between quantity and SUM(movements) is not enforced by the DB; see scripts/inventory_quantity_drift_check.sql
-    and future jobs/triggers/repository-only writes if you need hard invariants.
-
-    Optional idempotency_key with canonical payload hash prevents duplicate disposal on client retries.
-    Confirm/dispose UI pages are not a security boundary; validation and tenancy are enforced only here.
-
-    quantity_wasted is in InventoryItem.unit unless optional quantity_unit (or unit) is sent; then it is
-    converted with are_units_compatible / convert_to_inventory_unit_decimal.
-
-    On-hand quantity is stored as NUMERIC(18,4). Each line also appends an inventory_movements row
-    (WASTAGE, signed quantity) for replay and reconciliation; InventoryWastage remains the wastage slice.
-    """
-    org_id = UUID(g.org_id)
-    data = request.get_json() or {}
-    entries = data.get("entries")
-    if not entries or not isinstance(entries, list):
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "entries (array of {inventory_item_id, quantity_wasted}) required",
-                    "error_code": "ENTRIES_REQUIRED",
-                    "errors": [],
-                    "wastage_records": [],
-                }
-            ),
-            400,
-        )
-
-    if len(entries) > MAX_WASTAGE_BATCH_ENTRIES:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": f"At most {MAX_WASTAGE_BATCH_ENTRIES} entries per request",
-                    "error_code": "BATCH_TOO_LARGE",
-                    "errors": [],
-                    "wastage_records": [],
-                }
-            ),
-            400,
-        )
-
-    idem_key_raw = data.get("idempotency_key")
-    idem_key: str | None = None
-    if idem_key_raw is not None:
-        if not isinstance(idem_key_raw, str) or not idem_key_raw.strip() or len(idem_key_raw) > 128:
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": "idempotency_key must be a non-empty string at most 128 characters",
-                        "error_code": "IDEMPOTENCY_KEY_INVALID",
-                        "errors": [],
-                        "wastage_records": [],
-                    }
-                ),
-                400,
-            )
-        idem_key = idem_key_raw.strip()
-
-    parse_errors: list[str] = []
-    lines: list[tuple[int, UUID, Decimal, str | None, str]] = []
-    seen_ids: set[UUID] = set()
-
-    for idx, entry in enumerate(entries):
-        if not isinstance(entry, dict):
-            parse_errors.append(f"Entry {idx + 1}: must be an object")
-            continue
-        item_id_str = entry.get("inventory_item_id")
-        qty_wasted = entry.get("quantity_wasted")
-        if not item_id_str:
-            parse_errors.append(f"Entry {idx + 1}: inventory_item_id required")
-            continue
-        try:
-            item_id = UUID(item_id_str)
-        except (ValueError, TypeError):
-            parse_errors.append(f"Entry {idx + 1}: invalid inventory_item_id")
-            continue
-        if item_id in seen_ids:
-            parse_errors.append(f"Entry {idx + 1}: duplicate inventory_item_id in the same request")
-            continue
-        seen_ids.add(item_id)
-        waste_decimal, qty_err = parse_wastage_quantity(qty_wasted)
-        if qty_err:
-            parse_errors.append(f"Entry {idx + 1}: {qty_err}")
-            continue
-        raw_unit = entry.get("quantity_unit")
-        if raw_unit is None:
-            raw_unit = entry.get("unit")
-        parsed_unit, u_err = parse_wastage_unit_field(raw_unit)
-        if u_err:
-            parse_errors.append(f"Entry {idx + 1}: {u_err}")
-            continue
-        reason = (entry.get("reason") or "").replace("\x00", "").strip()
-        if not reason:
-            parse_errors.append(f"Entry {idx + 1}: reason is required")
-            continue
-        if len(reason) > 500:
-            parse_errors.append(f"Entry {idx + 1}: reason must be 500 characters or fewer")
-            continue
-        lines.append((idx + 1, item_id, waste_decimal, parsed_unit, reason))
-
-    if parse_errors:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "Validation failed",
-                    "error_code": "VALIDATION_FAILED",
-                    "errors": parse_errors,
-                    "wastage_records": [],
-                }
-            ),
-            400,
-        )
-
-    lines.sort(key=lambda t: t[1])
-    hash_for_idem = wastage_entries_payload_hash(
-        [
-            {"inventory_item_id": item_id, "quantity_wasted": w, "quantity_unit": u or "", "reason": r}
-            for _i, item_id, w, u, r in lines
-        ]
-    )
-
-    inventory_repo = InventoryRepository(db_session)
-    recorded_by = getattr(g, "user_email", None) or getattr(g, "username", None)
-
-    try:
-        if idem_key:
-            _pg_advisory_lock_wastage_idempotency(db_session, org_id, idem_key)
-            existing = (
-                db_session.query(ApiIdempotencyKey)
-                .filter(ApiIdempotencyKey.org_id == org_id, ApiIdempotencyKey.key == idem_key)
-                .one_or_none()
-            )
-            if existing:
-                if existing.payload_hash != hash_for_idem:
-                    return (
-                        jsonify(
-                            {
-                                "success": False,
-                                "error": "Idempotency key already used with a different payload",
-                                "error_code": "IDEMPOTENCY_PAYLOAD_MISMATCH",
-                                "errors": [],
-                                "wastage_records": [],
-                            }
-                        ),
-                        409,
-                    )
-                stored = json.loads(existing.response_json)
-                if isinstance(stored, dict):
-                    stored = {**stored, "idempotent_replay": True}
-                return jsonify(stored), existing.http_status
-
-        validation_errors: list[str] = []
-        staged: list[tuple[InventoryItem, Decimal, int, str | None, str]] = []
-
-        # Per-item FOR UPDATE lock with per-entry error accumulation (validation_errors
-        # above); batching would change lock-acquisition order and continue-on-error
-        # semantics for a small, bounded per-request wastage batch.
-        for entry_idx, item_id, waste_decimal, req_unit, reason in lines:
-            # nosemgrep: repository-get-in-for-loop
-            item = inventory_repo.get_inventory_item_by_id_for_update(item_id, org_id)
-            if not item:
-                # A rejected lookup here is a tenant-boundary probe as much as a stale/
-                # mistyped id, and the response is an ordinary 400 either way (AC15: never
-                # distinguishable) — so without this it leaves no trace at all. Same
-                # `access_denied` event name as inventory_repo.py/permissions.py so one
-                # query covers all of them.
-                logger.warning(
-                    "access_denied",
-                    reason="inventory_item_not_found_or_cross_org",
-                    feature="wastage",
-                    org_id=str(org_id),
-                    inventory_item_id=str(item_id),
-                    path=request.path,
-                )
-                validation_errors.append(f"Entry {entry_idx}: inventory item not found or access denied")
-                continue
-            current_qty = parse_stored_quantity_to_decimal(item.quantity)
-            if current_qty <= 0:
-                validation_errors.append(f"Entry {entry_idx}: item has no quantity to waste")
-                continue
-            inv_unit = (item.unit or "units").strip() or "units"
-            if req_unit:
-                if not are_units_compatible(req_unit, inv_unit):
-                    validation_errors.append(
-                        f"Entry {entry_idx}: quantity_unit is not compatible with inventory unit ({inv_unit})"
-                    )
-                    continue
-                try:
-                    waste_in_inv = convert_to_inventory_unit_decimal(waste_decimal, req_unit, inv_unit)
-                except ValueError as exc:
-                    validation_errors.append(f"Entry {entry_idx}: {exc}")
-                    continue
-            else:
-                waste_in_inv = waste_decimal
-            if waste_in_inv > current_qty:
-                validation_errors.append(
-                    f"Entry {entry_idx}: quantity_wasted exceeds available quantity ({current_qty} {inv_unit} on hand)"
-                )
-                continue
-            staged.append((item, waste_in_inv, entry_idx, req_unit, reason))
-
-        if validation_errors:
-            db_session.rollback()
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": "Validation failed",
-                        "error_code": "VALIDATION_FAILED",
-                        "errors": validation_errors,
-                        "wastage_records": [],
-                    }
-                ),
-                400,
-            )
-
-        result_records = []
-        with allow_inventory_quantity_write(InventoryQuantityWriteReason.WASTAGE_RECORD):
-            for item, waste_decimal, _entry_idx, request_unit, reason in staged:
-                actual_waste = waste_decimal
-                current_qty = parse_stored_quantity_to_decimal(item.quantity)
-                new_qty = current_qty - actual_waste
-                unit = (item.unit or "units").strip() or "units"
-                item.quantity = coerce_stored_quantity(new_qty)
-                record = InventoryWastage(
-                    org_id=org_id,
-                    inventory_item_id=item.id,
-                    quantity_wasted=str(actual_waste),
-                    unit=unit,
-                    reason=reason,
-                    recorded_by=recorded_by,
-                )
-                db_session.add(record)
-                db_session.flush()
-                movement_meta: dict = {"wastage_record_id": str(record.id)}
-                if idem_key:
-                    movement_meta["idempotency_key"] = idem_key
-                if request_unit:
-                    movement_meta["converted_from_unit"] = request_unit
-                    movement_meta["canonical_unit"] = unit
-                assert_movement_unit_matches_item_canonical(unit, item.unit or "units")
-                db_session.add(
-                    InventoryMovement(
-                        org_id=org_id,
-                        inventory_item_id=item.id,
-                        source_wastage_id=record.id,
-                        movement_type=InventoryMovementType.WASTAGE.value,
-                        quantity=coerce_stored_quantity(-actual_waste),
-                        unit=unit,
-                        movement_metadata=movement_meta,
-                    )
-                )
-                result_records.append(
-                    {
-                        "id": str(record.id),
-                        "inventory_item_id": str(item.id),
-                        "item_name": item.name,
-                        "quantity_wasted": str(actual_waste),
-                        "unit": unit,
-                        "reason": reason,
-                        "recorded_at": record.recorded_at.isoformat() if record.recorded_at else None,
-                    }
-                )
-
-        response_body = {
-            "success": True,
-            "wastage_records": result_records,
-            "errors": [],
-            "idempotent_replay": False,
-        }
-        http_status = 201
-        if idem_key:
-            db_session.add(
-                ApiIdempotencyKey(
-                    org_id=org_id,
-                    key=idem_key,
-                    payload_hash=hash_for_idem,
-                    response_json=json.dumps(response_body),
-                    http_status=http_status,
-                )
-            )
-
-        try:
-            db_session.commit()
-        except IntegrityError:
-            db_session.rollback()
-            if idem_key:
-                existing = (
-                    db_session.query(ApiIdempotencyKey)
-                    .filter(ApiIdempotencyKey.org_id == org_id, ApiIdempotencyKey.key == idem_key)
-                    .one_or_none()
-                )
-                if existing and existing.payload_hash == hash_for_idem:
-                    stored = json.loads(existing.response_json)
-                    if isinstance(stored, dict):
-                        stored = {**stored, "idempotent_replay": True}
-                    return jsonify(stored), existing.http_status
-            logger.warning("inventory_wastage commit conflict org_id=%s", org_id)
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": "Conflict recording wastage",
-                        "error_code": "CONFLICT_RECORDING_WASTAGE",
-                        "errors": [],
-                        "wastage_records": [],
-                    }
-                ),
-                409,
-            )
-
-        audit_payload = {
-            "event": "inventory_wastage_recorded",
-            "org_id": str(org_id),
-            "inventory_item_ids": [r["inventory_item_id"] for r in result_records],
-            "quantities_wasted": [r["quantity_wasted"] for r in result_records],
-            "units": [r["unit"] for r in result_records],
-            "recorded_by": recorded_by,
-            "idempotency_key": idem_key,
-            "entry_count": len(result_records),
-        }
-        logger.info("inventory_wastage_recorded %s", json.dumps(audit_payload, separators=(",", ":")))
-
-        return jsonify(response_body), http_status
-
-    except Exception as e:
-        db_session.rollback()
-        logger.exception("inventory_wastage failed: %s", e)
-        payload = {
-            "success": False,
-            "error": "Failed to record wastage",
-            "error_code": "INTERNAL_ERROR",
-            "errors": [],
-            "wastage_records": [],
-        }
-        if not config.is_production:
-            payload["details"] = str(e)
-        return jsonify(payload), 500
-
-
-@core_bp.route("/api/core/inventory/wastage", methods=["GET"])
-@requires_auth
-def list_wastage():
-    """List wastage records for sourcemap/trace. Optional ?inventory_item_id= for single item."""
-    org_id = UUID(g.org_id)
-    item_id_str = request.args.get("inventory_item_id")
-    inventory_item_id = None
-    if item_id_str:
-        try:
-            inventory_item_id = UUID(item_id_str)
-        except (ValueError, TypeError):
-            return jsonify({"error": "Invalid inventory_item_id"}), 400
-    repo = WastageRepository(db_session)
-    records = repo.list_wastage_records(org_id=org_id, inventory_item_id=inventory_item_id)
-    items_by_id = {}
-    if records:
-        item_ids = {r.inventory_item_id for r in records}
-        fetched = (
-            db_session.query(InventoryItem).filter(InventoryItem.id.in_(item_ids), InventoryItem.org_id == org_id).all()
-        )
-        items_by_id = {str(item.id): {"name": item.name, "unit": item.unit} for item in fetched}
-    result = []
-    for r in records:
-        info = items_by_id.get(str(r.inventory_item_id)) or {}
-        result.append(
-            {
-                "id": str(r.id),
-                "inventory_item_id": str(r.inventory_item_id),
-                "item_name": info.get("name") or "Unknown",
-                "quantity_wasted": r.quantity_wasted,
-                "unit": r.unit,
-                "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
-                "recorded_by": r.recorded_by,
-                "reason": r.reason,
-            }
-        )
-    return jsonify({"wastage_records": result}), 200
-
-
 @core_bp.route("/api/core/inventory/out-of-stock", methods=["GET"])
 @requires_auth
 def list_out_of_stock_raw_materials():
@@ -3998,12 +3468,14 @@ def list_out_of_stock_raw_materials():
     return jsonify({"inventory_items": result}), 200
 
 
+activity_routes.register_routes(core_bp)
 changes_feed.register_routes(core_bp)
 corechecks.register_routes(core_bp)
 reconciliation_routes.register_routes(core_bp)
 inventory_upload_routes.register_routes(core_bp)
 evidence_routes.register_routes(core_bp)
 process_docs_routes.register_routes(core_bp)
+wastage_routes.register_routes(core_bp)
 tasks.register_routes(core_bp)
 suppliers.register_routes(core_bp)
 demo_data_routes.register_routes(core_bp)
@@ -5227,7 +4699,7 @@ def _dashboard_compliant_workspace_summary(
     unavailable = {
         "available": False,
         "state": "unavailable",
-        "label": "Compliant is not enabled for this organisation.",
+        "label": "Compliance is not enabled for this organisation.",
         "attention_count": 0,
         "modules": [],
     }
@@ -5312,7 +4784,7 @@ def _dashboard_build_action_board(
             "count": (findings.get("expired_materials") or {}).get("count") or 0,
             "severity": "critical",
             "href": "/core/inventory/view",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "untracked_items",
@@ -5320,7 +4792,7 @@ def _dashboard_build_action_board(
             "count": (findings.get("untracked_items") or {}).get("count") or 0,
             "severity": "high",
             "href": "/core/notifications",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "output_expired",
@@ -5328,7 +4800,7 @@ def _dashboard_build_action_board(
             "count": output_expiry.get("red_count") or 0,
             "severity": "critical",
             "href": "/core/notifications",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "output_not_ready",
@@ -5336,15 +4808,15 @@ def _dashboard_build_action_board(
             "count": output_ready.get("red_count") or 0,
             "severity": "informational",
             "href": "/core/notifications",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "overdue_tasks",
-            "label": "Overdue CRM tasks",
+            "label": "Overdue Sales tasks",
             "count": (tasks_summary or {}).get("overdue_count") or 0,
             "severity": "high",
             "href": "/crm/tasks",
-            "workspace": "CRM",
+            "workspace": "Sales",
         },
         {
             "key": "compliant_evidence",
@@ -5352,7 +4824,7 @@ def _dashboard_build_action_board(
             "count": (compliant_workspace or {}).get("attention_count") or 0,
             "severity": "high",
             "href": "/compliant",
-            "workspace": "Compliant",
+            "workspace": "Compliance",
         },
     ]
 
@@ -5389,11 +4861,11 @@ def get_dashboard_summary():
     # mutations, pre-warmed by the warm-system-findings job); the cheap checks run live.
     # Same result set as CoreChecksRunner.run_all_checks() without the ~640ms DAG cost on
     # every landing-page load.
-    from app.core.backend.system_findings_cache import get_check_results
+    from app.features.compliance_checks.system_findings_cache import get_check_results
 
     check_results = get_check_results(org_id, db_session)
 
-    from app.core.backend.system_status import build_system_status_payload
+    from app.features.compliance_checks.system_status import build_system_status_payload
 
     system_status = build_system_status_payload(org_id, db_session, check_results)
     compliance = _dashboard_build_compliance_summary(check_results, system_status)
@@ -5786,785 +5258,6 @@ def get_hub_overview():
         },
     }
     return jsonify(payload), 200
-
-
-# ---------------------------------------------------------------------------
-# Entity Event Endpoints — Summary, Story, and Sourcemap
-# ---------------------------------------------------------------------------
-
-
-def _parse_entity_type(entity_type: str) -> str | None:
-    """Validate entity_type is one we support."""
-    valid = {"inventory_item", "execution", "process", "user", "org"}
-    return entity_type if entity_type in valid else None
-
-
-def _log_activity_access_denied(org_id: UUID, entity_type: str, entity_id: UUID) -> None:
-    """Same rationale as _log_process_access_denied/_log_trace_access_denied: a story or
-    summary lookup that resolves to nothing for the caller's org is a tenant-boundary probe
-    just as much as a stale/mistyped id, and the route returns the same empty 200 either
-    way (AC3/AC10: cross-org existence must not be distinguishable from non-existence), so
-    the log doesn't try to distinguish them either. Added as defense-in-depth telemetry
-    after F1 (security-audit.md) -- entity_summary_detail's missing org_id filter -- so a
-    future probe against this class of gap leaves a trace even if the filter regresses.
-    """
-    logger.warning(
-        "access_denied",
-        reason="entity_not_found_or_cross_org",
-        feature="activity-log",
-        org_id=str(org_id),
-        entity_type=entity_type,
-        entity_id=str(entity_id),
-        path=request.path,
-    )
-
-
-def _event_to_dict(ev) -> dict:
-    return {
-        "id": str(ev.id),
-        "event_type": ev.event_type,
-        "entity_type": ev.entity_type,
-        "entity_id": str(ev.entity_id) if ev.entity_id else None,
-        "at": ev.created_at.isoformat() if ev.created_at else None,
-        "actor": ev.actor_label,
-        "actor_type": ev.actor_type,
-        "payload": ev.payload,
-        "diff": ev.diff,
-        "causation_id": str(ev.causation_id) if ev.causation_id else None,
-    }
-
-
-_FIELD_LABELS = {
-    "name": "Name",
-    "description": "Description",
-    "quantity": "Quantity",
-    "unit": "Unit",
-    "inventory_type": "Type",
-    "supplier": "Supplier",
-    "supplier_batch_number": "Batch number",
-    "barcode": "Barcode",
-    "purchase_date": "Purchase date",
-    "expiry_date": "Expiry date",
-    "step_number": "Position",
-    "inputs": "Inputs",
-    "outputs": "Outputs",
-    "execution_prompts": "Prompts",
-    "category": "Category",
-    "is_draft": "Draft",
-}
-
-_ITEM_FIELD_LABELS = {
-    "name": "Name",
-    "label": "Label",
-    "quantity": "Quantity",
-    "unit": "Unit",
-    "inventory_type": "Inventory type",
-    "expected_inventory_type": "Expected type",
-    "type": "Type",
-    "required": "Required",
-    "is_variable": "Variable qty",
-    "requires_execution_confirmation": "Confirmation required",
-    "description": "Description",
-}
-
-# Fields that are auto-populated by the system and should not be reported when
-# they only appear in the after snapshot (i.e. before is None/absent).
-_ITEM_IMPLICIT_FIELDS = frozenset(
-    {
-        "inventory_type",
-        "expected_inventory_type",
-        "is_variable",
-        "requires_execution_confirmation",
-    }
-)
-
-_INVENTORY_TYPE_LABELS = {
-    "raw_material": "Raw material",
-    "work_in_progress": "Work in progress",
-    "final_product": "Final product",
-}
-
-_ITEM_SKIP_FIELDS = frozenset({"id", "extra_data"})
-
-
-def _fmt_field_value(val) -> str:
-    if val is None or val == "":
-        return "—"
-    if isinstance(val, bool):
-        return "Yes" if val else "No"
-    if isinstance(val, list):
-        if not val:
-            return "(none)"
-        if all(isinstance(i, dict) for i in val):
-            parts = []
-            for item in val:
-                if "name" in item:
-                    s = item["name"]
-                    if item.get("quantity") is not None:
-                        s += f" ({item['quantity']}"
-                        if item.get("unit"):
-                            s += f" {item['unit']}"
-                        s += ")"
-                    parts.append(s)
-                elif "label" in item:
-                    s = item["label"]
-                    if item.get("type"):
-                        s += f" ({item['type']})"
-                    parts.append(s)
-            if parts:
-                return ", ".join(parts)
-        return f"{len(val)} item{'s' if len(val) != 1 else ''}"
-    if isinstance(val, str) and val in _INVENTORY_TYPE_LABELS:
-        return _INVENTORY_TYPE_LABELS[val]
-    return str(val)
-
-
-def _fmt_sub_val(val, field: str = "") -> str:
-    if val is None or val == "":
-        return "(none)"
-    if isinstance(val, bool):
-        return "Yes" if val else "No"
-    if isinstance(val, list | dict):
-        return "(complex)"
-    if field in ("inventory_type", "expected_inventory_type"):
-        return _INVENTORY_TYPE_LABELS.get(str(val), str(val))
-    return str(val)
-
-
-def _item_key(item: dict) -> str | None:
-    for k in ("id", "name", "label"):
-        if k in item:
-            return str(item[k])
-    return None
-
-
-def _item_display_name(item: dict) -> str:
-    return item.get("name") or item.get("label") or "(item)"
-
-
-def _smart_list_diff_rows(label: str, before: list, after: list) -> list[dict]:
-    """Deep diff two lists of dicts, returning structured {label, before, after} rows."""
-    rows: list[dict] = []
-    before_by_key: dict = {}
-    after_by_key: dict = {}
-    for item in before:
-        k = _item_key(item)
-        if k:
-            before_by_key[k] = item
-    for item in after:
-        k = _item_key(item)
-        if k:
-            after_by_key[k] = item
-
-    if not before_by_key and not after_by_key:
-        if before != after:
-            rows.append({"label": label, "before": _fmt_field_value(before), "after": _fmt_field_value(after)})
-        return rows
-
-    seen: set = set()
-    for item in before:
-        k = _item_key(item)
-        if not k or k in seen:
-            continue
-        seen.add(k)
-        a_item = after_by_key.get(k)
-        if a_item is None:
-            rows.append({"label": label, "before": f"'{_item_display_name(item)}' removed", "after": None})
-        else:
-            all_fields = [f for f in set(item) | set(a_item) if f not in _ITEM_SKIP_FIELDS]
-            for field in all_fields:
-                b_val = item.get(field)
-                a_val = a_item.get(field)
-                if b_val == a_val:
-                    continue
-                # Skip fields that are auto-populated when they were simply absent before
-                if field in _ITEM_IMPLICIT_FIELDS and b_val is None:
-                    continue
-                fl = _ITEM_FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
-                rows.append(
-                    {
-                        "label": f"{label} '{_item_display_name(item)}' – {fl}",
-                        "before": _fmt_sub_val(b_val, field),
-                        "after": _fmt_sub_val(a_val, field),
-                    }
-                )
-
-    for item in after:
-        k = _item_key(item)
-        if not k or k in seen:
-            continue
-        seen.add(k)
-        if k not in before_by_key:
-            rows.append({"label": label, "before": None, "after": f"'{_item_display_name(item)}' added"})
-
-    return rows
-
-
-def _build_diff_rows(diff: dict) -> list[dict]:
-    """Build structured diff rows: [{label, before, after}]. before/after may be None."""
-    rows: list[dict] = []
-    for field, change in (diff or {}).items():
-        if not isinstance(change, dict):
-            continue
-        label = _FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
-        before = change.get("before")
-        after = change.get("after")
-        if isinstance(before, list) and isinstance(after, list) and all(isinstance(i, dict) for i in (before + after)):
-            rows.extend(_smart_list_diff_rows(label, before, after))
-        else:
-            b_str = _fmt_field_value(before)
-            a_str = _fmt_field_value(after)
-            if b_str != a_str:
-                rows.append(
-                    {
-                        "label": label,
-                        "before": None if b_str == "—" else b_str,
-                        "after": None if a_str == "—" else a_str,
-                    }
-                )
-    return rows
-
-
-def _step_added_diff_rows(step_data: dict) -> list[dict]:
-    """Synthesize diff rows for a newly added step from its snapshot payload."""
-    rows: list[dict] = []
-    desc = step_data.get("description")
-    if desc:
-        rows.append({"label": "Description", "before": None, "after": desc})
-    for inp in step_data.get("inputs") or []:
-        if not isinstance(inp, dict):
-            continue
-        name = _item_display_name(inp)
-        qty = inp.get("quantity")
-        unit = inp.get("unit", "")
-        detail = f"'{name}'"
-        if qty is not None:
-            detail += f" — {qty} {unit}".rstrip()
-        rows.append({"label": "Input", "before": None, "after": detail})
-    for out in step_data.get("outputs") or []:
-        if not isinstance(out, dict):
-            continue
-        name = _item_display_name(out)
-        qty = out.get("quantity")
-        unit = out.get("unit", "")
-        detail = f"'{name}'"
-        if qty is not None:
-            detail += f" — {qty} {unit}".rstrip()
-        rows.append({"label": "Output", "before": None, "after": detail})
-    for pr in step_data.get("execution_prompts") or []:
-        if not isinstance(pr, dict):
-            continue
-        label = pr.get("label") or pr.get("name") or "(prompt)"
-        rows.append({"label": "Prompt", "before": None, "after": label})
-    return rows
-
-
-def _event_diff_rows(ev) -> list[dict]:
-    """Return per-change diff rows for an event, handling nested step diffs."""
-    et = ev.event_type
-    p = ev.payload or {}
-    if et == "process.step_added":
-        return _step_added_diff_rows(p.get("step") or {})
-    if et == "process.step_updated":
-        return _build_diff_rows((ev.diff or {}).get("step") or {})
-    return _build_diff_rows(ev.diff or {})
-
-
-def _human_summary(ev) -> str:
-    et = ev.event_type
-    p = ev.payload or {}
-    d = ev.diff or {}
-
-    if et == "inventory_item.created":
-        qty = p.get("quantity", "")
-        unit = p.get("unit", "")
-        method = p.get("add_method", "manual").replace("_", " ")
-        inv_type = _INVENTORY_TYPE_LABELS.get(
-            p.get("inventory_type") or "", (p.get("inventory_type") or "").replace("_", " ")
-        )
-        parts = [f"Added {qty} {unit}".strip()]
-        if inv_type:
-            parts[0] += f" ({inv_type})"
-        parts.append(f"via {method}")
-        supplier = p.get("supplier")
-        batch = p.get("supplier_batch_number")
-        if supplier:
-            parts.append(f"· supplier: {supplier}")
-        if batch:
-            parts.append(f"· batch: {batch}")
-        return " ".join(parts)
-
-    if et == "inventory_item.quantity_adjusted":
-        before = p.get("quantity_before", "?")
-        after = p.get("quantity_after", p.get("quantity", "?"))
-        unit = p.get("unit", "")
-        return f"Quantity adjusted {before} → {after} {unit}".strip()
-
-    if et == "inventory_item.consumed":
-        qty = p.get("quantity_consumed", "?")
-        unit = p.get("unit", "")
-        step = p.get("step_name", "")
-        base = f"{qty} {unit} consumed".strip()
-        if step:
-            base += f" in '{step}'"
-        process = p.get("process_name")
-        if process:
-            base += f" · {process}"
-        return base
-
-    if et == "inventory_item.produced":
-        qty = p.get("quantity_produced", "?")
-        unit = p.get("unit", "")
-        step = p.get("step_name", "")
-        base = f"{qty} {unit} produced".strip()
-        if step:
-            base += f" by '{step}'"
-        process = p.get("process_name")
-        if process:
-            base += f" · {process}"
-        return base
-
-    if et == "inventory_item.wasted":
-        qty = p.get("quantity_wasted", "?")
-        unit = p.get("unit", "")
-        reason = p.get("reason", "")
-        base = f"{qty} {unit} wasted".strip()
-        if reason:
-            base += f" — {reason}"
-        return base
-
-    if et == "inventory_item.updated":
-        if not d:
-            return "Updated"
-        field_labels = {
-            "name": "name",
-            "inventory_type": "type",
-            "quantity": "quantity",
-            "unit": "unit",
-            "supplier": "supplier",
-            "supplier_batch_number": "batch",
-            "purchase_date": "purchase date",
-            "expiry_date": "expiry date",
-            "barcode": "barcode",
-        }
-        changed = [field_labels.get(k, k) for k in d]
-        return "Updated " + ", ".join(changed)
-
-    if et == "inventory_item.deleted":
-        name = p.get("name", "")
-        return f"Deleted{(' ' + name) if name else ''}"
-
-    if et == "execution.created":
-        steps = p.get("total_steps", "")
-        ver = p.get("process_version_number", "")
-        base = "Batch started"
-        if steps:
-            base += f" — {steps} steps"
-        if ver:
-            base += f" (process v{ver})"
-        return base
-
-    if et == "execution.step_completed":
-        step = p.get("step_name", f"Step {p.get('step_number', '?')}")
-        consumed = p.get("items_consumed") or []
-        produced = p.get("items_produced") or []
-        base = f"'{step}' completed"
-        if consumed:
-            base += f" — {len(consumed)} input{'s' if len(consumed) != 1 else ''} consumed"
-        if produced:
-            base += f", {len(produced)} output{'s' if len(produced) != 1 else ''} produced"
-        return base
-
-    if et == "execution.completed":
-        steps = p.get("total_steps", "")
-        base = "Batch completed"
-        if steps:
-            base += f" ({steps} steps)"
-        return base
-
-    if et == "execution.cancelled":
-        reason = p.get("reason", "")
-        base = "Batch cancelled"
-        if reason:
-            base += f" — {reason}"
-        return base
-
-    if et == "process.created":
-        name = p.get("name", "")
-        return f"Process{(' ' + repr(name)) if name else ''} created"
-
-    if et == "process.updated":
-        return "Process updated"
-
-    if et == "process.step_added":
-        step_data = p.get("step") or {}
-        step_name = step_data.get("name", "step")
-        pos = step_data.get("step_number", "")
-        base = f"Step '{step_name}' added"
-        if pos:
-            base += f" at position {pos}"
-        return base
-
-    if et == "process.step_updated":
-        step_name = (p.get("step") or {}).get("name", "step")
-        return f"Step '{step_name}' updated"
-
-    if et == "process.step_deleted":
-        step = (p.get("deleted_step") or {}).get("name", "step")
-        return f"Step '{step}' removed"
-
-    if et == "process.deleted":
-        name = p.get("name", "")
-        return f"Process{(' ' + repr(name)) if name else ''} deleted"
-
-    if et == "process.step_doc_uploaded":
-        step = p.get("step_name", "step")
-        title = p.get("doc_title", "document")
-        return f"SOP file '{title}' uploaded to step '{step}'"
-
-    if et == "process.step_doc_created":
-        step = p.get("step_name", "step")
-        title = p.get("doc_title", "document")
-        return f"SOP instructions '{title}' written for step '{step}'"
-
-    if et == "process.step_doc_updated":
-        step = p.get("step_name", "step")
-        title = p.get("doc_title", "document")
-        return f"SOP instructions '{title}' updated for step '{step}'"
-
-    if et == "process.step_doc_deleted":
-        step = p.get("step_name", "step")
-        title = p.get("doc_title", "document")
-        return f"SOP document '{title}' removed from step '{step}'"
-
-    if et in ("supplier.created", "supplier.updated", "supplier.deleted"):
-        name = p.get("name", "")
-        label = f" {name!r}" if name else ""
-        if et == "supplier.created":
-            source = " (from inventory)" if p.get("source") == "inventory" else ""
-            return f"Supplier{label} added{source}"
-        if et == "supplier.deleted":
-            return f"Supplier{label} deleted"
-        changed = ", ".join(key.replace("_", " ") for key in d) or "details"
-        return f"Supplier{label} updated — {changed}"
-
-    if et == "user.created":
-        return f"Account created — {p.get('email', '')}"
-
-    if et == "user.login":
-        method = "with 2FA" if p.get("2fa_used") else "with password"
-        return f"Logged in {method} from {p.get('ip', '?')}"
-
-    if et == "user.login_failed":
-        return f"Login failed from {p.get('ip', '?')} (attempt {p.get('failed_attempts', '?')})"
-
-    if et == "user.2fa_enabled":
-        return "Two-factor authentication enabled"
-
-    if et == "user.2fa_disabled":
-        return "Two-factor authentication disabled"
-
-    if et == "user.role_changed":
-        return f"Role changed from {p.get('old_role', '?')} to {p.get('new_role', '?')}"
-
-    if et == "org.settings_updated":
-        d = ev.diff or {}
-        parts = []
-        if "name" in d:
-            parts.append(f"Name changed to '{d['name'].get('after', '?')}'")
-        if "status" in d:
-            parts.append(f"Status changed to {d['status'].get('after', '?')}")
-        return "Organisation settings updated" + (f" — {', '.join(parts)}" if parts else "")
-
-    return et.replace(".", " — ").replace("_", " ").capitalize()
-
-
-@core_bp.route("/api/core/entities/<entity_type>/<entity_id>/story", methods=["GET"])
-@requires_auth
-def entity_story(entity_type: str, entity_id: str):
-    """Full event timeline for a single entity, ordered chronologically.
-
-    Used when drilling into a card to see its complete audit history.
-    For inventory items, legacy extra_data.inventory_audit_history entries are
-    merged in so nothing is lost — deduplicated against entity_events by timestamp.
-    """
-    from app.core.db.models.entity_event import EntityEvent
-
-    etype = _parse_entity_type(entity_type)
-    if not etype:
-        return jsonify({"error": "Invalid entity_type"}), 400
-
-    try:
-        eid = UUID(entity_id)
-    except ValueError:
-        return jsonify({"error": "Invalid entity_id"}), 400
-
-    org_id = UUID(g.org_id)
-    try:
-        limit = min(int(request.args.get("limit", 200)), 500)
-        offset = int(request.args.get("offset", 0))
-    except (TypeError, ValueError):
-        return jsonify({"error": "limit and offset must be integers"}), 400
-
-    db = db_session()
-    events = (
-        db.query(EntityEvent)
-        .filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid)
-        .order_by(EntityEvent.created_at.asc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
-
-    total = db.query(EntityEvent).filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid).count()
-
-    event_dicts = [
-        {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)} for ev in events
-    ]
-
-    if etype == "inventory_item":
-        event_dicts = _merge_inventory_legacy_audit(db, eid, org_id, event_dicts, events)
-
-    if total == 0 and not event_dicts:
-        _log_activity_access_denied(org_id, etype, eid)
-
-    return jsonify(
-        {
-            "entity_id": str(eid),
-            "entity_type": etype,
-            "total": total,
-            "offset": offset,
-            "events": event_dicts,
-        }
-    ), 200
-
-
-def _merge_inventory_legacy_audit(db, eid: UUID, org_id: UUID, event_dicts: list, events: list) -> list:
-    """Merge extra_data.inventory_audit_history into the entity_events timeline.
-
-    - Entries within 10 s of an existing entity_event are considered the same
-      action: the display name from the legacy entry augments the actor field.
-    - Entries with no matching entity_event are inserted as standalone timeline
-      items (covers pre-event-sourcing items and barcode re-stocks).
-    - user_id is always stripped.
-    """
-    from datetime import datetime
-
-    from app.core.db.models.inventory_item import InventoryItem
-
-    item = db.query(InventoryItem).filter(InventoryItem.id == eid, InventoryItem.org_id == org_id).first()
-    if not item or not item.extra_data:
-        return event_dicts
-
-    legacy_entries = item.extra_data.get("inventory_audit_history") or []
-    if not legacy_entries:
-        return event_dicts
-
-    # Build a lookup of entity_event timestamps (naive UTC) → index in event_dicts
-    ev_timestamps = []
-    for ev in events:
-        if ev.created_at:
-            ts = ev.created_at.replace(tzinfo=None) if ev.created_at.tzinfo else ev.created_at
-            ev_timestamps.append(ts)
-        else:
-            ev_timestamps.append(None)
-
-    def _parse_legacy_ts(ts_str):
-        if not ts_str:
-            return None
-        try:
-            return datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
-        except (ValueError, AttributeError):
-            return None
-
-    def _actor_display(entry):
-        name = (entry.get("operator_name") or "").strip()
-        email = (entry.get("operator_email") or "").strip()
-        if name and email and name != email:
-            return f"{name} ({email})"
-        return name or email or ""
-
-    def _legacy_summary(entry):
-        method = (entry.get("source_method") or "manual").replace("_", " ")
-        parts = []
-        qty = entry.get("quantity_added")
-        if qty:
-            parts.append(f"Added {qty}")
-        else:
-            parts.append("Item recorded")
-        parts.append(f"via {method}")
-        supplier = entry.get("supplier")
-        batch = entry.get("supplier_batch_number")
-        purchase = entry.get("purchase_date")
-        expiry = entry.get("expiry_date")
-        if supplier:
-            parts.append(f"· supplier: {supplier}")
-        if batch:
-            parts.append(f"· batch: {batch}")
-        if purchase:
-            parts.append(f"· purchased: {purchase}")
-        if expiry:
-            parts.append(f"· expiry: {expiry}")
-        return " ".join(parts)
-
-    extra_events = []
-    for entry in legacy_entries:
-        if not isinstance(entry, dict):
-            continue
-        entry = {k: v for k, v in entry.items() if k != "user_id"}
-        legacy_ts = _parse_legacy_ts(entry.get("timestamp_utc"))
-
-        matched_idx = None
-        if legacy_ts:
-            for i, ev_ts in enumerate(ev_timestamps):
-                if ev_ts and abs((legacy_ts - ev_ts).total_seconds()) < 10:
-                    matched_idx = i
-                    break
-
-        if matched_idx is not None:
-            # Augment the matching event's actor with the display name if available
-            name = (entry.get("operator_name") or "").strip()
-            email = (entry.get("operator_email") or "").strip()
-            if name and email and name != email:
-                current = event_dicts[matched_idx].get("actor") or ""
-                if name not in current:
-                    event_dicts[matched_idx] = dict(event_dicts[matched_idx])
-                    event_dicts[matched_idx]["actor"] = f"{name} ({current})" if current else name
-        else:
-            extra_events.append(
-                {
-                    "id": f"legacy_{entry.get('timestamp_utc', '')}",
-                    "event_type": "inventory_item.legacy_entry",
-                    "entity_type": "inventory_item",
-                    "entity_id": str(eid),
-                    "at": entry.get("timestamp_utc"),
-                    "actor": _actor_display(entry),
-                    "actor_type": "user",
-                    "summary": _legacy_summary(entry),
-                    "diff_rows": [],
-                    "payload": None,
-                    "diff": None,
-                    "causation_id": None,
-                }
-            )
-
-    if extra_events:
-        merged = event_dicts + extra_events
-        merged.sort(key=lambda e: e.get("at") or "")
-        return merged
-
-    return event_dicts
-
-
-@core_bp.route("/api/core/entities/<entity_type>/<entity_id>/summary", methods=["GET"])
-@requires_auth
-def entity_summary_detail(entity_type: str, entity_id: str):
-    """Rich computed summary for a single entity card detail view.
-
-    Queries entity_events directly (more detail than the pre-computed summary table).
-    """
-    from app.core.db.models.entity_event import EntityEvent
-    from app.core.db.models.entity_event_summary import EntityEventSummary
-
-    etype = _parse_entity_type(entity_type)
-    if not etype:
-        return jsonify({"error": "Invalid entity_type"}), 400
-
-    try:
-        eid = UUID(entity_id)
-    except ValueError:
-        return jsonify({"error": "Invalid entity_id"}), 400
-
-    org_id = UUID(g.org_id)
-    db = db_session()
-
-    # Pull pre-computed summary
-    summary_row = (
-        db.query(EntityEventSummary)
-        .filter(EntityEventSummary.entity_id == eid, EntityEventSummary.org_id == org_id)
-        .first()
-    )
-    summary = summary_row.summary if summary_row else {}
-
-    # Pull most recent 10 events for "recent_events" display
-    recent = (
-        db.query(EntityEvent)
-        .filter(EntityEvent.org_id == org_id, EntityEvent.entity_id == eid)
-        .order_by(EntityEvent.created_at.desc())
-        .limit(10)
-        .all()
-    )
-
-    if summary_row is None and not recent:
-        _log_activity_access_denied(org_id, etype, eid)
-
-    return jsonify(
-        {
-            "entity_id": str(eid),
-            "entity_type": etype,
-            "summary": summary,
-            "recent_events": [
-                {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
-                for ev in reversed(recent)
-            ],
-        }
-    ), 200
-
-
-@core_bp.route("/api/core/entities/activity", methods=["GET"])
-@requires_auth
-def entity_activity_feed():
-    """All entity events for the org, newest-first, with optional date/type filtering.
-
-    Powers the sourcemap Activity tab and any org-wide audit stream.
-    """
-    from app.core.db.models.entity_event import EntityEvent
-
-    org_id = UUID(g.org_id)
-    try:
-        limit = min(int(request.args.get("limit", 150)), 500)
-        offset = int(request.args.get("offset", 0))
-    except (TypeError, ValueError):
-        return jsonify({"error": "limit and offset must be integers"}), 400
-    from_date = request.args.get("from_date", "")
-    to_date = request.args.get("to_date", "")
-    entity_types_param = request.args.get("entity_types", "")
-
-    db = db_session()
-    q = db.query(EntityEvent).filter(EntityEvent.org_id == org_id)
-
-    if entity_types_param:
-        allowed = [t.strip() for t in entity_types_param.split(",") if t.strip()]
-        if allowed:
-            q = q.filter(EntityEvent.entity_type.in_(allowed))
-
-    if from_date:
-        try:
-            fd = datetime.strptime(from_date, "%Y-%m-%d").replace(tzinfo=UTC)
-            q = q.filter(EntityEvent.created_at >= fd)
-        except ValueError:
-            pass
-
-    if to_date:
-        try:
-            td = datetime.strptime(to_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=UTC)
-            q = q.filter(EntityEvent.created_at <= td)
-        except ValueError:
-            pass
-
-    total = q.count()
-    events = q.order_by(EntityEvent.created_at.desc()).offset(offset).limit(limit).all()
-
-    return jsonify(
-        {
-            "total": total,
-            "offset": offset,
-            "events": [
-                {**_event_to_dict(ev), "summary": _human_summary(ev), "diff_rows": _event_diff_rows(ev)}
-                for ev in events
-            ],
-        }
-    ), 200
 
 
 @core_bp.route("/api/core/sourcemap/objects", methods=["GET"])

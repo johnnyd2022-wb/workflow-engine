@@ -14,10 +14,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.backend.corechecks import CheckResult
 from app.core.db.models.execution import Execution
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
+from app.features.compliance_checks.routes.corechecks import CheckResult
 from app.observability import get_logger
 
 _log = get_logger(__name__)

@@ -71,16 +71,16 @@ class CoreChecksRunner:
 
     def _register_builtin_checks(self) -> None:
         """Register built-in checks so they can be run by id."""
-        from app.core.backend.checks.expired_materials import run_expired_materials_check
-        from app.core.backend.checks.output_expiry_check import run_output_expiry_check
-        from app.core.backend.checks.output_ready_date_check import (
+        from app.features.compliance_checks.checks.expired_materials import run_expired_materials_check
+        from app.features.compliance_checks.checks.output_expiry_check import run_output_expiry_check
+        from app.features.compliance_checks.checks.output_ready_date_check import (
             CHECK_ID as OUTPUT_READY_DATE_CHECK_ID,
         )
-        from app.core.backend.checks.output_ready_date_check import (
+        from app.features.compliance_checks.checks.output_ready_date_check import (
             run_output_ready_date_check,
         )
-        from app.core.backend.checks.tasks_due import run_tasks_due_check
-        from app.core.backend.checks.untracked_items import run_untracked_items_check
+        from app.features.compliance_checks.checks.tasks_due import run_tasks_due_check
+        from app.features.compliance_checks.checks.untracked_items import run_untracked_items_check
 
         self.register_check("expired_materials", run_expired_materials_check)
         self.register_check("untracked_items", run_untracked_items_check)
@@ -91,8 +91,10 @@ class CoreChecksRunner:
         # Product modules register through this public composition seam.  The runner
         # deliberately knows no industry-specific IDs or data shapes.
         from app.features.compliant.platform.registry import register_enabled_module_checks
+        from app.features.inventory.checks.stock_integrity import CHECK_ID, run_stock_integrity_check
 
         register_enabled_module_checks(self)
+        self.register_check(CHECK_ID, run_stock_integrity_check)
 
     def register_check(self, check_id: str, fn: CheckFn) -> None:
         """Register a check so it can be run via run_check(check_id)."""
@@ -133,8 +135,8 @@ def get_system_findings_by_item(org_id: UUID, session: Session) -> dict[str, lis
     Used to enrich the inventory list API so each item has system_findings for UI (red border + reasons).
     New checks: add an extractor below for the check's result.data shape; no change to check implementations.
     """
-    from app.core.backend.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
-    from app.core.backend.system_findings_cache import get_check_results
+    from app.features.compliance_checks.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
+    from app.features.compliance_checks.system_findings_cache import get_check_results
 
     # Same read-through cache the /core banner and dashboard use: the DAG-heavy
     # expired_materials slice (incl. its impacted_items list, which this enrichment needs)
@@ -208,7 +210,7 @@ def register_routes(bp):
         the latter also runs every cheap live check on each request only to discard them
         here.
         """
-        from app.core.backend.system_findings_cache import get_expired_materials_result
+        from app.features.compliance_checks.system_findings_cache import get_expired_materials_result
 
         org_id = UUID(g.org_id)
         result = get_expired_materials_result(org_id, db_session())
@@ -254,7 +256,7 @@ def register_routes(bp):
         Uses CoreChecksRunner (output_ready_date check). Used by system findings banner
         and sourcemap highlighting.
         """
-        from app.core.backend.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
+        from app.features.compliance_checks.checks.output_ready_date_check import CHECK_ID as OUTPUT_READY_DATE_CHECK_ID
 
         org_id = UUID(g.org_id)
         runner = CoreChecksRunner(org_id=org_id, session=db_session())
@@ -272,9 +274,9 @@ def register_routes(bp):
         check suite is a DAG traversal per expired-with-stock raw material -- ~1.3s on a
         real org -- and this endpoint is hit on every /core load. The cache is invalidated
         immediately by any inventory/execution/process mutation and recomputed once,
-        lazily, on the next request. See app/core/backend/system_findings_cache.py.
+        lazily, on the next request. See app/features/compliance_checks/system_findings_cache.py.
         """
-        from app.core.backend.system_findings_cache import get_or_compute
+        from app.features.compliance_checks.system_findings_cache import get_or_compute
 
         org_id = UUID(g.org_id)
         payload = get_or_compute(org_id, db_session())
