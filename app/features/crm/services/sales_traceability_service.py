@@ -271,6 +271,7 @@ class SalesTraceabilityService:
 
     def lot_candidates(self, org_id: UUID, product_name: str, site_id: UUID | None = None) -> list[dict]:
         """Batches of ``product_name`` in stock, oldest first, for the owner to pick from."""
+        from app.core.db.repositories.inventory_repo import producer_stock_predicate
         from app.core.db.site_operations import resolve_site
 
         selected_site = resolve_site(self.db, org_id, site_id)
@@ -278,6 +279,7 @@ class SalesTraceabilityService:
             InventoryItem.org_id == org_id,
             InventoryItem.name == product_name,
             InventoryItem.inventory_type == "final_product",
+            producer_stock_predicate(),
             InventoryItem.quantity > 0,
         )
         if selected_site is not None:

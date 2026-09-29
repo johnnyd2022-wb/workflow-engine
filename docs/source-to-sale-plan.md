@@ -879,9 +879,14 @@ Founder decisions for this phase:
       Lineage stays intact either way, so a recall works across both.
       - [x] Trusted material-scope prerequisite (!437): locked execution/order resolver,
         raw-material owner preflight and consistent batch-link lock ordering, with a
-        concurrent-assignment regression. Owner schema/DB guards, production hook,
-        receipts, transfer conservation and producer valuation/sales exclusions remain
-        open; customer receipts are not enabled by this prerequisite.
+        concurrent-assignment regression. This scope-only MR did not add owner
+        schema/DB guards, production hook, receipts, transfer conservation or
+        producer valuation/sales exclusions.
+      - [x] Recorded customer raw-title prerequisite (!445): immutable same-org
+        material receipts and owner proof; transaction-bound production consumption,
+        owner-conserving partial transfers and reasoned wastage; producer acquisition
+        projection and ordinary sales exclusions. Operations default off; monetary
+        valuation, finished-goods title and portal materials totals remain open.
     - [ ] c. **Duty either way.** Per order: who is liable for excise (the producer as
       licensee, the customer as licensee, or goods leaving underbond to the customer's
       CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the
@@ -991,3 +996,56 @@ Founder decisions for this phase:
     today's priorities, with the order's forecast date updated in the customer's portal.
 
 ---
+## Order
+
+1. **Phase 0.** Require 2FA and get `main` green now; the database split is planned for
+   go-live. Add the 5.1b ratchet straight away so `backend.py` stops growing.
+2. **0.4 roles and permissions** before a second producer with staff goes live.
+3. **1.2 then 1.3.** Whole bottles and Library stock, then the go-live stocktake. They
+   decide whether a new producer can start cleanly and whether stock can be trusted from
+   day one. Start 1.3 by checking whether Core can start a batch partway through a
+   workflow; that sets its size.
+4. **1.1 and 1.4.** Matching modes and the recall screen give owners control and turn the
+   trace into something to hand to NZFS.
+5. **2.1 then 2.6.** Excise per period, then the Customs stocktake. Both depend on 1.2,
+   final-step ABV, and stock locations. 2.5 licensing can run in parallel.
+6. **Phase 3** alongside the end of Phase 1; the rest of Phase 2 as NZ Alcohol parts are
+   finished.
+7. **Phase 4** on the corrected data; 4.1 and 4.7 can go first at any time.
+8. **Phase 5** throughout, carving each slice before a plan item changes it (5.1d).
+9. **Phase 6** once a second producer works. Generalise from two real producers, not one.
+10. **0.5 Google sign-in** at any time; it's independent. Settle the 2FA default (0.5d)
+    first.
+11. **Phase 7** after Phase 6's second producer. 7.3 (planner) can start first: it
+    needs only Core and gives contract orders (7.2) their dates. Then sites (7.1), then
+    contract manufacturing (7.2), since contract goods move between sites and licences.
+
+## Sources
+
+Official guidance checked 25 Sep 2026. Re-check before building, because rules and rates
+change.
+
+- NZ Customs, [Entry lodgement timing](https://www.customs.govt.nz/business/excise/entry-lodgement-timing):
+  lodgement periods, thresholds, due dates, nil returns.
+- NZ Customs, [Record-keeping obligations for alcohol licensed manufacturing areas and off-site storage](https://www.customs.govt.nz/business/excise/alcohol-and-excise/record-keeping-obligations-for-alcohol-licenced-manufacturing-areas-and-off-site-storage):
+  stock register, 7-year retention, NZ storage.
+- NZ Customs, [CCA licence holder guide: licensed manufacturing area](https://www.customs.govt.nz/media/vitaw55u/customer-guide-cca-licence-holder-licensed-manufacturing-area-alcohol-products-oct-2018.pdf):
+  at-least-annual stocktakes; confirmed losses are dutiable and must be reported. (Oct
+  2018 PDF; this link returned 404 on 25 Sep 2026, and the wording was confirmed from
+  Customs' own search excerpts. Find the current guide on customs.govt.nz.)
+- NZ Customs, [Excise duty remissions](https://www.customs.govt.nz/business/excise/excise-duty/excise-duty-remissions):
+  damaged, destroyed, lost, stolen and faulty goods; form NZCS 277.
+- NZ Customs, [Pay excise duty and other charges](https://www.customs.govt.nz/business/excise/pay-excise-duty-and-other-charges/).
+- NZ Customs, [Moving products excise-unpaid](https://www.customs.govt.nz/business/excise/alcohol-and-excise/moving-products-excise-unpaid)
+  and [Customs-controlled areas](https://www.customs.govt.nz/business/customs-controlled-areas):
+  CCA-to-CCA transfers without duty need prior approval, with records of every movement
+  (7.1d). Checked 28 Sep 2026.
+- Planning concepts for 7.3: MRPeasy, [What is a master production schedule](https://www.mrpeasy.com/blog/what-is-master-production-schedule/)
+  (MPS and available-to-promise); User Solutions, [Rough-cut capacity planning](https://usersolutions.com/blog/rough-cut-capacity-planning);
+  Nexelem, [Finite vs infinite capacity planning](https://nexelem.com/en/blog/finite-vs-infinite-capacity-planning-which-approach-fits-your-factory/);
+  BrewPlanner, [Brewery production scheduling](https://brewplanner.com/blog/how-to-build-a-brewery-production-schedule-that-maximizes-tank-utilization)
+  (backward-scheduled tank timelines).
+- Google, [OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect):
+  ID token claims (`sub`, `email_verified`, `hd`) for 0.5.
+- [Sale and Supply of Alcohol Act 2012](https://www.legislation.govt.nz/act/public/2012/0120/latest/DLM3339333.html)
+  and its regulations, for 2.5.

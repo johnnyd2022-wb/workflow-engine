@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 _accounting_write = ContextVar("_site_transfer_accounting_write", default=False)
 
 
+def transfer_accounting_allowed():
+    return _accounting_write.get()
+
+
 @contextmanager
 def allow_transfer_accounting():
     token = _accounting_write.set(True)

@@ -1011,11 +1011,14 @@ class CRMService:
         ]
 
     def list_final_products(self, org_id: UUID) -> list[dict]:
+        from app.core.db.repositories.inventory_repo import producer_stock_predicate
+
         rows = (
             self.db.query(InventoryItem)
             .filter(
                 InventoryItem.org_id == org_id,
                 InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                producer_stock_predicate(),
             )
             .order_by(InventoryItem.updated_at.desc().nulls_last(), InventoryItem.created_at.desc().nulls_last())
             .all()

@@ -24,6 +24,15 @@ from app.core.db.repositories.process_repo import ProcessRepository
 from app.features.demo_data.services.resetdb import DEMO_USER_EMAIL, clear_demo_db, reset_demo_db
 
 
+def _producer_input_id(db, org_id):
+    """Production preflight requires persisted same-org stock for selected input IDs."""
+    from tests.factories import InventoryItemFactory
+
+    item = InventoryItemFactory(org_id=org_id, name="Input A", quantity="100", unit="kg")
+    db.commit()
+    return str(item.id)
+
+
 @pytest.fixture
 def db():
     """Real database session for integration tests (same pattern as test_corechecks / test_dag_traversal)."""
@@ -84,6 +93,9 @@ def _teardown_synthetic_org_process(db, org_id, process_id):
     _clear_synthetic_executions(db, org_id, process_id)
     db.query(Step).filter(Step.process_id == process_id).delete(synchronize_session=False)
     db.query(Process).filter(Process.id == process_id).delete(synchronize_session=False)
+    from app.core.db.models.inventory_item import InventoryItem
+
+    db.query(InventoryItem).filter(InventoryItem.org_id == org_id).delete(synchronize_session=False)
     db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
     db.commit()
 
@@ -174,7 +186,7 @@ RE_PRIOR_STEPS_NOT_COMPLETED = r"prior steps.*are not completed"
 RE_NOT_IN_STATE_TO_COMPLETE = r"not in a state that can be completed"
 RE_PROCESS_NOT_FOUND = r"not found or does not belong"
 
-# Standard: use None when no inventory selection; str(uuid4()) when testing linkage
+# Standard: use None when no inventory selection; a persisted same-org stock ID for linkage
 INVENTORY_ITEM_ID_NONE = None
 
 
@@ -315,7 +327,7 @@ class TestCompleteStepContract:
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
         step1 = steps[0]
         actual_inputs = [
-            {"name": "Input A", "quantity": 5, "unit": "kg", "inventory_item_id": str(uuid4())},
+            {"name": "Input A", "quantity": 5, "unit": "kg", "inventory_item_id": _producer_input_id(db, org_id)},
         ]
         actual_outputs = [{"name": "Out1", "quantity": 4, "unit": "kg"}]
         execution_data = {"completed_by": "test@example.com"}
@@ -694,7 +706,9 @@ class TestStepOrderAndInputOutputConsistency:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 9, "unit": "kg", "inventory_item_id": str(uuid4())}],
+            actual_inputs=[
+                {"name": "Input A", "quantity": 9, "unit": "kg", "inventory_item_id": _producer_input_id(db, org_id)}
+            ],
             actual_outputs=step1_outputs,
         )
         loaded = repo.get_execution_with_steps(execution.id, org_id)
@@ -846,7 +860,7 @@ class TestActualInputsOutputsStrictShape:
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
         actual_inputs = [
-            {"name": "Input A", "quantity": 5.0, "unit": "kg", "inventory_item_id": str(uuid4())},
+            {"name": "Input A", "quantity": 5.0, "unit": "kg", "inventory_item_id": _producer_input_id(db, org_id)},
         ]
         actual_outputs = [{"name": "Out1", "quantity": 4, "unit": "kg", "inventory_item_id": None}]
         repo.complete_step(
@@ -858,26 +872,26 @@ class TestActualInputsOutputsStrictShape:
         loaded = repo.get_execution_with_steps(execution.id, org_id)
         step = next(es for es in loaded.execution_steps if es.step_number == 1)
         for d in step.actual_inputs:
-            assert (
-                set(d.keys()) <= ALLOWED_INPUT_KEYS
-            ), f"actual_inputs has extra keys: {set(d.keys()) - ALLOWED_INPUT_KEYS}"
+            assert set(d.keys()) <= ALLOWED_INPUT_KEYS, (
+                f"actual_inputs has extra keys: {set(d.keys()) - ALLOWED_INPUT_KEYS}"
+            )
             assert isinstance(d["name"], str)
             _assert_quantity_numeric(d["quantity"])
             assert isinstance(d["unit"], str)
-            assert (
-                "inventory_item_id" in d
-            ), "actual_inputs should include inventory_item_id (str or None) for downstream consistency"
+            assert "inventory_item_id" in d, (
+                "actual_inputs should include inventory_item_id (str or None) for downstream consistency"
+            )
             assert d["inventory_item_id"] is None or isinstance(d["inventory_item_id"], str)
         for d in step.actual_outputs:
-            assert (
-                set(d.keys()) <= ALLOWED_OUTPUT_KEYS
-            ), f"actual_outputs has extra keys: {set(d.keys()) - ALLOWED_OUTPUT_KEYS}"
+            assert set(d.keys()) <= ALLOWED_OUTPUT_KEYS, (
+                f"actual_outputs has extra keys: {set(d.keys()) - ALLOWED_OUTPUT_KEYS}"
+            )
             assert isinstance(d["name"], str)
             _assert_quantity_numeric(d["quantity"])
             assert isinstance(d["unit"], str)
-            assert (
-                "inventory_item_id" in d
-            ), "actual_outputs should include inventory_item_id (str or None) for downstream consistency"
+            assert "inventory_item_id" in d, (
+                "actual_outputs should include inventory_item_id (str or None) for downstream consistency"
+            )
             assert d["inventory_item_id"] is None or isinstance(d["inventory_item_id"], str)
 
 
@@ -913,12 +927,10 @@ class TestCompletedAtTimestamp:
         assert loaded.completed_at is not None
         assert isinstance(loaded.completed_at, datetime)
         # completed_at may be timezone-naive UTC; compare in UTC
-        completed_utc = (
-            loaded.completed_at if loaded.completed_at.tzinfo else loaded.completed_at.replace(tzinfo=UTC)
+        completed_utc = loaded.completed_at if loaded.completed_at.tzinfo else loaded.completed_at.replace(tzinfo=UTC)
+        assert before <= completed_utc <= after + timedelta(seconds=5), (
+            "completed_at should be within a few seconds of test run"
         )
-        assert (
-            before <= completed_utc <= after + timedelta(seconds=5)
-        ), "completed_at should be within a few seconds of test run"
 
     def test_completed_at_timezone_consistent_utc(self, db, synthetic_org_and_process_clean):
         """completed_at is stored and comparable in UTC (timezone-aware or naive UTC)."""
@@ -967,9 +979,9 @@ class TestCompletedAtTimestamp:
         completed_steps = [es for es in full.execution_steps if es.completed_at is not None]
         completed_steps.sort(key=lambda s: s.step_number)
         for i in range(1, len(completed_steps)):
-            assert (
-                completed_steps[i - 1].completed_at <= completed_steps[i].completed_at
-            ), "completed_at should be monotonic by step order"
+            assert completed_steps[i - 1].completed_at <= completed_steps[i].completed_at, (
+                "completed_at should be monotonic by step order"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1327,8 +1339,11 @@ class TestConsumptionOnlyStepCompletion:
             app = Flask(__name__)
             app.secret_key = "test-secret"
             app.register_blueprint(core_bp)
-            with app.app_context(), app.test_request_context(
-                path, method="POST", data=json.dumps(payload), content_type="application/json"
+            with (
+                app.app_context(),
+                app.test_request_context(
+                    path, method="POST", data=json.dumps(payload), content_type="application/json"
+                ),
             ):
                 g.org_id = str(org_id)
                 g.current_user = user
@@ -1389,7 +1404,7 @@ class TestExecutionFlowE2E:
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
         # Simulate execution modal payload (e.g. user selected inventory → quantity = item total)
         step1_inputs = [
-            {"name": "Input A", "quantity": 12.5, "unit": "kg", "inventory_item_id": str(uuid4())},
+            {"name": "Input A", "quantity": 12.5, "unit": "kg", "inventory_item_id": _producer_input_id(db, org_id)},
         ]
         step1_outputs = [{"name": "Out1", "quantity": 10, "unit": "kg"}]
         repo.complete_step(
@@ -1440,7 +1455,9 @@ class TestExecutionFlowE2E:
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
-            actual_inputs=[{"name": "Input A", "quantity": 12.5, "unit": "kg", "inventory_item_id": str(uuid4())}],
+            actual_inputs=[
+                {"name": "Input A", "quantity": 12.5, "unit": "kg", "inventory_item_id": _producer_input_id(db, org_id)}
+            ],
             actual_outputs=[{"name": "Out1", "quantity": 10.0, "unit": "kg"}],
             execution_data={"completed_by": "user@test.com"},
         )
@@ -1634,7 +1651,7 @@ class TestRegressionSafeguards:
         repo = ExecutionRepository(db)
         execution = repo.create_execution(org_id=org_id, process_id=process_id)
         steps = sorted(execution.execution_steps, key=lambda s: s.step_number)
-        inv_id = str(uuid4())
+        inv_id = _producer_input_id(db, org_id)
         repo.complete_step(
             execution_step_id=steps[0].id,
             org_id=org_id,
@@ -1830,9 +1847,7 @@ class TestCompletedExecutionPageIndex:
     def test_index_exists_with_the_expected_shape(self, db):
         from sqlalchemy import text
 
-        indexdef = db.execute(
-            text("SELECT indexdef FROM pg_indexes WHERE indexname = :n"), {"n": self._INDEX}
-        ).scalar()
+        indexdef = db.execute(text("SELECT indexdef FROM pg_indexes WHERE indexname = :n"), {"n": self._INDEX}).scalar()
         assert indexdef, f"{self._INDEX} is missing -- migration exec_completed_page_idx_001 not applied"
         # Column order + per-column direction: equality on (org_id, process_id, status)
         # then ORDER BY created_at DESC, id DESC -- exactly what execution_repo.

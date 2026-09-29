@@ -299,6 +299,9 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # Contract orders (7.2a): production sees order demand, never CRM contact details;
     # Sales sees commercial lines, with recipe/spec references removed by the DTO.
     ("contracts.list_customers", None, "sales.view"),
+    ("contracts.list_materials", None, "inventory.view"),
+    ("contracts.materials_page", None, "inventory.view"),
+    ("contracts.receive_customer_material", None, "inventory.adjust"),
     ("contracts.create_customer", None, "sales.record"),
     ("contracts.update_customer", None, "sales.record"),
     ("contracts.list_orders", None, ("sales.view", "production.view")),

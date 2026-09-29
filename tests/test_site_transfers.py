@@ -60,6 +60,8 @@ def transfers(released, db, monkeypatch):  # noqa: F811
     yield org, admin, other, neighbour, default, additional, stock_id, actor_id
     db.rollback()
     with unscoped():
+        # Test-only evidence purge; production receipt proof is immutable.
+        db.execute(text("SELECT set_config('app.migration_mode','1',true)"))
         db.query(InventoryMovement).filter(InventoryMovement.org_id == org.id).delete(synchronize_session=False)
         db.execute(
             text(
@@ -469,10 +471,17 @@ def test_legacy_move_cannot_cross_site_or_merge_incompatible_lots(transfers, db)
 def test_transfer_owned_metadata_is_closed(transfers, db):
     with unscoped():
         stock = db.get(InventoryItem, transfers[6])
-        stock.extra_data = {"contract_customer_id": str(uuid4())}
+        # Historical metadata is not a supported new ownership write. Simulate an
+        # already stored legacy hint without using the now-closed ORM/API path.
+        db.execute(
+            text(
+                "UPDATE inventory_items SET extra_data = jsonb_build_object('contract_customer_id', :owner) WHERE org_id=:org AND id=:id"
+            ),
+            {"owner": str(uuid4()), "org": stock.org_id, "id": stock.id},
+        )
         db.commit()
     result = post(transfers[1], "/api/core/site-transfers", payload(transfers))
-    assert result.status_code == 400 and "Customer-owned" in result.get_json()["error"]
+    assert result.status_code == 400 and "Legacy customer ownership" in result.get_json()["error"]
     options = transfers[1].get("/api/core/site-transfers/options").get_json()
     assert not options["stock"]
 
