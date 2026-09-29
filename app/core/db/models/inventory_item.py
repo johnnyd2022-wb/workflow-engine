@@ -41,6 +41,8 @@ class InventoryItem(TenantScoped, Base):
     # Supplier information (for raw materials)
     supplier = Column(String(255), nullable=True)
     barcode = Column(String(255), nullable=True, index=True)  # Product identity; reused across stock entries
+    # Plan 2.1: where the lot is. None = the main licensed (Customs-controlled) area.
+    location_id = Column(UUID(as_uuid=True), ForeignKey("stock_locations.id", ondelete="RESTRICT"), nullable=True)
     purchase_date = Column(Date, nullable=True)
     supplier_batch_number = Column(String(255), nullable=True)
     expiry_date = Column(Date, nullable=True)

@@ -336,6 +336,18 @@
       }
     },
     {
+      "control_id": "recall-policy",
+      "signed_on": "2026-09-23",
+      "due_date": "2027-09-23",
+      "review_interval_months": 12,
+      "how_we_meet": "Whistlebird's written food and drink recall policy covers supplier-notified and self-initiated recalls, immediate stock holds and source-to-sale tracing, risk assessment and recall decisions, NZFS notification within 24 hours of a recall decision, trade and consumer communication, product disposition, reconciliation, corrective action and an annual simulated recall. Johnny Dempsey is the decision maker, with Nikolai Scott as deputy.",
+      "evidence_reference": "docs/whistlebird-recall-policy.md",
+      "evidence_fields": {
+        "policy_reference": "docs/whistlebird-recall-policy.md",
+        "last_policy_review": "2026-09-23"
+      }
+    },
+    {
       "control_id": "registration-scope",
       "signed_on": "2026-02-01",
       "due_date": "2027-02-01",

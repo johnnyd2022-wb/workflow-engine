@@ -112,7 +112,7 @@ def test_ac6_inventory_static_does_not_expose_server_templates(page):
     """The inventory/ dir holds server-rendered Jinja (add.html, dispose.html, view.html,
     ...). None of it may be reachable as a static file -- regression guard for !197
     routing the whole directory through WhiteNoise."""
-    for name in ("add.html", "add_manual.html", "dispose.html", "view.html", "inventory_hub_banner.html"):
+    for name in ("add.html", "add_manual.html", "dispose.html", "view.html", "add_csv.html"):
         response = page.request.get(f"/static/inventory/{name}")
         assert response.status != 200, f"/static/inventory/{name} must not be served statically"
 
