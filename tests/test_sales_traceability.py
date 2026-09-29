@@ -173,6 +173,48 @@ def test_invoice_trace_items_include_all_allocated_lots_and_are_tenant_scoped(db
         assert status == 404
 
 
+def test_unmatched_queue_accounts_for_earlier_pending_sales(db, sales_org):
+    product = "Queue stock - final product"
+    InventoryRepository(db).create_inventory_item(
+        sales_org.id,
+        name=product,
+        quantity="5",
+        unit="units",
+        inventory_type="final_product",
+    )
+    _add_mapping(db, sales_org.id, product=product, pattern="Queue stock")
+    _add_sale(db, sales_org.id, invoice_id="queue-first", description="Queue stock", quantity="3")
+    _add_sale(db, sales_org.id, invoice_id="queue-second", description="Queue stock", quantity="3")
+
+    unmatched = SalesTraceabilityService(db).review_queue(sales_org.id)["unmatched"]
+
+    assert len(unmatched) == 2
+    assert unmatched[0]["invoice_id"] == "queue-first"
+    assert unmatched[0]["reason"] == "awaiting_replay"
+    assert unmatched[1]["invoice_id"] == "queue-second"
+    assert unmatched[1]["reason"] == "no_stock"
+    assert unmatched[1]["available"] == "2"
+
+
+def test_unmatched_queue_names_partial_batch_allocation(db, sales_org):
+    product = "Partially matched final product"
+    InventoryRepository(db).create_inventory_item(
+        sales_org.id, name=product, quantity="5", unit="units", inventory_type="final_product"
+    )
+    _add_mapping(db, sales_org.id, product=product, pattern="Partially matched")
+    _add_sale(db, sales_org.id, invoice_id="partial-line", description="Partially matched", quantity="3")
+    assert SalesTraceabilityService(db).reconcile_org(sales_org.id)["allocated"] == 1
+    allocation = db.query(SalesFifoAllocation).filter(SalesFifoAllocation.org_id == sales_org.id).one()
+    allocation.quantity = Decimal("2")
+    db.flush()
+
+    unmatched = SalesTraceabilityService(db).review_queue(sales_org.id)["unmatched"]
+
+    assert len(unmatched) == 1
+    assert unmatched[0]["reason"] == "allocation_mismatch"
+    assert unmatched[0]["available"] == "2"
+
+
 def test_reconcile_leaves_unmapped_and_insufficient_sales_unchanged(db, sales_org):
     product = "Solstice - final product"
     InventoryRepository(db).create_inventory_item(
