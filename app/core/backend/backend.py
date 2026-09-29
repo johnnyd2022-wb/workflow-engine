@@ -52,7 +52,7 @@ from app.observability import get_logger
 from app.utils.config_loader import config
 
 logger = get_logger(__name__)
-_EXECUTION_DATA_TRACE_KEYS = execution_routes._EXECUTION_DATA_TRACE_KEYS
+_EXECUTION_DATA_TRACE_KEYS = execution_routes._EXECUTION_DATA_TRACE_KEYS  # system/audit keys, not user prompts
 
 
 def _product_available(feature: str) -> bool:
@@ -155,9 +155,6 @@ def validate_custom_expiry_warning_not_exceed_duration(
     tests call this to safeguard the validation.
     """
     return assert_warning_within_expiry(output_name, duration_value, duration_unit, warning_value, warning_unit)
-
-
-# Keys in execution_data that are system/audit (execution_trace), not user prompts
 
 
 def _to_iso_timestamp(ts) -> str | None:
