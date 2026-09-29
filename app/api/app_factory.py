@@ -160,12 +160,18 @@ def create_app():
 
     app.register_blueprint(stocktake_bp)
 
-    from app.features.contract_manufacturing.routes import portal_staff  # noqa: F401 -- registers staff sharing routes
+    from app.features.contract_manufacturing.routes import (
+        materials,  # noqa: F401 -- staff material routes
+        portal_staff,  # noqa: F401 -- registers staff sharing routes
+    )
     from app.features.contract_manufacturing.routes.orders import bp as contracts_bp
     from app.features.contract_manufacturing.routes.portal import bp as contract_portal_bp
+    from app.features.contract_manufacturing.services.stock_guard import register_material_stock_guard
 
     app.register_blueprint(contracts_bp)
     app.register_blueprint(contract_portal_bp)
+    register_material_stock_guard()
+    materials.install_material_request_guard(app)
 
     from app.features.planning.routes import planning_bp
 

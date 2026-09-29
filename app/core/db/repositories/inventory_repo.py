@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 from decimal import ROUND_FLOOR, Decimal, InvalidOperation
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import Integer, and_, func, or_
 from sqlalchemy.orm import Session
@@ -22,6 +22,14 @@ logger = get_logger(__name__)
 _UNTRACKED_EXTRA_FILTER = {"untracked": True}
 
 
+def producer_stock_predicate():
+    """Producer acquisition/sales selectors exclude recorded or unresolved free issue."""
+    return and_(
+        InventoryItem.contract_customer_id.is_(None),
+        or_(InventoryItem.extra_data.is_(None), ~InventoryItem.extra_data.has_key("contract_customer_id")),
+    )
+
+
 def _parse_quantity(value: object | None) -> Decimal | None:
     if value is None:
         return None
@@ -39,6 +47,11 @@ def _item_snapshot(item: InventoryItem) -> dict:
         "org_id": str(item.org_id),
         "site_id": str(item.site_id) if item.site_id else None,
         "transfer_receipt_id": str(item.transfer_receipt_id) if item.transfer_receipt_id else None,
+        "contract_customer_id": str(item.contract_customer_id) if item.contract_customer_id else None,
+        "material_receipt_id": str(item.material_receipt_id) if item.material_receipt_id else None,
+        "producer_acquisition_value_included": item.contract_customer_id is None
+        and "contract_customer_id" not in (item.extra_data or {}),
+        "free_issue_acquisition_cost": "0" if item.contract_customer_id else None,
         "name": item.name,
         "quantity": str(item.quantity),
         "unit": item.unit,
@@ -203,6 +216,9 @@ class InventoryRepository:
         location_id: UUID | None = None,
         site_id: UUID | None = None,
         transfer_receipt_id: UUID | None = None,
+        contract_customer_id: UUID | None = None,
+        material_receipt_id: UUID | None = None,
+        inventory_item_id: UUID | None = None,
     ) -> InventoryItem:
         """Create a new inventory item. If commit=False, caller is responsible for commit."""
         with start_span(
@@ -219,6 +235,7 @@ class InventoryRepository:
             _require_whole_count(quantity, unit, name)
             with allow_inventory_quantity_write(write_reason):
                 item = InventoryItem(
+                    id=inventory_item_id or uuid4(),
                     org_id=org_id,
                     name=name,
                     quantity=coerce_stored_quantity(quantity),
@@ -237,6 +254,8 @@ class InventoryRepository:
                     location_id=location_id,
                     site_id=site_id,
                     transfer_receipt_id=transfer_receipt_id,
+                    contract_customer_id=contract_customer_id,
+                    material_receipt_id=material_receipt_id,
                 )
                 item.display_label = _build_display_label(item)
                 self.db.add(item)
@@ -425,6 +444,7 @@ class InventoryRepository:
                     InventoryItem.org_id == org_id,
                     InventoryItem.name == name,
                     InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                    producer_stock_predicate(),
                     InventoryItem.quantity > 0,
                 )
                 .order_by(
@@ -531,6 +551,7 @@ class InventoryRepository:
                 InventoryItem.id == inventory_item_id,
                 InventoryItem.org_id == org_id,
                 InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                producer_stock_predicate(),
             )
             .with_for_update()
             .one_or_none()
@@ -654,6 +675,7 @@ class InventoryRepository:
                     InventoryItem.source_output_id == item.source_output_id,
                     InventoryItem.source_step_name == item.source_step_name,
                     InventoryItem.transfer_receipt_id.is_(None),
+                    producer_stock_predicate(),
                     self.db.query(StockTransfer.id)
                     .filter(
                         StockTransfer.org_id == org_id,
@@ -796,6 +818,7 @@ class InventoryRepository:
                 InventoryItem.id == inventory_item_id,
                 InventoryItem.org_id == org_id,
                 InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                producer_stock_predicate(),
             )
             .with_for_update()
             .one_or_none()
@@ -892,6 +915,7 @@ class InventoryRepository:
         limit: int | None = None,
         cursor: tuple | None = None,
         site_id: UUID | None = None,
+        producer_owned_only: bool = False,
     ) -> list[InventoryItem]:
         """List inventory items for an organisation, optionally filtered by type or process.
 
@@ -902,6 +926,8 @@ class InventoryRepository:
         from sqlalchemy import tuple_ as _tuple
 
         query = self.db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
+        if producer_owned_only:
+            query = query.filter(producer_stock_predicate())
         if site_id is not None:
             query = query.filter(InventoryItem.site_id == site_id)
         if inventory_type:

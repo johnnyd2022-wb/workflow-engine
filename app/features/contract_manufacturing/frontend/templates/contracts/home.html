@@ -4,6 +4,7 @@
 {% block content %}
 <main class="contract-workspace">
   <header><h1>Contract orders</h1><p>Orders made for your customers.</p></header>
+  {% if can('inventory.view') %}<a href="{{ url_for('contracts.materials_page') }}" hx-boost="false">Customer raw materials</a>{% endif %}
   <p class="contract-error" role="alert" hidden></p>
   <section class="contract-card">
     <h2>Orders</h2>
