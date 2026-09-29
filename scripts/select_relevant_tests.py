@@ -70,7 +70,7 @@ RULES = (
     ),
     Rule(
         "Core API routes",
-        ("app/api/routes/**", "app/core/backend/checks/**"),
+        ("app/api/routes/**", "app/features/compliance_checks/checks/**"),
         (
             "tests/test_corechecks.py",
             "tests/test_corechecks_routes.py",
