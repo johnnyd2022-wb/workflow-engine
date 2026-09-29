@@ -1,0 +1,26 @@
+/* Touch targets on the canonical production step page. Its Record step bar is
+   fixed above the phone navigation by batch-start.css. */
+.batch-start-spa #execute-step-modal .spa-inp,
+.batch-start-spa #execute-step-modal input:not([type="checkbox"]),
+.batch-start-spa #execute-step-modal select,
+.batch-start-spa #execute-step-modal textarea,
+.batch-start-spa #execute-step-modal .btn {
+  min-height: 44px;
+  box-sizing: border-box;
+}
+.batch-start-spa #execute-step-modal .execute-evidence-file-input {
+  width: 100%;
+  padding: 8px;
+}
+.batch-start-spa #execute-step-modal .execute-evidence-row {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 767px) {
+  .batch-start-spa #execute-step-modal .exec-modal__section { padding: 14px 0; }
+  .batch-start-spa #execute-step-modal .execute-evidence-upload { padding: 12px !important; }
+  .inventory-barcode-page #barcode-spa-root .barcode-continue-actions { display: block !important; }
+  .inventory-barcode-page #barcode-spa-root #barcode-continue-btn { width: 100%; }
+  .inventory-barcode-page #barcode-spa-root .spa-inp { min-height: 44px; }
+}
