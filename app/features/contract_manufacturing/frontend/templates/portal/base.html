@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>{% block title %}Customer portal{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('contract_portal.static', filename='portal.css') }}">
+</head>
+<body>
+<main class="portal-shell">
+<header>
+<p class="portal-brand">{{ producer_name or 'biz-e' }} · Customer portal</p>{% if customer_name %}<p>{{ customer_name }}</p>
+<nav>
+<a href="/portal">Your orders</a>
+<button type="button" data-portal-logout>Sign out</button>
+</nav>{% endif %}</header>
+<p data-error role="alert" hidden>
+</p>{% block content %}{% endblock %}<footer>Only information shared by your producer appears here.</footer>
+</main>
+<script src="{{ url_for('contract_portal.static', filename='portal.js') }}">
+</script>
+</body>
+</html>

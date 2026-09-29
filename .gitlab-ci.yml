@@ -125,6 +125,22 @@ data_stores:
     - main
   allow_failure: false
 
+# Plan 5.1a: fail when a route claimed by the Feature Index no longer exists in the
+# composed app. The test environment mounts every optional product blueprint.
+feature_index_routes:
+  stage: test
+  image: python:3.14-bookworm
+  variables:
+    ENVIRONMENT: test
+  script:
+    - pip install "uv==${UV_VERSION}"
+    - uv sync --extra dev
+    - uv run python scripts/check_feature_index_routes.py
+  only:
+    - merge_requests
+    - main
+  allow_failure: false
+
 # Deterministic, path-aware MR test gate. The selector emits every chosen test and the
 # source rule that chose it, so this is inspectable rather than an opaque heuristic.
 # New/unmapped application paths deliberately fall back to tests/, while docs-only MRs
@@ -197,8 +213,44 @@ relevant_tests:
     - merge_requests
   allow_failure: false
 
+# Plan 0.3d: browser smoke flows must pass before an MR can merge. Broader
+# browser regressions remain tracked under the parent 0.3 main-green work.
+mr_e2e:
+  stage: test
+  image: python:3.14-bookworm
+  services:
+    - name: postgres:16
+      alias: postgres
+      command: ["postgres", "-c", "max_connections=200"]
+  variables:
+    ENVIRONMENT: test
+    POSTGRES_DB: workflow-engine-test
+    POSTGRES_USER: workflow_rw
+    POSTGRES_PASSWORD: secret
+    POSTGRES_HOST_AUTH_METHOD: trust
+  before_script:
+    - pip install "uv==${UV_VERSION}"
+    - uv sync --extra dev
+    - apt-get update -o Acquire::AllowInsecureRepositories=true -qq
+    - apt-get install -y -qq postgresql-client curl openssl ca-certificates
+    - chmod +x ci/*.sh
+    - ./ci/setup_database.sh
+    - |
+      for attempt in 1 2 3; do
+        uv run playwright install --with-deps chromium && break
+        if [ "$attempt" -eq 3 ]; then exit 1; fi
+        sleep "$((attempt * 15))"
+      done
+    - mkdir -p app/tls
+    - openssl req -x509 -newkey rsa:4096 -nodes -keyout app/tls/app_cert.key -out app/tls/app_cert.pem -days 1 -subj "/CN=localhost" 2>/dev/null
+  script:
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_smoke.py -v
+  only:
+    - merge_requests
+  allow_failure: false
+
 # The exhaustive suite is the post-merge release gate. It runs before the build/deploy
-# stages on main; merge requests use relevant_tests above for faster feedback.
+# stages on main; merge requests run selected regressions and browser smoke above.
 unit_tests:
   stage: test
   image: python:3.14-bookworm
@@ -443,17 +495,28 @@ migration_reversibility:
 # manual token needed for this part, unlike Renovate/Socket below.
 docker_build_publish:
   stage: build
-  image: docker:27
-  services:
-    - docker:27-dind
+  # The existing host-Docker shell runner also owns the downstream test deployment.
+  # The ordinary Docker executor is unprivileged and cannot start docker:dind.
+  tags:
+    - deploy-target
+  resource_group: workflow-registry-build
   variables:
-    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_HOST: "unix:///var/run/docker.sock"
+    DOCKER_API_VERSION: "1.43"  # host Docker 24.0.5; runner CLI is newer
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_TLS_VERIFY: ""
   script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - docker build --target test -f Dockerfile.multi -t "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" .
-    - docker push "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
-    - docker build --target production -f Dockerfile.multi -t "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA" .
-    - docker push "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA"
+    - |
+      set -eu
+      docker version --format '{{.Server.Version}}'
+      CI_DOCKER_CONFIG_DIR=$(mktemp -d)
+      export DOCKER_CONFIG="$CI_DOCKER_CONFIG_DIR"
+      trap 'rm -rf -- "$CI_DOCKER_CONFIG_DIR"' EXIT
+      printf '%s' "$CI_REGISTRY_PASSWORD" | docker login --username "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+      docker build --target test -f Dockerfile.multi -t "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA" .
+      docker push "$CI_REGISTRY_IMAGE/app:test-$CI_COMMIT_SHORT_SHA"
+      docker build --target production -f Dockerfile.multi -t "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA" .
+      docker push "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA"
   only:
     - main
 

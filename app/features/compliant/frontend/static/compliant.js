@@ -84,8 +84,9 @@
       overdue: Number(health.overdue || 0)
     };
   }
-  function moduleMetric(number, label, tone) {
-    var metric = document.createElement('span'); metric.className = 'compliant-framework-summary__metric compliant-framework-summary__metric--' + tone;
+  function moduleMetric(number, label, tone, destination) {
+    var metric = document.createElement(destination ? 'a' : 'span'); metric.className = 'compliant-framework-summary__metric compliant-framework-summary__metric--' + tone;
+    if (destination) { metric.href = destination; metric.setAttribute('hx-boost', 'false'); }
     metric.appendChild(textElement('strong', String(number)));
     metric.appendChild(document.createTextNode(' ' + label));
     return metric;
@@ -112,11 +113,12 @@
       card.appendChild(textElement('h2', framework.name, 'compliant-framework-summary__title'));
       card.appendChild(textElement('p', 'Compliance score: ' + health.score + '%', 'compliant-framework-summary__score'));
       if (framework.slug === 'np3-food-control') card.appendChild(np3ReadinessBar(health));
-      card.appendChild(textElement('p', health.currentControls + ' / ' + health.totalControls + ' current evidence controls', 'compliant-framework-summary__coverage'));
+      card.appendChild(textElement('p', health.currentControls + ' / ' + health.totalControls + ' NP3 checks with current evidence', 'compliant-framework-summary__coverage'));
       var metrics = document.createElement('div'); metrics.className = 'compliant-framework-summary__metrics';
-      metrics.appendChild(moduleMetric(health.evidenceReady, 'evidence ready', 'ready'));
-      metrics.appendChild(moduleMetric(health.needsAttention, 'need attention', 'attention'));
-      metrics.appendChild(moduleMetric(health.overdue, 'overdue', 'overdue'));
+      var np3 = framework.slug === 'np3-food-control';
+      metrics.appendChild(moduleMetric(health.evidenceReady, np3 ? 'checks with current evidence' : 'evidence ready', 'ready', np3 ? '/compliant/nz-alcohol/food-safety?filter=ok' : null));
+      metrics.appendChild(moduleMetric(health.needsAttention, np3 ? 'checks to review' : 'need attention', 'attention', np3 ? '/compliant/nz-alcohol/food-safety?filter=attention' : null));
+      metrics.appendChild(moduleMetric(health.overdue, 'overdue', 'overdue', np3 ? '/compliant/nz-alcohol/food-safety?filter=overdue' : null));
       card.appendChild(metrics);
       // Only these two have a workspace: NP3 evidence is per-check, Customs keeps the generic
       // record form. Any other framework in the catalogue has no capture page yet.
@@ -138,7 +140,7 @@
     controlSelect.dispatchEvent(new Event('change'));
   }
   function renderProductSuggestions(reconciliation) {
-    var target = root.querySelector('[data-product-suggestions]'); clear(target);
+    var target = root.querySelector('[data-product-suggestions]'); if (!target) return; clear(target);
     var names = reconciliation.unprofiled_inventory_names || [];
     if (!names.length) return;
     var intro = document.createElement('strong'); intro.textContent = 'Detected in Core — map with one click:'; target.appendChild(intro);
@@ -149,7 +151,7 @@
   }
   function renderSelectedCoreSources() {
     var target = root.querySelector('[data-core-source-selected]'); clear(target);
-    if (!selectedCoreSources.size) { target.textContent = 'No Core records selected.'; return; }
+    if (!selectedCoreSources.size) { target.textContent = 'No Production records selected.'; return; }
     selectedCoreSources.forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button';
       button.textContent = 'Remove ' + item.title;
@@ -164,7 +166,7 @@
   function renderCoreSourcePicker(candidates, append) {
     var target = root.querySelector('[data-core-source-picker]');
     if (!append) clear(target);
-    if (!candidates.length && !append) { target.textContent = 'No Core records found.'; renderSelectedCoreSources(); return; }
+    if (!candidates.length && !append) { target.textContent = 'No Production records found.'; renderSelectedCoreSources(); return; }
     candidates.forEach(function (item) {
       var label = document.createElement('label'); label.className = 'core-source-picker__choice';
       var checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.name = 'core_source_ref'; checkbox.value = item.id;
@@ -173,7 +175,7 @@
         var form = root.querySelector('[data-record-form]');
         if (checkbox.checked && selectedCoreSources.size >= 30) {
           checkbox.checked = false;
-          showError('Choose at most 30 Core source records.');
+          showError('Choose at most 30 Production records.');
           return;
         }
         if (checkbox.checked) selectedCoreSources.set(item.id, item);
@@ -206,7 +208,7 @@
     var body = document.createElement('tbody'); records.forEach(function (record) { var tr = document.createElement('tr'); [record.framework_slug, record.control_id, record.title, record.status, record.evidence_reference || '—'].forEach(function (value) { var td = document.createElement('td'); td.textContent = value; tr.appendChild(td); }); body.appendChild(tr); }); table.appendChild(body); target.appendChild(table);
   }
   function renderProducts(products) {
-    var target = root.querySelector('[data-alcohol-products]'); clear(target);
+    var target = root.querySelector('[data-alcohol-products]'); if (!target) return; clear(target);
     if (!products.length) { target.textContent = 'No alcohol product profiles yet — unprofiled production will be shown as a reconciliation gap.'; return; }
     var list = document.createElement('ul');
     products.forEach(function (product) { var item = document.createElement('li'); item.textContent = product.inventory_name + ' · ' + product.product_type + ' · ' + product.abv_percent + '% ABV'; list.appendChild(item); });
@@ -223,7 +225,8 @@
       return;
     }
     var reconciliation = overview.customs_reconciliation || {};
-    root.querySelector('[data-customs-reconciliation]').textContent = 'Live calculated: ' + (reconciliation.production_litres_of_alcohol || '0') + ' LAL produced, ' + (reconciliation.wastage_litres_of_alcohol || '0') + ' LAL wasted. ' + (reconciliation.unprofiled_movement_count || 0) + ' movement(s) need a product profile.';
+    var reconEl = root.querySelector('[data-customs-reconciliation]');
+    if (reconEl) reconEl.textContent = 'Live calculated: ' + (reconciliation.production_litres_of_alcohol || '0') + ' LAL produced, ' + (reconciliation.wastage_litres_of_alcohol || '0') + ' LAL wasted. ' + (reconciliation.unprofiled_movement_count || 0) + ' movement(s) need a product profile.';
     renderProductSuggestions(reconciliation);
     searchCoreSources(false);
     populateControls();

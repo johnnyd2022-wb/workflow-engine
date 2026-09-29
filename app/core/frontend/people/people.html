@@ -28,6 +28,14 @@
     .people-meta { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
     .people-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
     .people-actions button, .people-role-select { font: inherit; font-size: 13px; }
+    .people-custom-roles { padding: 16px 20px; }
+    .people-custom-roles h2 { margin: 0 0 4px; font-size: 17px; }
+    .people-custom-roles form, .people-custom-role { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+    .people-custom-role summary, .people-custom-role-new summary { cursor: pointer; }
+    .people-perms { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 14px; }
+    .people-perm { display: flex !important; flex-direction: row !important; gap: 8px; align-items: flex-start; font-weight: 400 !important; font-size: 13px; }
+    .people-perm--admin { opacity: .55; }
+    .people-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
     .people-role-select { padding: 6px 8px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-card); color: var(--text-primary); }
     .people-link-btn { background: none; border: 0; padding: 4px 6px; color: var(--azure-blue); cursor: pointer; text-decoration: underline; }
     .people-link-btn--danger { color: var(--error); }
@@ -85,10 +93,28 @@
       <summary>What each role can do</summary>
       <dl data-people-role-guide></dl>
     </details>
+
+    <section class="people-card people-custom-roles" data-custom-roles hidden aria-labelledby="people-custom-roles-title">
+      <h2 id="people-custom-roles-title">Custom roles</h2>
+      <p class="people-hint">Start from a built-in role and tick what it can do. Changing a role changes it for everyone who has it. People, organisation settings and compliance configuration stay with admins.</p>
+      <div data-custom-role-list></div>
+      <details class="people-custom-role-new">
+        <summary>New custom role</summary>
+        <form data-custom-role-form method="dialog" hx-boost="false" novalidate>
+          <div class="people-row2">
+            <label>Start from<select name="base_role" data-custom-role-base></select></label>
+            <label>Name<input name="name" maxlength="100" required placeholder="e.g. Cellar door"></label>
+          </div>
+          <label>What it's for<input name="description" maxlength="500" placeholder="Optional"></label>
+          <div data-custom-role-perms></div>
+          <div class="people-dialog-actions"><button type="submit" class="btn btn-primary">Create role</button></div>
+        </form>
+      </details>
+    </section>
   </div>
 
   <dialog class="people-dialog" data-people-dialog aria-labelledby="people-dialog-title">
-    <form data-people-form method="dialog" novalidate>
+    <form data-people-form method="dialog" hx-boost="false" novalidate>
       <h2 id="people-dialog-title">Add a person</h2>
       <label>Email<input type="email" name="email" id="people-email" required autocomplete="off"></label>
       <div class="people-row2">

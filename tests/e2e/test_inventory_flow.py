@@ -490,3 +490,12 @@ def test_live_inventory_consolidates_lots_and_drills_into_a_lot(logged_in_page: 
     sheet.locator("#core2-inv-sheet-close").click()
     expect(sheet).to_be_hidden()
     assert_clean_page(page)
+
+    # Source Map uses the same stock-line total and lot count as Live Inventory.
+    page.goto("/core/sourcemap")
+    page.wait_for_load_state("networkidle")
+    page.locator("#sm-search-input").fill(tag)
+    stock_card = page.locator(".sm-browse-card--inventory").filter(has_text=name)
+    expect(stock_card).to_have_count(1)
+    expect(stock_card.locator(".sm-browse-card__meta").first).to_have_text("17.5 kg")
+    expect(stock_card.locator(".sm-browse-card__count")).to_have_text("2 lots in stock")

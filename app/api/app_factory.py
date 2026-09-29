@@ -151,6 +151,25 @@ def create_app():
     from app.core.backend.go_live import go_live_bp
 
     app.register_blueprint(go_live_bp)
+    # Stock locations and moves (plan 2.1), kept out of core_bp / backend.py.
+    from app.core.backend.stock_locations import stock_locations_bp
+
+    app.register_blueprint(stock_locations_bp)
+    # Stocktakes (plan 2.6).
+    from app.core.backend.stocktake import stocktake_bp
+
+    app.register_blueprint(stocktake_bp)
+
+    from app.features.contract_manufacturing.routes import portal_staff  # noqa: F401 -- registers staff sharing routes
+    from app.features.contract_manufacturing.routes.orders import bp as contracts_bp
+    from app.features.contract_manufacturing.routes.portal import bp as contract_portal_bp
+
+    app.register_blueprint(contracts_bp)
+    app.register_blueprint(contract_portal_bp)
+
+    from app.features.planning.routes import planning_bp
+
+    app.register_blueprint(planning_bp)
 
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
@@ -391,6 +410,9 @@ def create_app():
         return jsonify({"error": "Authentication required", "message": "Session expired or not authenticated"}), 401
 
     # Set up middleware
+    from app.features.contract_manufacturing.portal_security import setup_portal_security
+
+    setup_portal_security(app)
     setup_tenant_context(app)
     # After tenant context: the policy reads g.current_user.
     setup_two_factor_policy(app)
@@ -610,9 +632,13 @@ def create_app():
         # in the Docker image the files are immutable, so scan once at boot.
         autorefresh=(config.environment == "local"),
     )
+    from app.core.backend.static_assets import core_asset_directories
+
     _core_frontend = os.path.join(app_dir, "core", "frontend")
-    app.wsgi_app.add_files(os.path.join(_core_frontend, "js"), prefix="static/js/")
-    app.wsgi_app.add_files(os.path.join(_core_frontend, "css"), prefix="static/css/")
+    for asset_dir in core_asset_directories("js"):
+        app.wsgi_app.add_files(str(asset_dir), prefix="static/js/")
+    for asset_dir in core_asset_directories("css"):
+        app.wsgi_app.add_files(str(asset_dir), prefix="static/css/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "inventory_static"), prefix="static/inventory/")
     app.wsgi_app.add_files(os.path.join(_core_frontend, "img"), prefix="static/img/")
     if crm_available:

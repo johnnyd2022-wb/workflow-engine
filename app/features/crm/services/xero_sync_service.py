@@ -86,7 +86,9 @@ class XeroSyncService:
                     "xero.sync.invoices",
                     attributes={"org_id": str(org_id), "sync_type": "full"},
                 ):
-                    invoices_result = self._sync_invoices(api_client, org_id, tenant.xero_tenant_id, incremental=False)
+                    invoices_result = self._sync_invoices(
+                        api_client, org_id, tenant.xero_tenant_id, sync_job_id=job.id, incremental=False
+                    )
                 result.invoices_synced = invoices_result.invoices_synced
                 result.sales_allocated = invoices_result.sales_allocated
                 result.sales_unmapped = invoices_result.sales_unmapped
@@ -138,7 +140,12 @@ class XeroSyncService:
                     attributes={"org_id": str(org_id), "sync_type": "incremental"},
                 ):
                     r = self._sync_invoices(
-                        api_client, org_id, tenant.xero_tenant_id, incremental=True, modified_after=modified_after
+                        api_client,
+                        org_id,
+                        tenant.xero_tenant_id,
+                        sync_job_id=job.id,
+                        incremental=True,
+                        modified_after=modified_after,
                     )
                 result.invoices_synced = r.invoices_synced
                 result.sales_allocated = r.sales_allocated
@@ -238,6 +245,8 @@ class XeroSyncService:
         tenant_id: str,
         incremental: bool = False,
         modified_after: datetime | None = None,
+        *,
+        sync_job_id: UUID | None = None,
     ) -> SyncResult:
         result = SyncResult()
         invoices = api_client.get_all_invoices(modified_after=modified_after if incremental else None)
@@ -315,7 +324,7 @@ class XeroSyncService:
         self.db.flush()
         from app.features.crm.services.sales_traceability_service import SalesTraceabilityService
 
-        allocation_summary = SalesTraceabilityService(self.db).reconcile_org(org_id)
+        allocation_summary = SalesTraceabilityService(self.db).reconcile_org(org_id, sync_job_id=sync_job_id)
         result.sales_allocated = allocation_summary.get("allocated", 0)
         result.sales_unmapped = allocation_summary.get("unmapped", 0)
         result.sales_insufficient_stock = allocation_summary.get("insufficient_stock", 0)
@@ -369,6 +378,7 @@ class XeroSyncService:
             entity_type="xero_sync_job",
             entity_id=job_id,
             payload=payload,
+            correlation_id=job_id,
         )
 
 

@@ -49,6 +49,12 @@ banner and Notifications, it may put these JSON-safe keys in `CheckResult.data`:
         "evidence_ready": 4,
         "needs_attention": 34,
         "overdue": 0,
+        "milestone": {                         # optional module-owned date
+            "label": "Next verification",
+            "date": "2026-10-22",              # ISO YYYY-MM-DD, or null if unknown
+            "overdue": False,
+            "detail": "2 open corrective actions",  # optional plain text
+        },
     },
 }
 ```
@@ -60,6 +66,9 @@ actionable work so the same signal reaches operators in both Core surfaces.
 `workspace_summary` is optional. Use it when a module has a compact, operator-facing
 health snapshot that belongs on the shared Dashboard workspace card. The module owns its
 numbers and labels; Core groups and renders summaries by the declared `workspace` only.
+An optional `milestone` is shown under the module score. It must have a nonempty string
+`label`, an ISO calendar `date` or null, and a boolean `overdue`. Invalid milestones are
+omitted without losing the rest of the summary. Core does not calculate module deadlines.
 
 ## Rules
 
@@ -79,7 +88,7 @@ numbers and labels; Core groups and renders summaries by the declared `workspace
 
 ## Implementation locations
 
-- Contract definition: `app/core/backend/corechecks.py` (`CheckResult`).
+- Contract definition: `app/features/compliance_checks/routes/corechecks.py` (`CheckResult`).
 - Generic banner renderer: `app/core/frontend/js/system-findings-banner.js`.
 - Generic notifications renderer: `app/core/frontend/js/system-findings-notifications.js`.
 - Example module: `app/features/compliant/modules/nz_alcohol/module.py`.
