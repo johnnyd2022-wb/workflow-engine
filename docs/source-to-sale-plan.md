@@ -793,7 +793,7 @@ split.
 
 Starts once Phases 1 and 2 hold up with a second producer.
 
-- [ ] **6.1 A landing page for NZ craft alcohol.** *S*
+- [x] **6.1 A landing page for NZ craft alcohol.** *S* (!411; rollout after 6.2)
   - Change: replace the generic "manufacturing operations" copy with what a producer
     gets: a real recall trace, an NP3 evidence pack and an excise draft.
 
