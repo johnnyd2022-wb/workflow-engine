@@ -559,20 +559,20 @@ class FakeEvent:
 
 class TestHumanSummaryFallback:
     def test_ac16_unrecognized_event_type_falls_back_to_generic_rendering(self):
-        from app.core.backend.backend import _human_summary
+        from app.features.activity_log.routes.activity_routes import _human_summary
 
         ev = FakeEvent("widget.frobnicated")
         assert _human_summary(ev) == "Widget — frobnicated"
 
     def test_ac16_unrecognized_event_type_does_not_raise(self):
-        from app.core.backend.backend import _event_diff_rows, _human_summary
+        from app.features.activity_log.routes.activity_routes import _event_diff_rows, _human_summary
 
         ev = FakeEvent("totally.unknown_thing", payload={}, diff={"some_field": {"before": "a", "after": "b"}})
         _human_summary(ev)  # must not raise
         _event_diff_rows(ev)  # must not raise
 
     def test_known_event_type_inventory_created_summary(self):
-        from app.core.backend.backend import _human_summary
+        from app.features.activity_log.routes.activity_routes import _human_summary
 
         ev = FakeEvent(
             "inventory_item.created",
@@ -581,13 +581,13 @@ class TestHumanSummaryFallback:
         assert "Added 10 kg" in _human_summary(ev)
 
     def test_build_diff_rows_skips_unchanged_fields(self):
-        from app.core.backend.backend import _build_diff_rows
+        from app.features.activity_log.routes.activity_routes import _build_diff_rows
 
         rows = _build_diff_rows({"name": {"before": "Same", "after": "Same"}})
         assert rows == []
 
     def test_build_diff_rows_reports_changed_field(self):
-        from app.core.backend.backend import _build_diff_rows
+        from app.features.activity_log.routes.activity_routes import _build_diff_rows
 
         rows = _build_diff_rows({"quantity": {"before": "5", "after": "8"}})
         assert rows == [{"label": "Quantity", "before": "5", "after": "8"}]
@@ -697,7 +697,7 @@ class TestHumanSummaryFallback:
     ],
 )
 def test_human_summary_every_known_event_type(event_type, payload, diff, expected_substring):
-    from app.core.backend.backend import _human_summary
+    from app.features.activity_log.routes.activity_routes import _human_summary
 
     ev = FakeEvent(event_type, payload=payload, diff=diff)
     assert expected_substring in _human_summary(ev)
@@ -709,7 +709,7 @@ class TestEventDiffRowsDispatch:
     the generic path had coverage before this review."""
 
     def test_process_step_added_synthesizes_rows_from_payload(self):
-        from app.core.backend.backend import _event_diff_rows
+        from app.features.activity_log.routes.activity_routes import _event_diff_rows
 
         ev = FakeEvent(
             "process.step_added",
@@ -728,14 +728,14 @@ class TestEventDiffRowsDispatch:
         assert rows[1]["after"] == "'Water' — 1 L"
 
     def test_process_step_updated_uses_nested_step_diff(self):
-        from app.core.backend.backend import _event_diff_rows
+        from app.features.activity_log.routes.activity_routes import _event_diff_rows
 
         ev = FakeEvent("process.step_updated", diff={"step": {"name": {"before": "Old", "after": "New"}}})
         rows = _event_diff_rows(ev)
         assert rows == [{"label": "Name", "before": "Old", "after": "New"}]
 
     def test_default_dispatch_uses_top_level_diff(self):
-        from app.core.backend.backend import _event_diff_rows
+        from app.features.activity_log.routes.activity_routes import _event_diff_rows
 
         ev = FakeEvent("inventory_item.updated", diff={"quantity": {"before": "1", "after": "2"}})
         rows = _event_diff_rows(ev)
@@ -748,19 +748,19 @@ class TestSmartListDiffRows:
     this review despite being a meaningfully complex chunk of the diff-humanisation logic."""
 
     def test_item_added_to_list(self):
-        from app.core.backend.backend import _smart_list_diff_rows
+        from app.features.activity_log.routes.activity_routes import _smart_list_diff_rows
 
         rows = _smart_list_diff_rows("Inputs", [], [{"name": "Water", "quantity": "1", "unit": "L"}])
         assert rows == [{"label": "Inputs", "before": None, "after": "'Water' added"}]
 
     def test_item_removed_from_list(self):
-        from app.core.backend.backend import _smart_list_diff_rows
+        from app.features.activity_log.routes.activity_routes import _smart_list_diff_rows
 
         rows = _smart_list_diff_rows("Inputs", [{"name": "Water", "quantity": "1"}], [])
         assert rows == [{"label": "Inputs", "before": "'Water' removed", "after": None}]
 
     def test_item_field_changed_within_list(self):
-        from app.core.backend.backend import _smart_list_diff_rows
+        from app.features.activity_log.routes.activity_routes import _smart_list_diff_rows
 
         before = [{"name": "Water", "quantity": "1", "unit": "L"}]
         after = [{"name": "Water", "quantity": "2", "unit": "L"}]
@@ -771,7 +771,7 @@ class TestSmartListDiffRows:
         assert rows[0]["after"] == "2"
 
     def test_unkeyed_scalar_list_falls_back_to_whole_value_diff(self):
-        from app.core.backend.backend import _smart_list_diff_rows
+        from app.features.activity_log.routes.activity_routes import _smart_list_diff_rows
 
         rows = _smart_list_diff_rows("Tags", [{"foo": "a"}], [{"foo": "b"}])
         # neither dict has an id/name/label key, so this falls back to a single before/after row
@@ -779,7 +779,7 @@ class TestSmartListDiffRows:
         assert rows[0]["label"] == "Tags"
 
     def test_identical_lists_produce_no_rows(self):
-        from app.core.backend.backend import _smart_list_diff_rows
+        from app.features.activity_log.routes.activity_routes import _smart_list_diff_rows
 
         items = [{"name": "Water", "quantity": "1", "unit": "L"}]
         rows = _smart_list_diff_rows("Inputs", items, items)
@@ -903,57 +903,57 @@ class TestFmtFieldValue:
     items, inventory_type mapping) had zero direct coverage before this review."""
 
     def test_bool_true_renders_yes(self):
-        from app.core.backend.backend import _fmt_field_value
+        from app.features.activity_log.routes.activity_routes import _fmt_field_value
 
         assert _fmt_field_value(True) == "Yes"
 
     def test_bool_false_renders_no(self):
-        from app.core.backend.backend import _fmt_field_value
+        from app.features.activity_log.routes.activity_routes import _fmt_field_value
 
         assert _fmt_field_value(False) == "No"
 
     def test_list_of_dicts_with_label_key_joins_labels(self):
-        from app.core.backend.backend import _fmt_field_value
+        from app.features.activity_log.routes.activity_routes import _fmt_field_value
 
         val = [{"label": "Confirm temp", "type": "checkbox"}, {"label": "Sign off"}]
         assert _fmt_field_value(val) == "Confirm temp (checkbox), Sign off"
 
     def test_list_of_dicts_with_name_and_quantity(self):
-        from app.core.backend.backend import _fmt_field_value
+        from app.features.activity_log.routes.activity_routes import _fmt_field_value
 
         val = [{"name": "Water", "quantity": "1", "unit": "L"}]
         assert _fmt_field_value(val) == "Water (1 L)"
 
     def test_empty_list_renders_none_marker(self):
-        from app.core.backend.backend import _fmt_field_value
+        from app.features.activity_log.routes.activity_routes import _fmt_field_value
 
         assert _fmt_field_value([]) == "(none)"
 
     def test_inventory_type_string_maps_to_label(self):
-        from app.core.backend.backend import _fmt_field_value
+        from app.features.activity_log.routes.activity_routes import _fmt_field_value
 
         assert _fmt_field_value("work_in_progress") == "Work in progress"
 
     def test_fmt_sub_val_bool(self):
-        from app.core.backend.backend import _fmt_sub_val
+        from app.features.activity_log.routes.activity_routes import _fmt_sub_val
 
         assert _fmt_sub_val(True) == "Yes"
 
     def test_fmt_sub_val_complex_value(self):
-        from app.core.backend.backend import _fmt_sub_val
+        from app.features.activity_log.routes.activity_routes import _fmt_sub_val
 
         assert _fmt_sub_val(["a", "b"]) == "(complex)"
         assert _fmt_sub_val({"a": 1}) == "(complex)"
 
     def test_fmt_sub_val_inventory_type_field_maps_to_label(self):
-        from app.core.backend.backend import _fmt_sub_val
+        from app.features.activity_log.routes.activity_routes import _fmt_sub_val
 
         assert _fmt_sub_val("final_product", field="inventory_type") == "Final product"
 
 
 class TestBuildDiffRowsListDispatch:
     def test_build_diff_rows_dispatches_list_of_dicts_to_smart_list_diff(self):
-        from app.core.backend.backend import _build_diff_rows
+        from app.features.activity_log.routes.activity_routes import _build_diff_rows
 
         diff = {
             "inputs": {
@@ -968,7 +968,7 @@ class TestBuildDiffRowsListDispatch:
 
 class TestStepAddedDiffRowsMalformedEntries:
     def test_non_dict_items_in_inputs_outputs_prompts_are_skipped_not_raised(self):
-        from app.core.backend.backend import _step_added_diff_rows
+        from app.features.activity_log.routes.activity_routes import _step_added_diff_rows
 
         rows = _step_added_diff_rows(
             {
@@ -984,7 +984,7 @@ class TestStepAddedDiffRowsMalformedEntries:
 
 class TestInventoryCreatedSummarySupplierBatch:
     def test_supplier_and_batch_appear_in_summary(self):
-        from app.core.backend.backend import _human_summary
+        from app.features.activity_log.routes.activity_routes import _human_summary
 
         ev = FakeEvent(
             "inventory_item.created",

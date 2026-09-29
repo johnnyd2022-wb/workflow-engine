@@ -5,8 +5,6 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.core.backend.checks.tasks_due import run_tasks_due_check
-from app.core.backend.system_status import _signals_from_results, derive_health_state
 from app.core.backend.tasks import (
     TaskError,
     assign_task_to_lane,
@@ -23,6 +21,8 @@ from app.core.db.models.core_task import CoreTask
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import User
 from app.core.utils.time import utc_now
+from app.features.compliance_checks.checks.tasks_due import run_tasks_due_check
+from app.features.compliance_checks.system_status import _signals_from_results, derive_health_state
 from app.features.crm.models.crm_task import CRMTask
 from app.features.crm.models.xero_contact import XeroContact
 from tests.factories import OrganisationFactory, UserFactory

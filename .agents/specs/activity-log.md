@@ -2,7 +2,7 @@
 status: reviewed
 name: Activity Log — event-sourced audit trail reader (story, summary, org activity feed)
 slug: activity-log
-blueprint: core_bp — routes in `app/core/backend/backend.py`
+blueprint: core_bp — routes in `app/features/activity_log/routes/activity_routes.py`
 url_prefix: /api/core/entities
 
 ## Description

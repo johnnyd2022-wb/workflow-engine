@@ -1,7 +1,7 @@
 """Inventory repository with tenancy enforcement"""
 
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_FLOOR, Decimal, InvalidOperation
 from uuid import UUID
 
 from sqlalchemy import Integer, and_, func, or_
@@ -14,6 +14,7 @@ from app.core.domain.inventory_quantity_guard import (
     allow_inventory_quantity_write,
 )
 from app.core.utils.inventory_quantity import coerce_stored_quantity, parse_stored_quantity_to_decimal
+from app.core.utils.unit_conversion import is_count_unit, whole_count_error
 from app.observability import get_logger, start_span
 
 logger = get_logger(__name__)
@@ -63,6 +64,8 @@ def _detect_add_method(extra_data: dict | None, source_execution_id) -> str:
         return "barcode_scan"
     if extra.get("csv_import"):
         return "csv_import"
+    if extra.get("opening_stock"):
+        return "opening_stock"
     return "manual"
 
 
@@ -73,6 +76,13 @@ def _build_display_label(item: InventoryItem) -> str:
     if item.quantity is not None:
         parts.append(f"{item.quantity} {item.unit}")
     return " · ".join(parts)
+
+
+def _require_whole_count(quantity, unit, name) -> None:
+    """Counted goods (bottles, cans, units...) are written in whole numbers (plan 1.2)."""
+    message = whole_count_error(quantity, unit, what=f"'{name}'" if name else "Quantity")
+    if message:
+        raise ValueError(message)
 
 
 class InventoryRepository:
@@ -187,6 +197,8 @@ class InventoryRepository:
         source_step_name: str | None = None,
         extra_data: dict | None = None,
         commit: bool = True,
+        write_reason: InventoryQuantityWriteReason = InventoryQuantityWriteReason.REPOSITORY_CREATE,
+        location_id: UUID | None = None,
     ) -> InventoryItem:
         """Create a new inventory item. If commit=False, caller is responsible for commit."""
         with start_span(
@@ -200,7 +212,8 @@ class InventoryRepository:
             self._assert_source_refs_belong_to_org(
                 org_id, source_execution_id, source_execution_step_id, source_output_id
             )
-            with allow_inventory_quantity_write(InventoryQuantityWriteReason.REPOSITORY_CREATE):
+            _require_whole_count(quantity, unit, name)
+            with allow_inventory_quantity_write(write_reason):
                 item = InventoryItem(
                     org_id=org_id,
                     name=name,
@@ -217,6 +230,7 @@ class InventoryRepository:
                     source_output_id=source_output_id,
                     source_step_name=source_step_name,
                     extra_data=extra_data or {},
+                    location_id=location_id,
                 )
                 item.display_label = _build_display_label(item)
                 self.db.add(item)
@@ -261,6 +275,7 @@ class InventoryRepository:
                 return None
             current = parse_stored_quantity_to_decimal(item.quantity)
             add_val = _parse_quantity(quantity_to_add) or Decimal("0")
+            _require_whole_count(add_val, item.unit, item.name)
             if add_val <= 0:
                 if commit:
                     self.db.commit()
@@ -327,6 +342,7 @@ class InventoryRepository:
             # handler as an unlogged non-JSON 500 instead of a 400.
             if target is None or not target.is_finite() or target < 0:
                 raise ValueError("new_quantity must be a non-negative finite number")
+            _require_whole_count(target, item.unit, item.name)
             quantity_before = str(current)
             if current == target:
                 if commit:
@@ -409,7 +425,18 @@ class InventoryRepository:
             if source_output_id is not None:
                 items = items.filter(InventoryItem.source_output_id == source_output_id)
             items = items.all()
-            total_available = sum((parse_stored_quantity_to_decimal(i.quantity) for i in items), Decimal("0"))
+            # Plan 1.2: counted goods move in whole units and a unit is never split between
+            # batches. A lot left holding a fraction (old data) gives up only its whole units;
+            # the fraction waits for a stocktake correction.
+            counted = bool(items) and all(is_count_unit(i.unit) for i in items)
+            if counted:
+                _require_whole_count(needed, items[0].unit, name)
+
+            def _usable(item) -> Decimal:
+                current = parse_stored_quantity_to_decimal(item.quantity)
+                return current.to_integral_value(rounding=ROUND_FLOOR) if counted else current
+
+            total_available = sum((_usable(i) for i in items), Decimal("0"))
             if total_available < needed:
                 raise ValueError(f"Insufficient stock for {name!r}: requested {needed}, available {total_available}")
 
@@ -421,7 +448,7 @@ class InventoryRepository:
                     if remaining <= 0:
                         break
                     current = parse_stored_quantity_to_decimal(item.quantity)
-                    take = min(current, remaining)
+                    take = min(_usable(item), remaining)
                     if take <= 0:
                         continue
                     quantity_before = str(current)
@@ -457,6 +484,191 @@ class InventoryRepository:
             if commit:
                 self.db.commit()
             return consumed
+
+    def consume_final_product_lot(
+        self,
+        org_id: UUID,
+        inventory_item_id: UUID,
+        quantity: str | Decimal,
+        reference: str | None = None,
+        commit: bool = True,
+    ) -> dict:
+        """Take ``quantity`` from one chosen final-product lot (plan 1.1 manual matching).
+
+        Same rules as FIFO: whole units for counted goods, never more than the lot holds.
+        """
+        amount = _parse_quantity(quantity)
+        if amount is None or not amount.is_finite() or amount <= 0:
+            raise ValueError("quantity must be a positive finite number")
+        item = (
+            self.db.query(InventoryItem)
+            .filter(
+                InventoryItem.id == inventory_item_id,
+                InventoryItem.org_id == org_id,
+                InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if item is None:
+            raise ValueError("That batch isn't a finished product in this organisation")
+        _require_whole_count(amount, item.unit, item.name)
+        current = parse_stored_quantity_to_decimal(item.quantity)
+        usable = current.to_integral_value(rounding=ROUND_FLOOR) if is_count_unit(item.unit) else current
+        if amount > usable:
+            raise ValueError(f"Batch {item.supplier_batch_number or item.name} only has {usable} {item.unit}")
+        quantity_before = str(current)
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.SALES_FIFO_CONSUMPTION):
+            item.quantity = coerce_stored_quantity(current - amount)
+            self.db.flush()
+        EventWriter(self.db, org_id).emit(
+            event_type="inventory_item.quantity_adjusted",
+            entity_type="inventory_item",
+            entity_id=item.id,
+            payload={
+                **_item_snapshot(item),
+                "quantity_before": quantity_before,
+                "quantity_after": str(item.quantity),
+                "delta": str(-amount),
+                "reason": "sales_manual_allocation",
+                "reference": reference,
+            },
+            diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+        )
+        if commit:
+            self.db.commit()
+        return {"inventory_item_id": str(item.id), "quantity_consumed": str(amount), "unit": item.unit}
+
+    def move_lot(
+        self,
+        org_id: UUID,
+        item_id: UUID,
+        quantity: str | Decimal,
+        to_location_id: UUID | None,
+        occurred_on,
+        note: str | None = None,
+        user_id: UUID | None = None,
+        commit: bool = True,
+    ):
+        """Move part (or all) of a lot to another location (plan 2.1).
+
+        The moved quantity becomes a new lot with the same name, batch and lineage at the
+        destination; the source lot keeps the rest. Crossing out of the licensed area is
+        recorded as direction "out" (an excise removal), crossing back in as "in".
+        Returns ``(new_item, transfer)``.
+        """
+        from app.core.db.models.stock_location import StockLocation, StockTransfer
+
+        amount = _parse_quantity(quantity)
+        if amount is None or not amount.is_finite() or amount <= 0:
+            raise ValueError("quantity must be more than 0")
+        item = self.get_inventory_item_by_id_for_update(item_id, org_id)
+        if item is None:
+            raise ValueError("Stock not found")
+        _require_whole_count(amount, item.unit, item.name)
+        current = parse_stored_quantity_to_decimal(item.quantity)
+        if amount > current:
+            raise ValueError(f"Only {current.normalize():f} {item.unit} of {item.name} to move")
+        if to_location_id == item.location_id:
+            raise ValueError("The stock is already there")
+
+        def licensed(location_id) -> bool:
+            if location_id is None:
+                return True
+            loc = (
+                self.db.query(StockLocation)
+                .filter(StockLocation.id == location_id, StockLocation.org_id == org_id)
+                .one_or_none()
+            )
+            if loc is None:
+                raise ValueError("Location not found")
+            return bool(loc.inside_licensed_area)
+
+        was_in, now_in = licensed(item.location_id), licensed(to_location_id)
+        direction = "out" if was_in and not now_in else ("in" if now_in and not was_in else "internal")
+
+        quantity_before = str(current)
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
+            item.quantity = coerce_stored_quantity(current - amount)
+            self.db.flush()
+        # Same batch already at the destination (e.g. moving stock back): add to it.
+        existing = None
+        if item.supplier_batch_number:
+            existing = (
+                self.db.query(InventoryItem)
+                .filter(
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.name == item.name,
+                    InventoryItem.supplier_batch_number == item.supplier_batch_number,
+                    InventoryItem.location_id.is_(None)
+                    if to_location_id is None
+                    else InventoryItem.location_id == to_location_id,
+                    InventoryItem.id != item.id,
+                )
+                .with_for_update()
+                .one_or_none()
+            )
+        if existing is not None:
+            with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
+                existing.quantity = coerce_stored_quantity(parse_stored_quantity_to_decimal(existing.quantity) + amount)
+                self.db.flush()
+            new_item = existing
+        else:
+            new_item = None
+        extra = dict(item.extra_data or {})
+        extra["moved_from_item_id"] = str(item.id)
+        new_item = new_item or self.create_inventory_item(
+            org_id=org_id,
+            name=item.name,
+            quantity=amount,
+            unit=item.unit,
+            inventory_type=item.inventory_type,
+            supplier=item.supplier,
+            barcode=item.barcode,
+            purchase_date=item.purchase_date,
+            supplier_batch_number=item.supplier_batch_number,
+            expiry_date=item.expiry_date,
+            source_execution_id=item.source_execution_id,
+            source_execution_step_id=item.source_execution_step_id,
+            source_output_id=item.source_output_id,
+            source_step_name=item.source_step_name,
+            extra_data=extra,
+            commit=False,
+            write_reason=InventoryQuantityWriteReason.STOCK_TRANSFER,
+            location_id=to_location_id,
+        )
+        transfer = StockTransfer(
+            org_id=org_id,
+            from_item_id=item.id,
+            to_item_id=new_item.id,
+            from_location_id=item.location_id,
+            to_location_id=to_location_id,
+            quantity=amount,
+            unit=item.unit,
+            direction=direction,
+            occurred_on=occurred_on,
+            note=(note or "").strip()[:500] or None,
+            created_by_user_id=user_id,
+        )
+        self.db.add(transfer)
+        EventWriter(self.db, org_id).emit(
+            event_type="inventory_item.quantity_adjusted",
+            entity_type="inventory_item",
+            entity_id=item.id,
+            payload={
+                **_item_snapshot(item),
+                "quantity_before": quantity_before,
+                "quantity_after": str(item.quantity),
+                "delta": str(-amount),
+                "reason": "stock_transfer",
+                "reference": f"moved to {new_item.id}",
+            },
+            diff={"quantity": {"before": quantity_before, "after": str(item.quantity)}},
+        )
+        self.db.flush()
+        if commit:
+            self.db.commit()
+        return new_item, transfer
 
     def reverse_final_product_fifo_consumption(
         self,
@@ -679,6 +891,8 @@ class InventoryRepository:
                 InventoryItem.quantity > self._NONZERO_QTY,
                 InventoryItem.source_execution_id.is_(None),
                 InventoryItem.supplier_batch_number.is_(None),
+                # Opening stock has no history by design (plan 1.3); it isn't a gap.
+                ~InventoryItem.extra_data.contains({"opening_stock": True}),
             )
             .order_by(InventoryItem.created_at.desc())
             .limit(safe_limit)
@@ -721,6 +935,10 @@ class InventoryRepository:
             item = self.get_inventory_item_by_id(item_id, org_id)
             if not item:
                 return None
+            if quantity is not None or unit is not None:
+                _require_whole_count(
+                    quantity if quantity is not None else item.quantity, unit or item.unit, name or item.name
+                )
 
             diff: dict = {}
             if name is not None and name != item.name:

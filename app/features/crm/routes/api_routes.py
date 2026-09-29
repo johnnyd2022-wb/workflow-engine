@@ -19,8 +19,10 @@ from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.features.crm.services.crm_service import CRMService
 from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
+from app.observability import get_logger
 
 api_bp = Blueprint("crm_api", __name__)
+logger = get_logger(__name__)
 
 
 def _crm_service() -> CRMService:
@@ -388,7 +390,11 @@ def list_task_lanes():
 def create_task_lane():
     try:
         lane = create_lane(
-            db_session(), UUID(g.org_id), "crm", UUID(g.user_id) if g.user_id else None, request.get_json(silent=True) or {}
+            db_session(),
+            UUID(g.org_id),
+            "crm",
+            UUID(g.user_id) if g.user_id else None,
+            request.get_json(silent=True) or {},
         )
         return jsonify({"lane": lane}), 201
     except TaskError as exc:
@@ -609,6 +615,81 @@ def update_traceability_config():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify(updated), 200
+
+
+# ------------------------------------------------------------------
+# Sales-to-batch matching (plan 1.1): hybrid review and manual assignment
+# ------------------------------------------------------------------
+
+
+def _traceability():
+    from app.features.crm.services.sales_traceability_service import SalesTraceabilityService
+
+    return SalesTraceabilityService(db_session)
+
+
+@api_bp.route("/api/crm/matching", methods=["GET"])
+@requires_auth
+def get_matching_queue():
+    return jsonify(_traceability().review_queue(UUID(g.org_id))), 200
+
+
+@api_bp.route("/api/crm/matching/candidates", methods=["GET"])
+@requires_auth
+def get_matching_candidates():
+    product = (request.args.get("product") or "").strip()
+    if not product:
+        return jsonify({"error": "product is required"}), 400
+    return jsonify({"batches": _traceability().lot_candidates(UUID(g.org_id), product)}), 200
+
+
+def _line_ref(data):
+    invoice_id = str(data.get("invoice_id") or "").strip()
+    line_key = str(data.get("line_key") or "").strip()
+    if not invoice_id or not line_key:
+        raise ValueError("invoice_id and line_key are required")
+    return invoice_id, line_key
+
+
+@api_bp.route("/api/crm/matching/confirm", methods=["POST"])
+@requires_auth
+def confirm_matching_line():
+    try:
+        invoice_id, line_key = _line_ref(request.get_json(silent=True) or {})
+        count = _traceability().confirm_line(UUID(g.org_id), invoice_id, line_key)
+        db_session.commit()
+    except ValueError as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"confirmed": count}), 200
+
+
+@api_bp.route("/api/crm/matching/assign", methods=["POST"])
+@requires_auth
+def assign_matching_line():
+    data = request.get_json(silent=True) or {}
+    try:
+        invoice_id, line_key = _line_ref(data)
+        created = _traceability().assign_line(UUID(g.org_id), invoice_id, line_key, data.get("picks") or [])
+        db_session.commit()
+    except ValueError as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"assigned": len(created), "presold": any(a.presold for a in created)}), 200
+
+
+@api_bp.route("/api/crm/matching/run", methods=["POST"])
+@requires_auth
+def run_matching():
+    """Re-run matching now (e.g. after changing the matching mode)."""
+    try:
+        summary = _traceability().reconcile_org(UUID(g.org_id))
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        logger.exception("sales_matching_run_failed", org_id=g.org_id)
+        return jsonify({"error": "Matching failed"}), 500
+    return jsonify({"summary": summary}), 200
 
 
 # ------------------------------------------------------------------
