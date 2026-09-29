@@ -100,10 +100,44 @@ ROLE_DESCRIPTIONS: dict[UserRole, str] = {
 }
 
 
+# Custom roles (plan 0.4c) can grant anything Staff can. People, organisation settings and
+# compliance configuration stay with Admins: those routes also check the Admin role itself.
+ADMIN_ONLY = frozenset({"users.manage", "settings.manage", "compliance.manage"})
+GRANTABLE = _ALL - ADMIN_ONLY
+CUSTOM_ROLE_BASES = tuple(role for role in UserRole if role != UserRole.ADMIN)
+
+
+def _custom_role(user):
+    role_id = getattr(user, "custom_role_id", None)
+    if role_id is None:
+        return None
+    from sqlalchemy.orm import object_session
+
+    from app.core.db.models.org_role import OrgRole
+
+    session = object_session(user)
+    role = session.get(OrgRole, role_id) if session is not None else None
+    return role if role is not None and role.org_id == getattr(user, "org_id", None) else False
+
+
 def permissions_for(user) -> frozenset[str]:
     if user is None:
         return frozenset()
+    custom = _custom_role(user)
+    if custom is False:  # a custom role we can't load: deny rather than fall back
+        return frozenset()
+    if custom is not None:
+        return frozenset(custom.permissions or ()) & GRANTABLE
     return ROLE_PERMISSIONS.get(getattr(user, "role", None), frozenset())
+
+
+def role_label_for(user) -> str | None:
+    if user is None:
+        return None
+    custom = _custom_role(user)
+    if custom:
+        return custom.name
+    return ROLE_LABELS.get(user.role, getattr(user.role, "value", None))
 
 
 def has_permission(user, *required: str) -> bool:
@@ -186,6 +220,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.process_docs_inline", None, "production.design"),
     ("core.process_docs_delete", None, "production.design"),
     ("process_templates.process_templates_api.copy_process_template", None, "production.design"),
+    ("process_templates.process_templates_api.apply_starter_pack", None, "production.design"),  # plan 2.4c
     ("process_templates.*", _READ, "production.design"),
     # --- recording production
     ("core.create_execution", None, "production.record"),
@@ -229,6 +264,11 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.sourcemap_objects", None, "inventory.view"),
     ("core.sourcemap_trace", None, "inventory.view"),  # POST, but read-only
     ("core.trace_*", None, "inventory.view"),
+    ("stock_locations.*", _READ, "inventory.view"),  # plan 2.1
+    ("stock_locations.*", None, "inventory.adjust"),
+    ("stocktake.update_stocktake_settings", None, "compliance.manage"),  # plan 2.6
+    ("stocktake.*", _READ, "inventory.view"),
+    ("stocktake.*", None, "inventory.adjust"),
     # --- reading production
     ("core.get_hub_overview", None, ("production.view", "inventory.view")),
     ("core.core", None, ("production.view", "inventory.view")),
@@ -248,8 +288,18 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_api.capture_context", None, ("production.view", "compliance.view")),
     ("compliant.compliant_tools.*", None, ("production.view", "compliance.view")),  # calculators
     ("compliant.compliant_api.update_profile", None, "compliance.manage"),
+    # Excise (plan 2.1): lodging and setup are for people who run compliance.
+    ("compliant.compliant_api.lodge_excise_period", None, "compliance.manage"),
+    ("compliant.compliant_api.update_excise_settings", None, "compliance.manage"),
+    ("compliant.compliant_api.add_excise_rate", None, "compliance.manage"),
+    ("compliant.compliant_api.save_excise_product", None, "compliance.manage"),
     ("compliant.compliant_api.update_abv_rules", None, "compliance.manage"),
     ("compliant.compliant_api.update_np3_check_settings", None, "compliance.manage"),
+    ("compliant.compliant_verification.update_verification_registration", None, "compliance.manage"),  # 2.2
+    # liquor licensing register (2.5): the log and check records are compliance.record
+    ("compliant.compliant_licensing.add_log_entry", None, "compliance.record"),
+    ("compliant.compliant_licensing.*", _READ, "compliance.view"),
+    ("compliant.compliant_licensing.*", None, "compliance.manage"),
     ("compliant.compliant_api.create_alcohol_product", None, "compliance.manage"),
     ("compliant.compliant_pages.nz_alcohol_configuration", None, "compliance.manage"),
     ("compliant.*", _READ, "compliance.view"),

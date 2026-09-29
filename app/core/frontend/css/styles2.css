@@ -820,9 +820,11 @@
   
   /* Shared SPA "hero" banner + title spacing (Core/Settings/Integrations).
      Tighter banner → title rhythm (~half prior gap) on all breakpoints; overrides inventory-spa-header.css. */
+  /* Plan 4.1: headers are the title, the main action and key numbers, left-aligned so
+     the page's data starts on the first screen. */
   .spa-page-hero {
-    text-align: center;
-    margin-top: 18px;
+    text-align: left;
+    margin-top: 12px;
     margin-bottom: 6px;
   }
   /* Core sits under the journey bar; give it a touch more breathing room. */

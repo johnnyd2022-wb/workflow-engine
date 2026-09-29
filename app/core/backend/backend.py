@@ -63,7 +63,7 @@ from app.core.domain.inventory_quantity_guard import (
     InventoryQuantityWriteReason,
     allow_inventory_quantity_write,
 )
-from app.core.security.permissions import has_permission, requires_auth, requires_role
+from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.internal_counters import inc_counter
 from app.core.utils.inventory_quantity import (
     coerce_stored_quantity,
@@ -4193,8 +4193,6 @@ def get_execution_metadata():
     metadata_items.sort(key=lambda x: (x["key"].lower(), x["value"].lower()))
 
     return jsonify({"metadata": metadata_items}), 200
-
-
 
 
 def _hub_active_execution_payload(execution) -> dict:

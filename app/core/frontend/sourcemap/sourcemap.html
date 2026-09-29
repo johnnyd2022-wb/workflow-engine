@@ -10,73 +10,9 @@
 {% block content %}
 <div class="max-content">
 
-  <!-- Page banner + hero — same pattern as core2 / flows2 -->
-  <div class="spa-hub-yellow-sleeve">
-    <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
-      <div class="inventory-spa-header__banner" aria-hidden="true">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;max-height:120px;">
-          <defs>
-            <linearGradient id="smb-line1" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#0ea5e9"/>
-              <stop offset="100%" stop-color="#06b6d4"/>
-            </linearGradient>
-            <linearGradient id="smb-line2" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stop-color="#06b6d4"/>
-              <stop offset="100%" stop-color="#10b981"/>
-            </linearGradient>
-            <linearGradient id="smb-raw" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#38bdf8"/>
-              <stop offset="100%" stop-color="#0284c7"/>
-            </linearGradient>
-            <linearGradient id="smb-wip" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#22d3ee"/>
-              <stop offset="100%" stop-color="#0891b2"/>
-            </linearGradient>
-            <linearGradient id="smb-final" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#34d399"/>
-              <stop offset="100%" stop-color="#059669"/>
-            </linearGradient>
-            <filter id="smb-shadow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.14"/>
-            </filter>
-          </defs>
-          <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
-          <path d="M28 52 C 55 36, 75 60, 100 52" stroke="url(#smb-line1)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.9" stroke-dasharray="5,3"/>
-          <path d="M100 52 C 125 44, 145 68, 172 52" stroke="url(#smb-line2)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.9" stroke-dasharray="5,3"/>
-          <circle cx="58" cy="43" r="3" fill="#0ea5e9" opacity="0.55"/>
-          <circle cx="80" cy="55" r="2.5" fill="#06b6d4" opacity="0.5"/>
-          <circle cx="125" cy="46" r="3" fill="#06b6d4" opacity="0.5"/>
-          <circle cx="148" cy="60" r="2.5" fill="#10b981" opacity="0.55"/>
-          <g filter="url(#smb-shadow)">
-            <circle cx="28" cy="52" r="16" fill="url(#smb-raw)"/>
-            <circle cx="100" cy="52" r="18" fill="url(#smb-wip)"/>
-            <circle cx="172" cy="52" r="16" fill="url(#smb-final)"/>
-          </g>
-          <!-- Node 1: Input — down arrow + tray -->
-          <line x1="28" y1="44" x2="28" y2="51" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
-          <path d="M 24.5 48.5 L 28 52 L 31.5 48.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
-          <path d="M 20 58 L 20 61 L 36 61 L 36 58" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
-          <!-- Node 2: Process — gear -->
-          <circle cx="100" cy="52" r="3" fill="none" stroke="#fff" stroke-width="1.8" opacity="0.9"/>
-          <circle cx="100" cy="52" r="6" fill="none" stroke="#fff" stroke-width="1.8" opacity="0.9"/>
-          <line x1="100" y1="46" x2="100" y2="42.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="105.2" y1="49" x2="108.2" y2="47.3" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="105.2" y1="55" x2="108.2" y2="56.7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="100" y1="58" x2="100" y2="61.5" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="94.8" y1="55" x2="91.8" y2="56.7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <line x1="94.8" y1="49" x2="91.8" y2="47.3" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
-          <!-- Node 3: Sale — price tag -->
-          <path d="M 164 47 L 172 47 L 180 52 L 172 57 L 164 57 Z" stroke="#fff" stroke-width="1.8" fill="none" stroke-linejoin="round" opacity="0.9"/>
-          <circle cx="166.5" cy="52" r="1.8" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.9"/>
-        </svg>
-      </div>
-    </div>
-  </div>
-
+  <!-- Compact page title; the trace search is the primary action. -->
   <section class="spa-form-section spa-page-hero" aria-labelledby="sm-page-title" data-sm-can-production="{{ 'true' if can('production.view') else 'false' }}">
     <h1 class="page-title" id="sm-page-title">Source Map</h1>
-    <p class="page-subtitle">Trace materials through every step of production</p>
-    <p class="sm-page-hint">Search below or click any card below to trace its journey</p>
   </section>
 
   <!-- Search bar (no dropdown — filters the browse grid inline) -->

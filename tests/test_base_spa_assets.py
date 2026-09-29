@@ -89,7 +89,7 @@ def test_integrations_page_degrades_when_crm_registration_fails(monkeypatch):
     with app.test_request_context("/core/integrations"):
         html = integrations.__wrapped__()
 
-    assert "CRM is unavailable in this environment." in html
+    assert "Sales is unavailable in this environment." in html
     assert "/crm/configuration" not in html
 
 
@@ -105,7 +105,7 @@ def test_unsubscribed_org_loads_core_without_compliant_workspace(monkeypatch):
         html = render_template("dashboard/dashboard.html", active_page="dashboard")
 
     assert 'href="/compliant"' not in html
-    assert "Compliant is not enabled for this organisation." in html
+    assert "Compliance is not enabled for this organisation." in html
 
 
 def test_core_shell_marks_cases_unavailable_when_cases_registration_fails(monkeypatch):
