@@ -1025,41 +1025,6 @@
   
   // Load inventory items (all types)
   let inventoryCache = null;
-  // Get previous step outputs for current step
-  function getPreviousStepOutputs() {
-    const previousOutputs = [];
-    
-    // Get outputs from all previously created steps
-    // createdSteps contains steps that have been created in this session
-    // Sort by step_number to ensure correct order
-    const sortedSteps = [...createdSteps].sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
-    
-    sortedSteps.forEach(step => {
-      if (step.outputs && step.outputs.length > 0) {
-        step.outputs.forEach(output => {
-          if (output.name) {
-            // Ensure step_number is valid (should be from step.step_number)
-            const stepNumber = step.step_number || 0;
-            previousOutputs.push({
-              id: output.id || null,
-              name: output.name,
-              quantity: output.quantity !== null && output.quantity !== undefined ? output.quantity : null,
-              unit: output.unit || '',
-              inventory_type: output.inventory_type || null,
-              step_number: stepNumber,
-              is_previous_output: true,
-              displayName: `Step ${stepNumber}: ${output.name}`
-            });
-          }
-        });
-      }
-    });
-    
-    console.log('getPreviousStepOutputs: found', previousOutputs.length, 'outputs from', sortedSteps.length, 'steps');
-    console.log('Step numbers:', sortedSteps.map(s => s.step_number));
-    
-    return previousOutputs;
-  }
   
   async function loadInventoryItems() {
     if (inventoryCache) {
@@ -1747,7 +1712,7 @@
       
       if (type === 'previous_output') {
         // Only get previous step outputs
-        const previousOutputs = getPreviousStepOutputs();
+        const previousOutputs = window.ProcessModalPreviousOutputs.getPreviousStepOutputs(createdSteps);
         
         if (previousOutputs.length === 0) {
           const messageDiv = document.createElement('div');
@@ -2338,7 +2303,7 @@
     const container = document.getElementById('guided-previous-outputs-container');
     if (!container) return;
     container.innerHTML = '';
-    const outputs = getPreviousStepOutputs();
+    const outputs = window.ProcessModalPreviousOutputs.getPreviousStepOutputs(createdSteps);
     const available = outputs.filter(function(item) {
       const displayName = item.displayName || ('Step ' + (item.step_number || '') + ': ' + item.name);
       return !selectedPreviousOutputs.has(displayName);
