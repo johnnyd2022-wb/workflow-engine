@@ -404,7 +404,7 @@ def test_invoice_sync_returns_fifo_reconciliation_summary(db, sales_org, monkeyp
     monkeypatch.setattr(
         SalesTraceabilityService,
         "reconcile_org",
-        lambda _self, _org_id: {"allocated": 2, "unmapped": 1, "insufficient_stock": 3},
+        lambda _self, _org_id, *, sync_job_id=None: {"allocated": 2, "unmapped": 1, "insufficient_stock": 3},
     )
     api = SimpleNamespace(get_all_invoices=lambda **_kwargs: [])
 

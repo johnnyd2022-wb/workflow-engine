@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -202,21 +203,123 @@ def _dashboard_event_log_period(
         .filter(EntityEvent.org_id == org_id)
         .filter(EntityEvent.created_at >= period_start, EntityEvent.created_at < period_end)
     )
-    total = q.count()
-    events = q.order_by(EntityEvent.created_at.desc()).limit(limit).all()
+    sync_job_expr = EntityEvent.payload["sync_job_id"].astext
+    is_sale_adjustment = (
+        (EntityEvent.event_type == "inventory_item.quantity_adjusted")
+        & func.coalesce(
+            EntityEvent.payload["reason"].astext.in_(["sales_fifo_consumption", "sales_fifo_reversal"]), False
+        )
+        & sync_job_expr.isnot(None)
+    )
+    raw_total = q.count()
+    sale_events_q = q.filter(is_sale_adjustment)
+    sale_event_count = sale_events_q.count()
+    events = q.filter(~is_sale_adjustment).order_by(EntityEvent.created_at.desc()).limit(limit).all()
+    sync_events = {
+        str((event.payload or {}).get("sync_job_id")): event
+        for event in events
+        if event.event_type in {"crm_xero.sync_completed", "crm_xero.sync_failed"}
+        and (event.payload or {}).get("sync_job_id")
+    }
+    sales_by_sync: dict[str, list[Any]] = {}
+    if sync_events:
+        for event in sale_events_q.filter(sync_job_expr.in_(sync_events)).order_by(EntityEvent.created_at.desc()).all():
+            sync_job_id = str((event.payload or {}).get("sync_job_id"))
+            sales_by_sync.setdefault(sync_job_id, []).append(event)
+    ordinary_events = [
+        event
+        for event in events
+        if not (
+            event.event_type in {"crm_xero.sync_completed", "crm_xero.sync_failed"}
+            and str((event.payload or {}).get("sync_job_id")) in sales_by_sync
+        )
+    ]
+
     items = [
         {
-            "id": str(ev.id),
-            "event_type": ev.event_type,
-            "summary": _human_summary(ev),
-            "at": ev.created_at.isoformat() if ev.created_at else None,
-            "actor": ev.actor_label or "System",
-            "entity_type": ev.entity_type,
-            "entity_id": str(ev.entity_id) if ev.entity_id else None,
+            "id": str(event.id),
+            "event_type": event.event_type,
+            "summary": _human_summary(event),
+            "at": event.created_at.isoformat() if event.created_at else None,
+            "actor": event.actor_label or "System",
+            "entity_type": event.entity_type,
+            "entity_id": str(event.entity_id) if event.entity_id else None,
+            "_sort_at": event.created_at,
         }
-        for ev in events
+        for event in ordinary_events
     ]
-    return {"total": total, "items": items}
+    for sync_job_id, sale_events in sales_by_sync.items():
+        sync_event = sync_events.get(sync_job_id)
+        sales_by_line: dict[tuple[str, str], dict[str, Any]] = {}
+        for event in sale_events:
+            payload = event.payload or {}
+            sale = payload.get("sale") or {}
+            reference = str(payload.get("reference") or event.id)
+            action = str(sale.get("action") or "sale")
+            line = sales_by_line.setdefault(
+                (reference, action),
+                {
+                    "action": action,
+                    "product_name": sale.get("product_name") or payload.get("name") or "product",
+                    "quantity_sold": None if action == "reversal" else sale.get("quantity_sold"),
+                    "invoice_number": sale.get("invoice_number"),
+                    "customer_name": sale.get("customer_name"),
+                    "batches": {},
+                },
+            )
+            if action == "reversal" and sale.get("quantity_sold"):
+                line["quantity_sold"] = (line["quantity_sold"] or Decimal("0")) + Decimal(str(sale["quantity_sold"]))
+            batch = str(sale.get("batch_number") or "unlabelled batch")
+            batch_quantity = Decimal(str(sale.get("quantity_from_batch") or 0))
+            line["batches"][batch] = line["batches"].get(batch, Decimal("0")) + batch_quantity
+
+        details = []
+        for line in sales_by_line.values():
+            batch_text = ", ".join(
+                f"{('batch ' + name) if name != 'unlabelled batch' else name} ({format(quantity.normalize(), 'f')})"
+                for name, quantity in sorted(line["batches"].items())
+            )
+            quantity = line["quantity_sold"] or sum(line["batches"].values(), Decimal("0"))
+            quantity_text = format(Decimal(str(quantity)).normalize(), "f")
+            text = (
+                f"{'Sale reversed' if line['action'] == 'reversal' else 'Sold'} "
+                f"{quantity_text} × {line['product_name']} ({batch_text})"
+            )
+            if line["invoice_number"]:
+                text += f", {line['invoice_number']}"
+            if line["customer_name"]:
+                text += f", {line['customer_name']}"
+            details.append(text)
+
+        event_source = sync_event or sale_events[0]
+        timestamp = max((event.created_at for event in sale_events if event.created_at), default=None)
+        if sync_event and sync_event.created_at and (timestamp is None or sync_event.created_at > timestamp):
+            timestamp = sync_event.created_at
+        failed = sync_event and sync_event.event_type == "crm_xero.sync_failed"
+        sync_summary = (
+            f"Xero sync {'failed' if failed else 'sales activity'}: "
+            f"{len(details)} sale line{'s' if len(details) != 1 else ''} across "
+            f"{len(sale_events)} batch update{'s' if len(sale_events) != 1 else ''}"
+        )
+        items.append(
+            {
+                "id": str(event_source.id),
+                "event_type": "crm_xero.sales_activity",
+                "summary": sync_summary,
+                "at": timestamp.isoformat() if timestamp else None,
+                "actor": (sync_event.actor_label if sync_event else None) or "System",
+                "entity_type": "xero_sync_job",
+                "entity_id": str(sync_event.entity_id) if sync_event else sync_job_id,
+                "details": details,
+                "_sort_at": timestamp,
+            }
+        )
+    items.sort(key=lambda item: item["_sort_at"] or datetime.min.replace(tzinfo=UTC), reverse=True)
+    total = raw_total - sale_event_count
+    return {
+        "total": total,
+        "items": [{key: value for key, value in item.items() if key != "_sort_at"} for item in items[:limit]],
+    }
 
 
 def _dashboard_operations_summary(

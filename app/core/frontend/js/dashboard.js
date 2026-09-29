@@ -208,9 +208,9 @@
 
         if (meta) {
             if (total <= limit) {
-                meta.textContent = 'Showing all ' + String(total) + ' events ' + periodLabel + '.';
+                meta.textContent = 'Showing all ' + String(total) + ' entries ' + periodLabel + '.';
             } else {
-                meta.textContent = 'Showing top ' + String(limit) + ' of ' + String(total) + ' events ' + periodLabel + '.';
+                meta.textContent = 'Showing top ' + String(limit) + ' of ' + String(total) + ' entries ' + periodLabel + '.';
             }
         }
         if (summary) {
@@ -226,9 +226,17 @@
             var summaryText = row.summary || row.event_type || 'Activity';
             var actor = row.actor || 'System';
             var at = formatDateTime(row.at);
+            var details = Array.isArray(row.details) ? row.details : [];
+            var detailMarkup = details.length
+                ? '<details class="dash-audit-sales-details"><summary>View ' + String(details.length) + ' sale update' +
+                    (details.length === 1 ? '' : 's') + '</summary><ul>' + details.map(function (detail) {
+                        return '<li>' + escapeHtml(detail) + '</li>';
+                    }).join('') + '</ul></details>'
+                : '';
             return (
                 '<li class="dash-list-item">' +
                 '<p class="dash-audit-title">' + escapeHtml(summaryText) + '</p>' +
+                detailMarkup +
                 '<p class="dash-audit-meta-line">' + escapeHtml(actor) + ' · ' + escapeHtml(at) + '</p>' +
                 '</li>'
             );
