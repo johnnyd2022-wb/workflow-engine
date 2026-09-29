@@ -1,0 +1,41 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Food registrations | biz-e{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}{{ super() }}
+<link rel="stylesheet" href="/compliant/static/compliant.css">
+<link rel="stylesheet" href="/compliant/static/premises.css">
+{% endblock %}
+{% block content %}
+<main class="compliant-shell premises" data-food-register>
+  <a href="/compliant/nz-alcohol/food-safety" hx-boost="false">Back to food safety</a>
+  <h1>Food registrations</h1>
+  <p>Record each registration and the sites and activities its documents cover. Site labels do not establish registration scope.</p>
+  <p class="compliant-error" role="alert" data-food-error hidden></p>
+  {% if can('compliance.manage') %}
+  <section><h2>Register a programme or plan</h2>
+    <form class="premises-form" data-food-registration-form hx-boost="false">
+      <label>Registration reference<input name="reference" maxlength="100" required></label>
+      <label>Name<input name="name" maxlength="150" required></label>
+      <label>Programme<select name="programme" data-food-programmes required></select></label>
+      <label>Registered on<input type="date" name="registered_on" required></label>
+      <label>Registered as<select name="registered_as"><option value="new">A new business</option><option value="existing">An existing business</option></select></label>
+      <label>Valid until (optional)<input type="date" name="valid_until"></label>
+      <label>Registration document reference<input name="evidence_reference" maxlength="500" required></label>
+      <button type="submit">Record registration</button>
+    </form>
+  </section>
+  <section><h2>Record a covered activity</h2>
+    <form class="premises-form" data-food-scope-form hx-boost="false">
+      <label>Registration<select name="registration_id" data-food-registration-select required></select></label>
+      <label>Site<select name="site_id" data-food-sites required></select></label>
+      <label>Covered activity<select name="activity" data-food-activities required></select></label>
+      <label>Scope document reference<input name="evidence_reference" maxlength="500" required></label>
+      <button type="submit">Record scope</button>
+    </form>
+  </section>
+  {% endif %}
+  <section><h2>Registrations</h2><div data-food-registration-list></div></section>
+  <section><h2>Covered sites and activities</h2><div data-food-scope-list></div></section>
+</main>
+{% endblock %}
+{% block scripts %}{{ super() }}<script src="/compliant/static/food-registrations.js"></script>{% endblock %}

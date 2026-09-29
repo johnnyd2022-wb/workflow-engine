@@ -39,7 +39,14 @@ def _np3_system_alerts(queue: list[dict], overall_alert: dict | None) -> list[di
 def _verification_milestone(session: Session, org_id: UUID, profile) -> dict | None:
     from app.features.compliant.modules.nz_alcohol import verification
 
-    return verification.milestone(verification.status(session, org_id, profile, date.today()))
+    choices = []
+    for current in verification.statuses_for_org(session, org_id, profile, date.today()):
+        entry = verification.milestone(current)
+        if entry is not None:
+            if current.get("registration_name"):
+                entry["detail"] = " · ".join(filter(None, (current["registration_name"], entry.get("detail"))))
+            choices.append(entry)
+    return min(choices, key=lambda item: item.get("date") or "9999-12-31") if choices else None
 
 
 def _np3_workspace_summary(health: dict, milestone: dict | None = None) -> dict:
@@ -242,7 +249,7 @@ def run_verification_check(org_id: UUID, session: Session) -> CheckResult:
     profile = ComplianceService(session).get_profile(org_id)
     if profile is None or not profile.enabled:
         return CheckResult(check_id=VERIFICATION_CHECK_ID, flagged=False, data={})
-    alerts = verification.alerts(verification.status(session, org_id, profile, date.today()), date.today())
+    alerts = verification.alerts_for_org(session, org_id, profile, date.today())
     if not alerts:
         return CheckResult(check_id=VERIFICATION_CHECK_ID, flagged=False, data={})
     return CheckResult(
