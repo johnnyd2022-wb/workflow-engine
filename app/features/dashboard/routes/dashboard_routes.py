@@ -214,9 +214,8 @@ def _dashboard_event_log_period(
     )
     sale_events_q = q.filter(is_sale_adjustment)
     sale_sync_job_ids = sale_events_q.with_entities(sync_job_expr).distinct()
-    completed_sync_without_sales = (
-        (EntityEvent.event_type == "crm_xero.sync_completed")
-        & (sync_job_expr.is_(None) | ~sync_job_expr.in_(sale_sync_job_ids))
+    completed_sync_without_sales = (EntityEvent.event_type == "crm_xero.sync_completed") & (
+        sync_job_expr.is_(None) | ~sync_job_expr.in_(sale_sync_job_ids)
     )
     q = q.filter(~completed_sync_without_sales)
     raw_total = q.count()
