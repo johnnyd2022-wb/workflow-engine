@@ -432,9 +432,10 @@ def statuses_for_org(session, org_id, profile, today):
     from app.features.compliant.modules.nz_alcohol.food_registrations import registration_profile
 
     currents = [status(session, org_id, profile, today)]
-    for registration in (
-        session.query(FoodRegistration).filter(FoodRegistration.org_id == org_id).order_by(FoodRegistration.name)
-    ):
+    registrations = (
+        session.query(FoodRegistration).filter(FoodRegistration.org_id == org_id).order_by(FoodRegistration.name).all()
+    )
+    for registration in registrations:
         current = status(session, org_id, registration_profile(registration), today, registration.id)
         current["registration_name"] = registration.name
         current["registration_programme"] = registration.programme
