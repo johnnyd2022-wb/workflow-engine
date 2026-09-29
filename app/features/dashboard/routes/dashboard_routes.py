@@ -6,10 +6,10 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from flask import g, jsonify, render_template, request
 from sqlalchemy import func
-from zoneinfo import ZoneInfo
 
 from app.core.db import db_session
 from app.core.db.models.entity_event import EntityEvent
@@ -18,7 +18,7 @@ from app.core.db.models.inventory_item import InventoryType
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
-from app.core.security.permissions import requires_auth
+from app.core.security.permissions import has_permission, requires_auth
 from app.features.activity_log.routes.activity_routes import _human_summary
 from app.observability import get_logger
 from app.utils.config_loader import config
@@ -619,11 +619,11 @@ def _dashboard_compliant_workspace_summary(
     unavailable = {
         "available": False,
         "state": "unavailable",
-        "label": "Compliant is not enabled for this organisation.",
+        "label": "Compliance is not enabled for this organisation.",
         "attention_count": 0,
         "modules": [],
     }
-    if not config.compliant_enabled:
+    if not config.compliant_enabled or not has_permission(g.current_user, "compliance.view"):
         return unavailable
 
     try:
@@ -704,7 +704,7 @@ def _dashboard_build_action_board(
             "count": (findings.get("expired_materials") or {}).get("count") or 0,
             "severity": "critical",
             "href": "/core/inventory/view",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "untracked_items",
@@ -712,7 +712,7 @@ def _dashboard_build_action_board(
             "count": (findings.get("untracked_items") or {}).get("count") or 0,
             "severity": "high",
             "href": "/core/notifications",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "output_expired",
@@ -720,7 +720,7 @@ def _dashboard_build_action_board(
             "count": output_expiry.get("red_count") or 0,
             "severity": "critical",
             "href": "/core/notifications",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "output_not_ready",
@@ -728,15 +728,15 @@ def _dashboard_build_action_board(
             "count": output_ready.get("red_count") or 0,
             "severity": "informational",
             "href": "/core/notifications",
-            "workspace": "Core",
+            "workspace": "Production",
         },
         {
             "key": "overdue_tasks",
-            "label": "Overdue CRM tasks",
+            "label": "Overdue Sales tasks",
             "count": (tasks_summary or {}).get("overdue_count") or 0,
             "severity": "high",
             "href": "/crm/tasks",
-            "workspace": "CRM",
+            "workspace": "Sales",
         },
         {
             "key": "compliant_evidence",
@@ -744,7 +744,7 @@ def _dashboard_build_action_board(
             "count": (compliant_workspace or {}).get("attention_count") or 0,
             "severity": "high",
             "href": "/compliant",
-            "workspace": "Compliant",
+            "workspace": "Compliance",
         },
     ]
 
@@ -780,11 +780,11 @@ def get_dashboard_summary():
     # mutations, pre-warmed by the warm-system-findings job); the cheap checks run live.
     # Same result set as CoreChecksRunner.run_all_checks() without the ~640ms DAG cost on
     # every landing-page load.
-    from app.core.backend.system_findings_cache import get_check_results
+    from app.features.compliance_checks.system_findings_cache import get_check_results
 
     check_results = get_check_results(org_id, db_session)
 
-    from app.core.backend.system_status import build_system_status_payload
+    from app.features.compliance_checks.system_status import build_system_status_payload
 
     system_status = build_system_status_payload(org_id, db_session, check_results)
     compliance = _dashboard_build_compliance_summary(check_results, system_status)
@@ -824,7 +824,7 @@ def get_dashboard_summary():
     }
     revenue_daily_mtd: list[dict[str, Any]] = []
 
-    if config.crm_enabled:
+    if config.crm_enabled and has_permission(g.current_user, "sales.view"):
         try:
             from app.features.crm.services.crm_service import CRMService
 

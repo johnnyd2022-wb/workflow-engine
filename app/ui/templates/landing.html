@@ -611,6 +611,15 @@
       }
     });
     
+    // "Sign in" links (e.g. after accepting an invite) open the sign-in form directly.
+    document.addEventListener('DOMContentLoaded', function() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('login') === '1') {
+        window.history.replaceState({}, '', window.location.pathname);
+        if (typeof openModal === 'function') openModal('loginModal');
+      }
+    });
+
     // Check if page loaded due to session timeout redirect
     (function() {
       // Check URL for session_expired parameter
@@ -1000,6 +1009,10 @@
                 errorDiv.style.display = 'block';
                 submitButton.disabled = false;
               }
+            } else if (data.requires_2fa_enrollment) {
+              // Admins must set up 2FA before anything else (the server enforces it too)
+              closeModal('loginModal');
+              window.location.href = data.action || '/core/settings?enroll2fa=1';
             } else {
               // Success - close modal and redirect
               closeModal('loginModal');
