@@ -1,10 +1,14 @@
 {% extends "shared/base_spa.html" %}
 
-{% block title %}Core{% endblock %}
+{% block title %}Production{% endblock %}
 
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Modern Process Hub for managing manufacturing workflows and executions">
   {# CSS extracted to core2.css and loaded globally in base_spa.html for HTMX boost compatibility. #}
+{% endblock %}
+
+{% block topbar %}
+  {% if not core2_focus %}{{ super() }}{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -15,51 +19,13 @@
             <section class="spa-form-section core2-journey-section" aria-label="Traceability bar">
               <div id="core2-journey-bar"></div>
             </section>
-
-            <div class="inventory-spa-header-wrap inventory-hub-banner-wrap">
-              <div class="inventory-spa-header__banner" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 88" fill="none" aria-hidden="true" preserveAspectRatio="xMidYMid meet" style="display:block; width:100%; height:auto; max-height:120px;">
-                  <defs>
-                    <linearGradient id="core-line" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stop-color="#10B981"/>
-                      <stop offset="100%" stop-color="#22D3EE"/>
-                    </linearGradient>
-                    <linearGradient id="core-node-a" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stop-color="#34D399"/>
-                      <stop offset="100%" stop-color="#059669"/>
-                    </linearGradient>
-                    <linearGradient id="core-node-b" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stop-color="#22D3EE"/>
-                      <stop offset="100%" stop-color="#0EA5E9"/>
-                    </linearGradient>
-                    <linearGradient id="core-node-c" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stop-color="#A7F3D0"/>
-                      <stop offset="100%" stop-color="#34D399"/>
-                    </linearGradient>
-                    <filter id="core-soft" x="-20%" y="-20%" width="140%" height="140%">
-                      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.12"/>
-                    </filter>
-                  </defs>
-                  <ellipse cx="100" cy="78" rx="88" ry="6" fill="#0f172a" opacity="0.06"/>
-                  <path d="M28 52 C 55 38, 75 38, 100 48 C 125 58, 145 38, 172 52" stroke="url(#core-line)" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.85"/>
-                  <g filter="url(#core-soft)">
-                    <circle cx="28" cy="52" r="14" fill="url(#core-node-a)"/>
-                    <circle cx="100" cy="48" r="16" fill="url(#core-node-b)"/>
-                    <circle cx="172" cy="52" r="14" fill="url(#core-node-c)"/>
-                  </g>
-                  <circle cx="28" cy="52" r="4" fill="#fff" opacity="0.9"/>
-                  <circle cx="100" cy="48" r="5" fill="#fff" opacity="0.9"/>
-                  <circle cx="172" cy="52" r="4" fill="#fff" opacity="0.9"/>
-                </svg>
-              </div>
-            </div>
           </div>
 
           <section class="spa-form-section spa-page-hero spa-page-hero--core" aria-labelledby="core2-hub-title">
             <h1 id="core2-hub-title" class="page-title">
               {% if core2_focus_mode == 'inventory_live' %}Live inventory
               {% elif core2_focus_mode == 'active_batches_live' %}Active batches
-              {% else %}Core
+              {% else %}Production
               {% endif %}
             </h1>
           </section>
@@ -69,8 +35,8 @@
           </section>
 
           {% if core2_focus_mode == '' %}
-          <section class="spa-form-section core2-main-tabs-wrap" aria-label="Core sections">
-            <div class="flow-mode-segmented core2-main-tabs" role="tablist" aria-label="Core pages">
+          <section class="spa-form-section core2-main-tabs-wrap" aria-label="Production sections">
+            <div class="flow-mode-segmented core2-main-tabs" role="tablist" aria-label="Production pages">
               <button id="core2-tab-overview" type="button" class="flow-mode-segment flow-mode-segment--active" data-core2-tab-target="overview" role="tab" aria-controls="core2-panel-overview" aria-selected="true" tabindex="0">Overview</button>
               <button id="core2-tab-inventory" type="button" class="flow-mode-segment" data-core2-tab-target="inventory" role="tab" aria-controls="core2-panel-inventory" aria-selected="false" tabindex="-1">Inventory</button>
               <button id="core2-tab-workflows" type="button" class="flow-mode-segment" data-core2-tab-target="workflows" role="tab" aria-controls="core2-panel-workflows" aria-selected="false" tabindex="-1">Product workflows</button>
@@ -86,7 +52,7 @@
                     <h2 id="core2-overview-summary-title" class="spa-form-section-title">Overview</h2>
                   </div>
                 </div>
-                <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Core metrics">
+                <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Production metrics">
                 <div class="core2-stats-hybrid__cell">
                   <div class="core2-stats-hybrid__label">Product workflows</div>
                   <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
@@ -304,7 +270,6 @@
                   <button type="button" class="flow-mode-segment" data-core2-inv-view="movements" role="tab" aria-selected="false">Movements</button>
                   <button type="button" class="flow-mode-segment" data-core2-inv-view="process" role="tab" aria-selected="false">By process</button>
                 </div>
-                <a href="/core/inventory/add" class="btn btn-primary core2-live-inv__receive-btn">+ Receive stock</a>
               </div>
             </div>
 

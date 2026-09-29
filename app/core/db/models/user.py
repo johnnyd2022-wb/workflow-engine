@@ -48,7 +48,13 @@ class User(TenantScoped, Base):
     access_expires_at = Column(DateTime(timezone=True), nullable=True)
     # A custom role (plan 0.4c) replaces the built-in role's permissions; ``role`` then
     # holds the built-in role it was cloned from.
-    custom_role_id = Column(UUID(as_uuid=True), ForeignKey("org_roles.id", ondelete="RESTRICT"), nullable=True)
+    # org_roles.created_by_user_id points back at users, so this side is created with ALTER
+    # (use_alter) to keep metadata table ordering acyclic; the name matches the migration's.
+    custom_role_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("org_roles.id", ondelete="RESTRICT", use_alter=True, name="users_custom_role_id_fkey"),
+        nullable=True,
+    )
     # Pending invite: SHA-256 of the one-time setup token, and when it stops working.
     invite_token_hash = Column(String(64), nullable=True, unique=True, index=True)
     invite_expires_at = Column(DateTime(timezone=True), nullable=True)

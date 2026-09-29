@@ -13,11 +13,13 @@ function crmCustomers() {
     sortBy: 'name',
     sortDir: 'asc',
     statusFilter: '',
+    missingContactOnly: false,
     xeroStatus: null,
     syncing: false,
 
     async init() {
       CRMAPI.ensureBackButton('/crm');
+      this.missingContactOnly = new URLSearchParams(window.location.search).get('missing_contact') === '1';
       await this.loadXeroStatus();
       await this.loadCustomers();
     },
@@ -48,6 +50,7 @@ function crmCustomers() {
         const params = { page: this.page, page_size: this.pageSize, sort_by: this.sortBy, sort_dir: this.sortDir };
         if (this.search)      params.q      = this.search;
         if (this.statusFilter) params.status = this.statusFilter;
+        if (this.missingContactOnly) params.missing_contact = '1';
         const data = await CRMAPI.getCustomers(params);
         this.customers  = data.customers  || [];
         this.total      = data.total      || 0;

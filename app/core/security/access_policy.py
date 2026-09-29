@@ -166,6 +166,9 @@ ANY_WORKSPACE = ("production.view", "inventory.view", "sales.view", "compliance.
 # rules come before the broad ones under them. A requirement is PUBLIC, SIGNED_IN, a
 # permission, or a tuple meaning "any of these".
 POLICY: list[tuple[str, frozenset[str] | None, object]] = [
+    ("planning.static", None, PUBLIC),
+    ("planning.*", _READ, "production.view"),
+    ("planning.*", frozenset({"POST"}), "production.record"),
     # --- public: landing, static assets, sign-in, telemetry ingest
     ("index", None, PUBLIC),
     ("favicon", None, PUBLIC),
@@ -242,6 +245,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("core.process_docs_inline", None, "production.design"),
     ("core.process_docs_delete", None, "production.design"),
     ("process_templates.process_templates_api.copy_process_template", None, "production.design"),
+    ("process_templates.process_templates_api.apply_starter_pack", None, "production.design"),  # plan 2.4c
     ("process_templates.*", _READ, "production.design"),
     # --- recording production
     ("core.create_execution", None, "production.record"),

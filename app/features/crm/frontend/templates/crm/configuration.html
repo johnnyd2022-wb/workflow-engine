@@ -1,9 +1,9 @@
 {% extends "shared/base_spa.html" %}
-{% block title %}Configuration · CRM{% endblock %}
+{% block title %}Configuration · Sales{% endblock %}
 {% block body_class %}crm-page{% endblock %}
 
 {% block topbar %}
-  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to CRM" hx-boost="false">
+  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to Sales" hx-boost="false">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M11 19l-7-7 7-7"/>
       <path d="M4 12h16"/>
@@ -14,7 +14,7 @@
 {% block content %}
 <div class="max-content crm-root" x-data="crmConfiguration()" x-init="init()">
   {% set crm_heading = "Configuration" %}
-  {% set crm_subtitle = "Manage CRM integrations, traceability, and mappings" %}
+  {% set crm_subtitle = "Manage sales integrations, traceability, and mappings" %}
   {% include "crm/_crm_banner.html" %}
   {% set active_crm_tab = "configuration" %}
   {% include "crm/_crm_section_tabs.html" %}
@@ -124,7 +124,7 @@
       </label>
       <p style="margin:0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Turn this off to use a manually configured “contains” mapping, such as <em>Wildflower</em>, across multiple Xero price variants.</p>
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);">Applies on the next sync, including sales already imported into CRM.</div>
+        <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);">Applies on the next sync, including sales already imported.</div>
         <div style="display:flex; gap:8px; align-items:center;">
           <a href="/core/sourcemap" class="crm-btn crm-btn--secondary crm-btn--sm">Open Sourcemap</a>
           <button class="crm-btn crm-btn--primary crm-btn--sm" @click="saveTraceConfig()">Save Traceability Settings</button>
@@ -170,7 +170,7 @@
       </div>
       <label style="display:inline-flex; align-items:center; gap:8px; font-size:.82rem; color:var(--text-secondary,#6b7280);">
         <input type="checkbox" x-model="traceConfig.obfuscate_sales_figures">
-        Obfuscate monetary figures on the CRM overview
+        Obfuscate monetary figures on the Sales overview
       </label>
       <p style="margin:0; font-size:.74rem; color:var(--text-secondary,#6b7280);">Overview currency values are replaced with *****. This does not change source records or traceability data.</p>
       <div style="display:flex; justify-content:flex-end;">
@@ -288,7 +288,7 @@
       </div>
       <div class="crm-lane-sheet__body">
         <p style="margin:0; font-size:.84rem; color:var(--text-secondary,#6b7280);">
-          This will disconnect Xero and remove synced contacts and invoices from CRM.
+          This will disconnect Xero and remove synced contacts and invoices from Sales.
         </p>
       </div>
       <div class="crm-lane-sheet__footer">
