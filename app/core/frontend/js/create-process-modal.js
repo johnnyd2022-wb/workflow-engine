@@ -152,24 +152,11 @@
       const prev = loadWizardSessionMergeBase() || {};
       const pid =
         new URLSearchParams(window.location.search || '').get('id') || prev.processId || null;
-      const payload = {
-        v: 1,
-        stepName: '',
-        stepDescription: '',
-        workflowProcessName: (prev.workflowProcessName != null ? String(prev.workflowProcessName) : '').trim(),
-        inputs: [],
-        outputs: [],
-        prompts: [],
-        batchNumberMode: 'optional',
-        evidenceMode: 'optional',
-        inputTab: prev.inputTab || 'inventory',
-        editingStepId: null,
-        createdSteps: Array.isArray(createdSteps) ? JSON.parse(JSON.stringify(createdSteps)) : [],
-        docInlineTitle: '',
-        docInlineContent: '',
-        processId: pid,
-        docFileUpload: null
-      };
+      const payload = window.ProcessModalSpaPayloads.buildClearedDraftPayload(
+        prev,
+        pid,
+        createdSteps
+      );
       sessionStorage.setItem(getProcessFlowSpaStorageKey(), JSON.stringify(payload));
     } catch (e) {
       console.warn('persistClearedWizardDraftState failed', e);
