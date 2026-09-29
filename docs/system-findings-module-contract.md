@@ -88,7 +88,7 @@ omitted without losing the rest of the summary. Core does not calculate module d
 
 ## Implementation locations
 
-- Contract definition: `app/core/backend/corechecks.py` (`CheckResult`).
+- Contract definition: `app/features/compliance_checks/routes/corechecks.py` (`CheckResult`).
 - Generic banner renderer: `app/core/frontend/js/system-findings-banner.js`.
 - Generic notifications renderer: `app/core/frontend/js/system-findings-notifications.js`.
 - Example module: `app/features/compliant/modules/nz_alcohol/module.py`.

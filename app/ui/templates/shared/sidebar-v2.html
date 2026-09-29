@@ -41,6 +41,7 @@
           </svg>
         </a>
       </li>
+      {% if can('production.view', 'inventory.view') %}
       <li class="nav-item">
         <a href="/core" class="nav-link{% if active_page == 'core' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
@@ -62,13 +63,14 @@
               <line x1="46" y1="36" x2="56" y2="36" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.7"/>
             </svg>
           </div>
-          <span class="nav-link-text">Core</span>
+          <span class="nav-link-text">Production</span>
           <svg class="nav-link-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="9 18 15 12 9 6"/>
           </svg>
         </a>
       </li>
-      {% if compliant_subscribed %}
+      {% endif %}
+      {% if compliant_subscribed and can('compliance.view') %}
       <li class="nav-item">
         {# Compliant's CSS and page controller are deliberately page-scoped and enter
            the document head/body on a full load.  Boosting this link only swaps
@@ -86,7 +88,7 @@
         </a>
       </li>
       {% endif %}
-      {% if crm_enabled %}
+      {% if crm_enabled and can('sales.view') %}
       <li class="nav-item">
         <a href="/crm" class="nav-link{% if active_page == 'crm' %} active{% endif %}">
           <div class="nav-link-icon-wrapper">
@@ -97,7 +99,7 @@
               <path d="M40 62c0-9 6.3-15 14-15s14 6 14 15" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-opacity="0.5"/>
             </svg>
           </div>
-          <span class="nav-link-text">CRM</span>
+          <span class="nav-link-text">Sales</span>
           <svg class="nav-link-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="9 18 15 12 9 6"/>
           </svg>
@@ -145,7 +147,7 @@
     </button>
   </div>
   
-  <!-- Hamburger Toggle Button - Centered and Overlapping -->
+  <!-- Sidebar collapse control -->
   <button class="sidebar-toggle-btn" onclick="toggleSidebar();" aria-label="Toggle sidebar">
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <line x1="3" y1="12" x2="21" y2="12"/>

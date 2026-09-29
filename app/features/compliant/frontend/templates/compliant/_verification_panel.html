@@ -1,0 +1,72 @@
+<section class="compliant-record-panel verification-panel" id="verification" data-verification-root
+         data-can-manage="{{ '1' if can('compliance.manage') else '0' }}"
+         data-can-record="{{ '1' if can('compliance.record') else '0' }}" aria-labelledby="verification-title">
+  <div class="verification-head">
+    <div>
+      <p class="compliant-eyebrow">VERIFICATION</p>
+      <h2 id="verification-title" data-verification-headline>Loading…</h2>
+      <p data-verification-sub></p>
+    </div>
+    <span class="verification-chip" data-verification-chip hidden></span>
+  </div>
+  <p class="compliant-error" data-verification-error role="alert" hidden></p>
+
+  <form class="verification-registration" data-verification-registration hidden>
+    <p>When did you register your national programme? The initial verification is due within 6 weeks for a new business, or within a year (NP1, NP2) or 6 months (NP3) for an existing one.</p>
+    <label>Registered on <input type="date" name="registered_on" required></label>
+    <label>Registered as <select name="registered_as"><option value="new">A new business</option><option value="existing">An existing business</option></select></label>
+    <button type="submit">Save</button>
+  </form>
+
+  <div data-verification-actions-wrap hidden>
+    <h3>Corrective actions</h3>
+    <ul class="verification-actions" data-verification-actions></ul>
+  </div>
+
+  <details class="verification-record" data-verification-record-wrap hidden>
+    <summary>Record a verification</summary>
+    <form data-verification-form novalidate>
+      <div class="verification-grid">
+        <label>Date of the visit <input type="date" name="verified_on" required></label>
+        <label>Verifier <input name="verifier_name" maxlength="255" required></label>
+        <label>Verification agency <input name="verifier_agency" maxlength="255" placeholder="e.g. your council or a third-party agency"></label>
+        <label>Report reference <input name="report_reference" maxlength="255"></label>
+      </div>
+      <fieldset class="verification-choice"><legend>Outcome</legend>
+        <label><input type="radio" name="outcome" value="acceptable" checked> Acceptable</label>
+        <label><input type="radio" name="outcome" value="unacceptable"> Unacceptable</label>
+      </fieldset>
+      <label data-verification-attitude hidden>The verifier found the business
+        <select name="attitude">
+          <option value="willing">willing and able to comply</option>
+          <option value="unwilling">unwilling or unable to comply</option>
+          <option value="immediate_risk">an immediate risk to public health</option>
+        </select>
+      </label>
+      <div data-verification-history-fields hidden>
+        <label class="verification-inline"><input type="checkbox" name="initial"> This was our initial verification</label>
+        <label data-verification-previous>Frequency before this visit
+          <select name="previous_step"></select>
+        </label>
+      </div>
+      <div class="verification-grid">
+        <label>Frequency the verifier set <select name="step" data-verification-step></select></label>
+        <label>Next verification <input type="date" name="next_due" data-verification-next></label>
+      </div>
+      <p class="verification-hint" data-verification-suggestion></p>
+      <label>Notes <textarea name="notes" rows="2" maxlength="4000"></textarea></label>
+      <h3>Corrective actions</h3>
+      <div class="verification-new-actions" data-verification-new-actions></div>
+      <button type="button" class="suggestion" data-verification-add-action>Add a corrective action</button>
+      <div><button type="submit">Record verification</button></div>
+    </form>
+  </details>
+
+  <details class="verification-history" data-verification-history-wrap hidden>
+    <summary>Past verifications</summary>
+    <div class="np3-training-table"><table>
+      <thead><tr><th scope="col">Date</th><th scope="col">Verifier</th><th scope="col">Outcome</th><th scope="col">Frequency set</th><th scope="col">Next due</th></tr></thead>
+      <tbody data-verification-history></tbody>
+    </table></div>
+  </details>
+</section>

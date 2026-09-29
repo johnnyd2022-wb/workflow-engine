@@ -1,0 +1,100 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Licensing · NZ Alcohol · Compliant{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block content %}
+<main class="compliant-shell licensing-shell" data-licensing-root
+      data-can-manage="{{ '1' if can('compliance.manage') else '0' }}"
+      data-can-record="{{ '1' if can('compliance.record') else '0' }}">
+  <nav class="module-breadcrumb" aria-label="Compliant location"><a href="/compliant" hx-boost="false">Compliant</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol" hx-boost="false">NZ Alcohol</a><span aria-hidden="true">/</span><strong>Licensing</strong></nav>
+  {% include "compliant/_nz_alcohol_tabs.html" %}
+  <header class="compliant-hero">
+    <div>
+      <p class="compliant-eyebrow">SALE AND SUPPLY OF ALCOHOL ACT 2012</p>
+      <h1>Licences, managers and the records an inspector asks for.</h1>
+      <p>Renewals are due at least 20 working days before a licence expires; a manager's certificate renewal must be filed before it expires. Your licence and its conditions are the authority: record them as the DLC issued them.</p>
+    </div>
+    <div class="compliant-summary"><a class="licensing-pack" href="/api/compliant/licensing/pack.pdf" hx-boost="false" download>Download inspector pack (PDF)</a></div>
+  </header>
+  <p class="compliant-error" data-licensing-error role="alert" hidden></p>
+
+  <section class="compliant-record-panel licensing-panel" aria-labelledby="lic-licences-title">
+    <div class="section-heading"><div><p class="compliant-eyebrow">LICENCES</p><h2 id="lic-licences-title">Licence register</h2></div></div>
+    <div class="licensing-cards" data-licensing-licences></div>
+    <details class="licensing-add" data-licensing-manage hidden>
+      <summary>Add a licence</summary>
+      <form class="licensing-form" data-licence-form>
+        <label>Type <select name="kind" data-licence-kind></select></label>
+        <label>Licence number <input name="licence_number" maxlength="100"></label>
+        <label>Issuing DLC <input name="issuing_dlc" maxlength="255" placeholder="e.g. Hutt City DLC"></label>
+        <label class="span-2" data-standing>Premises <input name="premises" maxlength="500"></label>
+        <fieldset class="span-2" data-standing><legend>Endorsements</legend><div data-licence-endorsements></div></fieldset>
+        <label data-standing>Issued <input type="date" name="issued_on"></label>
+        <label data-standing>Expires <input type="date" name="expires_on"></label>
+        <label data-standing>Annual fee next due <input type="date" name="annual_fee_due_on"></label>
+        <label class="span-2">Sale hours (as on the licence) <input name="sale_hours" maxlength="255" placeholder="e.g. Mon-Sun 7am-11pm"></label>
+        <label>Delivery hours from <input type="time" name="delivery_hours_start"></label>
+        <label>to <input type="time" name="delivery_hours_end"></label>
+        <label class="span-2" data-special hidden>Event <input name="event_name" maxlength="255"></label>
+        <label data-special hidden>Event starts <input type="date" name="event_starts_on"></label>
+        <label data-special hidden>Event ends <input type="date" name="event_ends_on"></label>
+        <label class="span-2" data-special hidden>Manager on duty <input name="manager_on_duty" maxlength="255"></label>
+        <label class="span-2">Other conditions <textarea name="conditions" rows="2" maxlength="4000"></textarea></label>
+        <div class="span-2"><button type="submit">Save licence</button></div>
+      </form>
+    </details>
+  </section>
+
+  <section class="compliant-record-panel licensing-panel" aria-labelledby="lic-managers-title">
+    <div class="section-heading"><div><p class="compliant-eyebrow">CERTIFIED MANAGERS</p><h2 id="lic-managers-title">Managers' certificates</h2></div></div>
+    <div class="np3-training-table"><table>
+      <thead><tr><th scope="col">Holder</th><th scope="col">Certificate</th><th scope="col">DLC</th><th scope="col">Expires</th><th scope="col">Status</th><th scope="col"><span class="licensing-sr">Actions</span></th></tr></thead>
+      <tbody data-licensing-managers></tbody>
+    </table></div>
+    <details class="licensing-add" data-licensing-manage hidden>
+      <summary>Add a manager's certificate</summary>
+      <form class="licensing-form" data-manager-form>
+        <label>Holder <select name="user_id" data-manager-user><option value="">Someone not in the app…</option></select></label>
+        <label data-manager-name>Name <input name="holder_name" maxlength="255"></label>
+        <label>Certificate number <input name="certificate_number" maxlength="100" required></label>
+        <label>Issuing DLC <input name="issuing_dlc" maxlength="255"></label>
+        <label>Issued <input type="date" name="issued_on"></label>
+        <label>Expires <input type="date" name="expires_on" required></label>
+        <div class="span-2"><button type="submit">Save certificate</button></div>
+      </form>
+    </details>
+  </section>
+
+  <section class="compliant-record-panel licensing-panel" aria-labelledby="lic-checks-title">
+    <div class="section-heading"><div><p class="compliant-eyebrow">CHECKS WITH EVIDENCE</p><h2 id="lic-checks-title">Policies, displays and checks</h2></div><p>Record each check with its evidence and when to review it. Staff training lives in the shared training register.</p></div>
+    <ul class="licensing-checks" data-licensing-checks></ul>
+    <form class="licensing-form" data-check-form hidden>
+      <input type="hidden" name="control_id">
+      <p class="span-2" data-check-form-title></p>
+      <label class="span-2">What was checked <input name="title" maxlength="255" required placeholder="e.g. Licence and duty manager sign on the cellar door"></label>
+      <label class="span-2">Evidence <input name="evidence_reference" maxlength="1024" required placeholder="Photo, document location or reference"></label>
+      <label>Review by <input type="date" name="due_date" required></label>
+      <div class="span-2"><button type="submit">Record check</button> <button type="button" class="suggestion" data-check-cancel>Cancel</button></div>
+    </form>
+  </section>
+
+  <section class="compliant-record-panel licensing-panel" aria-labelledby="lic-log-title">
+    <div class="section-heading"><div><p class="compliant-eyebrow">INCIDENT AND REFUSAL LOG</p><h2 id="lic-log-title">What an inspector asks to see</h2></div><p>Keep the log even when there's nothing to record.</p></div>
+    <form class="licensing-form" data-log-form hidden>
+      <label>Type <select name="kind" data-log-kind></select></label>
+      <label>When <input type="datetime-local" name="occurred_at"></label>
+      <label>Where <input name="location" maxlength="255" placeholder="Cellar door, online order, event"></label>
+      <label>Staff member <input name="staff_name" maxlength="255"></label>
+      <label class="span-2">What happened <textarea name="description" rows="2" maxlength="4000" required></textarea></label>
+      <label class="span-2">Action taken <textarea name="action_taken" rows="2" maxlength="4000"></textarea></label>
+      <label>Reference <input name="reference" maxlength="255" placeholder="Order number, police reference"></label>
+      <div class="span-2"><button type="submit">Add to the log</button></div>
+    </form>
+    <div class="np3-training-table"><table>
+      <thead><tr><th scope="col">When</th><th scope="col">Type</th><th scope="col">What happened</th><th scope="col">Action taken</th><th scope="col">Staff</th></tr></thead>
+      <tbody data-licensing-log></tbody>
+    </table></div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/licensing.js"></script>{% endblock %}
