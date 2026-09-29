@@ -1,10 +1,10 @@
 {% extends "shared/base_spa.html" %}
-{% block title %}Suppliers · Inventory · Core{% endblock %}
+{% block title %}Suppliers · Inventory · Production{% endblock %}
 {% block body_class %}suppliers-page{% endblock %}
 {% block head_extras %}<meta name="description" content="Contact details for the businesses you buy from.">{% endblock %}
 {% block content %}
 <main class="sup-shell" data-suppliers-page aria-busy="true">
-  <nav class="sup-breadcrumb" aria-label="Core location"><a href="/core" hx-boost="false">Core</a><span aria-hidden="true">/</span><a href="/core?tab=inventory" hx-boost="false">Inventory</a><span aria-hidden="true">/</span><strong>Suppliers</strong></nav>
+  <nav class="sup-breadcrumb" aria-label="Production location"><a href="/core" hx-boost="false">Production</a><span aria-hidden="true">/</span><a href="/core?tab=inventory" hx-boost="false">Inventory</a><span aria-hidden="true">/</span><strong>Suppliers</strong></nav>
   <p class="sup-message" data-suppliers-message role="status" aria-live="polite" hidden></p>
   <section class="sup-panel" aria-label="Supplier overview">
     <p class="sup-eyebrow">SUPPLIER OVERVIEW</p>

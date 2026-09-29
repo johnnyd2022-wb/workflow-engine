@@ -156,7 +156,7 @@ def test_wastage_advisory_lock_serializes_concurrent_duplicate_submissions(db, o
         "idempotency_key": key,
     }
 
-    import app.core.backend.backend as backend_module
+    import app.features.wastage.routes.wastage_routes as backend_module
 
     original_lock = backend_module._pg_advisory_lock_wastage_idempotency
     order_lock = threading.Lock()
@@ -273,7 +273,7 @@ def test_wastage_batch_failure_rolls_back_item_wastage_and_movement_together(db,
     item_b = InventoryItemFactory(org_id=org.id, quantity="10", unit="kg")
     db.commit()
 
-    import app.core.backend.backend as backend_module
+    import app.features.wastage.routes.wastage_routes as backend_module
 
     original_assert = backend_module.assert_movement_unit_matches_item_canonical
     calls = {"n": 0}
@@ -427,7 +427,7 @@ def test_wastage_rejects_non_string_idempotency_key(db, app_client, org):
 
 def test_wastage_batch_rejects_more_than_max_entries(db, app_client, org):
     """AC13: a batch larger than MAX_WASTAGE_BATCH_ENTRIES is rejected outright."""
-    from app.core.backend.backend import MAX_WASTAGE_BATCH_ENTRIES
+    from app.features.wastage.routes.wastage_routes import MAX_WASTAGE_BATCH_ENTRIES
 
     item = InventoryItemFactory(org_id=org.id, quantity="1000", unit="kg")
     db.commit()
