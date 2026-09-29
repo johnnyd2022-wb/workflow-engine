@@ -164,5 +164,87 @@
       });
   }
 
+  // --- starter packs (plan 2.4c) ---------------------------------------------------
+  var packsEl = root.querySelector("[data-pt-packs]");
+  var packGridEl = root.querySelector("[data-pt-pack-grid]");
+
+  function node(tag, className, text, attrs) {
+    var n = document.createElement(tag);
+    if (className) n.className = className;
+    if (text != null) n.textContent = text;
+    Object.keys(attrs || {}).forEach(function (key) { n.setAttribute(key, attrs[key]); });
+    return n;
+  }
+
+  function list(items) {
+    var ul = node("ul", "pt-preview-list");
+    items.forEach(function (item) { ul.appendChild(item); });
+    return ul;
+  }
+
+  function renderPacks(packs) {
+    packsEl.hidden = !packs.length;
+    packGridEl.replaceChildren();
+    packs.forEach(function (p) {
+      var card = node("article", "pt-card pt-pack-card");
+      card.appendChild(node("span", "pt-card-family", p.product_type));
+      card.appendChild(node("span", "pt-card-name", p.name));
+      card.appendChild(node("span", "pt-card-shape", p.steps.join(" → ")));
+      card.appendChild(node("span", "pt-card-meta", "ABV is required on “" + p.final_output + "”. Checks that matter:"));
+      card.appendChild(list(p.key_checks.map(function (c) { return node("li", null, c.why); })));
+      var btn = node("button", "btn btn-primary", "Use this pack", { type: "button" });
+      btn.addEventListener("click", function () { usePack(p.id, btn); });
+      card.appendChild(btn);
+      packGridEl.appendChild(card);
+    });
+  }
+
+  function showPackResult(data) {
+    modalBodyEl.replaceChildren();
+    modalBodyEl.appendChild(node("h2", null, data.name + (data.created ? " is ready" : " is already in your workflows")));
+    if (data.compliance_skipped) {
+      modalBodyEl.appendChild(node("p", "pt-advisory", "Ask someone who manages compliance to switch on this pack's fields (ABV on the final product)."));
+    } else if (data.compliance_changes.length) {
+      modalBodyEl.appendChild(list(data.compliance_changes.map(function (c) { return node("li", null, c); })));
+    } else {
+      modalBodyEl.appendChild(node("p", null, "Its compliance fields were already set up."));
+    }
+    modalBodyEl.appendChild(node("p", null, "Worth checking for this product:"));
+    modalBodyEl.appendChild(list(data.key_checks.map(function (c) {
+      var li = node("li");
+      li.appendChild(node("a", null, c.title, { href: "/compliant/nz-alcohol/np3-audit/check/" + encodeURIComponent(c.control_id) }));
+      li.appendChild(document.createTextNode(": " + c.why));
+      return li;
+    })));
+    modalBodyEl.appendChild(node("p", "pt-advisory", data.advisory));
+    modalBodyEl.appendChild(node("a", "btn btn-primary", "Review the workflow", { href: "/core/flows/create/summary?id=" + encodeURIComponent(data.process_id) }));
+    modalEl.hidden = false;
+  }
+
+  function usePack(packId, btn) {
+    btn.disabled = true;
+    // Audited: csrfHeaders() sets X-CSRFToken explicitly, as in useTemplate above.
+    fetch("/api/core/process-templates/starter-packs/" + encodeURIComponent(packId) + "/apply", { // nosemgrep: raw-fetch-post
+      method: "POST",
+      headers: csrfHeaders(),
+    })
+      .then(function (resp) {
+        return resp.json().then(function (data) {
+          if (!resp.ok) throw new Error(data.error || "Could not apply the starter pack");
+          return data;
+        });
+      })
+      .then(showPackResult)
+      .catch(function (err) {
+        showError(err.message || "Could not apply the starter pack. Please try again.");
+      })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  fetch("/api/core/process-templates/starter-packs")
+    .then(function (resp) { return resp.ok ? resp.json() : { packs: [] }; })
+    .then(function (data) { renderPacks(data.packs || []); })
+    .catch(function () { packsEl.hidden = true; });
+
   loadCatalog();
 })();

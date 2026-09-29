@@ -11,7 +11,6 @@ from uuid import UUID
 from flask import abort, g, jsonify, redirect, render_template, request
 from pydantic import ValidationError
 
-from app.core.backend.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.core.backend.complete_step_payload import (
     MAX_COMPLETE_STEP_CONTENT_LENGTH,
     CompleteStepRequestBody,
@@ -22,6 +21,7 @@ from app.core.backend.complete_step_payload import (
 )
 from app.core.backend.evidence.evidence_service import list_evidence_for_execution, list_evidence_for_executions_batch
 from app.core.backend.process_design_routes import _assert_flow_process_access, _flow_process_id_from_request
+from app.core.backend.step_outputs import apply_whole_unit_rules, parse_output_batch_number
 from app.core.db import db_session
 from app.core.db.models.execution import ExecutionStatus
 from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, ExecutionEvidence
@@ -41,6 +41,7 @@ from app.core.security.permissions import requires_auth
 from app.core.utils.internal_counters import inc_counter
 from app.core.utils.log_action import log_action
 from app.core.utils.unit_conversion import are_units_compatible, convert_to_inventory_unit_decimal
+from app.features.compliance_checks.checks.output_ready_date_check import is_inventory_item_ready_for_consumption
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -1132,19 +1133,7 @@ def register_routes(
                                 f"Invalid untracked_item_id for output '{output_name}'; skipping reconciliation."
                             )
 
-                    # Optional: tag this specific output with a lot/label-batch number (e.g. a
-                    # physical run of 500 pre-printed labels). Purely descriptive metadata --
-                    # unlike supplier_batch_number, this is not unique per (org, name): several
-                    # outputs across different steps/executions can and do share one batch
-                    # number when a single physical batch spans multiple production runs.
-                    batch_number_raw = output.get("batch_number")
-                    if batch_number_raw is not None:
-                        try:
-                            extra_data["batch_number"] = int(batch_number_raw)
-                        except (TypeError, ValueError):
-                            execution_warnings.append(
-                                f"Output '{output_name}': ignoring non-integer batch_number {batch_number_raw!r}."
-                            )
+                    parse_output_batch_number(output, output_name, extra_data, execution_warnings)
 
                     # Store creation parameters for atomic commit
                     source_step_name = step_def.name if step_def else None
@@ -1164,6 +1153,11 @@ def register_routes(
                         }
                     )
 
+            # Whole bottles; remainders to Library stock (plan 1.2, app/core/backend/step_outputs.py)
+            _step_process = getattr(getattr(execution_step, "step", None), "process", None)
+            execution_errors.extend(
+                apply_whole_unit_rules(output_creations, actual_outputs, getattr(_step_process, "settings", None))
+            )
             # Block inventory creation when output validation failed (e.g. custom_expiry warning > duration)
             if execution_errors:
                 db_session.rollback()
@@ -1195,7 +1189,7 @@ def register_routes(
                     db_session.flush()
 
                 # Create inventory items for outputs; when reconciling to untracked, reduce first then create only surplus
-                from app.core.backend.reconciliation_service import reconcile_output_to_untracked_reduce_only
+                from app.features.reconciliation.service import reconcile_output_to_untracked_reduce_only
 
                 for output_params in output_creations:
                     untracked_item_id = output_params.pop("untracked_item_id", None)

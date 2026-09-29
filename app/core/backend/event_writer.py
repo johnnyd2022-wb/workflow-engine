@@ -184,7 +184,7 @@ class EventWriter:
 
         # Invalidate the per-org system-findings cache for mutations the check suite reads
         # (inventory/execution/process). Guarded inside mark_stale -- never fails the write.
-        from app.core.backend.system_findings_cache import mark_stale
+        from app.features.compliance_checks.system_findings_cache import mark_stale
 
         mark_stale(self.session, self.org_id, event_type)
         return event

@@ -44,3 +44,10 @@ def crm_analytics():
 @requires_auth
 def crm_configuration():
     return render_template("crm/configuration.html", active_page="crm")
+
+
+@page_bp.route("/crm/matching", methods=["GET"])
+@requires_auth
+def crm_matching():
+    """Sales-to-batch matching: hybrid review and manual assignment (plan 1.1)."""
+    return render_template("crm/matching.html", active_page="crm")
