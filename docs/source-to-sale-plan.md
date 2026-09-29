@@ -725,6 +725,10 @@ plan branch and are delivered separately.
       lineage travel with the stock, so a recall still traces through a move. Drag a lot
       (or part of one) between sites or locations on a stock board, or scan to pick and
       receive on a phone (4.6). A printable transfer docket.
+      - [x] Accounting prerequisite: producer-owned dispatch, transit, partial receipt,
+        immutable batch-lineage fragments, confirmed-loss policy checks and printable
+        carrier/consignment docket (!438). Operational release stays internally off;
+        overage resolution, drag/scan and the complete movement workflow remain open.
     - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
@@ -743,6 +747,10 @@ plan branch and are delivered separately.
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] Guard prerequisite: production inputs/output reconciliation match the
+        persisted execution site, outputs inherit it, and FIFO/manual sales use the
+        shipping/default site (!429). Additional-site release remains internally
+        gated off pending transfer and module integration. This does not complete f.
     - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
       enforced on the server like every other permission.
   - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to

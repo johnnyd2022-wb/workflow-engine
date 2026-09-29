@@ -2029,7 +2029,9 @@ def create_execution():
 
     repo = ExecutionRepository(db_session)
     try:
-        execution = repo.create_execution(org_id=org_id, process_id=process_id)
+        execution = repo.create_execution(
+            org_id=org_id, process_id=process_id, site_id=getattr(g, "validated_site_id", None)
+        )
         return (
             jsonify(
                 {
@@ -2475,6 +2477,7 @@ def complete_step(execution_id: str, execution_step_id: str):
         # If validation fails after marking COMPLETED in-session, rollback so the step stays READY
         # and the client can retry (avoids "not in a state that can be completed" on the next attempt).
         execution_step = repo.complete_step(
+            execution_id=execution_uuid,
             execution_step_id=execution_step_uuid,
             org_id=org_id,
             actual_inputs=actual_inputs,
@@ -4175,6 +4178,7 @@ def create_inventory_item():
                 source_execution_step_id=source_execution_step_id,
                 source_output_id=source_output_id,
                 extra_data=extra_data if extra_data else None,
+                site_id=getattr(g, "validated_site_id", None),
             )
         except IntegrityError:
             db_session.rollback()
@@ -4357,13 +4361,7 @@ def adjust_inventory_item_quantity(item_id):
 @core_bp.route("/api/core/inventory/consume-fifo", methods=["POST"])
 @requires_auth
 def consume_final_product_fifo():
-    """Consume finished stock FIFO by label/lot batch number (oldest batch first).
-
-    Landing point for sales-driven consumption -- a future Xero invoice sync (or any
-    other sale-recording integration) calls this instead of touching a specific
-    inventory item directly, so it never has to know which physical batch a sale
-    actually drew from.
-    """
+    """Consume finished stock FIFO from the default or explicit shipping site."""
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
     name = (data.get("name") or "").strip()
@@ -4376,7 +4374,9 @@ def consume_final_product_fifo():
 
     repo = InventoryRepository(db_session)
     try:
-        consumed = repo.consume_final_product_fifo(org_id, name, str(quantity).strip(), reference=reference)
+        consumed = repo.consume_final_product_fifo(
+            org_id, name, str(quantity).strip(), reference=reference, site_id=getattr(g, "validated_site_id", None)
+        )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"name": name, "consumed": consumed}), 200

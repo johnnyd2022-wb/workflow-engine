@@ -35,6 +35,10 @@ input selection, FIFO/manual allocation, stocktakes, transfers and module enforc
 all enforce their scope. This slice does not provide a transfer or retagging shortcut.
 Per-site UI filters, whole-business reports and role site restrictions remain pending.
 
+The next prerequisite is documented in [site-operations-guard.md](site-operations-guard.md):
+persisted-site production checks and shipping-site sales selection, protected by an
+internal release gate that defaults off. Adding those guards alone does not open moves.
+
 ## Interfaces and ownership
 
 - Core: `Site`, `Organisation.multiple_sites_enabled`, optional `site_id` on

@@ -640,7 +640,12 @@ def get_matching_candidates():
     product = (request.args.get("product") or "").strip()
     if not product:
         return jsonify({"error": "product is required"}), 400
-    return jsonify({"batches": _traceability().lot_candidates(UUID(g.org_id), product)}), 200
+    try:
+        batches = _traceability().lot_candidates(UUID(g.org_id), product, site_id=request.args.get("site_id"))
+    except ValueError as error:
+        db_session.rollback()
+        return jsonify({"error": str(error)}), 400
+    return jsonify({"batches": batches}), 200
 
 
 def _line_ref(data):
@@ -670,7 +675,9 @@ def assign_matching_line():
     data = request.get_json(silent=True) or {}
     try:
         invoice_id, line_key = _line_ref(data)
-        created = _traceability().assign_line(UUID(g.org_id), invoice_id, line_key, data.get("picks") or [])
+        created = _traceability().assign_line(
+            UUID(g.org_id), invoice_id, line_key, data.get("picks") or [], site_id=data.get("site_id")
+        )
         db_session.commit()
     except ValueError as e:
         db_session.rollback()
