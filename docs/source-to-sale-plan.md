@@ -881,10 +881,17 @@ Founder decisions for this phase:
         entry of the licence it left (2.1);
       - into a site with no food registration covering the activity, or with no liquor
         licence for selling, raises a finding.
+      - [x] Producer-liable tested-spirits home removal records a frozen CCA, LAL,
+        configured rate and excise-due fact at dispatch; partial receipt does not
+        create a second charge (!446). Other products, customer duty and operational
+        release remain open.
     - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] Refuse the legacy location-based nil return and lodgement after multi-site
+        opt-in, and show observed producer home-removal excise by source CCA without
+        claiming a complete entry (!446). Full per-CCA entry/lodgement remains open.
     - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
       enforced on the server like every other permission.
   - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
