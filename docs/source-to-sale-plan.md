@@ -892,6 +892,10 @@ Founder decisions for this phase:
       - [x] Refuse the legacy location-based nil return and lodgement after multi-site
         opt-in, and show observed producer home-removal excise by source CCA without
         claiming a complete entry (!446). Full per-CCA entry/lodgement remains open.
+      - [x] Read-only source-CCA period review shows recognised movements, observed
+        producer excise due, unresolved records and missing accounting sources (!447).
+        Empty periods still cannot establish a nil return or total duty; complete
+        per-CCA entry and lodgement remain open.
     - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
       enforced on the server like every other permission.
   - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
