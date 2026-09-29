@@ -1,4 +1,4 @@
-"""Evidence-backed CCA transfer policy; accounting gaps remain closed.
+"""Evidence-backed CCA movement policy; full accounting release remains closed.
 
 Authority: Customs 'Moving products excise-unpaid'. Destination OSS movements
 require prior approval even where both premises belong to the same legal entity.
@@ -84,7 +84,7 @@ class NZAlcoholMovementPolicy:
                     "options": [
                         {"value": "same_legal_entity", "label": "CCA licences held by the same legal entity"},
                         {"value": "prior_customs_approval", "label": "Prior Customs approval"},
-                        {"value": "home_consumption", "label": "Removal for home consumption (producer pays duty)"},
+                        {"value": "home_consumption", "label": "Removal for home consumption (producer is liable)"},
                     ],
                 },
                 {
