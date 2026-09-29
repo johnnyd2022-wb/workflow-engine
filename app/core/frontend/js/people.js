@@ -351,7 +351,7 @@
       (rolesState.sites || []).forEach(function (site) {
         var input = el('input', { type: 'checkbox', value: site.id });
         input.checked = (role.site_ids || []).indexOf(site.id) !== -1;
-        input.disabled = !site.is_active;
+        input.disabled = !site.is_active && !input.checked;
         choices.append(el('label', {}, [input, document.createTextNode(' ' + site.name + (site.is_active ? '' : ' (inactive)'))]));
       });
       function sync() { choices.hidden = mode.value !== 'selected'; }
