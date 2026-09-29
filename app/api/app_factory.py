@@ -160,9 +160,12 @@ def create_app():
 
     app.register_blueprint(stocktake_bp)
 
+    from app.features.contract_manufacturing.routes import portal_staff  # noqa: F401 -- registers staff sharing routes
     from app.features.contract_manufacturing.routes.orders import bp as contracts_bp
+    from app.features.contract_manufacturing.routes.portal import bp as contract_portal_bp
 
     app.register_blueprint(contracts_bp)
+    app.register_blueprint(contract_portal_bp)
 
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
@@ -403,6 +406,9 @@ def create_app():
         return jsonify({"error": "Authentication required", "message": "Session expired or not authenticated"}), 401
 
     # Set up middleware
+    from app.features.contract_manufacturing.portal_security import setup_portal_security
+
+    setup_portal_security(app)
     setup_tenant_context(app)
     # After tenant context: the policy reads g.current_user.
     setup_two_factor_policy(app)

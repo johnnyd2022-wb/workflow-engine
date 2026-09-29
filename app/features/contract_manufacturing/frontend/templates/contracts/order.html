@@ -5,6 +5,7 @@
 <main class="contract-workspace">
   <a href="{{ url_for('contracts.home') }}" hx-boost="false">Contract orders</a>
   <header><h1>{{ order.reference }}</h1><p>{{ order.customer_name }} · Due {{ order.due_date }} · {{ order.status|capitalize }}</p></header>
+  {% if can('production.record', 'users.manage') %}<p><a href="{{ url_for('contracts.portal_sharing_page', order_id=order.id) }}" hx-boost="false">Customer portal sharing</a></p>{% endif %}
   <p class="contract-error" role="alert" hidden></p>
   <section class="contract-card">
     <h2>Order details</h2>
