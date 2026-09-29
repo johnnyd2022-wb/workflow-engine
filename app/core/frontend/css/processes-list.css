@@ -1,70 +1,13 @@
 .processes-list-hero__header {
-      text-align: center;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px 16px;
       padding: 0 0 12px 0;
     }
     .processes-list-hero__header .card-title {
       margin: 0;
-    }
-    .processes-list-hero__tagline {
-      font-size: 0.8125rem;
-      line-height: 1.45;
-      color: var(--text-secondary, #6b7280);
-      margin: 10px 0 0 0;
-      max-width: 36rem;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .processes-list-create-card {
-      display: flex;
-      flex-direction: row;
-      align-items: flex-start;
-      gap: 14px;
-      min-height: 78px;
-      width: 100%;
-      box-sizing: border-box;
-      padding: 12px;
-      margin: 0 0 12px 0;
-      border: 1px solid var(--border-light, #e6ecef);
-      border-radius: 12px;
-      text-decoration: none;
-      color: inherit;
-      background: var(--bg-secondary, #fbfcfd);
-      cursor: pointer;
-      text-align: left;
-      font: inherit;
-      transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-    .processes-list-create-card:hover {
-      border-color: #51a69c;
-      background: #f0fbf9;
-      box-shadow: 0 3px 12px rgba(18, 46, 66, 0.07);
-    }
-    .processes-list-create-card:focus-visible {
-      outline: 2px solid var(--primary, #3b82f6);
-      outline-offset: 2px;
-    }
-    .processes-list-create-card__icon {
-      flex-shrink: 0;
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--primary, #3b82f6);
-      opacity: 0.92;
-    }
-    .processes-list-create-card__icon svg {
-      width: 22px;
-      height: 22px;
-      display: block;
-    }
-    .processes-list-create-card__text .spa-form-section-title {
-      margin: 0;
-      text-transform: none;
-      letter-spacing: 0.02em;
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text-primary, #111827);
     }
     .processes-list-toolbar {
       display: flex;
