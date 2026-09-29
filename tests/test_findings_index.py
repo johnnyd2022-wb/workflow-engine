@@ -492,6 +492,66 @@ def test_heading_that_declares_itself_fixed_does_not_open_a_section(tmp_path, mo
     assert fi.parse_doc(path) == []
 
 
+def test_heading_checkbox_marker_closes_a_section_with_no_textual_cue(tmp_path, monkeypatch):
+    """Real misfire, docs/workflows-load-performance.md:80: `### 1. Slim the
+    `system-findings` banner payload -- `[x]` (commit: system_findings_cache
+    `_banner_finding_data`)`. The heading's own title contains "system-findings", which
+    `\\bfindings?\\b` reads as an open `finding` section -- and unlike the textual "Known
+    Issues Fixed" convention, this heading's done-ness is marked *only* by the `[x]`
+    (the "Done." summary is prose below it, not in the title), so CLOSED_HEADING_RE's
+    word list didn't catch it. Its collapsed "original plan" bullets -- restating fields
+    the linked commit already implemented -- re-entered the worklist every sweep."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """### 1. Slim the `system-findings` banner payload -- `[x]` (commit: `_banner_finding_data`)
+
+**Done.** Projects the finding data to just the fields the banner reads.
+
+<details><summary>original plan</summary>
+
+- `expired_raw_materials`: `[{id, name, expiry_date}]` -- not the full item object.
+- add `impacted_count` / `expired_count` scalars so the headline never needs the arrays.
+
+</details>
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_heading_checkmark_emoji_closes_a_section(tmp_path, monkeypatch):
+    """Same convention, spelled with a checkmark emoji instead of `[x]` -- verbatim in
+    docs/aer-architecture-review.md ('### Phase 2 -- Learning loop (finding -> permanent
+    deterministic rule) ✅'). The singular 'finding' in the title would otherwise open
+    a `finding` section on its own."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """### Phase 2 -- Learning loop (finding -> permanent deterministic rule) ✅
+- Every rule ships with the historical finding that motivated it.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_unchecked_heading_box_still_opens_a_section(tmp_path, monkeypatch):
+    """Contrast case: an *unchecked* `[ ]` means the work item is still open, so it must
+    not be swallowed by the same marker check that closes a checked `[x]` heading."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """### 2. Duplicate `/auth/me` findings lookup -- `[ ]`
+- Two separate queries fetch the same user row on every page load.
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "Two separate queries" in items[0].detail
+
+
 def test_nested_closed_subheading_closes_a_still_open_ancestor_section(tmp_path, monkeypatch):
     """A deeper subheading ("### Closed this review") never satisfies `level <=
     section[0]` against its shallower ancestor ("## Known gaps"), so without an explicit
@@ -1128,6 +1188,26 @@ def test_product_roadmap_plan_is_excluded_but_review_docs_are_not():
     )
     # Narrowness guard: an ordinary design doc with a real "Deliberately deferred"
     # call-out section must still be swept.
+    assert "docs/core-load-performance-design.md" in rel
+
+
+def test_compliant_core_contract_is_excluded_but_review_docs_are_not():
+    """docs/compliant-core-contract.md documents the Compliant/Core seam contract -- the
+    same genre as the already-excluded .agents/conventions.md, not a findings tracker.
+    Its '## Checks: alerts, findings and the dashboard' heading matched `\\bfindings?\\b`
+    on the bare word (naming a data type the seam produces) and swept three descriptive
+    convention bullets as P0 security findings in the first real sweep."""
+    import shutil
+
+    if not shutil.which("rg"):
+        pytest.skip("ripgrep not installed")
+
+    docs = fi.find_candidate_docs()
+    assert docs is not None, "find_candidate_docs could not run"
+    rel = {p.relative_to(fi.REPO_ROOT).as_posix() for p in docs}
+
+    assert "docs/compliant-core-contract.md" not in rel
+    # Narrowness guard: an ordinary design doc is still scanned.
     assert "docs/core-load-performance-design.md" in rel
 
 

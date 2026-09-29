@@ -70,6 +70,18 @@
         </a>
       </li>
       {% endif %}
+      {% if can('production.view') %}
+      <li class="nav-item">
+        <a href="/core/planner" hx-boost="false" class="nav-link{% if active_page == 'planner' %} active{% endif %}">
+          <div class="nav-link-icon-wrapper">
+            <svg class="nav-link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M7 14h3M14 14h3M7 18h3"/>
+            </svg>
+          </div>
+          <span class="nav-link-text">Planner</span>
+        </a>
+      </li>
+      {% endif %}
       {% if compliant_subscribed and can('compliance.view') %}
       <li class="nav-item">
         {# Compliant's CSS and page controller are deliberately page-scoped and enter

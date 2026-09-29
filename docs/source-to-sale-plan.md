@@ -579,7 +579,7 @@ records, not from people typing figures in.
 
 Sales matter here because they finish the trace. Make them readable and complete.
 
-- [ ] **3.1 Total sales per product.** *High · S*
+- [x] **3.1 Total sales per product.** *High · S* (!342)
   - Evidence: CRM Top Products lists one product across seven or more rows because Xero
     item codes and descriptions vary, typos included.
   - Change: group by the mapped product, with a row that expands to show Xero codes;
@@ -596,11 +596,11 @@ Sales matter here because they finish the trace. Make them readable and complete
   - Change: invoice lines with no product mapping, or that can't be filled from any stock
     (1.1d), become tasks with a direct fix.
 
-- [ ] **3.4 Customer records ready for a recall.** *S*
+- [x] **3.4 Customer records ready for a recall.** *S* (!341)
   - Change: show how many customers have a contact phone and email on record and prompt
     for missing ones. A recall is only as good as its contact list.
 
-- [ ] **3.5 Hide empty sales metrics.** *S*
+- [x] **3.5 Hide empty sales metrics.** *S* (!340)
   - Evidence: revenue-target tiles on the dashboard and CRM read "n/a" until a target is
     set.
   - Change: hide them, or offer a one-click setup.
@@ -711,6 +711,7 @@ split.
       - [x] Wastage pure move. (!332)
       - [x] Compliance-checks pure move. (!334)
       - [x] Activity-log pure move. (!335)
+      - [x] Dashboard pure move. (!339)
     - [ ] d. **Carve before you change:** when an item in this plan needs substantial work
       in a slice that still lives in `backend.py`, carve that slice first in its own MR,
       then make the change in its new home. Likely pulls: 1.2, 1.3, 1.6 and 2.6 →
@@ -912,6 +913,9 @@ Founder decisions for this phase:
       optional stock targets (a minimum or reorder level per product, per site with 7.1)
       and a simple forecast (e.g. average sales over the last n weeks). Pre-sales count as
       demand (1.1).
+      - [x] Explicit demand workspace: quantities, output units, due dates, priority,
+        cancellation, tenant isolation and staff audit (!425); sales/contract adapters,
+        forecasts and stock targets remain.
     - [ ] b. **What to make.** Net requirements = demand − stock on hand − stock already
       in production (and allocated), per product. Each shortfall becomes a **planned
       batch** of the workflow that makes it, rounded to its usual batch size.
@@ -929,6 +933,10 @@ Founder decisions for this phase:
       batch. It respects ready dates (not usable until ready) and expiry dates (use
       first-expiring stock first, and never plan to use a lot after it expires). A
       shortage moves the date and says which input caused it.
+      - [x] Material availability engine: per-physical-batch recipes, explicit known
+        supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
+        uncovered shortages (!428). Expected-delivery records, DB adapters,
+        dependent-production planning and forecast integration remain.
     - [ ] e. **Can we do it?** Rough capacity per site: a few resource groups the owner
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to
