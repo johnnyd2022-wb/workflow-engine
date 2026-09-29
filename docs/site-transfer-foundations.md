@@ -1,4 +1,4 @@
-# Recorded stock transfer foundation (partial plan 7.1d)
+# Recorded stock transfer foundation (partial plan 7.1d, !438)
 
 This slice requires the Sites foundation (!427), same-site operations prerequisite
 (!429), Customs premises register (!430) and generic module movement provider (!431).

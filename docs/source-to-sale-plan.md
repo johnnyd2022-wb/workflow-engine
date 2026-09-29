@@ -720,6 +720,10 @@ plan branch and are delivered separately.
       lineage travel with the stock, so a recall still traces through a move. Drag a lot
       (or part of one) between sites or locations on a stock board, or scan to pick and
       receive on a phone (4.6). A printable transfer docket.
+      - [x] Accounting prerequisite: producer-owned dispatch, transit, partial receipt,
+        immutable batch-lineage fragments, confirmed-loss policy checks and printable
+        carrier/consignment docket (!438). Operational release stays internally off;
+        overage resolution, drag/scan and the complete movement workflow remain open.
     - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
