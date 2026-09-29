@@ -29,6 +29,7 @@ PASSWORD = "A-portal-password-2026"
 
 @pytest.fixture
 def portal_world(world, db):  # noqa: F811 -- imported fixture
+    limiter_was_enabled = world["app"].limiter.enabled
     world["app"].limiter.enabled = False
     customers = [
         _customer(world["clients"][0], "Brand A"),
@@ -38,6 +39,7 @@ def portal_world(world, db):  # noqa: F811 -- imported fixture
     orders = [_order(world["clients"][0 if i < 2 else 1], customer["id"]) for i, customer in enumerate(customers)]
     world.update(customers=customers, orders=orders)
     yield world
+    world["app"].limiter.enabled = limiter_was_enabled  # shared app: later suites expect a live limiter
     db.rollback()
     org_ids = [org.id for org in world["orgs"]]
     for model in (PortalSession, PortalInvite, PortalPublication, PortalDocument, PortalPrincipal):
