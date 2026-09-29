@@ -52,7 +52,11 @@ async function _init2FAStatus() {
     const enableBtn = document.getElementById('enable-2fa-btn');
     const disableBtn = document.getElementById('disable-2fa-btn');
     if (enableBtn) enableBtn.style.display = enabled ? 'none' : 'block';
-    if (disableBtn) disableBtn.style.display = enabled ? 'block' : 'none';
+    // Admins can't turn 2FA off (the server refuses too).
+    const required = !!(data && data.user && data.user.two_factor_required);
+    if (disableBtn) disableBtn.style.display = enabled && !required ? 'block' : 'none';
+    const banner = document.getElementById('2fa-required-banner');
+    if (banner) banner.hidden = !(required && !enabled);
 
     return enabled;
   } catch (_) {

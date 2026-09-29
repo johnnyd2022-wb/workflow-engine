@@ -142,8 +142,8 @@
             card.href = onlyModule && typeof onlyModule.href === 'string' && onlyModule.href.charAt(0) === '/'
                 ? onlyModule.href
                 : '/compliant';
-            card.setAttribute('aria-label', onlyModule ? String(onlyModule.action_label || 'Open module') : 'Open Compliant evidence workspace');
-            cardLink.textContent = onlyModule ? String(onlyModule.action_label || 'Open module') + ' →' : 'Open Compliant →';
+            card.setAttribute('aria-label', onlyModule ? String(onlyModule.action_label || 'Open module') : 'Open Compliance workspace');
+            cardLink.textContent = onlyModule ? String(onlyModule.action_label || 'Open module') + ' →' : 'Open Compliance →';
         }
         modules.slice(0, 2).forEach(function (module) {
             var section = document.createElement('section'); section.className = 'dash-compliant-health__module';
@@ -175,7 +175,7 @@
         setText(
             root,
             '[data-dashboard-compliant-summary]',
-            compliant.label || 'Compliant is not enabled for this organisation.'
+            compliant.label || 'Compliance is not enabled for this organisation.'
         );
         renderCompliantHealth(root, compliant);
 
@@ -183,7 +183,7 @@
         var safeSales = sales || {};
         var taskCount = Number(safeTasks.due_this_week_count || 0);
         if (safeTasks.enabled === false) {
-            setText(root, '[data-dashboard-crm-summary]', 'CRM is not enabled for this organisation.');
+            setText(root, '[data-dashboard-crm-summary]', 'Sales is not enabled for this organisation.');
         } else if (taskCount) {
             setText(root, '[data-dashboard-crm-summary]', pluralize(taskCount, 'customer task') + ' due this week.');
         } else if (safeSales.baseline_target_mtd != null) {
@@ -394,9 +394,9 @@
         }
 
         if (sales.enabled === false) {
-            setText(root, '[data-sales-caption]', 'CRM is disabled for this tenant.');
+            setText(root, '[data-sales-caption]', 'Sales is disabled for this tenant.');
         } else if (sales.baseline_target_mtd == null) {
-            setText(root, '[data-sales-caption]', 'Define a baseline in CRM Configuration to track attainment.');
+            setText(root, '[data-sales-caption]', 'Define a baseline in Sales configuration to track attainment.');
         } else {
             var attainment = sales.baseline_attainment_pct == null ? 'n/a' : String(sales.baseline_attainment_pct) + '%';
             setText(root, '[data-sales-caption]', 'Baseline attainment: ' + attainment + '.');

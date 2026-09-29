@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly stock integrity audit after New Zealand midnight
+
+[Timer]
+OnCalendar=*-*-* 00:05:00 Pacific/Auckland
+Persistent=true
+Unit=workflow-stock-integrity.service
+
+[Install]
+WantedBy=timers.target

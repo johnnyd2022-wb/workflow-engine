@@ -53,3 +53,143 @@ button.np3-work-queue__item{font:inherit;text-align:left;cursor:pointer}
 .np3-training-table{margin-top:16px;overflow-x:auto}.np3-training-table table{width:100%;border-collapse:collapse;font-size:.9rem}.np3-training-table th,.np3-training-table td{padding:9px 12px;border:1px solid #dce4e9;text-align:left}.np3-training-table thead th{background:#f5fbfa;color:#175c52}.np3-training-table tbody th{font-weight:600;color:#405261}.np3-training-table td{white-space:nowrap}
 /* ABV on alcohol products (configuration): tick final products, or add a case-insensitive contains phrase. */
 .abv-rules-panel{margin-top:24px}.abv-rules-panel .section-heading{margin-bottom:12px}.abv-candidates td small{color:#5d6778}.abv-candidates td{white-space:normal;vertical-align:middle}.abv-candidates td:first-child,.abv-candidates th:first-child{width:56px;text-align:center}.abv-candidates input[type=checkbox]{width:18px;height:18px;accent-color:#0d6c6a}.abv-contains-form{display:grid!important;grid-template-columns:1fr auto!important;gap:8px 12px!important;align-items:end;margin-top:18px}.abv-contains-form label{display:grid;gap:6px;font-size:.85rem;font-weight:700}.abv-contains-form small{grid-column:1/-1;color:#5d6778;font-size:.8rem}.abv-rule-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}.abv-rule-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 12px;border:1px solid #dce4e9;border-radius:9px;background:#fbfcfd;font-size:.88rem}.abv-actions{display:flex;align-items:center;gap:14px;margin-top:18px}.abv-status{color:#175c52;font-size:.85rem;font-weight:700}@media(max-width:700px){.abv-contains-form{grid-template-columns:1fr!important}}
+
+/* Shared design system mapping for Compliance surfaces. */
+.compliant-shell {
+  --compliant-accent: var(--ui-accent, #0f766e);
+  --compliant-text: var(--ui-text, #172033);
+  --compliant-muted: var(--ui-text-muted, #5d6778);
+  --compliant-surface: var(--ui-surface, #fff);
+  --compliant-border: var(--ui-border, #dce4e9);
+  color: var(--compliant-text);
+}
+.compliant-shell .module-breadcrumb { color: var(--compliant-muted); text-decoration: none; }
+.compliant-shell .module-breadcrumb a { color: var(--ui-accent-strong, #115e59); text-decoration: none; }
+.compliant-shell .compliant-hero { border-radius: var(--ui-radius-lg, 16px); }
+.compliant-shell .module-card,
+.compliant-shell .compliant-action-plan,
+.compliant-shell .compliant-setup,
+.compliant-shell .compliant-record-panel,
+.compliant-shell .compliant-recent {
+  border-color: var(--compliant-border);
+  border-radius: var(--ui-radius-lg, 16px);
+  background: var(--compliant-surface);
+  box-shadow: var(--ui-shadow-card, 0 2px 8px rgb(15 23 42 / 5%));
+}
+.compliant-shell .module-card { color: var(--compliant-text); }
+.compliant-shell .compliant-section-tabs .flow-mode-segmented { border-color: var(--compliant-border); }
+.compliant-shell .compliant-section-tabs .flow-mode-segment--active { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
+.compliant-shell table { border-color: var(--compliant-border); color: var(--compliant-text); }
+.compliant-shell th, .compliant-shell td { border-color: var(--compliant-border); }
+.compliant-shell thead th { background: var(--ui-surface-subtle, #f8fafc); }
+.compliant-shell .module-card__link,
+.compliant-shell .module-card__mark { color: var(--ui-accent-strong, #115e59); }
+html[data-spa-theme="dark"] .compliant-shell .module-card,
+html[data-spa-theme="dark"] .compliant-shell .compliant-action-plan,
+html[data-spa-theme="dark"] .compliant-shell .compliant-setup,
+html[data-spa-theme="dark"] .compliant-shell .compliant-record-panel,
+html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui-text); }
+/* Customs Core source picker: show readable records rather than asking for UUIDs. */
+.core-source-picker{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;max-height:240px;overflow:auto}
+.compliant-record-panel .core-source-picker__choice{display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid #dce4e9;border-radius:8px;font-weight:500;cursor:pointer}
+.core-source-picker__choice input[type=checkbox]{flex:none;margin:2px 0 0;padding:0;accent-color:#0d6c6a}
+.compliant-record-panel fieldset>p{margin:4px 0 12px}
+.core-source-search{display:grid;grid-template-columns:minmax(150px,1fr) minmax(180px,2fr) auto;gap:8px;align-items:end;margin-bottom:12px}.core-source-search button{height:38px}.core-source-selected{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;color:#5d6778;font-size:.83rem}.core-source-selected button{padding:5px 8px;background:#e7f3f1;color:#175c52;font-size:.78rem}.core-source-selected button:hover{background:#d8eeeb}.compliant-record-panel [data-core-source-more]{margin-top:8px;background:#e7f3f1;color:#175c52}@media(max-width:700px){.core-source-search{grid-template-columns:1fr}.core-source-search button{height:auto}}
+.compliant-record-panel .core-source-search button{grid-column:auto}
+.compliant-record-panel fieldset.span-2{min-width:0}
+/* Excise workspace (plan 2.1) */
+.excise-panel { display: flex; flex-direction: column; gap: 14px; }
+.excise-panel [hidden] { display: none !important; }
+.excise-head { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-start; }
+.excise-head > div { max-width: 60ch; }
+.excise-settings, .excise-inline-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.excise-settings label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.excise-periods { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.excise-period { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 9.5rem; padding: 8px 12px;
+  border: 1px solid var(--border-default, #d9e0dd); border-radius: 10px; background: var(--bg-card, #fff); cursor: pointer; font: inherit; text-align: left; }
+.excise-period, .excise-period strong { color: var(--text-primary, #16211e); }
+.excise-period span { font-size: 12px; color: var(--text-secondary, #56645f); }
+.excise-period--lodged { border-color: #9ad3b6; }
+.excise-period--lodged span { color: #17603f; }
+.excise-period--active { outline: 2px solid var(--azure-blue, #1d6b58); }
+.excise-draft-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.excise-draft-head h3 { margin: 0; }
+.excise-totals { margin: 0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.excise-hint { margin: 4px 0; color: var(--text-secondary, #56645f); font-size: 13px; }
+.excise-warning { margin: 0; padding: 8px 12px; border-radius: 8px; background: #fdf3dc; color: #7a5410; font-size: 13px; }
+.excise-problems { margin: 4px 0 0; font-size: 13px; }
+.excise-table-wrap { overflow-x: auto; }
+.excise-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 640px; }
+.excise-table th, .excise-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-default, #d9e0dd); }
+.excise-detail td { padding-top: 0; font-size: 13px; color: var(--text-secondary, #56645f); }
+.excise-setup summary { cursor: pointer; font-weight: 600; }
+.excise-setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 16px; margin-top: 10px; }
+.excise-product strong { min-width: 12rem; }
+.excise-check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+/* NZ Alcohol tabs: tabs keep their full label (the shared segmented control lets them
+   shrink to nothing), and on a phone they wrap onto a second row instead of clipping. */
+.compliant-section-tabs .flow-mode-segment { flex: 0 0 auto; min-width: auto; text-align: center; }
+@media (max-width: 560px) {
+  .compliant-section-tabs .flow-mode-segmented { display: flex; flex-wrap: wrap; width: 100%; overflow: visible; gap: 3px; }
+  .compliant-section-tabs .flow-mode-segment { flex: 1 1 auto; }
+  .compliant-section-tabs .flow-mode-segment + .flow-mode-segment { border-left: 0; }
+}
+/* Verification lifecycle (plan 2.2) */
+.verification-panel { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
+.verification-panel [hidden] { display: none !important; }
+.verification-head { display: flex; gap: 16px; justify-content: space-between; align-items: flex-start; }
+.verification-head h2 { margin: 4px 0; }
+.verification-head p { margin: 0; color: #5d6778; max-width: 70ch; }
+.verification-chip { flex: none; padding: 4px 10px; border-radius: 999px; font-size: .8rem; font-weight: 700; background: #d9efe6; color: #17603f; }
+.verification-chip--warn { background: #fdf0d5; color: #7a4b00; }
+.verification-chip--bad { background: #fbe0dd; color: #8c1d13; }
+.verification-registration, .verification-record form { display: flex; flex-direction: column; gap: 12px; }
+.verification-registration { flex-direction: row; flex-wrap: wrap; align-items: flex-end; }
+.verification-registration p { flex-basis: 100%; margin: 0; color: #5d6778; }
+.verification-panel label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 700; }
+.verification-panel label.verification-inline { flex-direction: row; align-items: center; gap: 8px; font-weight: 600; }
+.verification-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.verification-choice { border: 0; padding: 0; margin: 0; display: flex; gap: 16px; flex-wrap: wrap; }
+.verification-choice label { flex-direction: row; align-items: center; gap: 6px; font-weight: 600; }
+.verification-hint { margin: 0; color: #5d6778; font-size: .85rem; }
+.verification-record summary, .verification-history summary { cursor: pointer; font-weight: 700; }
+.verification-record[open] summary { margin-bottom: 12px; }
+.verification-actions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.verification-action { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #dce4e9; border-radius: 9px; }
+.verification-action div { display: flex; flex-direction: column; gap: 2px; }
+.verification-action small { color: #5d6778; }
+.verification-action--overdue { border-color: #d9534f; }
+.verification-action--done { opacity: .7; }
+.verification-new-action { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: end; }
+.verification-remove { background: none; border: 0; color: #b42318; font-size: 1.2rem; cursor: pointer; padding: 8px 4px; }
+@media (max-width: 700px) { .verification-new-action { grid-template-columns: 1fr 1fr; } .verification-head { flex-direction: column; } }
+/* Liquor licensing register (plan 2.5) */
+.licensing-shell [hidden] { display: none !important; }
+.licensing-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.licensing-pack { display: inline-block; padding: 10px 14px; border-radius: 9px; background: #0d6c6a; color: #fff; font-weight: 700; text-decoration: none; }
+.licensing-panel { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.licensing-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.licensing-card { border: 1px solid #dce4e9; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.licensing-card h3 { margin: 0; font-size: 1rem; }
+.licensing-card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: .85rem; }
+.licensing-card dt { color: #5d6778; }
+.licensing-card dd { margin: 0; }
+.licensing-card .licensing-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.licensing-state { align-self: flex-start; padding: 3px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: #d9efe6; color: #17603f; }
+.licensing-state--due, .licensing-state--attention { background: #fdf0d5; color: #7a4b00; }
+.licensing-state--late, .licensing-state--expired, .licensing-state--overdue, .licensing-state--missing { background: #fbe0dd; color: #8c1d13; }
+.licensing-state--ended { background: #eef2f1; color: #5d6778; }
+.licensing-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.licensing-form .span-2 { grid-column: 1 / -1; }
+.licensing-form label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 700; }
+.licensing-form fieldset { border: 0; margin: 0; padding: 0; }
+.licensing-form fieldset label { flex-direction: row; align-items: center; gap: 6px; font-weight: 600; }
+.licensing-add summary { cursor: pointer; font-weight: 700; }
+.licensing-add[open] summary { margin-bottom: 12px; }
+.licensing-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.licensing-check { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #dce4e9; border-radius: 9px; }
+.licensing-check div { display: flex; flex-direction: column; gap: 3px; }
+.licensing-check small { color: #5d6778; }
+@media (max-width: 700px) { .licensing-form { grid-template-columns: 1fr; } .licensing-check { flex-direction: column; align-items: flex-start; } }
+.licensing-shell .np3-training-table { position: relative; overflow-x: auto; }
+.licensing-shell p, .licensing-shell dd { overflow-wrap: anywhere; }
