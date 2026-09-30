@@ -32,7 +32,7 @@ def get_site(session, org_id, site_id):
 
 
 def locked_org(session, org_id):
-    org = session.query(Organisation).filter(Organisation.id == org_id).with_for_update().one_or_none()
+    org = session.query(Organisation).filter(Organisation.id == org_id).with_for_update(key_share=True).one_or_none()
     if org is None:
         raise SiteScopeError("Organisation not found")
     return org

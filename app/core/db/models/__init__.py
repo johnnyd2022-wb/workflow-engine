@@ -14,6 +14,7 @@ from app.core.db.models.process import Process, ProcessCategory
 from app.core.db.models.process_step_document import ProcessStepDocument
 from app.core.db.models.process_version import ProcessVersion
 from app.core.db.models.site import Site
+from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
 from app.core.db.models.step import Step
 from app.core.db.models.stock_location import StockLocation, StockTransfer
 from app.core.db.models.stocktake import Stocktake, StocktakeLine, StocktakeResolution
@@ -24,6 +25,8 @@ from app.core.db.models.user import User
 
 __all__ = [
     "Site",
+    "SiteStockReceipt",
+    "SiteStockTransfer",
     "OrgRole",
     "StockLocation",
     "StockTransfer",

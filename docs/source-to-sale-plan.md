@@ -1067,12 +1067,17 @@ plan branch and are delivered separately.
       lineage travel with the stock, so a recall still traces through a move. Drag a lot
       (or part of one) between sites or locations on a stock board, or scan to pick and
       receive on a phone (4.6). A printable transfer docket.
+      - [x] Accounting prerequisite: producer-owned dispatch, transit, partial receipt,
+        immutable batch-lineage fragments, confirmed-loss policy checks and printable
+        carrier/consignment docket (!438). Operational release stays internally off;
+        overage resolution, drag/scan and the complete movement workflow remain open.
     - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
       block a move, or raise an alert. NZ Alcohol:
-      - CCA to CCA without duty needs Customs' prior approval for underbond movement:
-        the move asks for the approval reference and records both licences;
+      - CCA to CCA without duty records the applicable movement authority and both
+        licences. Prior Customs approval is required for an OSS destination or a move
+        outside Customs' listed authorities; record its reference before dispatch.
       - out of a CCA to a site without one (a cellar door) is a removal in the excise
         entry of the licence it left (2.1);
       - into a site with no food registration covering the activity, or with no liquor
