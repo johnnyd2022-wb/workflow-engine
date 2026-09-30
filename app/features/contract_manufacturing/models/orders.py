@@ -17,10 +17,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
+import app.features.crm.models.xero_contact  # noqa: F401 -- registers "xero_contacts" (crm_contact_id)
 from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
-from app.features.crm.models.xero_contact import XeroContact  # noqa: F401 -- FK target of crm_contact_id
 
 ORDER_STATUSES = ("draft", "confirmed", "completed", "cancelled")
 MATERIALS_SOURCES = ("producer", "customer", "mixed")
