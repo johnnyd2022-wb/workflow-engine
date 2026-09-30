@@ -7,6 +7,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
+import app.core.db.models.inventory_wastage  # noqa: F401 -- registers the "inventory_wastage" table this model points at
 from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now

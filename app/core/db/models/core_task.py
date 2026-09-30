@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import TIMESTAMP, Column, Date, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
+import app.core.db.models.task_board_lane  # noqa: F401 -- registers the "task_board_lanes" table this model points at
 from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
