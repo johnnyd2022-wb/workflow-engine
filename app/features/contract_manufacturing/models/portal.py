@@ -203,3 +203,33 @@ class PortalMessage(TenantScoped, Base):
     sender_portal_id = Column(UUID(as_uuid=True))
     body = Column(String(2000), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PortalReorderRequest(TenantScoped, Base):
+    """One immutable enquiry per completed source order, shared across customer users."""
+
+    __tablename__ = "contract_portal_reorders"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "order_id", "customer_id"],
+            ["contract_orders.org_id", "contract_orders.id", "contract_orders.customer_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "customer_id", "requested_by"],
+            [
+                "contract_portal_principals.org_id",
+                "contract_portal_principals.customer_id",
+                "contract_portal_principals.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("org_id", "order_id", name="uq_portal_reorder_order"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = Column(UUID(as_uuid=True), nullable=False)
+    customer_id = Column(UUID(as_uuid=True), nullable=False)
+    requested_by = Column(UUID(as_uuid=True), nullable=False)
+    note = Column(String(1000))
+    requested_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)

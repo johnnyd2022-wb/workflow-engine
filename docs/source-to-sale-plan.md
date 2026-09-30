@@ -779,6 +779,7 @@ split.
         - [x] Extract compact inventory loading and cache into `process-modal-inventory-loader.js` (!401).
         - [x] Extract searchable inventory dropdown into `process-modal-inventory-dropdown.js` (!402).
         - [x] Extract saved input restoration into `process-modal-input-restore.js` (!403).
+        - [x] Remove three unused session-overlay helpers (85 lines, no callers) (!458).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
@@ -994,6 +995,9 @@ Founder decisions for this phase:
       - [x] Order thread (!455): one append-only conversation per published order between the
         customer and producer staff, scoped to the customer's own order, audited, and closed when the
         publication is withdrawn. The event timeline, questions, emails and reorders remain.
+      - [x] Completed-order reorder enquiries (!457): one immutable customer request per
+        published completed order, visible to staff and deduplicated across users/retries.
+        Staff confirm the repeat order; emails and the event timeline remain open.
     - [x] f. **Isolation by design.** (!436) Portal users are a separate kind of user with no
       staff permissions; every portal query is scoped to the customer's orders on the
       server; a test walks every portal route with a second customer and expects 403/404.
@@ -1072,8 +1076,10 @@ Founder decisions for this phase:
       executions from the board, and today's list feeds the dashboard (4.5).
       - [x] Responsive week/month/day board with priority, pin/unpin, explicit date
         changes and cancellation, revisions, audit and a guarded idempotent start
-        seam (!440); trusted start checks, drag, automatic replan and dashboard
-        integration remain.
+        seam (!440); trusted start checks, automatic replan and dashboard integration remain.
+      - [x] Drag unpinned batches between dates (!459), using the guarded reschedule API
+        and refreshing stale cards after conflicts; date forms remain available on phones
+        and to keyboard users.
     - [ ] g. **Promise dates.** For a new order, "when can we deliver n?" from stock on
       hand, then what's planned, then capacity (available-to-promise). The same forecast
       ready date feeds the portal (7.2e) and the order.

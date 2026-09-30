@@ -20,6 +20,7 @@ from app.features.contract_manufacturing.models.portal import (
     PortalMessage,
     PortalPrincipal,
     PortalPublication,
+    PortalReorderRequest,
     PortalSession,
 )
 from app.features.contract_manufacturing.portal_security import COOKIE_NAME, PORTAL_ENDPOINTS
@@ -57,11 +58,13 @@ def portal_world(world, db):  # noqa: F811 -- imported fixture
     db.rollback()
     org_ids = [org.id for org in world["orgs"]]
     for model in (
+        PortalReorderRequest,
         PortalMessage,
         PortalSession,
         PortalInvite,
         PortalApproval,
         PortalPublication,
+        PortalReorderRequest,
         PortalDocument,
         PortalPrincipal,
     ):
@@ -197,6 +200,7 @@ def test_immutable_projection_and_explicit_unavailable_fields(portal_world, db):
         "documents",
         "waiting_on_you",
         "messages",  # the order thread (empty until someone writes)
+        "reorder_request",  # only the scoped enquiry, never a new operational order
     }
     for key in ("timing", "materials", "yield", "delivery", "waiting_on_you"):
         assert payload[key]["available"] is False
@@ -391,6 +395,7 @@ def test_label_proof_approval_is_scoped_one_time_and_audited(portal_world, db):
 
 def test_order_thread_is_scoped_ordered_append_only_and_audited(portal_world, db):
     from app.core.db.models.entity_event import EntityEvent
+
     w = portal_world
     order_id = w["orders"][0]["id"]
     staff_url = f"/api/core/contract-orders/{order_id}/portal-messages"
@@ -402,7 +407,14 @@ def test_order_thread_is_scoped_ordered_append_only_and_audited(portal_world, db
     other_customer = _accept(w, 1)
     foreign_customer = _accept(w, 2)
     assert w["clients"][1].post(staff_url, json={"body": hostile}).status_code == 404  # other tenant's staff
-    for bad in ({}, {"body": ""}, {"body": "   "}, {"body": "x" * 2001}, {"body": "ok", "sender": "staff"}, {"body": 5}):
+    for bad in (
+        {},
+        {"body": ""},
+        {"body": "   "},
+        {"body": "x" * 2001},
+        {"body": "ok", "sender": "staff"},
+        {"body": 5},
+    ):
         assert w["clients"][0].post(staff_url, json=bad).status_code == 400, bad
         assert customer.post(customer_url, json=bad).status_code == 400, bad
     assert other_customer.post(customer_url, json={"body": "not mine"}).status_code == 404
@@ -788,3 +800,128 @@ def test_customer_boundary_ignores_future_private_snapshot_fields(portal_world, 
     payload["waiting_on_you"] = {**payload["waiting_on_you"], "messages": [{"private_notes": "secret"}]}
     payload["delivery"] = {**payload["delivery"], "confirmed_duty_status": "secret"}
     assert "secret" not in str(publication_dto(payload))
+
+
+def test_reorder_enquiry_is_scoped_idempotent_and_immutable(portal_world, db):
+    from app.core.db.models.entity_event import EntityEvent
+    from app.features.contract_manufacturing.models.orders import ContractOrder
+
+    w = portal_world
+    customer = _accept(w)
+    other_customer = _accept(w, 1)
+    foreign_customer = _accept(w, 2)
+    order_id = w["orders"][0]["id"]
+    url = f"/portal/api/orders/{order_id}/reorder"
+    _publish(w)
+    assert customer.post(url, json={}).status_code == 409
+    assert other_customer.post(url, json={}).status_code == 404
+    assert foreign_customer.post(url, json={}).status_code == 404
+    order = db.query(ContractOrder).filter_by(org_id=w["orgs"][0].id, id=UUID(order_id)).one()
+    order.status = "completed"
+    db.commit()
+    # A stale confirmed publication must not expose a reorder action.
+    assert customer.post(url, json={}).status_code == 409
+    _publish(w)
+    for bad in (None, [], {"quantity": 999}, {"note": 123}, {"note": "x" * 1001}):
+        assert customer.post(url, json=bad).status_code == 400
+    hostile = '<script>alert("reorder")</script>'
+    first = customer.post(url, json={"note": hostile})
+    assert first.status_code == 201, first.get_json()
+    repeat = customer.post(url, json={"note": "changed retry"})
+    assert repeat.status_code == 200
+    assert repeat.get_json() == first.get_json()
+    assert db.query(PortalReorderRequest).filter_by(org_id=w["orgs"][0].id, order_id=UUID(order_id)).count() == 1
+    assert db.query(ContractOrder).filter_by(org_id=w["orgs"][0].id).count() == 2
+    assert (
+        db.query(EntityEvent).filter_by(org_id=w["orgs"][0].id, event_type="contract.portal_reorder_requested").count()
+        == 1
+    )
+    page = customer.get(f"/portal/orders/{order_id}").get_data(as_text=True)
+    assert "Reorder requested" in page and "&lt;script&gt;" in page and hostile not in page
+    page = w["clients"][0].get(f"/core/contracts/{order_id}/portal-sharing").get_data(as_text=True)
+    assert "Customer requested a repeat order" in page and hostile not in page
+    assert w["clients"][1].get(f"/core/contracts/{order_id}/portal-sharing").status_code == 404
+    row = db.query(PortalReorderRequest).filter_by(org_id=w["orgs"][0].id, order_id=UUID(order_id)).one()
+    row.note = "rewritten"
+    with pytest.raises(InternalError):
+        db.flush()
+    db.rollback()
+    assert w["clients"][0].delete(f"/api/core/contract-orders/{order_id}/portal-publications").status_code == 204
+    assert customer.post(url, json={}).status_code == 404
+    assert customer.get(f"/portal/api/orders/{order_id}").status_code == 404
+
+
+def test_reorder_requires_portal_session_and_real_csrf(portal_world, db):
+    from app.features.contract_manufacturing.models.orders import ContractOrder
+
+    w = portal_world
+    order_id = w["orders"][0]["id"]
+    url = f"/portal/api/orders/{order_id}/reorder"
+    assert w["app"].test_client().post(url, json={}, base_url="https://localhost").status_code == 401
+    assert w["clients"][0].post(url, json={}).status_code == 403
+    customer = _accept(w)
+    db.query(ContractOrder).filter_by(org_id=w["orgs"][0].id, id=UUID(order_id)).update({"status": "completed"})
+    db.commit()
+    _publish(w)
+    app = w["app"]
+    app.config["WTF_CSRF_ENABLED"] = True
+    try:
+        referer = {"Referer": "https://localhost/portal"}
+        assert customer.post(url, json={}, headers=referer).status_code == 400
+        page = customer.get(f"/portal/orders/{order_id}").get_data(as_text=True)
+        token = re.search(r'<meta name="csrf-token" content="([^"]+)"', page).group(1)
+        response = customer.post(url, json={}, headers={**referer, "X-CSRFToken": token})
+        assert response.status_code == 201, response.get_json()
+    finally:
+        app.config["WTF_CSRF_ENABLED"] = False
+
+
+def test_concurrent_reorder_retries_and_customer_fk_proof(portal_world, db):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from types import SimpleNamespace
+
+    from sqlalchemy.orm import sessionmaker
+
+    from app.features.contract_manufacturing.models.orders import ContractOrder
+    from app.features.contract_manufacturing.services.portal_reorders import request_reorder
+
+    w = portal_world
+    _accept(w)
+    order_id = UUID(w["orders"][0]["id"])
+    org_id = w["orgs"][0].id
+    customer_id = UUID(w["customers"][0]["id"])
+    principal_id = db.query(PortalPrincipal).filter_by(org_id=org_id, customer_id=customer_id).one().id
+    db.query(ContractOrder).filter_by(org_id=org_id, id=order_id).update({"status": "completed"})
+    db.commit()
+    _publish(w)
+    sessions = sessionmaker(bind=db.get_bind())
+    barrier = Barrier(2)
+
+    def send():
+        with sessions() as transaction:
+            barrier.wait(timeout=10)
+            row, created = request_reorder(
+                transaction, SimpleNamespace(org_id=org_id, customer_id=customer_id, id=principal_id), order_id, {}
+            )
+            result = (row.id, created)
+            transaction.commit()
+            return result
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: send(), range(2)))
+    assert results[0][0] == results[1][0]
+    assert sorted(created for _, created in results) == [False, True]
+    # An owner field cannot be reassigned to a customer from another order or tenant.
+    for other in (1, 2):
+        db.add(
+            PortalReorderRequest(
+                org_id=org_id,
+                order_id=UUID(w["orders"][other]["id"]),
+                customer_id=customer_id,
+                requested_by=principal_id,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            db.flush()
+        db.rollback()

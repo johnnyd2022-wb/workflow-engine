@@ -55,6 +55,7 @@
     </details>
     {% endif %}
   </section>
+  {% if can('production.record') %}<p>Drag an unpinned batch to another day to move it, or use its new start date form.</p>{% endif %}
   <h2 data-board-title>Planned work</h2>
   <p data-board-empty hidden>No planned batches in this period.</p>
   <section class="board-days" data-board-days aria-label="Planned production by day"></section>

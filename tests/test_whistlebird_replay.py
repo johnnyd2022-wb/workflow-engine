@@ -151,7 +151,7 @@ def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypat
         {},
         {batch.global_vat: batch.marker},
         {},
-        {batch.marker: [(1, Decimal("60")), (2, Decimal("18.5"))]},
+        {batch.marker: [(1, Decimal("60")), (2, Decimal("18"))]},
         {batch.marker: ("WBWF01", "WBWF02")},
     )
     by_key = {event.payload["step_key"]: event for event in events if event.event_type == "complete_step"}
@@ -173,7 +173,7 @@ def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypat
         lambda _store, _step_id, name: (
             [
                 {"id": "bottle-1", "name": name, "quantity": "60", "unit": "units"},
-                {"id": "bottle-2", "name": name, "quantity": "18.5", "unit": "units"},
+                {"id": "bottle-2", "name": name, "quantity": "18", "unit": "units"},
             ]
             if name == "Bottled product"
             else []
@@ -199,14 +199,46 @@ def test_replay_carries_wip_outputs_required_prompts_and_batch_numbers(monkeypat
     assert payloads["aging"]["actual_outputs"] == [{"name": "Aged Gin", "quantity": "55", "unit": "L"}]
     assert payloads["bottling"]["actual_outputs"] == [
         {"name": "Bottled product", "quantity": "60", "unit": "units", "batch_number": 1},
-        {"name": "Bottled product", "quantity": "18.5", "unit": "units", "batch_number": 2},
+        # The source's half bottle (78.5 x 700 mL) is Library stock, not a fractional count.
+        {
+            "name": "Bottled product",
+            "quantity": "18",
+            "unit": "units",
+            "batch_number": 2,
+            "library_remainder_ml": "350.0",
+        },
     ]
     assert payloads["bottling"]["execution_data"]["Batch number"] == "1, 2"
     assert payloads["labelling"]["actual_outputs"] == [
         {"name": "Wildflower - final product", "quantity": "60", "unit": "units", "batch_number": 1},
-        {"name": "Wildflower - final product", "quantity": "18.5", "unit": "units", "batch_number": 2},
+        {"name": "Wildflower - final product", "quantity": "18", "unit": "units", "batch_number": 2},
     ]
     assert payloads["labelling"]["execution_data"]["Batch number"] == "1, 2"
+
+
+def test_replay_sizes_a_sheet_sourced_half_bottle_at_the_default_700ml(monkeypatch):
+    # Production-sheet bottlings carry no bottle_size_ml; the half bottle must not vanish.
+    batch = replace(_batch(), bottlings=({"bottles": "56.5"},))
+    events = _batch_events(batch, {}, {batch.global_vat: batch.marker}, {}, {batch.marker: [(1, Decimal("56"))]}, {})
+    bottling = next(e for e in events if e.event_type == "complete_step" and e.payload["step_key"] == "bottling")
+    client = _Client()
+    monkeypatch.setattr(
+        replay,
+        "_produced_item_for_step",
+        lambda _store, _step_id, name: {"id": "vat", "name": name, "quantity": "55", "unit": "L"},
+    )
+
+    assert replay._execute_complete_step(client, _Store(), bottling) is True
+
+    assert client.calls[0][1]["actual_outputs"] == [
+        {
+            "name": "Bottled product",
+            "quantity": "56",
+            "unit": "units",
+            "batch_number": 1,
+            "library_remainder_ml": "350.0",
+        }
+    ]
 
 
 def test_replay_converts_the_documented_vat53_draw_into_green_gold(monkeypatch):

@@ -26,3 +26,7 @@
 .production-board summary { cursor: pointer; }
 @media (max-width: 1100px) { .board-days { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 650px) { .production-board { padding: .8rem; } .board-days { grid-template-columns: minmax(0, 1fr); } .board-toolbar button { flex: 1 1 100px; } }
+
+.board-drag-handle { cursor: grab; }
+.board-drag-handle:active { cursor: grabbing; }
+.board-day.board-drop-target { outline: 3px solid #246c59; outline-offset: -3px; background: #edf8f2; }
