@@ -8,7 +8,16 @@
 </p>
 {% if can('production.record') %}<section class="contract-card">
 <h2>Publish an order update</h2>
-<p>Only the selected facts and documents are copied to the portal. Shared ABV and progress are producer-entered facts. Ready dates, QC status and stock quantities are unavailable until their source integrations are ready.</p>{% if publication %}<p>Last revision: {{ publication.revision }} · {% if publication.revoked_at %}Withdrawn{% else %}Shared{% endif %}</p>{% endif %}<form hx-boost="false" data-sharing-api="/api/core/contract-orders/{{ order.id }}/portal-publications" data-publication>
+<p>Only selected facts and documents are copied to the portal. Shared milestones are copied from linked batch steps when you publish. Ready dates, QC status and stock quantities are unavailable until their source integrations are ready.</p>{% if publication %}<p>Last revision: {{ publication.revision }} · {% if publication.revoked_at %}Withdrawn{% else %}Shared{% endif %}</p>{% endif %}<form hx-boost="false" data-sharing-api="/api/core/contract-orders/{{ order.id }}/portal-publications" data-publication>
+{% if step_candidates %}<fieldset>
+<legend>Batch steps to share</legend>
+<p>Choose the steps customers may see and give each a customer-facing label. Status is copied when you publish a new revision.</p>
+{% for candidate in step_candidates %}<div data-shared-step="{{ candidate.execution_step_id }}">
+<label><input type="checkbox" name="shared_step_id" value="{{ candidate.execution_step_id }}" {% if candidate.execution_step_id in selected_steps %}checked{% endif %}>Batch {{ candidate.batch_id }} · {{ candidate.name }} ({{ candidate.status }})</label>
+<label>Customer label<input name="shared_step_label" maxlength="100" value="{{ selected_steps.get(candidate.execution_step_id, candidate.name) }}"></label>
+</div>{% endfor %}
+</fieldset>{% endif %}
+<p>If you share batch steps, leave manual progress blank.</p>
 <label>Stage to share<input name="stage_label" maxlength="100">
 </label>
 <label>Step to share<input name="step_label" maxlength="100">

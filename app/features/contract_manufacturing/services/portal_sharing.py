@@ -17,6 +17,7 @@ from app.features.contract_manufacturing.services.orders import (
     text_value,
 )
 from app.features.contract_manufacturing.services.portal_auth import audit
+from app.features.contract_manufacturing.services.portal_progress import derived_progress
 
 UNAVAILABLE = {"available": False, "reason": "Not shared yet"}
 MAX_DOCUMENT_BYTES = 5 * 1024 * 1024
@@ -81,12 +82,38 @@ def document_dto(row):
 def publish_order(db, org_id, actor_id, order_id, data):
     object_body(
         data,
-        {"stage_label", "step_label", "progress_percent", "actual_abv", "spec_abv", "document_ids", "bottling_dates"},
+        {
+            "stage_label",
+            "step_label",
+            "progress_percent",
+            "shared_steps",
+            "actual_abv",
+            "spec_abv",
+            "document_ids",
+            "bottling_dates",
+        },
     )
     order = ContractOrderService(db, org_id).order(order_id, lock=True)
     stage = text_value(data.get("stage_label"), "stage_label", 100, False)
     step = text_value(data.get("step_label"), "step_label", 100, False)
     progress = measurement(data.get("progress_percent"), "progress_percent")
+    selected_steps = data.get("shared_steps")
+    if selected_steps is not None and not isinstance(selected_steps, list):
+        raise OrderError("shared_steps must be a list")
+    if selected_steps and (stage or step or progress is not None):
+        raise OrderError("Choose derived shared steps or manually entered progress, not both")
+    progress_snapshot = (
+        derived_progress(db, org_id, order, selected_steps)
+        if selected_steps
+        else {
+            "available": bool(stage or step or progress is not None),
+            "stage_label": stage,
+            "step_label": step,
+            "percent": progress,
+            "milestones": [],
+            "selection": [],
+        }
+    )
     actual_abv = measurement(data.get("actual_abv"), "actual_abv")
     spec_abv = measurement(data.get("spec_abv"), "spec_abv")
     document_ids = data.get("document_ids", [])
@@ -132,12 +159,7 @@ def publish_order(db, org_id, actor_id, order_id, data):
         "due_date": order.due_date.isoformat(),
         "shared_at": now.isoformat(),
         "revision": revision,
-        "progress": {
-            "available": bool(stage or step or progress is not None),
-            "stage_label": stage,
-            "step_label": step,
-            "percent": progress,
-        },
+        "progress": progress_snapshot,
         "timing": {
             "available": False,
             "planned_ready_date": None,
@@ -173,7 +195,12 @@ def publish_order(db, org_id, actor_id, order_id, data):
         },
         "materials": copy.deepcopy(UNAVAILABLE),
         "yield": copy.deepcopy(UNAVAILABLE),
-        "delivery": copy.deepcopy(UNAVAILABLE),
+        "delivery": {
+            "available": False,
+            "declared_duty_responsibility": order.duty_responsibility,
+            "customer_cca_reference": order.customer_cca_reference,
+            "reason": "Dispatch, Customs treatment and payment have not been verified or shared",
+        },
         "documents": {"available": bool(documents), "items": documents},
         "waiting_on_you": {
             "available": False,
@@ -223,7 +250,7 @@ def publication_dto(payload):
         "quality": ("available", "actual_abv", "spec_abv", "qc_passed", "reason"),
         "materials": ("available", "reason"),
         "yield": ("available", "reason"),
-        "delivery": ("available", "reason"),
+        "delivery": ("available", "declared_duty_responsibility", "customer_cca_reference", "reason"),
         "documents": ("available",),
         "waiting_on_you": ("available", "reason"),
     }
@@ -234,6 +261,7 @@ def publication_dto(payload):
             raise OrderError("Published order is unavailable", 404)
         result[section] = {key: copy.deepcopy(source.get(key)) for key in keys}
     for section, container, keys in (
+        ("progress", "milestones", ("batch_id", "label", "status")),
         (
             "quantities",
             "lines",
