@@ -64,11 +64,11 @@ HTTP Request
 
 ### Key subsystems
 
-**Execution & DAG**: Processes are defined as DAGs of steps. `app/core/backend/dagtraversal.py` walks them. `ApiIdempotencyKey` prevents duplicate operations. `workflow_execution_lineage` tracks parent-child execution relationships.
+**Execution & DAG**: Processes are defined as DAGs of steps. `app/core/backend/dagtraversal.py` walks them. `ApiIdempotencyKey` prevents duplicate operations. Lineage is recorded on the inventory side — `InventoryItem.source_execution_id` / `source_execution_step_id` — not in a separate table (the legacy `workflow_execution_lineage` in `app/initialize.py` has no model and no writer).
 
 **Inventory**: Quantity writes require an `InventoryQuantityWriteReason` enum value (guards against untracked mutations). Unit conversion utilities live in `app/core/utils/`. Wastage is tracked in a separate table with batch-based entry hashing for idempotency.
 
-**Security**: Session-based auth + TOTP 2FA (pyotp). CSRF via Flask-WTF — SPAs send `X-CSRFToken` header. Rate limiting via Flask-Limiter is per-route with no app-wide default (`app/api/routes/auth_routes.py:131`): only `/auth/login`, `/auth/signup` and the public `/telemetry*` ingest routes carry a limit. The other `/auth/*` routes do not — notably `/auth/verify-2fa`, an open finding (F6 in `.agents/reports/auth/security-audit.md`). Passwords hashed with bcrypt.
+**Security**: Session-based auth + TOTP 2FA (pyotp). CSRF via Flask-WTF — SPAs send `X-CSRFToken` header. Rate limiting via Flask-Limiter is per-route with no app-wide default (the `limiter` in `app/api/routes/auth_routes.py`): only `/auth/login`, `/auth/signup`, `/auth/accept-invite`, `/auth/verify-2fa`, the contract-manufacturing portal's sign-in, accept, logout and staff-invite routes, and the public `/telemetry*` ingest routes carry a limit. `/auth/verify-2fa` is keyed on the pending account (the IP only when no 2FA login is pending), and five wrong codes also end the pending session (F6 in `.agents/reports/auth/security-audit.md`, patched 2026-09-25, pinned by `tests/test_admin_2fa_policy.py`). Passwords hashed with bcrypt.
 
 **Database sessions**: Scoped per request; cleaned up in `teardown_appcontext`. All queries are multi-tenant filtered by `org_id`.
 
