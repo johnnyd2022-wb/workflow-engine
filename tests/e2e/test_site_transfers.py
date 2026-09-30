@@ -71,6 +71,7 @@ def test_dispatch_approval_partial_receipt_and_docket(browser, transfer_server, 
         dispatch.locator('[name="destination_site_id"]').select_option(destination)
         dispatch.locator('[name="carrier"]').fill("Browser courier")
         dispatch.locator('[name="consignment_reference"]').fill("BROWSER-DOCKET")
+        dispatch.locator('[name="approval.destination_activity"]').select_option("storage")
         dispatch.locator('[name="approval.authority"]').select_option("same_legal_entity")
         dispatch.locator('[name="approval.evidence_reference"]').fill("Registered licences")
         dispatch.get_by_role("button", name="Dispatch", exact=True).click()

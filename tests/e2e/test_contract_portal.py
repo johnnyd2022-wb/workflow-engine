@@ -81,6 +81,10 @@ def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, 
         portal.get_by_role("link", name=order["reference"], exact=True).click()
         expect(portal.get_by_role("heading", name=order["reference"], exact=True)).to_be_visible()
         expect(portal.get_by_text("Shared actual ABV: 40.2%")).to_be_visible()
+        expect(portal.get_by_text("Order declaration: producer licensee responsible for excise.")).to_be_visible()
+        expect(
+            portal.get_by_text("Dispatch, Customs treatment and payment have not been verified or shared")
+        ).to_be_visible()
         assert portal.locator("h2").count() == 10
         assert portal.locator("main script").count() == 0
         assert portal.locator("main b").count() == 0

@@ -196,3 +196,25 @@ def test_verify_2fa_rate_limit_is_keyed_on_the_account_not_the_ip(org_world):
     with org_world["app"].test_request_context("/auth/verify-2fa", environ_base={"REMOTE_ADDR": "198.51.100.7"}):
         session["pending_2fa_user_id"] = user_id
         assert _pending_2fa_rate_limit_key() == f"2fa:{user_id}"
+
+
+def test_verify_2fa_route_carries_a_limit_keyed_on_the_account():
+    """F6: the two tests above prove the failure counter and the key function, but neither
+    notices if the `@limiter.limit` decorator itself is dropped from the view -- the key
+    function would still exist and the counter would still cap a single pending session,
+    while the account-wide 5/minute;20/hour bound (the part that survives a fresh login)
+    silently vanished. This asserts the route really is limited, and by the account key.
+    It does not assert the limit *string*: that is relaxed to 1000/minute under CI."""
+    from app.api.routes import auth_routes
+
+    manager = auth_routes.limiter.limit_manager
+    # `_decorated_limits` is flask-limiter's private registry (3.5.0): the public
+    # `decorated_limits(name)` needs the internal "<module>.<func>.<func>" key, so the
+    # name is found by suffix. If a flask-limiter upgrade breaks this lookup, fix the
+    # lookup -- do not delete the test.
+    registered = [name for name in manager._decorated_limits if name.endswith(".verify_two_factor")]
+    assert len(registered) == 1, f"verify_two_factor has no @limiter.limit registered: {registered}"
+
+    limits = manager.decorated_limits(registered[0])
+    assert limits
+    assert {limit.key_func for limit in limits} == {auth_routes._pending_2fa_rate_limit_key}
