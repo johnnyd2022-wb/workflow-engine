@@ -13,6 +13,7 @@ from decimal import Decimal, InvalidOperation
 
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.modules.nz_alcohol.excise import _base_name
+from app.features.compliant.modules.nz_alcohol.movement_registrations import coverage_findings
 from app.features.compliant.modules.nz_alcohol.premises import licence_for_area
 from app.features.compliant.platform.stock_movements import MovementDecision
 
@@ -59,6 +60,17 @@ class NZAlcoholMovementPolicy:
         return {
             "authority_permission": "compliance.manage",
             "fields": [
+                {
+                    "name": "destination_activity",
+                    "type": "select",
+                    "label": "Intended activity at destination",
+                    "required": True,
+                    "options": [
+                        {"value": "storage", "label": "Storage"},
+                        {"value": "manufacturing", "label": "Manufacturing"},
+                        {"value": "selling", "label": "Selling"},
+                    ],
+                },
                 {
                     "name": "authority",
                     "type": "select",
@@ -123,7 +135,7 @@ class NZAlcoholMovementPolicy:
         if destination is None:
             return _deny("An unlicensed destination needs an excise removal or temporary approval workflow")
         if context.operation == "receipt":
-            return self._receipt(context, destination, quantity)
+            return self._receipt(session, org_id, context, destination, quantity)
         source = licence_for_area(
             session, org_id, context.source_site_id, context.source_location_id, context.occurred_on
         )
@@ -134,10 +146,12 @@ class NZAlcoholMovementPolicy:
         approval = context.approval
         if not isinstance(approval, Mapping):
             return _deny("Record the authority for this movement")
-        if set(approval) - {"authority", "reference", "approved_on", "evidence_reference"}:
+        if set(approval) - {"authority", "reference", "approved_on", "evidence_reference", "destination_activity"}:
             return _deny("Unexpected movement approval fields")
         if any(value is not None and not isinstance(value, str) for value in approval.values()):
             return _deny("Movement approval fields must be text")
+        if approval.get("destination_activity") not in (None, "storage", "manufacturing", "selling"):
+            return _deny("Choose a supported destination activity")
         authority = approval.get("authority")
         if not _text(approval.get("evidence_reference")):
             return _deny("Record evidence for the movement authority")
@@ -157,6 +171,15 @@ class NZAlcoholMovementPolicy:
             return _deny("This movement authority is not yet supported; record prior Customs approval")
         evidence = {
             "policy": POLICY_VERSION,
+            "destination_activity": approval.get("destination_activity"),
+            "system_alerts": coverage_findings(
+                session,
+                org_id,
+                context.destination_site_id,
+                approval.get("destination_activity"),
+                context.occurred_on,
+                context.transfer_id,
+            ),
             "binding": _binding(context),
             "dispatched_quantity": str(quantity),
             "dispatched_on": context.occurred_on.isoformat(),
@@ -171,7 +194,7 @@ class NZAlcoholMovementPolicy:
         }
         return MovementDecision(True, "Recorded CCA movement authority", json.dumps(evidence, sort_keys=True))
 
-    def _receipt(self, context, destination, quantity):
+    def _receipt(self, session, org_id, context, destination, quantity):
         evidence = context.dispatch_evidence
         if isinstance(evidence, str):
             try:
@@ -195,6 +218,15 @@ class NZAlcoholMovementPolicy:
         result = {
             "policy": POLICY_VERSION,
             "binding": _binding(context),
+            "destination_activity": evidence.get("destination_activity"),
+            "system_alerts": coverage_findings(
+                session,
+                org_id,
+                context.destination_site_id,
+                evidence.get("destination_activity"),
+                context.occurred_on,
+                f"{context.transfer_id}-receipt-{context.receipt_id}",
+            ),
             "received_quantity": str(quantity),
             "received_on": context.occurred_on.isoformat(),
             "receipt_id": str(context.receipt_id),
