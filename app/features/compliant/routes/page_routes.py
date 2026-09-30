@@ -110,6 +110,4 @@ def _programme_labels(programme: str) -> dict:
 @page_bp.route("/compliant/nz-alcohol/configuration", methods=["GET"])
 @requires_auth
 def nz_alcohol_configuration():
-    return render_template(
-        "compliant/configuration.html", **_nz_alcohol_template_context()
-    )
+    return render_template("compliant/configuration.html", **_nz_alcohol_template_context())
