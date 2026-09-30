@@ -1056,7 +1056,7 @@ Founder decisions for this phase:
         supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
         uncovered shortages (!428). Expected-delivery records, DB adapters,
         dependent-production planning and forecast integration remain.
-    - [ ] e. **Can we do it?** Rough capacity per site: a few resource groups the owner
+    - [x] e. **Can we do it?** (!449, !464, !467) Rough capacity per site: a few resource groups the owner
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to
       move lower-priority batches; it doesn't try to optimise every minute.
@@ -1065,7 +1065,10 @@ Founder decisions for this phase:
         and capacity-backed promise dates remain open.
       - [x] Per-resource working weekdays and explicit closed dates (!464), with
         zero-capacity overloads on closed days and legacy seven-day defaults. Site-wide
-        verification/stocktake closures and capacity-backed forecasts remain open.
+        verification/stocktake closures and capacity-backed forecasts remain open under 7.3h/g.
+      - [x] Open the suggested lower-priority unpinned batch's move form (!467),
+        switching to its start day when outside the view. Staff choose the new date;
+        automatic moves remain in 7.3f.
     - [ ] f. **The daily driver.** A plan board (week and month) with a priority list for
       today: drag a batch to move it, pin a date so the planner won't move it, change a
       priority. When reality changes (a batch finishes late, a ready date or expiry is
