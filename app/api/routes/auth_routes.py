@@ -133,7 +133,8 @@ def get_rate_limit_key():
 
 
 # Create a limiter instance with custom key function (will be initialized with app in app_factory)
-# No default limits: rate limiting is applied only to login and signup endpoints.
+# No default limits: rate limiting is applied only to routes carrying an explicit
+# @limiter.limit (login, signup, accept-invite, verify-2fa, some CM portal routes, telemetry).
 limiter = Limiter(key_func=get_rate_limit_key)
 
 # Pending 2FA session expiry (Using 5 minutes as default)
