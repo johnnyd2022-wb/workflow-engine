@@ -319,7 +319,7 @@ want it, and never produce a recall list that can't be trusted.
   - Done when: a new producer goes live in one sitting without inventing a past date, and
     the first sale after go-live traces to an opening batch.
 
-- [ ] **1.4 Build the recall screen for the call to NZFS.** *High · M*
+- [x] **1.4 Build the recall screen for the call to NZFS.** *High · M* (!460)
   - Evidence: sales on a traced batch are listed without quantities or totals, process
     steps appear out of order, there's no export, and lots with 0 units are listed under
     "In stock" in the batch picker.
@@ -336,6 +336,8 @@ want it, and never produce a recall list that can't be trusted.
       - [x] an invoice (backward).
     - [x] g. Sold-out lots under their own heading, not "In stock".
   - Done when: the timed mock recall is under 5 minutes.
+    A stopwatch in `tests/e2e/source_to_sale/test_mock_recall.py` (!460) fails the scripted drill at five
+    minutes; it runs in about a second, so rehearse the real call with a person before relying on it.
 
 - [x] **1.5 Show when something happened and when it was entered.** *High · M* (!407, !408)
   - Evidence: a step entered days later looks the same as one recorded live, which
