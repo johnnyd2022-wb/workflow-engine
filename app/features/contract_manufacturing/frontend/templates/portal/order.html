@@ -47,4 +47,11 @@
 <button type="submit" name="decision" value="changes_requested">Request changes</button>
 </form>{% endif %}
 {% else %}<p>{{ order.waiting_on_you.reason }}</p>{% endfor %}
+<h3>Messages with the producer</h3>
+{% for message in order.messages %}<p data-message="{{ message.sender }}"><strong>{{ 'You' if message.sender == 'customer' else 'Producer' }}</strong> · {{ message.created_at[:16]|replace('T',' ') }} UTC<br>{{ message.body }}</p>
+{% else %}<p>No messages yet.</p>{% endfor %}
+<form data-portal-api="/portal/api/orders/{{ order.order_id }}/messages">
+<label>Send a message<textarea name="body" maxlength="2000" required></textarea></label>
+<button type="submit">Send message</button>
+</form>
 </section>{% endblock %}

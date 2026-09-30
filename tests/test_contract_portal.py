@@ -17,6 +17,7 @@ from app.features.contract_manufacturing.models.portal import (
     PortalApproval,
     PortalDocument,
     PortalInvite,
+    PortalMessage,
     PortalPrincipal,
     PortalPublication,
     PortalSession,
@@ -55,7 +56,15 @@ def portal_world(world, db):  # noqa: F811 -- imported fixture
         limiter.enabled = was_enabled
     db.rollback()
     org_ids = [org.id for org in world["orgs"]]
-    for model in (PortalSession, PortalInvite, PortalApproval, PortalPublication, PortalDocument, PortalPrincipal):
+    for model in (
+        PortalMessage,
+        PortalSession,
+        PortalInvite,
+        PortalApproval,
+        PortalPublication,
+        PortalDocument,
+        PortalPrincipal,
+    ):
         db.query(model).filter(model.org_id.in_(org_ids)).delete(synchronize_session=False)
     db.commit()
 
@@ -187,6 +196,7 @@ def test_immutable_projection_and_explicit_unavailable_fields(portal_world, db):
         "delivery",
         "documents",
         "waiting_on_you",
+        "messages",  # the order thread (empty until someone writes)
     }
     for key in ("timing", "materials", "yield", "delivery", "waiting_on_you"):
         assert payload[key]["available"] is False
@@ -377,6 +387,52 @@ def test_label_proof_approval_is_scoped_one_time_and_audited(portal_world, db):
     with pytest.raises(InternalError):
         db.flush()
     db.rollback()
+
+
+def test_order_thread_is_scoped_ordered_append_only_and_audited(portal_world, db):
+    from app.core.db.models.entity_event import EntityEvent
+    w = portal_world
+    order_id = w["orders"][0]["id"]
+    staff_url = f"/api/core/contract-orders/{order_id}/portal-messages"
+    customer_url = f"/portal/api/orders/{order_id}/messages"
+    hostile = "Hello <script>alert(1)</script>"
+    assert w["clients"][0].post(staff_url, json={"body": hostile}).status_code == 409  # not published yet
+    _publish(w)
+    customer = _accept(w)
+    other_customer = _accept(w, 1)
+    foreign_customer = _accept(w, 2)
+    assert w["clients"][1].post(staff_url, json={"body": hostile}).status_code == 404  # other tenant's staff
+    for bad in ({}, {"body": ""}, {"body": "   "}, {"body": "x" * 2001}, {"body": "ok", "sender": "staff"}, {"body": 5}):
+        assert w["clients"][0].post(staff_url, json=bad).status_code == 400, bad
+        assert customer.post(customer_url, json=bad).status_code == 400, bad
+    assert other_customer.post(customer_url, json={"body": "not mine"}).status_code == 404
+    assert foreign_customer.post(customer_url, json={"body": "not mine"}).status_code == 404
+    assert customer.post(customer_url, json={"body": hostile}).status_code == 201
+    assert w["clients"][0].post(staff_url, json={"body": "Thanks, proof is on its way"}).status_code == 201
+    assert customer.post(customer_url, json={"body": "Great"}).status_code == 201
+    thread = customer.get(f"/portal/api/orders/{order_id}").get_json()["order"]["messages"]
+    assert [(m["sender"], m["body"]) for m in thread] == [
+        ("customer", hostile),
+        ("producer", "Thanks, proof is on its way"),
+        ("customer", "Great"),
+    ]
+    assert other_customer.get(f"/portal/api/orders/{order_id}").status_code == 404
+    page = customer.get(f"/portal/orders/{order_id}").get_data(as_text=True)
+    assert "<script>alert(1)</script>" not in page and "&lt;script&gt;" in page
+    staff_page = w["clients"][0].get(f"/core/contracts/{order_id}/portal-sharing").get_data(as_text=True)
+    assert "Thanks, proof is on its way" in staff_page and "<script>alert(1)</script>" not in staff_page
+    assert db.query(PortalMessage).filter_by(order_id=UUID(order_id)).count() == 3
+    kinds = {e.event_type for e in db.query(EntityEvent).filter(EntityEvent.org_id == w["orgs"][0].id)}
+    assert {"contract.portal_staff_message_sent", "contract.portal_customer_message_sent"} <= kinds
+    row = db.query(PortalMessage).filter_by(order_id=UUID(order_id)).first()
+    row.body = "silently changed"
+    with pytest.raises(InternalError):
+        db.flush()
+    db.rollback()
+    # Withdrawing the publication closes the thread for the customer and for new staff messages.
+    assert w["clients"][0].delete(f"/api/core/contract-orders/{order_id}/portal-publications").status_code in (200, 204)
+    assert customer.post(customer_url, json={"body": "after withdrawal"}).status_code == 404
+    assert w["clients"][0].post(staff_url, json={"body": "after withdrawal"}).status_code == 409
 
 
 def test_withdrawn_proofs_and_publications_cannot_receive_approval(portal_world):

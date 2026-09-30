@@ -172,3 +172,34 @@ class PortalApproval(TenantScoped, Base):
     response_note = Column(String(1000))
     responded_by = Column(UUID(as_uuid=True))
     responded_at = Column(DateTime(timezone=True))
+
+
+class PortalMessage(TenantScoped, Base):
+    """Append-only conversation entry on one published customer order."""
+
+    __tablename__ = "contract_portal_messages"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "order_id", "customer_id"],
+            ["contract_orders.org_id", "contract_orders.id", "contract_orders.customer_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "customer_id", "sender_portal_id"],
+            [
+                "contract_portal_principals.org_id",
+                "contract_portal_principals.customer_id",
+                "contract_portal_principals.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("(sender_staff_id IS NULL) <> (sender_portal_id IS NULL)", name="ck_portal_message_one_sender"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = Column(UUID(as_uuid=True), nullable=False)
+    customer_id = Column(UUID(as_uuid=True), nullable=False)
+    sender_staff_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"))
+    sender_portal_id = Column(UUID(as_uuid=True))
+    body = Column(String(2000), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)

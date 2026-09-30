@@ -54,6 +54,15 @@
 </form>
 {% endif %}
 {% for approval in approval_requests %}<p>{{ approval.document_title }} · {{ approval.prompt }} · {{ approval.decision or 'Awaiting customer' }}{% if approval.response_note %} · {{ approval.response_note }}{% endif %}</p>{% else %}<p>No approval requests yet.</p>{% endfor %}
+</section>
+<section class="contract-card">
+<h2>Customer messages</h2>
+<p>One conversation per order. Messages cannot be edited or deleted once sent; the customer sees them only while the order is published.</p>
+{% for message in messages %}<p data-message="{{ message.sender }}"><strong>{{ 'Producer' if message.sender == 'producer' else 'Customer' }}</strong> · {{ message.created_at[:16]|replace('T',' ') }} UTC<br>{{ message.body }}</p>{% else %}<p>No messages yet.</p>{% endfor %}
+{% if publication and not publication.revoked_at %}<form hx-boost="false" data-sharing-api="/api/core/contract-orders/{{ order.id }}/portal-messages">
+<label>Message to the customer<textarea name="body" maxlength="2000" required></textarea></label>
+<button type="submit" class="btn">Send message</button>
+</form>{% endif %}
 </section>{% endif %}
 {% if can('users.manage') %}<section class="contract-card">
 <h2>Invite a customer user</h2>

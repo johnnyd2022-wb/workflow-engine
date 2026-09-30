@@ -96,6 +96,10 @@ def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, 
         expect(
             portal.get_by_text("Dispatch, Customs treatment and payment have not been verified or shared")
         ).to_be_visible()
+        portal.locator('textarea[name="body"]').fill("Can you confirm the bottling date? <b>Thanks</b>")
+        portal.get_by_role("button", name="Send message").click()
+        expect(portal.locator('[data-message="customer"]')).to_have_count(1)
+        assert "<b>Thanks</b>" in portal.locator('[data-message="customer"]').inner_text()
         assert portal.locator("h2").count() == 10
         assert portal.locator("main script").count() == 0
         assert portal.locator("main b").count() == 0
