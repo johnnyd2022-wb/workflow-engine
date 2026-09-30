@@ -6,7 +6,17 @@ which is where everything was before locations existed.
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Boolean, Column, Date, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    TIMESTAMP,
+    Boolean,
+    Column,
+    Date,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
@@ -16,10 +26,18 @@ from app.core.utils.time import utc_now
 
 class StockLocation(TenantScoped, Base):
     __tablename__ = "stock_locations"
-    __table_args__ = (UniqueConstraint("org_id", "name", name="uq_stock_locations_org_name"),)
+    __table_args__ = (
+        UniqueConstraint("org_id", "name", name="uq_stock_locations_org_name"),
+        UniqueConstraint("org_id", "id", name="uq_stock_locations_org_id"),
+        UniqueConstraint("org_id", "site_id", "id", name="uq_stock_locations_org_site_id"),
+        ForeignKeyConstraint(
+            ["org_id", "site_id"], ["sites.org_id", "sites.id"], name="fk_stock_locations_org_site", ondelete="RESTRICT"
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(120), nullable=False)
+    site_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     inside_licensed_area = Column(Boolean, nullable=False, default=False, server_default="false")
     is_active = Column(Boolean, nullable=False, default=True, server_default="true")
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, default=utc_now)
