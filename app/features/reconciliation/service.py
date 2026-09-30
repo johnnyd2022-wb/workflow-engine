@@ -818,6 +818,7 @@ def reconcile_output_to_untracked_reduce_only(
         org_id=org_id,
         quantity=qty_str,
         extra_data=new_extra,
+        commit=False,
     )
 
     return {

@@ -128,10 +128,10 @@ def options():
                     "unit": row.unit,
                     "batch": row.supplier_batch_number,
                     "barcode": row.barcode or (row.extra_data or {}).get("original_barcode"),
+                    "contract_customer_id": str(row.contract_customer_id) if row.contract_customer_id else None,
                 }
                 for row in stock
-                if getattr(row, "contract_customer_id", None) is None
-                and not (row.extra_data or {}).get("contract_customer_id")
+                if "contract_customer_id" not in (row.extra_data or {})
             ],
         }
     )

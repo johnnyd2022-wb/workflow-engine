@@ -1,4 +1,4 @@
-"""Trusted raw-material ownership preflight; receipts stay closed until stock guards land.
+"""Trusted raw-material ownership preflight with transaction-bound debit authority.
 
 Call before any production debit or output deposit, within the same transaction.
 The persisted execution and order determine authority; request owner/customer fields
@@ -10,6 +10,7 @@ from uuid import UUID
 
 from app.core.db.models.execution import Execution
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.organisation import Organisation
 from app.features.contract_manufacturing.models.orders import (
     MATERIALS_SOURCES,
     ContractOrder,
@@ -113,7 +114,16 @@ def validate_execution_materials(db, org_id, execution_id, actual_inputs, actual
     Requires the coordinated inventory owner column. Missing ownership schema fails
     closed rather than silently treating a customer's lot as producer-owned.
     """
+    from app.features.contract_manufacturing.services.stock_guard import PREFLIGHT_KEY, remember_preflight
+
+    db.info.pop(PREFLIGHT_KEY, None)
     scope = resolve_execution_material_scope(db, org_id, execution_id)
+    enabled = (
+        db.query(Organisation.contract_materials_enabled)
+        .filter(Organisation.id == org_id)
+        .with_for_update(read=True)
+        .scalar()
+    )
     item_ids = set()
     for entries, key in ((actual_inputs, "inventory_item_id"), (actual_outputs, "untracked_item_id")):
         if entries is not None and not isinstance(entries, list):
@@ -138,7 +148,10 @@ def validate_execution_materials(db, org_id, execution_id, actual_inputs, actual
     for item in items:
         if not hasattr(item, "contract_customer_id"):
             raise MaterialScopeError("Customer material ownership guards are not available yet", 409)
-        if (item.extra_data or {}).get("contract_customer_id"):
+        if "contract_customer_id" in (item.extra_data or {}):
             raise MaterialScopeError("Legacy customer ownership must be resolved before consumption", 409)
+        if item.contract_customer_id is not None and not enabled:
+            raise MaterialScopeError("Customer material operations are switched off", 409)
         validate_material_owner(scope, item.org_id, item.contract_customer_id, item.inventory_type)
+    remember_preflight(db, scope, items)
     return scope

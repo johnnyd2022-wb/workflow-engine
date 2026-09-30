@@ -914,9 +914,14 @@ Founder decisions for this phase:
       Lineage stays intact either way, so a recall works across both.
       - [x] Trusted material-scope prerequisite (!437): locked execution/order resolver,
         raw-material owner preflight and consistent batch-link lock ordering, with a
-        concurrent-assignment regression. Owner schema/DB guards, production hook,
-        receipts, transfer conservation and producer valuation/sales exclusions remain
-        open; customer receipts are not enabled by this prerequisite.
+        concurrent-assignment regression. This scope-only MR did not add owner
+        schema/DB guards, production hook, receipts, transfer conservation or
+        producer valuation/sales exclusions.
+      - [x] Recorded customer raw-title prerequisite (!445): immutable same-org
+        material receipts and owner proof; transaction-bound production consumption,
+        owner-conserving partial transfers and reasoned wastage; producer acquisition
+        projection and ordinary sales exclusions. Operations default off; monetary
+        valuation, finished-goods title and portal materials totals remain open.
     - [ ] c. **Duty either way.** Per order: who is liable for excise (the producer as
       licensee, the customer as licensee, or goods leaving underbond to the customer's
       CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the

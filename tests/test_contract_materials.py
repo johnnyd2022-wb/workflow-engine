@@ -189,13 +189,14 @@ def test_preflight_rejects_all_foreign_inputs_before_any_quantity_write(db, worl
         assert own.quantity == 5 and foreign.quantity == 7
 
 
-def test_missing_owner_schema_is_explicitly_closed(db, world):  # noqa: F811
+def test_producer_preflight_does_not_enable_customer_receipts(db, world):  # noqa: F811
     org = world["orgs"][0]
     execution = _batch(db, org.id)
     lot = InventoryItemFactory(org_id=org.id, quantity="5")
     db.commit()
-    with pytest.raises(MaterialScopeError, match="not available yet"):
-        validate_execution_materials(db, org.id, execution.id, [{"inventory_item_id": str(lot.id)}], [])
+    scope = validate_execution_materials(db, org.id, execution.id, [{"inventory_item_id": str(lot.id)}], [])
+    assert scope.customer_id is None
+    assert not org.contract_materials_enabled
     db.refresh(lot)
     assert lot.quantity == 5
 

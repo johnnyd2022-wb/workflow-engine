@@ -7,6 +7,7 @@ from app.core.db.models.site_transfer import SiteStockReceipt, SiteStockTransfer
 from app.core.db.site_guard import SiteScopeError
 
 PROVENANCE_FIELDS = (
+    "contract_customer_id",
     "name",
     "unit",
     "inventory_type",
