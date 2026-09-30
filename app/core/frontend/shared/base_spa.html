@@ -25,6 +25,7 @@
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='styles2.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='spa-theme.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='design-system.css') }}">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='section-tabs.css') }}">
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='execution-modal.css') }}">
   {# Execute-step page: scoped to .batch-start-spa so safe to load globally (needed for HTMX swaps). #}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batch-start.css') }}">
@@ -291,6 +292,7 @@
            swapped-in scripts in order. See docs/ux-overhaul-plan.md (1.3). #}
         {% set boosted = request.headers.get('HX-Boosted') == 'true' %}
         {% if boosted %}<div hidden data-page-assets>{{ self.head_extras() }}</div>{% endif %}
+        {% block section_tabs %}{% include 'shared/section_tabs.html' %}{% endblock %}
         {% block content %}{% endblock %}
         {% if boosted %}<div hidden data-page-assets>{{ self.scripts() }}</div>{% endif %}
       </main>

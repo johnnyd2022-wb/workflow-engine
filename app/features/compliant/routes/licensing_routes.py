@@ -52,7 +52,7 @@ def _save(action: str, entity: str, entity_id, fn):
 @licensing_bp.route("/compliant/nz-alcohol/licensing", methods=["GET"])
 @requires_auth
 def licensing_page():
-    return render_template("compliant/licensing.html", **_nz_alcohol_template_context(active_compliant_tab="licensing"))
+    return render_template("compliant/licensing.html", **_nz_alcohol_template_context())
 
 
 @licensing_bp.route("/api/compliant/licensing", methods=["GET"])

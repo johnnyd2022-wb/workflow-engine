@@ -571,6 +571,10 @@ def create_app():
 
             return dict(csrf_token=csrf_token)
 
+    from app.ui.navigation import nav_context
+
+    app.context_processor(nav_context)
+
     @app.context_processor
     def _inject_feature_flags():
         product_availability = app.extensions["product_availability"]

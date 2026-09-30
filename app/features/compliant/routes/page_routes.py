@@ -70,7 +70,7 @@ def nz_alcohol_customs_workspace():
     NP3 food-safety evidence is recorded per check in its own workspace (np3_check.html) and
     does not use this generic record form.
     """
-    return render_template("compliant/customs.html", **_nz_alcohol_template_context(active_compliant_tab="customs"))
+    return render_template("compliant/customs.html", **_nz_alcohol_template_context())
 
 
 @page_bp.route("/compliant/nz-alcohol/np3-audit", methods=["GET"])
@@ -83,7 +83,7 @@ def nz_alcohol_np3_audit():
 @page_bp.route("/compliant/nz-alcohol/food-safety", methods=["GET"])
 @requires_auth
 def nz_alcohol_food_safety():
-    context = _nz_alcohol_template_context(active_compliant_tab="food-safety")
+    context = _nz_alcohol_template_context()
     programme = context["food_control_programme"]
     if programme in {"np1", "np2", "np3"}:  # one verification workspace for every programme (plan 2.4b)
         return render_template("compliant/np3_audit.html", **_programme_labels(programme), **context)
@@ -93,7 +93,7 @@ def nz_alcohol_food_safety():
 @page_bp.route("/compliant/nz-alcohol/np3-audit/check/<control_id>", methods=["GET"])
 @requires_auth
 def nz_alcohol_np3_audit_check(control_id: str):
-    context = _nz_alcohol_template_context(active_compliant_tab="food-safety", control_id=control_id)
+    context = _nz_alcohol_template_context(control_id=control_id)
     programme = context["food_control_programme"]
     if programme not in {"np1", "np2", "np3"}:
         return redirect("/compliant/nz-alcohol/food-safety", code=302)
@@ -110,6 +110,4 @@ def _programme_labels(programme: str) -> dict:
 @page_bp.route("/compliant/nz-alcohol/configuration", methods=["GET"])
 @requires_auth
 def nz_alcohol_configuration():
-    return render_template(
-        "compliant/configuration.html", **_nz_alcohol_template_context(active_compliant_tab="configuration")
-    )
+    return render_template("compliant/configuration.html", **_nz_alcohol_template_context())

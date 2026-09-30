@@ -1,0 +1,13 @@
+{# The one sub-nav for every main tab (docs/ux-overhaul-plan.md 2.2). `section_tabs` comes from
+   app/ui/navigation.py, which reads app/ui/page_registry.py: same tabs, same order, same gating
+   everywhere. A page that should not show it (a focused, full-screen flow) overrides the
+   `section_tabs` block in base_spa.html with nothing. #}
+{% if section_tabs %}
+<nav class="section-tabs" aria-label="{{ section_label }} sections">
+  <div class="flow-mode-segmented ui-tabs" role="tablist" aria-label="{{ section_label }} pages">
+    {% for tab in section_tabs %}
+    <a href="{{ tab.href }}" role="tab" data-section-tab="{{ tab.key }}"{% if tab.food_safety %} data-food-safety-tab{% endif %}{% if tab.hidden %} hidden{% endif %} aria-selected="{{ 'true' if tab.active else 'false' }}" class="flow-mode-segment{% if tab.active %} flow-mode-segment--active{% endif %}">{{ tab.label }}</a>
+    {% endfor %}
+  </div>
+</nav>
+{% endif %}

@@ -22,7 +22,7 @@ def _org():
 @requires_auth
 @requires_org_scope
 def premises_page():
-    return render_template("compliant/premises.html", **_nz_alcohol_template_context(active_compliant_tab="premises"))
+    return render_template("compliant/premises.html", **_nz_alcohol_template_context())
 
 
 @premises_bp.get("/api/compliant/nz-alcohol/premises")

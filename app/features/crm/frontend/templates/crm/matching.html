@@ -34,8 +34,6 @@
   {% set crm_heading = "Batch matching" %}
   {% set crm_subtitle = "Which batch each sale came from, for recalls and stock" %}
   {% include "crm/_crm_banner.html" %}
-  {% set active_crm_tab = "matching" %}
-  {% include "crm/_crm_section_tabs.html" %}
 
   <div x-show="error" class="crm-error-banner" x-cloak><span x-text="error"></span>
     <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button></div>

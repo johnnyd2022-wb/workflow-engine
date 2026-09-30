@@ -8,7 +8,7 @@
   function showError(message) { error.textContent = message || ''; error.hidden = !message; }
   function selected(name) { return Array.prototype.map.call(form.querySelectorAll('input[name="' + name + '"]:checked'), function (input) { return input.value; }); }
   function updateFoodSafetyTab(programme) {
-    var tab = root.querySelector('[data-food-safety-tab]');
+    var tab = document.querySelector('[data-food-safety-tab]');
     if (!tab) return;
     tab.textContent = programme === 'np1' || programme === 'np2' || programme === 'np3' ? programme.toUpperCase() : 'Food safety';
     tab.hidden = programme === 'none';
