@@ -48,8 +48,14 @@ def resolve_availability(db, org_id, item) -> LotAvailability:
 
 
 def resolve_owner(item):
-    """The new persisted owner column is the authority, never legacy JSON hints."""
-    return hasattr(item, "contract_customer_id"), getattr(item, "contract_customer_id", None)
+    """The persisted owner column is the authority, never legacy JSON hints.
+
+    A lot that still carries a legacy ``contract_customer_id`` hint in its JSON has unresolved
+    ownership, the same rule the contract material services apply, so it is never cleared.
+    """
+    if not hasattr(item, "contract_customer_id") or "contract_customer_id" in (item.extra_data or {}):
+        return False, None
+    return True, item.contract_customer_id
 
 
 def raw_inputs(steps):

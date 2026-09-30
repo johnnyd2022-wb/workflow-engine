@@ -107,6 +107,7 @@ def test_owner_schema_absence_and_json_clearance_never_grant_availability(db, de
     own.extra_data = {"available_quantity": "999", "ready_date_actual": TODAY.isoformat(), "holds_checked": True}
     db.flush()
     monkeypatch.setattr(adapter, "resolve_availability", lambda *args: adapter.LotAvailability(Decimal(5), TODAY, ()))
+    monkeypatch.setattr(adapter, "resolve_owner", lambda item: (False, None))  # the owner schema is not (yet) trusted
     adapter.assess(db, org_id, {}, today=TODAY)
     current = adapter.latest(db, org_id)
     assert all(row["material_status"] == "blocked" for row in current["batches"])
