@@ -16,7 +16,15 @@
       try {
         const data = new FormData(form);
         const body = form.hasAttribute('data-upload') ? data : Object.fromEntries(data);
-        if (form.hasAttribute('data-publication')) body.document_ids = data.getAll('document_ids');
+        if (form.hasAttribute('data-publication')) {
+          body.document_ids = data.getAll('document_ids');
+          body.shared_steps = [...form.querySelectorAll('[data-shared-step]')].filter((row) => row.querySelector('[name="shared_step_id"]').checked).map((row) => ({
+            execution_step_id: row.querySelector('[name="shared_step_id"]').value,
+            label: row.querySelector('[name="shared_step_label"]').value,
+          }));
+          delete body.shared_step_id;
+          delete body.shared_step_label;
+        }
         const result = await send(form.dataset.sharingApi, 'POST', body, form.hasAttribute('data-upload'));
         if (form.hasAttribute('data-invite')) {
           const target = document.querySelector('[data-invite-result]');

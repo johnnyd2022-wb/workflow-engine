@@ -322,7 +322,7 @@ want it, and never produce a recall list that can't be trusted.
       where contact details are missing.
     - [x] d. Steps listed in process order.
     - [x] e. CSV and PDF export.
-    - [ ] f. Trace can start from:
+    - [x] f. Trace can start from: (!398)
       - [x] a supplier lot (forward).
       - [x] an invoice (backward).
     - [x] g. Sold-out lots under their own heading, not "In stock".
@@ -643,9 +643,9 @@ any time.
   - Change: shared tokens and components (page header, tabs, buttons, breadcrumbs, cards,
     tables, status badges) used by all three; migrate each area as it's touched.
 
-- [ ] **4.3 Use words and numbers producers use.** *S*
+- [x] **4.3 Use words and numbers producers use.** *S* (a–d: !344–!346, !394)
   - [x] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
-    Compliance; pages and cards say Compliant), CRM → **Sales**.
+    Compliance; pages and cards say Compliant), CRM → **Sales**. (!394)
   - [x] b. Durations in days ("22 days"), not hours ("Started 535h 54m ago"). (!346)
   - [x] c. No trailing zeros ("30", not "30.0000"), including activity entries. (!345)
   - [x] d. Fix "5 active batchs". Already pluralised by `pluralize()` in
@@ -710,7 +710,7 @@ split.
       map. (!326)
     - [x] b. **Stop the growth first:** a CI ratchet that fails if
       `app/core/backend/backend.py` gets longer. New routes go in the owning slice. (!321)
-    - [ ] c. Carve in the slicing plan's Phase 1 order: reconciliation → wastage →
+    - [x] c. Carve in the slicing plan's Phase 1 order: reconciliation → wastage →
       compliance-checks → traceability → activity-log → dashboard, then inventory →
       process-design → execution. One slice per MR, pure moves with no behaviour change,
       with the e2e suite as the safety net.
@@ -774,7 +774,7 @@ split.
   - Done when: `backend.py` holds only shell code, and every slice in the feature index
     points at its own directory.
 
-- [ ] **5.2 Run the stock checks as tests.** *S*
+- [x] **5.2 Run the stock checks as tests.** *S* (!415; CI after prerequisite merges)
   - Change: the 1.7 checks as tests, plus a mock-recall scenario and a Customs stocktake
     scenario (2.6) in the end-to-end suite.
   - [x] Stock arithmetic, matching queue, and finding contract tests. (!406)
@@ -793,7 +793,7 @@ split.
 
 Starts once Phases 1 and 2 hold up with a second producer.
 
-- [ ] **6.1 A landing page for NZ craft alcohol.** *S*
+- [x] **6.1 A landing page for NZ craft alcohol.** *S* (!411; rollout after 6.2)
   - Change: replace the generic "manufacturing operations" copy with what a producer
     gets: a real recall trace, an NP3 evidence pack and an excise draft.
 
@@ -937,10 +937,17 @@ Founder decisions for this phase:
       licensee, the customer as licensee, or goods leaving underbond to the customer's
       CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the
       order shows who pays.
+      - [x] Portal declaration display (!450): publish the order's declared duty
+        responsibility and customer CCA reference in the customer-visible snapshot.
+        Dispatch, Customs treatment and payment remain unverified; this does not
+        determine excise liability or underbond authority.
     - [ ] d. **Progress without typing it twice.** Milestones (materials received,
       scheduled, in production, QC passed, packed, ready, dispatched) come from the
       batch's own steps and stock movements. The producer chooses which steps show and
       what they're called.
+      - [x] Selected execution-step milestones (!451): staff choose linked batch steps
+        and customer-facing labels; each publication freezes their current statuses.
+        Materials, QC, packing and dispatch sources and automatic updates remain open.
     - [ ] e. **The portal.** Customer users sign in (0.5 Google sign-in works here too) to
       a slim, branded portal of **their** current and past orders only. For each order,
       the ten things that matter most to a brand owner:

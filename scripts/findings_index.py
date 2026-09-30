@@ -190,13 +190,25 @@ CODE_MARKER_RG = r"\b(TODO|FIXME|HACK|XXX|BUG)\b"
 #     after -- `-> fixed in <sha>` is still caught by the `fixed (?:in|by)` branch above.
 #   - `stale point-in-time note` (not bare `stale point-in-time`) to avoid a data-freshness
 #     bug description ("shows a stale point-in-time snapshot").
+#   - `patched <YYYY-MM-DD>` -- the dated note a fixed bullet is left with ("**Patched
+#     2026-09-25** (plan item 0.2): ..." on the `/auth/verify-2fa` item in
+#     docs/core-load-performance-design.md). Without it that item, already fixed and
+#     closed by !434, re-entered every fresh worktree's index as a P0. The date is
+#     required (a bare "needs to be patched" is still owed), and a hedge before the word
+#     ("partially/partly patched", "only patched", "not yet patched", "will be patched
+#     <date>") is excluded because each says work remains or is still to come. Known
+#     blind spots, accepted because no doc in this repo hits them: it reads only the word
+#     right before "patched" ("has not been patched <date>" would close) and nothing after
+#     the date ("Patched <date> (CSV only; JSON still open)" would close).
+_NOT_HEDGED = "".join(f"(?<!{w} )" for w in ("partially", "partial", "partly", "only", "be", "yet", "not", "never"))
 RESOLVED_MARKERS = re.compile(
     r"(^\s*(?:✅|✔|~~))|(\b(?:done|resolved|fixed|shipped|landed|completed|no longer)\b\s*[.:—-]?\s*$)"
     r"|(\bresolved (?:in|by)\b)|(\bfixed (?:in|by)\b)|(\balready (?:done|fixed|handled)\b)"
     r"|((?:→|->)\s*(?:\*\*)?(?:closed|closes|resolved)\b)"
     r"|((?:→|->)\s*(?:\*\*)?(?:fixed|done)(?:\*\*)?(?=\s*[.,;:)—]|\s*$))"
     r"|(\(verified\b[^)]{0,80}\bby findings-sweep\))"
-    r"|(\balready[- ]closed\b)|(\bno outstanding action\b)|(\bstale point-in-time note\b)",
+    r"|(\balready[- ]closed\b)|(\bno outstanding action\b)|(\bstale point-in-time note\b)"
+    r"|(" + _NOT_HEDGED + r"\bpatched\s+(?:on\s+)?\d{4}-\d{2}-\d{2}\b)",
     re.I,
 )
 
@@ -234,9 +246,18 @@ RESOLVED_MARKERS = re.compile(
 # bullets -- including one literally ending "... No gap." -- were indexed as 11 open
 # P0/P1 items in one real sweep. `\bnot a gap\b` widens to plural/no-article; `no gap(s)
 # found` is a separate branch since "found" trails the noun instead of "not"/"no" leading it.
+#
+# A spec section that answers a spec-critic gap says so in its own heading --
+# "## Calculation model (pins down spec-critic gap: exact formulas, not prose)" (verbatim in
+# .agents/specs/dilution_calculator.md). `\bgaps?\b` alone opened it as an open `gap`
+# section, so all six formula bullets under it were indexed as outstanding gaps. "pins
+# down" is active third person ("this section closes it"). Deliberately not matched: the
+# imperative "pin down before build" and the passive "to be pinned down" (both still owe
+# work), and "never pins down X" is negated below.
 _NOTHING_LEFT = r"(?:a|an|further|additional|other|remaining)\s+"
 CLOSED_HEADING_RE = re.compile(
     r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
+    r"|\bpins\s+down\b"
     r"|\balready (?:done|fixed|handled)\b"
     r"|\b(?:not|no)\s+(?:" + _NOTHING_LEFT + r")?findings?\b"
     r"|\bno\s+(?:" + _NOTHING_LEFT + r")?issues?\b",
@@ -244,7 +265,9 @@ CLOSED_HEADING_RE = re.compile(
 )
 # Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
 # not trip CLOSED_HEADING_RE; those headings are explicitly saying the opposite.
-NEGATED_CLOSURE_RE = re.compile(r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved)\b", re.I)
+NEGATED_CLOSURE_RE = re.compile(
+    r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved)\b|\b(?:not|never)\s+(?:yet\s+)?pins?\s+down\b", re.I
+)
 
 # A checked checkbox or checkmark in a heading's own title -- this repo's numbered
 # work-item convention ("### 1. Slim the `system-findings` banner payload -- `[x]`
