@@ -7,8 +7,11 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.db.models.organisation import Organisation
 from app.core.db.models.stock_location import StockLocation
+from app.core.security.tenant_scope import unscoped
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+from app.features.compliant.models.customs_premises import CustomsCoverage, CustomsLicence
 from app.features.compliant.models.excise import ExciseRate
 from app.features.compliant.modules.nz_alcohol.movement_excise import (
     capture_spirits_removal_basis,
@@ -230,17 +233,25 @@ def test_period_review_route_checks_licence_tenant_and_period(db, world, clients
 
 def test_period_review_route_returns_only_own_source_cca(db, flask_app):  # noqa: F811
     org, client = _admin_client(db, flask_app)
-    licence = add_licence(db, org.id, licence_data())
-    db.commit()
-    response = client.get(
-        "/api/compliant/nz-alcohol/excise/cca-period-review",
-        query_string={"licence_id": str(licence.id), "start": "2026-09-01", "end": "2026-10-01"},
-    )
-    assert response.status_code == 200
-    result = response.get_json()
-    assert result["source_cca"]["id"] == str(licence.id)
-    assert result["nil_return"] is None and result["total_duty"] is None
-    assert result["complete_lodgement"] is False
+    try:
+        licence = add_licence(db, org.id, licence_data())
+        db.commit()
+        response = client.get(
+            "/api/compliant/nz-alcohol/excise/cca-period-review",
+            query_string={"licence_id": str(licence.id), "start": "2026-09-01", "end": "2026-10-01"},
+        )
+        assert response.status_code == 200
+        result = response.get_json()
+        assert result["source_cca"]["id"] == str(licence.id)
+        assert result["nil_return"] is None and result["total_duty"] is None
+        assert result["complete_lodgement"] is False
+    finally:  # this test commits, so leave no licence behind for tests that count them
+        db.rollback()
+        with unscoped():
+            db.query(CustomsCoverage).filter(CustomsCoverage.org_id == org.id).delete(synchronize_session=False)
+            db.query(CustomsLicence).filter(CustomsLicence.org_id == org.id).delete(synchronize_session=False)
+            db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+            db.commit()
 
 
 @pytest.mark.parametrize("bad_fact", [None, "dispatched_quantity", "dispatched_on"])
