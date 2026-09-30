@@ -28,6 +28,55 @@
     return body;
   }
 
+
+  var MAX_FILE_BYTES = 10 * 1024 * 1024;
+  function fileInput() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = 'application/pdf,image/png,image/jpeg';
+    input.setAttribute('data-np3-attachments', '');
+    return input;
+  }
+  // Files go up one at a time after the record exists; a failed file is reported but the
+  // record stays, because it is already part of the audit trail.
+  async function uploadFiles(input, recordId) {
+    var failures = [];
+    var files = Array.prototype.slice.call(input.files || []);
+    for (var i = 0; i < files.length; i += 1) {
+      var file = files[i];
+      try {
+        if (file.size > MAX_FILE_BYTES) throw new Error('is larger than 10MB');
+        var body = new FormData();
+        body.append('file', file);
+        var token = document.querySelector('meta[name="csrf-token"]');
+        await api('/api/compliant/np3-audit/records/' + encodeURIComponent(recordId) + '/files', {
+          method: 'POST',
+          headers: { 'X-CSRFToken': token ? token.content : '' },
+          body: body,
+        });
+      } catch (err) {
+        failures.push(file.name + ': ' + (err.message === 'Request failed' ? 'upload failed' : err.message));
+      }
+    }
+    return failures;
+  }
+  function fileLinks(files) {
+    if (!files || !files.length) return null;
+    var list = document.createElement('ul');
+    list.className = 'np3-attachments';
+    files.forEach(function (file) {
+      var item = document.createElement('li');
+      var link = text('a', file.file_name);
+      link.href = file.url;
+      link.setAttribute('download', file.file_name);
+      item.appendChild(link);
+      item.appendChild(text('small', ' ' + Math.max(1, Math.round(file.file_size / 1024)) + ' KB'));
+      list.appendChild(item);
+    });
+    return list;
+  }
+
   function card(eyebrow, heading, className) {
     var section = document.createElement('section');
     section.className = 'np3-detail-card' + (className ? ' ' + className : '');
@@ -215,6 +264,14 @@
       evidence
     ));
 
+    var attachments = fileInput();
+    form.appendChild(reviewField(
+      'Attach files (optional)',
+      'PDF, PNG or JPEG, up to 10MB each. They are kept with this sign-off and included in the evidence PDF.',
+      'Signed SOP, photo of the completed log',
+      attachments
+    ));
+
     var confirmation = document.createElement('label');
     confirmation.className = 'np3-confirmation';
     var checkBox = document.createElement('input');
@@ -240,7 +297,7 @@
       submit.textContent = 'Saving review…';
       try {
         showError('');
-        await api('/api/compliant/np3-audit/attestations', {
+        var saved = await api('/api/compliant/np3-audit/attestations', {
           method: 'POST',
           headers: csrfHeaders(),
           body: JSON.stringify({
@@ -252,7 +309,9 @@
             confirmed: checkBox.checked,
           }),
         });
+        var failed = await uploadFiles(attachments, saved.record.id);
         await load();
+        if (failed.length) showError('Review saved, but these files were not attached: ' + failed.join('; '));
       } catch (err) {
         showError(err.message);
         submit.disabled = false;
@@ -374,6 +433,8 @@
           }
           item.appendChild(text('small', (definition ? definition.label : key.replace(/_/g, ' ')) + ': ' + value));
         });
+        var entryFiles = fileLinks(entry.files);
+        if (entryFiles) item.appendChild(entryFiles);
         list.appendChild(item);
       });
       registerBody.appendChild(list);
@@ -399,6 +460,13 @@
       form.appendChild(reviewField(field.label, help, '', input));
       controls[field.key] = input;
     });
+    var logFiles = fileInput();
+    form.appendChild(reviewField(
+      'Attach files (optional)',
+      'PDF, PNG or JPEG, up to 10MB each. They are kept with this entry and included in the evidence PDF.',
+      '',
+      logFiles
+    ));
     var submit = document.createElement('button');
     submit.type = 'submit';
     submit.textContent = 'Add log entry';
@@ -411,12 +479,14 @@
       submit.textContent = 'Saving entry…';
       try {
         showError('');
-        await api('/api/compliant/np3-audit/checks/' + encodeURIComponent(check.control_id) + '/logs', {
+        var savedEntry = await api('/api/compliant/np3-audit/checks/' + encodeURIComponent(check.control_id) + '/logs', {
           method: 'POST',
           headers: csrfHeaders(),
           body: JSON.stringify({ fields: fields }),
         });
+        var failedFiles = await uploadFiles(logFiles, savedEntry.record.id);
         await load();
+        if (failedFiles.length) showError('Entry saved, but these files were not attached: ' + failedFiles.join('; '));
       } catch (err) {
         showError(err.message);
         submit.disabled = false;
@@ -444,6 +514,8 @@
         item.appendChild(text('small', key.replace(/_/g, ' ') + ': ' + event.evidence_fields[key]));
       });
       if (event.due_date) item.appendChild(text('small', 'Next review: ' + event.due_date));
+      var eventFiles = fileLinks(event.files);
+      if (eventFiles) item.appendChild(eventFiles);
       list.appendChild(item);
     });
     section.appendChild(list);

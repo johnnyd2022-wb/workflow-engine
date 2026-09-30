@@ -351,12 +351,18 @@ def _attachment_cover(evidence: dict[str, Any], styles: dict[str, ParagraphStyle
     ]
 
 
-def build_np3_evidence_register_pdf(audit: dict[str, Any], uploaded_evidence: list[dict[str, Any]]) -> bytes:
+def build_np3_evidence_register_pdf(
+    audit: dict[str, Any],
+    uploaded_evidence: list[dict[str, Any]],
+    record_files: dict[str, dict[str, Any]] | None = None,
+) -> bytes:
     """Return a printable, self-contained NP3 evidence register.
 
     Images are rendered inside the documentation/record-keeping check.  Uploaded PDFs
     are appended at that same point as their original pages.  A non-renderable upload is
-    retained as a PDF attachment and given a readable cover page with its checksum.
+    retained as a PDF attachment and given a readable cover page with its checksum.  Files
+    attached to a check's own attestations and log entries (``record_files``, keyed by file
+    id) are placed the same way at the check they belong to.
     """
     styles = _styles()
     writer = PdfWriter()
@@ -391,42 +397,46 @@ def build_np3_evidence_register_pdf(audit: dict[str, Any], uploaded_evidence: li
         _answers(story, row, styles)
         _core_evidence(story, row, styles)
         story.append(Spacer(1, 6 * mm))
-        if row.get("control_id") == _DOCUMENTATION_CONTROL:
-            for evidence in uploaded_evidence:
-                mime_type = (evidence.get("mime_type") or "").lower()
-                content = evidence.get("content")
-                if not content:
-                    story.extend(
-                        _attachment_cover(
-                            evidence,
-                            styles,
-                            "The original uploaded file was unavailable when this register was generated.",
-                        )
+        attachments = list(uploaded_evidence) if row.get("control_id") == _DOCUMENTATION_CONTROL else []
+        # Files attached to this check's own attestations and log entries, oldest record first.
+        for item in reversed([*(row.get("history") or []), *(row.get("log_entries") or [])]):
+            for attached in item.get("files") or []:
+                attachments.append((record_files or {}).get(attached["id"]) or {**attached, "content": None})
+        for evidence in attachments:
+            mime_type = (evidence.get("mime_type") or "").lower()
+            content = evidence.get("content")
+            if not content:
+                story.extend(
+                    _attachment_cover(
+                        evidence,
+                        styles,
+                        "The original uploaded file was unavailable when this register was generated.",
                     )
-                    continue
-                if mime_type in {"image/jpeg", "image/jpg", "image/png"}:
-                    image_story, rendered = _image_story(evidence, styles)
-                    story.extend(image_story)
-                    if not rendered:
-                        writer.add_attachment(evidence["file_name"], content)
-                    continue
-                _append_document(writer, story)
-                story = []
-                _append_document(
-                    writer, _attachment_cover(evidence, styles, "The original PDF pages follow this cover sheet.")
                 )
-                if mime_type == "application/pdf":
-                    try:
-                        writer.append(BytesIO(content))
-                        continue
-                    except Exception:
-                        _append_document(
-                            writer,
-                            _attachment_cover(
-                                evidence, styles, "The PDF could not be rendered. Its original file is embedded below."
-                            ),
-                        )
-                writer.add_attachment(evidence["file_name"], content)
+                continue
+            if mime_type in {"image/jpeg", "image/jpg", "image/png"}:
+                image_story, rendered = _image_story(evidence, styles)
+                story.extend(image_story)
+                if not rendered:
+                    writer.add_attachment(evidence["file_name"], content)
+                continue
+            _append_document(writer, story)
+            story = []
+            _append_document(
+                writer, _attachment_cover(evidence, styles, "The original PDF pages follow this cover sheet.")
+            )
+            if mime_type == "application/pdf":
+                try:
+                    writer.append(BytesIO(content))
+                    continue
+                except Exception:
+                    _append_document(
+                        writer,
+                        _attachment_cover(
+                            evidence, styles, "The PDF could not be rendered. Its original file is embedded below."
+                        ),
+                    )
+            writer.add_attachment(evidence["file_name"], content)
     if story:
         _append_document(writer, story)
 
