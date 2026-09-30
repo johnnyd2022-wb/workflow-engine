@@ -31,3 +31,6 @@
 .board-capacity .board-calendar-days label { display: inline-flex; align-items: center; gap: .4rem; margin: .3rem .75rem .3rem 0; }
 .board-capacity .board-calendar-days input { width: auto; }
 .board-capacity textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.board-drag-handle { cursor: grab; }
+.board-drag-handle:active { cursor: grabbing; }
+.board-day.board-drop-target { outline: 3px solid #246c59; outline-offset: -3px; background: #edf8f2; }

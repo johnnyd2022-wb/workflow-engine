@@ -309,6 +309,9 @@ def shared_order(db, principal, order_id):
     from app.features.contract_manufacturing.services.portal_messages import messages_for_order
 
     result = publication_dto(row.payload)
+    from app.features.contract_manufacturing.services.portal_reorders import reorder_for_order
+
+    result["reorder_request"] = reorder_for_order(db, principal.org_id, principal.customer_id, row.order_id)
     result["messages"] = messages_for_order(db, principal.org_id, principal.customer_id, row.order_id)
     approvals = customer_approvals(db, principal, row)
     result["waiting_on_you"]["approvals"] = approvals

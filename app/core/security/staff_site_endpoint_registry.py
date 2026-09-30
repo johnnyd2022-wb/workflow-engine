@@ -411,5 +411,6 @@ ENDPOINT_COVERAGE = {
     ("google_auth.unlink", "POST"): "blocked",
     # Portal conversation thread (whole-order customer dialogue, not site-scoped).
     ("contract_portal.send_message", "POST"): "blocked",
+    ("contract_portal.reorder", "POST"): "blocked",
     ("contracts.portal_send_message", "POST"): "blocked",
 }
