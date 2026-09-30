@@ -415,7 +415,7 @@ socket_security:
     - >
       socketcli
       --integration gitlab
-      --repo "${CI_PROJECT_PATH}"
+      --repo "${CI_PROJECT_NAME}"
       --branch "${CI_COMMIT_REF_NAME}"
       --commit-sha "${CI_COMMIT_SHA}"
       --enable-json --json-file .agents/reports/security/socket.json
@@ -568,12 +568,37 @@ deploy_test:
 # message for why that distinction needed a real code fix first.
 cd_e2e:
   stage: deploy
-  image: python:3.14-bookworm
+  # deploy-target is a shell executor, so GitLab ignores `image:`. Copy the checkout
+  # into a disposable Python container and use the host network to reach the deployed
+  # test service at localhost:8001. Streaming avoids assuming the runner's checkout
+  # path is mounted at the same location on the Docker host.
   script:
-    - pip install "uv==${UV_VERSION}"
-    - uv sync --extra dev
-    - uv run playwright install --with-deps chromium
-    - E2E_BASE_URL=https://localhost:8001 uv run pytest tests/e2e/test_smoke.py -v
+    - |
+      set -euo pipefail
+      CD_E2E_CONTAINER="workflow-cd-e2e-${CI_JOB_ID}"
+      docker run --detach --name "$CD_E2E_CONTAINER" --network host \
+        python:3.14-bookworm sleep infinity
+      cleanup_cd_e2e() {
+        docker rm --force "$CD_E2E_CONTAINER" >/dev/null 2>&1 || true
+      }
+      trap cleanup_cd_e2e EXIT
+      docker exec "$CD_E2E_CONTAINER" mkdir -p /workspace
+      tar -C "$CI_PROJECT_DIR" \
+        --exclude=.git --exclude=.venv --exclude=.pytest_cache --exclude=__pycache__ \
+        -cf - . | docker exec --interactive "$CD_E2E_CONTAINER" tar -xf - -C /workspace
+      docker exec \
+        --workdir /workspace \
+        --env UV_VERSION="$UV_VERSION" \
+        --env E2E_BASE_URL="https://localhost:8001" \
+        --env UV_PROJECT_ENVIRONMENT=/tmp/workflow-engine-cd-e2e-venv \
+        --env UV_CACHE_DIR=/tmp/workflow-engine-cd-e2e-uv-cache \
+        --env PYTHONDONTWRITEBYTECODE=1 \
+        "$CD_E2E_CONTAINER" sh -euc '
+          python -m pip install --disable-pip-version-check "uv==${UV_VERSION}"
+          uv sync --extra dev --locked
+          uv run playwright install --with-deps chromium
+          uv run pytest -p no:cacheprovider tests/e2e/test_smoke.py -v
+        '
   needs: ["deploy_test"]
   only:
     - main
