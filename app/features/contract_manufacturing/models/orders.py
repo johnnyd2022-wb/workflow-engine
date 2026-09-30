@@ -20,6 +20,7 @@ from sqlalchemy.orm import relationship
 from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now
+from app.features.crm.models.xero_contact import XeroContact  # noqa: F401 -- FK target of crm_contact_id
 
 ORDER_STATUSES = ("draft", "confirmed", "completed", "cancelled")
 MATERIALS_SOURCES = ("producer", "customer", "mixed")

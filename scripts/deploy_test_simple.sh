@@ -23,9 +23,6 @@ IMAGE_REF="${1:-}"
 # is a substring filter and also matches "workflow-engine-test-db", which stops and
 # removes the database container along with the app container (data survives on its
 # named volume, but the container has to be manually recreated afterwards).
-docker stop $(docker ps -aqf "name=^workflow-engine-test$") 2>/dev/null || true
-docker rm $(docker ps -aqf "name=^workflow-engine-test$") 2>/dev/null || true
-
 if [ -n "$IMAGE_REF" ]; then
     echo "Pulling $IMAGE_REF from registry..."
     docker pull "$IMAGE_REF"
@@ -35,6 +32,11 @@ else
     docker build --target test -f Dockerfile.multi -t workflow-engine:test .
     RUN_IMAGE="workflow-engine:test"
 fi
+
+# Only now replace the running app: a failed pull or build above (for example a rollback to a
+# :test-stable tag that has not been promoted yet) must leave the existing container serving.
+docker stop $(docker ps -aqf "name=^workflow-engine-test$") 2>/dev/null || true
+docker rm $(docker ps -aqf "name=^workflow-engine-test$") 2>/dev/null || true
 
 # Browser telemetry uses the public PostHog project token stored in KeePassXC.
 # Optional, not required: an empty key just means client-side RUM doesn't
@@ -62,6 +64,14 @@ DOCKER_RUN_ARGS=(
 )
 if [ -n "$POSTHOG_PROJECT_API_KEY" ]; then
     DOCKER_RUN_ARGS+=(-e POSTHOG_PROJECT_API_KEY="$POSTHOG_PROJECT_API_KEY")
+fi
+# The test database password comes from the job or host environment and is never committed here. Without
+# it the app cannot connect to its database and never starts serving.
+DB_PASSWORD="${POSTGRES_PASSWORD:-${POSTGRES_PASSWORD_TEST:-}}"
+if [ -n "$DB_PASSWORD" ]; then
+    DOCKER_RUN_ARGS+=(-e POSTGRES_PASSWORD="$DB_PASSWORD")
+else
+    echo "⚠️  No POSTGRES_PASSWORD or POSTGRES_PASSWORD_TEST in this environment: the app will not reach its database."
 fi
 
 docker run "${DOCKER_RUN_ARGS[@]}" "$RUN_IMAGE"
