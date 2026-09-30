@@ -347,6 +347,38 @@
         applyState();
     }
 
+    function renderPlannedWork(root, work) {
+        var list = byData(root, '[data-planned-work-list]');
+        if (!list) return;
+        list.replaceChildren();
+        if (!work) {
+            setText(root, '[data-planned-work-summary]', 'Planned production is unavailable.');
+            return;
+        }
+        setText(root, '[data-planned-work-summary]', work.total
+            ? work.total + ' batch(es) proposed for today or earlier, highest priority first. Review checks on the board before starting.'
+            : 'No planned batches proposed for today or earlier.');
+        (work.items || []).forEach(function (batch) {
+            var item = document.createElement('li');
+            item.dataset.plannedBatchId = batch.id;
+            var title = document.createElement('strong');
+            title.textContent = batch.reference + ' · Batch ' + batch.batch_number;
+            var detail = document.createElement('p');
+            detail.textContent = batch.quantity + ' ' + batch.unit + ' · ' + batch.product_name + ' · ' + batch.site_name;
+            var state = document.createElement('p');
+            state.textContent = 'Priority ' + batch.priority + ' · Proposed ' + batch.proposed_start_date
+                + (batch.overdue ? ' · Overdue' : '') + (batch.pinned ? ' · Pinned' : '')
+                + (batch.status === 'blocked' ? ' · Checks pending' : '');
+            item.append(title, detail, state);
+            list.append(item);
+        });
+        if (work.truncated) {
+            var more = document.createElement('li');
+            more.textContent = 'Showing the first 20 batches. Review the production board for the rest.';
+            list.append(more);
+        }
+    }
+
     function renderDashboard(root, data) {
         var tasks = data.tasks || {};
         var operations = data.operations || {};
@@ -383,6 +415,7 @@
         renderSparkLine(root, 'tasks_week', insightSeries.tasks_due_week);
         renderSparkLine(root, 'throughput_vs_week', insightSeries.batch_completion_week);
 
+        renderPlannedWork(root, data.planned_work);
         renderActionList(root, actionBoard);
         renderWorkspaceSummaries(root, operations, compliantWorkspace, tasks, sales);
         wireAuditPeriodToggle(root, auditLog);
