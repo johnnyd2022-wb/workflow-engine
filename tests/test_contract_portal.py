@@ -9,7 +9,9 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError, InternalError
 
+from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.user import User, UserRole
+from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.security.access_policy import POLICY, PORTAL_SIGNED_IN, PUBLIC, allows, requirement_for
 from app.features.contract_manufacturing.models.portal import (
     PortalDocument,
@@ -21,9 +23,9 @@ from app.features.contract_manufacturing.models.portal import (
 from app.features.contract_manufacturing.portal_security import COOKIE_NAME, PORTAL_ENDPOINTS
 from app.features.contract_manufacturing.routes import portal as portal_routes
 from app.features.contract_manufacturing.services.portal_auth import token_hash
-from tests.factories import UserFactory
+from tests.factories import ExecutionFactory, UserFactory
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixtures
-from tests.test_contract_orders import _customer, _login, _order, world  # noqa: F401 -- fixtures
+from tests.test_contract_orders import _customer, _login, _order, _recipe, world  # noqa: F401 -- fixtures
 
 PASSWORD = "A-portal-password-2026"
 
@@ -255,6 +257,74 @@ def test_portal_shares_declared_duty_without_claiming_movement_or_payment(portal
     if reference:
         assert "CCA-&lt;script&gt;alert(1)&lt;/script&gt;" in page
     assert w["clients"][1].get(f"/api/core/contract-orders/{order_id}").status_code == 404
+
+
+def test_selected_batch_milestones_are_scoped_derived_and_frozen(portal_world, db):
+    w = portal_world
+    org = w["orgs"][0]
+    process, version, output = _recipe(db, org.id)
+    batch = ExecutionFactory(org_id=org.id, process_id=process.id)
+    order = _order(
+        w["clients"][0],
+        w["customers"][0]["id"],
+        lines=[
+            {
+                "product_name": "Gin",
+                "quantity": "600",
+                "unit": "bottles",
+                "materials_source": "producer",
+                "process_version_id": str(version.id),
+                "source_output_id": str(output),
+            }
+        ],
+    )
+    w["orders"][0] = order
+    line_id = order["lines"][0]["id"]
+    linked = w["clients"][0].post(
+        f"/api/core/contract-orders/{order['id']}/lines/{line_id}/batches", json={"execution_id": str(batch.id)}
+    )
+    assert linked.status_code == 201, linked.get_json()
+    step = db.query(ExecutionStep).filter_by(org_id=org.id, execution_id=batch.id).one()
+    selected = [{"execution_step_id": str(step.id), "label": "Bottling for customer"}]
+    page = w["clients"][0].get(f"/core/contracts/{order['id']}/portal-sharing").get_data(as_text=True)
+    assert str(step.id) in page and "Bottle" in page
+    assert (
+        w["clients"][0]
+        .post(
+            f"/api/core/contract-orders/{order['id']}/portal-publications",
+            json={"shared_steps": selected, "stage_label": "Manually asserted"},
+        )
+        .status_code
+        == 400
+    )
+    _publish(w, shared_steps=selected)
+    customer = _accept(w)
+    url = f"/portal/api/orders/{order['id']}"
+    first = customer.get(url).get_json()["order"]["progress"]
+    assert first["available"] is True
+    assert first["milestones"] == [
+        {"batch_id": str(batch.id), "label": "Bottling for customer", "status": step.status.value}
+    ]
+    assert "selection" not in first and "Bottle" not in str(first)
+    page = w["clients"][0].get(f"/core/contracts/{order['id']}/portal-sharing").get_data(as_text=True)
+    assert "Bottling for customer" in page and "checked" in page
+    ExecutionRepository(db).complete_step(step.id, org.id)
+    db.commit()
+    assert customer.get(url).get_json()["order"]["progress"] == first
+    _publish(w, shared_steps=selected)
+    latest = customer.get(url).get_json()["order"]["progress"]
+    assert latest["milestones"][0]["status"] == "completed"
+    assert latest["stage_label"] == "Shared milestones complete" and latest["percent"] == "100.0"
+    assert "Bottling for customer" in customer.get(f"/portal/orders/{order['id']}").get_data(as_text=True)
+    for payload in (
+        {"shared_steps": [{"execution_step_id": str(uuid4()), "label": "Wrong batch"}]},
+        {"shared_steps": [selected[0], selected[0]]},
+        {"shared_steps": [{**selected[0], "private": "secret"}]},
+        {"shared_steps": {"execution_step_id": str(step.id)}},
+    ):
+        assert w["clients"][0].post(
+            f"/api/core/contract-orders/{order['id']}/portal-publications", json=payload
+        ).status_code in (400, 404)
 
 
 def test_complete_hostile_portal_route_walk(portal_world):
