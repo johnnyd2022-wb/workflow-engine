@@ -182,7 +182,7 @@ Small, and everything else builds on it.
       and `nonce`, ID token checked for `iss`, `aud`, expiry and `email_verified`.
       Client ID and secret per environment in KeePassXC (local) and CI variables;
       redirect URIs for local, test and production; CSP and cookie settings reviewed.
-    - [ ] b. **Linking to the local account.** A `user_identities` table (provider,
+    - [x] b. **Linking to the local account.** (!424) A `user_identities` table (provider,
       Google `sub`, email at link time). After the first link, sign-in matches on `sub`,
       never on email, so a later email change can't hijack an account. The first link:
       - automatic when the verified Google email equals an active user's email **and**
@@ -191,7 +191,7 @@ Small, and everything else builds on it.
       - otherwise (a personal Google account on a non-Google domain) the person links it
         once from their account settings while signed in with their password, because a
         lookalike Google account could otherwise claim the address.
-    - [ ] c. **No accounts from nowhere.** Google never creates a user or an org on its
+    - [x] c. **No accounts from nowhere.** (!424) Google never creates a user or an org on its
       own. It can accept a pending invite (0.4g) for the invited address.
     - [ ] d. **2FA.** Google's ID token doesn't reliably say whether 2-Step Verification
       was used, so it can't prove it. Per org, an owner can choose "trust Google sign-in
@@ -199,7 +199,7 @@ Small, and everything else builds on it.
       Workspace admin console; otherwise the TOTP step still follows for roles that need
       2FA (0.2). **Founder decision:** the default (recommended: TOTP still required until
       the owner opts in).
-    - [ ] e. **Everything else still applies:** deactivated users, Auditor expiry, lockouts
+    - [x] e. **Everything else still applies:** (!424) deactivated users, Auditor expiry, lockouts
       and the audit log ("signed in with Google"). Account settings show linked sign-in
       methods; unlinking needs a password to remain, so nobody locks themselves out.
     - [ ] f. **Tests:** token verification mocked at the boundary; linking rules
@@ -207,6 +207,15 @@ Small, and everything else builds on it.
       2FA policy per org; no account creation.
   - Done when: johnny@whistlebird.co.nz clicks "Sign in with Google", lands in the same
     account as before, and an unlinked lookalike Google account can't get in.
+
+  - Independent plumbing (!424, draft): Authlib OIDC/PKCE/state/nonce, strict verified
+    token/account linking and Google invite acceptance, password-confirmed settings,
+    account restrictions, audit and session/TOTP tests are implemented. 115 focused
+    tests pass (96% feature coverage), with an empty-database migration and downgrade.
+    Item a remains open for provisioning actual environment credentials and live
+    redirect/sign-in verification. Item d and the per-org-policy part of f remain
+    open for the founder's domain-trust default decision and implementation. Google
+    sign-in is disabled in tracked configs; existing TOTP remains enforced.
 
 ---
 

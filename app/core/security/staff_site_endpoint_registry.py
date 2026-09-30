@@ -399,4 +399,14 @@ ENDPOINT_COVERAGE = {
     # Portal proof approvals (!454): whole-order customer dialogue, not site-scoped.
     ("contract_portal.respond_to_approval", "POST"): "blocked",
     ("contracts.portal_request_approval", "POST"): "blocked",
+    # Google sign-in (!424): identity and account routes, no site data. Blocked for selected-site staff
+    # by default; review before selected-site roles are activated.
+    ("google_auth.callback", "GET"): "blocked",
+    ("google_auth.challenge", "GET"): "blocked",
+    ("google_auth.invite", "POST"): "blocked",
+    ("google_auth.link", "POST"): "blocked",
+    ("google_auth.methods", "GET"): "blocked",
+    ("google_auth.set_password", "POST"): "blocked",
+    ("google_auth.start", "POST"): "blocked",
+    ("google_auth.unlink", "POST"): "blocked",
 }

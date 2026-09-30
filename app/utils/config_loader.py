@@ -23,6 +23,7 @@ class Config:
         self.environment = os.getenv("ENVIRONMENT", "local")
         self._keepass_creds: dict | None = None
         self._xero_keepass_creds: dict | None = None
+        self._google_keepass_creds: dict[str, str] = {}
         self._observability_keepass_creds: dict[str, str] = {}
         self.load_config()
         self._load_keepass_creds()
@@ -101,6 +102,21 @@ class Config:
                         LOGGER.info("keepass_xero_credentials_loaded")
             except Exception:
                 pass  # silently fall back to env var / ini
+
+        # Google sign-in secrets stay in the same local KeePassXC store. Loading is
+        # opt-in so disabled environments never prompt for Google credentials.
+        if self.environment == "local" and self.getboolean("google_sign_in", "enabled", False):
+            try:
+                from scripts.local_secrets import get_keepass_entry
+
+                for key in ("client_id", "client_secret"):
+                    entry_name = self.get("google_sign_in", f"keepass_{key}_entry", f"workflow-engine/google/{key}")
+                    entry = get_keepass_entry(entry_name=entry_name)
+                    value = entry.get("Password", "").strip() if entry else ""
+                    if value and value != "PROTECTED":
+                        self._google_keepass_creds[key] = value
+            except Exception:
+                LOGGER.info("keepass_google_credentials_unavailable")
 
         # Browser telemetry uses a public project key, but keeping it in the
         # local KeePassXC database avoids another secret-bearing shell/env file.
@@ -233,6 +249,22 @@ class Config:
         if self._keepass_creds and "Password" in self._keepass_creds:
             return self._keepass_creds["Password"]
         return self.get("database", "password", "")
+
+    @property
+    def google_client_id(self) -> str:
+        return self._clean_config_secret(os.getenv("GOOGLE_CLIENT_ID") or self._google_keepass_creds.get("client_id"))
+
+    @property
+    def google_client_secret(self) -> str:
+        return self._clean_config_secret(
+            os.getenv("GOOGLE_CLIENT_SECRET") or self._google_keepass_creds.get("client_secret")
+        )
+
+    @property
+    def google_redirect_uri(self) -> str:
+        return self._clean_config_secret(
+            os.getenv("GOOGLE_REDIRECT_URI") or self.get("google_sign_in", "redirect_uri", "")
+        )
 
     @property
     def xero_client_id(self) -> str:

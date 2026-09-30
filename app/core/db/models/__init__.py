@@ -23,6 +23,7 @@ from app.core.db.models.system_findings_cache import SystemFindingsCache
 from app.core.db.models.trusted_device import TrustedDevice
 from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
 from app.core.db.models.user import User
+from app.core.db.models.user_identity import UserIdentity
 
 # inventory_items carries a composite FK to contract_material_receipts (plan 7.2b), so
 # SQLAlchemy needs the contract models registered wherever the core models are loaded --
@@ -45,6 +46,7 @@ __all__ = [
     "ProcessStepDocument",
     "Organisation",
     "User",
+    "UserIdentity",
     "AuditLog",
     "EntityEvent",
     "EntityEventSummary",

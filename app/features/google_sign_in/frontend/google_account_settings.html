@@ -1,0 +1,37 @@
+{% set google = google_account() %}
+{% if google_sign_in_enabled or google.linked %}
+<section class="card settings-card">
+  <div class="card-header"><h2 class="card-title">Sign-in methods</h2></div>
+  <div class="card-content">
+    <p>{% if google.password_available %}Password is available.{% else %}Your account uses Google sign-in. Add a password before unlinking Google.{% endif %}</p>
+    {% if google.linked %}
+      <p>Google linked as {{ google.linked.email_at_link }}.</p>
+      {% if google.password_available %}
+      <!-- Flask-WTF uses the csrf_token hidden field below; this Django-only rule does not recognize it. -->
+      <form action="/auth/google/unlink" method="post"> <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label">Confirm your password<input class="form-input" name="password" type="password" autocomplete="current-password" required></label>
+        <button class="btn btn-secondary" type="submit">Unlink Google</button>
+      </form>
+      {% else %}
+      <!-- Flask-WTF uses the csrf_token hidden field below; this Django-only rule does not recognize it. -->
+      <form action="/auth/google/password" method="post"> <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p>Sign in with Google again if your sign-in was more than 10 minutes ago.</p>
+        <label class="form-label">New password<input class="form-input" name="password" type="password" autocomplete="new-password" required minlength="8"></label>
+        <label class="form-label">Confirm password<input class="form-input" name="password_confirm" type="password" autocomplete="new-password" required minlength="8"></label>
+        <button class="btn btn-primary" type="submit">Add password</button>
+      </form>
+      {% endif %}
+    {% elif google_sign_in_enabled %}
+      <p>Link Google once, then use it to sign in to this account.</p>
+      <!-- Flask-WTF uses the csrf_token hidden field below; this Django-only rule does not recognize it. -->
+      <form action="/auth/google/link" method="post"> <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label">Confirm your password<input class="form-input" name="password" type="password" autocomplete="current-password" required></label>
+        <button class="btn btn-primary" type="submit">Link Google</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
