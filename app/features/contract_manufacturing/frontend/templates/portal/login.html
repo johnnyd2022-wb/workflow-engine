@@ -1,0 +1,8 @@
+{% extends "portal/base.html" %}{% block title %}Sign in · Customer portal{% endblock %}{% block content %}<h1>Sign in to your orders</h1>{% if customer_key %}<form data-portal-api="/portal/api/login" hx-boost="false">
+<input type="hidden" name="customer_id" value="{{ customer_key }}">
+<label>Email<input type="email" name="email" required autocomplete="username">
+</label>
+<label>Password<input type="password" name="password" required autocomplete="current-password">
+</label>
+<button type="submit">Sign in</button>
+</form>{% else %}<p>Open the portal sign-in link provided by your producer.</p>{% endif %}<p>To create an account or restore access, ask your producer for an invitation.</p>{% endblock %}

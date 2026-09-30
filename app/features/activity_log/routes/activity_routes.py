@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from flask import g, jsonify, request
@@ -112,11 +113,37 @@ _INVENTORY_TYPE_LABELS = {
 _ITEM_SKIP_FIELDS = frozenset({"id", "extra_data"})
 
 
-def _fmt_field_value(val) -> str:
+def _format_quantity(raw) -> str:
+    if raw is None:
+        return ""
+    try:
+        quantity = Decimal(str(raw))
+    except (InvalidOperation, TypeError, ValueError):
+        return str(raw)
+    return format(quantity.normalize(), "f") if quantity.is_finite() else str(raw)
+
+
+_QUANTITY_FIELDS = frozenset(
+    {
+        "quantity",
+        "quantity_before",
+        "quantity_after",
+        "quantity_consumed",
+        "quantity_produced",
+        "quantity_wasted",
+        "quantity_added",
+        "delta",
+    }
+)
+
+
+def _fmt_field_value(val, field: str | None = None) -> str:
     if val is None or val == "":
         return "—"
     if isinstance(val, bool):
         return "Yes" if val else "No"
+    if field in _QUANTITY_FIELDS:
+        return _format_quantity(val)
     if isinstance(val, list):
         if not val:
             return "(none)"
@@ -126,7 +153,7 @@ def _fmt_field_value(val) -> str:
                 if "name" in item:
                     s = item["name"]
                     if item.get("quantity") is not None:
-                        s += f" ({item['quantity']}"
+                        s += f" ({_format_quantity(item['quantity'])}"
                         if item.get("unit"):
                             s += f" {item['unit']}"
                         s += ")"
@@ -153,6 +180,8 @@ def _fmt_sub_val(val, field: str = "") -> str:
         return "(complex)"
     if field in ("inventory_type", "expected_inventory_type"):
         return _INVENTORY_TYPE_LABELS.get(str(val), str(val))
+    if field in _QUANTITY_FIELDS:
+        return _format_quantity(val)
     return str(val)
 
 
@@ -237,8 +266,8 @@ def _build_diff_rows(diff: dict) -> list[dict]:
         if isinstance(before, list) and isinstance(after, list) and all(isinstance(i, dict) for i in (before + after)):
             rows.extend(_smart_list_diff_rows(label, before, after))
         else:
-            b_str = _fmt_field_value(before)
-            a_str = _fmt_field_value(after)
+            b_str = _fmt_field_value(before, field)
+            a_str = _fmt_field_value(after, field)
             if b_str != a_str:
                 rows.append(
                     {
@@ -264,7 +293,7 @@ def _step_added_diff_rows(step_data: dict) -> list[dict]:
         unit = inp.get("unit", "")
         detail = f"'{name}'"
         if qty is not None:
-            detail += f" — {qty} {unit}".rstrip()
+            detail += f" — {_format_quantity(qty)} {unit}".rstrip()
         rows.append({"label": "Input", "before": None, "after": detail})
     for out in step_data.get("outputs") or []:
         if not isinstance(out, dict):
@@ -274,7 +303,7 @@ def _step_added_diff_rows(step_data: dict) -> list[dict]:
         unit = out.get("unit", "")
         detail = f"'{name}'"
         if qty is not None:
-            detail += f" — {qty} {unit}".rstrip()
+            detail += f" — {_format_quantity(qty)} {unit}".rstrip()
         rows.append({"label": "Output", "before": None, "after": detail})
     for pr in step_data.get("execution_prompts") or []:
         if not isinstance(pr, dict):
@@ -300,8 +329,15 @@ def _human_summary(ev) -> str:
     p = ev.payload or {}
     d = ev.diff or {}
 
+    if et in {"crm_xero.sync_completed", "crm_xero.sync_failed"}:
+        status = "failed" if et.endswith("failed") else "completed"
+        invoices = int(p.get("invoices_synced") or 0)
+        allocated = int(p.get("sales_allocated") or 0)
+        unmapped = int(p.get("sales_unmapped") or 0)
+        return f"Xero sync {status} — {invoices} invoices, {allocated} sales matched, {unmapped} unmapped"
+
     if et == "inventory_item.created":
-        qty = p.get("quantity", "")
+        qty = _format_quantity(p.get("quantity", ""))
         unit = p.get("unit", "")
         method = p.get("add_method", "manual").replace("_", " ")
         inv_type = _INVENTORY_TYPE_LABELS.get(
@@ -320,13 +356,31 @@ def _human_summary(ev) -> str:
         return " ".join(parts)
 
     if et == "inventory_item.quantity_adjusted":
+        reason = p.get("reason")
+        if reason in {"sales_fifo_consumption", "sales_fifo_reversal"}:
+            sale = p.get("sale") or {}
+            quantity = sale.get("quantity_from_batch") or sale.get("quantity_sold") or p.get("delta", "?")
+            total = sale.get("quantity_sold")
+            product = sale.get("product_name") or p.get("name") or "product"
+            batch = sale.get("batch_number")
+            invoice = sale.get("invoice_number")
+            customer = sale.get("customer_name")
+            batch_text = f"batch {batch}" if batch not in (None, "") else "unlabelled batch"
+            quantity_text = _format_quantity(quantity)
+            sale_text = f"{quantity_text} × {product} ({batch_text})"
+            total_text = _format_quantity(total) if total not in (None, "") else ""
+            if total_text and total_text != quantity_text:
+                sale_text += f" · {total_text} total"
+            if reason == "sales_fifo_reversal":
+                return f"Sale reversed: {sale_text}{f', {invoice}' if invoice else ''}{f', {customer}' if customer else ''}"
+            return f"Sold {sale_text}{f', {invoice}' if invoice else ''}{f', {customer}' if customer else ''}"
         before = p.get("quantity_before", "?")
         after = p.get("quantity_after", p.get("quantity", "?"))
         unit = p.get("unit", "")
-        return f"Quantity adjusted {before} → {after} {unit}".strip()
+        return f"Quantity adjusted {_format_quantity(before)} → {_format_quantity(after)} {unit}".strip()
 
     if et == "inventory_item.consumed":
-        qty = p.get("quantity_consumed", "?")
+        qty = _format_quantity(p.get("quantity_consumed", "?"))
         unit = p.get("unit", "")
         step = p.get("step_name", "")
         base = f"{qty} {unit} consumed".strip()
@@ -338,7 +392,7 @@ def _human_summary(ev) -> str:
         return base
 
     if et == "inventory_item.produced":
-        qty = p.get("quantity_produced", "?")
+        qty = _format_quantity(p.get("quantity_produced", "?"))
         unit = p.get("unit", "")
         step = p.get("step_name", "")
         base = f"{qty} {unit} produced".strip()
@@ -350,7 +404,7 @@ def _human_summary(ev) -> str:
         return base
 
     if et == "inventory_item.wasted":
-        qty = p.get("quantity_wasted", "?")
+        qty = _format_quantity(p.get("quantity_wasted", "?"))
         unit = p.get("unit", "")
         reason = p.get("reason", "")
         base = f"{qty} {unit} wasted".strip()
@@ -613,7 +667,7 @@ def _merge_inventory_legacy_audit(db, eid: UUID, org_id: UUID, event_dicts: list
         parts = []
         qty = entry.get("quantity_added")
         if qty:
-            parts.append(f"Added {qty}")
+            parts.append(f"Added {_format_quantity(qty)}")
         else:
             parts.append("Item recorded")
         parts.append(f"via {method}")

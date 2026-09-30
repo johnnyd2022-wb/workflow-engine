@@ -883,6 +883,17 @@ class ComplianceService:
         work_queue = (
             [
                 {
+                    "kind": "missing-evidence",
+                    "severity": "attention",
+                    "control_id": row["control_id"],
+                    "title": f"Add evidence: {row['topic']}",
+                    "description": "This check has no current evidence. Open it to record proof or explain what needs attention.",
+                }
+                for row in unique_rows
+                if row["state"] == "missing"
+            ]
+            + [
+                {
                     "kind": "overdue-review",
                     "severity": "overdue",
                     "control_id": row["control_id"],

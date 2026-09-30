@@ -453,7 +453,9 @@ do not introduce reverse imports into existing domain code.
       - /api/core/hub/overview
       - /api/core/tasks
       - /api/core/tasks/*
-    backend:  app/core/backend/backend.py:4733-5790 (summary, metrics, hub overview)
+    backend:  app/features/dashboard/routes/dashboard_routes.py (summary, action board,
+              weekly series, metrics; registered on core_bp with stable endpoint names)
+              app/core/backend/backend.py (hub overview)
               app/core/backend/tasks.py (task and lane API)
     frontend: frontend/dashboard/dashboard.html, js/dashboard.js,
               js/core-active-batches-graph.js (1007), css/dashboard_spa.css

@@ -166,11 +166,15 @@ there instead of partway through a run. (verified 2026-09-19 by findings-sweep)
   5/min is relaxed to 1000/min in the test environment and local-under-CI, never in
   production (`USE_RELAXED_AUTH_RATE_LIMITS`, pinned by
   `tests/test_auth_rate_limit_gating.py`). Business routes are never throttled, so ~700
-  calls from one process cannot trip a limit. The remaining `/auth/*` routes carry no
-  limit either: `/auth/verify-2fa` has neither a limit nor an attempt counter — only
-  `/auth/login` touches `failed_login_attempts` / `lock_account` (`auth_routes.py:378-459`)
-  and `verify_totp` is a bare `pyotp` check (`app/core/security/auth_service.py:188-193`).
-  **Unfixed**; tracked as F6 in `.agents/reports/auth/security-audit.md`.
+  calls from one process cannot trip a limit. When this was researched (2026-09-14)
+  `/auth/verify-2fa` had neither a limit nor an attempt counter — only `/auth/login`
+  touches `failed_login_attempts` / `lock_account` (`auth_routes.py:378-459`) and
+  `verify_totp` is a bare `pyotp` check (`app/core/security/auth_service.py:188-193`).
+  **Since fixed** (F6 in `.agents/reports/auth/security-audit.md`, patched 2026-09-25,
+  plan item 0.2): `/auth/verify-2fa` is limited to 5/minute and 20/hour keyed on the
+  pending account, and five wrong codes end the pending session. The replay is
+  unaffected — it never calls `/auth/verify-2fa` and aborts if login answers `requires_2fa`
+  (`scripts/whistlebird_replay.py:143`). (verified 2026-09-30 by findings-sweep)
 
 ## Progress log (update this as work lands — this is the resume point after any
 interruption, read it before re-deriving anything)

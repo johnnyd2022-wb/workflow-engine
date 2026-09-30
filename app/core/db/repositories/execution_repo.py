@@ -398,10 +398,9 @@ class ExecutionRepository:
             execution_step.status = ExecutionStepStatus.COMPLETED
             execution_step.actual_inputs = actual_inputs or []
             execution_step.actual_outputs = actual_outputs or []
-            execution_step.execution_data = execution_data or {}
-            execution_step.completed_at = (
-                completed_at_override if completed_at_override is not None else datetime.now(UTC)
-            )
+            entered_at = datetime.now(UTC)
+            execution_step.execution_data = {**(execution_data or {}), "entered_at": entered_at.isoformat()}
+            execution_step.completed_at = completed_at_override if completed_at_override is not None else entered_at
 
             # Advance execution: mark next steps as ready
             self._advance_execution(execution)
@@ -431,6 +430,7 @@ class ExecutionRepository:
                     "items_produced": items_produced,
                     "evidence_ids": evidence_ids,
                     "completed_at": execution_step.completed_at.isoformat() if execution_step.completed_at else None,
+                    "entered_at": entered_at.isoformat(),
                 },
             )
 

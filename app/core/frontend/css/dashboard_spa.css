@@ -219,6 +219,11 @@ html[data-spa-theme="dark"] .dashboard-v3 .dash-workspace-card--unavailable {
   background: var(--dash-border);
 }
 
+.dashboard-v3 .dash-compliant-health__milestone--overdue {
+  color: var(--dash-warning, #b45309);
+  font-weight: 700;
+}
+
 .dashboard-v3 .dash-compliant-health__progress span {
   display: block;
   height: 100%;

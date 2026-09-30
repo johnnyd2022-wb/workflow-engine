@@ -37,12 +37,26 @@
         <div class="crm-kpi-value" x-text="formatCurrency2(overview.outstanding_receivables)"></div>
         <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`${overview.outstanding_invoice_count || 0} invoices`"></div>
       </button>
-      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openMoMModal()">
+      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openMoMModal()" x-show="monthOnMonthChangePct != null">
         <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">Month on month change</div>
         <div class="crm-kpi-value" :style="monthOnMonthChangePct == null ? 'color:var(--text-primary,#111827);' : (monthOnMonthChangePct >= 0 ? 'color:var(--crm-teal);' : 'color:var(--crm-red);')" x-text="formatPercent(monthOnMonthChangePct)"></div>
         <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`Last ${momPeriodMonths} month${momPeriodMonths > 1 ? 's' : ''} vs prior period`"></div>
       </button>
     </div>
+
+    <section class="crm-card" style="padding:16px 20px; margin:0 0 18px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;" x-show="Number(overview.contact_completeness?.missing_any || 0) > 0" x-cloak>
+      <div>
+        <h2 class="crm-section-title">Recall contact details</h2>
+        <p style="margin:4px 0 0; color:var(--text-secondary,#6b7280);">
+          <strong x-text="overview.contact_completeness?.missing_any || 0"></strong>
+          customers are missing a phone number or email. Of <span x-text="overview.contact_completeness?.total || 0"></span>,
+          <span x-text="overview.contact_completeness?.with_phone || 0"></span> have a phone and
+          <span x-text="overview.contact_completeness?.with_email || 0"></span> have an email.
+          Update contacts in Xero, then sync.
+        </p>
+      </div>
+      <a class="crm-btn crm-btn--secondary crm-btn--sm" href="/crm/customers?missing_contact=1">Review missing contacts</a>
+    </section>
 
     <div class="crm-widget-grid" :class="showGridGuide ? 'crm-widget-grid--guide' : ''">
       <template x-for="widget in widgetLayout" :key="widget.id">
@@ -161,13 +175,17 @@
                   </div>
                 </div>
                 <table class="crm-table crm-table--compact" style="width:100%;">
-                  <thead><tr><th>Item</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Revenue</th></tr></thead>
+                  <thead><tr><th>Product</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Revenue</th></tr></thead>
                   <tbody>
-                    <template x-for="product in systemRows('top_products')" :key="`${product.item_code || ''}-${product.description || ''}`">
+                    <template x-for="product in systemRows('top_products')" :key="product.description">
                       <tr>
                         <td>
-                          <div style="font-size:.82rem; font-weight:600;" x-text="product.description || product.item_code || '—'"></div>
-                          <div style="font-size:.72rem; color:var(--text-secondary,#6b7280);" x-text="product.item_code || 'No item code'"></div>
+                          <button type="button" style="font-size:.82rem; font-weight:600; border:0; background:none; padding:0; color:inherit; cursor:pointer; text-align:left;" @click="toggleProductDetails(product.description)" :aria-expanded="expandedProductName === product.description" x-text="product.description || '—'"></button>
+                          <div x-show="expandedProductName === product.description" x-cloak style="margin-top:6px; font-size:.72rem; color:var(--text-secondary,#6b7280);">
+                            <template x-for="(item, index) in product.xero_items || []" :key="`${item.item_code || ''}-${item.description || ''}-${index}`">
+                              <div><span x-text="item.item_code || 'No item code'"></span><span x-show="item.description && item.description !== product.description"> · <span x-text="item.description"></span></span></div>
+                            </template>
+                          </div>
                         </td>
                         <td style="text-align:right; font-size:.82rem;" x-text="formatNumber(product.total_qty)"></td>
                         <td style="text-align:right; font-size:.82rem; font-weight:700; color:var(--crm-teal);" x-text="formatCurrency2(product.total_revenue)"></td>
@@ -178,13 +196,23 @@
                     <tr style="border-top:2px solid var(--border-default,#e5e7eb); background:var(--surface-subtle,rgba(0,0,0,.03));">
                       <td>
                         <div style="font-size:.82rem; font-weight:800;">All authorised sales</div>
-                        <div style="font-size:.72rem; color:var(--text-secondary,#6b7280);">Total across every product, not just the rows shown above</div>
+                        <div style="font-size:.72rem; color:var(--text-secondary,#6b7280);">All authorised sale lines, including items awaiting mapping</div>
                       </td>
                       <td style="text-align:right; font-size:.82rem; font-weight:800;" x-text="formatNumber(overview.product_sales_summary?.total_qty || 0)"></td>
                       <td style="text-align:right; font-size:.82rem; font-weight:800; color:var(--crm-teal);" x-text="formatCurrency2(overview.product_sales_summary?.total_revenue || 0)"></td>
                     </tr>
                   </tfoot>
                 </table>
+                <section x-show="overview.unmapped_products_count > 0" x-cloak style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border-default,#e5e7eb);">
+                  <h3 style="font-size:.82rem; margin:0 0 4px;">Xero products needing a mapping (<span x-text="overview.unmapped_products_count"></span>)</h3>
+                  <p style="font-size:.74rem; color:var(--text-secondary,#6b7280); margin:0 0 8px;">These items are excluded from product totals until mapped.</p>
+                  <ul style="font-size:.76rem; margin:0 0 8px; padding-left:18px;">
+                    <template x-for="(item, index) in overview.unmapped_products || []" :key="`${item.item_code || ''}-${item.description || ''}-${index}`">
+                      <li><span x-text="item.description || 'No description'"></span> · <span x-text="item.item_code || 'No item code'"></span> <a :href="'/crm/configuration?xero_line=' + encodeURIComponent(item.description || item.item_code || '')">Map</a></li>
+                    </template>
+                  </ul>
+                  <a href="/crm/configuration">Review product mappings</a>
+                </section>
               </div>
             </template>
 
@@ -449,6 +477,7 @@
                 </tbody>
               </table>
               <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+                <a class="crm-btn crm-btn--secondary crm-btn--sm" :href="'/core/sourcemap?invoice=' + encodeURIComponent(inv.xero_invoice_id)" x-show="inv.xero_invoice_id">Trace stock</a>
                 <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click.stop="viewInvoice(inv)">View</button>
                 <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click.stop="downloadInvoice(inv)" :disabled="invoiceDownloadId === inv.id">
                   <span x-text="invoiceDownloadId === inv.id ? 'Downloading…' : 'Download PDF'"></span>

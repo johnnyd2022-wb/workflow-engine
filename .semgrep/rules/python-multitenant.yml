@@ -56,6 +56,10 @@ rules:
           def $FUNC(...):
             ...
       - pattern-not: |
+          @requires_portal
+          def $FUNC(...):
+            ...
+      - pattern-not: |
           @limiter.exempt
           def $FUNC(...):
             ...
