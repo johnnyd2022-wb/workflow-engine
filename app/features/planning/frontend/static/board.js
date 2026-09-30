@@ -10,6 +10,8 @@
   const settingForm = root.querySelector('[data-setting-form]');
   const planForm = root.querySelector('[data-plan-form]');
   let workflows = [];
+  let materialLots = [];
+  let materialAssessment = null;
   let boardRequest = 0;
   function node(tag, text) { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; }
   function iso(day) { return day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0'); }
@@ -48,6 +50,20 @@
     card.append(node('p', batch.forecast_ready_date ? 'Forecast ready ' + batch.forecast_ready_date : 'Delivery estimate pending checks'));
     if (batch.blockers.length) { const list = node('ul'); batch.blockers.forEach(reason => list.append(node('li', reason))); card.append(list); }
     if (batch.snapshot.timing_reason) card.append(node('p', batch.snapshot.timing_reason));
+    const material = materialAssessment?.batches.find(row => row.batch_id === batch.id);
+    if (material) {
+      card.append(node('p', 'Materials observed ' + materialAssessment.observed_at));
+      if (material.stale) card.append(node('p', 'Plan changed. Check materials again.'));
+      else {
+        card.append(node('p', material.material_start_date ? 'Materials available from ' + material.material_start_date : 'Material availability unresolved'));
+        if (material.material_timing_estimate) card.append(node('p', 'Timing estimate with these materials ' + material.material_timing_estimate));
+        (material.bindings || []).forEach(binding => {
+          const fact = materialAssessment.observations.find(lot => lot.id === binding.inventory_item_id);
+          if (fact) card.append(node('p', fact.name + ' · On hand observed: ' + fact.on_hand_quantity + ' ' + fact.unit));
+        });
+        const reasons = node('ul'); material.reasons.forEach(reason => reasons.append(node('li', reason))); card.append(reasons);
+      }
+    }
     if (canRecord && !['started', 'cancelled'].includes(batch.status)) {
       actionForm(card, batch, 'priority', 'Priority (0–100)', 'priority', 'number', batch.priority);
       actionForm(card, batch, 'pin', batch.pinned ? 'Unpin batch' : 'Pin batch');
@@ -75,8 +91,9 @@
   async function loadBoard() {
     const requestNumber = ++boardRequest;
     try {
-      const dates = range(); const result = await api('/api/core/planner/batches?start=' + iso(dates.start) + '&end=' + iso(dates.end));
+      const dates = range(); const [result, observed] = await Promise.all([api('/api/core/planner/batches?start=' + iso(dates.start) + '&end=' + iso(dates.end)), api('/api/core/planner/material-assessments')]);
       if (requestNumber !== boardRequest) return;
+      materialAssessment = observed.assessment;
       const days = root.querySelector('[data-board-days]'); days.replaceChildren();
       root.querySelector('[data-board-title]').textContent = iso(dates.start) + ' – ' + iso(dates.end);
       root.querySelector('[data-board-empty]').hidden = result.batches.length !== 0;
@@ -102,10 +119,24 @@
       const duration = field(row, 'Duration (minutes)', 'duration_minutes', 'number', saved?.duration_minutes ?? '');
       const waiting = field(row, 'Waiting (minutes)', 'waiting_minutes', 'number', saved?.waiting_minutes ?? '');
       [duration, waiting].forEach(input => { input.min = '0'; input.max = '525600'; input.step = '1'; }); fieldset.append(row);
+      (step.inputs || []).forEach((input, index) => {
+        if (!input || input.source_output_id != null) return;
+        const label = node('label', 'Exact raw lot for ' + (input.name || 'material') + ' (' + (input.quantity || '?') + ' ' + (input.unit || '?') + ')');
+        const select = node('select'); select.dataset.materialStep = step.step_id; select.dataset.materialIndex = index;
+        option(select, '', 'Select a lot');
+        materialLots.filter(lot => lot.unit === input.unit).forEach(lot => option(select, lot.id, lot.name + ' · Lot ' + lot.id.slice(0, 8) + ' · ' + lot.unit));
+        const binding = workflow.setting?.snapshot.material_bindings?.find(entry => entry.step_id === step.step_id && entry.input_index === index);
+        if (binding) {
+          if (!materialLots.some(lot => lot.id === binding.inventory_item_id && lot.unit === input.unit)) option(select, binding.inventory_item_id, 'Saved lot ' + binding.inventory_item_id.slice(0, 8));
+          select.value = binding.inventory_item_id;
+        }
+        label.append(select); row.append(label);
+      });
     });
   }
   async function loadInputs() {
-    const [catalog, demands] = await Promise.all([api('/api/core/planner/workflows'), api('/api/core/planner/demands')]); workflows = catalog.workflows;
+    const [catalog, demands] = await Promise.all([api('/api/core/planner/workflows'), api('/api/core/planner/demands')]); workflows = catalog.workflows; materialLots = catalog.material_lots;
+    if (catalog.material_lots_truncated) notice.textContent = 'Showing the first 500 raw lots. Existing bindings are retained when their lot is not listed.';
     if (settingForm) {
       const select = settingForm.elements.output; const selected = select.value; select.replaceChildren();
       workflows.forEach(row => option(select, row.id, row.name + ' · ' + row.process_name)); if (workflows.some(row => row.id === selected)) select.value = selected;
@@ -129,7 +160,8 @@
       const workflow = workflows.find(row => row.id === settingForm.elements.output.value);
       if (!workflow) { button.disabled = false; return; }
       const steps = Array.from(root.querySelectorAll('[data-step-id]')).map(row => ({step_id: row.dataset.stepId, duration_minutes: Number(row.querySelector('[name="duration_minutes"]').value), waiting_minutes: Number(row.querySelector('[name="waiting_minutes"]').value)}));
-      try { await api('/api/core/planner/workflows/' + workflow.process_id + '/settings', {source_output_id: workflow.id, batch_quantity: settingForm.elements.batch_quantity.value, steps, expected_revision: workflow.setting?.revision || 0}); await loadInputs(); notice.textContent = 'Planning settings saved'; }
+      const material_lots = Array.from(root.querySelectorAll('[data-material-step]')).filter(select => select.value).map(select => ({step_id: select.dataset.materialStep, input_index: Number(select.dataset.materialIndex), inventory_item_id: select.value}));
+      try { await api('/api/core/planner/workflows/' + workflow.process_id + '/settings', {source_output_id: workflow.id, batch_quantity: settingForm.elements.batch_quantity.value, steps, material_lots, expected_revision: workflow.setting?.revision || 0}); await loadInputs(); notice.textContent = 'Planning settings saved'; }
       catch (exc) { fail(exc); } finally { button.disabled = false; }
     });
   }
@@ -137,6 +169,11 @@
     event.preventDefault(); const button = planForm.querySelector('button'); button.disabled = true; error.hidden = true;
     const body = {}; if (planForm.elements.site.value) body.site_id = planForm.elements.site.value;
     try { const result = await api('/api/core/planner/demands/' + planForm.elements.demand.value + '/plan', body); if (result.batches.length) rangeForm.elements.date.value = result.batches[0].proposed_start_date; await loadBoard(); notice.textContent = 'Batches planned; delivery estimate pending checks'; }
+    catch (exc) { fail(exc); } finally { button.disabled = false; }
+  });
+  root.querySelector('[data-check-materials]')?.addEventListener('click', async function (event) {
+    const button = event.currentTarget; button.disabled = true; error.hidden = true;
+    try { await api('/api/core/planner/material-assessments', {}); await loadBoard(); notice.textContent = 'Materials observed. Refresh after stock changes; delivery and start checks remain pending.'; }
     catch (exc) { fail(exc); } finally { button.disabled = false; }
   });
   Promise.all([loadInputs(), loadBoard()]).catch(fail);

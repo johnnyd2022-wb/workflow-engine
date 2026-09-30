@@ -1029,6 +1029,9 @@ Founder decisions for this phase:
       batch. It respects ready dates (not usable until ready) and expiry dates (use
       first-expiring stock first, and never plan to use a lot after it expires). A
       shortage moves the date and says which input caused it.
+      - [x] Persist exact-lot raw bindings and historical same-org material
+        observations (!443). Holds, commitments, readiness, incoming supply and
+        published forecasts still need trusted records and adapters.
       - [x] Material availability engine: per-physical-batch recipes, explicit known
         supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
         uncovered shortages (!428). Expected-delivery records, DB adapters,
