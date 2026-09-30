@@ -56,6 +56,37 @@ label; trusted contract/activity evidence is still needed.
 
 Unlicensed removals, temporary unlicensed storage and confirmed transit losses are
 blocked until their specific approval and excise accounting workflows exist.
-Food/liquor registration findings, per-licence excise entries and a transfer screen
-remain separate open requirements. No existing licensed-area flag or excise behavior
+Per-licence excise entries and full operational release remain open requirements.
+Transfer and food/liquor finding foundations are separate dependent MRs. No existing licensed-area flag or excise behavior
 is replaced merely by adding this seam.
+
+## Destination registration findings
+
+NZ Alcohol projects an explicit `destination_activity` field (storage, manufacturing
+or selling) through the existing generic approval form. It does not infer this value
+from the destination's kind. Older clients or dispatch facts without this field raise
+an activity-review finding. Invalid supplied values are rejected.
+
+An authorised CCA movement records plain-text `system_alerts` within its immutable
+module evidence when food activity coverage or a current dated liquor record is
+missing. Receipt rechecks recorded coverage on its own date using the original
+activity. These review findings do not replace Customs authority requirements, and
+receiving stock never grants permission to sell.
+
+The module's periodic check re-evaluates dispatch and receipt dates against the
+recorded registers and emits the standard system-finding/notification contract.
+Each underlying transfer/receipt has stable alert IDs. Newly documented historic
+coverage can resolve the current finding without rewriting the original decision.
+Food coverage is the explicit registration/activity/site/date link. A liquor record
+must have the same site and organisation, current status, a number and issue/expiry
+dates; a special licence must also cover the event date. This is a missing-record
+check, not validation of licence conditions, hours, consumption mode or exemptions.
+All those requirements still need producer review. No external permit is verified.
+
+MPI permits explicit multi-site registration; addresses and coverage must be recorded:
+[Register a food business](https://www.mpi.govt.nz/food-business/starting-a-food-business/register-food-business).
+Liquor licence types authorise different activities:
+[Police alcohol-licence overview](https://www.police.govt.nz/advice-services/drugs-and-alcohol/alcohol-licences).
+
+Legacy dispatches without an activity remain reviewable; their immutable evidence
+is not overwritten. An audited activity-correction workflow remains future work.
