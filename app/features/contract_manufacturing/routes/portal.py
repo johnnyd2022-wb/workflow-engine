@@ -13,6 +13,7 @@ from app.features.contract_manufacturing.models.portal import PortalSession
 from app.features.contract_manufacturing.portal_security import COOKIE_NAME, requires_portal
 from app.features.contract_manufacturing.routes.orders import handled
 from app.features.contract_manufacturing.services.orders import OrderError
+from app.features.contract_manufacturing.services.portal_approvals import respond_approval
 from app.features.contract_manufacturing.services.portal_auth import (
     SESSION_LIFETIME,
     accept_invite,
@@ -150,6 +151,16 @@ def list_orders():
 @handled
 def get_order(order_id):
     return jsonify({"order": shared_order(db_session(), g.portal_principal, order_id)})
+
+
+@bp.post("/api/orders/<uuid:order_id>/approvals/<uuid:approval_id>")
+@limiter.limit("20 per minute", key_func=get_remote_address)
+@requires_portal
+@handled
+def respond_to_approval(order_id, approval_id):
+    row = respond_approval(db_session(), g.portal_principal, order_id, approval_id, request.get_json(silent=True))
+    db_session().commit()
+    return jsonify({"approval_id": str(row.id), "decision": row.decision})
 
 
 @bp.get("/api/orders/<uuid:order_id>/documents/<uuid:document_id>")

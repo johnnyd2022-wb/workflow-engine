@@ -52,6 +52,7 @@ def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, 
             upload.get_by_role("button", name="Upload copy").click()
         assert uploaded.value.status == 201
         expect(page.locator('form[data-publication] [name="document_ids"]')).to_have_count(1)
+        document_id = page.locator('form[data-publication] [name="document_ids"]').input_value()
         publish = page.locator("form[data-publication]")
         publish.locator('[name="stage_label"]').fill("Packed <script>alert(2)</script>")
         publish.locator('[name="actual_abv"]').fill("40.2")
@@ -59,6 +60,12 @@ def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, 
         publish.locator('[name="document_ids"]').check()
         publish.get_by_role("button", name="Publish update").click()
         expect(page.get_by_text("Last revision: 1")).to_be_visible()
+        approval = page.request.post(
+            f"/api/core/contract-orders/{order['id']}/portal-approvals",
+            headers=csrf_headers(page),
+            data={"document_id": document_id, "prompt": "Approve the shared label proof"},
+        )
+        assert approval.status == 201, approval.text()
         email = f"portal-e2e-{uuid4().hex[:8]}@brand.test"
         invite = page.locator("form[data-invite]")
         invite.locator('[name="email"]').fill(email)
@@ -81,6 +88,10 @@ def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, 
         portal.get_by_role("link", name=order["reference"], exact=True).click()
         expect(portal.get_by_role("heading", name=order["reference"], exact=True)).to_be_visible()
         expect(portal.get_by_text("Shared actual ABV: 40.2%")).to_be_visible()
+        expect(portal.get_by_text("Approve the shared label proof")).to_be_visible()
+        portal.get_by_role("button", name="Approve proof").click()
+        expect(portal.locator("form[data-approval-api]")).to_have_count(0)
+        assert "approved" in portal.get_by_role("heading", name="10. What's waiting on you").locator("..").inner_text()
         expect(portal.get_by_text("Order declaration: producer licensee responsible for excise.")).to_be_visible()
         expect(
             portal.get_by_text("Dispatch, Customs treatment and payment have not been verified or shared")

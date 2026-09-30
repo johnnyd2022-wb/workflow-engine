@@ -4,6 +4,7 @@ import uuid
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -25,6 +26,7 @@ class PortalPrincipal(TenantScoped, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "customer_id", "email", name="uq_portal_customer_email"),
         UniqueConstraint("org_id", "id", name="uq_portal_principal_org_id"),
+        UniqueConstraint("org_id", "customer_id", "id", name="uq_portal_principal_customer_scope"),
         ForeignKeyConstraint(
             ["org_id", "customer_id"], ["contract_customers.org_id", "contract_customers.id"], ondelete="RESTRICT"
         ),
@@ -120,3 +122,53 @@ class PortalDocument(TenantScoped, Base):
     uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     revoked_at = Column(DateTime(timezone=True))
+
+
+class PortalApproval(TenantScoped, Base):
+    """One customer decision on one explicitly shared document."""
+
+    __tablename__ = "contract_portal_approvals"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "order_id", "customer_id"],
+            ["contract_orders.org_id", "contract_orders.id", "contract_orders.customer_id"],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "order_id", "customer_id", "document_id"],
+            [
+                "contract_portal_documents.org_id",
+                "contract_portal_documents.order_id",
+                "contract_portal_documents.customer_id",
+                "contract_portal_documents.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "customer_id", "responded_by"],
+            [
+                "contract_portal_principals.org_id",
+                "contract_portal_principals.customer_id",
+                "contract_portal_principals.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("org_id", "order_id", "document_id", name="uq_portal_approval_document"),
+        CheckConstraint(
+            "(decision IS NULL AND responded_by IS NULL AND responded_at IS NULL AND response_note IS NULL) OR "
+            "(decision IN ('approved','changes_requested') AND responded_by IS NOT NULL AND responded_at IS NOT NULL)",
+            name="ck_portal_approval_response",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = Column(UUID(as_uuid=True), nullable=False)
+    customer_id = Column(UUID(as_uuid=True), nullable=False)
+    document_id = Column(UUID(as_uuid=True), nullable=False)
+    prompt = Column(String(500), nullable=False)
+    requested_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    requested_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    decision = Column(String(30))
+    response_note = Column(String(1000))
+    responded_by = Column(UUID(as_uuid=True))
+    responded_at = Column(DateTime(timezone=True))

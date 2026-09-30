@@ -42,7 +42,19 @@
 </label>
 <button type="submit" class="btn">Upload copy</button>
 </form>{% for document in documents %}<p>{{ document.title }} <button type="button" class="btn" data-sharing-delete="/api/core/contract-orders/{{ order.id }}/portal-documents/{{ document.id }}">Withdraw document</button>
-</p>{% endfor %}</section>{% endif %}
+</p>{% endfor %}</section>
+<section class="contract-card">
+<h2>Label proof approvals</h2>
+<p>Publish a label proof document first, then request a customer response. Each proof can be requested once; upload a new copy after requested changes.</p>
+{% if publication and not publication.revoked_at and publication.payload.documents['items'] %}
+<form hx-boost="false" data-sharing-api="/api/core/contract-orders/{{ order.id }}/portal-approvals">
+<label>Shared document<select name="document_id" required>{% for document in publication.payload.documents['items'] %}<option value="{{ document.id }}">{{ document.title }}</option>{% endfor %}</select></label>
+<label>Approval request<input name="prompt" maxlength="500" value="Please approve this label proof" required></label>
+<button type="submit" class="btn">Request approval</button>
+</form>
+{% endif %}
+{% for approval in approval_requests %}<p>{{ approval.document_title }} · {{ approval.prompt }} · {{ approval.decision or 'Awaiting customer' }}{% if approval.response_note %} · {{ approval.response_note }}{% endif %}</p>{% else %}<p>No approval requests yet.</p>{% endfor %}
+</section>{% endif %}
 {% if can('users.manage') %}<section class="contract-card">
 <h2>Invite a customer user</h2>
 <p>Invitations expire after 72 hours. Copy the link and provide it to the named person. Their account has access only to this customer's shared orders.</p>

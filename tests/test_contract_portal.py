@@ -14,6 +14,7 @@ from app.core.db.models.user import User, UserRole
 from app.core.db.repositories.execution_repo import ExecutionRepository
 from app.core.security.access_policy import POLICY, PORTAL_SIGNED_IN, PUBLIC, allows, requirement_for
 from app.features.contract_manufacturing.models.portal import (
+    PortalApproval,
     PortalDocument,
     PortalInvite,
     PortalPrincipal,
@@ -54,7 +55,7 @@ def portal_world(world, db):  # noqa: F811 -- imported fixture
         limiter.enabled = was_enabled
     db.rollback()
     org_ids = [org.id for org in world["orgs"]]
-    for model in (PortalSession, PortalInvite, PortalPublication, PortalDocument, PortalPrincipal):
+    for model in (PortalSession, PortalInvite, PortalApproval, PortalPublication, PortalDocument, PortalPrincipal):
         db.query(model).filter(model.org_id.in_(org_ids)).delete(synchronize_session=False)
     db.commit()
 
@@ -327,6 +328,92 @@ def test_selected_batch_milestones_are_scoped_derived_and_frozen(portal_world, d
         ).status_code in (400, 404)
 
 
+def test_label_proof_approval_is_scoped_one_time_and_audited(portal_world, db):
+    w = portal_world
+    order_id = w["orders"][0]["id"]
+    document = _upload(w)
+    staff_url = f"/api/core/contract-orders/{order_id}/portal-approvals"
+    body = {"document_id": document["id"], "prompt": "Approve label <script>alert(1)</script>?"}
+    assert w["clients"][0].post(staff_url, json=body).status_code == 409  # not published
+    _publish(w, document_ids=[document["id"]])
+    assert w["clients"][1].post(staff_url, json=body).status_code == 404
+    created = w["clients"][0].post(staff_url, json=body)
+    assert created.status_code == 201, created.get_json()
+    approval_id = created.get_json()["approval_id"]
+    assert w["clients"][0].post(staff_url, json=body).status_code == 409
+    customer = _accept(w)
+    other_customer = _accept(w, 1)
+    foreign_customer = _accept(w, 2)
+    response_url = f"/portal/api/orders/{order_id}/approvals/{approval_id}"
+    assert other_customer.post(response_url, json={"decision": "approved"}).status_code == 404
+    assert foreign_customer.post(response_url, json={"decision": "approved"}).status_code == 404
+    approval_row = db.query(PortalApproval).filter_by(id=UUID(approval_id)).one()
+    other_principal = (
+        db.query(PortalPrincipal).filter_by(org_id=w["orgs"][0].id, customer_id=UUID(w["customers"][1]["id"])).one()
+    )
+    approval_row.decision = "approved"
+    approval_row.responded_by = other_principal.id
+    approval_row.responded_at = datetime.now(UTC)
+    with pytest.raises(IntegrityError):
+        db.flush()
+    db.rollback()
+    assert customer.post(response_url, json={"decision": "changes_requested"}).status_code == 400
+    payload = customer.get(f"/portal/api/orders/{order_id}").get_json()["order"]
+    assert payload["waiting_on_you"]["approvals"][0]["id"] == approval_id
+    assert "<script>" not in customer.get(f"/portal/orders/{order_id}").get_data(as_text=True)
+    answered = customer.post(
+        response_url,
+        json={"decision": "changes_requested", "response_note": "Please enlarge the batch number"},
+    )
+    assert answered.status_code == 200, answered.get_json()
+    assert customer.post(response_url, json={"decision": "approved"}).status_code == 409
+    visible = customer.get(f"/portal/api/orders/{order_id}").get_json()["order"]
+    assert visible["waiting_on_you"]["approvals"][0]["decision"] == "changes_requested"
+    assert "Please enlarge the batch number" in w["clients"][0].get(
+        f"/core/contracts/{order_id}/portal-sharing"
+    ).get_data(as_text=True)
+    row = db.query(PortalApproval).filter_by(id=UUID(approval_id)).one()
+    row.prompt = "silently changed"
+    with pytest.raises(InternalError):
+        db.flush()
+    db.rollback()
+
+
+def test_withdrawn_proofs_and_publications_cannot_receive_approval(portal_world):
+    w = portal_world
+    order_id = w["orders"][0]["id"]
+    document = _upload(w)
+    _publish(w, document_ids=[document["id"]])
+    staff_url = f"/api/core/contract-orders/{order_id}/portal-approvals"
+    approval_id = (
+        w["clients"][0]
+        .post(staff_url, json={"document_id": document["id"], "prompt": "Approve this label"})
+        .get_json()["approval_id"]
+    )
+    customer = _accept(w)
+    response_url = f"/portal/api/orders/{order_id}/approvals/{approval_id}"
+    assert (
+        w["clients"][0].delete(f"/api/core/contract-orders/{order_id}/portal-documents/{document['id']}").status_code
+        == 204
+    )
+    assert customer.get(f"/portal/api/orders/{order_id}").get_json()["order"]["waiting_on_you"]["approvals"] == []
+    assert customer.post(response_url, json={"decision": "approved"}).status_code == 404
+    new_document = _upload(w)
+    _publish(w, document_ids=[new_document["id"]])
+    new_approval_id = (
+        w["clients"][0]
+        .post(staff_url, json={"document_id": new_document["id"], "prompt": "Approve updated label"})
+        .get_json()["approval_id"]
+    )
+    assert w["clients"][0].delete(f"/api/core/contract-orders/{order_id}/portal-publications").status_code == 204
+    assert (
+        customer.post(
+            f"/portal/api/orders/{order_id}/approvals/{new_approval_id}", json={"decision": "approved"}
+        ).status_code
+        == 404
+    )
+
+
 def test_complete_hostile_portal_route_walk(portal_world):
     w = portal_world
     docs = [_upload(w, index=i) for i in range(3)]
@@ -341,6 +428,7 @@ def test_complete_hostile_portal_route_walk(portal_world):
     for rule in w["app"].url_map.iter_rules():
         if (
             not rule.endpoint.startswith("contract_portal.")
+            or "GET" not in rule.methods
             or requirement_for(rule.endpoint, "GET") != PORTAL_SIGNED_IN
         ):
             continue
@@ -357,7 +445,13 @@ def test_complete_hostile_portal_route_walk(portal_world):
             for index in (1, 2):
                 path = adapter.build(rule.endpoint, {"order_id": own, "document_id": docs[index]["id"]})
                 assert client.get(path).status_code == 404
-    assert walked == {endpoint for endpoint in PORTAL_ENDPOINTS if requirement_for(endpoint, "GET") == PORTAL_SIGNED_IN}
+    assert walked == {
+        rule.endpoint
+        for rule in w["app"].url_map.iter_rules()
+        if rule.endpoint in PORTAL_ENDPOINTS
+        and "GET" in rule.methods
+        and requirement_for(rule.endpoint, "GET") == PORTAL_SIGNED_IN
+    }
     own_doc = client.get(f"/portal/api/orders/{own}/documents/{docs[0]['id']}")
     assert own_doc.status_code == 200 and own_doc.data.startswith(b"%PDF")
     assert "attachment" in own_doc.headers["Content-Disposition"]

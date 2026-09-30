@@ -17,9 +17,9 @@
     const response = await fetch(path, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content}, body: JSON.stringify(body)}); // nosemgrep: raw-fetch-post, sequential-independent-awaits -- explicit CSRF; response body depends on fetch
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || 'Unable to continue.');
-    location.assign(result.redirect);
+    location.assign(result.redirect || location.pathname);
   };
-  document.querySelectorAll('form[data-portal-api]').forEach((form) => {
+  document.querySelectorAll('form[data-portal-api], form[data-approval-api]').forEach((form) => {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const button = form.querySelector('button');
@@ -27,7 +27,8 @@
       try {
         const body = Object.fromEntries(new FormData(form));
         if (form.hasAttribute('data-invite')) body.token = inviteToken;
-        await post(form.dataset.portalApi, body);
+        if (form.hasAttribute('data-approval-api')) body.decision = event.submitter.value;
+        await post(form.dataset.portalApi || form.dataset.approvalApi, body);
       } catch (failure) { error(failure.message); button.disabled = false; }
     });
   });
