@@ -357,6 +357,9 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_api.save_excise_product", None, "compliance.manage"),
     ("compliant.compliant_api.update_abv_rules", None, "compliance.manage"),
     ("compliant.compliant_api.update_np3_check_settings", None, "compliance.manage"),
+    # Files on NP check evidence: attaching is recording, downloading is viewing.
+    ("compliant.compliant_api.attach_np3_record_file", None, "compliance.record"),
+    ("compliant.compliant_api.download_np3_record_file", _READ, "compliance.view"),
     ("compliant.compliant_verification.update_verification_registration", None, "compliance.manage"),  # 2.2
     # liquor licensing register (2.5): the log and check records are compliance.record
     ("compliant.compliant_licensing.add_log_entry", None, "compliance.record"),

@@ -21,10 +21,14 @@ which reads the org's NP3 rows out of the database. Snapshot **before** any rese
 scoped reset deletes `compliance_records`, and `scripts/whistlebird_rebuild_api.py`
 refuses to reset while the database holds NP3 evidence the manifest does not.
 
-Scope: text and selection evidence only. A record that links Core entities
-(`source_refs`) or an uploaded evidence file cannot be replayed (their IDs are
-regenerated on every reset), so the snapshot refuses them rather than silently dropping
-them. UUIDs are not preserved anywhere: a log's employee is keyed by email and re-linked
+Scope: text and selection evidence, plus committed files. A record that links Core
+entities (`source_refs`) cannot be replayed (their IDs are regenerated on every reset), so
+the snapshot refuses it rather than silently dropping it. An attestation or log entry may
+list `"files": ["docs/evidence/whistlebird/<name>.pdf", ...]` (repo-relative, PDF/PNG/JPEG,
+under `docs/evidence/`); the replay uploads each through the attach-file API once the record
+exists, and identifies an already-attached file by its SHA-256, so a re-run adds nothing.
+The snapshot keeps a record's `files` from the existing manifest and refuses a database
+file the manifest does not list (commit it under `docs/evidence/` and list it first). UUIDs are not preserved anywhere: a log's employee is keyed by email and re-linked
 to the newly created user.
 
 Idempotency: the NP3 routes build `details` server-side and reject unknown fields, so a
@@ -69,7 +73,12 @@ _ATTESTATION_KEYS = {
     "how_we_meet",
     "evidence_reference",
     "evidence_fields",
+    "files",
 }
+FILES_ROOT = Path(__file__).parents[1] / "docs" / "evidence"
+MAX_FILE_BYTES = 10 * 1024 * 1024
+MAX_FILES_PER_RECORD = 10
+_MAGIC = (b"%PDF", b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff")
 _LOCAL_TZ = ZoneInfo("Pacific/Auckland")
 
 
@@ -95,6 +104,12 @@ def _add_months(value: date, months: int) -> date:
 
 
 @dataclass(frozen=True)
+class Np3File:
+    path: Path  # absolute, under FILES_ROOT
+    sha256: str
+
+
+@dataclass(frozen=True)
 class Np3Attestation:
     control_id: str
     signed_on: date
@@ -103,6 +118,7 @@ class Np3Attestation:
     how_we_meet: str
     evidence_reference: str
     evidence_fields: dict[str, str]
+    files: tuple[Np3File, ...] = ()
 
     @property
     def fingerprint(self) -> str:
@@ -121,6 +137,7 @@ class Np3Log:
     # Field values keyed as in the log template, except a "user" field (`employee_user_id`)
     # which is keyed `employee_email` and holds the person's email.
     fields: dict[str, str]
+    files: tuple[Np3File, ...] = ()
 
     @property
     def event_date(self) -> date:
@@ -208,6 +225,33 @@ def _unknown_keys(mapping: dict[str, Any], allowed: set[str], where: str) -> Non
         raise Np3ManifestError(f"{where}: unknown key(s) {', '.join(unknown)}")
 
 
+def _parse_files(value: Any, where: str) -> tuple[Np3File, ...]:
+    """Validate a record's `files`: repo-relative paths to PDF/PNG/JPEG files under docs/evidence/."""
+    if value is None:
+        return ()
+    if not isinstance(value, list) or len(value) > MAX_FILES_PER_RECORD:
+        raise Np3ManifestError(f"{where}.files must be a list of at most {MAX_FILES_PER_RECORD} paths")
+    root = FILES_ROOT.resolve()
+    files: list[Np3File] = []
+    for entry in value:
+        if not isinstance(entry, str) or not entry.strip():
+            raise Np3ManifestError(f"{where}.files: each entry must be a path string")
+        path = (FILES_ROOT.parents[1] / entry).resolve()
+        if root not in path.parents:
+            raise Np3ManifestError(f"{where}.files: {entry!r} must be under docs/evidence/")
+        if not path.is_file():
+            raise Np3ManifestError(f"{where}.files: {entry!r} does not exist")
+        content = path.read_bytes()
+        if not content or len(content) > MAX_FILE_BYTES:
+            raise Np3ManifestError(f"{where}.files: {entry!r} must be between 1 byte and 10MB")
+        if not content.startswith(_MAGIC):
+            raise Np3ManifestError(f"{where}.files: {entry!r} must be a PDF, PNG or JPEG")
+        files.append(Np3File(path=path, sha256=hashlib.sha256(content).hexdigest()))
+    if len({f.sha256 for f in files}) != len(files):
+        raise Np3ManifestError(f"{where}.files: the same file is listed twice")
+    return tuple(files)
+
+
 def parse_np3_manifest(data: dict[str, Any]) -> Np3Manifest:
     """Validate against what the real routes accept, so a bad manifest fails before any
     destructive step rather than as a rejected request halfway through a replay."""
@@ -289,6 +333,7 @@ def parse_np3_manifest(data: dict[str, Any]) -> Np3Manifest:
                 how_we_meet=how_we_meet,
                 evidence_reference=evidence_reference,
                 evidence_fields=_clean(evidence_fields),
+                files=_parse_files(item.get("files"), where),
             )
         )
 
@@ -336,7 +381,7 @@ def parse_np3_manifest(data: dict[str, Any]) -> Np3Manifest:
         where = f"logs[{index}]"
         if not isinstance(item, dict):
             raise Np3ManifestError(f"{where}: must be an object")
-        _unknown_keys(item, {"control_id", "fields"}, where)
+        _unknown_keys(item, {"control_id", "fields", "files"}, where)
         control_id = str(item.get("control_id") or "")
         template = np3_log_template(control_id)
         if control_id not in controls or template is None:
@@ -368,7 +413,7 @@ def parse_np3_manifest(data: dict[str, Any]) -> Np3Manifest:
             cleaned.get("corrective_action") or cleaned.get("cause_and_action")
         ):
             raise Np3ManifestError(f"{where}: a follow-up-required entry needs its corrective action")
-        logs.append(Np3Log(control_id=control_id, fields=cleaned))
+        logs.append(Np3Log(control_id=control_id, fields=cleaned, files=_parse_files(item.get("files"), where)))
 
     fingerprints = [record.fingerprint for record in (*attestations, *logs)]
     if len(set(fingerprints)) != len(fingerprints):
@@ -412,6 +457,7 @@ class DbRecord:
     evidence_fields: dict[str, str]
     log_fields: dict[str, str]
     has_source_refs: bool
+    file_checksums: frozenset[str] = frozenset()
 
 
 class Np3Store:
@@ -474,6 +520,12 @@ class Np3Store:
                 ),
                 {"org": self.org_id, "framework": NP3_FRAMEWORK},
             ).all()
+            checksums: dict[str, set[str]] = {}
+            for record_id, checksum in conn.execute(
+                text("SELECT record_id, checksum_sha256 FROM compliance_record_files WHERE org_id = :org"),
+                {"org": self.org_id},
+            ).all():
+                checksums.setdefault(str(record_id), set()).add(checksum)
         records: list[DbRecord] = []
         for row in rows:
             record_id, control_id, record_type, details, reference, due, period_start, created_at, refs = row
@@ -486,6 +538,7 @@ class Np3Store:
                 period_start=period_start,
                 evidence_reference=(reference or "").strip(),
                 has_source_refs=bool(refs),
+                file_checksums=frozenset(checksums.get(str(record_id), ())),
             )
             if record_type == "attestation" and "how_we_meet" in details:
                 interval = details.get("review_interval_months", 6)
@@ -545,10 +598,21 @@ class Np3Store:
 # --------------------------------------------------------------------------------------
 
 
+def _attach_files(client: Any, record_id: str, files: tuple[Np3File, ...], attached: frozenset[str]) -> int:
+    """Upload each committed file the record does not already hold (identified by SHA-256)."""
+    uploaded = 0
+    for file in files:
+        if file.sha256 in attached:
+            continue
+        client.post_file(f"/api/compliant/np3-audit/records/{record_id}/files", file.path)
+        uploaded += 1
+    return uploaded
+
+
 def replay_np3(client: Any, store: Np3Store, manifest: Np3Manifest) -> dict[str, int]:
     """Issue the manifest through the real API. Runs after every Core event so an
     `np3_execution_evidence_mode: required` profile cannot block the Core replay."""
-    counts = {"staff": 0, "profile": 0, "attestations": 0, "logs": 0, "skipped": 0}
+    counts = {"staff": 0, "profile": 0, "attestations": 0, "logs": 0, "skipped": 0, "files": 0}
 
     for member in manifest.staff:
         if store.user_id_for_email(member.email):
@@ -566,9 +630,11 @@ def replay_np3(client: Any, store: Np3Store, manifest: Np3Manifest) -> dict[str,
         client.put("/api/compliant/profile", payload)
         counts["profile"] += 1
 
-    existing = store.fingerprints()
+    existing = {record.fingerprint: record for record in store.records() if record.fingerprint}
     for attestation in manifest.attestations:
         if attestation.fingerprint in existing:
+            row = existing[attestation.fingerprint]
+            counts["files"] += _attach_files(client, row.id, attestation.files, row.file_checksums)
             counts["skipped"] += 1
             continue
         body: dict[str, Any] = {
@@ -581,11 +647,15 @@ def replay_np3(client: Any, store: Np3Store, manifest: Np3Manifest) -> dict[str,
             body["evidence_reference"] = attestation.evidence_reference
         if attestation.evidence_fields:
             body["evidence_fields"] = attestation.evidence_fields
-        client.post("/api/compliant/np3-audit/attestations", body)
+        created = client.post("/api/compliant/np3-audit/attestations", body)
+        if attestation.files:
+            counts["files"] += _attach_files(client, created["record"]["id"], attestation.files, frozenset())
         counts["attestations"] += 1
 
     for log in manifest.logs:
         if log.fingerprint in existing:
+            row = existing[log.fingerprint]
+            counts["files"] += _attach_files(client, row.id, log.files, row.file_checksums)
             counts["skipped"] += 1
             continue
         fields = dict(log.fields)
@@ -595,7 +665,9 @@ def replay_np3(client: Any, store: Np3Store, manifest: Np3Manifest) -> dict[str,
                 if user_id is None:
                     raise Np3ManifestError(f"log for {log.control_id}: staff member was not created")
                 fields[key] = user_id
-        client.post(f"/api/compliant/np3-audit/checks/{log.control_id}/logs", {"fields": fields})
+        created = client.post(f"/api/compliant/np3-audit/checks/{log.control_id}/logs", {"fields": fields})
+        if log.files:
+            counts["files"] += _attach_files(client, created["record"]["id"], log.files, frozenset())
         counts["logs"] += 1
     return counts
 
@@ -760,11 +832,13 @@ def verify_np3(target_url: str, org_name: str, manifest: Np3Manifest) -> dict[st
     by_fingerprint = {r.fingerprint: r for r in records if r.fingerprint}
     present = 0
     date_mismatches = 0
+    files_present = 0
     for record in (*manifest.attestations, *manifest.logs):
         row = by_fingerprint.get(record.fingerprint)
         if row is None:
             continue
         present += 1
+        files_present += sum(1 for file in record.files if file.sha256 in row.file_checksums)
         if isinstance(record, Np3Attestation):
             wrong = row.created_on != record.signed_on or row.due_date != record.due_date
         else:
@@ -782,6 +856,10 @@ def verify_np3(target_url: str, org_name: str, manifest: Np3Manifest) -> dict[st
     return {
         "np3_record_count": {"expected": manifest.record_count, "actual": len(records)},
         "np3_record_content": {"expected": manifest.record_count, "actual": present},
+        "np3_files": {
+            "expected": sum(len(r.files) for r in (*manifest.attestations, *manifest.logs)),
+            "actual": files_present,
+        },
         "np3_staff": {"expected": len(manifest.staff), "actual": staff_present},
         "np3_profile": {"expected": 1, "actual": int(profile_matches)},
         "np3_date_mismatches": date_mismatches,
@@ -809,12 +887,14 @@ def np3_unsnapshotted(
     finally:
         store.dispose()
     reasons: list[str] = []
-    manifest_fingerprints = {r.fingerprint for r in (*manifest.attestations, *manifest.logs)}
+    manifest_records = {r.fingerprint: r for r in (*manifest.attestations, *manifest.logs)}
     for record in records:
         if record.fingerprint is None:
             reasons.append(f"{record.control_id}: a record the manifest cannot represent ({record.id})")
-        elif record.fingerprint not in manifest_fingerprints:
+        elif record.fingerprint not in manifest_records:
             reasons.append(f"{record.control_id}: {record.kind} in the database is not in the manifest")
+        elif record.file_checksums - {f.sha256 for f in manifest_records[record.fingerprint].files}:
+            reasons.append(f"{record.control_id}: {record.kind} has an attached file the manifest does not list")
     expected = _expected_profile(manifest)
     if profile is not None and any(profile[key] != expected[key] for key in expected):
         reasons.append("NP3 profile settings in the database differ from the manifest")
@@ -863,10 +943,17 @@ def _snapshot_org(target_url: str, org_name: str, existing: Np3Manifest | None, 
         for r in records
         if r.kind == "unrecognised" or r.has_source_refs
     ]
+    prior = {r.fingerprint: r for r in ((*existing.attestations, *existing.logs) if existing else ())}
+    for r in records:
+        listed = {f.sha256 for f in prior[r.fingerprint].files} if r.fingerprint in prior else set()
+        if r.file_checksums - listed:
+            problems.append(
+                f"{r.control_id}: {r.kind} record {r.id} has an attached file the manifest does not list "
+                "(commit it under docs/evidence/ and add it to the entry's `files`)"
+            )
     if problems:
         raise Np3SnapshotError("cannot snapshot:\n  " + "\n  ".join(problems))
 
-    prior = {r.fingerprint: r for r in ((*existing.attestations, *existing.logs) if existing else ())}
     attestations = []
     for record in records:
         if record.kind != "attestation":
@@ -883,10 +970,18 @@ def _snapshot_org(target_url: str, org_name: str, existing: Np3Manifest | None, 
             entry["evidence_reference"] = record.evidence_reference
         if record.evidence_fields:
             entry["evidence_fields"] = dict(sorted(record.evidence_fields.items()))
+        if kept and kept.files:
+            entry["files"] = [_relative(f.path) for f in kept.files]
         attestations.append(entry)
-    logs = [
-        {"control_id": r.control_id, "fields": dict(sorted(r.log_fields.items()))} for r in records if r.kind == "log"
-    ]
+    logs = []
+    for r in records:
+        if r.kind != "log":
+            continue
+        entry = {"control_id": r.control_id, "fields": dict(sorted(r.log_fields.items()))}
+        kept = prior.get(r.fingerprint)
+        if kept and kept.files:
+            entry["files"] = [_relative(f.path) for f in kept.files]
+        logs.append(entry)
     attestations.sort(key=lambda e: (e["control_id"], e["signed_on"], e["how_we_meet"]))
     logs.sort(key=lambda e: (e["control_id"], e["fields"].get("event_date", ""), json.dumps(e["fields"])))
 
@@ -913,6 +1008,10 @@ def _snapshot_org(target_url: str, org_name: str, existing: Np3Manifest | None, 
         }
     parse_np3_manifest(manifest)  # the snapshot must itself be a valid, replayable manifest
     return manifest
+
+
+def _relative(path: Path) -> str:
+    return path.relative_to(FILES_ROOT.parents[1]).as_posix()
 
 
 def write_manifest(path: Path, manifest: dict[str, Any]) -> None:

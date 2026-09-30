@@ -163,6 +163,19 @@ class ReplayClient:
             raise ReplayRejectedError(f"POST {path} -> {response.status_code}: {response.text[:1000]}")
         return response.json()
 
+    def post_file(self, path: str, file_path: Path) -> dict[str, Any]:
+        """Upload one file as multipart form data (the browser's attach-a-file request)."""
+        with open(file_path, "rb") as handle:
+            response = self.session.post(
+                f"{self.base_url}{path}",
+                files={"file": (file_path.name, handle)},
+                headers=self._headers(),
+                timeout=120,
+            )
+        if response.status_code not in (200, 201):
+            raise ReplayRejectedError(f"POST {path} -> {response.status_code}: {response.text[:1000]}")
+        return response.json()
+
     def put(self, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
         response = self.session.put(f"{self.base_url}{path}", json=json_body, headers=self._headers(), timeout=60)
         if response.status_code not in (200, 201):
