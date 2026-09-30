@@ -1,7 +1,7 @@
 """Persist immutable planning timing snapshots and editable proposed batches.
 
 Revision ID: planned_batches_001
-Revises: planner_demands_001
+Revises: multiple_sites_001
 """
 
 import sqlalchemy as sa
@@ -9,7 +9,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision = "planned_batches_001"
-down_revision = "planner_demands_001"
+down_revision = "contract_material_ownership_001"
 branch_labels = None
 depends_on = None
 

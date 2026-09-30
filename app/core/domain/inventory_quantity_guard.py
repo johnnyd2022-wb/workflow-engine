@@ -92,6 +92,11 @@ class InventoryQuantityWriteForbiddenError(RuntimeError):
     """Raised when inventory_items.quantity would change outside allow_inventory_quantity_write(...)."""
 
 
+def inventory_quantity_write_reason():
+    """Read the current trusted write purpose; this grants no ownership authority."""
+    return _reason.get() if _inventory_writes_allowed.get() else None
+
+
 @contextmanager
 def allow_inventory_quantity_write(reason: InventoryQuantityWriteReason | str):
     """Authorize quantity mutations for this block (per-thread / async task). Nested blocks are forbidden."""

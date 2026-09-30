@@ -3,7 +3,17 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, Date, DateTime, ForeignKey, ForeignKeyConstraint, Numeric, String
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -34,6 +44,36 @@ class InventoryItem(TenantScoped, Base):
     __tablename__ = "inventory_items"
     __table_args__ = (
         ForeignKeyConstraint(
+            ["org_id", "contract_customer_id"],
+            ["contract_customers.org_id", "contract_customers.id"],
+            name="fk_inventory_customer_owner",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "contract_customer_id", "material_receipt_id", "id"],
+            [
+                "contract_material_receipts.org_id",
+                "contract_material_receipts.customer_id",
+                "contract_material_receipts.id",
+                "contract_material_receipts.inventory_item_id",
+            ],
+            name="fk_inventory_material_receipt",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        CheckConstraint(
+            "contract_customer_id IS NULL OR inventory_type = 'raw_material'", name="ck_inventory_customer_raw"
+        ),
+        CheckConstraint(
+            "material_receipt_id IS NULL OR contract_customer_id IS NOT NULL", name="ck_inventory_material_proof"
+        ),
+        UniqueConstraint("org_id", "id", name="uq_inventory_items_org_id"),
+        UniqueConstraint("org_id", "transfer_receipt_id", name="uq_inventory_transfer_receipt"),
+        ForeignKeyConstraint(
+            ["org_id", "transfer_receipt_id"],
+            ["site_stock_receipts.org_id", "site_stock_receipts.id"],
+            name="fk_inventory_transfer_receipt",
+        ),
+        ForeignKeyConstraint(
             ["org_id", "site_id"], ["sites.org_id", "sites.id"], name="fk_inventory_items_org_site", ondelete="RESTRICT"
         ),
         ForeignKeyConstraint(
@@ -60,6 +100,10 @@ class InventoryItem(TenantScoped, Base):
     location_id = Column(UUID(as_uuid=True), ForeignKey("stock_locations.id", ondelete="RESTRICT"), nullable=True)
     # Nullable for new single-site stock; enabling sites backfills the default site.
     site_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    transfer_receipt_id = Column(UUID(as_uuid=True), nullable=True)
+    # NULL is explicit producer title. Customer title requires immutable raw receipt proof.
+    contract_customer_id = Column(UUID(as_uuid=True), nullable=True)
+    material_receipt_id = Column(UUID(as_uuid=True), nullable=True)
     purchase_date = Column(Date, nullable=True)
     supplier_batch_number = Column(String(255), nullable=True)
     expiry_date = Column(Date, nullable=True)

@@ -1,0 +1,42 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Stock transfers{% endblock %}
+{% block body_class %}site-transfers-page{% endblock %}
+{% block head_extras %}
+<style>
+  .transfers-shell { display:grid; gap:20px; padding-block:24px 48px; }
+  .transfers-card { background:var(--bg-card); border:1px solid var(--border-default); border-radius:var(--radius-lg); padding:20px; }
+  .transfers-fields { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); }
+  .transfers-shell form, .transfers-shell label { display:grid; gap:8px; }
+  .transfers-shell form { gap:16px; }
+  .transfers-shell input:not([type=checkbox]), .transfers-shell select { width:100%; padding:10px; color:var(--text-primary); background:var(--bg-card); border:1px solid var(--border-default); border-radius:var(--radius-md); }
+  .transfers-shell [hidden] { display:none !important; }
+  .transfers-shell h1, .transfers-shell h2 { margin:0 0 8px; }
+  @media(max-width:767px) { .site-transfers-page .app-layout .main-content { margin-left:0 !important; } }
+</style>
+{% endblock %}
+{% block content %}
+<div class="max-content transfers-shell" data-transfers-root>
+  <header><h1>Stock transfers</h1><p>Dispatch stock, track it in transit and record what arrived.</p></header>
+  <div class="transfers-card" role="status" aria-live="polite" data-transfers-message hidden></div>
+  <p data-transfers-state>Loading…</p>
+  {% if can('inventory.adjust') %}
+  <section class="transfers-card" data-transfer-create hidden>
+    <h2>Dispatch stock</h2>
+    <form data-transfer-dispatch hx-boost="false">
+      <div class="transfers-fields">
+        <label>Stock<select name="source_item_id" required></select></label>
+        <label>Quantity<input name="quantity" type="number" min="0.0001" step="0.0001" required></label>
+        <label>Destination site<select name="destination_site_id" required></select></label>
+        <label>Destination place<select name="destination_location_id"></select></label>
+        <label>Carrier<input name="carrier" maxlength="120" required></label>
+        <label>Consignment reference<input name="consignment_reference" maxlength="160" required></label>
+        <label>Dispatch date<input name="occurred_on" type="date" required></label>
+      </div>
+      <button class="btn btn-primary" type="submit">Dispatch</button>
+    </form>
+  </section>
+  {% endif %}
+  <section data-transfers-list class="transfers-shell" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}"></section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('site_transfers.static', filename='transfers.js') }}"></script>{% endblock %}

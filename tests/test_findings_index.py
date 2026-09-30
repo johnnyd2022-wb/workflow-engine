@@ -440,6 +440,43 @@ def test_prior_findings_sweep_in_place_annotation_closes_a_stale_bullet(tmp_path
     assert any("live figure is a real bug" in d for d in details)
 
 
+def test_dated_patched_note_closes_a_bullet_but_partial_or_undated_does_not(tmp_path, monkeypatch):
+    """Real misfire: the `/auth/verify-2fa` bullet in docs/core-load-performance-design.md
+    ends '**Patched 2026-09-25** (plan item 0.2): ...'. That fixed item was closed by !434
+    yet re-entered every fresh worktree's index as a P0, because a dated 'Patched' note
+    matched no resolution phrasing. The date is what makes it a disposition."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "docs/x.md",
+        """## Security findings requiring owner action
+
+1. `/auth/verify-2fa` has no brute-force throttle. It carries no `@limiter.limit` and no
+   attempt counter. Needs a policy decision before code.
+   **Patched 2026-09-25** (plan item 0.2): its own counter ending the pending session after
+   five wrong codes, plus 5/minute and 20/hour keyed on the account. Details in F6.
+2. The export endpoint has no rate limit. Partially patched 2026-09-25: the CSV route is
+   limited, the JSON route is still open to a denial of service.
+3. The import endpoint accepts unbounded uploads and needs to be patched before launch.
+4. The webhook route trusts the sender. Patched on 2026-09-26 by adding an HMAC check.
+5. The search route leaks stack traces. Only patched 2026-09-25 for the CSV export.
+6. The upload route skips a size check. Partly patched 2026-09-25; the API path is open.
+7. The report route has no auth check. Will be patched 2026-10-01.
+8. The invite route reuses tokens. Not yet patched 2026-09-25 -- fix scheduled.
+""",
+    )
+    details = [i.detail for i in fi.parse_doc(path)]
+    assert not any("verify-2fa" in d for d in details)  # "**Patched 2026-09-25**"
+    assert not any("webhook route" in d for d in details)  # "Patched on 2026-09-26"
+    assert any("JSON route is still open" in d for d in details)  # "Partially patched <date>"
+    assert any("unbounded uploads" in d for d in details)  # "patched" with no date
+    # a hedge before the word says work remains or is still to come
+    assert any("stack traces" in d for d in details)  # "Only patched <date>"
+    assert any("size check" in d for d in details)  # "Partly patched <date>"
+    assert any("report route" in d for d in details)  # "Will be patched <date>"
+    assert any("reuses tokens" in d for d in details)  # "Not yet patched <date>"
+
+
 def test_bullets_outside_a_findings_heading_are_ignored(tmp_path, monkeypatch):
     """Heading scoping is what keeps the index signal-dense; policy prose that merely
     says 'follow-up' must contribute nothing."""
@@ -490,6 +527,66 @@ def test_heading_that_declares_itself_fixed_does_not_open_a_section(tmp_path, mo
 """,
     )
     assert fi.parse_doc(path) == []
+
+
+def test_heading_checkbox_marker_closes_a_section_with_no_textual_cue(tmp_path, monkeypatch):
+    """Real misfire, docs/workflows-load-performance.md:80: `### 1. Slim the
+    `system-findings` banner payload -- `[x]` (commit: system_findings_cache
+    `_banner_finding_data`)`. The heading's own title contains "system-findings", which
+    `\\bfindings?\\b` reads as an open `finding` section -- and unlike the textual "Known
+    Issues Fixed" convention, this heading's done-ness is marked *only* by the `[x]`
+    (the "Done." summary is prose below it, not in the title), so CLOSED_HEADING_RE's
+    word list didn't catch it. Its collapsed "original plan" bullets -- restating fields
+    the linked commit already implemented -- re-entered the worklist every sweep."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """### 1. Slim the `system-findings` banner payload -- `[x]` (commit: `_banner_finding_data`)
+
+**Done.** Projects the finding data to just the fields the banner reads.
+
+<details><summary>original plan</summary>
+
+- `expired_raw_materials`: `[{id, name, expiry_date}]` -- not the full item object.
+- add `impacted_count` / `expired_count` scalars so the headline never needs the arrays.
+
+</details>
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_heading_checkmark_emoji_closes_a_section(tmp_path, monkeypatch):
+    """Same convention, spelled with a checkmark emoji instead of `[x]` -- verbatim in
+    docs/aer-architecture-review.md ('### Phase 2 -- Learning loop (finding -> permanent
+    deterministic rule) ✅'). The singular 'finding' in the title would otherwise open
+    a `finding` section on its own."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """### Phase 2 -- Learning loop (finding -> permanent deterministic rule) ✅
+- Every rule ships with the historical finding that motivated it.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_unchecked_heading_box_still_opens_a_section(tmp_path, monkeypatch):
+    """Contrast case: an *unchecked* `[ ]` means the work item is still open, so it must
+    not be swallowed by the same marker check that closes a checked `[x]` heading."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """### 2. Duplicate `/auth/me` findings lookup -- `[ ]`
+- Two separate queries fetch the same user row on every page load.
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "Two separate queries" in items[0].detail
 
 
 def test_nested_closed_subheading_closes_a_still_open_ancestor_section(tmp_path, monkeypatch):
@@ -599,6 +696,50 @@ def test_no_gap_found_heading_variants_do_not_open_a_section(tmp_path, monkeypat
 """,
     )
     assert fi.parse_doc(path) == []
+
+
+def test_heading_that_pins_down_a_gap_does_not_open_a_section(tmp_path, monkeypatch):
+    """A spec section that *answers* a spec-critic gap names the gap in its own heading.
+    Real misfire: '## Calculation model (pins down spec-critic gap: exact formulas, not
+    prose)' in `.agents/specs/dilution_calculator.md` matched `\\bgaps?\\b`, so its
+    formula bullets (`mass_total_start_g = ...`, `water_to_add_ml = ...`) were indexed as
+    six open gaps. They are the resolution, not a finding."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "specs/x.md",
+        """## Calculation model (pins down spec-critic gap: exact formulas, not prose)
+- `mass_total_start_g = starting_volume_ml * rho_mix(w(starting_abv))`
+- `water_to_add_ml = (mass_total_final_g - mass_total_start_g) / rho_mix(0)`
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_gap_headings_that_still_owe_a_pin_down_stay_open(tmp_path, monkeypatch):
+    """Contrast case for the fix above: only the active 'pins down' closes a section.
+    The imperative ('pin down before build'), the passive ('to be pinned down') and the
+    negated ('never pins down') headings all still hold real open gaps. The last one is
+    the only case that the closing regex would swallow without NEGATED_CLOSURE_RE."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "specs/x.md",
+        """## Gaps to pin down before build
+- Which reference density the ABV conversion uses is undecided.
+
+## Open gaps still to be pinned down
+- The rounding rule for `water_to_add_ml` is unspecified.
+
+## Known gaps (the spec never pins down the tolerance)
+- The round-trip tolerance for volumes is not stated.
+""",
+    )
+    details = [item.detail for item in fi.parse_doc(path)]
+    assert len(details) == 3
+    assert any("reference density" in d for d in details)
+    assert any("rounding rule" in d for d in details)
+    assert any("round-trip tolerance" in d for d in details)
 
 
 def test_no_further_findings_heading_does_not_open_a_section(tmp_path, monkeypatch):
@@ -1128,6 +1269,26 @@ def test_product_roadmap_plan_is_excluded_but_review_docs_are_not():
     )
     # Narrowness guard: an ordinary design doc with a real "Deliberately deferred"
     # call-out section must still be swept.
+    assert "docs/core-load-performance-design.md" in rel
+
+
+def test_compliant_core_contract_is_excluded_but_review_docs_are_not():
+    """docs/compliant-core-contract.md documents the Compliant/Core seam contract -- the
+    same genre as the already-excluded .agents/conventions.md, not a findings tracker.
+    Its '## Checks: alerts, findings and the dashboard' heading matched `\\bfindings?\\b`
+    on the bare word (naming a data type the seam produces) and swept three descriptive
+    convention bullets as P0 security findings in the first real sweep."""
+    import shutil
+
+    if not shutil.which("rg"):
+        pytest.skip("ripgrep not installed")
+
+    docs = fi.find_candidate_docs()
+    assert docs is not None, "find_candidate_docs could not run"
+    rel = {p.relative_to(fi.REPO_ROOT).as_posix() for p in docs}
+
+    assert "docs/compliant-core-contract.md" not in rel
+    # Narrowness guard: an ordinary design doc is still scanned.
     assert "docs/core-load-performance-design.md" in rel
 
 

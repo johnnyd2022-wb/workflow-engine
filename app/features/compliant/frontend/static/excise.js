@@ -67,9 +67,13 @@
     var sub = el('p', { className: 'excise-hint', text: d.status === 'lodged'
       ? ('Recorded as lodged on ' + fmtDate(d.lodged_on) + (d.entry_reference ? ' (entry ' + d.entry_reference + ')' : '') + (d.nil_return ? ' as a nil return' : '') + '. These figures are locked.')
       : ('Due by ' + fmtDate(d.due) + ' (15th working day; public holidays not counted). Payment is due by the last working day of that month.') });
-    var totals = el('p', { className: 'excise-totals', text: d.total_lal + ' LAL · ' + money(d.total_duty) + ' duty' });
+    var totals = el('p', { className: 'excise-totals', text: d.legacy_unavailable ? 'CCA totals unresolved' : d.total_lal + ' LAL · ' + money(d.total_duty) + ' duty' });
     head.append(el('div', {}, [title, sub]), totals);
     wrap.append(head);
+
+    if (d.legacy_unavailable) {
+      wrap.append(el('p', { className: 'excise-warning', text: 'Multiple-site excise needs a separate, complete entry for each source CCA. This legacy location-based draft is for review only and cannot establish a nil return or be recorded as lodged.' }));
+    }
 
     if ((d.problems || []).length) {
       var probs = el('ul', { className: 'excise-problems' });
@@ -78,7 +82,7 @@
     }
 
     if (!(d.lines || []).length && !(d.adjustments || []).length) {
-      wrap.append(el('p', { text: d.open ? 'Nothing removed yet this period.' : 'Nothing was removed this period: lodge a nil return.' }));
+      wrap.append(el('p', { text: d.legacy_unavailable ? 'No removals are shown by this legacy calculation; CCA activity is unresolved.' : (d.open ? 'Nothing removed yet this period.' : 'Nothing was removed this period: lodge a nil return.') }));
     } else {
       var table = el('table', { className: 'excise-table' });
       var hr = el('tr'); ['Tariff item', 'Product', 'Units', 'Litres', 'LAL', 'Rate', 'Duty'].forEach(function (h) { hr.append(el('th', { text: h })); });
@@ -111,7 +115,7 @@
       wrap.append(el('p', { className: 'excise-hint', text: 'Stock came back into the licensed area this period (' + d.returns.map(function (r) { return r.quantity + ' ' + r.unit + ' ' + r.product; }).join(', ') + '). If duty was paid when it left, raise a possible credit with Customs; it isn\'t claimed here.' }));
     }
 
-    if (d.status !== 'lodged' && !d.open) {
+    if (d.status !== 'lodged' && !d.open && !d.legacy_unavailable) {
       var form = el('form', { className: 'excise-inline-form excise-lodge' });
       var ref = el('input', { name: 'entry_reference', id: 'excise-entry-ref', placeholder: 'Customs entry number (optional)', maxlength: '100', 'aria-label': 'Customs entry number' });
       var on = el('input', { name: 'lodged_on', id: 'excise-lodged-on', type: 'date', 'aria-label': 'Lodged on' });
