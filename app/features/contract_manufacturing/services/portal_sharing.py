@@ -173,7 +173,12 @@ def publish_order(db, org_id, actor_id, order_id, data):
         },
         "materials": copy.deepcopy(UNAVAILABLE),
         "yield": copy.deepcopy(UNAVAILABLE),
-        "delivery": copy.deepcopy(UNAVAILABLE),
+        "delivery": {
+            "available": False,
+            "declared_duty_responsibility": order.duty_responsibility,
+            "customer_cca_reference": order.customer_cca_reference,
+            "reason": "Dispatch, Customs treatment and payment have not been verified or shared",
+        },
         "documents": {"available": bool(documents), "items": documents},
         "waiting_on_you": {
             "available": False,
@@ -223,7 +228,7 @@ def publication_dto(payload):
         "quality": ("available", "actual_abv", "spec_abv", "qc_passed", "reason"),
         "materials": ("available", "reason"),
         "yield": ("available", "reason"),
-        "delivery": ("available", "reason"),
+        "delivery": ("available", "declared_duty_responsibility", "customer_cca_reference", "reason"),
         "documents": ("available",),
         "waiting_on_you": ("available", "reason"),
     }
