@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_FLOOR, Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.db.models.inventory_item import InventoryItem
 from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.utils.inventory_quantity import parse_stored_quantity_to_decimal
+from app.core.utils.unit_conversion import is_count_unit
 from app.features.crm.models.product_mapping import ProductMapping
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.models.xero_contact import XeroContact
@@ -32,7 +33,7 @@ class SalesTraceabilityService:
         self.inventory = InventoryRepository(db)
         self.config_repo = SalesTraceabilityConfigRepository(db)
 
-    def reconcile_org(self, org_id: UUID) -> dict[str, int]:
+    def reconcile_org(self, org_id: UUID, *, sync_job_id: UUID | None = None) -> dict[str, int]:
         """Backfill and incrementally maintain FIFO allocations for all synced sales.
 
         Reconciliation intentionally examines the local invoice snapshot, rather than
@@ -51,11 +52,13 @@ class SalesTraceabilityService:
         if confirmed:
             summary["auto_confirmed"] += confirmed
         for invoice in invoices:
-            for key, value in self._reconcile_invoice(org_id, invoice).items():
+            for key, value in self._reconcile_invoice(org_id, invoice, sync_job_id=sync_job_id).items():
                 summary[key] += value
         return dict(summary)
 
-    def _reconcile_invoice(self, org_id: UUID, invoice: XeroInvoice) -> dict[str, int]:
+    def _reconcile_invoice(
+        self, org_id: UUID, invoice: XeroInvoice, *, sync_job_id: UUID | None = None
+    ) -> dict[str, int]:
         line_items = (
             self.db.query(XeroInvoiceLineItem)
             .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id == invoice.id)
@@ -66,7 +69,9 @@ class SalesTraceabilityService:
             invoice.status or ""
         ).upper() in _SALE_STATUSES
         if not active_sale:
-            restored = self._reverse_invoice_allocations(org_id, invoice.xero_invoice_id)
+            restored = self._reverse_invoice_allocations(
+                org_id, invoice.xero_invoice_id, invoice=invoice, sync_job_id=sync_job_id
+            )
             return {"reversed": restored} if restored else {}
 
         # Plan 1.3: tracing starts at go-live. An earlier sale stays in sales reporting but
@@ -87,6 +92,13 @@ class SalesTraceabilityService:
             self.db.query(ProductMapping)
             .filter(ProductMapping.org_id == org_id, ProductMapping.is_active.is_(True))
             .all()
+        )
+        contact = (
+            self.db.query(XeroContact)
+            .filter(XeroContact.org_id == org_id, XeroContact.id == invoice.contact_id)
+            .first()
+            if invoice.contact_id
+            else None
         )
         summary = defaultdict(int)
         for index, line in enumerate(line_items):
@@ -117,7 +129,7 @@ class SalesTraceabilityService:
                 summary["awaiting_assignment"] += 1
                 continue
             if existing:
-                self._reverse_allocations(existing)
+                self._reverse_allocations(existing, invoice=invoice, contact=contact, sync_job_id=sync_job_id)
             reference = _line_reference(invoice.xero_invoice_id, line_key)
             try:
                 consumed = self.inventory.consume_final_product_fifo(
@@ -126,6 +138,16 @@ class SalesTraceabilityService:
                     quantity,
                     reference=reference,
                     source_output_id=match.biz_e_source_output_id,
+                    sale_context={
+                        "product_name": match.biz_e_product_name,
+                        "action": "sale",
+                        "quantity_sold": str(quantity),
+                        "invoice_number": invoice.invoice_number or invoice.xero_invoice_id,
+                        "customer_name": contact.name if contact else "Unknown customer",
+                        "item_code": line.item_code,
+                        "sync_job_id": str(sync_job_id) if sync_job_id else None,
+                    },
+                    correlation_id=sync_job_id,
                     commit=False,
                 )
             except ValueError as exc:
@@ -344,7 +366,163 @@ class SalesTraceabilityService:
                 }
             )
         to_assign = self._lines_to_assign(org_id, limit) if strategy == "manual" else []
-        return {"mode": strategy, "pending_review": list(grouped.values()), "to_assign": to_assign}
+        unmatched = self._unmatched_sales_lines(org_id, limit)
+        return {
+            "mode": strategy,
+            "pending_review": list(grouped.values()),
+            "to_assign": to_assign,
+            "unmatched": unmatched,
+        }
+
+    def _unmatched_sales_lines(self, org_id: UUID, limit: int) -> list[dict]:
+        """Return active post-go-live sale lines that have no mapping or enough stock."""
+        go_live = self._go_live_date(org_id)
+        config = self.config_repo.get_for_org(org_id)
+        strict = True if config is None else bool(config.strict_mapping)
+        strategy = (config.matching_strategy if config is not None else "fifo") or "fifo"
+        mappings = (
+            self.db.query(ProductMapping)
+            .filter(ProductMapping.org_id == org_id, ProductMapping.is_active.is_(True))
+            .all()
+        )
+        allocated: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+        for invoice_id, line_key, amount in (
+            self.db.query(
+                SalesFifoAllocation.xero_invoice_id,
+                SalesFifoAllocation.xero_line_key,
+                SalesFifoAllocation.quantity,
+            )
+            .filter(SalesFifoAllocation.org_id == org_id)
+            .all()
+        ):
+            allocated[(invoice_id, line_key)] += Decimal(str(amount))
+        invoices = (
+            self.db.query(XeroInvoice)
+            .filter(XeroInvoice.org_id == org_id)
+            .order_by(XeroInvoice.date.asc().nulls_last(), XeroInvoice.created_at.asc())
+            .all()
+        )
+        lines_by_invoice = self._invoice_lines_by_id(org_id, invoices)
+        stock_items_by_name: dict[str, list[InventoryItem]] = defaultdict(list)
+        product_names = {mapping.biz_e_product_name for mapping in mappings}
+        if product_names:
+            stock_items = (
+                self.db.query(InventoryItem)
+                .filter(
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.name.in_(product_names),
+                    InventoryItem.inventory_type == "final_product",
+                    InventoryItem.quantity > 0,
+                )
+                .all()
+            )
+            for item in stock_items:
+                stock_items_by_name[item.name].append(item)
+        stock_cache: dict[tuple[str, UUID | None], Decimal] = {}
+        rows = []
+        for invoice in invoices:
+            if (invoice.invoice_type or "").upper() != _SALE_INVOICE_TYPE or (
+                invoice.status or ""
+            ).upper() not in _SALE_STATUSES:
+                continue
+            if go_live is not None and invoice.date is not None and invoice.date < go_live:
+                continue
+            lines = lines_by_invoice.get(invoice.id, [])
+            for index, line in enumerate(lines):
+                line_key = (line.xero_line_item_id or f"position:{index + 1}").strip()
+                match = self._find_mapping(line, mappings, strict)
+                quantity = _positive_quantity(line.quantity)
+                existing = allocated.get((invoice.xero_invoice_id, line_key))
+                if existing is not None:
+                    # Removing a mapping does not undo historical allocations, but an
+                    # allocation for only part of an otherwise valid line is a gap.
+                    if match is None or quantity is None or existing == quantity * int(match.units_per_line or 1):
+                        continue
+                    rows.append(
+                        {
+                            "invoice_id": invoice.xero_invoice_id,
+                            "line_key": line_key,
+                            "invoice_number": invoice.invoice_number,
+                            "invoice_date": invoice.date.isoformat() if invoice.date else None,
+                            "description": line.description,
+                            "item_code": line.item_code,
+                            "product_name": match.biz_e_product_name,
+                            "quantity": f"{(quantity * int(match.units_per_line or 1)).normalize():f}",
+                            "available": f"{existing.normalize():f}",
+                            "reason": "allocation_mismatch",
+                        }
+                    )
+                    if len(rows) >= limit:
+                        return rows
+                    continue
+                if quantity is None:
+                    rows.append(
+                        {
+                            "invoice_id": invoice.xero_invoice_id,
+                            "line_key": line_key,
+                            "invoice_number": invoice.invoice_number,
+                            "invoice_date": invoice.date.isoformat() if invoice.date else None,
+                            "description": line.description,
+                            "item_code": line.item_code,
+                            "product_name": None,
+                            "quantity": str(line.quantity),
+                            "available": "0",
+                            "reason": "invalid_quantity",
+                        }
+                    )
+                    if len(rows) >= limit:
+                        return rows
+                    continue
+                reason = "unmapped"
+                product_name = None
+                needed = quantity
+                available = Decimal("0")
+                if match is not None:
+                    product_name = match.biz_e_product_name
+                    needed = quantity * int(match.units_per_line or 1)
+                    stock_key = (product_name, match.biz_e_source_output_id)
+                    if stock_key not in stock_cache:
+                        available = Decimal("0")
+                        for item in stock_items_by_name.get(product_name, []):
+                            if (
+                                match.biz_e_source_output_id is not None
+                                and item.source_output_id != match.biz_e_source_output_id
+                            ):
+                                continue
+                            item_quantity = parse_stored_quantity_to_decimal(item.quantity)
+                            if is_count_unit(item.unit):
+                                item_quantity = item_quantity.to_integral_value(rounding=ROUND_FLOOR)
+                            available += item_quantity
+                        stock_cache[stock_key] = available
+                    available = stock_cache[stock_key]
+                    if not available.is_finite() or not needed.is_finite():
+                        continue
+                    if available >= needed:
+                        # Earlier unallocated invoice lines would consume this stock
+                        # first during replay. Reserve it before assessing later lines.
+                        stock_cache[stock_key] = available - needed
+                        reason = "awaiting_assignment" if strategy == "manual" else "awaiting_replay"
+                    else:
+                        reason = "no_stock"
+                else:
+                    reason = "unmapped"
+                rows.append(
+                    {
+                        "invoice_id": invoice.xero_invoice_id,
+                        "line_key": line_key,
+                        "invoice_number": invoice.invoice_number,
+                        "invoice_date": invoice.date.isoformat() if invoice.date else None,
+                        "description": line.description,
+                        "item_code": line.item_code,
+                        "product_name": product_name,
+                        "quantity": f"{needed.normalize():f}",
+                        "available": f"{available.normalize():f}",
+                        "reason": reason,
+                    }
+                )
+                if len(rows) >= limit:
+                    return rows
+        return rows
 
     def _lines_to_assign(self, org_id: UUID, limit: int) -> list[dict]:
         go_live = self._go_live_date(org_id)
@@ -368,15 +546,7 @@ class SalesTraceabilityService:
             .order_by(XeroInvoice.date.asc().nulls_last())
             .all()
         )
-        # One query for every line, grouped by invoice (no per-invoice query in the loop).
-        lines_by_invoice: dict = defaultdict(list)
-        for line in (
-            self.db.query(XeroInvoiceLineItem)
-            .filter(XeroInvoiceLineItem.org_id == org_id)
-            .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
-            .all()
-        ):
-            lines_by_invoice[line.invoice_id].append(line)
+        lines_by_invoice = self._invoice_lines_by_id(org_id, invoices)
         for inv in invoices:
             if (inv.invoice_type or "").upper() != _SALE_INVOICE_TYPE or (
                 inv.status or ""
@@ -384,7 +554,8 @@ class SalesTraceabilityService:
                 continue
             if go_live is not None and inv.date is not None and inv.date < go_live:
                 continue
-            for index, line in enumerate(lines_by_invoice.get(inv.id, [])):
+            lines = lines_by_invoice.get(inv.id, [])
+            for index, line in enumerate(lines):
                 key = (line.xero_line_item_id or f"position:{index + 1}").strip()
                 if (inv.xero_invoice_id, key) in allocated:
                     continue
@@ -406,7 +577,20 @@ class SalesTraceabilityService:
                 if len(out) >= limit:
                     return out
         return out
-        return out
+
+    def _invoice_lines_by_id(self, org_id: UUID, invoices: list[XeroInvoice]) -> dict[UUID, list[XeroInvoiceLineItem]]:
+        lines_by_invoice: dict[UUID, list[XeroInvoiceLineItem]] = defaultdict(list)
+        invoice_ids = [invoice.id for invoice in invoices]
+        if invoice_ids:
+            lines = (
+                self.db.query(XeroInvoiceLineItem)
+                .filter(XeroInvoiceLineItem.org_id == org_id, XeroInvoiceLineItem.invoice_id.in_(invoice_ids))
+                .order_by(XeroInvoiceLineItem.created_at.asc(), XeroInvoiceLineItem.id.asc())
+                .all()
+            )
+            for line in lines:
+                lines_by_invoice[line.invoice_id].append(line)
+        return lines_by_invoice
 
     def _go_live_date(self, org_id: UUID):
         cache = self.__dict__.setdefault("_go_live_cache", {})
@@ -440,22 +624,60 @@ class SalesTraceabilityService:
             and sum((parse_stored_quantity_to_decimal(row.quantity) for row in existing), Decimal("0")) == quantity
         )
 
-    def _reverse_invoice_allocations(self, org_id: UUID, invoice_id: str) -> int:
+    def _reverse_invoice_allocations(
+        self,
+        org_id: UUID,
+        invoice_id: str,
+        *,
+        invoice: XeroInvoice | None = None,
+        sync_job_id: UUID | None = None,
+    ) -> int:
         allocations = (
             self.db.query(SalesFifoAllocation)
             .filter(SalesFifoAllocation.org_id == org_id, SalesFifoAllocation.xero_invoice_id == invoice_id)
             .order_by(SalesFifoAllocation.created_at.desc(), SalesFifoAllocation.id.desc())
             .all()
         )
-        return self._reverse_allocations(allocations)
+        return self._reverse_allocations(allocations, invoice=invoice, sync_job_id=sync_job_id)
 
-    def _reverse_allocations(self, allocations: list[SalesFifoAllocation]) -> int:
+    def _reverse_allocations(
+        self,
+        allocations: list[SalesFifoAllocation],
+        *,
+        invoice: XeroInvoice | None = None,
+        contact: XeroContact | None = None,
+        sync_job_id: UUID | None = None,
+    ) -> int:
+        if allocations and invoice is None:
+            invoice = (
+                self.db.query(XeroInvoice)
+                .filter(
+                    XeroInvoice.org_id == allocations[0].org_id,
+                    XeroInvoice.xero_invoice_id == allocations[0].xero_invoice_id,
+                )
+                .first()
+            )
+        if invoice is not None and contact is None and invoice.contact_id:
+            contact = (
+                self.db.query(XeroContact)
+                .filter(XeroContact.org_id == invoice.org_id, XeroContact.id == invoice.contact_id)
+                .first()
+            )
         for allocation in allocations:
             self.inventory.reverse_final_product_fifo_consumption(
                 allocation.org_id,
                 allocation.inventory_item_id,
                 allocation.quantity,
                 reference=_line_reference(allocation.xero_invoice_id, allocation.xero_line_key),
+                sale_context={
+                    "product_name": allocation.product_name,
+                    "action": "reversal",
+                    "quantity_sold": str(allocation.quantity),
+                    "invoice_number": (invoice.invoice_number or invoice.xero_invoice_id) if invoice else "",
+                    "customer_name": contact.name if contact else "Unknown customer",
+                    "sync_job_id": str(sync_job_id) if sync_job_id else None,
+                },
+                correlation_id=sync_job_id,
                 commit=False,
             )
             self.db.delete(allocation)

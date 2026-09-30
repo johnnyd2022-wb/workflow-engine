@@ -14,6 +14,7 @@ from app.core.db import db_session
 from app.core.security.entitlements import org_has_feature
 from app.core.security.permissions import requires_auth
 from app.features.compliant.routes.api_routes import api_bp
+from app.features.compliant.routes.food_registration_routes import food_registration_bp
 from app.features.compliant.routes.licensing_routes import licensing_bp
 from app.features.compliant.routes.page_routes import page_bp
 from app.features.compliant.routes.premises_routes import premises_bp
@@ -35,6 +36,7 @@ def create_compliant_blueprint() -> Blueprint:
     bp.register_blueprint(verification_bp)
     bp.register_blueprint(licensing_bp)
     bp.register_blueprint(premises_bp)
+    bp.register_blueprint(food_registration_bp)
     root = os.path.dirname(os.path.abspath(__file__))
 
     @bp.before_request

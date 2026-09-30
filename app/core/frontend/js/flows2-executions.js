@@ -179,7 +179,7 @@
     }
 
     /** One completed execution step row (inputs / outputs / metadata panes). */
-    function flows2BuildCompletedExecutionStepRowDOM(es) {
+    function flows2BuildCompletedExecutionStepRowDOM(es, executionId) {
       const completedDate = es.completed_at
         ? new Date(es.completed_at).toLocaleString('en-US', {
             month: 'short',
@@ -234,6 +234,13 @@
       subEl.textContent = `Completed: ${completedDate} by ${completedBy}`;
       headBlock.appendChild(nameEl);
       headBlock.appendChild(subEl);
+      if (es.id && executionId) {
+        const recordLink = document.createElement('a');
+        recordLink.href = '/core/executions/' + encodeURIComponent(executionId) + '/steps/' + encodeURIComponent(es.id) + '/record';
+        recordLink.textContent = 'View record and edit history';
+        recordLink.style.cssText = 'display: inline-block; font-size: 12px; margin-top: 4px;';
+        headBlock.appendChild(recordLink);
+      }
       col.appendChild(headBlock);
 
       const ioRow = document.createElement('div');
@@ -428,7 +435,7 @@
       content.id = completedStepsSectionId;
       content.style.display = 'none';
       completedStepsCapped.forEach((es) => {
-        content.appendChild(flows2BuildCompletedExecutionStepRowDOM(es));
+        content.appendChild(flows2BuildCompletedExecutionStepRowDOM(es, executionId));
       });
       wrap.appendChild(hdr);
       wrap.appendChild(content);

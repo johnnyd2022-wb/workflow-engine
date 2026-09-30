@@ -10,7 +10,6 @@
   <div class="max-content">
     {% from "shared/primary_card.html" import primary_card %}
 
-    {% include 'inventory/inventory_hub_banner.html' %}
     <p><a href="{{ url_for('site_transfers.page') }}" hx-boost="false">Stock transfers and transit</a></p>
 
     {% call primary_card(
