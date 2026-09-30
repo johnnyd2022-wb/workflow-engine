@@ -777,6 +777,7 @@ split.
         - [x] Extract compact inventory loading and cache into `process-modal-inventory-loader.js` (!401).
         - [x] Extract searchable inventory dropdown into `process-modal-inventory-dropdown.js` (!402).
         - [x] Extract saved input restoration into `process-modal-input-restore.js` (!403).
+        - [x] Remove three unused session-overlay helpers (85 lines, no callers) (!458).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
