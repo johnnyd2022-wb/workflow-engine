@@ -34,7 +34,7 @@ import os
 import re
 import sys
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_FLOOR, Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -746,7 +746,12 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
             if vat_item is not None:
                 actual_inputs.append(_consume_whole_item(vat_item))
             if batch.bottlings:
-                total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
+                source_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
+                # Whole bottles only (plan 1.2): the source's part-filled bottle goes to
+                # Library stock as mL rather than a fractional bottle count.
+                total_bottles = source_bottles.to_integral_value(rounding=ROUND_FLOOR)
+                bottle_size_ml = Decimal(str(batch.bottlings[0].get("bottle_size_ml") or wm.DEFAULT_BOTTLE_SIZE_ML))
+                remainder_ml = (source_bottles - total_bottles) * bottle_size_ml
                 if total_bottles > 0:
                     # The same physical label-batch allocation must follow bottles
                     # through both Bottling and Labelling.  Splitting here also keeps
@@ -757,6 +762,8 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
                         if batch_number is not None:
                             output["batch_number"] = batch_number
                         actual_outputs.append(output)
+                    if remainder_ml > 0:
+                        actual_outputs[-1]["library_remainder_ml"] = str(remainder_ml)
 
         if step_key == "labelling":
             bottled_items: list[dict[str, Any]] = []
