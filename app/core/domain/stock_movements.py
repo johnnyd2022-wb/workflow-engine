@@ -1,7 +1,7 @@
 """Immutable physical facts supplied to a generic movement-policy provider."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
@@ -31,3 +31,5 @@ class StockMovementContext:
     loss_reason: str | None = None
     damaged_quantity: Decimal = Decimal("0")
     short_quantity: Decimal = Decimal("0")
+    # Opaque module context prepared before Core locks org/site/inventory rows.
+    prepared_context: Mapping = field(default_factory=dict)

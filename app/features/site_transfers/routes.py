@@ -36,6 +36,12 @@ def _policy(session, org_id, context):
     return evaluate_stock_movement(session, org_id, context)
 
 
+def _prepare(session, org_id, source_item_id):
+    from app.features.compliant.platform.stock_movements import prepare_stock_movement
+
+    return prepare_stock_movement(session, org_id, source_item_id)
+
+
 def _requirements():
     try:
         from app.features.compliant.platform.stock_movements import movement_requirements
@@ -148,6 +154,7 @@ def dispatch():
         request.headers.get("Idempotency-Key"),
         request.get_json(silent=True),
         _policy,
+        _prepare,
     )
     db_session.commit()
     return jsonify(

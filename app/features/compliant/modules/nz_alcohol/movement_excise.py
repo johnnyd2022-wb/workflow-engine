@@ -24,6 +24,83 @@ class CapturedRemovalBasis:
     evidence: str = "{}"
 
 
+def prepare_dispatch_duty(session, org_id, source_item_id):
+    """Lock a source's Step → Execution → Order before Core locks Org/Site/Inventory.
+
+    The item read is only a locator. The policy must compare this result with the
+    later locked stock snapshot before it trusts any order or payer fact.
+    """
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.features.contract_manufacturing.models.orders import ContractOrder, ContractOrderExecution
+
+    item = (
+        session.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.id == source_item_id)
+        .one_or_none()
+    )
+    if item is None:
+        return {"source_item_id": str(source_item_id), "found": False}
+    step_id = item.source_execution_step_id
+    execution_id = item.source_execution_id
+    if step_id:
+        step = (
+            session.query(ExecutionStep)
+            .filter(ExecutionStep.org_id == org_id, ExecutionStep.id == step_id)
+            .with_for_update()
+            .populate_existing()
+            .one_or_none()
+        )
+        if step is None or (execution_id and step.execution_id != execution_id):
+            raise ValueError("Source production provenance is unresolved")
+        execution_id = step.execution_id
+    if execution_id:
+        execution = (
+            session.query(Execution)
+            .filter(Execution.org_id == org_id, Execution.id == execution_id)
+            .with_for_update()
+            .populate_existing()
+            .one_or_none()
+        )
+        if execution is None:
+            raise ValueError("Source production provenance is unresolved")
+    prepared = {
+        "source_item_id": str(item.id),
+        "found": True,
+        "source_execution_step_id": str(step_id) if step_id else None,
+        "source_execution_id": str(item.source_execution_id) if item.source_execution_id else None,
+        "contract_order_id": None,
+        "duty_responsibility": "producer_licensee",
+        "customer_cca_reference": None,
+    }
+    if not execution_id:
+        return prepared
+    assignment = (
+        session.query(ContractOrderExecution)
+        .filter(ContractOrderExecution.org_id == org_id, ContractOrderExecution.execution_id == execution_id)
+        .populate_existing()
+        .one_or_none()
+    )
+    if assignment is None:
+        return prepared
+    order = (
+        session.query(ContractOrder)
+        .filter(ContractOrder.org_id == org_id, ContractOrder.id == assignment.order_id)
+        .with_for_update()
+        .populate_existing()
+        .one_or_none()
+    )
+    if order is None or order.status != "confirmed":
+        raise ValueError("Contract duty responsibility needs a confirmed order")
+    prepared.update(
+        contract_order_id=str(order.id),
+        duty_responsibility=order.duty_responsibility,
+        customer_cca_reference=order.customer_cca_reference,
+    )
+    return prepared
+
+
 def _positive(value):
     if isinstance(value, bool):
         raise ValueError("A positive finite decimal is required")
@@ -194,7 +271,8 @@ def cca_movement_register(session, org_id, start, end):
             unresolved.append({"transfer_id": str(transfer.id), "reason": "Recorded source CCA decision is unresolved"})
             continue
         group = groups.setdefault(
-            source["id"], {"source_cca": dict(source), "movements": [], "complete_lodgement": False}
+            source["id"],
+            {"source_cca": dict(source), "movements": [], "observed_excise_duty": "0", "complete_lodgement": False},
         )
         binding = evidence.get("binding") or {}
         try:
@@ -235,7 +313,36 @@ def cca_movement_register(session, org_id, start, end):
         # Their authorisation is captured by the policy; no rate/ABV guess is needed.
         authority = evidence.get("authority")
         destination = evidence.get("destination_licence")
-        if (
+        if isinstance(authority, dict) and authority.get("authority") == "home_consumption":
+            basis = evidence.get("removal_basis")
+            try:
+                duty = _positive(basis["excise_duty_only"])
+                basis_quantity = _positive(basis["quantity"])
+            except (TypeError, KeyError, ValueError):
+                duty, basis_quantity = None, None
+            if (
+                not isinstance(basis, dict)
+                or duty is None
+                or basis_quantity != transfer.quantity
+                or evidence.get("tax_status") != "home_consumption_excise_due"
+                or evidence.get("duty_responsibility") != "producer_licensee"
+                or destination is not None
+                or basis.get("transfer_id") != str(transfer.id)
+                or basis.get("source_item_id") != str(transfer.source_item_id)
+                or not isinstance(basis.get("source_cca"), dict)
+                or basis["source_cca"].get("id") != source["id"]
+                or basis.get("occurred_on") != transfer.occurred_on.isoformat()
+                or basis.get("unit") != transfer.unit
+            ):
+                unresolved.append(
+                    {"transfer_id": str(transfer.id), "reason": "Recorded home-consumption duty basis is unresolved"}
+                )
+                continue
+            entry["treatment"] = "recorded_producer_home_consumption"
+            entry["removal_basis"] = dict(basis)
+            group["observed_excise_duty"] = str(Decimal(group["observed_excise_duty"]) + duty)
+            group["movements"].append(entry)
+        elif (
             isinstance(destination, dict)
             and isinstance(authority, dict)
             and authority.get("authority")
