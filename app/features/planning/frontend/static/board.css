@@ -26,3 +26,8 @@
 .production-board summary { cursor: pointer; }
 @media (max-width: 1100px) { .board-days { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 650px) { .production-board { padding: .8rem; } .board-days { grid-template-columns: minmax(0, 1fr); } .board-toolbar button { flex: 1 1 100px; } }
+
+.board-capacity .board-calendar-days { flex: 1 1 100%; min-width: 0; }
+.board-capacity .board-calendar-days label { display: inline-flex; align-items: center; gap: .4rem; margin: .3rem .75rem .3rem 0; }
+.board-capacity .board-calendar-days input { width: auto; }
+.board-capacity textarea { width: 100%; min-width: 0; box-sizing: border-box; }

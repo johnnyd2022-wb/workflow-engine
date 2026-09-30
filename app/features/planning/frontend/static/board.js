@@ -96,7 +96,7 @@
     output.append(node('p', overloads.length ? overloads.length + ' overloaded resource-day(s) in this view.' : 'No overload in configured groups for this view. Unassigned work may still exist.'));
     const list = node('ul');
     overloads.forEach(row => list.append(node('li', row.day + ' · ' + row.group_name + ': ' + row.load_minutes + '/' + row.capacity_minutes + ' minutes' +
-      (row.suggest_move_batch_id ? ' · consider moving batch ' + row.suggest_move_batch_id.slice(0, 8) : ' · all affected batches pinned'))));
+      (row.calendar_closed ? ' · resource closed' : '') + (row.suggest_move_batch_id ? ' · consider moving batch ' + row.suggest_move_batch_id.slice(0, 8) : ' · all affected batches pinned'))));
     if (overloads.length) output.append(list);
     if (capacityReview.unresolved.length) output.append(node('p', capacityReview.unresolved.length + ' batch(es) have incomplete capacity assignments or timing; no clearance can be inferred.'));
   }
@@ -112,7 +112,28 @@
     if (capacityReview.sites.some(site => site.id === selected)) select.value = selected;
     const config = currentCapacity();
     const list = root.querySelector('[data-capacity-groups]'); list.replaceChildren();
-    config.groups.forEach(group => list.append(node('p', group.name + ' · ' + group.minutes_per_day + ' minutes per day')));
+    config.groups.forEach(group => {
+      list.append(node('p', group.name + ' · ' + group.minutes_per_day + ' minutes per working day'));
+      const form = node('form'); form.setAttribute('hx-boost', 'false'); form.dataset.capacityCalendar = group.id;
+      const days = node('fieldset'); days.className = 'board-calendar-days'; days.append(node('legend', group.name + ' working days'));
+      ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].forEach((name, index) => {
+        const label = node('label'); const input = node('input'); input.type = 'checkbox'; input.name = 'working_days'; input.value = index;
+        input.checked = (group.working_days || [0,1,2,3,4,5,6]).includes(index); label.append(input, node('span', name)); days.append(label);
+      });
+      form.append(days);
+      const label = node('label', 'Closed dates, one per line (YYYY-MM-DD)'); const dates = node('textarea');
+      dates.name = 'closed_dates'; dates.rows = 3; dates.value = (group.closed_dates || []).join('\n'); label.append(dates); form.append(label);
+      const button = node('button', 'Save calendar'); button.type = 'submit'; form.append(button);
+      form.addEventListener('submit', async function (event) {
+        event.preventDefault(); button.disabled = true; error.hidden = true; notice.textContent = '';
+        const updated = {...group, working_days: Array.from(form.querySelectorAll('[name="working_days"]:checked'), input => Number(input.value)), closed_dates: dates.value.trim() ? dates.value.trim().split(/\s+/) : []};
+        try {
+          await saveCapacity({...config, groups: config.groups.map(item => item.id === group.id ? updated : item)});
+          notice.textContent = 'Resource calendar saved';
+        } catch (exc) { fail(exc); button.disabled = false; }
+      });
+      list.append(form);
+    });
     const steps = root.querySelector('[data-capacity-step]'); const priorStep = steps.value; steps.replaceChildren();
     workflows.forEach(workflow => workflow.steps.forEach(step => option(steps, step.step_id, workflow.process_name + ' · ' + step.name)));
     if (Array.from(steps.options).some(item => item.value === priorStep)) steps.value = priorStep;
