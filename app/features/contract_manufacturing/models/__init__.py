@@ -12,6 +12,7 @@ from app.features.contract_manufacturing.models.portal import (
     PortalMessage,
     PortalPrincipal,
     PortalPublication,
+    PortalReorderRequest,
     PortalSession,
 )
 
@@ -26,6 +27,7 @@ __all__ = [
     "PortalMessage",
     "PortalPrincipal",
     "PortalPublication",
+    "PortalReorderRequest",
     "PortalSession",
     "ContractMaterialReceipt",
 ]

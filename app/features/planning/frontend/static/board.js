@@ -14,6 +14,54 @@
   let materialAssessment = null;
   let capacityReview = null;
   let boardRequest = 0;
+  let draggedBatch = null;
+  let dragPending = false;
+  const batchDragType = 'application/x-bize-planned-batch';
+  function clearDrag() {
+    draggedBatch = null;
+    root.querySelectorAll('.board-drop-target').forEach(section => section.classList.remove('board-drop-target'));
+  }
+  function dragHandle(card, batch) {
+    const handle = node('button', 'Drag to move');
+    handle.type = 'button'; handle.className = 'board-drag-handle'; handle.draggable = true;
+    handle.title = 'Drag to a day, or use the new start date form';
+    handle.addEventListener('dragstart', function (event) {
+      if (dragPending || !event.dataTransfer) { event.preventDefault(); return; }
+      draggedBatch = batch;
+      event.dataTransfer.setData(batchDragType, batch.id);
+      event.dataTransfer.effectAllowed = 'move';
+    });
+    handle.addEventListener('dragend', clearDrag);
+    handle.addEventListener('click', function () { card.querySelector('[name="start_date"]')?.focus(); });
+    card.append(handle);
+  }
+  function dropDay(section, date) {
+    section.dataset.boardDate = date;
+    if (!canRecord) return;
+    section.addEventListener('dragover', function (event) {
+      if (!draggedBatch || dragPending || draggedBatch.proposed_start_date === date) return;
+      event.preventDefault(); event.dataTransfer.dropEffect = 'move';
+      section.classList.add('board-drop-target');
+    });
+    section.addEventListener('dragleave', function (event) {
+      if (!section.contains(event.relatedTarget)) section.classList.remove('board-drop-target');
+    });
+    section.addEventListener('drop', async function (event) {
+      const batch = draggedBatch;
+      if (!batch || dragPending || !event.dataTransfer || event.dataTransfer.getData(batchDragType) !== batch.id) return;
+      event.preventDefault(); clearDrag();
+      if (batch.proposed_start_date === date) return;
+      dragPending = true; error.hidden = true;
+      try {
+        await api('/api/core/planner/batches/' + batch.id + '/action', {action: 'reschedule', expected_revision: batch.revision, start_date: date});
+        await loadBoard(); notice.textContent = 'Batch moved to ' + date;
+      } catch (exc) {
+        fail(exc);
+        // A pin, cancellation or concurrent edit may have made this card stale.
+        try { await loadBoard(); } catch (reloadError) { fail(reloadError); }
+      } finally { dragPending = false; }
+    });
+  }
   function node(tag, text) { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; }
   function iso(day) { return day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0'); }
   function day(value) { const parts = value.split('-').map(Number); return new Date(parts[0], parts[1] - 1, parts[2], 12); }
@@ -43,6 +91,7 @@
   }
   function batchCard(batch) {
     const card = node('article'); card.className = 'board-batch'; card.dataset.batchId = batch.id;
+    if (canRecord && !batch.pinned && !['started', 'cancelled'].includes(batch.status)) dragHandle(card, batch);
     card.append(node('h4', batch.snapshot.demand_reference + ' · Batch ' + batch.batch_number));
     card.append(node('p', batch.quantity + ' ' + batch.unit + ' · ' + batch.snapshot.output_name));
     card.append(node('p', batch.snapshot.site_name + ' · Priority ' + batch.priority + (batch.pinned ? ' · Pinned' : '')));
@@ -177,12 +226,14 @@
       if (requestNumber !== boardRequest) return;
       materialAssessment = observed.assessment;
       capacityReview = capacity; renderCapacity(); showCapacitySettings();
+      clearDrag();
       const days = root.querySelector('[data-board-days]'); days.replaceChildren();
       root.querySelector('[data-board-title]').textContent = iso(dates.start) + ' – ' + iso(dates.end);
       root.querySelector('[data-board-empty]').hidden = result.batches.length !== 0;
       if (result.truncated) notice.textContent = 'Showing the first 1,000 batches. Choose a shorter period to see more.';
       for (let current = dates.start; current <= dates.end; current = add(current, 1)) {
         const key = iso(current); const section = node('section'); section.className = 'board-day';
+        dropDay(section, key);
         section.append(node('h3', current.toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'})));
         result.batches.filter(batch => batch.proposed_start_date === key).forEach(batch => section.append(batchCard(batch)));
         days.append(section);
