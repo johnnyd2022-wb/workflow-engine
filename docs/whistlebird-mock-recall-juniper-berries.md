@@ -126,8 +126,8 @@ Each step is linked to the section of the [recall policy](whistlebird-recall-pol
 
 ## 5. Risk assessment — SIMULATED RECALL
 
-- **Product and who drinks it:** Whistlebird gin, 700 mL, batches SIM-G-201 and SIM-G-202. Sold to adults, including people who may be pregnant or unwell.
-- **Hazard and likely harm:** a toxic look-alike berry (savin juniper) may have been distilled into the gin. Savin is documented as poisonous and as unsafe in pregnancy. The level in the finished gin is unknown, and the volatile oil can carry into a spirit.
+- **Product and who drinks it:** Whistlebird gin, 700 mL, batches SIM-G-201 and SIM-G-202. Sold through licensed bottle stores to adults aged 18 and over.
+- **Hazard and likely harm:** a toxic look-alike berry (savin juniper) may have been distilled into the gin. Savin is documented as poisonous. The level in the finished gin is unknown, and the volatile oil can carry into a spirit.
 - **Source and time window:** supplier lot SIM-JB-14, received Day −70, used on Day −56 and Day −35. Gin delivered Day −50 to Day −12.
 - **Affected lots and quantity:** two batches, 1,000 bottles. 120 on hold at Whistlebird, 834 with 32 bottle stores, 12 retained samples, 28 with staff and marketing, 6 at an unrecorded trade tasting.
 - **Where it is now:** section 3.1 and section 8. The 834 bottles at stores may already have been sold to consumers. We do not know who bought them.
