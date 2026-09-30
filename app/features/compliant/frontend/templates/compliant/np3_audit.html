@@ -4,7 +4,7 @@
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
 {% block content %}
 <main class="compliant-shell" data-np3-audit-root data-programme-short="{{ programme_short }}" aria-busy="true">
-  <nav class="module-breadcrumb" aria-label="Compliance location"><a href="/compliant" hx-boost="false">Compliance</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol" hx-boost="false">NZ Alcohol</a><span aria-hidden="true">/</span><strong>{{ programme_short }}</strong></nav>
+  <nav class="module-breadcrumb" aria-label="Compliance location"><a href="/compliant">Compliance</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol">NZ Alcohol</a><span aria-hidden="true">/</span><strong>{{ programme_short }}</strong></nav>
   {% include "compliant/_nz_alcohol_tabs.html" %}
   <header class="compliant-hero np3-audit-hero">
     <div><p class="compliant-eyebrow">{{ programme_label|upper }}</p><p><a class="np3-guidance-link" href="{{ guidance_url }}" target="_blank" rel="noopener noreferrer">Open the latest MPI {{ programme_label }} guidance ↗</a></p></div>

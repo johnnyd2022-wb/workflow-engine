@@ -7,7 +7,7 @@ load it directly, then reach it by a boosted click from the dashboard, and requi
 boosted render
 
 * has about as many elements as the full load (within 10%, plus a few for live regions),
-* has every element id the full load has (the page's key selectors),
+* has every stylesheet and every element id the full load has (the page's key selectors),
 * has no "Loading…" left once the network is idle, and
 * raised no console error the full load did not.
 
@@ -28,32 +28,22 @@ pytestmark = pytest.mark.e2e
 
 # Pages whose boosted render is still wrong (docs/ux-overhaul-plan.md, step 1). Remove a path here
 # in the same change that fixes it.
-BOOST_BROKEN: set[str] = {
-    "/core",  # reached by a full reload, not a swap (the special case in base_spa)
-    "/core/tasks",  # lands on /core
-    "/core/go-live",
-    "/core/executions/live",
-    "/core/inventory/live",
-    "/core/stocktake",
-    "/core/site-transfers",
-    "/core/planner/board",
-    "/core/notifications",
-    "/compliant/nz-alcohol/np3-audit",
-    "/compliant/nz-alcohol/food-safety",
-    "/compliant/nz-alcohol/customs",
-    "/compliant/nz-alcohol/evidence",
-    "/compliant/nz-alcohol/licensing",
-    "/crm/analytics",
-}
+BOOST_BROKEN: set[str] = set()
 
 _SNAPSHOT_JS = """() => {
   const root = document.querySelector('#page-content');
+  // Count what the user can get: not asset tags (a boosted swap carries them in a hidden
+  // [data-page-assets] holder and htmx removes executed scripts) and not the test's own link.
+  const elements = [...root.querySelectorAll('*')].filter(
+    (el) => !el.closest('[data-page-assets]') && el.id !== '__boost_probe' && !/^(SCRIPT|LINK|STYLE|META)$/.test(el.tagName)
+  );
   const leaf = (el) => el.children.length === 0;
   return {
     path: location.pathname,
-    elements: root.querySelectorAll('*').length,
-    ids: [...root.querySelectorAll('[id]')].map((el) => el.id).filter((id) => id && !/[0-9a-f]{8}-|\\d{5,}/.test(id)),
-    loading: [...root.querySelectorAll('*')].filter((el) => leaf(el) && /^\\s*Loading(…|\\.\\.\\.)?\\s*$/i.test(el.textContent)).length,
+    elements: elements.length,
+    sheets: [...document.querySelectorAll('link[rel~="stylesheet"]')].map((el) => new URL(el.href).pathname),
+    ids: elements.map((el) => el.id).filter((id) => id && !/[0-9a-f]{8}-|\\d{5,}/.test(id)),
+    loading: elements.filter((el) => leaf(el) && /^\\s*Loading(…|\\.\\.\\.)?\\s*$/i.test(el.textContent)).length,
   };
 }"""
 
@@ -122,6 +112,8 @@ def test_boosted_click_renders_the_same_page_as_a_full_load(logged_in_page, path
     assert abs(boosted["elements"] - full["elements"]) <= tolerance, (
         f"{boosted['elements']} elements boosted vs {full['elements']} on a full load"
     )
+    no_sheets = sorted(set(full["sheets"]) - set(boosted["sheets"]))
+    assert not no_sheets, f"stylesheets a full load has but the boosted page lacks: {no_sheets}"
     missing = sorted(set(full["ids"]) - set(boosted["ids"]))
     assert not missing, f"elements missing after a boosted click: {missing[:15]}"
     assert boosted["loading"] <= full["loading"], f"{boosted['loading']} 'Loading…' left after a boosted click"
@@ -131,3 +123,29 @@ def test_boosted_click_renders_the_same_page_as_a_full_load(logged_in_page, path
 
 def test_registry_paths_are_distinct_from_assets():
     assert all(re.fullmatch(r"/[a-z0-9/_-]*", page.path) for page in PAGES)
+
+
+def test_back_and_forward_restore_working_pages(logged_in_page):
+    """htmx would restore a cached DOM snapshot on back/forward, which comes back inert (no
+    handlers, no data). base_spa.html sets `historyCacheSize: 0` + `refreshOnHistoryMiss`, so the
+    browser's own back/forward reloads the page from the server."""
+    page = logged_in_page
+    page.goto("/core/dashboard")
+    _settle(page)
+    page.evaluate(_BOOSTED_CLICK_JS, "/core/stocktake")
+    page.wait_for_function("window.__boostSettled === true", timeout=15_000)
+    _settle(page)
+    assert page.locator("[data-stocktake-root]").count() == 1
+    assert page.locator("[data-stocktake-root]").get_attribute("data-st-bound") == "1"
+
+    page.go_back()
+    _settle(page)
+    assert page.url.endswith("/core/dashboard")
+    assert page.locator("[data-dashboard-root]").count() == 1
+    assert page.locator("#page-content").get_by_text("Loading…", exact=True).count() == 0
+
+    page.go_forward()
+    _settle(page)
+    assert page.url.endswith("/core/stocktake")
+    assert page.locator("[data-stocktake-root]").get_attribute("data-st-bound") == "1"
+    assert page.locator("#page-content").get_by_text("Loading…", exact=True).count() == 0

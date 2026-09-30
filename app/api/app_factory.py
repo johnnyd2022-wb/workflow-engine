@@ -484,6 +484,11 @@ def create_app():
         # Prevent MIME type sniffing (forces browsers to respect Content-Type)
         response.headers["X-Content-Type-Options"] = "nosniff"
 
+        # A boosted htmx navigation gets the page's CSS and scripts inside #page-content
+        # (shared/base_spa.html); a full load gets them in <head> and at the end of <body>.
+        if response.mimetype == "text/html":
+            response.vary.add("HX-Boosted")
+
         # Prevent clickjacking: DENY by default; SAMEORIGIN for process-docs download and the
         # landing diagram (embedded as an iframe on the landing page).
         path = (request.path or "").strip()

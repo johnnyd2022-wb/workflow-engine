@@ -4,7 +4,7 @@
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
 {% block content %}
 <main class="compliant-shell" data-np3-check-root data-programme-short="{{ programme_short }}" data-control-id="{{ control_id }}" aria-busy="true">
-  <nav class="module-breadcrumb" aria-label="Compliance location"><a href="/compliant" hx-boost="false">Compliance</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol/food-safety" hx-boost="false">{{ programme_short }}</a><span aria-hidden="true">/</span><strong data-np3-check-breadcrumb>Check</strong></nav>
+  <nav class="module-breadcrumb" aria-label="Compliance location"><a href="/compliant">Compliance</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol/food-safety">{{ programme_short }}</a><span aria-hidden="true">/</span><strong data-np3-check-breadcrumb>Check</strong></nav>
   {% include "compliant/_nz_alcohol_tabs.html" %}
   <p class="compliant-error" data-np3-check-error hidden></p>
   <header class="compliant-hero np3-check-hero"><div><p class="compliant-eyebrow">{{ programme_label|upper }} / CHECK DETAIL</p><h1 data-np3-check-title>Loading check…</h1><p data-np3-check-summary></p></div><div class="compliant-summary"><strong data-np3-check-state>Loading</strong><span data-np3-check-next-review></span></div></header>

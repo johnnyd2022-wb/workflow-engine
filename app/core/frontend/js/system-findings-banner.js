@@ -114,7 +114,7 @@
             '</div>' +
           '</div>';
       } else if (!actionBlock && checkId === 'tasks_due') {
-        actionBlock = '<a href="/core?tab=tasks" class="btn btn-secondary btn-sm" hx-boost="false">Open tasks</a>';
+        actionBlock = '<a href="/core?tab=tasks" class="btn btn-secondary btn-sm">Open tasks</a>';
       }
       return (
         '<li class="system-findings-item" data-index="' + index + '" data-check-id="' + escapeHtml(checkId) + '">' +
@@ -143,7 +143,7 @@
     var href = action ? safeInternalHref(action.href) : '';
     if (!href) return '';
     var label = action.label == null ? 'Open finding' : String(action.label);
-    return '<a href="' + escapeHtml(href) + '" class="btn btn-secondary btn-sm" hx-boost="false">' + escapeHtml(label) + '</a>';
+    return '<a href="' + escapeHtml(href) + '" class="btn btn-secondary btn-sm">' + escapeHtml(label) + '</a>';
   }
 
   function onFindingActionClick(ev) {
@@ -205,7 +205,7 @@
         var title = detail.title == null ? 'Action' : String(detail.title);
         var description = detail.description == null ? '' : String(detail.description);
         var href = safeInternalHref(detail.href);
-        var action = href ? '<a href="' + escapeHtml(href) + '" hx-boost="false">' + escapeHtml(String(detail.action_label || 'Open')) + '</a>' : '';
+        var action = href ? '<a href="' + escapeHtml(href) + '">' + escapeHtml(String(detail.action_label || 'Open')) + '</a>' : '';
         parts.push('<p class="system-findings-item__detail-section"><strong>' + escapeHtml(title) + ':</strong> ' + escapeHtml(description) + (action ? ' ' + action : '') + '</p>');
       });
     } else if (checkId === 'expired_materials') {

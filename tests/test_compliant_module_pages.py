@@ -110,8 +110,9 @@ def test_complaint_spelling_redirects_to_the_compliant_workspace():
     assert 'redirect("/compliant", code=302)' in routes
 
 
-def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
-    """Compliant CSS/JS are subscription-protected and only enter <head> on a full load."""
+def test_compliant_navigation_is_boosted_but_downloads_are_not():
+    """Page links are boosted (a boosted response carries the page's own CSS/JS inside #page-content,
+    see shared/base_spa.html); a file download must still bypass htmx."""
     tabs = (
         ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_nz_alcohol_tabs.html"
     ).read_text(encoding="utf-8")
@@ -121,8 +122,8 @@ def test_compliant_navigation_uses_full_documents_for_page_specific_assets():
     # The Flask app's Jinja root is app/ui/templates.  Guard the template it actually
     # renders, rather than the separately served /ui/shared asset directory.
     sidebar = (ROOT / "app" / "ui" / "templates" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")
-    assert tabs.count('hx-boost="false"') == 5  # every tab, including Licensing (plan 2.5)
-    assert 'href="/compliant" hx-boost="false"' in sidebar
+    assert 'hx-boost="false"' not in tabs  # every tab, including Licensing (plan 2.5), is boosted
+    assert 'href="/compliant"' in sidebar and 'href="/compliant" hx-boost="false"' not in sidebar
     assert 'href="/api/compliant/np3-audit?format=csv" hx-boost="false"' in audit
     assert 'href="/api/compliant/np3-audit?format=pdf" hx-boost="false"' in audit
 
@@ -324,7 +325,9 @@ def test_np3_post_audit_checks_added_2026_09_23_have_playbooks_registers_and_a_c
     assert control_reference("np3-food-control", "recall-policy") == "Recalling your food"
 
     hazard_log = np3_log_template("hazard-issues-register")
-    hazard_options = {option for field in hazard_log["fields"] if field["key"] == "hazard_type" for option, _label in field["options"]}
+    hazard_options = {
+        option for field in hazard_log["fields"] if field["key"] == "hazard_type" for option, _label in field["options"]
+    }
     assert hazard_options == {"physical", "biological", "chemical"}
 
     cleaning_chem_log = np3_log_template("cleaning-chemicals-food-safe")

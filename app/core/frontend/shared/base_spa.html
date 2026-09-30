@@ -14,6 +14,8 @@
   <meta name="operational-cases-enabled" content="{{ 'true' if operational_cases_available else 'false' }}">
   <meta name="current-org-id" content="{{ g.current_org_id or '' }}">
   <meta name="current-user-id" content="{{ g.current_user.id if g.current_user else '' }}">
+  {# Back/forward reload the page from the server rather than restoring an inert DOM snapshot. #}
+  <meta name="htmx-config" content='{"historyCacheSize":0,"refreshOnHistoryMiss":true}'>
   <title>{% block title %}Flume Workflow Engine{% endblock %}</title>
   {# Inline SVG favicon — avoids a /favicon.ico 404 without shipping a binary asset. #}
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='%232DD4BF' fill-opacity='.22'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%232DD4BF'/%3E%3C/svg%3E">
@@ -112,7 +114,6 @@
               class="topbar-notifications"
               id="topbar-notifications-link"
               aria-label="Notifications"
-              hx-boost="false"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/>
@@ -285,7 +286,13 @@
         </div>
 
       <main id="page-content" class="page-content">
+        {# A boosted navigation swaps only #page-content, so the page's own CSS and scripts (which a
+           full load puts in <head> and at the end of <body>) must travel inside it. htmx runs
+           swapped-in scripts in order. See docs/ux-overhaul-plan.md (1.3). #}
+        {% set boosted = request.headers.get('HX-Boosted') == 'true' %}
+        {% if boosted %}<div hidden data-page-assets>{{ self.head_extras() }}</div>{% endif %}
         {% block content %}{% endblock %}
+        {% if boosted %}<div hidden data-page-assets>{{ self.scripts() }}</div>{% endif %}
       </main>
     </div>
   </div>
@@ -327,6 +334,7 @@
   <script src="{{ url_for('core.serve_core_js', filename='system-findings-banner.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='inventory-adjust.js') }}"></script>
   <script src="/ui/shared/account-info.js"></script>
+  <script src="/ui/shared/page-init.js"></script>
   <script src="/ui/shared/sidebar-v2.js"></script>
   <script src="/ui/shared/password-policy.js"></script>
   <script src="/ui/shared/workflow-engine-settings.js"></script>
@@ -703,11 +711,6 @@
       var tgt = evt.detail && evt.detail.target;
       if (tgt && tgt.id === 'page-content') {
         spaNormalizeBodyClasses();
-        if (window.Alpine && typeof window.Alpine.initTree === 'function') {
-          try {
-            window.Alpine.initTree(tgt);
-          } catch (e) {}
-        }
         syncAddInventoryManualPageShell();
         tagExecAddMissingItemControls(tgt);
         wireExecInputsMutationObserver();
@@ -717,10 +720,42 @@
       }
     });
 
+    // Alpine would initialise swapped-in `x-data` the moment htmx inserts it, but htmx only runs the
+    // page's own scripts (which may define that component) once the swap settles. So Alpine stops
+    // watching the DOM for the duration of a #page-content swap, then initialises the new content
+    // after its scripts have run. (docs/ux-overhaul-plan.md, 1.3)
+    var spaAlpinePaused = null;
+    function spaResumeAlpine(initTarget) {
+      clearTimeout(spaAlpinePaused);
+      spaAlpinePaused = null;
+      var alpine = window.Alpine;
+      if (!alpine || typeof alpine.startObservingMutations !== 'function') return;
+      alpine.startObservingMutations();
+      if (initTarget && typeof alpine.initTree === 'function') {
+        try { alpine.initTree(initTarget); } catch (e) {}
+      }
+    }
+    document.body.addEventListener('htmx:beforeSwap', function (evt) {
+      var tgt = evt.detail && evt.detail.target;
+      var alpine = window.Alpine;
+      if (!tgt || tgt.id !== 'page-content' || evt.detail.shouldSwap === false) return;
+      if (!alpine || typeof alpine.stopObservingMutations !== 'function') return;
+      Array.prototype.slice.call(tgt.children).forEach(function (child) {
+        try { alpine.destroyTree(child); } catch (e) {}
+      });
+      alpine.stopObservingMutations();
+      // Never leave Alpine blind if the swap fails before it settles.
+      spaAlpinePaused = setTimeout(function () { spaResumeAlpine(null); }, 5000);
+    });
+    document.body.addEventListener('htmx:swapError', function () { spaResumeAlpine(null); });
+
     // After boosted navigation settles: sync banner + scroll the real overflow parent (#page-content),
     // not window (fixes tiny post-nav drift on mobile when the column scroll container kept its old scrollTop).
     document.body.addEventListener('htmx:afterSettle', function (evt) {
       var tgt = evt.detail && evt.detail.target;
+      if (tgt && tgt.id === 'page-content' && spaAlpinePaused) {
+        spaResumeAlpine(tgt);
+      }
       tagExecAddMissingItemControls(tgt && tgt.id === 'page-content' ? tgt : document);
       syncAddInventoryManualPageShell();
       if (typeof spaSyncBannerBack === 'function') {
@@ -745,16 +780,9 @@
       });
     });
 
-    // afterOnLoad: banner back state (HTMX keeps shell; sync from URL) + Process Hub data reload (see core2.html)
+    // afterOnLoad: banner back state (HTMX keeps shell; sync from URL)
     document.body.addEventListener('htmx:afterOnLoad', function (evt) {
       spaSyncBannerBack();
-      var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
-      if (path !== '/core') return;
-      if (typeof window.loadCoreHubDashboardData === 'function') {
-        window.loadCoreHubDashboardData();
-      } else {
-        window.location.reload();
-      }
     });
   </script>
 
