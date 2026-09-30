@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>biz-e — Effortless control and visibility for your manufacturing operations</title>
-  <meta name="description" content="biz-e captures production activity, enforces defined constraints, tracks every change, and maintains a live connected record—removing uncertainty, reducing manual effort, and enabling instant forensic reconstruction of your production outcomes.">
+  <title>biz-e — Production and compliance for NZ craft alcohol</title>
+  <meta name="description" content="Track ingredients, batches and Xero sales in one place. Build recall traces, NP3 evidence packs and excise drafts for your New Zealand craft alcohol business.">
   <meta name="author" content="biz-e">
 
   <!-- Open Graph -->
-  <meta property="og:title" content="biz-e — Effortless control and visibility for your manufacturing operations">
-  <meta property="og:description" content="biz-e captures production activity, enforces defined constraints, tracks every change, and maintains a live connected record—removing uncertainty, reducing manual effort, and enabling instant forensic reconstruction of your production outcomes.">
+  <meta property="og:title" content="biz-e — Production and compliance for NZ craft alcohol">
+  <meta property="og:description" content="Track ingredients, batches and Xero sales in one place. Build recall traces, NP3 evidence packs and excise drafts for your New Zealand craft alcohol business.">
   <meta property="og:type" content="website">
   
   <!-- Twitter Card -->
@@ -41,9 +41,6 @@
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-    }
-    @media (max-width: 768px) {
-      .landing-diagram-section { display: none; }
     }
     @media (max-width: 640px) {
       .hero-heading { font-size: 2rem; }
@@ -86,12 +83,12 @@
       <!-- Hero Text -->
       <div class="space-y-8 animate-fade-in" style="max-width: 48rem;">
         <h1 class="text-5xl md-text-6xl momo-trust-display-regular hero-heading" style="line-height: 1.1;">
-          Effortless control and visibility for your
-          <span class="gradient-text">manufacturing operations</span>
+          From your first ingredient
+          <span class="gradient-text">to your last bottle.</span>
         </h1>
 
         <p class="text-xl text-muted" style="max-width: 36rem;">
-          <span class="momo-trust-display-regular">biz-e</span> captures production activity, enforces defined constraints, tracks every change, and maintains a live connected record—removing uncertainty, reducing manual effort, and enabling instant forensic reconstruction of your production outcomes.
+          <span class="momo-trust-display-regular">biz-e</span> connects your production records, stock and Xero sales. Find the customers behind a batch, gather your NP3 evidence and prepare an excise draft from recorded removals.
         </p>
 
         <div id="hero-buttons">
@@ -103,39 +100,50 @@
         <div style="display: none;" id="hero-buttons-authenticated">
           <div class="hero-buttons-row" style="display: flex; gap: 1rem;">
             <a href="/dashboard"><button class="btn btn-hero btn-lg">View Dashboard</button></a>
-            <a href="/core"><button class="btn btn-glass btn-lg">Go to Operations</button></a>
+            <a href="/core"><button class="btn btn-glass btn-lg">Go to Production</button></a>
           </div>
         </div>
 
-        <!-- Social proof -->
+        <!-- Product outcomes -->
         <div class="social-proof-row flex items-center" style="gap: 1.5rem; padding-top: 1rem;">
           <div>
-            <p class="text-3xl font-bold">Real-time</p>
-            <p class="text-sm text-muted">Capture at point of work</p>
+            <p class="text-3xl font-bold">Recall</p>
+            <p class="text-sm text-muted">Batch to customer</p>
           </div>
           <div class="social-proof-divider" style="height: 3rem; width: 1px; background: var(--border);"></div>
           <div>
-            <p class="text-3xl font-bold">Always</p>
-            <p class="text-sm text-muted">Audit-ready by default</p>
+            <p class="text-3xl font-bold">NP3</p>
+            <p class="text-sm text-muted">Evidence in one pack</p>
           </div>
           <div class="social-proof-divider" style="height: 3rem; width: 1px; background: var(--border);"></div>
           <div>
-            <p class="text-3xl font-bold">Instant</p>
-            <p class="text-sm text-muted">Production state reconstruction</p>
+            <p class="text-3xl font-bold">Excise</p>
+            <p class="text-sm text-muted">Draft from removals</p>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Diagram — sits on solid background so colours match exactly; hidden on mobile (canvas is 1216px wide, unreadable when scaled to phone size) -->
-  <section class="landing-diagram-section" style="background-color: var(--background); padding: 0;">
-    <iframe
-      src="/landing-diagram"
-      title="biz-e operational diagram"
-      style="width: 100%; height: clamp(400px, 69vw, 840px); border: none; display: block;"
-      loading="lazy"
-    ></iframe>
+  <!-- A readable batch trail on desktop and phone -->
+  <section class="py-8" aria-labelledby="batch-trail-heading">
+    <div class="container">
+      <h2 id="batch-trail-heading" class="text-2xl font-bold mb-4">One connected batch record</h2>
+      <div class="grid md-grid-cols-3">
+        <div class="glass-card">
+          <h3 class="text-xl font-bold mb-2">1. Receive and make</h3>
+          <p class="text-muted">Record supplier lots and opening stock. Follow ingredients into each batch, with the quantities and checks on every step.</p>
+        </div>
+        <div class="glass-card">
+          <h3 class="text-xl font-bold mb-2">2. Bottle and sell</h3>
+          <p class="text-muted">Keep batch IDs, bottling details and stock on hand together. Connect Xero invoice lines to the finished batches sold.</p>
+        </div>
+        <div class="glass-card">
+          <h3 class="text-xl font-bold mb-2">3. Trace and prepare</h3>
+          <p class="text-muted">Use those linked records for a recall report, an NP3 evidence pack or a Customs excise draft.</p>
+        </div>
+      </div>
+    </div>
   </section>
 
    <!-- Features Section -->
@@ -143,11 +151,11 @@
     <div class="container">
       <div class="text-center mb-8 animate-fade-in">
         <h2 class="text-4xl md-text-5xl momo-trust-display-regular features-heading mb-4">
-          Everything you need for<br>
-          <span style="color: #2DD4BF;">clear and reliable operational insights</span>
+          Make the batch record work for<br>
+          <span style="color: #2DD4BF;">your next recall, verification and return</span>
         </h2>
         <p class="text-xl text-muted mx-auto" style="max-width: 42rem;">
-          <span class="momo-trust-display-regular">biz-e</span> is not a reporting tool, ERP module, or documentation system. It captures how work is actually completed in real time.
+          For New Zealand makers of spirits, beer, wine, cider, mead and RTDs. Keep your own production workflow and record the ingredients, quantities, checks and evidence as you go.
         </p>
       </div>
 
@@ -158,8 +166,8 @@
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
             </svg>
           </div>
-          <h3 class="text-xl font-bold mb-2">Capture work as it happens</h3>
-          <p class="text-muted">Production activity is recorded at the point of execution, capturing inputs, outputs, and key details as work is completed.</p>
+          <h3 class="text-xl font-bold mb-2">Trace a batch to its customers</h3>
+          <p class="text-muted">Follow supplier lots through production to the bottles sold. See affected customers, invoices and stock still on hand, then export the recall report for follow-up.</p>
         </div>
 
         <div class="glass-card hover animate-fade-in">
@@ -168,8 +176,8 @@
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
             </svg>
           </div>
-          <h3 class="text-xl font-bold mb-2">Be audit-ready by default</h3>
-          <p class="text-muted">A complete operational history is always available without requiring manual preparation or reconstruction.</p>
+          <h3 class="text-xl font-bold mb-2">Gather your NP3 evidence</h3>
+          <p class="text-muted">Keep checks, supporting files and production records together. See what needs attention and export an evidence pack for your verifier, with links back to the records.</p>
         </div>
 
         <div class="glass-card hover animate-fade-in">
@@ -178,8 +186,8 @@
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
           </div>
-          <h3 class="text-xl font-bold mb-2">Reconstruct any production state instantly</h3>
-          <p class="text-muted">Any batch, workflow, or operational moment can be rebuilt with full context when needed.</p>
+          <h3 class="text-xl font-bold mb-2">Prepare your Customs excise draft</h3>
+          <p class="text-muted">Use recorded alcohol removals, pack volumes and batch ABV to prepare period totals in litres of alcohol and duty. Review the draft before lodging with Customs.</p>
         </div>
       </div>
     </div>
@@ -190,10 +198,10 @@
     <div class="container text-center">
       <div class="glass-card cta-card-inner mx-auto animate-scale-in" style="max-width: 48rem; padding: 3rem;">
         <h2 class="text-4xl font-bold mb-4">
-          Ready to take clear control of your manufacturing operations?
+          Put your next batch on the record.
         </h2>
         <p class="text-xl text-muted mb-8">
-          Join manufacturing teams who run with clarity and confidence.
+          Set up your organisation, record your opening stock and connect your production to sales.
         </p>
         <button class="btn btn-hero btn-lg" onclick="openModal('signupModal')">
           Sign Up
@@ -205,7 +213,7 @@
   <!-- Footer -->
   <footer class="py-8 border-t">
     <div class="container text-center text-muted">
-      <p>© 2026 <span class="momo-trust-display-regular">biz-e</span>. Effortless control and visibility for your manufacturing operations.</p>
+      <p>© 2026 <span class="momo-trust-display-regular">biz-e</span>. Production and compliance for New Zealand craft alcohol.</p>
     </div>
   </footer>
 

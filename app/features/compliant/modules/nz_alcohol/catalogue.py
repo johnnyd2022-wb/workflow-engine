@@ -209,9 +209,9 @@ NZ_ALCOHOL_FRAMEWORKS = (
     {
         "slug": "np2-food-control",
         "name": "National Programme 2 food control",
-        "version": "2025 guidance",
-        "source_title": "Ministry for Primary Industries — National Programme 2 guidance",
-        "source_url": "https://www.mpi.govt.nz/food-business/running-a-food-business/national-programmes",
+        "version": "2025-v2",
+        "source_title": "Ministry for Primary Industries — National Programme 2 Guidance (December 2025, version 2)",
+        "source_url": "https://www.mpi.govt.nz/dmsdocument/21850/direct",
         "applies_to": ("national-programme-2", "beer", "spirits", "cider", "mead", "rtd", "other"),
         "controls": (
             ("registration-scope", "Keep the registered business scope, verifier and material changes current."),
@@ -228,9 +228,9 @@ NZ_ALCOHOL_FRAMEWORKS = (
     {
         "slug": "np1-food-control",
         "name": "National Programme 1 food control",
-        "version": "2025 guidance",
-        "source_title": "Ministry for Primary Industries — National Programme 1 guidance",
-        "source_url": "https://www.mpi.govt.nz/food-business/running-a-food-business/national-programmes",
+        "version": "2025-v2",
+        "source_title": "Ministry for Primary Industries — National Programme 1 Guidance (December 2025, version 2)",
+        "source_url": "https://www.mpi.govt.nz/dmsdocument/21847/direct",
         "applies_to": ("national-programme-1", "beer", "spirits", "cider", "mead", "rtd", "other"),
         "controls": (
             ("registration-scope", "Keep the registered business scope, verifier and material changes current."),
@@ -311,6 +311,31 @@ NZ_ALCOHOL_FRAMEWORKS = (
         ),
     },
 )
+
+
+def _extend_national_programmes() -> None:
+    """NP1 and NP2 get a check for every MPI guidance card (plan 2.4b), described as in NP3."""
+    from app.features.compliant.modules.nz_alcohol.national_programmes import (
+        NP1_AUDIT_CATEGORIES,
+        NP2_AUDIT_CATEGORIES,
+        topic_ids,
+    )
+
+    np3 = next(f for f in NZ_ALCOHOL_FRAMEWORKS if f["slug"] == "np3-food-control")
+    described = dict(np3["controls"])
+    for slug, categories in (("np1-food-control", NP1_AUDIT_CATEGORIES), ("np2-food-control", NP2_AUDIT_CATEGORIES)):
+        framework = next(f for f in NZ_ALCOHOL_FRAMEWORKS if f["slug"] == slug)
+        controls = list(framework["controls"])
+        known = {control_id for control_id, _ in controls}
+        titles = {control_id: title for _category, topics in categories for control_id, title in topics}
+        for control_id in topic_ids(categories):
+            if control_id not in known:
+                controls.append((control_id, described.get(control_id, titles[control_id])))
+        framework["controls"] = tuple(controls)
+
+
+_extend_national_programmes()
+
 
 CONTROL_REQUIREMENTS = {
     ("customs-alcohol", "period-lodgement"): {"record_types": ("lodgement",), "period": True, "evidence": True},

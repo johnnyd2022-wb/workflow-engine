@@ -1,0 +1,8 @@
+[Unit]
+Description=Warm system findings and audit stock for active tenants
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec workflow-engine-prod uv run workflow warm-system-findings

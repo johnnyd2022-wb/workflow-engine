@@ -3,7 +3,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
@@ -26,6 +26,7 @@ class Process(TenantScoped, Base):
     """Process model representing a reusable workflow definition (DAG)"""
 
     __tablename__ = "processes"
+    __table_args__ = (UniqueConstraint("org_id", "id", name="uq_processes_planning_org_id"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)

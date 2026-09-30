@@ -28,6 +28,9 @@ from app.core.db.models.process_version import ProcessVersion
 from app.features.crm.models.xero_tenant import XeroTenant
 from app.features.crm.models.xero_oauth_token import XeroOAuthToken
 from app.features.crm.models.xero_contact import XeroContact
+from app.features.contract_manufacturing.models.portal import PortalApproval, PortalDocument, PortalInvite, PortalPrincipal, PortalPublication, PortalSession  # noqa: F401
+from app.features.contract_manufacturing.models import ContractCustomer, ContractOrder, ContractOrderLine, ContractOrderExecution
+from app.features.contract_manufacturing.models.material_receipt import ContractMaterialReceipt  # noqa: F401
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
 from app.features.crm.models.xero_sync_job import XeroSyncJob
@@ -39,11 +42,17 @@ from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.compliant.models.compliance_profile import ComplianceProfile
 from app.features.compliant.models.compliance_record import ComplianceRecord
 from app.features.compliant.models.compliance_report import ComplianceReport
+from app.features.compliant.models.customs_premises import CustomsCoverage, CustomsLicence
+from app.features.compliant.models.food_registration import FoodRegistration, FoodRegistrationSite
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.operational_cases.models.operational_case import OperationalCase
 from app.features.operational_cases.models.operational_case_event import OperationalCaseEvent
 from app.features.operational_cases.models.operational_case_link import OperationalCaseLink
 from app.utils.config_loader import config
+from app.features.planning.models import PlanningDemand
+from app.features.planning.batch_models import PlanningBatch, PlanningWorkflowSetting
+from app.features.planning.capacity_models import PlanningCapacitySetting
+from app.features.planning.forecast_models import PlanningMaterialAssessment, PlanningMaterialBatchAssessment
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

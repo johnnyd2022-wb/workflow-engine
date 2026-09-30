@@ -46,3 +46,27 @@ def copy_process_template(template_id: str):
     if process is None:
         return jsonify({"error": "Template not found"}), 404
     return jsonify({"process_id": str(process.id)}), 201
+
+
+@api_bp.route("/api/core/process-templates/starter-packs", methods=["GET"])
+@requires_auth
+def list_starter_packs():
+    return jsonify({"packs": service.list_starter_packs(db_session(), _org_id())}), 200
+
+
+@api_bp.route("/api/core/process-templates/starter-packs/<pack_id>/apply", methods=["POST"])
+@requires_auth
+def apply_starter_pack(pack_id: str):
+    """Create the pack's workflow; compliance fields are set only for someone who may configure them."""
+    from app.core.security.permissions import has_permission
+
+    try:
+        result = service.apply_starter_pack(
+            db_session(), _org_id(), pack_id, configure_compliance=has_permission(g.current_user, "compliance.manage")
+        )
+    except ValueError as e:
+        db_session().rollback()
+        return jsonify({"error": str(e)}), 400
+    if result is None:
+        return jsonify({"error": "Starter pack not found"}), 404
+    return jsonify(result), 201 if result["created"] else 200

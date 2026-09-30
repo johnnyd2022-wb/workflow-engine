@@ -10,6 +10,12 @@
         </svg>
       </button>
     </div>
+
+    <div class="exec-modal__section">
+      <label for="execute-step-occurred-at" style="display:block;font-weight:600;margin-bottom:6px;">When did this step happen?</label>
+      <input id="execute-step-occurred-at" type="datetime-local" style="max-width:320px;width:100%;" aria-describedby="execute-step-occurred-help">
+      <p id="execute-step-occurred-help" style="font-size:13px;color:var(--text-secondary,#6b7280);margin:6px 0 0;">Leave blank to use the time you record it now. Backdated entries are marked in the record.</p>
+    </div>
     
     <!-- Step Documentation (SOP) – read-only reference -->
     <div id="execute-docs-section" class="exec-modal__section">

@@ -18,6 +18,7 @@ from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
 from app.features.compliant.models import ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
+from app.features.compliant.modules.nz_alcohol.national_programmes import GUIDANCE
 from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook, np3_log_template
 from app.features.compliant.modules.nz_alcohol.workflow_rules import (
     ABV_RULES_SETTING,
@@ -66,6 +67,16 @@ def _csv_safe(value):
     if text.startswith(_CSV_FORMULA_PREFIXES):
         return "'" + text
     return text
+
+
+_NP_PROGRAMMES = ("np1", "np2", "np3")
+
+
+def _np_programme() -> str:
+    """The org's national programme; the verification workspace serves NP1, NP2 and NP3 (plan 2.4b)."""
+    profile = _service().get_profile(_org_id())
+    programme = ((profile.settings or {}) if profile else {}).get("food_control_programme", "np3")
+    return programme if programme in _NP_PROGRAMMES else "np3"
 
 
 def _service() -> ComplianceService:
@@ -170,7 +181,7 @@ def np3_audit():
             "Status",
             "Evidence records",
             "Evidence references",
-            "Core source IDs",
+            "Production record IDs",
             "Last recorded",
         ]
     )
@@ -211,14 +222,14 @@ def np3_audit_check(control_id: str):
 @requires_auth
 @requires_role(UserRole.ADMIN)
 def update_np3_check_settings(control_id: str):
-    if control_id not in dict((framework_by_slug("np3-food-control") or {}).get("controls", ())):
+    if control_id not in dict((framework_by_slug(f"{_np_programme()}-food-control") or {}).get("controls", ())):
         return jsonify({"error": "Unknown NP3 check"}), 404
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or data.get("review_interval_months") not in _NP3_REVIEW_INTERVALS:
         return jsonify({"error": "review_interval_months must be 1, 3, 6, or 12"}), 400
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
-        return jsonify({"error": "Configure Compliant before changing NP3 check settings"}), 409
+        return jsonify({"error": "Configure Compliance before changing NP3 check settings"}), 409
     settings = dict(profile.settings or {})
     intervals = dict(settings.get("np3_check_review_intervals") or {})
     intervals[control_id] = data["review_interval_months"]
@@ -236,7 +247,7 @@ def attest_np3_check():
     if not isinstance(data, dict):
         return jsonify({"error": "JSON object required"}), 400
     control_id = str(data.get("control_id") or "")
-    framework = framework_by_slug("np3-food-control") or {}
+    framework = framework_by_slug(f"{_np_programme()}-food-control") or {}
     controls = dict(framework.get("controls", ()))
     if control_id not in controls:
         return jsonify({"error": "Unknown NP3 check"}), 400
@@ -263,13 +274,13 @@ def attest_np3_check():
         return jsonify({"error": "source_refs must be a list of at most 30 strings"}), 400
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
-        return jsonify({"error": "Configure Compliant before signing off NP3 checks"}), 409
-    if (profile.settings or {}).get("food_control_programme", "np3") != "np3":
-        return jsonify({"error": "Select National Programme 3 in Configuration before signing off checks"}), 409
+        return jsonify({"error": "Configure Compliance before signing off checks"}), 409
+    if (profile.settings or {}).get("food_control_programme", "np3") not in _NP_PROGRAMMES:
+        return jsonify({"error": "Select a national programme in Configuration before signing off checks"}), 409
     invalid_source_refs = _service().invalid_core_source_references(_org_id(), source_refs)
     if invalid_source_refs:
         logger.warning("access_denied", reason="source_ref_not_in_org", feature="compliant", org_id=str(_org_id()))
-        return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
+        return jsonify({"error": "Each Production record reference must be a record in this organisation"}), 400
     evidence_fields = data.get("evidence_fields") or {}
     allowed_evidence_fields = {field["key"] for field in evidence_playbook(control_id)["fields"]}
     if (
@@ -283,11 +294,11 @@ def attest_np3_check():
         _org_id(),
         g.current_user.id,
         {
-            "framework_slug": "np3-food-control",
+            "framework_slug": framework["slug"],
             "control_id": control_id,
             "record_type": "attestation",
             "status": "complete",
-            "title": f"NP3 review: {controls[control_id]}",
+            "title": f"{GUIDANCE[_np_programme()]['short']} review: {controls[control_id]}",
             "due_date": _add_months(today, review_interval_months),
             "evidence_reference": evidence_reference,
             "source_refs": source_refs,
@@ -300,7 +311,7 @@ def attest_np3_check():
             },
         },
     )
-    log_action("create", "compliance_record", record.id, {"framework": "np3-food-control", "control": control_id})
+    log_action("create", "compliance_record", record.id, {"framework": framework["slug"], "control": control_id})
     return jsonify({"record": serialise_record(record)}), 201
 
 
@@ -309,7 +320,7 @@ def attest_np3_check():
 def add_np3_check_log(control_id: str):
     """Append a control-specific operational log entry from the check workspace."""
     template = np3_log_template(control_id)
-    framework = framework_by_slug("np3-food-control") or {}
+    framework = framework_by_slug(f"{_np_programme()}-food-control") or {}
     controls = dict(framework.get("controls", ()))
     if control_id not in controls or template is None:
         return jsonify({"error": "This NP3 check does not have a built-in log"}), 404
@@ -357,8 +368,12 @@ def add_np3_check_log(control_id: str):
         if employee is None:
             return jsonify({"error": "Employee must be an active user in this organisation"}), 400
     profile = _service().get_profile(_org_id())
-    if profile is None or not profile.enabled or (profile.settings or {}).get("food_control_programme", "np3") != "np3":
-        return jsonify({"error": "Configure National Programme 3 before adding a log entry"}), 409
+    if (
+        profile is None
+        or not profile.enabled
+        or (profile.settings or {}).get("food_control_programme", "np3") not in _NP_PROGRAMMES
+    ):
+        return jsonify({"error": "Configure a national programme before adding a log entry"}), 409
     status = "open" if normalised.get("result") == "action-required" else "complete"
     if status == "open" and not (normalised.get("corrective_action") or normalised.get("cause_and_action")):
         return jsonify({"error": "Describe the corrective action when follow-up is required"}), 400
@@ -367,11 +382,11 @@ def add_np3_check_log(control_id: str):
         _org_id(),
         g.current_user.id,
         {
-            "framework_slug": "np3-food-control",
+            "framework_slug": framework["slug"],
             "control_id": control_id,
             "record_type": template["record_type"],
             "status": status,
-            "title": f"NP3 log: {template['title']}",
+            "title": f"{GUIDANCE[_np_programme()]['short']} log: {template['title']}",
             "period_start": event_date,
             "due_date": _add_months(event_date, 1) if status == "open" else None,
             "owner_user_id": owner_user_id,
@@ -386,7 +401,7 @@ def add_np3_check_log(control_id: str):
         "create",
         "compliance_record",
         record.id,
-        {"framework": "np3-food-control", "control": control_id, "log": template["key"]},
+        {"framework": framework["slug"], "control": control_id, "log": template["key"]},
     )
     return jsonify({"record": serialise_record(record)}), 201
 
@@ -452,7 +467,7 @@ def update_abv_rules():
         return jsonify({"error": error}), 400
     profile = _service().get_profile(_org_id())
     if profile is None:
-        return jsonify({"error": "Configure Compliant before adding ABV rules"}), 409
+        return jsonify({"error": "Configure Compliance before adding ABV rules"}), 409
     cleaned = [{"pattern": rule["pattern"].strip(), "match_type": rule["match_type"]} for rule in rules]
     _service().upsert_profile(_org_id(), {"settings": {**(profile.settings or {}), ABV_RULES_SETTING: cleaned}})
     log_action("update", "compliance_profile", profile.id, {ABV_RULES_SETTING: len(cleaned)})
@@ -482,7 +497,7 @@ def update_profile():
         if check_intervals is not None and (
             not isinstance(check_intervals, dict)
             or not all(
-                key in dict((framework_by_slug("np3-food-control") or {}).get("controls", ()))
+                key in dict((framework_by_slug(f"{_np_programme()}-food-control") or {}).get("controls", ()))
                 and value in _NP3_REVIEW_INTERVALS
                 for key, value in check_intervals.items()
             )
@@ -649,7 +664,7 @@ def create_record():
         return jsonify({"error": "period_end cannot be before period_start"}), 400
     profile = _service().get_profile(_org_id())
     if profile is None or not profile.enabled:
-        return jsonify({"error": "Configure Compliant before adding records"}), 409
+        return jsonify({"error": "Configure Compliance before adding records"}), 409
     requirements = capture_requirements(framework_slug, control_id, profile.settings or {})
     if requirements.get("record_types") and record_data["record_type"] not in requirements["record_types"]:
         allowed = ", ".join(requirements["record_types"])
@@ -661,7 +676,7 @@ def create_record():
     if requirements.get("evidence") and not record_data["evidence_reference"]:
         return jsonify({"error": "This control requires an evidence reference"}), 400
     if requirements.get("source_refs") and not record_data["source_refs"]:
-        return jsonify({"error": "This control requires a linked Core source reference"}), 400
+        return jsonify({"error": "This control requires a linked Production record reference"}), 400
     invalid_source_refs = _service().invalid_core_source_references(_org_id(), record_data["source_refs"])
     if invalid_source_refs:
         # A source_ref that parses as a UUID but doesn't resolve inside this org is a
@@ -676,7 +691,7 @@ def create_record():
             org_id=str(_org_id()),
             invalid_source_refs=invalid_source_refs,
         )
-        return jsonify({"error": "Each Core source reference must be a record in this organisation"}), 400
+        return jsonify({"error": "Each Production record reference must be a record in this organisation"}), 400
     missing_fields = [
         field for field in requirements.get("fields", ()) if not record_data.get(field) and not details.get(field)
     ]

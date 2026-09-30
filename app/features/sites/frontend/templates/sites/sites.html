@@ -1,0 +1,49 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Sites{% endblock %}
+{% block body_class %}sites-page{% endblock %}
+{% block head_extras %}
+<style>
+  .sites-shell { display: grid; gap: 20px; padding: 24px 0 48px; }
+  .sites-shell header { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+  .sites-shell h1, .sites-shell h2 { margin: 0 0 8px; }
+  .sites-shell p { color: var(--text-secondary); }
+  .sites-card { padding: 20px; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--bg-card); }
+  .sites-fields { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); }
+  .sites-shell label { display: grid; gap: 6px; }
+  .sites-shell input, .sites-shell select { width: 100%; padding: 10px; color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
+  .sites-shell form { display: grid; gap: 16px; }
+  .sites-shell [hidden] { display: none !important; }
+  .sites-message { padding: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-md); }
+  @media (max-width: 767px) {
+    /* The shell's sidebar script sets an inline desktop margin. */
+    .sites-page .app-layout .main-content { margin-left: 0 !important; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="max-content sites-shell" data-sites-root>
+  <header><h1>Sites</h1><a href="/core/settings" class="btn btn-secondary">Settings</a></header>
+  <div class="sites-message" role="status" aria-live="polite" data-sites-message hidden></div>
+  <section class="sites-card">
+    <h2>Multiple sites</h2>
+    <p data-sites-state>Loading…</p>
+    <button type="button" class="btn btn-primary" data-sites-toggle disabled>Switch on</button>
+  </section>
+  <section data-sites-register hidden>
+    <p>Configure your sites here. Stock and batches currently use the default site. Recording work and moving stock at additional sites will become available together with the checks those operations need.</p>
+    <div data-sites-list class="sites-shell"></div>
+    <section class="sites-card">
+      <h2>Add site</h2>
+      <form data-sites-create hx-boost="false">
+        <div class="sites-fields">
+          <label>Name<input name="name" required maxlength="120" autocomplete="off"></label>
+          <label>Address<input name="address" maxlength="500" autocomplete="street-address"></label>
+          <label>Kind<select name="kind" data-sites-kinds></select></label>
+        </div>
+        <button type="submit" class="btn btn-primary">Add site</button>
+      </form>
+    </section>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('sites.static', filename='sites.js') }}"></script>{% endblock %}

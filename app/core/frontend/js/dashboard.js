@@ -75,7 +75,7 @@
 
         var rows = (actionBoard && Array.isArray(actionBoard.items)) ? actionBoard.items : [];
         if (rows.length === 0) {
-            list.innerHTML = '<li class="dash-empty">No critical actions right now.</li>';
+            list.innerHTML = '<li class="dash-empty">Nothing needs attention right now.</li>';
             return;
         }
 
@@ -142,8 +142,8 @@
             card.href = onlyModule && typeof onlyModule.href === 'string' && onlyModule.href.charAt(0) === '/'
                 ? onlyModule.href
                 : '/compliant';
-            card.setAttribute('aria-label', onlyModule ? String(onlyModule.action_label || 'Open module') : 'Open Compliant evidence workspace');
-            cardLink.textContent = onlyModule ? String(onlyModule.action_label || 'Open module') + ' →' : 'Open Compliant →';
+            card.setAttribute('aria-label', onlyModule ? String(onlyModule.action_label || 'Open module') : 'Open Compliance workspace');
+            cardLink.textContent = onlyModule ? String(onlyModule.action_label || 'Open module') + ' →' : 'Open Compliance →';
         }
         modules.slice(0, 2).forEach(function (module) {
             var section = document.createElement('section'); section.className = 'dash-compliant-health__module';
@@ -151,6 +151,16 @@
             title.textContent = String(module.module_name || 'Compliance') + ' compliance score: ' + String(module.score || 0) + '%';
             section.appendChild(title);
             section.appendChild(dashboardReadinessBar(module.score, module.module_name));
+            var milestone = module.milestone;
+            if (milestone && typeof milestone.label === 'string' && typeof milestone.overdue === 'boolean') {
+                var milestoneLine = document.createElement('p');
+                milestoneLine.className = 'dash-compliant-health__coverage';
+                if (milestone.overdue) milestoneLine.classList.add('dash-compliant-health__milestone--overdue');
+                milestoneLine.textContent = milestone.label + ': ' + (milestone.date || 'Date not set')
+                    + (milestone.overdue ? ' · overdue' : '')
+                    + (typeof milestone.detail === 'string' && milestone.detail ? ' · ' + milestone.detail : '');
+                section.appendChild(milestoneLine);
+            }
             var coverage = document.createElement('p'); coverage.className = 'dash-compliant-health__coverage';
             coverage.textContent = String(module.current_controls || 0) + ' / ' + String(module.total_controls || 0) + ' current evidence controls';
             section.appendChild(coverage);
@@ -175,7 +185,7 @@
         setText(
             root,
             '[data-dashboard-compliant-summary]',
-            compliant.label || 'Compliant is not enabled for this organisation.'
+            compliant.label || 'Compliance is not enabled for this organisation.'
         );
         renderCompliantHealth(root, compliant);
 
@@ -183,7 +193,7 @@
         var safeSales = sales || {};
         var taskCount = Number(safeTasks.due_this_week_count || 0);
         if (safeTasks.enabled === false) {
-            setText(root, '[data-dashboard-crm-summary]', 'CRM is not enabled for this organisation.');
+            setText(root, '[data-dashboard-crm-summary]', 'Sales is not enabled for this organisation.');
         } else if (taskCount) {
             setText(root, '[data-dashboard-crm-summary]', pluralize(taskCount, 'customer task') + ' due this week.');
         } else if (safeSales.baseline_target_mtd != null) {
@@ -208,9 +218,9 @@
 
         if (meta) {
             if (total <= limit) {
-                meta.textContent = 'Showing all ' + String(total) + ' events ' + periodLabel + '.';
+                meta.textContent = 'Showing all ' + String(total) + ' entries ' + periodLabel + '.';
             } else {
-                meta.textContent = 'Showing top ' + String(limit) + ' of ' + String(total) + ' events ' + periodLabel + '.';
+                meta.textContent = 'Showing top ' + String(limit) + ' of ' + String(total) + ' entries ' + periodLabel + '.';
             }
         }
         if (summary) {
@@ -226,9 +236,17 @@
             var summaryText = row.summary || row.event_type || 'Activity';
             var actor = row.actor || 'System';
             var at = formatDateTime(row.at);
+            var details = Array.isArray(row.details) ? row.details : [];
+            var detailMarkup = details.length
+                ? '<details class="dash-audit-sales-details"><summary>View ' + String(details.length) + ' sale update' +
+                    (details.length === 1 ? '' : 's') + '</summary><ul>' + details.map(function (detail) {
+                        return '<li>' + escapeHtml(detail) + '</li>';
+                    }).join('') + '</ul></details>'
+                : '';
             return (
                 '<li class="dash-list-item">' +
                 '<p class="dash-audit-title">' + escapeHtml(summaryText) + '</p>' +
+                detailMarkup +
                 '<p class="dash-audit-meta-line">' + escapeHtml(actor) + ' · ' + escapeHtml(at) + '</p>' +
                 '</li>'
             );
@@ -346,10 +364,17 @@
         setText(root, '[data-kpi-operator-actions]', operatorActions.week_to_date || 0);
         setText(root, '[data-kpi-open-action-items]', actionBoard.critical_actions_total || 0);
         setText(root, '[data-kpi-active-batches]', operations.active_executions || 0);
-        setText(root, '[data-kpi-revenue-goal]', formatGoalPct(sales.baseline_attainment_pct));
+        setText(root, '[data-kpi-revenue-goal]', sales.baseline_target_mtd == null
+            ? 'Set target'
+            : formatGoalPct(sales.baseline_attainment_pct));
+        var revenueGoalCard = byData(root, '[data-kpi-revenue-goal-card]');
+        var revenueGoalSpark = revenueGoalCard && revenueGoalCard.querySelector('[data-kpi-spark="monthly_goal"]');
+        if (revenueGoalSpark) revenueGoalSpark.hidden = sales.baseline_target_mtd == null;
         setText(root, '[data-kpi-tasks-week]', tasks.due_this_week_count || 0);
         setText(root, '[data-kpi-overdue]', tasks.overdue_count || 0);
         setText(root, '[data-kpi-throughput-vs-last-week]', formatPct(operations.completed_vs_last_week_pct));
+        var throughputCard = byData(root, '[data-kpi-throughput-card]');
+        if (throughputCard) throughputCard.hidden = operations.completed_vs_last_week_pct == null;
 
         renderSparkLine(root, 'operator_actions', insightSeries.operator_actions_week);
         renderSparkLine(root, 'open_action_items', insightSeries.open_action_items);
@@ -369,13 +394,21 @@
 
         setText(root, '[data-sales-revenue-mtd]', formatCurrency(sales.current_month_revenue));
         setText(root, '[data-sales-baseline-target]', sales.baseline_target_mtd == null ? 'Not set' : formatCurrency(sales.baseline_target_mtd));
-        setText(root, '[data-sales-baseline-variance]', formatCurrencyVariance(sales.baseline_variance_mtd));
-        setText(root, '[data-sales-mom]', formatPct(sales.revenue_vs_last_month_pct));
+        var baselineVarianceRow = byData(root, '[data-sales-baseline-variance-row]');
+        if (baselineVarianceRow) baselineVarianceRow.hidden = sales.baseline_variance_mtd == null;
+        if (sales.baseline_variance_mtd != null) {
+            setText(root, '[data-sales-baseline-variance]', formatCurrencyVariance(sales.baseline_variance_mtd));
+        }
+        var salesMomRow = byData(root, '[data-sales-mom-row]');
+        if (salesMomRow) salesMomRow.hidden = sales.revenue_vs_last_month_pct == null;
+        if (sales.revenue_vs_last_month_pct != null) {
+            setText(root, '[data-sales-mom]', formatPct(sales.revenue_vs_last_month_pct));
+        }
 
         if (sales.enabled === false) {
-            setText(root, '[data-sales-caption]', 'CRM is disabled for this tenant.');
+            setText(root, '[data-sales-caption]', 'Sales is disabled for this tenant.');
         } else if (sales.baseline_target_mtd == null) {
-            setText(root, '[data-sales-caption]', 'Define a baseline in CRM Configuration to track attainment.');
+            setText(root, '[data-sales-caption]', 'Define a baseline in Sales configuration to track attainment.');
         } else {
             var attainment = sales.baseline_attainment_pct == null ? 'n/a' : String(sales.baseline_attainment_pct) + '%';
             setText(root, '[data-sales-caption]', 'Baseline attainment: ' + attainment + '.');

@@ -8,6 +8,7 @@ from flask import Blueprint, g, jsonify, render_template, request
 from app.core.db import db_session
 from app.core.db.models.org_role import OrgRole
 from app.core.db.models.organisation import OrganisationStatus
+from app.core.db.models.site import Site
 from app.core.db.models.user import User, UserRole
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
@@ -27,6 +28,12 @@ from app.core.security.people import (
     validate_new_password,
 )
 from app.core.security.permissions import requires_auth, requires_org_scope, requires_role
+from app.core.security.staff_site_roles import (
+    lock_role_administration,
+    replace_site_config,
+    role_site_ids,
+    validate_site_config,
+)
 from app.core.utils.emit_event import emit_event
 from app.core.utils.log_action import log_action
 from app.observability import get_logger
@@ -192,6 +199,7 @@ def create_user():
 
     db = db_session()
     try:
+        lock_role_administration(db, g.current_org_id)
         role, custom = parse_role_choice(data.get("role", "member"), _custom_roles(db))
         expires = parse_access_expiry(data.get("access_expires_at"), role)
         if password:
@@ -268,6 +276,7 @@ def update_user(user_id: str):
 
     db = db_session()
     try:
+        lock_role_administration(db, g.current_org_id)
         target = _load_target(db, user_uuid)
         if not target:
             return jsonify({"error": "User not found"}), 404
@@ -331,6 +340,7 @@ def reissue_invite(user_id: str):
 
     db = db_session()
     try:
+        lock_role_administration(db, g.current_org_id)
         target = _load_target(db, user_uuid)
         if not target:
             return jsonify({"error": "User not found"}), 404
@@ -358,6 +368,7 @@ def delete_user(user_id: str):
 
     db = db_session()
     try:
+        lock_role_administration(db, g.current_org_id)
         target = _load_target(db, user_uuid)
         if not target:
             return jsonify({"error": "User not found"}), 404
@@ -391,7 +402,7 @@ def _custom_roles(db) -> list:
     return db.query(OrgRole).filter(OrgRole.org_id == g.current_org_id).order_by(OrgRole.name.asc()).limit(100).all()
 
 
-def _serialize_role(role: OrgRole, holders: int) -> dict:
+def _serialize_role(role: OrgRole, holders: int, site_ids=()) -> dict:
     return {
         "id": str(role.id),
         "value": f"custom:{role.id}",
@@ -400,6 +411,9 @@ def _serialize_role(role: OrgRole, holders: int) -> dict:
         "base_role": role.base_role,
         "permissions": list(role.permissions or []),
         "holders": holders,
+        "site_access_mode": role.site_access_mode,
+        "site_ids": [str(site_id) for site_id in site_ids],
+        "assignable": role.site_access_mode == "all",
     }
 
 
@@ -416,7 +430,9 @@ def _roles_body(db) -> dict:
         .all()
     )
     return {
-        "custom_roles": [_serialize_role(r, counts.get(r.id, 0)) for r in customs],
+        "custom_roles": [
+            _serialize_role(r, counts.get(r.id, 0), role_site_ids(db, g.current_org_id, r.id)) for r in customs
+        ],
         "built_in": [
             {
                 "value": role.value,
@@ -428,6 +444,11 @@ def _roles_body(db) -> dict:
             for role in UserRole
         ],
         "permissions": permission_catalogue(),
+        "site_roles_assignable": False,
+        "sites": [
+            {"id": str(s.id), "name": s.name, "is_active": s.is_active}
+            for s in db.query(Site).filter(Site.org_id == g.current_org_id).order_by(Site.name).all()
+        ],
     }
 
 
@@ -450,14 +471,25 @@ def create_role():
         return jsonify({"error": "JSON body required"}), 400
     db = db_session()
     try:
+        lock_role_administration(db, g.current_org_id)
+        mode, ids = validate_site_config(db, g.current_org_id, data)
         values = validate_custom_role(data, {r.name.casefold() for r in _custom_roles(db)})
         role = OrgRole(org_id=g.current_org_id, created_by_user_id=g.current_user.id, **values)
         db.add(role)
+        db.flush()
+        replace_site_config(db, role, mode, ids)
         db.commit()
     except PeopleError as e:
         db.rollback()
         return jsonify({"error": str(e)}), 400
-    log_action("create", "org_role", role.id, values, g.current_org_id, g.current_user.id)
+    log_action(
+        "create",
+        "org_role",
+        role.id,
+        {**values, "site_access_mode": mode, "site_ids": [str(x) for x in sorted(ids)]},
+        g.current_org_id,
+        g.current_user.id,
+    )
     return jsonify(_roles_body(db)), 201
 
 
@@ -479,10 +511,18 @@ def update_role(role_id: str):
     if data is None:
         return jsonify({"error": "JSON body required"}), 400
     db = db_session()
+    lock_role_administration(db, g.current_org_id)
     role = _load_role(db, role_id)
     if role is None:
         return jsonify({"error": "Role not found"}), 404
     try:
+        mode, ids = validate_site_config(
+            db,
+            g.current_org_id,
+            data,
+            default_mode=role.site_access_mode,
+            default_ids=[str(x) for x in role_site_ids(db, g.current_org_id, role.id)],
+        )
         others = {r.name.casefold() for r in _custom_roles(db) if r.id != role.id}
         values = validate_custom_role(
             {
@@ -493,7 +533,13 @@ def update_role(role_id: str):
             },
             others,
         )
-        before = {"name": role.name, "permissions": list(role.permissions or [])}
+        before = {
+            "name": role.name,
+            "permissions": list(role.permissions or []),
+            "site_access_mode": role.site_access_mode,
+            "site_ids": [str(x) for x in role_site_ids(db, g.current_org_id, role.id)],
+        }
+        replace_site_config(db, role, mode, ids)
         role.name, role.permissions, role.description = values["name"], values["permissions"], values["description"]
         db.commit()
     except PeopleError as e:
@@ -503,7 +549,15 @@ def update_role(role_id: str):
         "update",
         "org_role",
         role.id,
-        {"before": before, "after": {"name": role.name, "permissions": role.permissions}},
+        {
+            "before": before,
+            "after": {
+                "name": role.name,
+                "permissions": role.permissions,
+                "site_access_mode": mode,
+                "site_ids": [str(x) for x in sorted(ids)],
+            },
+        },
         g.current_org_id,
         g.current_user.id,
     )
@@ -516,6 +570,7 @@ def update_role(role_id: str):
 @requires_org_scope
 def delete_role(role_id: str):
     db = db_session()
+    lock_role_administration(db, g.current_org_id)
     role = _load_role(db, role_id)
     if role is None:
         return jsonify({"error": "Role not found"}), 404

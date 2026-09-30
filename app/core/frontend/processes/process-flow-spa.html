@@ -485,9 +485,6 @@
         <div class="max-content">
           {# Hub illustration strip before title — matches Core / Integrations / Settings (svg, then card header) #}
           {% block wizard_pre_card %}
-          <div class="spa-hub-yellow-sleeve">
-            {% include 'processes/process_flow_overview_banner.html' %}
-          </div>
           {% endblock %}
           <section class="card spa-primary-flat process-flow-card notifications-card" style="margin-top: 24px;" aria-labelledby="modal-title">
             <div class="card-header process-flow-hero__header">
@@ -565,5 +562,36 @@
     };
   </script>
   <script src="{{ url_for('core.serve_core_js', filename='process-flow-spa.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-utils.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-mappers.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-session.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-controls.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-docs.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-summary-utils.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-summary.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-step-data.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-rows.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-inventory-cards.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-previous-outputs.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-inventory-loader.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-inventory-dropdown.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-input-restore.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-spa-payloads.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-prompts.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-api-session.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-session-summary.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-summary-session.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-step-summary-ui.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-step-summary.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-step-order.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-deep-link-edit.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-navigation.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-existing-steps.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-validation.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-navigation-actions.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-output-restore.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-prompt-restore.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-doc-restore.js') }}"></script>
+  <script src="{{ url_for('core.serve_core_js', filename='process-modal-restore-controls.js') }}"></script>
   <script src="{{ url_for('core.serve_core_js', filename='create-process-modal.js') }}"></script>
 {% endblock %}
