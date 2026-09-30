@@ -108,21 +108,21 @@ Keep existing URLs working. Where a page moves, keep the old URL as a 301 redire
 
 ### 1. Boost-safe page loading (goal 1). Do this first; everything else builds on it.
 
-- [x] **1.1** (MR below) **Harness first, as a committed regression test.** `tests/e2e/test_boosted_navigation.py` walks every page in a registry (below). For each page it loads the page directly, then reaches it by a boosted click from the dashboard, and asserts that the boosted render:
+- [x] **1.1** (!471) **Harness first, as a committed regression test.** `tests/e2e/test_boosted_navigation.py` walks every page in a registry (below). For each page it loads the page directly, then reaches it by a boosted click from the dashboard, and asserts that the boosted render:
    - matches the full load (element count within 10% and the same key selectors present);
    - has no new console errors;
    - has no "Loading…" left after the network goes idle.
 
    It starts `xfail` for the 19 known pages, and each fix removes an `xfail`. The audit harness used for this plan was a temporary version of the same thing: `e2e_user` + `FeatureSubscriptionFactory(feature_key="compliant")` + `storage_state_path`, then page.goto, then inject `<a href>` into `#page-content`, `htmx.process`, click. Remember the memory note: CI skips e2e in `relevant_tests`, so prove fail-before and pass-after locally.
-- [x] **1.2** (MR below) **One page registry.** Add `app/ui/page_registry.py` listing every page: URL, section, sub-nav tab, title, required permission and feature flag. The sidebar, sub-nav, breadcrumbs and the e2e test all read from it, so none of them can drift again.
-- [ ] **1.3** **Move page assets into the swapped region.** In `base_spa.html`, render a `<div id="page-assets">` inside `<main id="page-content">` that holds `{% block head_extras %}` and `{% block scripts %}` output. htmx 1.9 runs `<script>` tags in swapped content. Stylesheet `<link>` tags in body content load in all target browsers. Guard against double-loading shared libraries: page scripts must be idempotent, and library scripts stay in the head.
-- [ ] **1.4** **One page-init convention.** Add a small `app/ui/shared/page-init.js`: `bize.onPage(selector, init)` runs `init(root)` on first load and after every `htmx:afterSettle` whose content contains `selector`, and runs teardown on `htmx:beforeSwap`. Convert the 43 `DOMContentLoaded` page scripts to it, starting with the 19 broken pages.
-- [ ] **1.5** **Delete the workarounds** once their page passes the test:
+- [x] **1.2** (!471) **One page registry.** Add `app/ui/page_registry.py` listing every page: URL, section, sub-nav tab, title, required permission and feature flag. The sidebar, sub-nav, breadcrumbs and the e2e test all read from it, so none of them can drift again.
+- [x] **1.3** (!472) Done differently from the letter of the plan: a boosted response (`HX-Boosted`) carries the assets inside `#page-content`; a full load keeps CSS in head and scripts at the end of body, so script order is untouched. Alpine initialises after the swap settles. **Move page assets into the swapped region.** In `base_spa.html`, render a `<div id="page-assets">` inside `<main id="page-content">` that holds `{% block head_extras %}` and `{% block scripts %}` output. htmx 1.9 runs `<script>` tags in swapped content. Stylesheet `<link>` tags in body content load in all target browsers. Guard against double-loading shared libraries: page scripts must be idempotent, and library scripts stay in the head.
+- [x] **1.4** (!472) `bize.onPage` added; go-live, people, sites, stocktake, licensing and verification converted. The rest already guard with `readyState` and per-root flags and work unchanged. **One page-init convention.** Add a small `app/ui/shared/page-init.js`: `bize.onPage(selector, init)` runs `init(root)` on first load and after every `htmx:afterSettle` whose content contains `selector`, and runs teardown on `htmx:beforeSwap`. Convert the 43 `DOMContentLoaded` page scripts to it, starting with the 19 broken pages.
+- [ ] **1.5** (!472 did the links and the `/core` reload; still to do: page stylesheets and CRM scripts loaded globally in `base_spa` for boost's sake, and `hx-boost="false"` on JS-handled forms) **Delete the workarounds** once their page passes the test:
    - the 94 `hx-boost="false"` attributes (keep them only on real non-HTML links: downloads, OAuth, logout, external);
    - the `/core` reload special case;
    - page stylesheets and CRM scripts loaded globally only for boost's sake.
-- [ ] **1.6** **Consider the htmx `head-support` extension** (1.9-compatible) only if step 3 proves insufficient for a page; don't add it by default.
-- [ ] **1.7** **Keep the history cache in mind.** Check that back and forward buttons restore a working page. Setting `htmx.config.historyCacheSize = 0` is acceptable if restored snapshots come back inert.
+- [x] **1.6** (not needed: the assets approach sufficed) **Consider the htmx `head-support` extension** (1.9-compatible) only if step 3 proves insufficient for a page; don't add it by default.
+- [x] **1.7** (!472) Back/forward reload from the server (`historyCacheSize 0`, `refreshOnHistoryMiss`); covered by an e2e test. **Keep the history cache in mind.** Check that back and forward buttons restore a working page. Setting `htmx.config.historyCacheSize = 0` is acceptable if restored snapshots come back inert.
 
 **Done when:** all 47 pages pass the boosted-navigation test, sidebar and sub-nav links are boosted, and no page needs a refresh.
 
