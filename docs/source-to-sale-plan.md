@@ -1061,8 +1061,11 @@ Founder decisions for this phase:
       week, and the steps that use them. The planner flags overloaded days and offers to
       move lower-priority batches; it doesn't try to optimise every minute.
       - [x] Site resource groups, per-step assignments and a read-only daily overload
-        view suggest an unpinned lower-priority batch to review (!449). Calendars,
-        automatic moves and capacity-backed promise dates remain open.
+        view suggest an unpinned lower-priority batch to review (!449). Automatic moves
+        and capacity-backed promise dates remain open.
+      - [x] Per-resource working weekdays and explicit closed dates (!464), with
+        zero-capacity overloads on closed days and legacy seven-day defaults. Site-wide
+        verification/stocktake closures and capacity-backed forecasts remain open.
     - [ ] f. **The daily driver.** A plan board (week and month) with a priority list for
       today: drag a batch to move it, pin a date so the planner won't move it, change a
       priority. When reality changes (a batch finishes late, a ready date or expiry is
