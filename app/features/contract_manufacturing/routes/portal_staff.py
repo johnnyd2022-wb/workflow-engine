@@ -13,6 +13,7 @@ from app.features.contract_manufacturing.models.portal import PortalDocument, Po
 from app.features.contract_manufacturing.routes.orders import bp, handled, service
 from app.features.contract_manufacturing.services.orders import OrderError
 from app.features.contract_manufacturing.services.portal_auth import audit, issue_invite, portal_people, revoke_access
+from app.features.contract_manufacturing.services.portal_progress import step_candidates
 from app.features.contract_manufacturing.services.portal_sharing import (
     document_dto,
     publish_order,
@@ -43,6 +44,13 @@ def portal_sharing_page(order_id):
         order=order,
         documents=[document_dto(d) for d in documents],
         publication=publication,
+        step_candidates=step_candidates(db_session(), UUID(g.org_id), order) if _can_record() else [],
+        selected_steps={
+            item["execution_step_id"]: item["label"]
+            for item in ((publication.payload.get("progress") or {}).get("selection") or [])
+        }
+        if publication and _can_record()
+        else {},
         people=portal_people(db_session(), UUID(g.org_id), order.customer_id)
         if g.current_user and _manage_people()
         else None,
@@ -53,6 +61,12 @@ def _manage_people():
     from app.core.security.access_policy import has_permission
 
     return has_permission(g.current_user, "users.manage")
+
+
+def _can_record():
+    from app.core.security.access_policy import has_permission
+
+    return has_permission(g.current_user, "production.record")
 
 
 @bp.get("/api/core/contract-customers/<uuid:customer_id>/portal-people")
