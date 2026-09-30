@@ -869,8 +869,12 @@ Founder decisions for this phase:
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
       block a move, or raise an alert. NZ Alcohol:
-      - CCA to CCA without duty needs Customs' prior approval for underbond movement:
-        the move asks for the approval reference and records both licences;
+      - CCA to CCA without duty records the applicable movement authority and both
+        licences. Prior Customs approval is required for an OSS destination or a move
+        outside Customs' listed authorities; record its reference before dispatch.
+      - [x] Generic movement decision/evidence seam and initial CCA authority policy
+        (!431). Transfer wiring, additional authorities, findings and duty accounting
+        remain open; multi-site operations stay gated.
       - out of a CCA to a site without one (a cellar door) is a removal in the excise
         entry of the licence it left (2.1);
       - into a site with no food registration covering the activity, or with no liquor
