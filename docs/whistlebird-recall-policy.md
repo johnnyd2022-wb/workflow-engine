@@ -1,15 +1,15 @@
 # Whistlebird Ltd — food and drink recall policy
 
 - **Created and effective:** 23 September 2026
-- **Owner and recall decision maker:** Johnny Dempsey
-- **Deputy:** Nikolai Scott, who takes the lead when Johnny is unavailable
+- **Updated:** 30 September 2026, so that both decision makers have equal authority
+- **Recall decision makers:** Johnny Dempsey and Nikolai Scott. They have equal authority. Either of them can make and authorise a recall decision, and neither needs the other's approval to act.
 - **Review:** at least every 12 months, after a recall or mock recall, and when products, suppliers, distribution or MPI guidance change.
 
 This procedure applies to Whistlebird's ingredients, work in progress and bottled spirits. It covers a problem Whistlebird discovers and a recall notified by a supplier. Protect consumers first; act on a credible concern while facts are still being gathered. Record the time, source and nature of every report, every decision and the person making it.
 
 ## 1. Investigate and contain immediately
 
-The person receiving a complaint, test result, production finding or supplier notice tells Johnny (or Nikolai as deputy) immediately. Stop using or dispatching possibly affected material. Identify and physically segregate stock on site, label it **ON HOLD — DO NOT USE OR SELL**, and prevent its release. If a supplier recalls an ingredient or packaging component, identify all receipts and finished batches that used it; follow the supplier's instructions while assessing Whistlebird's own finished products.
+The person receiving a complaint, test result, production finding or supplier notice tells Johnny or Nikolai immediately. Whichever of them is told starts the response and tells the other. Stop using or dispatching possibly affected material. Identify and physically segregate stock on site, label it **ON HOLD — DO NOT USE OR SELL**, and prevent its release. If a supplier recalls an ingredient or packaging component, identify all receipts and finished batches that used it; follow the supplier's instructions while assessing Whistlebird's own finished products.
 
 Use purchase and supplier lot records, production steps, inventory movements, bottle or batch IDs, Xero sales allocations and customer contacts to trace both backwards to inputs and forwards to every affected batch and recipient. Include products already shipped, on hand, in transit, used as samples or otherwise disposed of. Record quantities and any unknown destinations. Ask trade customers or logistics providers to hold affected stock promptly when that could limit exposure.
 
@@ -17,13 +17,13 @@ Use purchase and supplier lot records, production steps, inventory movements, bo
 
 Contact the NP3 verifier as soon as practicable; if unavailable, contact New Zealand Food Safety (NZFS) on **0800 00 83 33** or **Food.Recalls@mpi.govt.nz**. Give the known product, batch, hazard, distribution and hold details; update them as the investigation progresses. Seek NZFS advice promptly if scope or risk is uncertain.
 
-Johnny, with Nikolai and any relevant production, sales or communications staff, documents a risk assessment: product and intended consumer, hazard and likely harm, affected lots and dates, source and time window, quantity and current location, distribution, and any uncertainty. Use MPI's food recall risk assessment form. Decide and record the reason for one of these actions:
+Johnny or Nikolai, working with the other and any relevant production, sales or communications staff, documents a risk assessment: product and intended consumer, hazard and likely harm, affected lots and dates, source and time window, quantity and current location, distribution, and any uncertainty. Use MPI's food recall risk assessment form. Decide and record the reason for one of these actions:
 
 - **Consumer-level recall** when unsafe product may have reached consumers: remove it from trade and notify consumers.
 - **Trade-level recall** when affected product has not reached consumers, or NZFS advises that this level is appropriate for a suitability issue: remove it from the supply chain.
 - **No recall / withdrawal** only when the assessment shows recall is unnecessary; document and resolve the problem. A cosmetic issue alone may warrant a trade withdrawal.
 
-Take a cautious approach, especially for vulnerable consumers. Johnny authorises the decision; Nikolai does so if Johnny is unavailable. Neither person may release held stock until its safety and suitability are established and the release is recorded.
+Take a cautious approach, especially for vulnerable consumers. Either Johnny or Nikolai can authorise the decision. If they disagree, the more cautious option applies until NZFS has given advice. Neither of them may release held stock until its safety and suitability are established and the release is recorded.
 
 ## 3. Check the decision and communicate
 
