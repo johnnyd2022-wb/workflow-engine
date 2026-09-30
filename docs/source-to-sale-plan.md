@@ -774,7 +774,7 @@ split.
   - Done when: `backend.py` holds only shell code, and every slice in the feature index
     points at its own directory.
 
-- [ ] **5.2 Run the stock checks as tests.** *S*
+- [x] **5.2 Run the stock checks as tests.** *S* (!415; CI after prerequisite merges)
   - Change: the 1.7 checks as tests, plus a mock-recall scenario and a Customs stocktake
     scenario (2.6) in the end-to-end suite.
   - [x] Stock arithmetic, matching queue, and finding contract tests. (!406)
