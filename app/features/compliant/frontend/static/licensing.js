@@ -87,6 +87,7 @@
           row('File renewal by', lic.renewal_lodged_on ? '' : fmt(lic.renewal_file_by));
           row('Annual fee due', fmt(lic.annual_fee_due_on) + (lic.annual_fee_overdue ? ' (overdue)' : ''));
         }
+        row('Site', lic.site_name || 'Not assigned');
         row('DLC', lic.issuing_dlc);
         row('Endorsements', lic.endorsement_labels.join(', '));
         row('Sale hours', lic.sale_hours);
@@ -94,6 +95,13 @@
         row('Conditions', lic.conditions);
         var actions = el('div', { className: 'licensing-actions' });
         if (canManage && lic.status === 'current') {
+          var sitePicker = el('select', { 'aria-label': 'Site for ' + (lic.licence_number || lic.kind_label) });
+          sitePicker.append(el('option', { value: '', text: 'Choose site' }));
+          (s.sites || []).forEach(function (site) { sitePicker.append(el('option', { value: site.id, text: site.name })); });
+          sitePicker.value = lic.site_id || '';
+          actions.append(sitePicker, button('Assign site', function () {
+            if (sitePicker.value) act('PUT', '/api/compliant/licensing/licences/' + lic.id, { site_id: sitePicker.value });
+          }));
           if (lic.kind !== 'special' && !lic.renewal_lodged_on) {
             actions.append(button('Renewal lodged', function () {
               var d = askDate('When did you file the renewal?'); if (d) act('POST', '/api/compliant/licensing/licences/' + lic.id + '/renewal-lodged', { lodged_on: d });
@@ -195,6 +203,12 @@
 
     function render(s) {
       state = s;
+      var site = $('[data-licence-site]');
+      var previous = site.value;
+      site.replaceChildren(el('option', { value: '', text: s.multiple_sites_enabled ? 'Choose site' : 'Not assigned' }));
+      (s.sites || []).forEach(function (row) { site.append(el('option', { value: row.id, text: row.name })); });
+      site.value = previous;
+      site.required = !!s.multiple_sites_enabled;
       var kind = $('[data-licence-kind]');
       if (!kind.options.length) {
         s.kinds.forEach(function (k) { kind.append(el('option', { value: k.value, text: k.label })); });

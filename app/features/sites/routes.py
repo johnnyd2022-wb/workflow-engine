@@ -130,7 +130,12 @@ def install_site_request_validation(app):
     Additional-site operations wait for the site-specific inventory/production slices.
     """
     tagged_endpoints = frozenset(
-        {"core.create_inventory_item", "core.create_execution", "stock_locations.create_location"}
+        {
+            "core.create_inventory_item",
+            "core.create_execution",
+            "stock_locations.create_location",
+            "core.consume_final_product_fifo",
+        }
     )
 
     @app.before_request
@@ -138,16 +143,44 @@ def install_site_request_validation(app):
         if request.endpoint not in tagged_endpoints or not getattr(g, "current_user", None):
             return None
         data = request.get_json(silent=True)
-        if not isinstance(data, dict) or "site_id" not in data:
+        if not isinstance(data, dict):
             return None
         try:
+            if "site_id" not in data:
+                if (
+                    request.endpoint == "core.create_inventory_item"
+                    and g.current_org.multiple_sites_enabled
+                    and data.get("barcode")
+                ):
+                    from app.core.db.models.inventory_item import InventoryItem
+                    from app.core.db.site_operations import resolve_site
+
+                    existing = (
+                        db_session.query(InventoryItem)
+                        .filter(InventoryItem.org_id == _org(), InventoryItem.barcode == str(data["barcode"]).strip())
+                        .one_or_none()
+                    )
+                    if existing is not None and existing.site_id != resolve_site(db_session, _org()):
+                        raise SiteScopeError("Barcode stock belongs to another site; choose its site explicitly")
+                return None
             if not g.current_org.multiple_sites_enabled:
                 raise SiteScopeError("Multiple sites are switched off")
             site = service.get_site(db_session, _org(), service.parse_id(data["site_id"]))
             if site is None or not site.is_active:
                 raise SiteScopeError("Site must be active and belong to this organisation")
-            if not site.is_default:
+            if not site.is_default and not g.current_org.multiple_site_operations_enabled:
                 raise SiteScopeError("Operations at additional sites are not available yet")
+            g.validated_site_id = site.id
+            if request.endpoint == "core.create_inventory_item" and data.get("barcode"):
+                from app.core.db.models.inventory_item import InventoryItem
+
+                existing = (
+                    db_session.query(InventoryItem)
+                    .filter(InventoryItem.org_id == _org(), InventoryItem.barcode == str(data["barcode"]).strip())
+                    .one_or_none()
+                )
+                if existing is not None and existing.site_id != site.id:
+                    raise SiteScopeError("Barcode stock belongs to another site")
         except SiteScopeError as error:
             return jsonify({"error": str(error), "code": "invalid_site_scope"}), 400
         return None

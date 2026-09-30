@@ -225,6 +225,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("sites.list_sites", _READ, ("inventory.view", "production.view", "settings.manage")),
     ("sites.site_position", _READ, "inventory.view"),
     ("sites.*", None, "settings.manage"),
+    ("site_transfers.*", _READ, "inventory.view"),
+    ("site_transfers.*", None, "inventory.adjust"),
     ("org.*", None, "users.manage"),
     ("people_pages.*", None, "users.manage"),
     ("initialize", None, "settings.manage"),
@@ -298,6 +300,9 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # Contract orders (7.2a): production sees order demand, never CRM contact details;
     # Sales sees commercial lines, with recipe/spec references removed by the DTO.
     ("contracts.list_customers", None, "sales.view"),
+    ("contracts.list_materials", None, "inventory.view"),
+    ("contracts.materials_page", None, "inventory.view"),
+    ("contracts.receive_customer_material", None, "inventory.adjust"),
     ("contracts.create_customer", None, "sales.record"),
     ("contracts.update_customer", None, "sales.record"),
     ("contracts.list_orders", None, ("sales.view", "production.view")),
@@ -346,6 +351,11 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_licensing.*", None, "compliance.manage"),
     ("compliant.compliant_api.create_alcohol_product", None, "compliance.manage"),
     ("compliant.compliant_pages.nz_alcohol_configuration", None, "compliance.manage"),
+    ("compliant.compliant_cca_movements.*", _READ, "compliance.view"),
+    ("compliant.compliant_food_registrations.*", _READ, "compliance.view"),
+    ("compliant.compliant_food_registrations.*", None, "compliance.manage"),
+    ("compliant.compliant_premises.*", _READ, "compliance.view"),
+    ("compliant.compliant_premises.*", None, "compliance.manage"),
     ("compliant.*", _READ, "compliance.view"),
     ("compliant.*", None, "compliance.record"),
 ]

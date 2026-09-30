@@ -1,0 +1,9 @@
+.premises { box-sizing: border-box; min-width: 0; }
+.premises-form { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin: 1rem 0 2rem; }
+.premises-form label { display: grid; gap: .4rem; flex: 1 1 210px; min-width: 0; }
+.premises-form input, .premises-form select { min-width: 0; width: 100%; box-sizing: border-box; padding: .6rem; }
+.premises-form button { padding: .7rem 1rem; }
+.premises article { border-top: 1px solid #dde2e2; padding: 1rem 0; overflow-wrap: anywhere; }
+.premises article h3 { margin: 0 0 .4rem; }
+.premises article p { margin: .4rem 0; }
+@media (max-width: 600px) { .premises { width: 100%; padding: 1rem; } }

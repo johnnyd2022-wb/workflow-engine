@@ -856,6 +856,11 @@ Founder decisions for this phase:
       cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
       registration), a liquor licence (2.5 register gains the site). "Inside a licensed
       area" comes from the site's CCA, replacing the manual flag.
+      - [x] Customs licence register and dated, nonoverlapping site/location coverage (!430).
+      - [x] Explicit liquor-licence site assignment and tenant validation (!435).
+      - [x] Explicit food-registration/activity scope and isolated per-registration NP
+        verification histories (!439). FCP verification automation and movement-policy
+        replacement of the manual flag remain open.
     - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
       consignment note) → in transit (on the books, on no shelf) → received, with short,
       over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
@@ -866,16 +871,31 @@ Founder decisions for this phase:
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
       block a move, or raise an alert. NZ Alcohol:
-      - CCA to CCA without duty needs Customs' prior approval for underbond movement:
-        the move asks for the approval reference and records both licences;
+      - CCA to CCA without duty records the applicable movement authority and both
+        licences. Prior Customs approval is required for an OSS destination or a move
+        outside Customs' listed authorities; record its reference before dispatch.
+      - [x] Generic movement decision/evidence seam and initial CCA authority policy
+        (!431). Transfer wiring, additional authorities, findings and duty accounting
+        remain open; multi-site operations stay gated.
       - out of a CCA to a site without one (a cellar door) is a removal in the excise
         entry of the licence it left (2.1);
       - into a site with no food registration covering the activity, or with no liquor
         licence for selling, raises a finding.
+      - [x] Producer-liable tested-spirits home removal records a frozen CCA, LAL,
+        configured rate and excise-due fact at dispatch; partial receipt does not
+        create a second charge (!446). Other products, customer duty and operational
+        release remain open.
     - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] Refuse the legacy location-based nil return and lodgement after multi-site
+        opt-in, and show observed producer home-removal excise by source CCA without
+        claiming a complete entry (!446). Full per-CCA entry/lodgement remains open.
+      - [x] Read-only source-CCA period review shows recognised movements, observed
+        producer excise due, unresolved records and missing accounting sources (!447).
+        Empty periods still cannot establish a nil return or total duty; complete
+        per-CCA entry and lodgement remain open.
     - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
       enforced on the server like every other permission.
   - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
@@ -905,9 +925,14 @@ Founder decisions for this phase:
       Lineage stays intact either way, so a recall works across both.
       - [x] Trusted material-scope prerequisite (!437): locked execution/order resolver,
         raw-material owner preflight and consistent batch-link lock ordering, with a
-        concurrent-assignment regression. Owner schema/DB guards, production hook,
-        receipts, transfer conservation and producer valuation/sales exclusions remain
-        open; customer receipts are not enabled by this prerequisite.
+        concurrent-assignment regression. This scope-only MR did not add owner
+        schema/DB guards, production hook, receipts, transfer conservation or
+        producer valuation/sales exclusions.
+      - [x] Recorded customer raw-title prerequisite (!445): immutable same-org
+        material receipts and owner proof; transaction-bound production consumption,
+        owner-conserving partial transfers and reasoned wastage; producer acquisition
+        projection and ordinary sales exclusions. Operations default off; monetary
+        valuation, finished-goods title and portal materials totals remain open.
     - [ ] c. **Duty either way.** Per order: who is liable for excise (the producer as
       licensee, the customer as licensee, or goods leaving underbond to the customer's
       CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the
@@ -1061,20 +1086,35 @@ plan branch and are delivered separately.
       lineage travel with the stock, so a recall still traces through a move. Drag a lot
       (or part of one) between sites or locations on a stock board, or scan to pick and
       receive on a phone (4.6). A printable transfer docket.
+      - [x] Accounting prerequisite: producer-owned dispatch, transit, partial receipt,
+        immutable batch-lineage fragments, confirmed-loss policy checks and printable
+        carrier/consignment docket (!438). Operational release stays internally off;
+        overage resolution, drag/scan and the complete movement workflow remain open.
     - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
       block a move, or raise an alert. NZ Alcohol:
-      - CCA to CCA without duty needs Customs' prior approval for underbond movement:
-        the move asks for the approval reference and records both licences;
+      - CCA to CCA without duty records the applicable movement authority and both
+        licences. Prior Customs approval is required for an OSS destination or a move
+        outside Customs' listed authorities; record its reference before dispatch.
       - out of a CCA to a site without one (a cellar door) is a removal in the excise
         entry of the licence it left (2.1);
       - into a site with no food registration covering the activity, or with no liquor
         licence for selling, raises a finding.
+      - [x] Module-owned destination activity/food/liquor missing-record findings on
+        authorised dispatch and receipt, with dated immutable evidence and periodic
+        review (!441). Other movement authorities and excise accounting remain open.
     - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] Source-CCA movement register and frozen tested-spirits/LAL measurement
+        basis (!442). Physical removal authorisation, contract duty, complete
+        per-CCA drafts/lodgement and release remain open.
+      - [x] Guard prerequisite: production inputs/output reconciliation match the
+        persisted execution site, outputs inherit it, and FIFO/manual sales use the
+        shipping/default site (!429). Additional-site release remains internally
+        gated off pending transfer and module integration. This does not complete f.
     - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
       enforced on the server like every other permission.
   - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to

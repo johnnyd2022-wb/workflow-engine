@@ -104,10 +104,14 @@ def settings_for(profile) -> dict:
     }
 
 
-def _last(session: Session, org_id: UUID, programme: str) -> ComplianceVerification | None:
+def _last(session: Session, org_id: UUID, programme: str, registration_id=None) -> ComplianceVerification | None:
     return (
         session.query(ComplianceVerification)
-        .filter(ComplianceVerification.org_id == org_id, ComplianceVerification.programme == programme)
+        .filter(
+            ComplianceVerification.org_id == org_id,
+            ComplianceVerification.programme == programme,
+            ComplianceVerification.food_registration_id == registration_id,
+        )
         .order_by(ComplianceVerification.verified_on.desc(), ComplianceVerification.created_at.desc())
         .first()
     )
@@ -118,7 +122,9 @@ def _clean(value, limit: int) -> str | None:
     return text or None
 
 
-def record(session: Session, org_id: UUID, profile, data: dict, user_id, today: date) -> ComplianceVerification:
+def record(
+    session: Session, org_id: UUID, profile, data: dict, user_id, today: date, registration_id=None
+) -> ComplianceVerification:
     """Record a verification visit, its outcome, frequency step and corrective actions."""
     cfg = settings_for(profile)
     programme = cfg["programme"]
@@ -141,7 +147,7 @@ def record(session: Session, org_id: UUID, profile, data: dict, user_id, today: 
         raise ValueError("For an unacceptable outcome, say whether the business is willing and able to comply")
     if outcome == "acceptable":
         attitude = None
-    last = _last(session, org_id, programme)
+    last = _last(session, org_id, programme, registration_id)
     if last is not None and verified_on < last.verified_on:
         raise ValueError(f"A later verification ({last.verified_on.isoformat()}) is already recorded")
     initial = bool(data.get("initial")) if last is None else False
@@ -165,6 +171,7 @@ def record(session: Session, org_id: UUID, profile, data: dict, user_id, today: 
 
     verification = ComplianceVerification(
         org_id=org_id,
+        food_registration_id=registration_id,
         programme=programme,
         verified_on=verified_on,
         verifier_name=verifier,
@@ -221,10 +228,19 @@ def _int(value) -> int | None:
         return None
 
 
-def complete_action(session: Session, org_id: UUID, action_id: UUID, note, user_id, today: date):
+def complete_action(session: Session, org_id: UUID, action_id: UUID, note, user_id, today: date, registration_id=None):
     action = (
         session.query(ComplianceVerificationAction)
-        .filter(ComplianceVerificationAction.id == action_id, ComplianceVerificationAction.org_id == org_id)
+        .join(
+            ComplianceVerification,
+            (ComplianceVerification.id == ComplianceVerificationAction.verification_id)
+            & (ComplianceVerification.org_id == ComplianceVerificationAction.org_id),
+        )
+        .filter(
+            ComplianceVerificationAction.id == action_id,
+            ComplianceVerificationAction.org_id == org_id,
+            ComplianceVerification.food_registration_id == registration_id,
+        )
         .one_or_none()
     )
     if action is None:
@@ -239,12 +255,13 @@ def complete_action(session: Session, org_id: UUID, action_id: UUID, note, user_
     return action
 
 
-def status(session: Session, org_id: UUID, profile, today: date) -> dict:
+def status(session: Session, org_id: UUID, profile, today: date, registration_id=None) -> dict:
     """Current verification status, next due date and corrective actions."""
     cfg = settings_for(profile)
     programme = cfg["programme"]
     base = {
         "programme": programme,
+        "registration_id": str(registration_id) if registration_id else None,
         "registered_on": cfg["registered_on"].isoformat() if cfg["registered_on"] else None,
         "registered_as": cfg["registered_as"],
         "steps": {str(k): step_label(k) for k in STEP_MONTHS},
@@ -253,15 +270,27 @@ def status(session: Session, org_id: UUID, profile, today: date) -> dict:
         return {**base, "state": "not_applicable", "verifications": [], "actions": []}
     rows = (
         session.query(ComplianceVerification)
-        .filter(ComplianceVerification.org_id == org_id, ComplianceVerification.programme == programme)
+        .filter(
+            ComplianceVerification.org_id == org_id,
+            ComplianceVerification.programme == programme,
+            ComplianceVerification.food_registration_id == registration_id,
+        )
         .order_by(ComplianceVerification.verified_on.desc(), ComplianceVerification.created_at.desc())
         .limit(50)
         .all()
     )
     actions = (
         session.query(ComplianceVerificationAction)
-        .join(ComplianceVerification, ComplianceVerification.id == ComplianceVerificationAction.verification_id)
-        .filter(ComplianceVerificationAction.org_id == org_id, ComplianceVerification.programme == programme)
+        .join(
+            ComplianceVerification,
+            (ComplianceVerification.id == ComplianceVerificationAction.verification_id)
+            & (ComplianceVerification.org_id == ComplianceVerificationAction.org_id),
+        )
+        .filter(
+            ComplianceVerificationAction.org_id == org_id,
+            ComplianceVerification.programme == programme,
+            ComplianceVerification.food_registration_id == registration_id,
+        )
         .order_by(ComplianceVerificationAction.status.desc(), ComplianceVerificationAction.due_on.asc())
         .limit(200)
         .all()
@@ -395,3 +424,35 @@ def milestone(current: dict) -> dict | None:
         "overdue": bool(current.get("overdue")),
         "detail": " · ".join(detail) or None,
     }
+
+
+def statuses_for_org(session, org_id, profile, today):
+    """Legacy history stays distinct; registered premises never share visit chronology."""
+    from app.features.compliant.models.food_registration import FoodRegistration
+    from app.features.compliant.modules.nz_alcohol.food_registrations import registration_profile
+
+    currents = [status(session, org_id, profile, today)]
+    registrations = (
+        session.query(FoodRegistration).filter(FoodRegistration.org_id == org_id).order_by(FoodRegistration.name).all()
+    )
+    for registration in registrations:
+        current = status(session, org_id, registration_profile(registration), today, registration.id)
+        current["registration_name"] = registration.name
+        current["registration_programme"] = registration.programme
+        currents.append(current)
+    return currents
+
+
+def alerts_for_org(session, org_id, profile, today):
+    result = []
+    for current in statuses_for_org(session, org_id, profile, today):
+        for alert in alerts(current, today):
+            if current.get("registration_id"):
+                alert = {
+                    **alert,
+                    "id": f"{alert['id']}-{current['registration_id']}",
+                    "title": f"{current['registration_name']}: {alert['title']}",
+                    "href": f"/compliant/nz-alcohol/food-safety?registration_id={current['registration_id']}#verification",
+                }
+            result.append(alert)
+    return result

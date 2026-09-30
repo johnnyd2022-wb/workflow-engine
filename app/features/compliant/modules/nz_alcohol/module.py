@@ -41,7 +41,14 @@ def _np3_system_alerts(queue: list[dict], overall_alert: dict | None, label: str
 def _verification_milestone(session: Session, org_id: UUID, profile) -> dict | None:
     from app.features.compliant.modules.nz_alcohol import verification
 
-    return verification.milestone(verification.status(session, org_id, profile, date.today()))
+    choices = []
+    for current in verification.statuses_for_org(session, org_id, profile, date.today()):
+        entry = verification.milestone(current)
+        if entry is not None:
+            if current.get("registration_name"):
+                entry["detail"] = " · ".join(filter(None, (current["registration_name"], entry.get("detail"))))
+            choices.append(entry)
+    return min(choices, key=lambda item: item.get("date") or "9999-12-31") if choices else None
 
 
 def _np3_workspace_summary(health: dict, milestone: dict | None = None, label: str = "NP3") -> dict:
@@ -244,7 +251,7 @@ def run_verification_check(org_id: UUID, session: Session) -> CheckResult:
     profile = ComplianceService(session).get_profile(org_id)
     if profile is None or not profile.enabled:
         return CheckResult(check_id=VERIFICATION_CHECK_ID, flagged=False, data={})
-    alerts = verification.alerts(verification.status(session, org_id, profile, date.today()), date.today())
+    alerts = verification.alerts_for_org(session, org_id, profile, date.today())
     if not alerts:
         return CheckResult(check_id=VERIFICATION_CHECK_ID, flagged=False, data={})
     return CheckResult(
@@ -290,6 +297,33 @@ def run_licensing_check(org_id: UUID, session: Session) -> CheckResult:
     )
 
 
+MOVEMENT_REGISTRATION_CHECK_ID = "compliant.nz_alcohol.movement_registrations"
+
+
+def run_movement_registration_check(org_id: UUID, session: Session) -> CheckResult:
+    from app.features.compliant.modules.nz_alcohol.movement_registrations import transfer_findings
+
+    profile = ComplianceService(session).get_profile(org_id)
+    if profile is None or not profile.enabled or profile.industry_module != "nz_alcohol":
+        return CheckResult(check_id=MOVEMENT_REGISTRATION_CHECK_ID, flagged=False, data={})
+    alerts = transfer_findings(session, org_id)
+    if not alerts:
+        return CheckResult(check_id=MOVEMENT_REGISTRATION_CHECK_ID, flagged=False, data={})
+    return CheckResult(
+        check_id=MOVEMENT_REGISTRATION_CHECK_ID,
+        flagged=True,
+        message=alerts[0]["title"],
+        data={
+            "system_finding": {
+                "category": "Destination registrations",
+                "action": {"href": "/core/site-transfers", "label": "Review transfers"},
+                "details": alerts,
+            },
+            "system_alerts": alerts,
+        },
+    )
+
+
 def register_checks(runner) -> None:
     if config.compliant_enabled:
         runner.register_check(CHECK_ID, run_check)
@@ -297,3 +331,4 @@ def register_checks(runner) -> None:
         runner.register_check(STOCKTAKE_CHECK_ID, run_stocktake_check)
         runner.register_check(VERIFICATION_CHECK_ID, run_verification_check)
         runner.register_check(LICENSING_CHECK_ID, run_licensing_check)
+        runner.register_check(MOVEMENT_REGISTRATION_CHECK_ID, run_movement_registration_check)

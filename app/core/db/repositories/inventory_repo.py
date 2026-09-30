@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 from decimal import ROUND_FLOOR, Decimal, InvalidOperation
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import Integer, and_, func, or_
 from sqlalchemy.orm import Session
@@ -22,6 +22,14 @@ logger = get_logger(__name__)
 _UNTRACKED_EXTRA_FILTER = {"untracked": True}
 
 
+def producer_stock_predicate():
+    """Producer acquisition/sales selectors exclude recorded or unresolved free issue."""
+    return and_(
+        InventoryItem.contract_customer_id.is_(None),
+        or_(InventoryItem.extra_data.is_(None), ~InventoryItem.extra_data.has_key("contract_customer_id")),
+    )
+
+
 def _parse_quantity(value: object | None) -> Decimal | None:
     if value is None:
         return None
@@ -38,6 +46,12 @@ def _item_snapshot(item: InventoryItem) -> dict:
         "id": str(item.id),
         "org_id": str(item.org_id),
         "site_id": str(item.site_id) if item.site_id else None,
+        "transfer_receipt_id": str(item.transfer_receipt_id) if item.transfer_receipt_id else None,
+        "contract_customer_id": str(item.contract_customer_id) if item.contract_customer_id else None,
+        "material_receipt_id": str(item.material_receipt_id) if item.material_receipt_id else None,
+        "producer_acquisition_value_included": item.contract_customer_id is None
+        and "contract_customer_id" not in (item.extra_data or {}),
+        "free_issue_acquisition_cost": "0" if item.contract_customer_id else None,
         "name": item.name,
         "quantity": str(item.quantity),
         "unit": item.unit,
@@ -201,6 +215,10 @@ class InventoryRepository:
         write_reason: InventoryQuantityWriteReason = InventoryQuantityWriteReason.REPOSITORY_CREATE,
         location_id: UUID | None = None,
         site_id: UUID | None = None,
+        transfer_receipt_id: UUID | None = None,
+        contract_customer_id: UUID | None = None,
+        material_receipt_id: UUID | None = None,
+        inventory_item_id: UUID | None = None,
     ) -> InventoryItem:
         """Create a new inventory item. If commit=False, caller is responsible for commit."""
         with start_span(
@@ -217,6 +235,7 @@ class InventoryRepository:
             _require_whole_count(quantity, unit, name)
             with allow_inventory_quantity_write(write_reason):
                 item = InventoryItem(
+                    id=inventory_item_id or uuid4(),
                     org_id=org_id,
                     name=name,
                     quantity=coerce_stored_quantity(quantity),
@@ -234,6 +253,9 @@ class InventoryRepository:
                     extra_data=extra_data or {},
                     location_id=location_id,
                     site_id=site_id,
+                    transfer_receipt_id=transfer_receipt_id,
+                    contract_customer_id=contract_customer_id,
+                    material_receipt_id=material_receipt_id,
                 )
                 item.display_label = _build_display_label(item)
                 self.db.add(item)
@@ -387,6 +409,7 @@ class InventoryRepository:
         commit: bool = True,
         sale_context: dict | None = None,
         correlation_id: UUID | None = None,
+        site_id: UUID | None = None,
     ) -> list[dict]:
         """Consume `quantity` units of the FINAL_PRODUCT item(s) named `name`, draining
         the oldest label/lot batch first -- `extra_data.batch_number` ascending (a batch
@@ -402,6 +425,9 @@ class InventoryRepository:
         needed = _parse_quantity(quantity)
         if needed is None or not needed.is_finite() or needed <= 0:
             raise ValueError("quantity must be a positive finite number")
+        from app.core.db.site_operations import resolve_site
+
+        selected_site = resolve_site(self.db, org_id, site_id)
 
         with start_span(
             "inventory.consume_fifo",
@@ -418,6 +444,7 @@ class InventoryRepository:
                     InventoryItem.org_id == org_id,
                     InventoryItem.name == name,
                     InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                    producer_stock_predicate(),
                     InventoryItem.quantity > 0,
                 )
                 .order_by(
@@ -429,6 +456,8 @@ class InventoryRepository:
             )
             if source_output_id is not None:
                 items = items.filter(InventoryItem.source_output_id == source_output_id)
+            if selected_site is not None:
+                items = items.filter(InventoryItem.site_id == selected_site)
             items = items.all()
             # Plan 1.2: counted goods move in whole units and a unit is never split between
             # batches. A lot left holding a fraction (old data) gives up only its whole units;
@@ -504,6 +533,7 @@ class InventoryRepository:
         quantity: str | Decimal,
         reference: str | None = None,
         commit: bool = True,
+        site_id: UUID | None = None,
     ) -> dict:
         """Take ``quantity`` from one chosen final-product lot (plan 1.1 manual matching).
 
@@ -512,18 +542,24 @@ class InventoryRepository:
         amount = _parse_quantity(quantity)
         if amount is None or not amount.is_finite() or amount <= 0:
             raise ValueError("quantity must be a positive finite number")
+        from app.core.db.site_operations import resolve_site
+
+        selected_site = resolve_site(self.db, org_id, site_id)
         item = (
             self.db.query(InventoryItem)
             .filter(
                 InventoryItem.id == inventory_item_id,
                 InventoryItem.org_id == org_id,
                 InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                producer_stock_predicate(),
             )
             .with_for_update()
             .one_or_none()
         )
         if item is None:
             raise ValueError("That batch isn't a finished product in this organisation")
+        if selected_site is not None and item.site_id != selected_site:
+            raise ValueError("That batch does not belong to the shipping site")
         _require_whole_count(amount, item.unit, item.name)
         current = parse_stored_quantity_to_decimal(item.quantity)
         usable = current.to_integral_value(rounding=ROUND_FLOOR) if is_count_unit(item.unit) else current
@@ -569,7 +605,18 @@ class InventoryRepository:
         recorded as direction "out" (an excise removal), crossing back in as "in".
         Returns ``(new_item, transfer)``.
         """
+        from app.core.db.models.organisation import Organisation
         from app.core.db.models.stock_location import StockLocation, StockTransfer
+        from app.core.db.site_operations import resolve_site
+
+        resolve_site(self.db, org_id)  # Hold organisation settings before stock locks.
+        mode = (
+            self.db.query(Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled)
+            .filter(Organisation.id == org_id)
+            .one()
+        )
+        if mode.multiple_sites_enabled and mode.multiple_site_operations_enabled:
+            raise ValueError("Moving between sites or places requires a recorded dispatch and receipt")
 
         amount = _parse_quantity(quantity)
         if amount is None or not amount.is_finite() or amount <= 0:
@@ -577,6 +624,12 @@ class InventoryRepository:
         item = self.get_inventory_item_by_id_for_update(item_id, org_id)
         if item is None:
             raise ValueError("Stock not found")
+        if item.transfer_receipt_id:
+            raise ValueError("Received fragments require a recorded dispatch and receipt to move")
+        if getattr(item, "contract_customer_id", None) is not None or (item.extra_data or {}).get(
+            "contract_customer_id"
+        ):
+            raise ValueError("Customer-owned movements require a recorded ownership-aware transfer")
         _require_whole_count(amount, item.unit, item.name)
         current = parse_stored_quantity_to_decimal(item.quantity)
         if amount > current:
@@ -594,15 +647,14 @@ class InventoryRepository:
             )
             if loc is None:
                 raise ValueError("Location not found")
+            if loc.site_id != item.site_id:
+                raise ValueError("Moving between sites requires a recorded dispatch and receipt")
             return bool(loc.inside_licensed_area)
 
         was_in, now_in = licensed(item.location_id), licensed(to_location_id)
         direction = "out" if was_in and not now_in else ("in" if now_in and not was_in else "internal")
 
         quantity_before = str(current)
-        with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
-            item.quantity = coerce_stored_quantity(current - amount)
-            self.db.flush()
         # Same batch already at the destination (e.g. moving stock back): add to it.
         existing = None
         if item.supplier_batch_number:
@@ -612,14 +664,70 @@ class InventoryRepository:
                     InventoryItem.org_id == org_id,
                     InventoryItem.name == item.name,
                     InventoryItem.supplier_batch_number == item.supplier_batch_number,
+                    InventoryItem.site_id == item.site_id,
+                    InventoryItem.unit == item.unit,
+                    InventoryItem.inventory_type == item.inventory_type,
+                    InventoryItem.supplier == item.supplier,
+                    InventoryItem.purchase_date == item.purchase_date,
+                    InventoryItem.expiry_date == item.expiry_date,
+                    InventoryItem.source_execution_id == item.source_execution_id,
+                    InventoryItem.source_execution_step_id == item.source_execution_step_id,
+                    InventoryItem.source_output_id == item.source_output_id,
+                    InventoryItem.source_step_name == item.source_step_name,
+                    InventoryItem.transfer_receipt_id.is_(None),
+                    producer_stock_predicate(),
+                    self.db.query(StockTransfer.id)
+                    .filter(
+                        StockTransfer.org_id == org_id,
+                        or_(
+                            and_(StockTransfer.from_item_id == item.id, StockTransfer.to_item_id == InventoryItem.id),
+                            and_(StockTransfer.to_item_id == item.id, StockTransfer.from_item_id == InventoryItem.id),
+                        ),
+                    )
+                    .exists(),
                     InventoryItem.location_id.is_(None)
                     if to_location_id is None
                     else InventoryItem.location_id == to_location_id,
                     InventoryItem.id != item.id,
                 )
                 .with_for_update()
-                .one_or_none()
+                .order_by(InventoryItem.id)
+                .first()
             )
+        if existing is not None:
+
+            def identity_extra(lot):
+                return {
+                    key: value
+                    for key, value in (lot.extra_data or {}).items()
+                    if key not in {"moved_from_item_id", "original_barcode"}
+                }
+
+            if getattr(existing, "contract_customer_id", None) is not None or identity_extra(
+                existing
+            ) != identity_extra(item):
+                existing = None
+        if existing is None and item.supplier_batch_number:
+            occupied = (
+                self.db.query(InventoryItem.id)
+                .filter(
+                    InventoryItem.org_id == org_id,
+                    InventoryItem.site_id == item.site_id,
+                    InventoryItem.name == item.name,
+                    InventoryItem.supplier_batch_number == item.supplier_batch_number,
+                    InventoryItem.location_id.is_(None)
+                    if to_location_id is None
+                    else InventoryItem.location_id == to_location_id,
+                    InventoryItem.transfer_receipt_id.is_(None),
+                    InventoryItem.id != item.id,
+                )
+                .first()
+            )
+            if occupied is not None:
+                raise ValueError("Destination has a different lot identity; use recorded dispatch and receipt")
+        with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
+            item.quantity = coerce_stored_quantity(current - amount)
+            self.db.flush()
         if existing is not None:
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.STOCK_TRANSFER):
                 existing.quantity = coerce_stored_quantity(parse_stored_quantity_to_decimal(existing.quantity) + amount)
@@ -629,6 +737,7 @@ class InventoryRepository:
             new_item = None
         extra = dict(item.extra_data or {})
         extra["moved_from_item_id"] = str(item.id)
+        extra["original_barcode"] = item.barcode or extra.get("original_barcode")
         new_item = new_item or self.create_inventory_item(
             org_id=org_id,
             name=item.name,
@@ -636,7 +745,7 @@ class InventoryRepository:
             unit=item.unit,
             inventory_type=item.inventory_type,
             supplier=item.supplier,
-            barcode=item.barcode,
+            barcode=None,
             purchase_date=item.purchase_date,
             supplier_batch_number=item.supplier_batch_number,
             expiry_date=item.expiry_date,
@@ -648,6 +757,7 @@ class InventoryRepository:
             commit=False,
             write_reason=InventoryQuantityWriteReason.STOCK_TRANSFER,
             location_id=to_location_id,
+            site_id=item.site_id,
         )
         transfer = StockTransfer(
             org_id=org_id,
@@ -708,6 +818,7 @@ class InventoryRepository:
                 InventoryItem.id == inventory_item_id,
                 InventoryItem.org_id == org_id,
                 InventoryItem.inventory_type == InventoryType.FINAL_PRODUCT.value,
+                producer_stock_predicate(),
             )
             .with_for_update()
             .one_or_none()
@@ -804,6 +915,7 @@ class InventoryRepository:
         limit: int | None = None,
         cursor: tuple | None = None,
         site_id: UUID | None = None,
+        producer_owned_only: bool = False,
     ) -> list[InventoryItem]:
         """List inventory items for an organisation, optionally filtered by type or process.
 
@@ -814,6 +926,8 @@ class InventoryRepository:
         from sqlalchemy import tuple_ as _tuple
 
         query = self.db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
+        if producer_owned_only:
+            query = query.filter(producer_stock_predicate())
         if site_id is not None:
             query = query.filter(InventoryItem.site_id == site_id)
         if inventory_type:
