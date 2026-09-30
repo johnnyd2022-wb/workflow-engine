@@ -208,7 +208,11 @@ def test_owner_site_unit_readiness_and_balance_evidence_fails_closed(db, demand_
     if kind == "owner":
         monkeypatch.setattr(adapter, "resolve_owner", lambda item: (True, uuid4()))
     elif kind == "legacy_owner":
-        own.extra_data = {"contract_customer_id": str(uuid4())}
+        # A row that predates the contract stock guard: the guard refuses to save this hint through the
+        # ORM once the app has registered it, so write it with a direct table update.
+        table = InventoryItem.__table__
+        db.execute(table.update().where(table.c.id == own.id).values(extra_data={"contract_customer_id": str(uuid4())}))
+        db.refresh(own)
     elif kind == "unknown_ready":
         monkeypatch.setattr(
             adapter, "resolve_availability", lambda *args: adapter.LotAvailability(Decimal(5), None, ())
