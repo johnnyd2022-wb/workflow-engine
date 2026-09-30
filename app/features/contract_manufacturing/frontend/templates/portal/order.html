@@ -1,0 +1,68 @@
+{% extends "portal/base.html" %}{% block title %}{{ order.reference }} · Your order{% endblock %}{% block content %}<h1>{{ order.reference }}</h1>
+<p>{{ order.status|capitalize }} · Requested due date {{ order.due_date }}</p>
+<p class="shared-at">Producer shared revision {{ order.revision }} at {{ order.shared_at[:16]|replace('T',' ') }} UTC</p>
+<section>
+<h2>1. Where it's up to</h2>{% if order.progress.available %}<p>{{ order.progress.stage_label or '' }}{% if order.progress.step_label %} · {{ order.progress.step_label }}{% endif %}</p>{% if order.progress.percent is not none %}<p>{{ order.progress.percent }}% {% if order.progress.milestones %}of shared milestones{% else %}complete (shared by producer){% endif %}</p>{% endif %}{% if order.progress.milestones %}<ul>{% for milestone in order.progress.milestones %}<li>Batch {{ milestone.batch_id }} · {{ milestone.label }} · {{ milestone.status|replace('_', ' ') }}</li>{% endfor %}</ul>{% endif %}{% else %}<p>Progress not shared yet.</p>{% endif %}</section>
+<section>
+<h2>2. When it'll be ready</h2>
+<p>{{ order.timing.reason }}</p>
+</section>
+<section>
+<h2>3. How much</h2>{% for line in order.quantities.lines %}<p>{{ line.product_name }} · Ordered {{ line.ordered }} {{ line.unit }}</p>{% endfor %}<p>{{ order.quantities.reason }}</p>
+</section>
+<section>
+<h2>4. Your batches</h2>{% for batch in order.batches['items'] %}<p>Batch <code>{{ batch.batch_id }}</code>{% if batch.bottling_date %} · Bottled {{ batch.bottling_date }}{% endif %}</p>{% else %}<p>Batches not shared yet.</p>{% endfor %}</section>
+<section>
+<h2>5. Quality</h2>{% if order.quality.actual_abv is not none %}<p>Shared actual ABV: {{ order.quality.actual_abv }}%</p>{% endif %}{% if order.quality.spec_abv is not none %}<p>Shared specification ABV: {{ order.quality.spec_abv }}%</p>{% endif %}<p>{{ order.quality.reason }}</p>
+</section>
+<section>
+<h2>6. Your materials</h2>
+<p>{{ order.materials.reason }}</p>
+</section>
+<section>
+<h2>7. Yield</h2>
+<p>{{ order['yield'].reason }}</p>
+</section>
+<section>
+<h2>8. Delivery</h2>
+{% if order.delivery.declared_duty_responsibility %}
+<p>
+  Order declaration:
+  {% if order.delivery.declared_duty_responsibility == 'producer_licensee' %}producer licensee responsible for excise{% elif order.delivery.declared_duty_responsibility == 'customer_licensee' %}customer licensee responsible for excise{% elif order.delivery.declared_duty_responsibility == 'customer_underbond' %}customer CCA underbond arrangement declared{% else %}duty responsibility unresolved{% endif %}{% if order.delivery.customer_cca_reference %} · Customer CCA reference {{ order.delivery.customer_cca_reference }}{% endif %}.
+</p>
+{% endif %}
+<p>{{ order.delivery.reason }}</p>
+</section>
+<section>
+<h2>9. Documents</h2>{% for document in order.documents['items'] %}<p>
+<a href="/portal/api/orders/{{ order.order_id }}/documents/{{ document.id }}">{{ document.title }}</a>
+</p>{% else %}<p>Documents not shared yet.</p>{% endfor %}</section>
+<section>
+<h2>10. What's waiting on you</h2>
+{% for approval in order.waiting_on_you.approvals %}
+<p>{{ approval.document_title }} · {{ approval.prompt }}{% if approval.decision %} · {{ approval.decision|replace('_', ' ') }}{% if approval.response_note %}: {{ approval.response_note }}{% endif %}{% endif %}</p>
+{% if not approval.decision %}<form data-approval-api="/portal/api/orders/{{ order.order_id }}/approvals/{{ approval.id }}">
+<label>Response note (required when requesting changes)<textarea name="response_note" maxlength="1000"></textarea></label>
+<button type="submit" name="decision" value="approved">Approve proof</button>
+<button type="submit" name="decision" value="changes_requested">Request changes</button>
+</form>{% endif %}
+{% else %}<p>{{ order.waiting_on_you.reason }}</p>{% endfor %}
+<h3>Messages with the producer</h3>
+{% for message in order.messages %}<p data-message="{{ message.sender }}"><strong>{{ 'You' if message.sender == 'customer' else 'Producer' }}</strong> · {{ message.created_at[:16]|replace('T',' ') }} UTC<br>{{ message.body }}</p>
+{% else %}<p>No messages yet.</p>{% endfor %}
+<form data-portal-api="/portal/api/orders/{{ order.order_id }}/messages">
+<label>Send a message<textarea name="body" maxlength="2000" required></textarea></label>
+<button type="submit">Send message</button>
+</form>
+</section>
+{% if order.status == 'completed' %}<section>
+<h2>Request another order</h2>
+{% if order.reorder_request %}<p>Reorder requested {{ order.reorder_request.requested_at[:16]|replace('T',' ') }} UTC.</p>
+{% if order.reorder_request.note %}<p>{{ order.reorder_request.note }}</p>{% endif %}
+<p>Contact the producer in the order conversation for changes or additional requests.</p>
+{% else %}<p>Ask the producer to repeat this order. They will confirm quantities, price and dates with you before creating a new order.</p>
+<form data-portal-api="/portal/api/orders/{{ order.order_id }}/reorder">
+<label>Anything to change?<textarea name="note" maxlength="1000"></textarea></label>
+<button type="submit">Request reorder</button>
+</form>{% endif %}
+</section>{% endif %}{% endblock %}

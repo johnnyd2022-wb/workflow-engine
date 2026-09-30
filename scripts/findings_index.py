@@ -130,6 +130,14 @@ EXCLUDE_GLOBS = (
     # "cross-tenant"). A deferred *bug fix* in a review report is still swept; a
     # deferred product *decision* in a roadmap is not.
     "!docs/customer-value-execution-plan-*.md",
+    # Architecture/contract reference doc ("How Compliant plugs into Core"), the same
+    # genre as .agents/conventions.md above -- it documents how the seam works, not a
+    # findings tracker. Its "Conventions:" bullet list sits under a "## Checks: alerts,
+    # findings and the dashboard" heading, where the bare word "findings" (naming a data
+    # type the seam produces, not a section of open issues) opened a `finding` section and
+    # swept three descriptive convention bullets ("href is always a same-origin path",
+    # etc.) as P0 security findings in the first real sweep of this file.
+    "!docs/compliant-core-contract.md",
 )
 
 # ---------------------------------------------------------------------------
@@ -182,13 +190,25 @@ CODE_MARKER_RG = r"\b(TODO|FIXME|HACK|XXX|BUG)\b"
 #     after -- `-> fixed in <sha>` is still caught by the `fixed (?:in|by)` branch above.
 #   - `stale point-in-time note` (not bare `stale point-in-time`) to avoid a data-freshness
 #     bug description ("shows a stale point-in-time snapshot").
+#   - `patched <YYYY-MM-DD>` -- the dated note a fixed bullet is left with ("**Patched
+#     2026-09-25** (plan item 0.2): ..." on the `/auth/verify-2fa` item in
+#     docs/core-load-performance-design.md). Without it that item, already fixed and
+#     closed by !434, re-entered every fresh worktree's index as a P0. The date is
+#     required (a bare "needs to be patched" is still owed), and a hedge before the word
+#     ("partially/partly patched", "only patched", "not yet patched", "will be patched
+#     <date>") is excluded because each says work remains or is still to come. Known
+#     blind spots, accepted because no doc in this repo hits them: it reads only the word
+#     right before "patched" ("has not been patched <date>" would close) and nothing after
+#     the date ("Patched <date> (CSV only; JSON still open)" would close).
+_NOT_HEDGED = "".join(f"(?<!{w} )" for w in ("partially", "partial", "partly", "only", "be", "yet", "not", "never"))
 RESOLVED_MARKERS = re.compile(
     r"(^\s*(?:✅|✔|~~))|(\b(?:done|resolved|fixed|shipped|landed|completed|no longer)\b\s*[.:—-]?\s*$)"
     r"|(\bresolved (?:in|by)\b)|(\bfixed (?:in|by)\b)|(\balready (?:done|fixed|handled)\b)"
     r"|((?:→|->)\s*(?:\*\*)?(?:closed|closes|resolved)\b)"
     r"|((?:→|->)\s*(?:\*\*)?(?:fixed|done)(?:\*\*)?(?=\s*[.,;:)—]|\s*$))"
     r"|(\(verified\b[^)]{0,80}\bby findings-sweep\))"
-    r"|(\balready[- ]closed\b)|(\bno outstanding action\b)|(\bstale point-in-time note\b)",
+    r"|(\balready[- ]closed\b)|(\bno outstanding action\b)|(\bstale point-in-time note\b)"
+    r"|(" + _NOT_HEDGED + r"\bpatched\s+(?:on\s+)?\d{4}-\d{2}-\d{2}\b)",
     re.I,
 )
 
@@ -226,9 +246,18 @@ RESOLVED_MARKERS = re.compile(
 # bullets -- including one literally ending "... No gap." -- were indexed as 11 open
 # P0/P1 items in one real sweep. `\bnot a gap\b` widens to plural/no-article; `no gap(s)
 # found` is a separate branch since "found" trails the noun instead of "not"/"no" leading it.
+#
+# A spec section that answers a spec-critic gap says so in its own heading --
+# "## Calculation model (pins down spec-critic gap: exact formulas, not prose)" (verbatim in
+# .agents/specs/dilution_calculator.md). `\bgaps?\b` alone opened it as an open `gap`
+# section, so all six formula bullets under it were indexed as outstanding gaps. "pins
+# down" is active third person ("this section closes it"). Deliberately not matched: the
+# imperative "pin down before build" and the passive "to be pinned down" (both still owe
+# work), and "never pins down X" is negated below.
 _NOTHING_LEFT = r"(?:a|an|further|additional|other|remaining)\s+"
 CLOSED_HEADING_RE = re.compile(
     r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
+    r"|\bpins\s+down\b"
     r"|\balready (?:done|fixed|handled)\b"
     r"|\b(?:not|no)\s+(?:" + _NOTHING_LEFT + r")?findings?\b"
     r"|\bno\s+(?:" + _NOTHING_LEFT + r")?issues?\b",
@@ -236,7 +265,29 @@ CLOSED_HEADING_RE = re.compile(
 )
 # Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
 # not trip CLOSED_HEADING_RE; those headings are explicitly saying the opposite.
-NEGATED_CLOSURE_RE = re.compile(r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved)\b", re.I)
+NEGATED_CLOSURE_RE = re.compile(
+    r"\bnot\s+(?:yet\s+)?(?:fix(?:ed|es)|closed|resolved)\b|\b(?:not|never)\s+(?:yet\s+)?pins?\s+down\b", re.I
+)
+
+# A checked checkbox or checkmark in a heading's own title -- this repo's numbered
+# work-item convention ("### 1. Slim the `system-findings` banner payload -- `[x]`
+# (commit: ...)"), used verbatim across docs/workflows-load-performance.md,
+# docs/live-sync-architecture.md, docs/aer-architecture-review.md, and elsewhere.
+# Unlike CLOSED_HEADING_RE's textual cues, several real headings in that convention mark
+# done status *only* via this mark, with no "fixed"/"done"/"closed" word anywhere in the
+# title (the prose right below carries that instead) -- so the textual check alone missed
+# them. It mattered because one such heading's own title contains "system-findings", which
+# \bfindings?\b reads as an open `finding` section: without this, its already-shipped
+# "original plan" bullets re-entered the worklist every sweep. An *unchecked* `[ ]` must
+# not match -- that means still open.
+CLOSED_HEADING_MARKER_RE = re.compile(r"[✅✔]|`?\[[xX]\]`?")
+
+
+def _heading_declares_closed(title: str) -> bool:
+    if NEGATED_CLOSURE_RE.search(title):
+        return False
+    return bool(CLOSED_HEADING_RE.search(title) or CLOSED_HEADING_MARKER_RE.search(title))
+
 
 # A file path, optionally with a line or line-range, as this repo writes them in prose:
 # `backend.py:2679`, `app/utils/config_loader.py:153-155`, `inventory_quantity_guard.py:57-70`.
@@ -660,7 +711,7 @@ def parse_doc(path: Path) -> list[Item]:
         heading = HEADING_RE.match(line)
         if heading:
             level, title = len(heading.group(1)), heading.group(2)
-            declares_closed = CLOSED_HEADING_RE.search(title) and not NEGATED_CLOSURE_RE.search(title)
+            declares_closed = _heading_declares_closed(title)
             # A level-1 heading is this repo's document title, written once, never a
             # section marker -- and since a level-1 section can only be closed by another
             # level-1 heading, a title that happens to contain a trigger word (e.g. this
@@ -914,7 +965,7 @@ def _parse_mr_description(desc: str, pseudo_path: str) -> list[Item]:
         heading = HEADING_RE.match(line)
         if heading:
             level, title = len(heading.group(1)), heading.group(2)
-            declares_closed = CLOSED_HEADING_RE.search(title) and not NEGATED_CLOSURE_RE.search(title)
+            declares_closed = _heading_declares_closed(title)
             # See parse_doc's matching comment: a level-1 heading must never open a
             # section, or a title-word match becomes unclosable for the rest of the text.
             kind = (

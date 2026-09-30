@@ -1,0 +1,43 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Customs licences and areas | biz-e{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}{{ super() }}
+<link rel="stylesheet" href="/compliant/static/compliant.css">
+<link rel="stylesheet" href="/compliant/static/premises.css">
+{% endblock %}
+{% block content %}
+<main class="compliant-shell premises" data-premises-root>
+  <a href="/compliant/nz-alcohol/customs" hx-boost="false">Back to Customs</a>
+  <h1>Customs licences and areas</h1>
+  <p>Record each CCA licence and the stock areas it covers. One licence can cover areas at several sites.</p>
+  <p class="compliant-error" role="alert" data-premises-error hidden></p>
+  {% if can('compliance.manage') %}
+  <section><h2>Register a licence</h2>
+    <form data-licence-form hx-boost="false" class="premises-form">
+      <label>Licence number<input name="number" maxlength="100" required></label>
+      <label>Name<input name="name" maxlength="150" required></label>
+      <label>Type<select name="kind" required><option value="lma">Manufacturing area</option><option value="oss">Off-site storage</option><option value="duty_free">Duty-free shop</option><option value="export">Export warehouse</option></select></label>
+      <label>Legal entity reference<input name="legal_entity_reference" maxlength="100" required placeholder="NZBN or registered entity ID"></label>
+      <label>Valid from<input name="valid_from" type="date" required></label>
+      <label>Valid until (optional)<input name="valid_until" type="date"></label>
+      <label>Licence document reference<input name="evidence_reference" maxlength="500" required></label>
+      <button type="submit">Register licence</button>
+    </form>
+  </section>
+  <section><h2>Assign a licensed area</h2>
+    <form data-coverage-form hx-boost="false" class="premises-form">
+      <label>Licence<select name="licence_id" data-licence-select required></select></label>
+      <label>Site<select name="site_id" data-site-select required></select></label>
+      <label>Stock area<select name="location_id" data-location-select></select></label>
+      <label>Covered from<input name="valid_from" type="date" required></label>
+      <label>Covered until (optional)<input name="valid_until" type="date"></label>
+      <label>Coverage document reference<input name="evidence_reference" maxlength="500" required></label>
+      <button type="submit">Assign area</button>
+    </form>
+  </section>
+  {% endif %}
+  <section><h2>Registered licences</h2><div data-licences></div></section>
+  <section><h2>Licensed areas</h2><div data-coverage></div></section>
+</main>
+{% endblock %}
+{% block scripts %}{{ super() }}<script src="/compliant/static/premises.js"></script>{% endblock %}

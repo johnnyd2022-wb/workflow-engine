@@ -278,9 +278,11 @@ def purge_org(session, org_id, user_id) -> None:
     breaking this teardown and getting "fixed" by someone deleting the cleanup.
     """
     from sqlalchemy import or_, select
+    from sqlalchemy.exc import IntegrityError
 
     from app.core.db.models.models import Base
 
+    statements = []
     for table in reversed(Base.metadata.sorted_tables):
         if table.name in ("organisations", "users"):
             continue
@@ -306,7 +308,21 @@ def purge_org(session, org_id, user_id) -> None:
                     table.c[fk.parent.name].in_(select(parent.c[fk.column.name]).where(parent.c.user_id == user_id))
                 )
         if conditions:
-            session.execute(table.delete().where(or_(*conditions)))
+            statements.append((table.name, table.delete().where(or_(*conditions))))
+    # Some tables now reference each other (inventory_items <-> contract_material_receipts, the site
+    # transfer tables), so sorted_tables cannot order them and one pass can hit a foreign key. Postpone
+    # a delete the database refuses and retry after the rest; only give up when a pass makes no progress.
+    while statements:
+        postponed = []
+        for name, statement in statements:
+            try:
+                with session.begin_nested():
+                    session.execute(statement)
+            except IntegrityError:
+                postponed.append((name, statement))
+        if len(postponed) == len(statements):
+            raise RuntimeError(f"purge_org cannot delete in any order; blocked tables: {[n for n, _ in postponed]}")
+        statements = postponed
     session.commit()
 
 

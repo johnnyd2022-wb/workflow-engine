@@ -1,0 +1,16 @@
+.contract-workspace { max-width: 1080px; margin: 0 auto; padding: 20px; color: var(--text-primary); }
+.contract-workspace header { margin-bottom: 24px; }
+.contract-card { background: var(--bg-surface, var(--bg-secondary)); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.contract-card form { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; margin: 16px 0; }
+.contract-card label { display: grid; gap: 6px; flex: 1 1 200px; }
+.contract-card input, .contract-card select { padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); width: 100%; box-sizing: border-box; }
+.contract-card [data-publication] fieldset { min-width: 0; width: 100%; box-sizing: border-box; }
+.contract-card [data-shared-step] { display: grid; gap: 8px; margin: 12px 0; overflow-wrap: anywhere; }
+.contract-card [data-shared-step] label:first-child { display: flex; align-items: center; }
+.contract-card [data-shared-step] input[type="checkbox"] { width: auto; flex: 0 0 auto; }
+.contract-card .btn { min-height: 40px; }
+.contract-table { overflow-x: auto; }
+.contract-table table { border-collapse: collapse; width: 100%; text-align: left; }
+.contract-table th, .contract-table td { padding: 12px; border-bottom: 1px solid var(--border-color); }
+.contract-error { padding: 14px; border: 1px solid #b42318; color: #b42318; border-radius: 8px; }
+@media (max-width: 480px) { .contract-workspace { padding: 12px; } .contract-card { padding: 14px; } .contract-card label { flex-basis: 100%; } }

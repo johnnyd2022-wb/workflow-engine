@@ -21,6 +21,12 @@
       </p>
     </section>
 
+    {% if can('settings.manage') %}
+    <section class="card settings-card">
+      <div class="card-content"><a href="/core/sites" hx-boost="false" class="btn btn-secondary">Sites</a></div>
+    </section>
+    {% endif %}
+
     <!-- Long-session warning: security nudge when timeout > 24h and 2FA disabled; not an enforcement mechanism -->
     <div id="long-session-banner" class="long-session-banner" role="alert" aria-live="polite" style="display: none;">
       <div class="long-session-banner-content">
@@ -243,6 +249,8 @@
             </div>
           </section>
           {% endif %}
+
+          {% include 'google_account_settings.html' %}
 
           <section class="card settings-card">
             <div class="card-header" style="padding-bottom: 12px;">

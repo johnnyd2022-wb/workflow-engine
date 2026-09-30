@@ -327,6 +327,10 @@
       html += '</div></div>';
     }
 
+    html += '<div class="exec-spa-section"><label class="spa-field-label" for="exec-spa-occurred-at">When did this step happen?</label>' +
+      '<input id="exec-spa-occurred-at" class="spa-inp" type="datetime-local" style="max-width:320px;" aria-describedby="exec-spa-occurred-help">' +
+      '<p id="exec-spa-occurred-help" style="font-size:13px;color:var(--text-secondary);">Leave blank to record it as happening now. Backdated entries are marked in the record.</p></div>';
+
     // Prompts
     if (prompts.length) {
       html += '<div class="exec-spa-section">';
@@ -498,6 +502,12 @@
         }
         return;
       }
+      var occurredInput = root.querySelector('#exec-spa-occurred-at');
+      var occurredValue = occurredInput && occurredInput.value ? new Date(occurredInput.value) : null;
+      if (occurredValue && Number.isNaN(occurredValue.getTime())) {
+        if (window.showNotification) window.showNotification('error', 'Invalid time', 'Enter a valid time for when this step happened.');
+        return;
+      }
       setBusy(submitBtn, true, 'Completing…');
       try {
         var createResult = await CoreAPI.createExecution(ctx.processId);
@@ -552,6 +562,7 @@
           actual_inputs: actualInputs,
           actual_outputs: actualOutputs,
           execution_data: promptPayload,
+          occurred_at: occurredValue ? occurredValue.toISOString() : undefined,
         });
 
         if (typeof ctx.onDone === 'function') ctx.onDone({ executionId: executionId, completed: true });

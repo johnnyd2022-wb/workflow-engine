@@ -61,6 +61,8 @@ how they get carved.
 | designing a process, the create wizard, steps, reordering, step docs | process-design |
 | running a batch, completing a step, DAG, evidence upload | execution |
 | stock levels, adding/adjusting items, CSV import, barcodes, units | inventory |
+| sites, multiple sites setting, physical stock and execution tags | sites |
+| dispatch, transit, partial receipt, transfer docket | site-transfers |
 | disposal, waste, writing stock off | wastage |
 | untracked stock, matching, "the numbers don't line up" | reconciliation |
 | expired materials, findings, system status, notifications, compliance | compliance-checks |
@@ -80,6 +82,30 @@ how they get carved.
 | entered demand, material feasibility, capacity, stock risk | planning (planned) |
 | rule templates, automated alerts, overdue chases, automation worker | automations (planned) |
 | performance cockpit, metric definitions, business trends | dashboard (planned extension) |
+
+## site-transfers
+
+- **subscription:** core · **layer:** domain
+- **purpose:** Recorded producer-owned dispatch, transit, partial receipt and confirmed losses; internal operational release stays off.
+- **entry points:** `/core/site-transfers`, `/api/core/site-transfers*`; blueprint `app/features/site_transfers/routes.py`.
+- **state/writes:** `SiteStockTransfer`, `SiteStockReceipt`, immutable inventory receipt proofs; `app/features/site_transfers/service.py` owns atomic movement accounting.
+- **dependencies:** Sites, inventory, generic Compliant stock movement decisions/field metadata; industry rules remain module-owned.
+- **depended on by:** inventory shelf identity, FIFO, lineage tracing and future customer ownership/CCA attribution.
+
+## sites
+
+subscription: core (enterprise operations planned)
+layer: domain
+flag: Organisation.multiple_sites_enabled (default off)
+routes: /core/sites, /api/core/sites, /api/core/sites/settings, /api/core/sites/<site_id>, /api/core/sites/<site_id>/position
+backend: app/features/sites/routes.py; app/features/sites/service.py; app/core/db/site_guard.py; app/core/db/site_operations.py
+models: Site; site_id tags on InventoryItem, Execution, StockLocation
+frontend: app/features/sites/frontend/templates/sites/sites.html; app/features/sites/frontend/static/sites.js
+tests: tests/test_sites.py; tests/test_site_operations.py
+depends on: platform, identity, inventory, execution
+depended on by: contract manufacturing and planning (planned)
+invariant: additional-site operations stay closed until stock consumption, FIFO, transfers and compliance enforce site scope; existing physical tags cannot be edited as moves
+status: plan 7.1a/b foundations only; see docs/multiple-sites-foundations.md
 
 ## Customer-value programme — delivery status
 
@@ -437,7 +463,9 @@ do not introduce reverse imports into existing domain code.
       - /api/core/hub/overview
       - /api/core/tasks
       - /api/core/tasks/*
-    backend:  app/core/backend/backend.py:4733-5790 (summary, metrics, hub overview)
+    backend:  app/features/dashboard/routes/dashboard_routes.py (summary, action board,
+              weekly series, metrics; registered on core_bp with stable endpoint names)
+              app/core/backend/backend.py (hub overview)
               app/core/backend/tasks.py (task and lane API)
     frontend: frontend/dashboard/dashboard.html, js/dashboard.js,
               js/core-active-batches-graph.js (1007), css/dashboard_spa.css
@@ -751,3 +779,11 @@ exhaustive coverage.
   worktrees (one in flight) every time `review-feature` or `entrypoint` runs, and writes the
   line itself — never hand-edit `reviewed:`. See the field's own description above for the
   three states it can hold.
+
+### Staff site roles (7.1g foundation, activation closed)
+
+- Model/migration: `org_role.py`, `org_role_site.py`, `staff_site_roles_001.py`.
+- Admin configuration: `staff_site_roles.py`, `/org/roles`, existing People role editor.
+- Authorization: `staff_site_scope.py`, `staff_site_policy.py`, static endpoint registry.
+- Existing all-site access preserved; selected assignment and every sensitive handler
+  remain closed. Activation audit: `docs/staff-site-role-foundations.md`.

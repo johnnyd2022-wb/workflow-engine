@@ -210,9 +210,7 @@ def test_settings_defaults_to_empty_and_round_trips_through_create(authed_client
 
 
 def test_create_process_rejects_invalid_settings(authed_client):
-    resp = authed_client.post(
-        "/api/core/processes", json={"name": "x", "settings": {"fifo_auto_select": "yes"}}
-    )
+    resp = authed_client.post("/api/core/processes", json={"name": "x", "settings": {"fifo_auto_select": "yes"}})
     assert resp.status_code == 400
     assert "fifo_auto_select" in resp.get_json()["error"]
 
@@ -287,9 +285,9 @@ def test_ac4_delete_process_rejected_for_non_admin_member(authed_client):
     resp = authed_client.delete(f"/api/core/processes/{pid}")
     assert resp.status_code == 403
 
-    assert authed_client.get(f"/api/core/processes/{pid}").status_code == 200, (
-        "process should still exist after a rejected non-admin delete"
-    )
+    assert (
+        authed_client.get(f"/api/core/processes/{pid}").status_code == 200
+    ), "process should still exist after a rejected non-admin delete"
 
 
 # --------------------------------------------------------------------------------------
@@ -642,14 +640,14 @@ def test_ac9_reorder_writes_process_version_and_emits_event(authed_client, db):
 
 
 def test_next_step_position_first_step_defaults_to_1000(authed_client):
-    from app.core.backend.backend import _next_step_position
+    from app.core.backend.process_design_routes import _next_step_position
 
     pid = _create_process(authed_client)["id"]
     assert _next_step_position(pid) == Decimal("1000")
 
 
 def test_next_step_position_continues_the_1000_grid(authed_client):
-    from app.core.backend.backend import _next_step_position
+    from app.core.backend.process_design_routes import _next_step_position
 
     pid = _create_process(authed_client)["id"]
     _add_step(authed_client, pid, 1, "First")
@@ -661,13 +659,13 @@ def test_next_step_position_rounds_up_when_current_max_is_not_grid_aligned():
     never actually persist (see the AC9 GAP notes on reorder for the one place that
     tries and 500s) — so this defensive rounding branch is exercised here by mocking
     the position lookup rather than seeding an impossible row."""
-    from app.core.backend import backend
+    from app.core.backend import process_design_routes
 
-    with patch.object(backend.db_session, "query") as mock_query:
+    with patch.object(process_design_routes.db_session, "query") as mock_query:
         mock_query.return_value.filter.return_value.order_by.return_value.limit.return_value.scalar.return_value = (
             Decimal("1500")
         )
-        result = backend._next_step_position(uuid4())
+        result = process_design_routes._next_step_position(uuid4())
 
     # mp=1500, rem=500, rounds up to 2000, then appends one more grid slot -> 3000.
     assert result == Decimal("3000")

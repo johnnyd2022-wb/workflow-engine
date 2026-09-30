@@ -64,3 +64,10 @@ keepass_posthog_project_api_key_entry = workflow-engine/observability/posthog_pr
 # Shared storage for auth rate limits. REQUIRED for any multi-worker deploy --
 # without it each gunicorn worker keeps its own bucket and the limits are diluted.
 # storage_uri = redis://localhost:6379/0
+
+[google_sign_in]
+# Enable after provisioning a separate OAuth web client for this environment.
+enabled = false
+redirect_uri = https://dev.biz-e.app/auth/google/callback
+keepass_client_id_entry = workflow-engine/google/client_id
+keepass_client_secret_entry = workflow-engine/google/client_secret

@@ -133,7 +133,8 @@ def get_rate_limit_key():
 
 
 # Create a limiter instance with custom key function (will be initialized with app in app_factory)
-# No default limits: rate limiting is applied only to login and signup endpoints.
+# No default limits: rate limiting is applied only to routes carrying an explicit
+# @limiter.limit (login, signup, accept-invite, verify-2fa, some CM portal routes, telemetry).
 limiter = Limiter(key_func=get_rate_limit_key)
 
 # Pending 2FA session expiry (Using 5 minutes as default)
@@ -925,6 +926,19 @@ def verify_two_factor():
             logger.warning(f"2FA not enabled for user {pending} but pending session exists")
             return jsonify({"error": "Invalid session. Please login again."}), 401
 
+        # A Google primary factor still needs a live, usable account and the same
+        # linked subject when TOTP completes; neither step may outlive revocation.
+        google_subject = session.get("pending_google_sub") if session.get("pending_auth_method") == "google" else None
+        if google_subject:
+            from app.features.google_sign_in.routes import validate_pending_google
+            from app.features.google_sign_in.service import GoogleSignInError
+
+            try:
+                validate_pending_google(db, user, google_subject)
+            except GoogleSignInError:
+                rotate_session()
+                return jsonify({"error": "Account unavailable. Sign in again."}), 401
+
         # Extract ALL values while user is still bound to session
         user_id = user.id
         user_org_id = user.org_id
@@ -966,6 +980,11 @@ def verify_two_factor():
         # Get user's session timeout preference (use extracted value to avoid detached instance error)
         if user_session_timeout:
             session["session_timeout_minutes"] = user_session_timeout
+
+        if google_subject:
+            from app.features.google_sign_in.routes import record_google_session
+
+            record_google_session(user, google_subject)
 
         # If user wants to remember this device, create a trusted device token
         # Following Google/AWS/Azure patterns: store token in HttpOnly cookie + hash in DB
