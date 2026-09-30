@@ -294,6 +294,8 @@ def shared_orders(db, principal):
 
 
 def shared_order(db, principal, order_id):
+    from app.features.contract_manufacturing.services.portal_approvals import customer_approvals
+
     row = (
         db.query(PortalPublication)
         .filter_by(
@@ -304,7 +306,13 @@ def shared_order(db, principal, order_id):
     )
     if row is None or row.revoked_at:
         raise OrderError("Order not found", 404)
-    return publication_dto(row.payload)
+    result = publication_dto(row.payload)
+    approvals = customer_approvals(db, principal, row)
+    result["waiting_on_you"]["approvals"] = approvals
+    if approvals:
+        result["waiting_on_you"]["available"] = True
+        result["waiting_on_you"]["reason"] = "Label proof approval requests and responses"
+    return result
 
 
 def shared_document(db, principal, order_id, document_id):

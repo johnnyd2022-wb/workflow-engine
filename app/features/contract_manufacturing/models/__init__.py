@@ -6,6 +6,7 @@ from app.features.contract_manufacturing.models.orders import (
     ContractOrderLine,
 )
 from app.features.contract_manufacturing.models.portal import (
+    PortalApproval,
     PortalDocument,
     PortalInvite,
     PortalPrincipal,
@@ -18,6 +19,7 @@ __all__ = [
     "ContractOrder",
     "ContractOrderLine",
     "ContractOrderExecution",
+    "PortalApproval",
     "PortalDocument",
     "PortalInvite",
     "PortalPrincipal",

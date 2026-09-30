@@ -396,4 +396,7 @@ ENDPOINT_COVERAGE = {
     ("site_transfers.page", "GET"): "blocked",
     ("site_transfers.receive", "POST"): "blocked",
     ("site_transfers.static", "GET"): "blocked",
+    # Portal proof approvals (!454): whole-order customer dialogue, not site-scoped.
+    ("contract_portal.respond_to_approval", "POST"): "blocked",
+    ("contracts.portal_request_approval", "POST"): "blocked",
 }

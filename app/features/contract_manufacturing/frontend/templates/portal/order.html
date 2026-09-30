@@ -39,5 +39,12 @@
 </p>{% else %}<p>Documents not shared yet.</p>{% endfor %}</section>
 <section>
 <h2>10. What's waiting on you</h2>
-<p>{{ order.waiting_on_you.reason }}</p>
+{% for approval in order.waiting_on_you.approvals %}
+<p>{{ approval.document_title }} · {{ approval.prompt }}{% if approval.decision %} · {{ approval.decision|replace('_', ' ') }}{% if approval.response_note %}: {{ approval.response_note }}{% endif %}{% endif %}</p>
+{% if not approval.decision %}<form data-approval-api="/portal/api/orders/{{ order.order_id }}/approvals/{{ approval.id }}">
+<label>Response note (required when requesting changes)<textarea name="response_note" maxlength="1000"></textarea></label>
+<button type="submit" name="decision" value="approved">Approve proof</button>
+<button type="submit" name="decision" value="changes_requested">Request changes</button>
+</form>{% endif %}
+{% else %}<p>{{ order.waiting_on_you.reason }}</p>{% endfor %}
 </section>{% endblock %}
