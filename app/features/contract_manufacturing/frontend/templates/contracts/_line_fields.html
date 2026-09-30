@@ -1,0 +1,8 @@
+<label>Product<input name="{{ line_prefix }}product_name" maxlength="255" required></label>
+<label>Quantity<input name="{{ line_prefix }}quantity" type="number" min="0.0001" step="0.0001" required></label>
+<label>Unit<input name="{{ line_prefix }}unit" maxlength="50" placeholder="bottles, L, kg" required></label>
+<label>Materials supplied by<select name="{{ line_prefix }}materials_source" required><option value="">Choose materials</option><option value="producer">Producer</option><option value="customer">Customer</option><option value="mixed">Customer and producer</option></select></label>
+{% if can('production.view') %}
+<label>Specification reference<input name="{{ line_prefix }}spec_reference" maxlength="500"></label>
+<label>Recipe version and product<select name="{{ line_prefix }}product_mapping"><option value="">Map later</option>{% for recipe in recipe_outputs %}<option value="{{ recipe.value }}">{{ recipe.label }}</option>{% endfor %}</select></label>
+{% endif %}

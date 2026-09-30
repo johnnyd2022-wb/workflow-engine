@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db.models.execution_step import ExecutionStep
 from app.core.db.models.inventory_item import InventoryItem
+from app.core.db.models.organisation import Organisation
 from app.core.db.models.stock_location import StockLocation, StockTransfer
 from app.core.utils.unit_conversion import is_count_unit, normalize_unit
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
@@ -332,6 +333,11 @@ def _s(value) -> str:
     return f"{Decimal(str(value)).normalize():f}"
 
 
+def _legacy_draft_unavailable(session: Session, org_id: UUID) -> bool:
+    """The location flag cannot assign a removal to a CCA after multi-site opt-in."""
+    return bool(session.query(Organisation.multiple_sites_enabled).filter(Organisation.id == org_id).scalar())
+
+
 def measure(session: Session, org_id: UUID, pairs: list, on: date) -> list[dict]:
     """Litres, ABV, LAL and duty at ``on`` for (item, quantity) pairs: stocktake lines, stock position.
 
@@ -422,7 +428,26 @@ def draft(session: Session, org_id: UUID, start: date, frequency: str, today: da
 
     current = compute_lines(session, org_id, removals_between(session, org_id, start, end), start)
     adjustments = _late_adjustments(session, org_id, start)
-    return {**base, **current, "status": "draft", "adjustments": adjustments}
+    if _legacy_draft_unavailable(session, org_id):
+        current["problems"].append(
+            {
+                "product": "CCA accounting",
+                "reason": "The legacy location-based draft cannot assign removals to a CCA after multiple sites are enabled",
+                "removals": 0,
+            }
+        )
+        return {
+            **base,
+            **current,
+            "status": "draft",
+            "adjustments": adjustments,
+            "legacy_unavailable": True,
+            "complete_lodgement": False,
+            "nil_return": None,
+            "total_lal": None,
+            "total_duty": None,
+        }
+    return {**base, **current, "status": "draft", "adjustments": adjustments, "legacy_unavailable": False}
 
 
 def _late_adjustments(session: Session, org_id: UUID, before: date) -> list[dict]:
@@ -476,6 +501,8 @@ def lodge(
     user_id,
     today: date | None = None,
 ) -> ExciseLodgement:
+    if _legacy_draft_unavailable(session, org_id):
+        raise ValueError("Multiple-site excise must be reviewed per CCA; the legacy draft cannot be lodged")
     current = draft(session, org_id, start, frequency, today=today)
     if current["status"] == "lodged":
         raise ValueError(f"{current['label']} is already recorded as lodged.")
@@ -515,6 +542,16 @@ def reminder(session: Session, org_id: UUID, profile, today: date | None = None)
     if current["status"] == "lodged":
         return None
     due = date.fromisoformat(current["due"])
+    if current.get("legacy_unavailable"):
+        return {
+            "id": f"excise-lodgement-{current['period_start']}",
+            "title": f"Review per-CCA excise for {current['label']}",
+            "description": "Multiple-site removals need a complete entry for each source CCA. The legacy draft cannot be lodged.",
+            "due_date": due.isoformat(),
+            "href": "/compliant/nz-alcohol/customs",
+            "action_label": "Review CCA movements",
+            "overdue": today > due,
+        }
     nil = not current["lines"] and not current["adjustments"]
     what = "nil return" if nil else f"entry: {current['total_lal']} LAL"
     return {

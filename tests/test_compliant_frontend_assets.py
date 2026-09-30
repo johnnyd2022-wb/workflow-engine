@@ -127,7 +127,7 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "Compliance score:" in dashboard_script
     assert "np3ReadinessBar" in dashboard_script
     assert "framework.slug === 'np3-food-control'" in dashboard_script
-    assert "current evidence controls" in dashboard_script
+    assert "NP3 checks with current evidence" in dashboard_script
     assert "evidence ready" in dashboard_script
     assert "need attention" in dashboard_script
     assert "overdue" in dashboard_script

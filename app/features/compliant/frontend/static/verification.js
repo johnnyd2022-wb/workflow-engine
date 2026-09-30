@@ -10,6 +10,12 @@
   }
 
   async function api(method, url, body) {
+    var root = document.querySelector('[data-verification-root]');
+    var selected = root ? root.dataset.registrationId || '' : '';
+    if (selected) {
+      if (method === 'GET') url += (url.indexOf('?') === -1 ? '?' : '&') + 'registration_id=' + encodeURIComponent(selected);
+      else body = Object.assign({}, body || {}, { registration_id: selected });
+    }
     var headers = { 'Accept': 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (method !== 'GET') headers['X-CSRFToken'] = csrfToken();
@@ -45,6 +51,14 @@
     var canRecord = root.dataset.canRecord === '1';
     var form = $('[data-verification-form]');
     var state = null;
+    var registrationSelect = $('[data-verification-registration-select]');
+    var requestedRegistration = new URLSearchParams(window.location.search).get('registration_id') || '';
+    root.dataset.registrationId = '';
+    registrationSelect.addEventListener('change', function () {
+      root.dataset.registrationId = registrationSelect.value;
+      form.reset(); $('[data-verification-new-actions]').replaceChildren();
+      api('GET', '/api/compliant/verification').then(render).catch(fail);
+    });
 
     function fail(err) {
       console.error(err);
@@ -55,15 +69,28 @@
     function clearError() { $('[data-verification-error]').hidden = true; }
 
     function render(s) {
+      if ((s.registration_id || '') !== (root.dataset.registrationId || '')) return;
       state = s;
+      registrationSelect.replaceChildren(el('option', { value: '', text: 'Unassigned history / organisation settings' }));
+      (s.registrations || []).forEach(function (row) {
+        registrationSelect.append(el('option', { value: row.id, text: row.name + ' · ' + row.reference }));
+      });
+      registrationSelect.value = s.registration_id || '';
+      if (requestedRegistration) {
+        var wanted = requestedRegistration; requestedRegistration = '';
+        if ((s.registrations || []).some(function (row) { return row.id === wanted; })) {
+          root.dataset.registrationId = wanted; registrationSelect.value = wanted;
+          api('GET', '/api/compliant/verification').then(render).catch(fail); return;
+        }
+      }
       var head = $('[data-verification-headline]');
       var sub = $('[data-verification-sub]');
       var chip = $('[data-verification-chip]');
       var programme = (s.programme || '').toUpperCase();
       chip.hidden = true;
       if (s.state === 'not_applicable') {
-        head.textContent = 'No national programme selected';
-        sub.textContent = 'Select your food safety programme in Configuration.';
+        head.textContent = s.registration_programme === 'fcp' ? 'Food control plan registration' : 'No national programme selected';
+        sub.textContent = s.registration_programme === 'fcp' ? 'Use your plan and verifier’s schedule. National programme frequency rules do not apply.' : 'Select your food safety programme in Configuration.';
       } else if (s.state === 'not_recorded') {
         head.textContent = 'When is your ' + programme + ' verification?';
         sub.textContent = 'Record your last verification, or when you registered, and the next date is worked out for you.';
@@ -82,7 +109,7 @@
       }
 
       var reg = $('[data-verification-registration]');
-      reg.hidden = !(canManage && !s.last && s.state !== 'not_applicable');
+      reg.hidden = !!s.registration_id || !(canManage && !s.last && s.state !== 'not_applicable');
       if (s.registered_on) reg.registered_on.value = s.registered_on;
       if (s.registered_as) reg.registered_as.value = s.registered_as;
 
@@ -144,7 +171,9 @@
         if (state.last) q.set('previous_step', String(state.current_step));
         if (form.verified_on.value) q.set('verified_on', form.verified_on.value);
         try {
+          var selectedRegistration = root.dataset.registrationId;
           var s = await api('GET', '/api/compliant/verification/suggest?' + q.toString());
+          if (selectedRegistration !== root.dataset.registrationId) return;
           var select = $('[data-verification-step]');
           select.replaceChildren();
           s.allowed.forEach(function (o) {

@@ -315,26 +315,31 @@ want it, and never produce a recall list that can't be trusted.
     steps appear out of order, there's no export, and lots with 0 units are listed under
     "In stock" in the batch picker.
   - Change:
-    - [ ] a. Header shows product, the org's batch ID, ABV and bottling date.
-    - [ ] b. Summary line such as "48 sold to 8 customers · 30 on hand", with pre-sold
+    - [x] a. Header shows product, the org's batch ID, ABV and bottling date.
+    - [x] b. Summary line such as "48 sold to 8 customers · 30 on hand", with pre-sold
       sales marked.
-    - [ ] c. Per customer: quantity, invoices, dates and contact details, with a warning
+    - [x] c. Per customer: quantity, invoices, dates and contact details, with a warning
       where contact details are missing.
-    - [ ] d. Steps listed in process order.
-    - [ ] e. CSV and PDF export.
-    - [ ] f. Trace can start from a supplier lot (forward) or an invoice (backward).
-    - [ ] g. Sold-out lots under their own heading, not "In stock".
+    - [x] d. Steps listed in process order.
+    - [x] e. CSV and PDF export.
+    - [ ] f. Trace can start from:
+      - [x] a supplier lot (forward).
+      - [x] an invoice (backward).
+    - [x] g. Sold-out lots under their own heading, not "In stock".
   - Done when: the timed mock recall is under 5 minutes.
 
-- [ ] **1.5 Show when something happened and when it was entered.** *High · M*
+- [x] **1.5 Show when something happened and when it was entered.** *High · M* (!407, !408)
   - Evidence: a step entered days later looks the same as one recorded live, which
     undermines an auditor's trust in the whole record.
   - Change: store both the time a step happened and the time it was entered; show an
     "entered later" badge when they differ by more than a day; keep an edit history on
     each record.
   - Done when: every late entry is visibly marked and every edit is traceable.
+  - [x] Separate occurrence and entry times; mark entries over 24 hours late in
+    execution and trace views. (!407)
+  - [x] Expose a traceable edit history for completed step records. (!408)
 
-- [ ] **1.6 Show one stock number everywhere.** *High · S*
+- [x] **1.6 Show one stock number everywhere.** *High · S* (!404)
   - Evidence: a Source Map card shows one lot's quantity (`sourcemap.js`, primary lot)
     while Live Inventory shows the total for the same product.
   - Change: one shared calculation; cards show the total and the number of lots.
@@ -416,6 +421,7 @@ records, not from people typing figures in.
   - Change: record each verification (date, verifier, outcome, corrective actions with
     owners and due dates); work out the next verification from the programme's frequency
     and show it on the dashboard.
+  - [x] Dashboard validates and renders a module-owned next-date milestone. (!412)
   - Done when: the app always knows the current verification status and next due date.
   - As built (!413): NP3 page (and the NP1/NP2 page) → Verification. Each visit records
     date, verifier, agency, report reference, outcome (and, when unacceptable, whether the
@@ -428,7 +434,7 @@ records, not from people typing figures in.
     week before each action; the dashboard module card carries the next date as a
     milestone (rendered by !412). Recording a visit clears the booked-visit fields.
 
-- [ ] **2.3 Make evidence counts consistent and clickable.** *S*
+- [x] **2.3 Make evidence counts consistent and clickable.** *S* (!347)
   - Evidence: "38 evidence ready" appears next to "0 active evidence files" on the NP3
     page, and the "Guided next steps" panel is empty.
   - Change: define ready, needs evidence and overdue once; every count links to the
@@ -579,13 +585,13 @@ records, not from people typing figures in.
 
 Sales matter here because they finish the trace. Make them readable and complete.
 
-- [ ] **3.1 Total sales per product.** *High · S*
+- [x] **3.1 Total sales per product.** *High · S* (!342)
   - Evidence: CRM Top Products lists one product across seven or more rows because Xero
     item codes and descriptions vary, typos included.
   - Change: group by the mapped product, with a row that expands to show Xero codes;
     unmapped lines go to a queue to be mapped.
 
-- [ ] **3.2 Make sales readable in the activity log.** *High · S*
+- [x] **3.2 Make sales readable in the activity log.** *High · S* (!343)
   - Evidence: a sale is logged as "Quantity adjusted 36.0000 → 30.0000 units"
     (`app/core/backend/backend.py`, `Quantity adjusted` formatter), and one sync writes
     hundreds of these, flooding the dashboard's "Logged events".
@@ -596,11 +602,11 @@ Sales matter here because they finish the trace. Make them readable and complete
   - Change: invoice lines with no product mapping, or that can't be filled from any stock
     (1.1d), become tasks with a direct fix.
 
-- [ ] **3.4 Customer records ready for a recall.** *S*
+- [x] **3.4 Customer records ready for a recall.** *S* (!341)
   - Change: show how many customers have a contact phone and email on record and prompt
     for missing ones. A recall is only as good as its contact list.
 
-- [ ] **3.5 Hide empty sales metrics.** *S*
+- [x] **3.5 Hide empty sales metrics.** *S* (!340)
   - Evidence: revenue-target tiles on the dashboard and CRM read "n/a" until a target is
     set.
   - Change: hide them, or offer a one-click setup.
@@ -640,9 +646,10 @@ any time.
 - [ ] **4.3 Use words and numbers producers use.** *S*
   - [x] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
     Compliance; pages and cards say Compliant), CRM → **Sales**.
-  - [ ] b. Durations in days ("22 days"), not hours ("Started 535h 54m ago").
-  - [ ] c. No trailing zeros ("30", not "30.0000"), including activity entries.
-  - [ ] d. Fix "5 active batchs".
+  - [x] b. Durations in days ("22 days"), not hours ("Started 535h 54m ago"). (!346)
+  - [x] c. No trailing zeros ("30", not "30.0000"), including activity entries. (!345)
+  - [x] d. Fix "5 active batchs". Already pluralised by `pluralize()` in
+    `app/core/frontend/js/dashboard.js:171`. (!344)
 
 - [x] **4.4 One route to each job.** *S* (a–d: !390–!393)
   - [x] a. "Trace" and Source Map links use the single `/core/sourcemap` page
@@ -656,7 +663,7 @@ any time.
     `app/features/compliant/routes/page_routes.py` and `app/core/backend/backend.py`
     (!390).
 
-- [ ] **4.5 Make the dashboard today's work list.** *High · M*
+- [x] **4.5 Make the dashboard today's work list.** *High · M* (!350)
   - Evidence: a "−100% batch completion vs last week" tile computed against a zero base;
     a sign-in ("Logged in with password from 127.0.0.1") shown as the day's featured
     event; several "n/a" tiles; a "System Issues Detected" banner on Core pages with no
@@ -711,6 +718,11 @@ split.
       - [x] Wastage pure move. (!332)
       - [x] Compliance-checks pure move. (!334)
       - [x] Activity-log pure move. (!335)
+      - [x] Dashboard pure move. (!339)
+      - [x] Traceability pure move. (!353)
+      - [x] Inventory pure move. (!354)
+      - [x] Process-design pure move. (!355)
+      - [x] Execution pure move. (!356)
     - [ ] d. **Carve before you change:** when an item in this plan needs substantial work
       in a slice that still lives in `backend.py`, carve that slice first in its own MR,
       then make the change in its new home. Likely pulls: 1.2, 1.3, 1.6 and 2.6 →
@@ -719,23 +731,61 @@ split.
     - [ ] e. **New work starts in its slice:** roles and permissions (0.4) in
       platform/identity; Customs (2.1, 2.6) and licensing (2.5) in
       `app/features/compliant/modules/nz_alcohol/`; matching modes (1.1) in crm.
-    - [ ] f. **Frontend after backend:** the asset registry (slicing plan §3, option 1)
-      before any JS moves; split `create-process-modal.js` internally as part of
-      process-design.
+    - [ ] f. **Frontend after backend:**
+      - [x] Register public Core JS/CSS assets by owning slice before any asset moves.
+        (!352)
+      - [ ] Split `create-process-modal.js` internally as part of process-design.
+        - [x] Extract pure process-modal helpers into `process-modal-utils.js` (!357).
+        - [x] Extract process-modal session/API mappers into `process-modal-mappers.js` (!358).
+        - [x] Extract wizard session recovery into `process-modal-session.js` (!359).
+        - [x] Extract process-modal mode controls into `process-modal-controls.js` (!360).
+        - [x] Extract step-document UI into `process-modal-docs.js` (!361).
+        - [x] Extract process-modal summary helpers into `process-modal-summary-utils.js` (!362).
+        - [x] Extract the summary/compliance panel into `process-modal-summary.js` (!362).
+        - [x] Extract step merge and ordering helpers into `process-modal-step-data.js` (!363).
+        - [x] Extract input/output row UI helpers into `process-modal-rows.js` (!364).
+        - [x] Extract inventory-card display helpers into `process-modal-inventory-cards.js` (!365).
+        - [x] Extract SPA payload serialization and preservation helpers into `process-modal-spa-payloads.js` (!366).
+        - [x] Extract prompt editor helpers into `process-modal-prompts.js` (!367).
+        - [x] Extract API-step wizard-session payload mapping into `process-modal-api-session.js` (!368).
+        - [x] Extract virtual summary-step construction into `process-modal-session-summary.js` (!370).
+        - [x] Extract summary-step session selection and enrichment helpers into `process-modal-summary-session.js` (!371).
+        - [x] Extract step-summary expand/collapse behavior into `process-modal-step-summary-ui.js` (!372).
+        - [x] Extract process-step summary rendering and reorder UI into `process-modal-step-summary.js` (!373).
+        - [x] Extract process-step order persistence and stale-write recovery into `process-modal-step-order.js` (!374).
+        - [x] Extract the `?edit=<stepId>` resume flow into `process-modal-deep-link-edit.js` (!375).
+        - [x] Extract process wizard step display updates into `process-modal-navigation.js` (!376).
+        - [x] Extract the existing-process step list renderer into `process-modal-existing-steps.js` (!377).
+        - [x] Extract process-overview and forward/back wizard actions into `process-modal-navigation-actions.js` (!378).
+        - [x] Extract inventory and fixed-expiry validation adapters into `process-modal-validation.js` (!379).
+        - [x] Extract SPA wizard form-state serialization into `process-modal-spa-payloads.js` (!380).
+        - [x] Extract cleared wizard draft payload construction into `process-modal-spa-payloads.js` (!381).
+        - [x] Extract output payload restoration into `process-modal-output-restore.js` (!382).
+        - [x] Extract prompt-list restoration into `process-modal-prompt-restore.js` (!383).
+        - [x] Extract inline-document and pending-upload restoration into `process-modal-doc-restore.js` (!384).
+        - [x] Extract restored input-tab and prompt-mode controls into `process-modal-restore-controls.js` (!385).
+        - [x] Extract previous-step output options into `process-modal-previous-outputs.js` (!400).
+        - [x] Extract compact inventory loading and cache into `process-modal-inventory-loader.js` (!401).
+        - [x] Extract searchable inventory dropdown into `process-modal-inventory-dropdown.js` (!402).
+        - [x] Extract saved input restoration into `process-modal-input-restore.js` (!403).
+        - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
   - Done when: `backend.py` holds only shell code, and every slice in the feature index
     points at its own directory.
 
-- [ ] **5.2 Run the stock checks as tests.** *S*
+- [x] **5.2 Run the stock checks as tests.** *S* (!415; CI after prerequisite merges)
   - Change: the 1.7 checks as tests, plus a mock-recall scenario and a Customs stocktake
     scenario (2.6) in the end-to-end suite.
   - [x] Stock arithmetic, matching queue, and finding contract tests. (!406)
 
-- [ ] **5.3 Keep tooling in proportion.** *S*
-  - Evidence: 40 report categories under `.agents/reports/`, plus several watchers and
-    sweeps, for one customer.
-  - Change: keep the tools that change decisions; retire the rest.
+- [x] **5.3 Keep tooling in proportion.** *S* (!351)
+  - Evidence: `.agents/reports/` has 33 directories, alongside 11 watcher/sweep scripts.
+  - Change: keep the tools that change decisions; retire the rest. Review on 26 Sep 2026
+    found no unreferenced automation: the six watch/sweep flows are wired to explicit
+    setup docs, state, and/or test coverage. The report directories are versioned
+    engineering findings and decision history, not runtime tooling. Retain them; no
+    deletion is justified by this review.
 
 ---
 
@@ -743,7 +793,7 @@ split.
 
 Starts once Phases 1 and 2 hold up with a second producer.
 
-- [ ] **6.1 A landing page for NZ craft alcohol.** *S*
+- [x] **6.1 A landing page for NZ craft alcohol.** *S* (!411; rollout after 6.2)
   - Change: replace the generic "manufacturing operations" copy with what a producer
     gets: a real recall trace, an NP3 evidence pack and an excise draft.
 
@@ -806,6 +856,11 @@ Founder decisions for this phase:
       cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
       registration), a liquor licence (2.5 register gains the site). "Inside a licensed
       area" comes from the site's CCA, replacing the manual flag.
+      - [x] Customs licence register and dated, nonoverlapping site/location coverage (!430).
+      - [x] Explicit liquor-licence site assignment and tenant validation (!435).
+      - [x] Explicit food-registration/activity scope and isolated per-registration NP
+        verification histories (!439). FCP verification automation and movement-policy
+        replacement of the manual flag remain open.
     - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
       consignment note) → in transit (on the books, on no shelf) → received, with short,
       over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
@@ -816,16 +871,31 @@ Founder decisions for this phase:
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
       block a move, or raise an alert. NZ Alcohol:
-      - CCA to CCA without duty needs Customs' prior approval for underbond movement:
-        the move asks for the approval reference and records both licences;
+      - CCA to CCA without duty records the applicable movement authority and both
+        licences. Prior Customs approval is required for an OSS destination or a move
+        outside Customs' listed authorities; record its reference before dispatch.
+      - [x] Generic movement decision/evidence seam and initial CCA authority policy
+        (!431). Transfer wiring, additional authorities, findings and duty accounting
+        remain open; multi-site operations stay gated.
       - out of a CCA to a site without one (a cellar door) is a removal in the excise
         entry of the licence it left (2.1);
       - into a site with no food registration covering the activity, or with no liquor
         licence for selling, raises a finding.
+      - [x] Producer-liable tested-spirits home removal records a frozen CCA, LAL,
+        configured rate and excise-due fact at dispatch; partial receipt does not
+        create a second charge (!446). Other products, customer duty and operational
+        release remain open.
     - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] Refuse the legacy location-based nil return and lodgement after multi-site
+        opt-in, and show observed producer home-removal excise by source CCA without
+        claiming a complete entry (!446). Full per-CCA entry/lodgement remains open.
+      - [x] Read-only source-CCA period review shows recognised movements, observed
+        producer excise due, unresolved records and missing accounting sources (!447).
+        Empty periods still cannot establish a nil return or total duty; complete
+        per-CCA entry and lodgement remain open.
     - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
       enforced on the server like every other permission.
   - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
@@ -845,10 +915,24 @@ Founder decisions for this phase:
       contact where there is one) and orders: product, quantity, spec or recipe version,
       due date, status. Each order links to the batches (executions) that make it, and
       the scheduler (7.3) plans them.
+      - [x] Staff customer/order/line/batch foundation (!426): per-line specification,
+        stored recipe version and output reference, linked batch counts, and per-line
+        materials/per-order duty declarations. Scheduler integration remains 7.3;
+        materials ownership and excise behaviour remain 7.2b/c.
     - [ ] b. **Materials either way.** Per order line: supplied by the customer
       (free-issue: received as lots owned by the customer, kept out of the producer's own
       stock value, usable only for that customer's orders), by the producer, or a mix.
       Lineage stays intact either way, so a recall works across both.
+      - [x] Trusted material-scope prerequisite (!437): locked execution/order resolver,
+        raw-material owner preflight and consistent batch-link lock ordering, with a
+        concurrent-assignment regression. This scope-only MR did not add owner
+        schema/DB guards, production hook, receipts, transfer conservation or
+        producer valuation/sales exclusions.
+      - [x] Recorded customer raw-title prerequisite (!445): immutable same-org
+        material receipts and owner proof; transaction-bound production consumption,
+        owner-conserving partial transfers and reasoned wastage; producer acquisition
+        projection and ordinary sales exclusions. Operations default off; monetary
+        valuation, finished-goods title and portal materials totals remain open.
     - [ ] c. **Duty either way.** Per order: who is liable for excise (the producer as
       licensee, the customer as licensee, or goods leaving underbond to the customer's
       CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the
@@ -878,7 +962,11 @@ Founder decisions for this phase:
          timeline of events and messages, one thread per order.
       Past orders keep the same view, with a "reorder" request. Email notifications
       once the app can send email (0.4g still uses invite links).
-    - [ ] f. **Isolation by design.** Portal users are a separate kind of user with no
+      - [x] Read-only portal foundation (!436): separate invitations/password sessions,
+        branded current/past published orders, shared ABV/batch dates and opt-in document
+        copies. Unavailable fields are explicit; Google, scheduler forecasts, stock,
+        duty, derived milestones, approvals/messages and reorders remain open.
+    - [x] f. **Isolation by design.** (!436) Portal users are a separate kind of user with no
       staff permissions; every portal query is scoped to the customer's orders on the
       server; a test walks every portal route with a second customer and expects 403/404.
       Other customers, recipes, costs and the producer's sales are never reachable.
@@ -937,6 +1025,10 @@ Founder decisions for this phase:
       - [x] Persist exact-lot raw bindings and historical same-org material
         observations (!443). Holds, commitments, readiness, incoming supply and
         published forecasts still need trusted records and adapters.
+      - [x] Material availability engine: per-physical-batch recipes, explicit known
+        supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
+        uncovered shortages (!428). Expected-delivery records, DB adapters,
+        dependent-production planning and forecast integration remain.
     - [ ] e. **Can we do it?** Rough capacity per site: a few resource groups the owner
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to
@@ -961,6 +1053,78 @@ Founder decisions for this phase:
     lays out the batches, flags a botanical short for the second one and moves its date;
     the owner pins the first, drags the second, and the next morning the dashboard shows
     today's priorities, with the order's forecast date updated in the customer's portal.
+
+---
+
+## Phase 7: Multiple sites (7.1 scope)
+
+This branch carries the 7.1 scope from !421. The other Phase 7 items remain in that
+plan branch and are delivered separately.
+
+- [ ] **7.1 Multiple sites.** *High · L+*
+  - Why: a producer grows into a second site (a bond store or off-site storage area, a
+    cellar door, a warehouse or 3PL, a shared facility) and needs to run the business
+    across them. Customs, food safety and liquor licensing attach to premises, so they
+    have to know which site stock and production are at.
+  - Evidence (28 Sep 2026): one org is one site. 2.1 added stock locations with an
+    "inside the licensed area" flag and moves between them (`stock_locations_bp`), but
+    there is no site, no transit or receipt, and no per-site registration or licence.
+  - Change:
+    - [ ] a. **Switch it on.** An org setting "multiple sites". Off (the default) keeps
+      everything exactly as today. On, the org defines its sites (name, address, kind:
+      manufacturing, storage/bond, cellar door or retail, warehouse/3PL, event) and one
+      is the default. Existing stock and executions go to the default site.
+    - [ ] b. **Tag, don't fork.** Inventory items and executions carry a site. Stock
+      locations (2.1) become places within a site. Screens and APIs filter by site; every
+      total can be shown per site or for the whole business. No separate database or org
+      per site.
+    - [ ] c. **Registrations belong to sites, as the business has them.** Each site can
+      be linked to zero or more registrations: a Customs CCA licence (one licence may
+      cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
+      registration), a liquor licence (2.5 register gains the site). "Inside a licensed
+      area" comes from the site's CCA, replacing the manual flag.
+    - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
+      consignment note) → in transit (on the books, on no shelf) → received, with short,
+      over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
+      lineage travel with the stock, so a recall still traces through a move. Drag a lot
+      (or part of one) between sites or locations on a stock board, or scan to pick and
+      receive on a phone (4.6). A printable transfer docket.
+      - [x] Accounting prerequisite: producer-owned dispatch, transit, partial receipt,
+        immutable batch-lineage fragments, confirmed-loss policy checks and printable
+        carrier/consignment docket (!438). Operational release stays internally off;
+        overage resolution, drag/scan and the complete movement workflow remain open.
+    - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
+      "stock movement" seam in the Compliant platform (like workflow rules and stock
+      measures, see `docs/compliant-core-contract.md`), a module can require fields,
+      block a move, or raise an alert. NZ Alcohol:
+      - CCA to CCA without duty records the applicable movement authority and both
+        licences. Prior Customs approval is required for an OSS destination or a move
+        outside Customs' listed authorities; record its reference before dispatch.
+      - out of a CCA to a site without one (a cellar door) is a removal in the excise
+        entry of the licence it left (2.1);
+      - into a site with no food registration covering the activity, or with no liquor
+        licence for selling, raises a finding.
+      - [x] Module-owned destination activity/food/liquor missing-record findings on
+        authorised dispatch and receipt, with dated immutable evidence and periodic
+        review (!441). Other movement authorities and excise accounting remain open.
+    - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
+      stock; stocktakes per site or per licence (2.6); each sales channel or Xero
+      tracking category maps to the site it ships from, so FIFO matches from the right
+      shelf (1.1); excise drafts per CCA licence.
+      - [x] Source-CCA movement register and frozen tested-spirits/LAL measurement
+        basis (!442). Physical removal authorisation, contract duty, complete
+        per-CCA drafts/lodgement and release remain open.
+      - [x] Guard prerequisite: production inputs/output reconciliation match the
+        persisted execution site, outputs inherit it, and FIFO/manual sales use the
+        shipping/default site (!429). Additional-site release remains internally
+        gated off pending transfer and module integration. This does not complete f.
+    - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
+      enforced on the server like every other permission.
+  - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
+    a bond store (licence B, with the underbond approval recorded) and on to a cellar door
+    (no CCA, so it's a removal on licence B's excise draft); every screen agrees where it
+    is at each step; and a recall of that batch lists the cellar door's sales. With
+    multiple sites off, nothing changes.
 
 ---
 

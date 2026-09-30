@@ -826,9 +826,9 @@ class TestMergeInventoryLegacyAuditMatching:
 
         resp = app_client.get(f"/api/core/entities/inventory_item/{item.id}/story")
         body = resp.get_json()
-        assert len(body["events"]) == 1, (
-            "a matched legacy entry augments the existing event, it does not add a second row"
-        )
+        assert (
+            len(body["events"]) == 1
+        ), "a matched legacy entry augments the existing event, it does not add a second row"
         assert body["events"][0]["event_type"] != "inventory_item.legacy_entry"
         assert "Jane Operator" in body["events"][0]["actor"]
 
