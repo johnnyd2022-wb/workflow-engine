@@ -105,7 +105,7 @@ def test_committed_manifest_is_valid():
     exercise = [record for record in manifest.logs if record.control_id == "trace-and-recall"]
     assert len(exercise) == 1
     assert exercise[0].fields["batch_or_product"].startswith("SIMULATED RECALL")
-    assert "docs/whistlebird-mock-recall-juniper-berries.md" in exercise[0].fields["trace_result"]
+    assert exercise[0].fields["trace_result"].startswith("Desk-based simulated recall completed 30 September 2026")
     assert (Path(__file__).parents[1] / "docs/whistlebird-mock-recall-juniper-berries.md").is_file()
     assert (Path(__file__).parents[1] / policy.evidence_fields["policy_reference"]).is_file()
     training = [record for record in manifest.logs if record.control_id == "staff-competency"]
