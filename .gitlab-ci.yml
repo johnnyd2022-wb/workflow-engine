@@ -590,6 +590,7 @@ cd_e2e:
         --workdir /workspace \
         --env UV_VERSION="$UV_VERSION" \
         --env E2E_BASE_URL="https://localhost:8001" \
+        --env POSTGRES_PASSWORD_TEST="${POSTGRES_PASSWORD_TEST:-}" \
         --env UV_PROJECT_ENVIRONMENT=/tmp/workflow-engine-cd-e2e-venv \
         --env UV_CACHE_DIR=/tmp/workflow-engine-cd-e2e-uv-cache \
         --env PYTHONDONTWRITEBYTECODE=1 \
