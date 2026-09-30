@@ -107,6 +107,10 @@ def create_demand(db, org_id: UUID, data: dict) -> PlanningDemand:
 
 
 def cancel_demand(db, org_id: UUID, demand_id: UUID) -> PlanningDemand | None:
+    from app.features.planning.batch_models import PlanningBatch
+    from app.features.planning.batch_service import _lock_org
+
+    _lock_org(db, org_id)
     row = (
         db.query(PlanningDemand)
         .filter(
@@ -120,6 +124,22 @@ def cancel_demand(db, org_id: UUID, demand_id: UUID) -> PlanningDemand | None:
         return None
     if row.status == "fulfilled":
         raise ValueError("A fulfilled demand cannot be cancelled")
+    batches = (
+        db.query(PlanningBatch)
+        .filter(
+            PlanningBatch.org_id == org_id,
+            PlanningBatch.demand_id == demand_id,
+            PlanningBatch.status != "cancelled",
+        )
+        .with_for_update()
+        .populate_existing()
+        .all()
+    )
+    if any(batch.status == "started" for batch in batches):
+        raise ValueError("Review started batches before cancelling this demand")
+    for batch in batches:
+        batch.status = "cancelled"
+        batch.revision += 1
     row.status = "cancelled"
     db.flush()
     return row

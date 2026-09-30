@@ -180,6 +180,7 @@ def create_app():
     from app.features.sites.routes import sites_bp
 
     app.register_blueprint(sites_bp)
+
     from app.features.site_transfers.routes import site_transfers_bp
 
     app.register_blueprint(site_transfers_bp)
