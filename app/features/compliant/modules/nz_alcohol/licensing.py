@@ -22,6 +22,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.db.models.organisation import Organisation
+from app.core.db.models.site import Site
 from app.core.db.models.user import User
 from app.features.compliant.models import ComplianceRecord
 from app.features.compliant.models.licensing import LicensingLogEntry, LiquorLicence, ManagerCertificate
@@ -72,6 +74,43 @@ def _time(value, field: str) -> time | None:
 
 
 # --- licences -----------------------------------------------------------------------------------
+
+
+def assign_licence_site(session, licence, data):
+    """Premises are explicit registrations; free-text addresses never establish scope."""
+    org = (
+        session.query(Organisation)
+        .filter(Organisation.id == licence.org_id)
+        .with_for_update(read=True)
+        .populate_existing()
+        .one()
+    )
+    if "site_id" not in data:
+        if org.multiple_sites_enabled and licence.site_id is None:
+            raise ValueError("Choose the site covered by this liquor licence")
+        return
+    value = data["site_id"]
+    if value in (None, ""):
+        if org.multiple_sites_enabled:
+            raise ValueError("Choose the site covered by this liquor licence")
+        licence.site_id = None
+        return
+    try:
+        site_id = UUID(str(value))
+    except (ValueError, TypeError):
+        raise ValueError("Invalid licence site") from None
+    site = (
+        session.query(Site)
+        .filter(Site.org_id == licence.org_id, Site.id == site_id)
+        .with_for_update(read=True)
+        .populate_existing()
+        .one_or_none()
+    )
+    if site is None or not site.is_active:
+        raise ValueError("Choose an active site belonging to this business")
+    if not org.multiple_sites_enabled and not site.is_default:
+        raise ValueError("Multiple sites must be switched on to select an additional site")
+    licence.site_id = site.id
 
 
 def apply_licence(licence: LiquorLicence, data: dict) -> LiquorLicence:
@@ -157,6 +196,7 @@ def licence_json(licence: LiquorLicence, today: date) -> dict:
     fee_due = licence.annual_fee_due_on
     return {
         "id": str(licence.id),
+        "site_id": str(licence.site_id) if licence.site_id else None,
         "kind": licence.kind,
         "kind_label": KINDS[licence.kind],
         "licence_number": licence.licence_number,
@@ -462,8 +502,17 @@ def overview(session: Session, org_id: UUID, today: date, now: datetime | None =
         .limit(200)
         .all()
     ]
+    sites = session.query(Site).filter(Site.org_id == org_id).order_by(Site.name).all()
+    names = {site.id: site.name for site in sites}
+    org = session.query(Organisation).filter(Organisation.id == org_id).one()
     return {
-        "licences": [licence_json(lic, today) for lic in licences],
+        "multiple_sites_enabled": bool(org.multiple_sites_enabled),
+        "sites": [
+            {"id": str(site.id), "name": site.name}
+            for site in sites
+            if site.is_active and (org.multiple_sites_enabled or site.is_default)
+        ],
+        "licences": [{**licence_json(lic, today), "site_name": names.get(lic.site_id)} for lic in licences],
         "managers": [manager_json(m, today) for m in managers],
         "log": [log_json(e) for e in log],
         "checks": checks(session, org_id, today),
