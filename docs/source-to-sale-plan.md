@@ -322,7 +322,7 @@ want it, and never produce a recall list that can't be trusted.
       where contact details are missing.
     - [x] d. Steps listed in process order.
     - [x] e. CSV and PDF export.
-    - [ ] f. Trace can start from:
+    - [x] f. Trace can start from: (!398)
       - [x] a supplier lot (forward).
       - [x] an invoice (backward).
     - [x] g. Sold-out lots under their own heading, not "In stock".
@@ -643,9 +643,9 @@ any time.
   - Change: shared tokens and components (page header, tabs, buttons, breadcrumbs, cards,
     tables, status badges) used by all three; migrate each area as it's touched.
 
-- [ ] **4.3 Use words and numbers producers use.** *S*
+- [x] **4.3 Use words and numbers producers use.** *S* (a–d: !344–!346, !394)
   - [x] a. Rename Core → **Production**, Compliant → **Compliance** (nav already says
-    Compliance; pages and cards say Compliant), CRM → **Sales**.
+    Compliance; pages and cards say Compliant), CRM → **Sales**. (!394)
   - [x] b. Durations in days ("22 days"), not hours ("Started 535h 54m ago"). (!346)
   - [x] c. No trailing zeros ("30", not "30.0000"), including activity entries. (!345)
   - [x] d. Fix "5 active batchs". Already pluralised by `pluralize()` in
@@ -710,7 +710,7 @@ split.
       map. (!326)
     - [x] b. **Stop the growth first:** a CI ratchet that fails if
       `app/core/backend/backend.py` gets longer. New routes go in the owning slice. (!321)
-    - [ ] c. Carve in the slicing plan's Phase 1 order: reconciliation → wastage →
+    - [x] c. Carve in the slicing plan's Phase 1 order: reconciliation → wastage →
       compliance-checks → traceability → activity-log → dashboard, then inventory →
       process-design → execution. One slice per MR, pure moves with no behaviour change,
       with the e2e suite as the safety net.
