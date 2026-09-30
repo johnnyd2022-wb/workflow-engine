@@ -632,6 +632,10 @@ Sales matter here because they finish the trace. Make them readable and complete
 Start after Phase 1 so redesigned screens show correct numbers; 4.1 and 4.7 can start at
 any time.
 
+The navigation, page-loading, layout and style work that came out of the 1 Oct 2026 audit of
+all 47 pages is tracked in its own checklist, `docs/ux-overhaul-plan.md` (boost-safe loading,
+five main tabs, shared components, page-by-page fixes). Items there are not repeated here.
+
 - [x] **4.1 Put data at the top of every page.** *High · S* (!395)
   - Evidence: every Core and CRM page (dashboard, product workflows, active batches, live
     inventory, source map, CRM) opens with a decorative three-node illustration and a
