@@ -2,7 +2,7 @@
 <p>{{ order.status|capitalize }} · Requested due date {{ order.due_date }}</p>
 <p class="shared-at">Producer shared revision {{ order.revision }} at {{ order.shared_at[:16]|replace('T',' ') }} UTC</p>
 <section>
-<h2>1. Where it's up to</h2>{% if order.progress.available %}<p>{{ order.progress.stage_label or '' }}{% if order.progress.step_label %} · {{ order.progress.step_label }}{% endif %}</p>{% if order.progress.percent is not none %}<p>{{ order.progress.percent }}% complete (shared by producer)</p>{% endif %}{% else %}<p>Progress not shared yet.</p>{% endif %}</section>
+<h2>1. Where it's up to</h2>{% if order.progress.available %}<p>{{ order.progress.stage_label or '' }}{% if order.progress.step_label %} · {{ order.progress.step_label }}{% endif %}</p>{% if order.progress.percent is not none %}<p>{{ order.progress.percent }}% {% if order.progress.milestones %}of shared milestones{% else %}complete (shared by producer){% endif %}</p>{% endif %}{% if order.progress.milestones %}<ul>{% for milestone in order.progress.milestones %}<li>Batch {{ milestone.batch_id }} · {{ milestone.label }} · {{ milestone.status|replace('_', ' ') }}</li>{% endfor %}</ul>{% endif %}{% else %}<p>Progress not shared yet.</p>{% endif %}</section>
 <section>
 <h2>2. When it'll be ready</h2>
 <p>{{ order.timing.reason }}</p>
@@ -25,6 +25,12 @@
 </section>
 <section>
 <h2>8. Delivery</h2>
+{% if order.delivery.declared_duty_responsibility %}
+<p>
+  Order declaration:
+  {% if order.delivery.declared_duty_responsibility == 'producer_licensee' %}producer licensee responsible for excise{% elif order.delivery.declared_duty_responsibility == 'customer_licensee' %}customer licensee responsible for excise{% elif order.delivery.declared_duty_responsibility == 'customer_underbond' %}customer CCA underbond arrangement declared{% else %}duty responsibility unresolved{% endif %}{% if order.delivery.customer_cca_reference %} · Customer CCA reference {{ order.delivery.customer_cca_reference }}{% endif %}.
+</p>
+{% endif %}
 <p>{{ order.delivery.reason }}</p>
 </section>
 <section>
