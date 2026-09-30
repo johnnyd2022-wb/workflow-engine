@@ -8,8 +8,6 @@
   {% set crm_heading = "Sales" %}
   {% set crm_subtitle = "Sales performance and customer insights" %}
   {% include "crm/_crm_banner.html" %}
-  {% set active_crm_tab = "overview" %}
-  {% include "crm/_crm_section_tabs.html" %}
 
   <div x-show="error" class="crm-error-banner" x-cloak>
     <span x-text="error"></span>

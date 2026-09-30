@@ -128,8 +128,8 @@ Keep existing URLs working. Where a page moves, keep the old URL as a 301 redire
 
 ### 2. Navigation: five tabs and section sub-navs (goal 4)
 
-- [ ] **2.1** **Sidebar.** Reduce it to Dashboard, Production, Compliance, Sales, Settings, driven by the registry, with the same permission and feature gating as today.
-- [ ] **2.2** **One shared sub-nav partial** (`app/ui/templates/shared/section_tabs.html`). It replaces the Production segmented bar, `_crm_section_tabs.html` and `_nz_alcohol_tabs.html`, and is added to Planner, Contract orders, Inventory pages, Settings and so on, following the target IA table.
+- [x] **2.1** (MR-NUM) **Sidebar.** Reduce it to Dashboard, Production, Compliance, Sales, Settings, driven by the registry, with the same permission and feature gating as today.
+- [x] **2.2** (MR-NUM) The shared sub-nav replaces the Sales and Compliance components and is added to every Production, Compliance and Sales page from `base_spa`. The Production hub keeps its in-page Overview/Inventory/Product workflows/Tasks bar until 4.2 reworks that page; Sales and Compliance keep a transitional Configuration tab until 2.5. **One shared sub-nav partial** (`app/ui/templates/shared/section_tabs.html`). It replaces the Production segmented bar, `_crm_section_tabs.html` and `_nz_alcohol_tabs.html`, and is added to Planner, Contract orders, Inventory pages, Settings and so on, following the target IA table.
 - [ ] **2.3** **Breadcrumbs** from the registry for third-level pages (for example Production › Contract orders › Order CO-12 › Portal sharing). Replace the ad-hoc yellow back arrow with the breadcrumb, or make the back arrow consistent on every non-root page.
 - [ ] **2.4** **Move pages to their new homes.** Add redirects for moved or aliased URLs, and make the unreachable pages reachable (stocktake, sales analytics, compliance tools).
 - [ ] **2.5** **Settings restructure.** Add a sub-nav, move integrations (Xero), sites, people and section settings in, and reduce each form to its own card with one save button.

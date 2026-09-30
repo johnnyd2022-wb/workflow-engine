@@ -24,7 +24,7 @@ def _org():
 @requires_org_scope
 def page():
     return render_template(
-        "compliant/food_registrations.html", **_nz_alcohol_template_context(active_compliant_tab="food-safety")
+        "compliant/food_registrations.html", **_nz_alcohol_template_context()
     )
 
 

@@ -58,6 +58,10 @@ PAGES: tuple[Page, ...] = (
         "/core/inventory/add",
         None,
     ),
+    Page(
+        "/core/inventory/add/csv", "production", "inventory", "Add inventory from a file", "/core/inventory/add", None
+    ),
+    Page("/core/inventory/dispose", "production", "inventory", "Record disposal", "/core/inventory/view", None),
     Page("/core/stocktake", "production", "inventory", "Stocktake", "/core/inventory/view", None),
     Page("/core/sourcemap", "production", "inventory", "Trace and recall", "/core/inventory/view", None),
     Page("/core/site-transfers", "production", "inventory", "Stock transfers", "/core/inventory/view", None),
@@ -95,7 +99,9 @@ PAGES: tuple[Page, ...] = (
         "compliant",
     ),
     Page("/compliant/tools", "compliance", "tools", "Tools", None, "compliant"),
-    Page("/compliant/nz-alcohol/configuration", "compliance", None, "Compliance settings", "/compliant", "compliant"),
+    Page(
+        "/compliant/nz-alcohol/configuration", "compliance", "configuration", "Compliance settings", None, "compliant"
+    ),
     Page("/crm", "sales", "overview", "Sales overview", None, "crm"),
     Page("/crm/customers", "sales", "customers", "Customers", None, "crm"),
     Page("/crm/tasks", "sales", "tasks", "Sales tasks", None, "crm"),
@@ -105,7 +111,7 @@ PAGES: tuple[Page, ...] = (
     Page("/core/people", "settings", "people", "People and roles", None, None),
     Page("/core/sites", "settings", "sites", "Sites", None, None),
     Page("/core/integrations", "settings", "integrations", "Integrations", None, None),
-    Page("/crm/configuration", "settings", "integrations", "Sales settings", "/core/integrations", "crm"),
+    Page("/crm/configuration", "sales", "configuration", "Sales settings", None, "crm"),
     Page("/core/notifications", "settings", "notifications", "Notifications", None, None),
     Page("/core/tasks/configuration", "settings", "section-settings", "Task settings", None, None),
 )
@@ -121,3 +127,62 @@ def requirement(page: Page, app, method: str = "GET"):
 
     endpoint, _ = app.url_map.bind("localhost").match(page.path, method=method)
     return requirement_for(endpoint, method)
+
+
+@dataclass(frozen=True)
+class Tab:
+    """One entry of a section's sub-nav. ``requires`` is any-of (empty = everyone); ``when`` names a
+    condition in `app.ui.navigation` (for tabs that depend on the organisation's setup)."""
+
+    key: str
+    label: str
+    path: str
+    requires: tuple[str, ...] = ()
+    when: str | None = None
+
+
+SECTION_LABELS = {
+    "dashboard": "Dashboard",
+    "production": "Production",
+    "compliance": "Compliance",
+    "sales": "Sales",
+    "settings": "Settings",
+}
+
+SECTION_TABS: dict[str, tuple[Tab, ...]] = {
+    "production": (
+        Tab("overview", "Overview", "/core", ("production.view", "inventory.view")),
+        Tab("planner", "Planner", "/core/planner", ("production.view",)),
+        Tab("batches", "Batches", "/core/executions/live", ("production.view",)),
+        Tab("workflows", "Workflows", "/core/processes", ("production.view",)),
+        Tab("inventory", "Inventory", "/core/inventory/view", ("inventory.view",)),
+        Tab("contracts", "Contract orders", "/core/contracts", ("sales.view", "production.view")),
+        Tab("suppliers", "Suppliers", "/core/suppliers", ("inventory.view",)),
+    ),
+    "compliance": (
+        Tab("overview", "Overview", "/compliant/nz-alcohol", ("compliance.view",)),
+        Tab("np3", "Food safety", "/compliant/nz-alcohol/np3-audit", ("compliance.view",), when="food_safety"),
+        Tab("customs", "Customs", "/compliant/nz-alcohol/customs", ("compliance.view",)),
+        Tab("licensing", "Licensing", "/compliant/nz-alcohol/licensing", ("compliance.view",), when="licensing"),
+        Tab("premises", "Premises", "/compliant/nz-alcohol/premises", ("compliance.view",)),
+        Tab(
+            "food-registrations",
+            "Food registrations",
+            "/compliant/nz-alcohol/food-registrations",
+            ("compliance.view",),
+            when="food_safety",
+        ),
+        Tab("tools", "Tools", "/compliant/tools", ("production.view", "compliance.view")),
+        # Transitional (plan 2.5 turns this into a "Compliance settings" link and drops the tab).
+        Tab("configuration", "Configuration", "/compliant/nz-alcohol/configuration", ("compliance.manage",)),
+    ),
+    "sales": (
+        Tab("overview", "Overview", "/crm", ("sales.view",)),
+        Tab("customers", "Customers", "/crm/customers", ("sales.view",)),
+        Tab("tasks", "Tasks", "/crm/tasks", ("sales.view",)),
+        Tab("matching", "Batch matching", "/crm/matching", ("sales.view",)),
+        Tab("analytics", "Analytics", "/crm/analytics", ("sales.view",)),
+        # Transitional (plan 2.5 moves Xero and Sales settings into Settings > Integrations).
+        Tab("configuration", "Configuration", "/crm/configuration", ("sales.manage",)),
+    ),
+}

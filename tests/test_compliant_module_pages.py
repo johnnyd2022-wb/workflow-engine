@@ -114,7 +114,7 @@ def test_compliant_navigation_is_boosted_but_downloads_are_not():
     """Page links are boosted (a boosted response carries the page's own CSS/JS inside #page-content,
     see shared/base_spa.html); a file download must still bypass htmx."""
     tabs = (
-        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_nz_alcohol_tabs.html"
+        ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html"
     ).read_text(encoding="utf-8")
     audit = (
         ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_audit.html"
@@ -123,14 +123,14 @@ def test_compliant_navigation_is_boosted_but_downloads_are_not():
     # renders, rather than the separately served /ui/shared asset directory.
     sidebar = (ROOT / "app" / "ui" / "templates" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")
     assert 'hx-boost="false"' not in tabs  # every tab, including Licensing (plan 2.5), is boosted
-    assert 'href="/compliant"' in sidebar and 'href="/compliant" hx-boost="false"' not in sidebar
+    assert "section_home('compliance')" in sidebar and 'hx-boost="false"' not in sidebar
     assert 'href="/api/compliant/np3-audit?format=csv" hx-boost="false"' in audit
     assert 'href="/api/compliant/np3-audit?format=pdf" hx-boost="false"' in audit
 
 
 def test_food_safety_tab_tracks_the_configured_programme_for_np1_np2_and_np3():
     tabs = (
-        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_nz_alcohol_tabs.html"
+        ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html"
     ).read_text(encoding="utf-8")
     routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
     configuration = (ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "configuration.js").read_text(
@@ -139,9 +139,13 @@ def test_food_safety_tab_tracks_the_configured_programme_for_np1_np2_and_np3():
     assert _food_safety_programme({"food_control_programme": "np1"}) == "np1"
     assert _food_safety_programme({"food_control_programme": "np2"}) == "np2"
     assert _food_safety_programme({"food_control_programme": "unexpected"}) == "np3"
-    assert 'href="/compliant/nz-alcohol/food-safety"' in tabs
-    assert 'href="/compliant/nz-alcohol/customs"' in tabs
-    assert "food_control_programme|upper" in tabs
+    from app.ui.page_registry import SECTION_TABS
+
+    paths = {tab.key: tab.path for tab in SECTION_TABS["compliance"]}
+    assert paths["np3"] == "/compliant/nz-alcohol/np3-audit"
+    assert paths["customs"] == "/compliant/nz-alcohol/customs"
+    assert "data-food-safety-tab" in tabs  # configuration.js shows, hides and renames it live
+    assert 'conditions["programme"].upper()' in (ROOT / "app" / "ui" / "navigation.py").read_text(encoding="utf-8")
     assert 'route("/compliant/nz-alcohol/food-safety"' in routes
     assert 'route("/compliant/nz-alcohol/customs"' in routes
     assert "updateFoodSafetyTab" in configuration

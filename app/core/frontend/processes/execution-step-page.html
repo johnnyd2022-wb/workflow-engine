@@ -1,5 +1,7 @@
 {# Dedicated execution step screen (SPA shell). #}
 {% extends "shared/base_spa.html" %}
+{# A focused full-screen flow: no section sub-nav. #}
+{% block section_tabs %}{% endblock %}
 
 {% block body_class %}execution-step-spa{% endblock %}
 {% block body_extra_attrs %}data-page="execution-step"{% endblock %}
