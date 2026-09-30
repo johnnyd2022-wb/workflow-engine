@@ -431,7 +431,6 @@
     load();
   }
 
-  function boot() { init(document.querySelector('[data-people-root]')); }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-  document.addEventListener('htmx:afterSwap', boot);
+  // Runs at first load and after every boosted swap that brings the page in (page-init.js).
+  bize.onPage('[data-people-root]', init);
 })();

@@ -231,11 +231,10 @@ def test_executions_live_loads_bounded_production_lists(logged_in_page):
 
 
 def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page):
-    """core2.html's scripts live in the template's scripts block, outside #page-content,
-    so an hx-boost return to /core swaps in fresh markup they never re-touch. Without the
-    htmx:afterSettle re-bootstrap the tab buttons have no handlers -- the page looks fine
-    but every click is dead until a hard refresh -- and Overview never (re)loads. Bounce a
-    few times and prove the tabs still respond and the overview call still fires."""
+    """core2.html's scripts travel inside #page-content on a boosted response (base_spa.html) and
+    htmx re-runs them on every visit. If they did not, the tab buttons would have no handlers --
+    the page looks fine but every click is dead until a hard refresh -- and Overview would never
+    (re)load. Bounce a few times and prove the tabs still respond and the overview call fires."""
     page = logged_in_page
     page.goto("/core/dashboard")
     page.wait_for_selector("[data-dashboard-root]")
@@ -245,6 +244,11 @@ def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page
     for i in range(3):
         page.locator('a.nav-link[href="/core"]').click()
         page.wait_for_selector('[data-core2-tab-target="inventory"]')
+        # The hub's scripts run when the swap settles, a moment after its markup appears.
+        for _ in range(100):
+            if calls.count("hub/overview") >= i + 1:
+                break
+            page.wait_for_timeout(100)
         _wait(page)
         assert calls.count("hub/overview") == i + 1, ("overview not re-fetched on return", calls)
 

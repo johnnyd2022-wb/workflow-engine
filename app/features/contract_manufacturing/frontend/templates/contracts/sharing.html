@@ -1,5 +1,5 @@
 {% extends "shared/base_spa.html" %}{% block title %}{{ order.reference }} · Portal sharing{% endblock %}{% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}{% block content %}<main class="contract-workspace">
-<a href="{{ url_for('contracts.order_page',order_id=order.id) }}" hx-boost="false">{{ order.reference }}</a>
+<a href="{{ url_for('contracts.order_page',order_id=order.id) }}">{{ order.reference }}</a>
 <h1>Customer portal sharing</h1>
 <p>{{ order.customer.name }}</p>
 <p class="contract-error" role="alert" hidden>
