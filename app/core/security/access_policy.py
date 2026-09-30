@@ -208,6 +208,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("contract_portal.get_order", None, PORTAL_SIGNED_IN),
     ("contract_portal.respond_to_approval", None, PORTAL_SIGNED_IN),
     ("contract_portal.send_message", None, PORTAL_SIGNED_IN),
+    ("contract_portal.reorder", None, PORTAL_SIGNED_IN),
     ("contract_portal.download_document", None, PORTAL_SIGNED_IN),
     ("contract_portal.logout", None, PORTAL_SIGNED_IN),
     ("contracts.portal_sharing_page", None, ("production.record", "users.manage")),

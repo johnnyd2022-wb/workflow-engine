@@ -22,6 +22,7 @@ from app.features.contract_manufacturing.services.portal_auth import (
     token_hash,
 )
 from app.features.contract_manufacturing.services.portal_messages import message_dto, send_customer_message
+from app.features.contract_manufacturing.services.portal_reorders import reorder_dto, request_reorder
 from app.features.contract_manufacturing.services.portal_sharing import shared_document, shared_order, shared_orders
 
 bp = Blueprint(
@@ -188,3 +189,13 @@ def download_document(order_id, document_id):
         conditional=False,
         max_age=0,
     )
+
+
+@bp.post("/api/orders/<uuid:order_id>/reorder")
+@limiter.limit("10 per minute", key_func=get_remote_address)
+@requires_portal
+@handled
+def reorder(order_id):
+    row, created = request_reorder(db_session(), g.portal_principal, order_id, request.get_json(silent=True))
+    db_session().commit()
+    return jsonify({"reorder_request": reorder_dto(row)}), 201 if created else 200
