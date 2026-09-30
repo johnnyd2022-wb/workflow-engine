@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import re
 
-GATE_INFRA_TABLES = frozenset({"users", "organisations", "feature_subscriptions"})
+# org_roles / org_role_sites: the staff-site policy (before_request) loads the signed-in user's role and
+# site grants in one statement on every request, so that lookup is gate infrastructure too.
+GATE_INFRA_TABLES = frozenset({"users", "organisations", "feature_subscriptions", "org_roles", "org_role_sites"})
 _WRITE_KW = ("insert into", "update ", "delete from", "merge into", "truncate ")
 _FROM_JOIN = re.compile(r"\b(?:from|join)\s+([a-z_][a-z0-9_.]*)")
 _CTE = re.compile(r"(?:\bwith\s+|,\s*)([a-z_][a-z0-9_]*)\s+as\s*\(")
