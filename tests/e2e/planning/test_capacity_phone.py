@@ -83,6 +83,58 @@ def test_phone_capacity_group_step_and_overload(db, board_clients, browser, widt
         calendar.get_by_role("button", name="Save calendar").click()
         page.get_by_text("Resource calendar saved", exact=True).wait_for()
         page.get_by_text("180/120 minutes", exact=False).wait_for()
+        page.get_by_role("button", name="Review and move suggested batch").first.click()
+        page.get_by_text("Choose a new start date, then move the suggested batch.", exact=True).wait_for()
+        focused = page.locator('[name="start_date"]:focus')
+        assert focused.count() == 1
+        next_day = (TODAY + timedelta(days=1)).isoformat()
+        focused.fill(next_day)
+        focused.locator("..").locator("..").get_by_role("button", name="Move batch", exact=True).click()
+        page.get_by_text("Plan updated", exact=True).wait_for()
+        page.get_by_text("No overload in configured groups for this view.", exact=False).wait_for()
+        # A two-day resource load still appears on tomorrow even when its batch
+        # starts outside the selected day. The review action must open its start day.
+        catalog = client.get("/api/core/planner/workflows").get_json()["workflows"]
+        workflow = next(row for row in catalog if row["id"] == str(output))
+        updated = client.post(
+            f"/api/core/planner/workflows/{workflow['process_id']}/settings",
+            json={
+                "source_output_id": str(output),
+                "batch_quantity": "250",
+                "expected_revision": workflow["setting"]["revision"],
+                "steps": [
+                    {"step_id": step["step_id"], "duration_minutes": 2880, "waiting_minutes": 0}
+                    for step in workflow["steps"]
+                ],
+            },
+        )
+        assert updated.status_code == 200, updated.get_json()
+        demand = client.post(
+            "/api/core/planner/demands",
+            json=payload(
+                output,
+                quantity="250",
+                priority=0,
+                reference="Two-day bottling run",
+                due_date=(TODAY + timedelta(days=2)).isoformat(),
+            ),
+        ).get_json()
+        planned = client.post(f"/api/core/planner/demands/{demand['id']}/plan", json={})
+        assert planned.status_code == 201, planned.get_json()
+        long_batch = planned.get_json()["batches"][0]
+        assert long_batch["proposed_start_date"] == TODAY.isoformat()
+        page.locator('[data-board-range] [name="date"]').fill(next_day)
+        page.locator('[data-board-range] [name="view"]').select_option("day")
+        page.get_by_role("button", name="Show board").click()
+        page.get_by_text(next_day + " – " + next_day, exact=True).wait_for()
+        assert page.locator(f'[data-batch-id="{long_batch["id"]}"]').count() == 0
+        page.get_by_role("button", name="Review and move suggested batch").first.click()
+        page.get_by_text(TODAY.isoformat() + " – " + TODAY.isoformat(), exact=True).wait_for()
+        page.get_by_text("Choose a new start date, then move the suggested batch.", exact=True).wait_for()
+        assert (
+            page.locator('[name="start_date"]:focus').evaluate("el => el.closest('[data-batch-id]').dataset.batchId")
+            == long_batch["id"]
+        )
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     finally:
         page.close()
