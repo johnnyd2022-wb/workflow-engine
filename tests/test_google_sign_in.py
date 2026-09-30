@@ -49,6 +49,11 @@ def world(db):
     users = [UserFactory(org_id=o.id, email=f"{uuid4().hex}@gmail.com") for o in orgs]
     db.commit()
     app = create_app()
+    # These tests are not about rate limits, but they make more than 10 sign-in starts a minute and the
+    # limiter's counters outlive each per-test app: start every test with empty counters. Reset the limiter
+    # the routes were decorated with too (test_auth_rate_limit_gating reloads auth_routes, so it can differ).
+    for limiter in {id(item): item for item in (app.limiter, routes.limiter)}.values():
+        limiter.storage.reset()
     app.config.update(
         TESTING=True,
         WTF_CSRF_ENABLED=False,
