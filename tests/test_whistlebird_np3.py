@@ -88,12 +88,25 @@ def test_committed_manifest_is_valid():
     manifest = np3.load_np3_manifest()
 
     assert len(manifest.attestations) == 39
-    assert len(manifest.logs) == 62
+    assert len(manifest.logs) == 64  # 62 plus the policy update and the prepared simulated recall pack
     policy = next(record for record in manifest.attestations if record.control_id == "recall-policy")
     assert policy.evidence_fields["policy_reference"] == "docs/whistlebird-recall-policy.md"
     assert policy.signed_on == date(2026, 9, 23)
     assert policy.due_date == date(2027, 9, 23)
-    assert policy.evidence_fields["last_policy_review"] == "2026-09-23"
+    assert policy.evidence_fields["last_policy_review"] == "2026-09-30"
+    # Both decision makers have equal authority; nobody is the owner with a deputy.
+    assert "both recall decision makers with equal authority" in policy.how_we_meet
+    assert "deputy" not in policy.how_we_meet
+    policy_text = (Path(__file__).parents[1] / "docs/whistlebird-recall-policy.md").read_text(encoding="utf-8")
+    assert "deputy" not in policy_text.lower()
+    assert "equal authority" in policy_text
+    updates = [record for record in manifest.logs if record.control_id == "recall-policy"]
+    assert [record.event_date.isoformat() for record in updates] == ["2026-09-30"]
+    exercise = [record for record in manifest.logs if record.control_id == "trace-and-recall"]
+    assert len(exercise) == 1
+    assert exercise[0].fields["batch_or_product"].startswith("SIMULATED RECALL")
+    assert "docs/whistlebird-mock-recall-juniper-berries.md" in exercise[0].fields["trace_result"]
+    assert (Path(__file__).parents[1] / "docs/whistlebird-mock-recall-juniper-berries.md").is_file()
     assert (Path(__file__).parents[1] / policy.evidence_fields["policy_reference"]).is_file()
     training = [record for record in manifest.logs if record.control_id == "staff-competency"]
     # 2 staff x 9 supplied register items x 3 annual dates, plus the two recall
@@ -449,11 +462,11 @@ def test_committed_manifest_replays_all_review_placeholders(db, np3_org):
     updated = np3.correct_np3_timestamps(np3_org["url"], np3_org["name"], manifest)
     report = np3.verify_np3(np3_org["url"], np3_org["name"], manifest)
 
-    assert counts == {"staff": 2, "profile": 1, "attestations": 39, "logs": 62, "skipped": 0}
-    assert updated == 101
+    assert counts == {"staff": 2, "profile": 1, "attestations": 39, "logs": 64, "skipped": 0}
+    assert updated == 103
     assert report == {
-        "np3_record_count": {"expected": 101, "actual": 101},
-        "np3_record_content": {"expected": 101, "actual": 101},
+        "np3_record_count": {"expected": 103, "actual": 103},
+        "np3_record_content": {"expected": 103, "actual": 103},
         "np3_staff": {"expected": 2, "actual": 2},
         "np3_profile": {"expected": 1, "actual": 1},
         "np3_date_mismatches": 0,
@@ -463,7 +476,7 @@ def test_committed_manifest_replays_all_review_placeholders(db, np3_org):
             "SELECT (r.created_at AT TIME ZONE 'Pacific/Auckland')::date, "
             "(a.timestamp AT TIME ZONE 'Pacific/Auckland')::date "
             "FROM compliance_records r JOIN audit_logs a ON a.entity_id = r.id "
-            "WHERE r.org_id = :org AND r.control_id = 'recall-policy' "
+            "WHERE r.org_id = :org AND r.control_id = 'recall-policy' AND r.details->>'how_we_meet' IS NOT NULL "
             "AND a.org_id = :org AND a.entity = 'compliance_record' AND a.action = 'create'"
         ),
         {"org": np3_org["org"].id},
