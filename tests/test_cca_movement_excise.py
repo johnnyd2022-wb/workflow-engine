@@ -7,17 +7,25 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.db.models.organisation import Organisation
 from app.core.db.models.stock_location import StockLocation
+from app.core.security.tenant_scope import unscoped
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+from app.features.compliant.models.customs_premises import CustomsCoverage, CustomsLicence
 from app.features.compliant.models.excise import ExciseRate
 from app.features.compliant.modules.nz_alcohol.movement_excise import (
     capture_spirits_removal_basis,
     cca_movement_register,
+    cca_period_review,
 )
+from app.features.compliant.modules.nz_alcohol.premises import add_licence
 from app.features.compliant.platform.stock_movements import evaluate_stock_movement
 from app.features.contract_manufacturing.models.orders import ContractCustomer  # noqa: F401 -- FK mapper registration
-from tests.test_compliant_routes import flask_app  # noqa: F401
-from tests.test_customs_premises import world  # noqa: F401
+from tests.test_compliant_routes import _admin_client, flask_app  # noqa: F401
+from tests.test_customs_premises import (
+    licence_data,
+    world,  # noqa: F401
+)
 from tests.test_food_registrations import clients  # noqa: F401
 from tests.test_stock_movement_policy import movement  # noqa: F401
 
@@ -182,6 +190,24 @@ def test_empty_register_never_claims_complete_or_nil(db, world):  # noqa: F811
         cca_movement_register(db, org, date(2026, 9, 1), date(2026, 9, 1))
 
 
+def test_period_review_is_per_source_cca_and_never_a_nil_or_lodged_entry(db, world):  # noqa: F811
+    orgs = world[0]
+    first = add_licence(db, orgs[0].id, licence_data())
+    second = add_licence(db, orgs[0].id, licence_data(number="CCA-456", kind="oss"))
+    foreign = add_licence(db, orgs[1].id, licence_data())
+    start, end = date(2026, 9, 1), date(2026, 10, 1)
+    result = cca_period_review(db, orgs[0].id, first.id, start, end)
+    assert result["source_cca"]["id"] == str(first.id)
+    assert result["observed_excise_duty"] == "0" and result["movements"] == []
+    assert result["total_duty"] is None and result["nil_return"] is None
+    assert result["complete_lodgement"] is False and result["remaining_sources"]
+    assert cca_period_review(db, orgs[0].id, second.id, start, end)["source_cca"]["kind"] == "oss"
+    with pytest.raises(ValueError, match="belonging"):
+        cca_period_review(db, orgs[0].id, foreign.id, start, end)
+    with pytest.raises(ValueError, match="period"):
+        cca_period_review(db, orgs[0].id, first.id, start, start)
+
+
 def test_register_api_has_bounded_dates_and_trusted_org(clients):  # noqa: F811
     _, client, _, neighbour = clients
     path = "/api/compliant/nz-alcohol/excise/cca-movements"
@@ -190,6 +216,42 @@ def test_register_api_has_bounded_dates_and_trusted_org(clients):  # noqa: F811
     for actor in (client, neighbour):
         response = actor.get(path, query_string={"start": "2026-09-01", "end": "2026-10-01", "org_id": str(uuid4())})
         assert response.status_code == 200 and response.get_json()["licences"] == []
+
+
+def test_period_review_route_checks_licence_tenant_and_period(db, world, clients):  # noqa: F811
+    orgs = world[0]
+    _, client, _, neighbour = clients
+    licence = add_licence(db, orgs[0].id, licence_data())
+    url = "/api/compliant/nz-alcohol/excise/cca-period-review"
+    query = {"licence_id": str(licence.id), "start": "2026-09-01", "end": "2026-10-01"}
+    # The independent client fixture has its own org; a real CCA ID cannot cross that boundary.
+    assert client.get(url, query_string=query).status_code == 400
+    assert neighbour.get(url, query_string=query).status_code == 400
+    assert client.get(url, query_string={**query, "end": "2028-10-01"}).status_code == 400
+    assert client.get(url, query_string={**query, "licence_id": "bad"}).status_code == 400
+
+
+def test_period_review_route_returns_only_own_source_cca(db, flask_app):  # noqa: F811
+    org, client = _admin_client(db, flask_app)
+    try:
+        licence = add_licence(db, org.id, licence_data())
+        db.commit()
+        response = client.get(
+            "/api/compliant/nz-alcohol/excise/cca-period-review",
+            query_string={"licence_id": str(licence.id), "start": "2026-09-01", "end": "2026-10-01"},
+        )
+        assert response.status_code == 200
+        result = response.get_json()
+        assert result["source_cca"]["id"] == str(licence.id)
+        assert result["nil_return"] is None and result["total_duty"] is None
+        assert result["complete_lodgement"] is False
+    finally:  # this test commits, so leave no licence behind for tests that count them
+        db.rollback()
+        with unscoped():
+            db.query(CustomsCoverage).filter(CustomsCoverage.org_id == org.id).delete(synchronize_session=False)
+            db.query(CustomsLicence).filter(CustomsLicence.org_id == org.id).delete(synchronize_session=False)
+            db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+            db.commit()
 
 
 @pytest.mark.parametrize("bad_fact", [None, "dispatched_quantity", "dispatched_on"])
@@ -265,5 +327,9 @@ def test_register_groups_immutable_cca_dispatch_once_despite_partial_receipts(db
     assert len(group["movements"]) == 1
     assert group["movements"][0]["destination_cca"]["id"] == str(destination.id)
     assert group["movements"][0]["treatment"] == "recorded_excise_unpaid_transfer"
+    review = cca_period_review(db, org, source.id, date(2026, 9, 1), date(2026, 10, 1))
+    assert [row["transfer_id"] for row in review["movements"]] == [str(transfer.id)]
+    assert review["observed_excise_duty"] == "0"
+    assert review["total_duty"] is None and review["nil_return"] is None
     assert current["nil_return"] is None and current["total_duty"] is None
     assert cca_movement_register(db, uuid4(), date(2026, 9, 1), date(2026, 10, 1))["licences"] == []
