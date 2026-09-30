@@ -431,6 +431,9 @@ def create_app():
     # After tenant context: the policy reads g.current_user.
     setup_two_factor_policy(app)
     # After tenant context: reads g.current_user. Every endpoint must be in POLICY.
+    from app.core.security.staff_site_policy import setup_staff_site_policy
+
+    setup_staff_site_policy(app)
     setup_access_policy(app)
     from app.features.sites.routes import install_site_request_validation
 

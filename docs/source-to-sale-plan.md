@@ -898,6 +898,9 @@ Founder decisions for this phase:
         per-CCA entry and lodgement remain open.
     - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
       enforced on the server like every other permission.
+      - [x] Foundation: default-all role scopes, same-org selected grants, staged
+        assignment refusal and a fail-closed endpoint registry (!444). Selected staff
+        activation and operational route coverage remain open.
   - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
     a bond store (licence B, with the underbond approval recorded) and on to a cellar door
     (no CCA, so it's a removal on licence B's excise draft); every screen agrees where it
