@@ -993,6 +993,9 @@ Founder decisions for this phase:
       - [x] Order thread (!455): one append-only conversation per published order between the
         customer and producer staff, scoped to the customer's own order, audited, and closed when the
         publication is withdrawn. The event timeline, questions, emails and reorders remain.
+      - [x] Completed-order reorder enquiries (!457): one immutable customer request per
+        published completed order, visible to staff and deduplicated across users/retries.
+        Staff confirm the repeat order; emails and the event timeline remain open.
     - [x] f. **Isolation by design.** (!436) Portal users are a separate kind of user with no
       staff permissions; every portal query is scoped to the customer's orders on the
       server; a test walks every portal route with a second customer and expects 403/404.

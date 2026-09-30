@@ -11,7 +11,7 @@ from tests.e2e.conftest import csrf_headers, login_through_ui
 pytestmark = pytest.mark.e2e
 
 
-def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, fresh_user):
+def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, fresh_user, db):
     admin = fresh_user(UserRole.ADMIN)
     contexts = []
     try:
@@ -109,6 +109,28 @@ def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, 
             portal.get_by_role("link", name="Lab result <b>shared</b>").click()
         assert download.value.suggested_filename.endswith(".pdf")
         assert portal.request.get("/api/core/processes").status == 403
+        # Finish the synthetic source order so the customer can request a repeat.
+        from uuid import UUID
+
+        from app.features.contract_manufacturing.models.orders import ContractOrder
+
+        db.query(ContractOrder).filter_by(org_id=admin["org_id"], id=UUID(order["id"])).update({"status": "completed"})
+        db.commit()
+        published = page.request.post(
+            f"/api/core/contract-orders/{order['id']}/portal-publications", headers=csrf_headers(page), data={}
+        )
+        assert published.status == 201
+        portal.reload()
+        portal.locator('textarea[name="note"]').fill("Same run, new label <b>please</b>")
+        with portal.expect_response("**/reorder") as reordered:
+            portal.get_by_role("button", name="Request reorder", exact=True).click()
+        assert reordered.value.status == 201
+        expect(portal.get_by_text("Reorder requested", exact=False)).to_be_visible()
+        expect(portal.get_by_role("button", name="Request reorder", exact=True)).to_have_count(0)
+        assert portal.locator("main b").count() == 0
+        assert portal.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        page.reload()
+        expect(page.get_by_text("Customer requested a repeat order", exact=False)).to_be_visible()
         portal.get_by_role("button", name="Sign out", exact=True).click()
         expect(portal.get_by_role("heading", name="Sign in to your orders")).to_be_visible()
         portal.locator('[name="email"]').fill(email)
