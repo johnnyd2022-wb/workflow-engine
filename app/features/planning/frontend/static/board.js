@@ -12,6 +12,7 @@
   let workflows = [];
   let materialLots = [];
   let materialAssessment = null;
+  let capacityReview = null;
   let boardRequest = 0;
   function node(tag, text) { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; }
   function iso(day) { return day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0'); }
@@ -88,12 +89,49 @@
     if (rangeForm.elements.view.value === 'month') { start = new Date(selected.getFullYear(), selected.getMonth(), 1, 12); end = new Date(selected.getFullYear(), selected.getMonth() + 1, 0, 12); }
     return {start, end};
   }
+  function renderCapacity() {
+    if (!capacityReview) return;
+    const output = root.querySelector('[data-capacity-results]'); output.replaceChildren();
+    const overloads = capacityReview.days.filter(row => row.overloaded);
+    output.append(node('p', overloads.length ? overloads.length + ' overloaded resource-day(s) in this view.' : 'No overload in configured groups for this view. Unassigned work may still exist.'));
+    const list = node('ul');
+    overloads.forEach(row => list.append(node('li', row.day + ' · ' + row.group_name + ': ' + row.load_minutes + '/' + row.capacity_minutes + ' minutes' +
+      (row.suggest_move_batch_id ? ' · consider moving batch ' + row.suggest_move_batch_id.slice(0, 8) : ' · all affected batches pinned'))));
+    if (overloads.length) output.append(list);
+    if (capacityReview.unresolved.length) output.append(node('p', capacityReview.unresolved.length + ' batch(es) have incomplete capacity assignments or timing; no clearance can be inferred.'));
+  }
+  function currentCapacity() {
+    const site = root.querySelector('[data-capacity-site]')?.value;
+    return capacityReview?.settings.find(row => row.site_id === site) || {site_id: site, revision: 0, groups: [], assignments: []};
+  }
+  function showCapacitySettings() {
+    const select = root.querySelector('[data-capacity-site]');
+    if (!select || !capacityReview) return;
+    const selected = select.value; select.replaceChildren();
+    capacityReview.sites.forEach(site => option(select, site.id, site.name));
+    if (capacityReview.sites.some(site => site.id === selected)) select.value = selected;
+    const config = currentCapacity();
+    const list = root.querySelector('[data-capacity-groups]'); list.replaceChildren();
+    config.groups.forEach(group => list.append(node('p', group.name + ' · ' + group.minutes_per_day + ' minutes per day')));
+    const steps = root.querySelector('[data-capacity-step]'); const priorStep = steps.value; steps.replaceChildren();
+    workflows.forEach(workflow => workflow.steps.forEach(step => option(steps, step.step_id, workflow.process_name + ' · ' + step.name)));
+    if (Array.from(steps.options).some(item => item.value === priorStep)) steps.value = priorStep;
+    const groups = root.querySelector('[data-capacity-group]'); groups.replaceChildren();
+    config.groups.forEach(group => option(groups, group.id, group.name));
+  }
+  async function saveCapacity(config) {
+    const result = await api('/api/core/planner/capacity/sites/' + config.site_id, {groups: config.groups, assignments: config.assignments, expected_revision: config.revision});
+    const old = capacityReview.settings.findIndex(row => row.site_id === config.site_id);
+    if (old < 0) capacityReview.settings.push(result.setting); else capacityReview.settings[old] = result.setting;
+    showCapacitySettings(); await loadBoard();
+  }
   async function loadBoard() {
     const requestNumber = ++boardRequest;
     try {
-      const dates = range(); const [result, observed] = await Promise.all([api('/api/core/planner/batches?start=' + iso(dates.start) + '&end=' + iso(dates.end)), api('/api/core/planner/material-assessments')]);
+      const dates = range(); const [result, observed, capacity] = await Promise.all([api('/api/core/planner/batches?start=' + iso(dates.start) + '&end=' + iso(dates.end)), api('/api/core/planner/material-assessments'), api('/api/core/planner/capacity?start=' + iso(dates.start) + '&end=' + iso(dates.end))]);
       if (requestNumber !== boardRequest) return;
       materialAssessment = observed.assessment;
+      capacityReview = capacity; renderCapacity(); showCapacitySettings();
       const days = root.querySelector('[data-board-days]'); days.replaceChildren();
       root.querySelector('[data-board-title]').textContent = iso(dates.start) + ' – ' + iso(dates.end);
       root.querySelector('[data-board-empty]').hidden = result.batches.length !== 0;
@@ -140,7 +178,7 @@
     if (settingForm) {
       const select = settingForm.elements.output; const selected = select.value; select.replaceChildren();
       workflows.forEach(row => option(select, row.id, row.name + ' · ' + row.process_name)); if (workflows.some(row => row.id === selected)) select.value = selected;
-      showSettings();
+      showSettings(); showCapacitySettings();
     }
     if (planForm) {
       const select = planForm.elements.demand; const selectedDemand = select.value; const selectedSite = planForm.elements.site.value;
@@ -150,6 +188,26 @@
       if (catalog.sites.some(site => site.id === selectedSite)) planForm.elements.site.value = selectedSite;
     }
   }
+  root.querySelector('[data-capacity-site]')?.addEventListener('change', showCapacitySettings);
+  root.querySelector('[data-capacity-group-form]')?.addEventListener('submit', async function (event) {
+    event.preventDefault(); error.hidden = true;
+    const form = event.currentTarget; const button = form.querySelector('button'); button.disabled = true;
+    const config = currentCapacity();
+    try {
+      await saveCapacity({...config, groups: config.groups.concat([{id: crypto.randomUUID(), name: form.elements.name.value, minutes_per_day: Number(form.elements.minutes_per_day.value)}])});
+      form.elements.name.value = ''; form.elements.minutes_per_day.value = '';
+      notice.textContent = 'Resource group saved; assign steps to include their load.';
+    } catch (exc) { fail(exc); } finally { button.disabled = false; }
+  });
+  root.querySelector('[data-capacity-assignment-form]')?.addEventListener('submit', async function (event) {
+    event.preventDefault(); error.hidden = true;
+    const form = event.currentTarget; const button = form.querySelector('button'); button.disabled = true;
+    const config = currentCapacity(); const step = form.elements.step_id.value;
+    try {
+      await saveCapacity({...config, assignments: config.assignments.filter(row => row.step_id !== step).concat([{step_id: step, group_id: form.elements.group_id.value}])});
+      notice.textContent = 'Step resource assignment saved; observed load refreshed.';
+    } catch (exc) { fail(exc); } finally { button.disabled = false; }
+  });
   rangeForm.elements.date.value = iso(new Date());
   rangeForm.addEventListener('submit', event => { event.preventDefault(); error.hidden = true; loadBoard().catch(fail); });
   root.querySelector('[data-board-today]').addEventListener('click', () => { rangeForm.elements.date.value = iso(new Date()); loadBoard().catch(fail); });

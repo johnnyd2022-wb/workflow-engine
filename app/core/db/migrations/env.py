@@ -51,6 +51,7 @@ from app.features.operational_cases.models.operational_case_link import Operatio
 from app.utils.config_loader import config
 from app.features.planning.models import PlanningDemand
 from app.features.planning.batch_models import PlanningBatch, PlanningWorkflowSetting
+from app.features.planning.capacity_models import PlanningCapacitySetting
 from app.features.planning.forecast_models import PlanningMaterialAssessment, PlanningMaterialBatchAssessment
 
 # this is the Alembic Config object, which provides

@@ -271,3 +271,41 @@ def assess_materials():
     except (ValueError, OverflowError) as exc:
         return _planning_error(exc)
     return jsonify({"assessment": latest(db_session, _org_id(), assessment_id=row.id)}), 201
+
+
+@planning_bp.get("/api/core/planner/capacity")
+@requires_auth
+@requires_org_scope
+def get_capacity():
+    from app.features.planning.capacity_service import review
+
+    try:
+        start = date.fromisoformat(request.args.get("start"))
+        end = date.fromisoformat(request.args.get("end"))
+        return jsonify(review(db_session, _org_id(), start, end))
+    except (ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc) or "Choose a capacity period"}), 400
+
+
+@planning_bp.post("/api/core/planner/capacity/sites/<uuid:site_id>")
+@requires_auth
+@requires_org_scope
+def save_capacity(site_id):
+    from app.features.planning.capacity_service import save_setting, setting_dict
+
+    try:
+        row = save_setting(db_session, _org_id(), site_id, request.get_json(silent=True))
+        db_session.add(
+            AuditLog(
+                org_id=_org_id(),
+                user_id=g.current_user.id,
+                action="planning_capacity_settings_saved",
+                entity="planning_capacity_setting",
+                entity_id=row.id,
+                meta_data={"site_id": str(row.site_id), "revision": row.revision},
+            )
+        )
+        db_session.commit()
+    except ValueError as exc:
+        return _planning_error(exc)
+    return jsonify({"setting": setting_dict(row)})

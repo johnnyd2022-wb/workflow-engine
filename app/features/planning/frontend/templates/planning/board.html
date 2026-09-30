@@ -33,6 +33,28 @@
     <button type="button" data-check-materials>Check materials</button>
   </form>
   {% endif %}
+  <section class="board-capacity" aria-labelledby="capacity-title">
+    <h2 id="capacity-title">Rough site capacity</h2>
+    <p>Observed minutes by resource group and day. Overloads suggest a lower-priority batch to move; no resource is reserved and no delivery date is promised.</p>
+    <div data-capacity-results aria-live="polite"></div>
+    {% if can('production.record') %}
+    <details data-capacity-settings>
+      <summary>Set daily resource capacity and assign workflow steps</summary>
+      <form data-capacity-group-form hx-boost="false">
+        <label>Site<select name="site_id" required data-capacity-site></select></label>
+        <label>Resource name<input name="name" maxlength="100" required placeholder="Still, bottling line, tanks"></label>
+        <label>Minutes per day<input name="minutes_per_day" type="number" min="1" max="1440" step="1" required></label>
+        <button type="submit">Add group</button>
+      </form>
+      <div data-capacity-groups></div>
+      <form data-capacity-assignment-form hx-boost="false">
+        <label>Workflow step<select name="step_id" required data-capacity-step></select></label>
+        <label>Resource group<select name="group_id" required data-capacity-group></select></label>
+        <button type="submit">Assign step</button>
+      </form>
+    </details>
+    {% endif %}
+  </section>
   <h2 data-board-title>Planned work</h2>
   <p data-board-empty hidden>No planned batches in this period.</p>
   <section class="board-days" data-board-days aria-label="Planned production by day"></section>
