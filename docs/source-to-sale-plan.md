@@ -989,6 +989,9 @@ Founder decisions for this phase:
       - [x] Label proof response (!454): a customer can approve or request changes to
         an explicitly published document; the one-time response is scoped to their
         order and visible to staff. Other approvals, messages, emails and reorders remain.
+      - [x] Order thread (!455): one append-only conversation per published order between the
+        customer and producer staff, scoped to the customer's own order, audited, and closed when the
+        publication is withdrawn. The event timeline, questions, emails and reorders remain.
     - [x] f. **Isolation by design.** (!436) Portal users are a separate kind of user with no
       staff permissions; every portal query is scoped to the customer's orders on the
       server; a test walks every portal route with a second customer and expects 403/404.

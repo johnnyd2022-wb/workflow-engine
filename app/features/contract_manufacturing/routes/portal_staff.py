@@ -14,6 +14,11 @@ from app.features.contract_manufacturing.routes.orders import bp, handled, servi
 from app.features.contract_manufacturing.services.orders import OrderError
 from app.features.contract_manufacturing.services.portal_approvals import request_approval, staff_approvals
 from app.features.contract_manufacturing.services.portal_auth import audit, issue_invite, portal_people, revoke_access
+from app.features.contract_manufacturing.services.portal_messages import (
+    message_dto,
+    messages_for_order,
+    send_staff_message,
+)
 from app.features.contract_manufacturing.services.portal_progress import step_candidates
 from app.features.contract_manufacturing.services.portal_sharing import (
     document_dto,
@@ -53,6 +58,7 @@ def portal_sharing_page(order_id):
         if publication and _can_record()
         else {},
         approval_requests=staff_approvals(db_session(), UUID(g.org_id), order.id) if _can_record() else [],
+        messages=messages_for_order(db_session(), UUID(g.org_id), order.customer_id, order.id) if _can_record() else [],
         people=portal_people(db_session(), UUID(g.org_id), order.customer_id)
         if g.current_user and _manage_people()
         else None,
@@ -132,6 +138,15 @@ def portal_publish_order(order_id):
     row = publish_order(db_session(), UUID(g.org_id), g.current_user.id, order_id, request.get_json(silent=True))
     db_session().commit()
     return jsonify({"publication_id": str(row.id), "revision": row.revision}), 201
+
+
+@bp.post("/api/core/contract-orders/<uuid:order_id>/portal-messages")
+@requires_auth
+@handled
+def portal_send_message(order_id):
+    row = send_staff_message(db_session(), UUID(g.org_id), g.current_user.id, order_id, request.get_json(silent=True))
+    db_session().commit()
+    return jsonify({"message": message_dto(row)}), 201
 
 
 @bp.post("/api/core/contract-orders/<uuid:order_id>/portal-approvals")

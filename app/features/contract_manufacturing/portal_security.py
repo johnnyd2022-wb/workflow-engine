@@ -23,6 +23,7 @@ PORTAL_ENDPOINTS = frozenset(
         "contract_portal.list_orders",
         "contract_portal.get_order",
         "contract_portal.respond_to_approval",
+        "contract_portal.send_message",
         "contract_portal.download_document",
         "contract_portal.static",
     }

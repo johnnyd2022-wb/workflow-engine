@@ -21,6 +21,7 @@ from app.features.contract_manufacturing.services.portal_auth import (
     authenticate,
     token_hash,
 )
+from app.features.contract_manufacturing.services.portal_messages import message_dto, send_customer_message
 from app.features.contract_manufacturing.services.portal_sharing import shared_document, shared_order, shared_orders
 
 bp = Blueprint(
@@ -151,6 +152,16 @@ def list_orders():
 @handled
 def get_order(order_id):
     return jsonify({"order": shared_order(db_session(), g.portal_principal, order_id)})
+
+
+@bp.post("/api/orders/<uuid:order_id>/messages")
+@limiter.limit("20 per minute", key_func=get_remote_address)
+@requires_portal
+@handled
+def send_message(order_id):
+    row = send_customer_message(db_session(), g.portal_principal, order_id, request.get_json(silent=True))
+    db_session().commit()
+    return jsonify({"message": message_dto(row)}), 201
 
 
 @bp.post("/api/orders/<uuid:order_id>/approvals/<uuid:approval_id>")
