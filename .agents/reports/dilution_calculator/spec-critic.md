@@ -41,9 +41,13 @@ reference densities for ethanol and water, and the spec is silent on which to us
 
 - Option A: derive them from the *same* formula's own endpoints (`rho(0)=1.0`, `rho(1)=0.788`),
   giving a fully self-contained, closed system: `ABV(w) = 100 · w · rho(w) / rho(1)`.
+  Closed: round 2 gap-status #1 records the spec adopting this option
+  (`.agents/specs/dilution_calculator.md`, "Calculation model"). (verified 2026-09-30 by findings-sweep)
 - Option B: use independent literature reference densities at 20°C (water ≈ 0.9982 g/mL,
   ethanol ≈ 0.7893 g/mL) to convert the *input* ABV to ethanol mass, while using `rho(w)` only
   for the mixture's own volume.
+  Closed: the spec chose Option A instead, so this alternative is not being built.
+  (verified 2026-09-30 by findings-sweep)
 
 Both are "internally consistent" mass-balance implementations of the prose as written; they
 give different numeric answers for the same request. Neither AC2 (a directional `> 2000`

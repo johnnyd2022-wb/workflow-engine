@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import TIMESTAMP, Boolean, Column, Date, ForeignKey, Integer, String, Text
+from sqlalchemy import TIMESTAMP, Boolean, Column, Date, ForeignKey, ForeignKeyConstraint, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
@@ -11,9 +11,18 @@ from app.core.utils.time import utc_now
 
 class ComplianceVerification(Base):
     __tablename__ = "compliance_verifications"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "food_registration_id"],
+            ["food_registrations.org_id", "food_registrations.id"],
+            name="fk_verification_food_registration",
+            ondelete="RESTRICT",
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     org_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
+    food_registration_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     programme = Column(String(10), nullable=False)
     verified_on = Column(Date, nullable=False)
     verifier_name = Column(String(255), nullable=False)

@@ -156,6 +156,7 @@ def access_expired(user, now: datetime | None = None) -> bool:
 # --- the policy table --------------------------------------------------------------------
 
 PUBLIC = "public"  # anyone, signed in or not
+PORTAL_SIGNED_IN = "portal_signed_in"  # separate principal; enforced by requires_portal
 SIGNED_IN = "signed_in"  # any signed-in user, whatever their role
 
 _READ = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -187,6 +188,27 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("auth.check_password_policy", None, PUBLIC),
     ("auth.accept_invite", None, PUBLIC),
     ("invite.accept_invite_page", None, PUBLIC),
+    # Portal entry routes remain CSRF protected. Authenticated routes have a portal
+    # decorator; this requirement can never be satisfied by a staff role.
+    ("contract_portal.login_page", None, PUBLIC),
+    ("contract_portal.invite_page", None, PUBLIC),
+    ("contract_portal.login", None, PUBLIC),
+    ("contract_portal.accept", None, PUBLIC),
+    ("contract_portal.home", None, PORTAL_SIGNED_IN),
+    ("contract_portal.order_page", None, PORTAL_SIGNED_IN),
+    ("contract_portal.list_orders", None, PORTAL_SIGNED_IN),
+    ("contract_portal.get_order", None, PORTAL_SIGNED_IN),
+    ("contract_portal.download_document", None, PORTAL_SIGNED_IN),
+    ("contract_portal.logout", None, PORTAL_SIGNED_IN),
+    ("contracts.portal_sharing_page", None, ("production.record", "users.manage")),
+    ("contracts.portal_list_people", None, "users.manage"),
+    ("contracts.portal_issue_invite", None, "users.manage"),
+    ("contracts.portal_revoke_invite", None, "users.manage"),
+    ("contracts.portal_revoke_person", None, "users.manage"),
+    ("contracts.portal_publish_order", None, "production.record"),
+    ("contracts.portal_unpublish_order", None, "production.record"),
+    ("contracts.portal_upload_document", None, "production.record"),
+    ("contracts.portal_revoke_document", None, "production.record"),
     # --- your own account, and pages every role lands on
     ("auth.*", None, SIGNED_IN),
     ("dashboard", None, SIGNED_IN),  # /dashboard -> /core/dashboard
@@ -203,6 +225,8 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("sites.list_sites", _READ, ("inventory.view", "production.view", "settings.manage")),
     ("sites.site_position", _READ, "inventory.view"),
     ("sites.*", None, "settings.manage"),
+    ("site_transfers.*", _READ, "inventory.view"),
+    ("site_transfers.*", None, "inventory.adjust"),
     ("org.*", None, "users.manage"),
     ("people_pages.*", None, "users.manage"),
     ("initialize", None, "settings.manage"),
@@ -231,6 +255,7 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # --- recording production
     ("core.create_execution", None, "production.record"),
     ("core.complete_step", None, "production.record"),
+    ("core.amend_execution_step_record", None, "production.record"),  # plan 1.5: correcting a completed step
     ("core.flows_batches_start", None, "production.record"),
     ("core.evidence_upload", None, "production.record"),
     ("core.evidence_delete", None, "production.record"),
@@ -275,6 +300,9 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     # Contract orders (7.2a): production sees order demand, never CRM contact details;
     # Sales sees commercial lines, with recipe/spec references removed by the DTO.
     ("contracts.list_customers", None, "sales.view"),
+    ("contracts.list_materials", None, "inventory.view"),
+    ("contracts.materials_page", None, "inventory.view"),
+    ("contracts.receive_customer_material", None, "inventory.adjust"),
     ("contracts.create_customer", None, "sales.record"),
     ("contracts.update_customer", None, "sales.record"),
     ("contracts.list_orders", None, ("sales.view", "production.view")),
@@ -323,6 +351,11 @@ POLICY: list[tuple[str, frozenset[str] | None, object]] = [
     ("compliant.compliant_licensing.*", None, "compliance.manage"),
     ("compliant.compliant_api.create_alcohol_product", None, "compliance.manage"),
     ("compliant.compliant_pages.nz_alcohol_configuration", None, "compliance.manage"),
+    ("compliant.compliant_cca_movements.*", _READ, "compliance.view"),
+    ("compliant.compliant_food_registrations.*", _READ, "compliance.view"),
+    ("compliant.compliant_food_registrations.*", None, "compliance.manage"),
+    ("compliant.compliant_premises.*", _READ, "compliance.view"),
+    ("compliant.compliant_premises.*", None, "compliance.manage"),
     ("compliant.*", _READ, "compliance.view"),
     ("compliant.*", None, "compliance.record"),
 ]
@@ -345,7 +378,7 @@ def allows(user, endpoint: str, method: str) -> bool:
     requirement = requirement_for(endpoint, method)
     if requirement == PUBLIC:
         return True
-    if requirement == DENY or user is None:
+    if requirement in (DENY, PORTAL_SIGNED_IN) or user is None:
         return False
     if requirement == SIGNED_IN:
         return True

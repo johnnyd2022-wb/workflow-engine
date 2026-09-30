@@ -1,0 +1,51 @@
+{% extends "shared/base_spa.html" %}
+
+{% block title %}Step record | Workflow Engine{% endblock %}
+
+{% block content %}
+<div class="max-content" id="execution-record" data-execution-id="{{ execution_id }}" data-step-id="{{ execution_step_id }}">
+  <a class="btn btn-secondary btn-sm" href="/core/flows" hx-boost="true">Back to product workflows</a>
+  <h1 style="margin:18px 0 6px;">{{ step_name }} record</h1>
+  <p style="color:var(--text-secondary);">Happened: {{ occurred_at or 'Unknown' }} · Entered: {{ entered_at or 'Legacy record' }}</p>
+  <p style="color:var(--text-secondary);">Stock inputs and outputs are fixed after completion. Correct stock through Live Inventory.</p>
+
+  <section class="card" style="padding:20px;margin:20px 0;" aria-labelledby="record-edit-heading">
+    <h2 id="record-edit-heading">Correct a recorded answer</h2>
+    <p>Only changed answers are saved. Give a reason so the correction is understandable later.</p>
+    {% for key, value in prompts.items() %}
+      {% if key != 'operator_note' %}
+      <label style="display:block;font-weight:600;margin:14px 0 5px;" for="record-prompt-{{ loop.index }}">{{ key }}</label>
+      <textarea id="record-prompt-{{ loop.index }}" class="spa-inp" data-record-prompt="{{ key }}" rows="2" style="width:100%;">{{ value if value is string else value|tojson }}</textarea>
+      {% endif %}
+    {% endfor %}
+    <label style="display:block;font-weight:600;margin:14px 0 5px;" for="record-operator-note">Correction note</label>
+    <textarea id="record-operator-note" class="spa-inp" data-record-prompt="operator_note" rows="3" style="width:100%;">{{ prompts.get('operator_note') or '' }}</textarea>
+    <label style="display:block;font-weight:600;margin:14px 0 5px;" for="record-reason">Reason for this edit (required)</label>
+    <input id="record-reason" class="spa-inp" maxlength="500" style="width:100%;" required placeholder="What changed and why?">
+    <div id="record-error" role="alert" hidden style="color:var(--error);margin-top:10px;"></div>
+    <button type="button" class="btn btn-primary" id="record-save" style="margin-top:14px;">Save correction</button>
+  </section>
+
+  <section aria-labelledby="record-history-heading">
+    <h2 id="record-history-heading">Edit history</h2>
+    {% if not history %}<p>This legacy step has no original audit event. Corrections made here will appear below.</p>{% endif %}
+    <ol style="padding-left:24px;">
+      {% for event in history %}
+      <li style="margin:0 0 18px;">
+        <strong>{{ 'Original entry' if event.event == 'execution.step_completed' else 'Correction' }}</strong>
+        · {{ event.at }} · {{ event.actor }}
+        {% if event.reason %}<p style="margin:4px 0;">Reason: {{ event.reason }}</p>{% endif %}
+        {% for change in event.changes %}
+          <p style="margin:4px 0;">{{ change.field }}: {{ change.before if change.before is not none else 'Empty' }} → {{ change.after if change.after is not none else 'Empty' }}</p>
+        {% endfor %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+</div>
+<script type="application/json" id="record-initial-prompts">{{ prompts|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('core.serve_core_js', filename='execution-record.js') }}"></script>
+{% endblock %}

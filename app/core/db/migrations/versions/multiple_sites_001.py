@@ -9,7 +9,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 revision = "multiple_sites_001"
-down_revision = "custom_roles_001"
+down_revision = "contract_portal_001"
 branch_labels = None
 depends_on = None
 

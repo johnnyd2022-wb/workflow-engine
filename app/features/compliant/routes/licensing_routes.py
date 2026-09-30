@@ -96,6 +96,7 @@ def create_licence():
     licence = LiquorLicence(org_id=_org_id(), created_by_user_id=g.current_user.id, endorsements=[])
 
     def run():
+        licensing.assign_licence_site(db_session, licence, _body())
         licensing.apply_licence(licence, _body())
         db_session.add(licence)
         db_session.flush()
@@ -110,9 +111,12 @@ def update_licence(licence_id: str):
     licence = _load(LiquorLicence, licence_id)
     if licence is None:
         return jsonify({"error": "Licence not found"}), 404
-    return _save(
-        "update_liquor_licence", "liquor_licence", licence.id, lambda: licensing.apply_licence(licence, _body())
-    )
+
+    def run():
+        licensing.assign_licence_site(db_session, licence, _body())
+        licensing.apply_licence(licence, _body())
+
+    return _save("update_liquor_licence", "liquor_licence", licence.id, run)
 
 
 def _date_arg(field: str) -> date:

@@ -45,6 +45,7 @@ class ContractOrder(TenantScoped, Base):
     __tablename__ = "contract_orders"
     __table_args__ = (
         UniqueConstraint("org_id", "id", name="uq_contract_orders_org_id"),
+        UniqueConstraint("org_id", "id", "customer_id", name="uq_contract_order_customer_scope"),
         UniqueConstraint("org_id", "reference", name="uq_contract_orders_org_reference"),
         ForeignKeyConstraint(
             ["org_id", "customer_id"], ["contract_customers.org_id", "contract_customers.id"], ondelete="RESTRICT"

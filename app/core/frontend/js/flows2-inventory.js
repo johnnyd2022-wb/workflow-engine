@@ -628,8 +628,21 @@
         if (step.completed_at) {
           const completed = document.createElement('p');
           completed.className = 'flows2-inv-upstream-step__meta';
-          completed.textContent = `Completed: ${flows2InvFormatDate(step.completed_at)}`;
+          completed.textContent = `Happened: ${flows2InvFormatDate(step.completed_at)}`;
           box.appendChild(completed);
+        }
+        if (step.entered_later) {
+          const late = document.createElement('p');
+          late.className = 'flows2-inv-upstream-step__meta flows2-inv-upstream-step__late';
+          late.textContent = `Entered later · ${flows2InvFormatDate(step.entered_at)}`;
+          box.appendChild(late);
+        }
+        if (step.execution_id && step.execution_step_id) {
+          const record = document.createElement('a');
+          record.href = '/core/executions/' + encodeURIComponent(step.execution_id) + '/steps/' + encodeURIComponent(step.execution_step_id) + '/record';
+          record.textContent = 'View record and edit history';
+          record.className = 'flows2-inv-upstream-step__meta';
+          box.appendChild(record);
         }
         section.appendChild(box);
       });

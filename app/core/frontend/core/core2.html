@@ -1451,11 +1451,10 @@
         return Number.isFinite(n) ? n : 0;
       }
       function onHand(it) {
-        return qNum(it && it.quantity);
+        return window.InventoryStockSummary.onHand(it);
       }
       function isVisible(it) {
-        const q = onHand(it);
-        return q > 0 && Math.abs(q) >= 0.0001;
+        return window.InventoryStockSummary.isVisible(it);
       }
       function parseDay(v) {
         if (!v) return null;
@@ -1598,7 +1597,7 @@
         return n + ' ' + word + (n === 1 ? '' : 's');
       }
       function fmtTotal(n) {
-        return (Math.round(n * 10000) / 10000).toLocaleString(undefined, { maximumFractionDigits: 4 });
+        return window.InventoryStockSummary.format(n);
       }
       function pill(label, cls, title) {
         const p = el('span', 'core2-live-inv__pill ' + cls, label);
@@ -1610,7 +1609,7 @@
       // shown as one card. Type and unit are part of the key so a raw "Vodka" and an
       // intermediate "Vodka", or litres and bottles, never get added together.
       function groupKey(it) {
-        return [String(it.name || '').trim().toLowerCase(), it.inventory_type || '', String(it.unit || '').trim().toLowerCase()].join('\u0000');
+        return window.InventoryStockSummary.groupKey(it);
       }
       function isExpired(it) {
         const dd = dayDiffFromNow(it.expiry_date);
@@ -1621,18 +1620,7 @@
         return d ? d.getTime() : Infinity;
       }
       function buildGroups(items) {
-        const byKey = new Map();
-        items.forEach(function (it) {
-          const key = groupKey(it);
-          let g = byKey.get(key);
-          if (!g) {
-            g = { key: key, name: String(it.name || '').trim() || 'Unnamed item', type: it.inventory_type, unit: it.unit || '', lots: [], total: 0 };
-            byKey.set(key, g);
-          }
-          g.lots.push(it);
-          g.total += onHand(it);
-        });
-        const groups = Array.from(byKey.values());
+        const groups = window.InventoryStockSummary.group(items);
         groups.forEach(function (g) {
           // Earliest expiry first (FEFO); lots with no expiry go last.
           g.lots.sort(function (a, b) {

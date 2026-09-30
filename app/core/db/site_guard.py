@@ -19,6 +19,7 @@ def _before_flush(session, _flush_context, _instances):
     from app.core.db.models.organisation import Organisation
     from app.core.db.models.site import Site
     from app.core.db.models.stock_location import StockLocation
+    from app.core.db.transfer_proof import PROVENANCE_FIELDS, receipt_proofs, validate_receipt_fragment
 
     scoped = (StockLocation, Execution, InventoryItem)
     affected = []
@@ -28,13 +29,27 @@ def _before_flush(session, _flush_context, _instances):
         attrs = inspect(obj).attrs
         relevant = ("site_id",)
         if isinstance(obj, InventoryItem):
-            relevant += ("location_id", "source_execution_id")
+            relevant += ("location_id", "source_execution_id", "transfer_receipt_id")
+            if obj.transfer_receipt_id:
+                relevant += PROVENANCE_FIELDS + ("extra_data", "barcode")
         if obj in session.new or any(attrs[key].history.has_changes() for key in relevant):
             affected.append(obj)
     if not affected:
         return
     org_ids = {obj.org_id for obj in affected}
-    organisations = {row.id: row for row in session.query(Organisation).filter(Organisation.id.in_(org_ids))}
+    # Scope is held for the whole transaction, including legacy/default shipping.
+    # Lock order matches settings: organisation first, then sites. Scalar flags avoid
+    # a stale identity map; SHARE permits inventory's FK KEY SHARE while blocking
+    # the settings transaction's NO KEY UPDATE lock.
+    organisations = {
+        row.id: row
+        for row in session.query(
+            Organisation.id, Organisation.multiple_sites_enabled, Organisation.multiple_site_operations_enabled
+        )
+        .filter(Organisation.id.in_(org_ids))
+        .order_by(Organisation.id)
+        .with_for_update(read=True)
+    }
     # Share-lock registration rows while assigning tags. A concurrent default change
     # takes an exclusive lock before checking occupancy, so it cannot strand new stock
     # at what has just become an additional (not operational yet) site.
@@ -73,6 +88,7 @@ def _before_flush(session, _flush_context, _instances):
         if execution_ids
         else {}
     )
+    proofs = receipt_proofs(session, affected)
     for obj in affected:
         org_id = obj.org_id
         org, default = organisations.get(org_id), defaults.get(org_id)
@@ -81,15 +97,26 @@ def _before_flush(session, _flush_context, _instances):
         history = inspect(obj).attrs.site_id.history
         if obj not in session.new and history.has_changes() and history.deleted and history.deleted[0] is not None:
             raise SiteScopeError("A site tag cannot be changed: moving stock requires a recorded transfer")
+        if (
+            isinstance(obj, InventoryItem)
+            and obj not in session.new
+            and inspect(obj).attrs.transfer_receipt_id.history.has_changes()
+        ):
+            raise SiteScopeError("A recorded receipt link cannot be changed")
         if org.multiple_sites_enabled and (default is None or not default.is_active):
             raise SiteScopeError("An active default site is required")
-        if obj.site_id is None and default is not None:
-            obj.site_id = default.id
+        if obj.site_id is None:
+            producing_execution = (
+                executions.get((org_id, obj.source_execution_id)) if isinstance(obj, InventoryItem) else None
+            )
+            obj.site_id = (
+                producing_execution.site_id if producing_execution is not None else (default.id if default else None)
+            )
         if obj.site_id is not None:
             site = sites.get((org_id, obj.site_id))
             if site is None or not site.is_active:
                 raise SiteScopeError("Site must be active and belong to this organisation")
-            if not site.is_default:
+            if not site.is_default and not (org.multiple_sites_enabled and org.multiple_site_operations_enabled):
                 raise SiteScopeError("Operations at additional sites are not available yet")
         if isinstance(obj, InventoryItem) and obj.location_id is not None:
             location = locations.get((org_id, obj.location_id))
@@ -99,8 +126,10 @@ def _before_flush(session, _flush_context, _instances):
                 raise SiteScopeError("Stock and its location must belong to the same site")
         if isinstance(obj, InventoryItem) and obj.source_execution_id is not None:
             execution = executions.get((org_id, obj.source_execution_id))
-            if execution is not None and execution.site_id != obj.site_id:
+            if execution is not None and execution.site_id != obj.site_id and not obj.transfer_receipt_id:
                 raise SiteScopeError("Produced stock must belong to its execution's site")
+        if isinstance(obj, InventoryItem) and obj.transfer_receipt_id:
+            validate_receipt_fragment(session, obj, proofs.get((org_id, obj.transfer_receipt_id)))
 
 
 def register_site_guard():

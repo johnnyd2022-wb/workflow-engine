@@ -151,6 +151,16 @@
             title.textContent = String(module.module_name || 'Compliance') + ' compliance score: ' + String(module.score || 0) + '%';
             section.appendChild(title);
             section.appendChild(dashboardReadinessBar(module.score, module.module_name));
+            var milestone = module.milestone;
+            if (milestone && typeof milestone.label === 'string' && typeof milestone.overdue === 'boolean') {
+                var milestoneLine = document.createElement('p');
+                milestoneLine.className = 'dash-compliant-health__coverage';
+                if (milestone.overdue) milestoneLine.classList.add('dash-compliant-health__milestone--overdue');
+                milestoneLine.textContent = milestone.label + ': ' + (milestone.date || 'Date not set')
+                    + (milestone.overdue ? ' · overdue' : '')
+                    + (typeof milestone.detail === 'string' && milestone.detail ? ' · ' + milestone.detail : '');
+                section.appendChild(milestoneLine);
+            }
             var coverage = document.createElement('p'); coverage.className = 'dash-compliant-health__coverage';
             coverage.textContent = String(module.current_controls || 0) + ' / ' + String(module.total_controls || 0) + ' current evidence controls';
             section.appendChild(coverage);

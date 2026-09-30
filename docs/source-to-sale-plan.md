@@ -763,13 +763,18 @@ split.
         - [x] Extract output payload restoration into `process-modal-output-restore.js` (!382).
         - [x] Extract prompt-list restoration into `process-modal-prompt-restore.js` (!383).
         - [x] Extract inline-document and pending-upload restoration into `process-modal-doc-restore.js` (!384).
+        - [x] Extract restored input-tab and prompt-mode controls into `process-modal-restore-controls.js` (!385).
+        - [x] Extract previous-step output options into `process-modal-previous-outputs.js` (!400).
+        - [x] Extract compact inventory loading and cache into `process-modal-inventory-loader.js` (!401).
+        - [x] Extract searchable inventory dropdown into `process-modal-inventory-dropdown.js` (!402).
+        - [x] Extract saved input restoration into `process-modal-input-restore.js` (!403).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
   - Done when: `backend.py` holds only shell code, and every slice in the feature index
     points at its own directory.
 
-- [ ] **5.2 Run the stock checks as tests.** *S*
+- [x] **5.2 Run the stock checks as tests.** *S* (!415; CI after prerequisite merges)
   - Change: the 1.7 checks as tests, plus a mock-recall scenario and a Customs stocktake
     scenario (2.6) in the end-to-end suite.
   - [x] Stock arithmetic, matching queue, and finding contract tests. (!406)
@@ -788,7 +793,7 @@ split.
 
 Starts once Phases 1 and 2 hold up with a second producer.
 
-- [ ] **6.1 A landing page for NZ craft alcohol.** *S*
+- [x] **6.1 A landing page for NZ craft alcohol.** *S* (!411; rollout after 6.2)
   - Change: replace the generic "manufacturing operations" copy with what a producer
     gets: a real recall trace, an NP3 evidence pack and an excise draft.
 
@@ -851,6 +856,11 @@ Founder decisions for this phase:
       cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
       registration), a liquor licence (2.5 register gains the site). "Inside a licensed
       area" comes from the site's CCA, replacing the manual flag.
+      - [x] Customs licence register and dated, nonoverlapping site/location coverage (!430).
+      - [x] Explicit liquor-licence site assignment and tenant validation (!435).
+      - [x] Explicit food-registration/activity scope and isolated per-registration NP
+        verification histories (!439). FCP verification automation and movement-policy
+        replacement of the manual flag remain open.
     - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
       consignment note) → in transit (on the books, on no shelf) → received, with short,
       over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
@@ -861,16 +871,31 @@ Founder decisions for this phase:
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
       block a move, or raise an alert. NZ Alcohol:
-      - CCA to CCA without duty needs Customs' prior approval for underbond movement:
-        the move asks for the approval reference and records both licences;
+      - CCA to CCA without duty records the applicable movement authority and both
+        licences. Prior Customs approval is required for an OSS destination or a move
+        outside Customs' listed authorities; record its reference before dispatch.
+      - [x] Generic movement decision/evidence seam and initial CCA authority policy
+        (!431). Transfer wiring, additional authorities, findings and duty accounting
+        remain open; multi-site operations stay gated.
       - out of a CCA to a site without one (a cellar door) is a removal in the excise
         entry of the licence it left (2.1);
       - into a site with no food registration covering the activity, or with no liquor
         licence for selling, raises a finding.
+      - [x] Producer-liable tested-spirits home removal records a frozen CCA, LAL,
+        configured rate and excise-due fact at dispatch; partial receipt does not
+        create a second charge (!446). Other products, customer duty and operational
+        release remain open.
     - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] Refuse the legacy location-based nil return and lodgement after multi-site
+        opt-in, and show observed producer home-removal excise by source CCA without
+        claiming a complete entry (!446). Full per-CCA entry/lodgement remains open.
+      - [x] Read-only source-CCA period review shows recognised movements, observed
+        producer excise due, unresolved records and missing accounting sources (!447).
+        Empty periods still cannot establish a nil return or total duty; complete
+        per-CCA entry and lodgement remain open.
     - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
       enforced on the server like every other permission.
       - [x] Foundation: default-all role scopes, same-org selected grants, staged
@@ -901,6 +926,16 @@ Founder decisions for this phase:
       (free-issue: received as lots owned by the customer, kept out of the producer's own
       stock value, usable only for that customer's orders), by the producer, or a mix.
       Lineage stays intact either way, so a recall works across both.
+      - [x] Trusted material-scope prerequisite (!437): locked execution/order resolver,
+        raw-material owner preflight and consistent batch-link lock ordering, with a
+        concurrent-assignment regression. This scope-only MR did not add owner
+        schema/DB guards, production hook, receipts, transfer conservation or
+        producer valuation/sales exclusions.
+      - [x] Recorded customer raw-title prerequisite (!445): immutable same-org
+        material receipts and owner proof; transaction-bound production consumption,
+        owner-conserving partial transfers and reasoned wastage; producer acquisition
+        projection and ordinary sales exclusions. Operations default off; monetary
+        valuation, finished-goods title and portal materials totals remain open.
     - [ ] c. **Duty either way.** Per order: who is liable for excise (the producer as
       licensee, the customer as licensee, or goods leaving underbond to the customer's
       CCA, 7.1e). The excise module (2.1) counts or skips the removal accordingly and the
@@ -930,7 +965,11 @@ Founder decisions for this phase:
          timeline of events and messages, one thread per order.
       Past orders keep the same view, with a "reorder" request. Email notifications
       once the app can send email (0.4g still uses invite links).
-    - [ ] f. **Isolation by design.** Portal users are a separate kind of user with no
+      - [x] Read-only portal foundation (!436): separate invitations/password sessions,
+        branded current/past published orders, shared ABV/batch dates and opt-in document
+        copies. Unavailable fields are explicit; Google, scheduler forecasts, stock,
+        duty, derived milestones, approvals/messages and reorders remain open.
+    - [x] f. **Isolation by design.** (!436) Portal users are a separate kind of user with no
       staff permissions; every portal query is scoped to the customer's orders on the
       server; a test walks every portal route with a second customer and expects 403/404.
       Other customers, recipes, costs and the producer's sales are never reachable.
@@ -968,6 +1007,9 @@ Founder decisions for this phase:
       batch** of the workflow that makes it, rounded to its usual batch size.
       - [x] Net-requirements engine: eligible stock/WIP, batch rounding and
         owner/site/unit separation (!423); persistence and order adapters remain.
+      - [x] Persisted physical batches from explicit manual production demand,
+        frozen quantity/unit/site snapshots and repeat-request protection (!440);
+        inventory netting and order/target adapters remain.
     - [ ] c. **How long it takes.** Each workflow step gets an expected duration and any
       waiting time (e.g. maceration 7 days, resting before bottling); the output ready
       date rules already in Core apply. From these, a planned batch gets a start and a
@@ -975,11 +1017,17 @@ Founder decisions for this phase:
       already late.
       - [x] Timing engine: DAG critical path including waits, backwards dates and
         late-date reasons (!423); workflow settings and readiness adapters remain.
+      - [x] Workflow batch-size settings and explicit step duration/wait snapshots,
+        fixed output-ready timing and exact workflow-version pinning (!440);
+        unknown readiness stays unknown and delivery forecasts remain unpublished.
     - [ ] d. **Will we have the materials?** Each planned batch checks its inputs: on
       hand, arriving (expected supplier deliveries, a small new record), or made by another planned
       batch. It respects ready dates (not usable until ready) and expiry dates (use
       first-expiring stock first, and never plan to use a lot after it expires). A
       shortage moves the date and says which input caused it.
+      - [x] Persist exact-lot raw bindings and historical same-org material
+        observations (!443). Holds, commitments, readiness, incoming supply and
+        published forecasts still need trusted records and adapters.
       - [x] Material availability engine: per-physical-batch recipes, explicit known
         supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
         uncovered shortages (!428). Expected-delivery records, DB adapters,
@@ -988,12 +1036,19 @@ Founder decisions for this phase:
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to
       move lower-priority batches; it doesn't try to optimise every minute.
+      - [x] Site resource groups, per-step assignments and a read-only daily overload
+        view suggest an unpinned lower-priority batch to review (!449). Calendars,
+        automatic moves and capacity-backed promise dates remain open.
     - [ ] f. **The daily driver.** A plan board (week and month) with a priority list for
       today: drag a batch to move it, pin a date so the planner won't move it, change a
       priority. When reality changes (a batch finishes late, a ready date or expiry is
       flagged, an order is added or cancelled, stock is short), the planner re-plans what
       isn't pinned and lists what moved and why. Planned batches start as real
       executions from the board, and today's list feeds the dashboard (4.5).
+      - [x] Responsive week/month/day board with priority, pin/unpin, explicit date
+        changes and cancellation, revisions, audit and a guarded idempotent start
+        seam (!440); trusted start checks, drag, automatic replan and dashboard
+        integration remain.
     - [ ] g. **Promise dates.** For a new order, "when can we deliver n?" from stock on
       hand, then what's planned, then capacity (available-to-promise). The same forecast
       ready date feeds the portal (7.2e) and the order.
@@ -1004,6 +1059,78 @@ Founder decisions for this phase:
     lays out the batches, flags a botanical short for the second one and moves its date;
     the owner pins the first, drags the second, and the next morning the dashboard shows
     today's priorities, with the order's forecast date updated in the customer's portal.
+
+---
+
+## Phase 7: Multiple sites (7.1 scope)
+
+This branch carries the 7.1 scope from !421. The other Phase 7 items remain in that
+plan branch and are delivered separately.
+
+- [ ] **7.1 Multiple sites.** *High · L+*
+  - Why: a producer grows into a second site (a bond store or off-site storage area, a
+    cellar door, a warehouse or 3PL, a shared facility) and needs to run the business
+    across them. Customs, food safety and liquor licensing attach to premises, so they
+    have to know which site stock and production are at.
+  - Evidence (28 Sep 2026): one org is one site. 2.1 added stock locations with an
+    "inside the licensed area" flag and moves between them (`stock_locations_bp`), but
+    there is no site, no transit or receipt, and no per-site registration or licence.
+  - Change:
+    - [ ] a. **Switch it on.** An org setting "multiple sites". Off (the default) keeps
+      everything exactly as today. On, the org defines its sites (name, address, kind:
+      manufacturing, storage/bond, cellar door or retail, warehouse/3PL, event) and one
+      is the default. Existing stock and executions go to the default site.
+    - [ ] b. **Tag, don't fork.** Inventory items and executions carry a site. Stock
+      locations (2.1) become places within a site. Screens and APIs filter by site; every
+      total can be shown per site or for the whole business. No separate database or org
+      per site.
+    - [ ] c. **Registrations belong to sites, as the business has them.** Each site can
+      be linked to zero or more registrations: a Customs CCA licence (one licence may
+      cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
+      registration), a liquor licence (2.5 register gains the site). "Inside a licensed
+      area" comes from the site's CCA, replacing the manual flag.
+    - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
+      consignment note) → in transit (on the books, on no shelf) → received, with short,
+      over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
+      lineage travel with the stock, so a recall still traces through a move. Drag a lot
+      (or part of one) between sites or locations on a stock board, or scan to pick and
+      receive on a phone (4.6). A printable transfer docket.
+      - [x] Accounting prerequisite: producer-owned dispatch, transit, partial receipt,
+        immutable batch-lineage fragments, confirmed-loss policy checks and printable
+        carrier/consignment docket (!438). Operational release stays internally off;
+        overage resolution, drag/scan and the complete movement workflow remain open.
+    - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
+      "stock movement" seam in the Compliant platform (like workflow rules and stock
+      measures, see `docs/compliant-core-contract.md`), a module can require fields,
+      block a move, or raise an alert. NZ Alcohol:
+      - CCA to CCA without duty records the applicable movement authority and both
+        licences. Prior Customs approval is required for an OSS destination or a move
+        outside Customs' listed authorities; record its reference before dispatch.
+      - out of a CCA to a site without one (a cellar door) is a removal in the excise
+        entry of the licence it left (2.1);
+      - into a site with no food registration covering the activity, or with no liquor
+        licence for selling, raises a finding.
+      - [x] Module-owned destination activity/food/liquor missing-record findings on
+        authorised dispatch and receipt, with dated immutable evidence and periodic
+        review (!441). Other movement authorities and excise accounting remain open.
+    - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
+      stock; stocktakes per site or per licence (2.6); each sales channel or Xero
+      tracking category maps to the site it ships from, so FIFO matches from the right
+      shelf (1.1); excise drafts per CCA licence.
+      - [x] Source-CCA movement register and frozen tested-spirits/LAL measurement
+        basis (!442). Physical removal authorisation, contract duty, complete
+        per-CCA drafts/lodgement and release remain open.
+      - [x] Guard prerequisite: production inputs/output reconciliation match the
+        persisted execution site, outputs inherit it, and FIFO/manual sales use the
+        shipping/default site (!429). Additional-site release remains internally
+        gated off pending transfer and module integration. This does not complete f.
+    - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
+      enforced on the server like every other permission.
+  - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
+    a bond store (licence B, with the underbond approval recorded) and on to a cellar door
+    (no CCA, so it's a removal on licence B's excise draft); every screen agrees where it
+    is at each step; and a recall of that batch lists the cellar door's sales. With
+    multiple sites off, nothing changes.
 
 ---
 

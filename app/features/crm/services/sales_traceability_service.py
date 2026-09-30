@@ -252,7 +252,9 @@ class SalesTraceabilityService:
         self.db.flush()
         return len(allocations)
 
-    def assign_line(self, org_id: UUID, invoice_id: str, line_key: str, picks: list[dict]) -> list[SalesFifoAllocation]:
+    def assign_line(
+        self, org_id: UUID, invoice_id: str, line_key: str, picks: list[dict], site_id: UUID | None = None
+    ) -> list[SalesFifoAllocation]:
         """Put a sale line on the batches the owner chose (replacing any earlier match)."""
         invoice, _line, match, needed = self._line_and_match(org_id, invoice_id, line_key)
         parsed = []
@@ -276,7 +278,9 @@ class SalesTraceabilityService:
         reference = _line_reference(invoice_id, line_key)
         created = []
         for item_id, qty in parsed:
-            row = self.inventory.consume_final_product_lot(org_id, item_id, qty, reference=reference, commit=False)
+            row = self.inventory.consume_final_product_lot(
+                org_id, item_id, qty, reference=reference, commit=False, site_id=site_id
+            )
             item = self.db.get(InventoryItem, item_id)
             if item is None or item.name != match.biz_e_product_name:
                 raise ValueError(f"That batch isn't {match.biz_e_product_name}")
@@ -286,18 +290,22 @@ class SalesTraceabilityService:
         self.db.flush()
         return created
 
-    def lot_candidates(self, org_id: UUID, product_name: str) -> list[dict]:
+    def lot_candidates(self, org_id: UUID, product_name: str, site_id: UUID | None = None) -> list[dict]:
         """Batches of ``product_name`` in stock, oldest first, for the owner to pick from."""
-        items = (
-            self.db.query(InventoryItem)
-            .filter(
-                InventoryItem.org_id == org_id,
-                InventoryItem.name == product_name,
-                InventoryItem.inventory_type == "final_product",
-                InventoryItem.quantity > 0,
-            )
-            .all()
+        from app.core.db.repositories.inventory_repo import producer_stock_predicate
+        from app.core.db.site_operations import resolve_site
+
+        selected_site = resolve_site(self.db, org_id, site_id)
+        items = self.db.query(InventoryItem).filter(
+            InventoryItem.org_id == org_id,
+            InventoryItem.name == product_name,
+            InventoryItem.inventory_type == "final_product",
+            producer_stock_predicate(),
+            InventoryItem.quantity > 0,
         )
+        if selected_site is not None:
+            items = items.filter(InventoryItem.site_id == selected_site)
+        items = items.all()
         rows = []
         for i in items:
             made = _made_on(self.db, i)
