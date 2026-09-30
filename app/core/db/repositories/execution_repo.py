@@ -332,6 +332,7 @@ class ExecutionRepository:
         execution_data: dict | None = None,
         commit: bool = True,
         completed_at_override: datetime | None = None,
+        execution_id: UUID | None = None,
     ) -> ExecutionStep | None:
         """Complete an execution step and advance execution.
 
@@ -363,6 +364,11 @@ class ExecutionRepository:
                 return None
 
             execution = execution_step.execution
+            if execution_id is not None and execution.id != execution_id:
+                raise ValueError("Step does not belong to this execution")
+            from app.core.db.site_operations import validate_execution_inputs
+
+            validate_execution_inputs(self.db, execution, actual_inputs, actual_outputs)
             if span is not None:
                 span.set_attribute("execution_id", str(execution.id))
                 span.set_attribute("step_number", execution_step.step_number)

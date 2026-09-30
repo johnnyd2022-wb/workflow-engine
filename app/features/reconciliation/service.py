@@ -490,6 +490,7 @@ def reconcile_via_addition(
             supplier_batch_number=supplier_batch_number,
             expiry_date=expiry_date_parsed,
             extra_data={"reconciled_via_addition": True} if untracked_item_id else None,
+            site_id=untracked.site_id if untracked_item_id else None,
             commit=False,
         )
 
@@ -574,7 +575,9 @@ def reconcile_via_execution(
 
     try:
         try:
-            execution = exec_repo.create_execution(org_id=org_id, process_id=process_id, commit=False)
+            execution = exec_repo.create_execution(
+                org_id=org_id, process_id=process_id, commit=False, site_id=untracked.site_id
+            )
         except ValueError:
             # create_execution raises ValueError (not ValueError subclass) only when the
             # process doesn't exist or belongs to another org — same "not found or access
@@ -725,6 +728,16 @@ def reconcile_output_to_untracked_reduce_only(
     untracked = inv_repo.get_inventory_item_by_id_for_update(untracked_item_id, org_id)
     if not untracked:
         return {"error": "Untracked item not found"}
+    from app.core.db.models.execution import Execution
+    from app.core.db.site_operations import validate_execution_inputs
+
+    execution = session.query(Execution).filter(Execution.org_id == org_id, Execution.id == execution_id).one_or_none()
+    if execution is None:
+        return {"error": "Execution not found"}
+    try:
+        validate_execution_inputs(session, execution, [], [{"untracked_item_id": str(untracked.id)}])
+    except ValueError as error:
+        return {"error": str(error)}
     if (untracked.extra_data or {}).get("untracked") is not True:
         return {"error": "Item is not an untracked item"}
     out_unit = (output_unit or "").strip() or "units"

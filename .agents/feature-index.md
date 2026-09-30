@@ -88,10 +88,10 @@ subscription: core (enterprise operations planned)
 layer: domain
 flag: Organisation.multiple_sites_enabled (default off)
 routes: /core/sites, /api/core/sites, /api/core/sites/settings, /api/core/sites/<site_id>, /api/core/sites/<site_id>/position
-backend: app/features/sites/routes.py; app/features/sites/service.py; app/core/db/site_guard.py
+backend: app/features/sites/routes.py; app/features/sites/service.py; app/core/db/site_guard.py; app/core/db/site_operations.py
 models: Site; site_id tags on InventoryItem, Execution, StockLocation
 frontend: app/features/sites/frontend/templates/sites/sites.html; app/features/sites/frontend/static/sites.js
-tests: tests/test_sites.py
+tests: tests/test_sites.py; tests/test_site_operations.py
 depends on: platform, identity, inventory, execution
 depended on by: contract manufacturing and planning (planned)
 invariant: additional-site operations stay closed until stock consumption, FIFO, transfers and compliance enforce site scope; existing physical tags cannot be edited as moves

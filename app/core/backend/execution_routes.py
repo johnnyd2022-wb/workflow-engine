@@ -297,7 +297,9 @@ def register_routes(
 
         repo = ExecutionRepository(db_session)
         try:
-            execution = repo.create_execution(org_id=org_id, process_id=process_id)
+            execution = repo.create_execution(
+                org_id=org_id, process_id=process_id, site_id=getattr(g, "validated_site_id", None)
+            )
             return (
                 jsonify(
                     {
@@ -725,6 +727,7 @@ def register_routes(
             # If validation fails after marking COMPLETED in-session, rollback so the step stays READY
             # and the client can retry (avoids "not in a state that can be completed" on the next attempt).
             execution_step = repo.complete_step(
+                execution_id=execution_uuid,
                 execution_step_id=execution_step_uuid,
                 org_id=org_id,
                 actual_inputs=actual_inputs,
