@@ -174,15 +174,13 @@ def create_app():
     materials.install_material_request_guard(app)
 
     from app.features.planning.routes import planning_bp
-    from app.features.sites.routes import sites_bp
 
     app.register_blueprint(planning_bp)
-    app.register_blueprint(sites_bp)
-
 
     from app.features.sites.routes import sites_bp
 
     app.register_blueprint(sites_bp)
+
     from app.features.site_transfers.routes import site_transfers_bp
 
     app.register_blueprint(site_transfers_bp)
