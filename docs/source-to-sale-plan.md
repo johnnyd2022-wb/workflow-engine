@@ -920,6 +920,9 @@ Founder decisions for this phase:
       scheduled, in production, QC passed, packed, ready, dispatched) come from the
       batch's own steps and stock movements. The producer chooses which steps show and
       what they're called.
+      - [x] Selected execution-step milestones (!451): staff choose linked batch steps
+        and customer-facing labels; each publication freezes their current statuses.
+        Materials, QC, packing and dispatch sources and automatic updates remain open.
     - [ ] e. **The portal.** Customer users sign in (0.5 Google sign-in works here too) to
       a slim, branded portal of **their** current and past orders only. For each order,
       the ten things that matter most to a brand owner:
