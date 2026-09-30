@@ -98,6 +98,9 @@ html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui
 .compliant-record-panel .core-source-search button{grid-column:auto}
 .compliant-record-panel fieldset.span-2{min-width:0}
 /* Excise workspace (plan 2.1) */
+.cca-period-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.cca-period-form label { display: flex; flex-direction: column; gap: 4px; min-width: min(100%, 11rem); }
+.cca-period-review [data-cca-period-results] { overflow-wrap: anywhere; }
 .excise-panel { display: flex; flex-direction: column; gap: 14px; }
 .excise-panel [hidden] { display: none !important; }
 .excise-head { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: flex-start; }
@@ -175,6 +178,7 @@ html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui
 .licensing-card dt { color: #5d6778; }
 .licensing-card dd { margin: 0; }
 .licensing-card .licensing-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.licensing-actions select { max-width: 100%; min-width: 0; box-sizing: border-box; }
 .licensing-state { align-self: flex-start; padding: 3px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; background: #d9efe6; color: #17603f; }
 .licensing-state--due, .licensing-state--attention { background: #fdf0d5; color: #7a4b00; }
 .licensing-state--late, .licensing-state--expired, .licensing-state--overdue, .licensing-state--missing { background: #fbe0dd; color: #8c1d13; }
@@ -191,5 +195,6 @@ html[data-spa-theme="dark"] .compliant-shell .compliant-recent { color: var(--ui
 .licensing-check div { display: flex; flex-direction: column; gap: 3px; }
 .licensing-check small { color: #5d6778; }
 @media (max-width: 700px) { .licensing-form { grid-template-columns: 1fr; } .licensing-check { flex-direction: column; align-items: flex-start; } }
+
 .licensing-shell .np3-training-table { position: relative; overflow-x: auto; }
 .licensing-shell p, .licensing-shell dd { overflow-wrap: anywhere; }

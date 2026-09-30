@@ -8,7 +8,7 @@ from flask import Blueprint, g, jsonify, request
 from app.core.db import db_session
 from app.core.security.permissions import requires_auth
 from app.core.utils.log_action import log_action
-from app.features.compliant.modules.nz_alcohol import verification
+from app.features.compliant.modules.nz_alcohol import food_registrations, verification
 from app.features.compliant.service import ComplianceService
 
 verification_bp = Blueprint("compliant_verification", __name__)
@@ -22,17 +22,46 @@ def _profile():
     return ComplianceService(db_session).get_profile(_org_id())
 
 
+def _context(lock=False):
+    data = request.get_json(silent=True) if request.method != "GET" else None
+    if data is not None and not isinstance(data, dict):
+        raise ValueError("Verification data must be an object")
+    registration_id = (data or {}).get("registration_id") if isinstance(data, dict) else None
+    registration_id = registration_id or request.args.get("registration_id")
+    if not registration_id:
+        return _profile(), None, None
+    row = food_registrations.get_registration(db_session, _org_id(), registration_id, lock=lock)
+    return food_registrations.registration_profile(row), row.id, row
+
+
+def _status(profile, registration_id, registration=None):
+    result = verification.status(db_session, _org_id(), profile, date.today(), registration_id)
+    result["registrations"] = food_registrations.overview(db_session, _org_id())["registrations"]
+    if registration is not None:
+        result["registration_name"] = registration.name
+        result["registration_programme"] = registration.programme
+    return result
+
+
 @verification_bp.route("/api/compliant/verification", methods=["GET"])
 @requires_auth
 def get_verification_status():
-    return jsonify(verification.status(db_session, _org_id(), _profile(), date.today())), 200
+    try:
+        profile, registration_id, registration = _context()
+    except ValueError:
+        return jsonify({"error": "Food registration not found"}), 404
+    return jsonify(_status(profile, registration_id, registration)), 200
 
 
 @verification_bp.route("/api/compliant/verification/suggest", methods=["GET"])
 @requires_auth
 def suggest_verification_step():
     """The step the regulations give for an outcome, with the next due date it implies."""
-    cfg = verification.settings_for(_profile())
+    try:
+        profile, _, _ = _context()
+    except ValueError:
+        return jsonify({"error": "Food registration not found"}), 404
+    cfg = verification.settings_for(profile)
     programme = cfg["programme"]
     if programme is None:
         return jsonify({"error": "Select a national programme in Configuration first"}), 409
@@ -65,10 +94,18 @@ def suggest_verification_step():
 @requires_auth
 def record_verification():
     try:
+        profile, registration_id, registration = _context(lock=True)
         record = verification.record(
-            db_session, _org_id(), _profile(), request.get_json(silent=True) or {}, g.current_user.id, date.today()
+            db_session,
+            _org_id(),
+            profile,
+            request.get_json(silent=True) or {},
+            g.current_user.id,
+            date.today(),
+            registration_id,
         )
-        _clear_booked_visit(record.verified_on)
+        if registration_id is None:
+            _clear_booked_visit(record.verified_on)
         db_session.commit()
     except ValueError as e:
         db_session.rollback()
@@ -79,7 +116,7 @@ def record_verification():
         record.id,
         {"outcome": record.outcome, "step": record.step, "verified_on": record.verified_on.isoformat()},
     )
-    return jsonify(verification.status(db_session, _org_id(), _profile(), date.today())), 201
+    return jsonify(_status(profile, registration_id, registration)), 201
 
 
 def _clear_booked_visit(verified_on: date) -> None:
@@ -105,6 +142,7 @@ def complete_verification_action(action_id: str):
     except ValueError:
         return jsonify({"error": "Corrective action not found"}), 404
     try:
+        profile, registration_id, registration = _context()
         action = verification.complete_action(
             db_session,
             _org_id(),
@@ -112,6 +150,7 @@ def complete_verification_action(action_id: str):
             (request.get_json(silent=True) or {}).get("note"),
             g.current_user.id,
             date.today(),
+            registration_id,
         )
         if action is None:
             return jsonify({"error": "Corrective action not found"}), 404
@@ -120,13 +159,19 @@ def complete_verification_action(action_id: str):
         db_session.rollback()
         return jsonify({"error": str(e)}), 409
     log_action("complete_verification_action", "compliance_verification_action", action.id, {})
-    return jsonify(verification.status(db_session, _org_id(), _profile(), date.today())), 200
+    return jsonify(_status(profile, registration_id, registration)), 200
 
 
 @verification_bp.route("/api/compliant/verification/registration", methods=["PUT"])
 @requires_auth
 def update_verification_registration():
     """When the business registered its national programme, which sets the initial verification date."""
+    try:
+        _, selected, _ = _context()
+    except ValueError:
+        return jsonify({"error": "Food registration not found"}), 404
+    if selected is not None:
+        return jsonify({"error": "Registration dates are recorded in the food registration register"}), 409
     profile = _profile()
     if profile is None:
         return jsonify({"error": "Configure Compliant first"}), 409

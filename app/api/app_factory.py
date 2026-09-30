@@ -160,12 +160,18 @@ def create_app():
 
     app.register_blueprint(stocktake_bp)
 
-    from app.features.contract_manufacturing.routes import portal_staff  # noqa: F401 -- registers staff sharing routes
+    from app.features.contract_manufacturing.routes import (
+        materials,  # noqa: F401 -- staff material routes
+        portal_staff,  # noqa: F401 -- registers staff sharing routes
+    )
     from app.features.contract_manufacturing.routes.orders import bp as contracts_bp
     from app.features.contract_manufacturing.routes.portal import bp as contract_portal_bp
+    from app.features.contract_manufacturing.services.stock_guard import register_material_stock_guard
 
     app.register_blueprint(contracts_bp)
     app.register_blueprint(contract_portal_bp)
+    register_material_stock_guard()
+    materials.install_material_request_guard(app)
 
     from app.features.planning.routes import planning_bp
 
@@ -174,6 +180,10 @@ def create_app():
     from app.features.sites.routes import sites_bp
 
     app.register_blueprint(sites_bp)
+
+    from app.features.site_transfers.routes import site_transfers_bp
+
+    app.register_blueprint(site_transfers_bp)
 
     # Register process templates blueprint (always on — exposure is gated per-org,
     # per-request by ComplianceProfile inside the routes, not by a static config flag;
@@ -421,6 +431,9 @@ def create_app():
     # After tenant context: the policy reads g.current_user.
     setup_two_factor_policy(app)
     # After tenant context: reads g.current_user. Every endpoint must be in POLICY.
+    from app.core.security.staff_site_policy import setup_staff_site_policy
+
+    setup_staff_site_policy(app)
     setup_access_policy(app)
     from app.features.sites.routes import install_site_request_validation
 

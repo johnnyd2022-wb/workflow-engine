@@ -76,7 +76,7 @@
       roleSelect.replaceChildren();
       state.roles.forEach(function (r) {
         var opt = document.createElement('option');
-        opt.value = r.value; opt.textContent = r.label;
+        opt.value = r.value; opt.textContent = r.label; opt.disabled = r.assignable === false;
         if (r.value === 'member') { opt.selected = true; opt.setAttribute('selected', ''); }
         roleSelect.append(opt);
       });
@@ -133,7 +133,7 @@
         sel.className = 'people-role-select';
         sel.setAttribute('aria-label', 'Role for ' + p.display_name);
         state.roles.forEach(function (r) {
-          var o = document.createElement('option'); o.value = r.value; o.textContent = r.label;
+          var o = document.createElement('option'); o.value = r.value; o.textContent = r.label; o.disabled = r.assignable === false;
           if (r.value === p.role) o.selected = true;
           sel.append(o);
         });
@@ -341,6 +341,26 @@
         .map(function (i) { return i.value; });
     }
 
+    function siteScopeFields(role) {
+      var root = el('fieldset');
+      root.append(el('legend', { text: 'Site access' }));
+      var mode = el('select', { 'aria-label': 'Site access' });
+      mode.append(el('option', { value: 'all', text: 'All sites' }), el('option', { value: 'selected', text: 'Selected sites' }));
+      mode.value = role.site_access_mode || 'all';
+      var choices = el('div');
+      (rolesState.sites || []).forEach(function (site) {
+        var input = el('input', { type: 'checkbox', value: site.id });
+        input.checked = (role.site_ids || []).indexOf(site.id) !== -1;
+        input.disabled = !site.is_active && !input.checked;
+        choices.append(el('label', {}, [input, document.createTextNode(' ' + site.name + (site.is_active ? '' : ' (inactive)'))]));
+      });
+      function sync() { choices.hidden = mode.value !== 'selected'; }
+      mode.onchange = sync; sync();
+      root.append(mode, choices, el('p', { className: 'people-hint', text: 'Selected-site roles can be prepared now. They cannot be assigned to people yet. No selected sites means no access.' }));
+      root.scopeValue = function () { return { site_access_mode: mode.value, site_ids: mode.value === 'selected' ? ticked(choices) : [] }; };
+      return root;
+    }
+
     function renderCustomRoles(data) {
       rolesState = data;
       rolesRoot.hidden = false;
@@ -354,9 +374,10 @@
           document.createTextNode(' · from ' + (base ? base.label : r.base_role) + ' · ' + r.permissions.length + ' permissions · ' + r.holders + (r.holders === 1 ? ' person' : ' people'))]));
         var name = el('input', { value: r.name, maxlength: '100', 'aria-label': 'Role name' });
         var boxes = permissionBoxes(r.permissions);
+        var sites = siteScopeFields(r);
         var save = el('button', { type: 'button', className: 'btn btn-primary', text: 'Save' });
         save.addEventListener('click', async function () {
-          try { await refreshAfterRoleChange(await api('PATCH', '/org/roles/' + r.id, { name: name.value, permissions: ticked(boxes) })); say(name.value + ' saved. Everyone with it has the new permissions.', true); }
+          try { await refreshAfterRoleChange(await api('PATCH', '/org/roles/' + r.id, Object.assign({ name: name.value, permissions: ticked(boxes) }, sites.scopeValue()))); say(name.value + ' saved. Everyone with it has the new permissions.', true); }
           catch (err) { say(err.message, false); }
         });
         var del = el('button', { type: 'button', className: 'btn btn-secondary', text: 'Delete' });
@@ -367,7 +388,7 @@
           try { await refreshAfterRoleChange(await api('DELETE', '/org/roles/' + r.id)); say(r.name + ' deleted.', true); }
           catch (err) { say(err.message, false); }
         });
-        details.append(el('label', { className: 'people-field' }, [document.createTextNode('Name'), name]), boxes,
+        details.append(el('label', { className: 'people-field' }, [document.createTextNode('Name'), name]), boxes, sites,
           el('div', { className: 'people-dialog-actions' }, [del, save]));
         list.append(details);
       });
@@ -386,6 +407,7 @@
       }
       base.onchange = reseed;
       reseed();
+      $(rolesRoot, '[data-custom-role-sites]').replaceChildren(siteScopeFields({}));
     }
 
     if (rolesRoot) {
@@ -395,9 +417,11 @@
         var boxes = $(rolesRoot, '[data-custom-role-perms] .people-perms');
         try {
           await refreshAfterRoleChange(await api('POST', '/org/roles', {
-            name: f.name.value, base_role: f.base_role.value, description: f.description.value, permissions: ticked(boxes)
+            name: f.name.value, base_role: f.base_role.value, description: f.description.value, permissions: ticked(boxes),
+            site_access_mode: $(rolesRoot, '[data-custom-role-sites] fieldset').scopeValue().site_access_mode,
+            site_ids: $(rolesRoot, '[data-custom-role-sites] fieldset').scopeValue().site_ids
           }));
-          say(f.name.value + ' created. Pick it as anyone\'s role above.', true);
+          say(f.name.value + ' created.', true);
           f.reset();
           f.closest('details').open = false;
         } catch (err) { say(err.message, false); }

@@ -195,6 +195,37 @@ def test_lodging_locks_the_period_and_late_changes_carry_forward(world):
     assert nov["adjustments"] == []
 
 
+def test_multiple_sites_cannot_lodge_legacy_or_claim_nil_return(world):
+    db, org, client = world["db"], world["org"], world["client"]
+    org.multiple_sites_enabled = True
+    db.commit()
+
+    draft = excise.draft(db, org.id, date(2026, 8, 1), "monthly", today=date(2026, 9, 5))
+    assert draft["legacy_unavailable"] is True
+    assert draft["complete_lodgement"] is False
+    assert draft["nil_return"] is None
+    assert draft["total_lal"] is None and draft["total_duty"] is None
+    assert draft["problems"][0]["product"] == "CCA accounting"
+    assert client.get("/api/compliant/nz-alcohol/excise?period=2026-08-01").json["draft"]["legacy_unavailable"]
+
+    with pytest.raises(ValueError, match="reviewed per CCA"):
+        excise.lodge(db, org.id, date(2026, 8, 1), "monthly", date(2026, 9, 5), None, None)
+    response = client.post(
+        "/api/compliant/nz-alcohol/excise/lodge",
+        json={"period_start": "2026-08-01", "lodged_on": "2026-09-05"},
+    )
+    assert response.status_code == 400
+    assert db.query(ExciseLodgement).filter_by(org_id=org.id).count() == 0
+
+    from app.features.compliant.service import ComplianceService
+
+    profile = ComplianceService(db).get_profile(org.id)
+    profile.settings = {**profile.settings, "excise_tracking_from": "2026-08-01"}
+    db.commit()
+    alert = excise.reminder(db, org.id, profile, today=date(2026, 9, 5))
+    assert "per-CCA" in alert["title"] and "nil" not in alert["title"].lower()
+
+
 def test_nil_return_and_reminder(world):
     """August 2026 (already finished by the real clock, which the lodge API uses)."""
     db, org, client = world["db"], world["org"], world["client"]

@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import CheckConstraint, Column, Date, DateTime, Integer, Numeric, String
+from sqlalchemy import CheckConstraint, Column, Date, DateTime, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.db.models.models import Base
@@ -13,6 +13,7 @@ from app.core.utils.time import utc_now
 class PlanningDemand(TenantScoped, Base):
     __tablename__ = "planning_demands"
     __table_args__ = (
+        UniqueConstraint("org_id", "id", name="uq_planning_demands_org_id"),
         CheckConstraint("quantity > 0 AND quantity <= 99999999999999.9999", name="ck_planning_demand_quantity"),
         CheckConstraint("priority >= 0 AND priority <= 100", name="ck_planning_demand_priority"),
         CheckConstraint("status IN ('open', 'cancelled', 'fulfilled')", name="ck_planning_demand_status"),

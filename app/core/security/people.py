@@ -58,6 +58,7 @@ def role_options(custom_roles: list | None = None) -> list[dict]:
                 "description": custom.description or f"Custom role based on {ROLE_LABELS[base]}.",
                 "needs_expiry": base == UserRole.AUDITOR,
                 "custom": True,
+                "assignable": getattr(custom, "site_access_mode", "all") == "all",
             }
         )
     return options
@@ -78,6 +79,9 @@ def parse_role_choice(value, custom_roles: list) -> tuple[UserRole, object | Non
         custom = next((r for r in custom_roles if str(r.id) == wanted), None)
         if custom is None:
             raise PeopleError("Unknown role")
+        from app.core.security.staff_site_roles import check_site_role_assignment
+
+        check_site_role_assignment(custom)
         return UserRole(custom.base_role), custom
     return parse_role(text), None
 
