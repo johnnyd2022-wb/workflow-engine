@@ -947,7 +947,11 @@ Founder decisions for this phase:
       - [x] Read-only portal foundation (!436): separate invitations/password sessions,
         branded current/past published orders, shared ABV/batch dates and opt-in document
         copies. Unavailable fields are explicit; Google, scheduler forecasts, stock,
-        duty, derived milestones, approvals/messages and reorders remain open.
+        duty, derived milestones, approval responses/messages and reorders remained open
+        at that foundation stage.
+      - [x] Label proof response (!454): a customer can approve or request changes to
+        an explicitly published document; the one-time response is scoped to their
+        order and visible to staff. Other approvals, messages, emails and reorders remain.
     - [x] f. **Isolation by design.** (!436) Portal users are a separate kind of user with no
       staff permissions; every portal query is scoped to the customer's orders on the
       server; a test walks every portal route with a second customer and expects 403/404.
