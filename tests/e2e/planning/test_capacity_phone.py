@@ -19,7 +19,8 @@ TODAY = fixtures.TODAY
 pytestmark = pytest.mark.e2e
 
 
-def test_phone_capacity_group_step_and_overload(db, board_clients, browser):
+@pytest.mark.parametrize("width", [390, 1440])
+def test_phone_capacity_group_step_and_overload(db, board_clients, browser, width):
     client, org_id, output = board_clients[0]
     site = Site(org_id=org_id, name="Main", is_default=True)
     db.add(site)
@@ -28,7 +29,7 @@ def test_phone_capacity_group_step_and_overload(db, board_clients, browser):
         "/api/core/planner/demands",
         json=payload(output, reference="Capacity order", due_date=(TODAY + timedelta(days=2)).isoformat()),
     )
-    page = browser.new_page(viewport={"width": 390, "height": 844})
+    page = browser.new_page(viewport={"width": width, "height": 844})
 
     def proxy(route):
         request = route.request
@@ -65,6 +66,22 @@ def test_phone_capacity_group_step_and_overload(db, board_clients, browser):
         page.get_by_text("Planning settings saved", exact=True).wait_for()
         page.get_by_role("button", name="Plan batches").click()
         page.get_by_text("1 overloaded resource-day(s) in this view.", exact=True).wait_for()
+        page.get_by_text("180/120 minutes", exact=False).wait_for()
+        calendar = page.locator("[data-capacity-calendar]")
+        today_checkbox = calendar.locator(f'[name="working_days"][value="{TODAY.weekday()}"]')
+        today_checkbox.uncheck()
+        calendar.get_by_role("button", name="Save calendar").click()
+        page.get_by_text("Resource calendar saved", exact=True).wait_for()
+        page.get_by_text("180/0 minutes", exact=False).wait_for()
+        page.get_by_text("resource closed", exact=False).wait_for()
+        today_checkbox.check()
+        calendar.locator('[name="closed_dates"]').fill(TODAY.isoformat())
+        calendar.get_by_role("button", name="Save calendar").click()
+        page.get_by_text("Resource calendar saved", exact=True).wait_for()
+        page.get_by_text("180/0 minutes", exact=False).wait_for()
+        calendar.locator('[name="closed_dates"]').fill("")
+        calendar.get_by_role("button", name="Save calendar").click()
+        page.get_by_text("Resource calendar saved", exact=True).wait_for()
         page.get_by_text("180/120 minutes", exact=False).wait_for()
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     finally:

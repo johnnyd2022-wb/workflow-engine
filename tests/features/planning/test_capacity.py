@@ -143,3 +143,76 @@ def test_capacity_routes_scope_settings_to_staff_and_tenant(db, demand_clients):
         db.query(PlanningCapacitySetting).filter(PlanningCapacitySetting.org_id == org_id).delete()
         db.query(Site).filter(Site.org_id == org_id).delete()
         db.commit()
+
+
+def test_resource_calendar_closes_weekdays_and_specific_dates_without_moving_batches(db, demand_world):
+    org_id = demand_world[0]
+    site = Site(org_id=org_id, name="Main", is_default=True)
+    db.add(site)
+    db.flush()
+    _, _, _, rows = batch_fixtures.planned(db, demand_world)
+    step = db.query(Step).filter(Step.org_id == org_id).one()
+    data = _payload(step.id, capacity=240)
+    data["groups"][0].update(working_days=list(range(7)), closed_dates=[date.today().isoformat()])
+    saved = save_setting(db, org_id, site.id, data)
+    closed = review(db, org_id, date.today(), date.today())["days"][0]
+    assert closed["capacity_minutes"] == 0 and closed["calendar_closed"] and closed["overloaded"]
+    assert closed["load_minutes"] == 180
+    assert all(row.proposed_start_date == date.today() for row in rows)
+    data["expected_revision"] = saved.revision
+    data["groups"][0]["closed_dates"] = []
+    data["groups"][0]["working_days"] = [day for day in range(7) if day != date.today().weekday()]
+    saved = save_setting(db, org_id, site.id, data)
+    assert review(db, org_id, date.today(), date.today())["days"][0]["calendar_closed"]
+    data["expected_revision"] = saved.revision
+    data["groups"][0]["working_days"] = list(range(7))
+    save_setting(db, org_id, site.id, data)
+    opened = review(db, org_id, date.today(), date.today())["days"][0]
+    assert opened["capacity_minutes"] == 240 and not opened["calendar_closed"] and not opened["overloaded"]
+
+
+@pytest.mark.parametrize(
+    "calendar",
+    [
+        {"working_days": [True]},
+        {"working_days": [7]},
+        {"working_days": [1, 1]},
+        {"working_days": "Monday"},
+        {"closed_dates": ["2026-02-30"]},
+        {"closed_dates": ["20260101"]},
+        {"closed_dates": ["2026-01-01", "2026-01-01"]},
+        {"closed_dates": [True]},
+        {"closed_dates": "2026-01-01"},
+    ],
+)
+def test_invalid_resource_calendars_do_not_persist(db, demand_world, calendar):
+    org_id = demand_world[0]
+    site = Site(org_id=org_id, name="Main", is_default=True)
+    db.add(site)
+    db.flush()
+    step = db.query(Step).filter(Step.org_id == org_id).one()
+    data = _payload(step.id)
+    data["groups"][0].update(calendar)
+    with pytest.raises(ValueError):
+        save_setting(db, org_id, site.id, data)
+    assert db.query(PlanningCapacitySetting).filter_by(org_id=org_id).count() == 0
+
+
+def test_empty_work_week_and_legacy_calendar_defaults(db, demand_world):
+    org_id = demand_world[0]
+    site = Site(org_id=org_id, name="Main", is_default=True)
+    db.add(site)
+    db.flush()
+    _, _, _, _ = batch_fixtures.planned(db, demand_world)
+    step = db.query(Step).filter(Step.org_id == org_id).one()
+    data = _payload(step.id, capacity=240)
+    saved = save_setting(db, org_id, site.id, data)
+    assert saved.config["groups"][0]["working_days"] == list(range(7))
+    # Old persisted configurations have no calendar fields and keep all-day capacity.
+    saved.config = {"groups": data["groups"], "assignments": data["assignments"]}
+    db.flush()
+    assert not review(db, org_id, date.today(), date.today())["days"][0]["overloaded"]
+    data["expected_revision"] = saved.revision
+    data["groups"][0]["working_days"] = []
+    save_setting(db, org_id, site.id, data)
+    assert review(db, org_id, date.today(), date.today())["days"][0]["calendar_closed"]
