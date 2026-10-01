@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import TIMESTAMP, Column, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
+import app.features.crm.models.xero_invoice  # noqa: F401 -- registers the "xero_invoices" table this model points at
 from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now

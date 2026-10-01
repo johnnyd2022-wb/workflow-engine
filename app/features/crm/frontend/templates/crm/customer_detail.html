@@ -1,4 +1,5 @@
 {% extends "shared/base_spa.html" %}
+{% set breadcrumb_leaf = "Customer" %}
 {% block title %}Customer · Sales{% endblock %}
 {% block body_class %}crm-page{% endblock %}
 
@@ -6,22 +7,12 @@
   <link rel="stylesheet" href="/crm/static/css/crm.css">
 {% endblock %}
 
-{% block topbar %}
-  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to Sales" hx-boost="false">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M11 19l-7-7 7-7"/>
-      <path d="M4 12h16"/>
-    </svg>
-  </a>
-{% endblock %}
 
 {% block content %}
 <div class="max-content crm-root" x-data="crmCustomerDetail('{{ contact_id }}')" x-init="init()">
   {% set crm_heading = "Customer Profile" %}
   {% set crm_subtitle = "Customer activity, invoices, tasks, and notes" %}
   {% include "crm/_crm_banner.html" %}
-  {% set active_crm_tab = "customers" %}
-  {% include "crm/_crm_section_tabs.html" %}
 
   {# Loading #}
   <template x-if="loading">

@@ -110,6 +110,10 @@ WHISTLEBIRD_ORG_NAME = "Whistlebird Ltd"
 DEFAULT_ADMIN_EMAIL = "johnny@whistlebird.co.nz"
 DEFAULT_ADMIN_NAME = ("Johnny", "Dempsey")  # shown instead of the login email
 
+# Whistlebird's standard bottle.  The production sheet records bottle counts only (no
+# bottle_size_ml), so a part-filled bottle's remainder is sized from this.
+DEFAULT_BOTTLE_SIZE_ML = Decimal("700")
+
 # These are the repeatable shelf-life assumptions used only where the historic
 # purchase register did not retain an expiry.  The curated raw-material manifest
 # carries an explicit expiry for every one of its receipts; this map covers the

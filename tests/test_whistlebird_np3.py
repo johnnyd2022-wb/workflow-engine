@@ -8,9 +8,11 @@ evidence, dates, staff link and profile.
 """
 
 import copy
+import hashlib
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -88,12 +90,25 @@ def test_committed_manifest_is_valid():
     manifest = np3.load_np3_manifest()
 
     assert len(manifest.attestations) == 39
-    assert len(manifest.logs) == 62
+    assert len(manifest.logs) == 64  # 62 plus the policy update and the prepared simulated recall pack
     policy = next(record for record in manifest.attestations if record.control_id == "recall-policy")
     assert policy.evidence_fields["policy_reference"] == "docs/whistlebird-recall-policy.md"
     assert policy.signed_on == date(2026, 9, 23)
     assert policy.due_date == date(2027, 9, 23)
-    assert policy.evidence_fields["last_policy_review"] == "2026-09-23"
+    assert policy.evidence_fields["last_policy_review"] == "2026-09-30"
+    # Both decision makers have equal authority; nobody is the owner with a deputy.
+    assert "both recall decision makers with equal authority" in policy.how_we_meet
+    assert "deputy" not in policy.how_we_meet
+    policy_text = (Path(__file__).parents[1] / "docs/whistlebird-recall-policy.md").read_text(encoding="utf-8")
+    assert "deputy" not in policy_text.lower()
+    assert "equal authority" in policy_text
+    updates = [record for record in manifest.logs if record.control_id == "recall-policy"]
+    assert [record.event_date.isoformat() for record in updates] == ["2026-09-30"]
+    exercise = [record for record in manifest.logs if record.control_id == "trace-and-recall"]
+    assert len(exercise) == 1
+    assert exercise[0].fields["batch_or_product"].startswith("SIMULATED RECALL")
+    assert exercise[0].fields["trace_result"].startswith("Desk-based simulated recall completed 30 September 2026")
+    assert (Path(__file__).parents[1] / "docs/whistlebird-mock-recall-juniper-berries.md").is_file()
     assert (Path(__file__).parents[1] / policy.evidence_fields["policy_reference"]).is_file()
     training = [record for record in manifest.logs if record.control_id == "staff-competency"]
     # 2 staff x 9 supplied register items x 3 annual dates, plus the two recall
@@ -110,6 +125,16 @@ def test_committed_manifest_is_valid():
     assert {member.name for member in manifest.staff} == {"Johnny Dempsey", "Nikolai Scott"}
     assert {record.fields["employee_name"] for record in training} == {"Johnny Dempsey", "Nikolai Scott"}
     assert manifest.record_count == len(manifest.attestations) + len(manifest.logs)
+
+
+def test_recall_evidence_pdfs_are_attached_to_their_checks():
+    manifest = np3.load_np3_manifest()
+    attached = {log.control_id: [file.path.name for file in log.files] for log in manifest.logs if log.files}
+
+    assert attached == {
+        "recall-policy": ["recall-policy.pdf"],
+        "trace-and-recall": ["mock-recall-juniper-berries.pdf"],
+    }
 
 
 def test_annual_training_expands_to_category_person_and_date_and_needs_human_names():
@@ -212,15 +237,26 @@ class _Client:
 
 
 class _Store:
-    def __init__(self, users=(), fingerprints=()):
+    def __init__(self, users=(), fingerprints=(), checksums=None):
         self.users = {email: f"user-{index}" for index, email in enumerate(users)}
         self._fingerprints = set(fingerprints)
+        self._checksums = checksums or {}
 
     def user_id_for_email(self, email):
         return self.users.get(email)
 
     def fingerprints(self):
         return self._fingerprints
+
+    def records(self):
+        return [
+            SimpleNamespace(
+                fingerprint=fingerprint,
+                id=f"record-{index}",
+                file_checksums=frozenset(self._checksums.get(fingerprint, ())),
+            )
+            for index, fingerprint in enumerate(sorted(self._fingerprints))
+        ]
 
 
 def test_replay_orders_staff_then_profile_then_attestations_then_logs_and_links_employee():
@@ -244,7 +280,7 @@ def test_replay_orders_staff_then_profile_then_attestations_then_logs_and_links_
         ("POST", "/api/compliant/np3-audit/checks/health-and-sickness/logs"),
         ("POST", "/api/compliant/np3-audit/checks/cleaning-and-hygiene/logs"),
     ]
-    assert counts == {"staff": 1, "profile": 1, "attestations": 1, "logs": 2, "skipped": 0}
+    assert counts == {"staff": 1, "profile": 1, "attestations": 1, "logs": 2, "skipped": 0, "files": 0}
     user_body = client.calls[0][2]
     assert user_body["email"] == STAFF_EMAIL and user_body["role"] == "member" and len(user_body["password"]) >= 32
     log_fields = client.calls[3][2]["fields"]
@@ -260,7 +296,7 @@ def test_replay_skips_what_already_exists():
 
     counts = np3.replay_np3(client, store, manifest)
 
-    assert counts == {"staff": 0, "profile": 1, "attestations": 0, "logs": 0, "skipped": 4}
+    assert counts == {"staff": 0, "profile": 1, "attestations": 0, "logs": 0, "skipped": 4, "files": 0}
     assert [call[1] for call in client.calls] == ["/api/compliant/profile"]
 
 
@@ -307,6 +343,14 @@ class _FlaskClient:
 
     def put(self, path, body):
         return self._send("put", path, body)
+
+    def post_file(self, path, file_path):
+        with open(file_path, "rb") as handle:
+            response = self._client.post(
+                path, data={"file": (handle, Path(file_path).name)}, content_type="multipart/form-data"
+            )
+        assert response.status_code == 201, f"POST {path} -> {response.status_code}: {response.data!r}"
+        return response.get_json()
 
 
 def _setup_baseline(client):
@@ -369,11 +413,12 @@ def test_manifest_is_accepted_by_the_real_routes_and_dated_explicitly(db, np3_or
     updated = np3.correct_np3_timestamps(np3_org["url"], np3_org["name"], manifest)
     report = np3.verify_np3(np3_org["url"], np3_org["name"], manifest)
 
-    assert counts == {"staff": 1, "profile": 1, "attestations": 1, "logs": 2, "skipped": 0}
+    assert counts == {"staff": 1, "profile": 1, "attestations": 1, "logs": 2, "skipped": 0, "files": 0}
     assert updated == 3
     assert report == {
         "np3_record_count": {"expected": 3, "actual": 3},
         "np3_record_content": {"expected": 3, "actual": 3},
+        "np3_files": {"expected": 0, "actual": 0},
         "np3_staff": {"expected": 1, "actual": 1},
         "np3_profile": {"expected": 1, "actual": 1},
         "np3_date_mismatches": 0,
@@ -449,11 +494,12 @@ def test_committed_manifest_replays_all_review_placeholders(db, np3_org):
     updated = np3.correct_np3_timestamps(np3_org["url"], np3_org["name"], manifest)
     report = np3.verify_np3(np3_org["url"], np3_org["name"], manifest)
 
-    assert counts == {"staff": 2, "profile": 1, "attestations": 39, "logs": 62, "skipped": 0}
-    assert updated == 101
+    assert counts == {"staff": 2, "profile": 1, "attestations": 39, "logs": 64, "skipped": 0, "files": 2}
+    assert updated == 103
     assert report == {
-        "np3_record_count": {"expected": 101, "actual": 101},
-        "np3_record_content": {"expected": 101, "actual": 101},
+        "np3_record_count": {"expected": 103, "actual": 103},
+        "np3_record_content": {"expected": 103, "actual": 103},
+        "np3_files": {"expected": 2, "actual": 2},
         "np3_staff": {"expected": 2, "actual": 2},
         "np3_profile": {"expected": 1, "actual": 1},
         "np3_date_mismatches": 0,
@@ -463,7 +509,7 @@ def test_committed_manifest_replays_all_review_placeholders(db, np3_org):
             "SELECT (r.created_at AT TIME ZONE 'Pacific/Auckland')::date, "
             "(a.timestamp AT TIME ZONE 'Pacific/Auckland')::date "
             "FROM compliance_records r JOIN audit_logs a ON a.entity_id = r.id "
-            "WHERE r.org_id = :org AND r.control_id = 'recall-policy' "
+            "WHERE r.org_id = :org AND r.control_id = 'recall-policy' AND r.details->>'how_we_meet' IS NOT NULL "
             "AND a.org_id = :org AND a.entity = 'compliance_record' AND a.action = 'create'"
         ),
         {"org": np3_org["org"].id},
@@ -563,3 +609,118 @@ def test_snapshot_refuses_evidence_it_cannot_replay(db, np3_org):
 def test_snapshot_is_only_permitted_for_the_test_tenant():
     with pytest.raises(ValueError, match="only permitted"):
         np3.snapshot_np3("postgresql://unused", "Some Other Org")
+
+
+# --------------------------------------------------------------------------------------
+# Committed evidence files
+# --------------------------------------------------------------------------------------
+
+PDF_BYTES = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+
+
+@pytest.fixture
+def evidence_dir(tmp_path, monkeypatch):
+    root = tmp_path / "docs" / "evidence"
+    root.mkdir(parents=True)
+    monkeypatch.setattr(np3, "FILES_ROOT", root)
+    return root
+
+
+def _with_files(*paths, log_paths=()):
+    data = _manifest()
+    data["attestations"][0]["files"] = list(paths)
+    if log_paths:
+        data["logs"][1]["files"] = list(log_paths)
+    return data
+
+
+@pytest.mark.parametrize(
+    "files, message",
+    [
+        (["docs/evidence/missing.pdf"], "does not exist"),
+        (["../outside.pdf"], "under docs/evidence"),
+        (["docs/evidence/notes.txt"], "PDF, PNG or JPEG"),
+        (["docs/evidence/empty.pdf"], "between 1 byte and 10MB"),
+        (["docs/evidence/a.pdf", "docs/evidence/a.pdf"], "listed twice"),
+        ("docs/evidence/a.pdf", "list of at most"),
+        ([""], "path string"),
+    ],
+)
+def test_manifest_files_are_validated(evidence_dir, files, message):
+    (evidence_dir / "a.pdf").write_bytes(PDF_BYTES)
+    (evidence_dir / "notes.txt").write_text("not a pdf")
+    (evidence_dir / "empty.pdf").write_bytes(b"")
+    (evidence_dir.parents[1] / "outside.pdf").write_bytes(PDF_BYTES)
+
+    with pytest.raises(np3.Np3ManifestError, match=message):
+        np3.parse_np3_manifest(
+            _with_files(*files)
+            if isinstance(files, list)
+            else {**_manifest(), "attestations": [{**_manifest()["attestations"][0], "files": files}]}
+        )
+
+
+def test_manifest_files_are_hashed_and_do_not_change_identity(evidence_dir):
+    (evidence_dir / "a.pdf").write_bytes(PDF_BYTES)
+    plain = np3.parse_np3_manifest(_manifest())
+    with_file = np3.parse_np3_manifest(_with_files("docs/evidence/a.pdf"))
+
+    assert with_file.attestations[0].files[0].sha256 == hashlib.sha256(PDF_BYTES).hexdigest()
+    assert with_file.attestations[0].fingerprint == plain.attestations[0].fingerprint
+
+
+def test_replay_uploads_files_after_the_record_and_skips_ones_already_attached(evidence_dir):
+    (evidence_dir / "a.pdf").write_bytes(PDF_BYTES)
+    (evidence_dir / "b.pdf").write_bytes(PDF_BYTES + b"b")
+    manifest = np3.parse_np3_manifest(_with_files("docs/evidence/a.pdf", log_paths=["docs/evidence/b.pdf"]))
+
+    class _FileClient(_Client):
+        def post(self, path, body):
+            super().post(path, body)
+            return {"record": {"id": f"created-{len(self.calls)}"}}
+
+        def post_file(self, path, file_path):
+            self.calls.append(("FILE", path, file_path.name))
+            return {}
+
+    client = _FileClient()
+    counts = np3.replay_np3(client, _Store(users=[STAFF_EMAIL]), manifest)
+
+    assert counts["files"] == 2
+    kinds = [(method, path) for method, path, _ in client.calls]
+    attestation_at = kinds.index(("POST", "/api/compliant/np3-audit/attestations"))
+    assert kinds[attestation_at + 1][0] == "FILE" and kinds[attestation_at + 1][1].startswith(
+        "/api/compliant/np3-audit/records/created-"
+    )
+
+    # A re-run: both records exist, one already holds its file, the other does not.
+    attestation = manifest.attestations[0]
+    store = _Store(
+        users=[STAFF_EMAIL],
+        fingerprints=[r.fingerprint for r in (*manifest.attestations, *manifest.logs)],
+        checksums={attestation.fingerprint: {attestation.files[0].sha256}},
+    )
+    rerun = _FileClient()
+    assert np3.replay_np3(rerun, store, manifest)["files"] == 1
+    assert [call[2] for call in rerun.calls if call[0] == "FILE"] == ["b.pdf"]
+
+
+def test_files_replay_through_the_real_routes_verify_and_guard_the_reset(db, np3_org, evidence_dir):
+    (evidence_dir / "a.pdf").write_bytes(PDF_BYTES)
+    manifest = np3.parse_np3_manifest(_with_files("docs/evidence/a.pdf"))
+    url, name, admin = np3_org["url"], np3_org["name"], np3_org["admin_email"]
+
+    assert _replay(np3_org, manifest)["files"] == 1
+    assert _replay(np3_org, manifest)["files"] == 0  # idempotent
+    assert np3.verify_np3(url, name, manifest)["np3_files"] == {"expected": 1, "actual": 1}
+    assert np3.np3_unsnapshotted(url, name, manifest, admin) == []
+
+    unlisted = np3.parse_np3_manifest(_manifest())
+    reasons = np3.np3_unsnapshotted(url, name, unlisted, admin)
+    assert any("attached file the manifest does not list" in reason for reason in reasons)
+    with pytest.raises(np3.Np3SnapshotError, match="attached file the manifest does not list"):
+        np3._snapshot_org(url, name, unlisted, admin)
+
+    snapshot = np3._snapshot_org(url, name, manifest, admin)
+    assert snapshot["attestations"][0]["files"] == ["docs/evidence/a.pdf"]
+    assert np3.parse_np3_manifest(snapshot).attestations[0].files == manifest.attestations[0].files

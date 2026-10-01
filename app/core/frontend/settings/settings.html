@@ -9,7 +9,6 @@
   {# CSS moved to settings_spa.css and inventory-spa-header.css — both loaded globally in base_spa.html. #}
 {% endblock %}
 
-{% block topbar %}{% endblock %}
 
 {% block content %}
   <div class="max-content">
@@ -23,7 +22,7 @@
 
     {% if can('settings.manage') %}
     <section class="card settings-card">
-      <div class="card-content"><a href="/core/sites" hx-boost="false" class="btn btn-secondary">Sites</a></div>
+      <div class="card-content"><a href="/core/sites" class="btn btn-secondary">Sites</a></div>
     </section>
     {% endif %}
 

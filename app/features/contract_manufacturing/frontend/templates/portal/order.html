@@ -54,4 +54,15 @@
 <label>Send a message<textarea name="body" maxlength="2000" required></textarea></label>
 <button type="submit">Send message</button>
 </form>
-</section>{% endblock %}
+</section>
+{% if order.status == 'completed' %}<section>
+<h2>Request another order</h2>
+{% if order.reorder_request %}<p>Reorder requested {{ order.reorder_request.requested_at[:16]|replace('T',' ') }} UTC.</p>
+{% if order.reorder_request.note %}<p>{{ order.reorder_request.note }}</p>{% endif %}
+<p>Contact the producer in the order conversation for changes or additional requests.</p>
+{% else %}<p>Ask the producer to repeat this order. They will confirm quantities, price and dates with you before creating a new order.</p>
+<form data-portal-api="/portal/api/orders/{{ order.order_id }}/reorder">
+<label>Anything to change?<textarea name="note" maxlength="1000"></textarea></label>
+<button type="submit">Request reorder</button>
+</form>{% endif %}
+</section>{% endif %}{% endblock %}

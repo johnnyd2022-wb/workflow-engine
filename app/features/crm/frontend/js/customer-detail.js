@@ -77,7 +77,6 @@ function crmCustomerDetail(contactId) {
     savingMapping: false,
 
     async init() {
-      CRMAPI.ensureBackButton('/crm');
       this.loading = true;
       this.error = null;
       try {

@@ -28,6 +28,30 @@ def _whole(value, low, high, label):
     return value
 
 
+def _calendar(group):
+    working = group.get("working_days", list(range(7)))
+    closed = group.get("closed_dates", [])
+    if (
+        not isinstance(working, list)
+        or len(working) > 7
+        or any(type(day) is not int or not 0 <= day <= 6 for day in working)
+        or len(set(working)) != len(working)
+    ):
+        raise ValueError("Working days must be distinct weekdays from Monday (0) to Sunday (6)")
+    if not isinstance(closed, list) or len(closed) > 366:
+        raise ValueError("Use at most 366 closed dates")
+    normalized = []
+    for value in closed:
+        try:
+            parsed = date.fromisoformat(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Closed dates must be YYYY-MM-DD") from exc
+        if parsed.isoformat() != value or value in normalized:
+            raise ValueError("Closed dates must be distinct dates in YYYY-MM-DD format")
+        normalized.append(value)
+    return sorted(working), sorted(normalized)
+
+
 def save_setting(db, org_id, site_id, data):
     """Replace a site's named groups and assignments with optimistic revision."""
     if not isinstance(data, dict) or set(data) != {"groups", "assignments", "expected_revision"}:
@@ -47,7 +71,12 @@ def save_setting(db, org_id, site_id, data):
         raise ValueError("Use at most 20 resource groups and 200 step assignments")
     clean_groups, group_ids, names = [], set(), set()
     for group in groups:
-        if not isinstance(group, dict) or set(group) != {"id", "name", "minutes_per_day"}:
+        required = {"id", "name", "minutes_per_day"}
+        if (
+            not isinstance(group, dict)
+            or not required <= set(group)
+            or set(group) - required - {"working_days", "closed_dates"}
+        ):
             raise ValueError("Resource groups need ID, name and daily minutes")
         group_id = str(_uuid(group["id"]))
         name = group["name"]
@@ -58,11 +87,14 @@ def save_setting(db, org_id, site_id, data):
             raise ValueError("Resource groups must be distinct")
         group_ids.add(group_id)
         names.add(name.casefold())
+        working_days, closed_dates = _calendar(group)
         clean_groups.append(
             {
                 "id": group_id,
                 "name": name,
                 "minutes_per_day": _whole(group["minutes_per_day"], 1, 1440, "Daily capacity"),
+                "working_days": working_days,
+                "closed_dates": closed_dates,
             }
         )
     clean_assignments, step_ids = [], set()
@@ -206,12 +238,16 @@ def review(db, org_id, start, end):
     days = []
     for setting in settings:
         for group in setting.config["groups"]:
+            working_days, closed_dates = _calendar(group)
             for offset in range((end - start).days + 1):
-                day = (start + timedelta(days=offset)).isoformat()
+                calendar_day = start + timedelta(days=offset)
+                day = calendar_day.isoformat()
                 load = loads.get((str(setting.site_id), group["id"], day), {"minutes": 0, "batches": []})
                 if not load["minutes"]:
                     continue
-                overloaded = load["minutes"] > group["minutes_per_day"]
+                closed = calendar_day.weekday() not in working_days or day in closed_dates
+                capacity = 0 if closed else group["minutes_per_day"]
+                overloaded = load["minutes"] > capacity
                 movable = sorted(
                     (item for item in load["batches"] if not item["pinned"]),
                     key=lambda item: (item["priority"], item["batch_id"]),
@@ -223,7 +259,8 @@ def review(db, org_id, start, end):
                         "group_name": group["name"],
                         "day": day,
                         "load_minutes": load["minutes"],
-                        "capacity_minutes": group["minutes_per_day"],
+                        "capacity_minutes": capacity,
+                        "calendar_closed": closed,
                         "overloaded": overloaded,
                         "batches": load["batches"],
                         "suggest_move_batch_id": movable[0]["batch_id"] if overloaded and movable else None,

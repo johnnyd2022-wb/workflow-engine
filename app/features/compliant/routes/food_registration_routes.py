@@ -23,9 +23,7 @@ def _org():
 @requires_auth
 @requires_org_scope
 def page():
-    return render_template(
-        "compliant/food_registrations.html", **_nz_alcohol_template_context(active_compliant_tab="food-safety")
-    )
+    return render_template("compliant/food_registrations.html", **_nz_alcohol_template_context())
 
 
 @food_registration_bp.get("/api/compliant/food-registrations")

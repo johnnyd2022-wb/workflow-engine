@@ -16,6 +16,7 @@ from app.core.db.repositories.inventory_repo import InventoryRepository
 from app.core.db.repositories.process_repo import ProcessRepository
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.models.excise import ExciseRate
+from app.features.crm.models.product_mapping import ProductMapping  # noqa: F401 -- FK target
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem

@@ -3364,27 +3364,6 @@
     // openExecutionModal and submitExecution are now loaded from js/execution-modal.js
     // Configuration is set above in ExecutionModalConfig
 
-    // This whole block lives in the template's scripts block, which base_spa renders
-    // OUTSIDE #page-content -- so an hx-boost navigation back to /core swaps in fresh
-    // markup that these DOMContentLoaded/immediate bootstraps never touch again: tab buttons,
-    // the health sheet and the create-process form end up with no handlers (the page
-    // looks fine but every click is dead until a full refresh), and the Overview shows
-    // stale/zero metrics. Re-run the bootstraps on settle. Each init is idempotent
-    // (per-node dataset guards / module-level flags), so repeated calls are safe.
-    window.__core2AfterSettle = function (evt) {
-      var tgt = evt && evt.detail && evt.detail.target;
-      if (!tgt || tgt.id !== 'page-content') return;
-      if (!document.getElementById('core2-hub-title')) return;  // not the /core hub
-      initCore2Page();
-      initCore2CreateProcessForm();
-      initCore2HubLoad();
-    };
-    if (!window.__core2AfterSettleBound) {
-      document.body.addEventListener('htmx:afterSettle', function (evt) {
-        window.__core2AfterSettle(evt);
-      });
-      window.__core2AfterSettleBound = true;
-    }
 
     Object.assign(window, {
       closeNotification,

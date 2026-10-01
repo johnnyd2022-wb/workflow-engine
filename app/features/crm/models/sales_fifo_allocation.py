@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
+import app.features.crm.models.product_mapping  # noqa: F401 -- registers the "product_mappings" table this model points at
 from app.core.db.models.models import Base
 from app.core.db.models.tenant_mixin import TenantScoped
 from app.core.utils.time import utc_now

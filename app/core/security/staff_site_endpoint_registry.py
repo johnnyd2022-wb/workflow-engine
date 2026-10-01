@@ -27,6 +27,7 @@ ENDPOINT_COVERAGE = {
     ("auth.verify_two_factor", "POST"): "blocked",
     ("compliant.compliant_api.add_excise_rate", "POST"): "blocked",
     ("compliant.compliant_api.add_np3_check_log", "POST"): "blocked",
+    ("compliant.compliant_api.attach_np3_record_file", "POST"): "blocked",
     ("compliant.compliant_api.attest_np3_check", "POST"): "blocked",
     ("compliant.compliant_api.capture_context", "GET"): "blocked",
     ("compliant.compliant_api.core_sources", "GET"): "blocked",
@@ -42,6 +43,7 @@ ENDPOINT_COVERAGE = {
     ("compliant.compliant_api.list_excise_rates", "GET"): "blocked",
     ("compliant.compliant_api.list_records", "GET"): "blocked",
     ("compliant.compliant_api.lodge_excise_period", "POST"): "blocked",
+    ("compliant.compliant_api.download_np3_record_file", "GET"): "blocked",
     ("compliant.compliant_api.np3_audit", "GET"): "blocked",
     ("compliant.compliant_api.np3_audit_check", "GET"): "blocked",
     ("compliant.compliant_api.overview", "GET"): "blocked",
@@ -411,5 +413,6 @@ ENDPOINT_COVERAGE = {
     ("google_auth.unlink", "POST"): "blocked",
     # Portal conversation thread (whole-order customer dialogue, not site-scoped).
     ("contract_portal.send_message", "POST"): "blocked",
+    ("contract_portal.reorder", "POST"): "blocked",
     ("contracts.portal_send_message", "POST"): "blocked",
 }

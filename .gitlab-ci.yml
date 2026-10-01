@@ -108,6 +108,17 @@ backend_size:
     - main
   allow_failure: false
 
+# Plan 0.3e: GitLab's "Pipelines must succeed" setting checks the MR pipeline, not
+# the latest main pipeline. Read its status with the job token and fail closed.
+main_green:
+  stage: test
+  image: python:3.14-bookworm
+  script:
+    - python3 scripts/check_main_pipeline.py
+  only:
+    - merge_requests
+  allow_failure: false
+
 # Guard the agent-written data stores (AER metrics ledger + findings history). These are
 # append-only JSONL that unattended skills write; a malformed line should fail fast here
 # rather than silently corrupt a scorecard or suppress the wrong finding. Stdlib-only.
@@ -576,7 +587,10 @@ cd_e2e:
     - |
       set -euo pipefail
       CD_E2E_CONTAINER="workflow-cd-e2e-${CI_JOB_ID}"
+      # On this host network `host.docker.internal` resolves to the Windows side; the test database is
+      # published by the Docker engine on this machine, so point the name at loopback for the job.
       docker run --detach --name "$CD_E2E_CONTAINER" --network host \
+        --add-host host.docker.internal:127.0.0.1 \
         python:3.14-bookworm sleep infinity
       cleanup_cd_e2e() {
         docker rm --force "$CD_E2E_CONTAINER" >/dev/null 2>&1 || true
@@ -589,6 +603,7 @@ cd_e2e:
       docker exec \
         --workdir /workspace \
         --env UV_VERSION="$UV_VERSION" \
+        --env ENVIRONMENT=test \
         --env E2E_BASE_URL="https://localhost:8001" \
         --env POSTGRES_PASSWORD_TEST="${POSTGRES_PASSWORD_TEST:-}" \
         --env UV_PROJECT_ENVIRONMENT=/tmp/workflow-engine-cd-e2e-venv \

@@ -1,5 +1,5 @@
-{% extends "shared/base_spa.html" %}{% block title %}{{ order.reference }} · Portal sharing{% endblock %}{% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}{% block content %}<main class="contract-workspace">
-<a href="{{ url_for('contracts.order_page',order_id=order.id) }}" hx-boost="false">{{ order.reference }}</a>
+{% extends "shared/base_spa.html" %}{% set breadcrumb_leaf = "Portal sharing" %}{% set breadcrumb_extra = [{"label": order.reference, "href": url_for("contracts.order_page", order_id=order.id)}] %}{% block title %}{{ order.reference }} · Portal sharing{% endblock %}{% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}{% block content %}<main class="contract-workspace">
+<a href="{{ url_for('contracts.order_page',order_id=order.id) }}">{{ order.reference }}</a>
 <h1>Customer portal sharing</h1>
 <p>{{ order.customer.name }}</p>
 <p class="contract-error" role="alert" hidden>
@@ -56,6 +56,11 @@
 {% for approval in approval_requests %}<p>{{ approval.document_title }} · {{ approval.prompt }} · {{ approval.decision or 'Awaiting customer' }}{% if approval.response_note %} · {{ approval.response_note }}{% endif %}</p>{% else %}<p>No approval requests yet.</p>{% endfor %}
 </section>
 <section class="contract-card">
+<h2>Reorder request</h2>
+{% if reorder_request %}<p>Customer requested a repeat order {{ reorder_request.requested_at[:16]|replace('T',' ') }} UTC.</p>
+{% if reorder_request.note %}<p>{{ reorder_request.note }}</p>{% endif %}
+<p>Confirm quantities, price and dates in the conversation, then create a new contract order.</p>
+{% else %}<p>No reorder request.</p>{% endif %}
 <h2>Customer messages</h2>
 <p>One conversation per order. Messages cannot be edited or deleted once sent; the customer sees them only while the order is published.</p>
 {% for message in messages %}<p data-message="{{ message.sender }}"><strong>{{ 'Producer' if message.sender == 'producer' else 'Customer' }}</strong> · {{ message.created_at[:16]|replace('T',' ') }} UTC<br>{{ message.body }}</p>{% else %}<p>No messages yet.</p>{% endfor %}

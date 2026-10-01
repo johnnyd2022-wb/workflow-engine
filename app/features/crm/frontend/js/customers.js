@@ -18,7 +18,6 @@ function crmCustomers() {
     syncing: false,
 
     async init() {
-      CRMAPI.ensureBackButton('/crm');
       this.missingContactOnly = new URLSearchParams(window.location.search).get('missing_contact') === '1';
       await this.loadXeroStatus();
       await this.loadCustomers();

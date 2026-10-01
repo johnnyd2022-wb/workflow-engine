@@ -3,6 +3,7 @@
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.models.compliance_profile import ComplianceProfile
 from app.features.compliant.models.compliance_record import ComplianceRecord
+from app.features.compliant.models.compliance_record_file import ComplianceRecordFile
 from app.features.compliant.models.compliance_report import ComplianceReport
 from app.features.compliant.models.customs_premises import CustomsCoverage, CustomsLicence
 from app.features.compliant.models.excise import ExciseLodgement, ExciseRate
@@ -18,6 +19,7 @@ __all__ = [
     "AlcoholProductProfile",
     "ComplianceProfile",
     "ComplianceRecord",
+    "ComplianceRecordFile",
     "ComplianceReport",
     "ComplianceVerification",
     "ComplianceVerificationAction",

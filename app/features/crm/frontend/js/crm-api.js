@@ -66,28 +66,6 @@ window.CRMAPI = (function () {
     window.location.href = path;
   }
 
-  function ensureBackButton(path, hidden = false) {
-    const el = document.getElementById('spa-banner-back');
-    if (!el) return;
-    if (hidden) {
-      el.classList.add('spa-banner-back--hidden');
-      el.setAttribute('aria-hidden', 'true');
-      el.setAttribute('tabindex', '-1');
-      el.setAttribute('href', path || '/crm');
-      el.onclick = null;
-      return;
-    }
-    el.classList.remove('spa-banner-back--hidden');
-    el.removeAttribute('aria-hidden');
-    el.removeAttribute('tabindex');
-    el.setAttribute('href', path || '/crm');
-    el.setAttribute('data-spa-back-explicit', 'true');
-    el.onclick = function (evt) {
-      evt.preventDefault();
-      navigate(path || '/crm');
-    };
-  }
-
   // ── Xero ──────────────────────────────────────────────────────
   async function getXeroStatus() { return request('/xero/status'); }
   async function getXeroAuthUrl() {
@@ -191,7 +169,7 @@ window.CRMAPI = (function () {
   async function deleteProductMapping(id)     { return request(`/product-mappings/${id}`, { method: 'DELETE' }); }
 
   return {
-    request, csrfToken, navigate, ensureBackButton,
+    request, csrfToken, navigate,
     getXeroStatus, getXeroAuthUrl, triggerSync, disconnectXero,
     getCustomers, getCustomer, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice, getInvoiceViewUrl, invoicePdfUrl,
     createNote, updateNote, deleteNote,

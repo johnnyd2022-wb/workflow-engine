@@ -227,7 +227,7 @@
         '<div class="flows2-step__header-edit">' +
           '<a class="btn btn-secondary btn-sm" href="' +
             editHref +
-            '" hx-boost="false" onclick="event.stopPropagation();">Edit</a>' +
+            '" onclick="event.stopPropagation();">Edit</a>' +
         '</div>' +
         '<button type="button" class="flows2-step__toggle" onclick="toggleStep(this)" aria-label="Expand step">' +
           '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +

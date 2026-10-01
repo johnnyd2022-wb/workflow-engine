@@ -13,7 +13,6 @@ function crmMatching() {
     picker: null, // { line, batches: [{...candidate, pick}], error }
 
     async init() {
-      CRMAPI.ensureBackButton && CRMAPI.ensureBackButton('/crm');
       await this.load();
     },
 

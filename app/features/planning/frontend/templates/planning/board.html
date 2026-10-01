@@ -5,7 +5,7 @@
 {% endblock %}
 {% block content %}
 <main class="production-board" data-board-root data-can-record="{{ 'true' if can('production.record') else 'false' }}">
-  <nav><a href="{{ url_for('planning.planner_page') }}" hx-boost="false">Production demand</a></nav>
+  <nav><a href="{{ url_for('planning.planner_page') }}">Production demand</a></nav>
   <header><h1>Production board</h1><p>Proposed work dates. A delivery estimate is available once materials, capacity and site checks are complete.</p></header>
   <p role="alert" data-board-error hidden></p>
   <p role="status" data-board-notice></p>
@@ -39,7 +39,7 @@
     <div data-capacity-results aria-live="polite"></div>
     {% if can('production.record') %}
     <details data-capacity-settings>
-      <summary>Set daily resource capacity and assign workflow steps</summary>
+      <summary>Set resource capacity, working calendars and workflow steps</summary>
       <form data-capacity-group-form hx-boost="false">
         <label>Site<select name="site_id" required data-capacity-site></select></label>
         <label>Resource name<input name="name" maxlength="100" required placeholder="Still, bottling line, tanks"></label>
@@ -55,6 +55,7 @@
     </details>
     {% endif %}
   </section>
+  {% if can('production.record') %}<p>Drag an unpinned batch to another day to move it, or use its new start date form.</p>{% endif %}
   <h2 data-board-title>Planned work</h2>
   <p data-board-empty hidden>No planned batches in this period.</p>
   <section class="board-days" data-board-days aria-label="Planned production by day"></section>

@@ -20,6 +20,7 @@ from app.features.contract_manufacturing.services.portal_messages import (
     send_staff_message,
 )
 from app.features.contract_manufacturing.services.portal_progress import step_candidates
+from app.features.contract_manufacturing.services.portal_reorders import reorder_for_order
 from app.features.contract_manufacturing.services.portal_sharing import (
     document_dto,
     publish_order,
@@ -59,6 +60,9 @@ def portal_sharing_page(order_id):
         else {},
         approval_requests=staff_approvals(db_session(), UUID(g.org_id), order.id) if _can_record() else [],
         messages=messages_for_order(db_session(), UUID(g.org_id), order.customer_id, order.id) if _can_record() else [],
+        reorder_request=reorder_for_order(db_session(), UUID(g.org_id), order.customer_id, order.id)
+        if _can_record()
+        else None,
         people=portal_people(db_session(), UUID(g.org_id), order.customer_id)
         if g.current_user and _manage_people()
         else None,
