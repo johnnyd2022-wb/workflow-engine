@@ -35,7 +35,6 @@ function crmConfiguration() {
     },
 
     async init() {
-      CRMAPI.ensureBackButton('/crm');
       this.loading = true;
       this.error = null;
       try {

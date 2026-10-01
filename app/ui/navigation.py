@@ -28,6 +28,59 @@ def resolve(path: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _normal(path: str) -> str:
+    return (path or "/").rstrip("/") or "/"
+
+
+def _nearest_page(path: str):
+    path = _normal(path)
+    parts = path.split("/")
+    page = _BY_PATH.get(path)
+    while page is None and len(parts) > 2:
+        parts.pop()
+        page = _BY_PATH.get("/".join(parts))
+    return page
+
+
+def breadcrumbs(path: str, leaf: str | None = None, extra: list[dict] | None = None) -> list[dict]:
+    """The trail for a page: its main tab, its sub-nav tab, registered parents, then the page itself.
+
+    Empty for a page that is a main tab or a sub-nav tab's own page (the tabs already say where you
+    are). For an unregistered detail URL (an order, a customer, a case) the nearest registered ancestor
+    is a link and ``leaf`` names the page; ``extra`` adds links between them (an order above its
+    portal-sharing page). Each crumb is ``{"label", "href"}``; the last has ``href`` None.
+    """
+    path = _normal(path)
+    page = _nearest_page(path)
+    if page is None:
+        return []
+    exact = page.path == path
+    section = page.section
+    tab = next((t for t in SECTION_TABS.get(section, ()) if t.key == page.tab), None)
+    if exact and (path == _HOME.get(section) or (tab is not None and tab.path == path)):
+        return []
+    crumbs = [{"label": SECTION_LABELS[section], "href": _HOME[section]}]
+    if tab is not None and tab.path not in {path, crumbs[-1]["href"]}:
+        crumbs.append({"label": tab.label, "href": tab.path})
+    chain = []
+    parent = page.parent if exact else page.path
+    while parent:
+        found = _BY_PATH.get(parent)
+        if found is None:
+            break
+        chain.append(found)
+        parent = found.parent
+    for found in reversed(chain):
+        if found.path not in {crumb["href"] for crumb in crumbs}:
+            crumbs.append({"label": found.title, "href": found.path})
+    if exact:
+        crumbs.append({"label": page.title, "href": None})
+    else:
+        crumbs.extend({"label": item["label"], "href": item.get("href")} for item in (extra or []))
+        crumbs.append({"label": leaf or "Details", "href": None})
+    return crumbs
+
+
 def _conditions() -> dict[str, bool]:
     """Setup-dependent tabs, read once per request (compliance pages only)."""
     # Cached on the request's own environ: `g` can outlive a request when an app context is reused.
@@ -116,4 +169,5 @@ def nav_context() -> dict:
         "section_tabs": items,
         "section_label": SECTION_LABELS.get(section or ""),
         "section_home": lambda name: section_home(name, user),
+        "nav_breadcrumbs": lambda leaf=None, extra=None: breadcrumbs(request.path, leaf, extra),
     }

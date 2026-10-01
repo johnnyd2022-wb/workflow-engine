@@ -2,6 +2,7 @@
 {% extends "shared/base_spa.html" %}
 {# A focused full-screen flow: no section sub-nav. #}
 {% block section_tabs %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
 
 {% block body_class %}process-flow-spa{% endblock %}
 {% block body_extra_attrs %}data-page="process-flow-wizard" data-flow-wizard-page="{{ flow_wizard_page }}"{% endblock %}

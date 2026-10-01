@@ -1,0 +1,16 @@
+{# Breadcrumb trail from app/ui/navigation.py (docs/ux-overhaul-plan.md 2.3). A page may set
+   `breadcrumb_leaf` (what to call an unregistered detail page) and `breadcrumb_extra` (links between
+   the registered parent and the page). The hidden marker tells the shell's back arrow where "up" is;
+   it is empty on a page with no trail (a tab's own page), which hides the arrow. #}
+{% set crumbs = nav_breadcrumbs(breadcrumb_leaf|default(none), breadcrumb_extra|default(none)) %}
+{% if crumbs|length > 1 %}
+<nav class="breadcrumbs" aria-label="Breadcrumb" data-nav-back="{{ crumbs[-2].href }}">
+  <ol>
+    {% for crumb in crumbs %}
+    {% if crumb.href %}<li><a href="{{ crumb.href }}">{{ crumb.label }}</a></li>{% else %}<li aria-current="page" data-breadcrumb-leaf>{{ crumb.label }}</li>{% endif %}
+    {% endfor %}
+  </ol>
+</nav>
+{% else %}
+<span hidden data-nav-back=""></span>
+{% endif %}

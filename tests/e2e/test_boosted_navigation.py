@@ -149,3 +149,29 @@ def test_back_and_forward_restore_working_pages(logged_in_page):
     assert page.url.endswith("/core/stocktake")
     assert page.locator("[data-stocktake-root]").get_attribute("data-st-bound") == "1"
     assert page.locator("#page-content").get_by_text("Loading…", exact=True).count() == 0
+
+
+def test_back_arrow_goes_up_one_level_on_every_kind_of_page(logged_in_page):
+    """The arrow in the top bar follows the breadcrumb (shared/breadcrumbs.html): hidden on a tab's own
+    page, one level up elsewhere, the same whether the page came from a full load or a boosted click."""
+    page = logged_in_page
+    arrow = page.locator("#spa-banner-back")
+
+    page.goto("/core/planner")
+    _settle(page)
+    assert "spa-banner-back--hidden" in (arrow.get_attribute("class") or "")
+
+    page.evaluate(_BOOSTED_CLICK_JS, "/core/planner/board")
+    page.wait_for_function("window.__boostSettled === true", timeout=15_000)
+    _settle(page)
+    assert "spa-banner-back--hidden" not in (arrow.get_attribute("class") or "")
+    assert arrow.get_attribute("href") == "/core/planner"
+    arrow.click()
+    page.wait_for_url("**/core/planner")
+    _settle(page)
+    assert "spa-banner-back--hidden" in (arrow.get_attribute("class") or "")
+
+    page.goto("/core/go-live")
+    _settle(page)
+    assert arrow.get_attribute("href") == "/core/dashboard"
+    assert page.locator(".breadcrumbs li").all_inner_texts() == ["Dashboard", "Go live"]

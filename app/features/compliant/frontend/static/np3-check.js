@@ -525,7 +525,8 @@
   function render(payload) {
     var check = payload.check;
     root.querySelector('[data-np3-check-title]').textContent = check.topic;
-    root.querySelector('[data-np3-check-breadcrumb]').textContent = check.topic;
+    var leaf = document.querySelector('[data-breadcrumb-leaf]');
+    if (leaf) leaf.textContent = check.topic;
     root.querySelector('[data-np3-check-summary]').textContent = check.requirement_summary;
     root.querySelector('[data-np3-check-state]').textContent = check.guidance_update_required
       ? 'Guidance update required'
