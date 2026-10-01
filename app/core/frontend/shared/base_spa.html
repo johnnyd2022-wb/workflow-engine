@@ -100,6 +100,7 @@
               class="spa-banner-back"
               id="spa-banner-back"
               aria-label="Go back"
+              hx-boost="false"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M11 19l-7-7 7-7"/>
@@ -293,6 +294,7 @@
         {% set boosted = request.headers.get('HX-Boosted') == 'true' %}
         {% if boosted %}<div hidden data-page-assets>{{ self.head_extras() }}</div>{% endif %}
         {% block section_tabs %}{% include 'shared/section_tabs.html' %}{% endblock %}
+        {% block breadcrumbs %}{% include 'shared/breadcrumbs.html' %}{% endblock %}
         {% block content %}{% endblock %}
         {% if boosted %}<div hidden data-page-assets>{{ self.scripts() }}</div>{% endif %}
       </main>
@@ -485,6 +487,23 @@
       var el = document.getElementById('spa-banner-back');
       if (!el) return;
       var path = (window.location.pathname || '').replace(/\/$/, '') || '/';
+      // The page says where "up" is (shared/breadcrumbs.html); empty means a tab's own page.
+      var marker = document.querySelector('#page-content [data-nav-back]');
+      if (marker) {
+        var upHref = marker.getAttribute('data-nav-back');
+        if (!upHref) {
+          el.classList.add('spa-banner-back--hidden');
+          el.setAttribute('aria-hidden', 'true');
+          el.setAttribute('tabindex', '-1');
+          return;
+        }
+        el.classList.remove('spa-banner-back--hidden');
+        el.removeAttribute('aria-hidden');
+        el.removeAttribute('tabindex');
+        el.setAttribute('href', upHref);
+        el.setAttribute('data-spa-back-explicit', 'true');
+        return;
+      }
       if (spaBannerBackIsMainTab(path)) {
         el.classList.add('spa-banner-back--hidden');
         el.setAttribute('aria-hidden', 'true');
@@ -606,23 +625,16 @@
           }
           return;
         }
-        /* CRM pages: explicit deterministic parent route, independent of stale href/history state. */
-        if (pathNow.indexOf('/crm') === 0) {
-          e.preventDefault();
-          var crmDest = '/crm';
-          if (window.htmx && typeof window.htmx.ajax === 'function') {
-            window.htmx.ajax('GET', crmDest, {
-              target: '#page-content',
-              swap: 'innerHTML',
-              select: '#page-content',
-              pushURL: true,
-            });
-          } else {
-            window.location.href = crmDest;
-          }
-          return;
-        }
         if (el.getAttribute('data-spa-back-explicit') === 'true') {
+          /* Not boosted: htmx reads a boosted link's href once, but this href changes with the page. */
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+          e.preventDefault();
+          var upHref = el.getAttribute('href');
+          if (window.htmx && typeof window.htmx.ajax === 'function') {
+            window.htmx.ajax('GET', upHref, { target: '#page-content', swap: 'innerHTML', select: '#page-content', pushURL: true });
+          } else {
+            window.location.href = upHref;
+          }
           return;
         }
         if (window.history.length > 1) {

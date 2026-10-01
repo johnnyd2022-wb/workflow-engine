@@ -67,7 +67,6 @@ function crmOverview() {
     expandedProductName: null,
 
     async init() {
-      CRMAPI.ensureBackButton('/crm', true);
       try {
         const [overview, monthly, users, traceCfg] = await Promise.all([
           CRMAPI.getOverview(),

@@ -1,4 +1,5 @@
 {% extends "shared/base_spa.html" %}
+{% set breadcrumb_leaf = order.reference %}
 {% block title %}{{ order.reference }} · Contract orders{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}
 {% block content %}

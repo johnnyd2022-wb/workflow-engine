@@ -4,7 +4,6 @@
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
 {% block content %}
 <main class="compliant-shell" data-np3-audit-root data-programme-short="{{ programme_short }}" aria-busy="true">
-  <nav class="module-breadcrumb" aria-label="Compliance location"><a href="/compliant">Compliance</a><span aria-hidden="true">/</span><a href="/compliant/nz-alcohol">NZ Alcohol</a><span aria-hidden="true">/</span><strong>{{ programme_short }}</strong></nav>
   <header class="compliant-hero np3-audit-hero">
     <div><p class="compliant-eyebrow">{{ programme_label|upper }}</p><p><a class="np3-guidance-link" href="{{ guidance_url }}" target="_blank" rel="noopener noreferrer">Open the latest MPI {{ programme_label }} guidance ↗</a></p></div>
     <div class="compliant-summary" role="status" aria-live="polite"><span data-np3-date>No verification visit booked.</span></div>

@@ -61,7 +61,6 @@ function crmTasks() {
     calExtendingAfter: false,
 
     async init() {
-      CRMAPI.ensureBackButton('/crm');
       this.syncViewport();
       window.addEventListener('resize', () => { this.syncViewport(); });
       this.initCalendarWindow();

@@ -103,7 +103,9 @@ def test_sub_nav_shows_only_the_tabs_a_role_may_open(db, flask_app):  # noqa: F8
         assert "contracts" in keys and "inventory" in keys
         assert not {"planner", "batches", "workflows"} & set(keys)  # need production.view
         assert [key for key, _ in _tabs(client.get("/crm").get_data(as_text=True))] == [
-            t.key for t in SECTION_TABS["sales"] if t.key != "configuration"  # needs sales.manage
+            t.key
+            for t in SECTION_TABS["sales"]
+            if t.key != "configuration"  # needs sales.manage
         ]
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
@@ -149,6 +151,85 @@ def test_focused_flows_and_the_dashboard_have_no_sub_nav(db, flask_app):  # noqa
     try:
         assert _tabs(client.get("/core/dashboard").get_data(as_text=True)) == []
         assert _tabs(client.get("/core/flows/create/start").get_data(as_text=True)) != []
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+# --- breadcrumbs and the back arrow (plan 2.3) ---------------------------------------------------
+
+from app.ui.navigation import breadcrumbs  # noqa: E402
+
+
+def _trail(path, **kw):
+    return [(c["label"], c["href"]) for c in breadcrumbs(path, **kw)]
+
+
+def test_a_tab_page_has_no_trail_and_so_no_back_arrow():
+    assert breadcrumbs("/core") == []
+    assert breadcrumbs("/core/planner") == []
+    assert breadcrumbs("/core/dashboard") == []
+    assert breadcrumbs("/compliant") == []
+    assert breadcrumbs("/compliant/nz-alcohol/customs") == []
+
+
+def test_registered_child_pages_list_their_tab_and_parents():
+    assert _trail("/core/planner/board") == [
+        ("Production", "/core"),
+        ("Planner", "/core/planner"),
+        ("Production board", None),
+    ]
+    assert _trail("/core/inventory/add/manual") == [
+        ("Production", "/core"),
+        ("Inventory", "/core/inventory/view"),
+        ("Add to inventory", "/core/inventory/add"),
+        ("Add inventory manually", None),
+    ]
+    assert _trail("/core/go-live") == [("Dashboard", "/core/dashboard"), ("Go live", None)]
+    assert _trail("/core/people") == [("Settings", "/core/settings"), ("People and roles", None)]
+
+
+def test_a_detail_page_hangs_off_its_registered_ancestor():
+    assert _trail("/core/contracts/abc", leaf="CO-12") == [
+        ("Production", "/core"),
+        ("Contract orders", "/core/contracts"),
+        ("CO-12", None),
+    ]
+    assert _trail(
+        "/core/contracts/abc/portal-sharing",
+        leaf="Portal sharing",
+        extra=[{"label": "CO-12", "href": "/core/contracts/abc"}],
+    ) == [
+        ("Production", "/core"),
+        ("Contract orders", "/core/contracts"),
+        ("CO-12", "/core/contracts/abc"),
+        ("Portal sharing", None),
+    ]
+    assert _trail("/compliant/nz-alcohol/np3-audit/check/recall-policy", leaf="Check")[-2:] == [
+        ("Food safety", "/compliant/nz-alcohol/np3-audit"),
+        ("Check", None),
+    ]
+    assert _trail("/crm/customers/7")[-1] == ("Details", None)
+
+
+def test_every_registered_page_is_reachable_up_the_trail_to_its_section():
+    for page in PAGES:
+        crumbs = breadcrumbs(page.path)
+        for crumb in crumbs[:-1]:
+            assert crumb["href"], f"{page.path}: {crumb}"
+        if crumbs:
+            assert crumbs[0]["label"].lower().startswith(page.section[:4]), page.path
+
+
+def test_rendered_pages_tell_the_back_arrow_where_up_is(db, flask_app):  # noqa: F811
+    org, client = _client(flask_app, db, UserRole.ADMIN)
+    try:
+        html = client.get("/core/planner/board").get_data(as_text=True)
+        assert 'data-nav-back="/core/planner"' in html and "Production board" in html
+        root = client.get("/core/planner").get_data(as_text=True)
+        assert 'data-nav-back=""' in root
+        wizard = client.get("/core/flows/create/step/1").get_data(as_text=True)
+        assert "data-nav-back" not in wizard  # keeps the wizard's own back handling
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()

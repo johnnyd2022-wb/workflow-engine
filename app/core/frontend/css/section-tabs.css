@@ -20,3 +20,12 @@
   white-space: nowrap;
   text-decoration: none;
 }
+
+/* Breadcrumb trail (app/ui/templates/shared/breadcrumbs.html). */
+.breadcrumbs { padding: 12px 24px 0; font-size: 13px; }
+@media (max-width: 767px) { .breadcrumbs { padding: 10px 16px 0; } }
+.breadcrumbs ol { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0; padding: 0; list-style: none; }
+.breadcrumbs li + li::before { content: "/"; margin-right: 8px; color: var(--text-muted, #8a94a6); }
+.breadcrumbs a { color: var(--text-secondary, #52606d); text-decoration: none; }
+.breadcrumbs a:hover { text-decoration: underline; }
+.breadcrumbs [aria-current="page"] { color: var(--text-primary, #172033); font-weight: 600; }

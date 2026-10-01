@@ -1,4 +1,4 @@
-{% extends "shared/base_spa.html" %}{% block title %}{{ order.reference }} · Portal sharing{% endblock %}{% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}{% block content %}<main class="contract-workspace">
+{% extends "shared/base_spa.html" %}{% set breadcrumb_leaf = "Portal sharing" %}{% set breadcrumb_extra = [{"label": order.reference, "href": url_for("contracts.order_page", order_id=order.id)}] %}{% block title %}{{ order.reference }} · Portal sharing{% endblock %}{% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}{% block content %}<main class="contract-workspace">
 <a href="{{ url_for('contracts.order_page',order_id=order.id) }}">{{ order.reference }}</a>
 <h1>Customer portal sharing</h1>
 <p>{{ order.customer.name }}</p>
