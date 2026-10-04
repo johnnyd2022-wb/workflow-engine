@@ -19,8 +19,8 @@ password. Other email domains accept the password invite first, then link explic
 
 ## Environment setup
 
-Sign-in remains disabled until credentials are provisioned. Set `[google_sign_in]
-enabled = true` in the environment config. Never put credentials in tracked ini files.
+Sign-in is enabled in all environment configs and their templates. Provision OAuth
+credentials before starting each environment. Never put credentials in tracked ini files.
 Use a separate Google Cloud OAuth **web application** client for each environment,
 with scopes `openid email` and its exact redirect URI:
 
@@ -35,9 +35,21 @@ it must end in `/auth/google/callback`, with no query, fragment or embedded cred
 Register that same URI in Google Cloud. Provision local KeePassXC entries
 `workflow-engine/google/client_id` and `workflow-engine/google/client_secret`, each
 with the credential in its Password field. Entry paths are configurable under
-`[google_sign_in]`. CI/deployment uses protected masked `GOOGLE_CLIENT_ID` and
+`[google_sign_in]`. Host runs with `ENVIRONMENT=test` use KeePassXC entries
+`workflow-engine/GOOGLE_CLIENT_ID` and `workflow-engine/GOOGLE_CLIENT_SECRET` for
+the test client. The test Docker scripts resolve these entries on the host and
+inject them into the container.
+CI/deployment uses protected masked `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` variables. Enabled configurations fail startup if incomplete.
-No Google secrets are required for the automated test suite.
+Pytest and the isolated CI test server supply test-only OAuth values when none
+are provided; provider verification is mocked and no real Google credentials
+are required. Actual deployments must supply their own real credentials.
+
+OAuth branding and audience are shared by all clients in a Google Cloud project.
+Use a dedicated biz-e project rather than an unrelated Cloudflare Access project,
+set the audience to External, and register `biz-e.app` as an authorized domain.
+After replacing credentials in KeePassXC, recreate the test container to refresh
+its injected environment; restarting it retains its old credentials.
 
 Authorization uses a server redirect, S256 PKCE, random state and nonce, and a
 ten-minute flow. Authlib validates the code exchange and ID token signature using
@@ -63,7 +75,7 @@ this implementation does not bypass TOTP based on Google claims.
 Tests mock only the provider-verification boundary for route scenarios. They also
 exercise Authlib's signature/claims checks with locally signed tokens and mocked
 Google JWKS and code exchange. Provision real credentials and verify the configured
-redirect and Johnny's existing account before enabling production sign-in.
+redirect and Johnny's existing account before production rollout.
 
 Primary references checked 28 September 2026:
 

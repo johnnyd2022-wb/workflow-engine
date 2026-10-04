@@ -3,6 +3,7 @@ environment = test
 debug = true
 host = host.docker.internal
 port = 5001
+keepass_session_secret_entry = workflow-engine/FLASK_SECRET_KEY_TEST
 
 [database]
 host = host.docker.internal
@@ -62,8 +63,8 @@ keepass_posthog_project_api_key_entry = workflow-engine/observability/posthog_pr
 # storage_uri = redis://localhost:6379/0
 
 [google_sign_in]
-# Enable after provisioning a separate OAuth web client for this environment.
-enabled = false
+# Requires OAuth credentials from KeePassXC locally or protected environment variables.
+enabled = true
 redirect_uri = https://test.biz-e.app/auth/google/callback
-keepass_client_id_entry = workflow-engine/google/client_id
-keepass_client_secret_entry = workflow-engine/google/client_secret
+keepass_client_id_entry = workflow-engine/GOOGLE_CLIENT_ID
+keepass_client_secret_entry = workflow-engine/GOOGLE_CLIENT_SECRET
