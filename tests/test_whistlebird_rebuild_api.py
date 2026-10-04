@@ -185,3 +185,39 @@ def test_a_malformed_curated_manifest_blocks_the_reset(steps, monkeypatch, tmp_p
         rebuild_api.rebuild(_args(steps, f"{flag}={path}", "--confirm-reset-whistlebird-ltd"))
 
     assert steps["called"] == []
+
+
+def test_resume_preserves_tenant_workflows_and_unsnapshotted_evidence(steps, monkeypatch):
+    monkeypatch.setattr(np3, "np3_unsnapshotted", lambda *_a, **_k: ["existing evidence"])
+    report = rebuild_api.rebuild(_args(steps, "--resume"))
+    assert report["resumed"] is True
+    assert steps["called"][0] == "replay"
+    for destructive in ("tenant", "reset", "workflows", "compliant"):
+        assert destructive not in steps["called"]
+    assert "timestamps" in steps["called"]
+    assert "verify" in steps["called"]
+
+
+def test_resume_cannot_be_combined_with_reset_confirmation(steps):
+    with pytest.raises(SystemExit) as error:
+        _args(steps, "--resume", "--confirm-reset-whistlebird-ltd")
+    assert error.value.code == 2
+
+
+def test_transport_failure_prints_recovery_message_without_traceback(steps, monkeypatch, capsys):
+    def fail(*_a, **_k):
+        raise rebuild_api.replay.ReplayTransportError("response lost; use --resume")
+
+    monkeypatch.setattr(rebuild_api.replay, "run_replay", fail)
+    assert (
+        rebuild_api.main(["--target-url=postgresql://target", f"--np3-manifest={steps['manifest']}", "--resume"]) == 1
+    )
+    assert "use --resume" in capsys.readouterr().err
+
+
+def test_rebuild_passes_recent_manifest_into_timestamp_correction(steps, monkeypatch):
+    calls = []
+    monkeypatch.setattr(rebuild_api.correct, "correct_timestamps", lambda *_a, **kw: calls.append(kw) or {})
+    args = _args(steps, "--resume")
+    rebuild_api.rebuild(args)
+    assert calls[0]["recent_batches_manifest_path"] == args.recent_batches_manifest

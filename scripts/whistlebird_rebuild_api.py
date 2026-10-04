@@ -118,7 +118,7 @@ def preflight(args: argparse.Namespace) -> list[str]:
         # Found here, before the reset: a legacy source that fails later would leave a wiped tenant.
         problems.append(f"legacy source unusable ({args.legacy_source}): {type(exc).__name__}: {exc}")
     problems.extend(check_replay_plan(args))
-    if not args.discard_unsnapshotted_np3:
+    if not args.resume and not args.discard_unsnapshotted_np3:
         unsnapshotted = np3.np3_unsnapshotted(args.target_url, args.org_name, manifest)
         if unsnapshotted:
             problems.append(
@@ -136,15 +136,20 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
     problems = preflight(args)
     if problems:
         raise RebuildRefusedError("\n  ".join(["refusing to rebuild:", *problems]))
-    if not args.confirm_reset_whistlebird:
+    if not args.confirm_reset_whistlebird and not args.resume:
         return {"dry_run": True, "would_run": list(STEPS), "preflight": "ok"}
 
     report: dict[str, Any] = {}
-    report["tenant"] = wm.ensure_target_org_admin(args.target_url, args.org_name, args.admin_email, args.admin_password)
-    report["password_sync"] = wm.sync_whistlebird_admin_password(args.target_url, args.org_name, args.admin_email)
-    report["reset"] = wm.reset_target_org(args.target_url, args.org_name)
-    report["workflows"] = wm.setup_product_workflows(args.target_url, args.org_name)
-    report["compliant_setup"] = wm.ensure_compliant_nz_alcohol_setup(args.target_url, args.org_name)
+    if args.resume:
+        report["resumed"] = True
+    else:
+        report["tenant"] = wm.ensure_target_org_admin(
+            args.target_url, args.org_name, args.admin_email, args.admin_password
+        )
+        report["password_sync"] = wm.sync_whistlebird_admin_password(args.target_url, args.org_name, args.admin_email)
+        report["reset"] = wm.reset_target_org(args.target_url, args.org_name)
+        report["workflows"] = wm.setup_product_workflows(args.target_url, args.org_name)
+        report["compliant_setup"] = wm.ensure_compliant_nz_alcohol_setup(args.target_url, args.org_name)
     report["replay"] = replay.run_replay(
         args.base_url,
         args.legacy_source,
@@ -168,6 +173,7 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         disposals_manifest_path=args.disposals_manifest,
         production_manifest_path=args.production_manifest,
         crm_manifest_path=args.crm_manifest,
+        recent_batches_manifest_path=args.recent_batches_manifest,
     )
     report["lot_details"] = lot_details.apply_lot_details(args.target_url, args.org_name)
     report["trace_dates"] = trace_dates.apply_trace_dates(args.target_url, args.org_name)
@@ -223,13 +229,18 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Proceed even though the database holds NP3 evidence the manifest lacks (it will be lost).",
     )
+    parser.add_argument(
+        "--resume", action="store_true", help="Continue an interrupted rebuild without resetting the tenant."
+    )
     args = parser.parse_args(argv)
+    if args.resume and args.confirm_reset_whistlebird:
+        parser.error("--resume cannot be combined with --confirm-reset-whistlebird-ltd")
     if not args.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
     if args.org_name != wm.WHISTLEBIRD_ORG_NAME:
         parser.error(f"--org-name must be exactly {wm.WHISTLEBIRD_ORG_NAME!r}")
     args.admin_password = os.environ.get(args.admin_password_env)
-    if not args.admin_password and args.confirm_reset_whistlebird:
+    if not args.admin_password and (args.confirm_reset_whistlebird or args.resume):
         try:
             args.admin_password = wm._keepass_password(wm.WHISTLEBIRD_ADMIN_KEEPASS_ENTRY)
         except ValueError as exc:
@@ -241,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _arguments(argv)
     try:
         report = rebuild(args)
-    except RebuildRefusedError as exc:
+    except (RebuildRefusedError, replay.ReplayRejectedError) as exc:
         print(exc, file=sys.stderr)
         return 1
     print(json.dumps(report, indent=2, sort_keys=True, default=str))

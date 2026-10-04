@@ -60,6 +60,10 @@ class ReplayRejectedError(RuntimeError):
     """A real API call was rejected. Stop -- don't paper over it."""
 
 
+class ReplayTransportError(ReplayRejectedError):
+    """The API response was lost; the request may have committed."""
+
+
 _MATERIAL_NAME_ALIASES = {
     # The legacy purchase register uses "Macedonia" while the fixed production recipe
     # uses "Macedonian".  They are the same botanical, and the alias keeps reset/replay
@@ -158,7 +162,15 @@ class ReplayClient:
         return {"X-CSRFToken": self._csrf_token, "Referer": f"{self.base_url}/core/dashboard"}
 
     def post(self, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
-        response = self.session.post(f"{self.base_url}{path}", json=json_body, headers=self._headers(), timeout=60)
+        try:
+            response = self.session.post(f"{self.base_url}{path}", json=json_body, headers=self._headers(), timeout=60)
+        except requests.RequestException as exc:
+            # Never blindly retry a mutation: the server may have committed it.
+            raise ReplayTransportError(
+                f"POST {path}: {type(exc).__name__}; the outcome is unknown. "
+                "Once the app is available, continue with scripts/replay_whistlebird.sh --resume "
+                "(without --confirm); this preserves the existing tenant."
+            ) from None
         if response.status_code not in (200, 201):
             raise ReplayRejectedError(f"POST {path} -> {response.status_code}: {response.text[:1000]}")
         return response.json()
@@ -863,14 +875,21 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
     if green_gold is not None:
         execution_data[wm.ABV_PROMPT_LABEL] = wm.abv_prompt_value(wm.GREEN_GOLD_ABV_PERCENT)
 
-    client.post(
-        f"/api/core/executions/{execution_id}/steps/{step_row['id']}/complete",
-        {
-            "actual_inputs": actual_inputs,
-            "actual_outputs": actual_outputs,
-            "execution_data": execution_data,
-        },
-    )
+    try:
+        client.post(
+            f"/api/core/executions/{execution_id}/steps/{step_row['id']}/complete",
+            {
+                "actual_inputs": actual_inputs,
+                "actual_outputs": actual_outputs,
+                "execution_data": execution_data,
+            },
+        )
+    except ReplayTransportError:
+        # Read the tenant-scoped durable marker, not the lost HTTP response. If the
+        # step committed, continuing avoids a second inventory debit/output write.
+        if not store.step_already_completed(execution_id, step_number):
+            raise
+        print(f"Recovered committed step after lost response: {event.event_id}", file=sys.stderr)
     return True
 
 
