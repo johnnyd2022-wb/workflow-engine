@@ -15,12 +15,13 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: scripts/replay_whistlebird.sh --confirm [--discard-unsnapshotted-np3]
+Usage: scripts/replay_whistlebird.sh (--confirm | --resume) [--discard-unsnapshotted-np3]
 
 Rebuild Whistlebird Ltd through the local API using the committed replay manifests.
 
 Required:
   --confirm                       Reset and rebuild the Whistlebird Ltd tenant.
+  --resume                        Continue an interrupted rebuild without resetting.
 
 Optional:
   --discard-unsnapshotted-np3     Discard NP3 evidence entered in the app but not
@@ -41,10 +42,12 @@ EOF
 }
 
 confirm=0
+resume=0
 discard_unsnapshotted_np3=0
 for argument in "$@"; do
     case "$argument" in
         --confirm) confirm=1 ;;
+        --resume) resume=1 ;;
         --discard-unsnapshotted-np3) discard_unsnapshotted_np3=1 ;;
         --help|-h) usage; exit 0 ;;
         *)
@@ -55,8 +58,8 @@ for argument in "$@"; do
     esac
 done
 
-if [[ "$confirm" -ne 1 ]]; then
-    printf 'Refusing to reset Whistlebird Ltd without --confirm.\n\n' >&2
+if [[ "$confirm" -eq "$resume" ]]; then
+    printf 'Choose exactly one of --confirm (reset) or --resume (preserve existing data).\n\n' >&2
     usage >&2
     exit 2
 fi
@@ -91,8 +94,12 @@ fi
 
 arguments=(
     --base-url "$WHISTLEBIRD_REPLAY_BASE_URL"
-    --confirm-reset-whistlebird-ltd
 )
+if [[ "$resume" -eq 1 ]]; then
+    arguments+=(--resume)
+else
+    arguments+=(--confirm-reset-whistlebird-ltd)
+fi
 if [[ "$WHISTLEBIRD_REPLAY_INSECURE" == "1" ]]; then
     arguments+=(--insecure)
 fi

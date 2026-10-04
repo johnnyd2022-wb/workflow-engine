@@ -286,3 +286,66 @@ def test_replay_converts_the_documented_vat53_draw_into_green_gold(monkeypatch):
 
 def test_replay_marks_unbottled_vat_as_not_applicable_for_required_batch_prompt():
     assert replay._batch_number_prompt_value(None) == "Not applicable — no bottled output recorded"
+
+
+def test_post_transport_failure_reports_safe_resume_without_retry(monkeypatch):
+    import pytest
+    import requests
+
+    client = replay.ReplayClient("https://localhost:8001")
+    client._csrf_token = "test-token"
+    calls = []
+
+    def lost_response(*args, **kwargs):
+        calls.append(args)
+        raise requests.ReadTimeout("sensitive server details")
+
+    monkeypatch.setattr(client.session, "post", lost_response)
+    with pytest.raises(replay.ReplayTransportError, match="--resume") as error:
+        client.post("/api/core/executions/one/steps/two/complete", {})
+    assert len(calls) == 1
+    assert "sensitive server details" not in str(error.value)
+
+
+def test_complete_step_recovers_committed_lost_response_without_second_write(monkeypatch):
+    monkeypatch.setattr(replay, "_produced_items_for_step", lambda *_a: [])
+
+    class CommittedStore(_Store):
+        def __init__(self):
+            self.reads = 0
+
+        def step_already_completed(self, *_args):
+            self.reads += 1
+            return self.reads > 1
+
+    class LostClient(_Client):
+        def post(self, path, payload):
+            super().post(path, payload)
+            raise replay.ReplayTransportError("response lost")
+
+    # Exercise the real labelling payload with inventory lookups stubbed above.
+    events = _batch_events(_batch(), {}, {}, {})
+    event = next(e for e in events if e.event_type == "complete_step" and e.payload["step_key"] == "labelling")
+    client = LostClient()
+    assert replay._execute_complete_step(client, CommittedStore(), event) is True
+    assert len(client.calls) == 1
+
+
+def test_complete_step_stops_if_lost_response_has_no_durable_completion(monkeypatch):
+    monkeypatch.setattr(replay, "_produced_items_for_step", lambda *_a: [])
+    import pytest
+
+    class LostClient(_Client):
+        def post(self, path, payload):
+            super().post(path, payload)
+            raise replay.ReplayTransportError("response lost")
+
+    event = next(
+        e
+        for e in _batch_events(_batch(), {}, {}, {})
+        if e.event_type == "complete_step" and e.payload["step_key"] == "labelling"
+    )
+    client = LostClient()
+    with pytest.raises(replay.ReplayTransportError):
+        replay._execute_complete_step(client, _Store(), event)
+    assert len(client.calls) == 1

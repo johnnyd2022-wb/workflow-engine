@@ -458,6 +458,21 @@ source of truth: `docs/whistlebird-np3-evidence-source.json`.
    setup -> replay (Core, then NP3) -> timestamp pass -> verify. Without the confirm flag
    it is a read-only preflight.
 
+If a request times out, the step-completion handler checks the tenant-scoped database
+marker. A committed step continues without resending the inventory mutation. Otherwise
+the command stops with the event and request path, and a recovery command:
+
+```bash
+scripts/replay_whistlebird.sh --resume
+```
+
+Resume skips tenant reset, workflow creation and Compliant setup, then runs the replay,
+timestamp passes and verification. It preserves unsnapshotted evidence. It cannot be
+combined with `--confirm`. The existing narrow limitation still applies: interruption
+after creating an execution but before its first step records `batch_ref` can leave an
+empty, unmarked execution. Verification detects the extra incomplete steps; a confirmed
+fresh rebuild is needed for that case. Never bypass NP3 preflight to discard new evidence.
+
 **Decisions (founder, 2026-09-19)**
 
 - Text and selection evidence only. A record linking Core entities (`source_refs`) or an
