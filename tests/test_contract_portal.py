@@ -201,6 +201,7 @@ def test_immutable_projection_and_explicit_unavailable_fields(portal_world, db):
         "waiting_on_you",
         "messages",  # the order thread (empty until someone writes)
         "reorder_request",  # only the scoped enquiry, never a new operational order
+        "timeline",  # explicit events assembled from already visible portal facts
     }
     for key in ("timing", "materials", "yield", "delivery", "waiting_on_you"):
         assert payload[key]["available"] is False
@@ -925,3 +926,79 @@ def test_concurrent_reorder_retries_and_customer_fk_proof(portal_world, db):
         with pytest.raises(IntegrityError):
             db.flush()
         db.rollback()
+
+
+def test_order_timeline_only_contains_current_customer_shared_facts(portal_world, db):
+    w = portal_world
+    customer = _accept(w)
+    other_customer = _accept(w, 1)
+    foreign_customer = _accept(w, 2)
+    order_id = w["orders"][0]["id"]
+    document = _upload(w)
+    _publish(w, document_ids=[document["id"]], stage_label="A private old shared label")
+    staff_base = f"/api/core/contract-orders/{order_id}"
+    approval = (
+        w["clients"][0]
+        .post(staff_base + "/portal-approvals", json={"document_id": document["id"], "prompt": "Please review proof"})
+        .get_json()["approval_id"]
+    )
+    customer_base = f"/portal/api/orders/{order_id}"
+    assert customer.post(customer_base + f"/approvals/{approval}", json={"decision": "approved"}).status_code == 200
+    assert customer.post(customer_base + "/messages", json={"body": "Customer message"}).status_code == 201
+    assert w["clients"][0].post(staff_base + "/portal-messages", json={"body": "Producer reply"}).status_code == 201
+    _publish(w, document_ids=[document["id"]])
+    timeline = customer.get(customer_base).get_json()["order"]["timeline"]
+    events = timeline["events"]
+    assert [e["kind"] for e in events] == [
+        "shared_update",
+        "proof_requested",
+        "proof_response",
+        "message",
+        "message",
+        "shared_update",
+    ]
+    assert all(set(event) == {"id", "occurred_at", "kind", "label"} for event in events)
+    assert not timeline["truncated"]
+    assert "A private old shared label" not in str(timeline)
+    page = customer.get(f"/portal/orders/{order_id}").get_data(as_text=True)
+    assert "Order timeline" in page and "Read conversation" in page
+    assert other_customer.get(customer_base).status_code == 404
+    assert foreign_customer.get(customer_base).status_code == 404
+    # Removing a proof from the current allowlist removes both its timeline events.
+    _publish(w)
+    events = customer.get(customer_base).get_json()["order"]["timeline"]["events"]
+    assert not any(event["kind"].startswith("proof_") for event in events)
+    assert w["clients"][0].delete(staff_base + "/portal-publications").status_code == 204
+    assert customer.get(customer_base).status_code == 404
+
+
+def test_timeline_bounds_shared_history_and_ignores_internal_audit_fields(portal_world, db):
+    from app.features.contract_manufacturing.services.portal_timeline import order_timeline
+
+    w = portal_world
+    customer = _accept(w)
+    _publish(w)
+    order_id = UUID(w["orders"][0]["id"])
+    row = db.query(PortalPublication).filter_by(org_id=w["orgs"][0].id, order_id=order_id).one()
+    for revision in range(2, 54):
+        db.add(
+            PortalPublication(
+                org_id=row.org_id,
+                order_id=row.order_id,
+                customer_id=row.customer_id,
+                revision=revision,
+                payload=row.payload,
+                published_by=row.published_by,
+            )
+        )
+    db.commit()
+    data = customer.get(f"/portal/api/orders/{order_id}").get_json()["order"]
+    assert data["timeline"]["truncated"]
+    assert len(data["timeline"]["events"]) == 50
+    assert {int(event["id"].split(":")[1]) for event in data["timeline"]["events"]} == set(range(4, 54))
+    principal = db.query(PortalPrincipal).filter_by(org_id=row.org_id, customer_id=row.customer_id).one()
+    data["messages"] = [
+        {"id": str(uuid4()), "created_at": row.created_at.isoformat(), "sender": "customer"} for _ in range(100)
+    ]
+    combined = order_timeline(db, principal, order_id, data)
+    assert len(combined["events"]) == 100 and combined["truncated"]

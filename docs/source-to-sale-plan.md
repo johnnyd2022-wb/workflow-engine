@@ -1015,10 +1015,13 @@ Founder decisions for this phase:
         order and visible to staff. Other approvals, messages, emails and reorders remain.
       - [x] Order thread (!455): one append-only conversation per published order between the
         customer and producer staff, scoped to the customer's own order, audited, and closed when the
-        publication is withdrawn. The event timeline, questions, emails and reorders remain.
+        publication is withdrawn. Questions and email notifications remain open.
       - [x] Completed-order reorder enquiries (!457): one immutable customer request per
         published completed order, visible to staff and deduplicated across users/retries.
-        Staff confirm the repeat order; emails and the event timeline remain open.
+        Staff confirm the repeat order; email notifications remain open.
+      - [x] Shared order timeline (!461): bounded chronological publication, proof,
+        message and reorder events, with current proof-sharing rules and order withdrawal
+        respected. Private operational activity is not published.
     - [x] f. **Isolation by design.** (!436) Portal users are a separate kind of user with no
       staff permissions; every portal query is scoped to the customer's orders on the
       server; a test walks every portal route with a second customer and expects 403/404.
@@ -1082,7 +1085,7 @@ Founder decisions for this phase:
         supply, readiness/expiry FEFO, atomic forecast balances and unknown dates for
         uncovered shortages (!428). Expected-delivery records, DB adapters,
         dependent-production planning and forecast integration remain.
-    - [ ] e. **Can we do it?** Rough capacity per site: a few resource groups the owner
+    - [x] e. **Can we do it?** (!449, !464, !467) Rough capacity per site: a few resource groups the owner
       names (e.g. "still", "bottling line", "tanks") with how much they can do per day or
       week, and the steps that use them. The planner flags overloaded days and offers to
       move lower-priority batches; it doesn't try to optimise every minute.
@@ -1091,7 +1094,10 @@ Founder decisions for this phase:
         and capacity-backed promise dates remain open.
       - [x] Per-resource working weekdays and explicit closed dates (!464), with
         zero-capacity overloads on closed days and legacy seven-day defaults. Site-wide
-        verification/stocktake closures and capacity-backed forecasts remain open.
+        verification/stocktake closures and capacity-backed forecasts remain open under 7.3h/g.
+      - [x] Open the suggested lower-priority unpinned batch's move form (!467),
+        switching to its start day when outside the view. Staff choose the new date;
+        automatic moves remain in 7.3f.
     - [ ] f. **The daily driver.** A plan board (week and month) with a priority list for
       today: drag a batch to move it, pin a date so the planner won't move it, change a
       priority. When reality changes (a batch finishes late, a ready date or expiry is
@@ -1100,10 +1106,13 @@ Founder decisions for this phase:
       executions from the board, and today's list feeds the dashboard (4.5).
       - [x] Responsive week/month/day board with priority, pin/unpin, explicit date
         changes and cancellation, revisions, audit and a guarded idempotent start
-        seam (!440); trusted start checks, automatic replan and dashboard integration remain.
+        seam (!440); trusted start checks and automatic replan remain.
       - [x] Drag unpinned batches between dates (!459), using the guarded reschedule API
         and refreshing stale cards after conflicts; date forms remain available on phones
         and to keyboard users.
+      - [x] Today's planned production priorities on the dashboard (!463): due and overdue
+        open batches, current priority and pin/check state, bounded display and a review
+        link to the board. Production permission is required for query and rendering.
     - [ ] g. **Promise dates.** For a new order, "when can we deliver n?" from stock on
       hand, then what's planned, then capacity (available-to-promise). The same forecast
       ready date feeds the portal (7.2e) and the order.
