@@ -176,7 +176,7 @@ relevant_tests:
     - |
       python3 scripts/select_relevant_tests.py --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --format pytest > /tmp/relevant-pytest-targets
       if [ "$(cat /tmp/relevant-pytest-targets)" = "__NO_TESTS__" ]; then
-        echo "No Python tests selected for this documentation-only change."
+        echo "No Python tests selected for this approved documentation-only change."
         exit 0
       fi
     - pip install "uv==${UV_VERSION}"
@@ -235,11 +235,17 @@ mr_e2e:
       command: ["postgres", "-c", "max_connections=200"]
   variables:
     ENVIRONMENT: test
+    GIT_DEPTH: 0
     POSTGRES_DB: workflow-engine-test
     POSTGRES_USER: workflow_rw
     POSTGRES_PASSWORD: secret
     POSTGRES_HOST_AUTH_METHOD: trust
   before_script:
+    - |
+      if python3 scripts/select_relevant_tests.py --fast-eligible --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA"; then
+        echo "Skipping expensive setup for an approved ci::fast MR."
+        exit 0
+      fi
     - pip install "uv==${UV_VERSION}"
     - uv sync --extra dev
     - apt-get update -o Acquire::AllowInsecureRepositories=true -qq
@@ -459,11 +465,17 @@ migration_reversibility:
       command: ["postgres", "-c", "max_connections=200"]
   variables:
     ENVIRONMENT: test
+    GIT_DEPTH: 0
     POSTGRES_DB: workflow-engine-test
     POSTGRES_USER: workflow_rw
     POSTGRES_PASSWORD: secret
     POSTGRES_HOST_AUTH_METHOD: trust
   before_script:
+    - |
+      if python3 scripts/select_relevant_tests.py --fast-eligible --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA"; then
+        echo "Skipping expensive setup for an approved ci::fast MR."
+        exit 0
+      fi
     - pip install "uv==${UV_VERSION}"
     - uv sync --extra dev
     - apt-get update -o Acquire::AllowInsecureRepositories=true -qq && apt-get install -y -qq postgresql-client
@@ -646,6 +658,10 @@ promote_test_stable:
 rollback_test_on_failure:
   stage: deploy
   image: docker:27
+  # The rollback needs the same scoped auth secrets as the candidate deploy.
+  environment:
+    name: test
+    action: prepare
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - echo "cd_e2e failed -- rolling back to last known-good :test-stable"

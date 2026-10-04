@@ -58,3 +58,44 @@ python3 scripts/select_relevant_tests.py --format pytest --base origin/main --he
 
 When a new product area is introduced, add its source-to-test rule before relying on
 targeted CI. Until then, the selector intentionally chooses the full suite.
+
+## Opt-in fast MRs
+
+Add the GitLab label **`ci::fast`** before creating an MR pipeline. For an existing
+MR, add the label then use **Run pipeline** in its Pipelines tab to create a new
+MR pipeline. Retrying jobs from an old pipeline does not refresh its label values.
+
+The first allow-list covers:
+
+- Markdown files under `docs/` and `README.md`.
+- Changes to only `google_sign_in.keepass_client_id_entry` and
+  `google_sign_in.keepass_client_secret_entry` in `app/config/local.ini` and its
+  template, optionally with `tests/test_config_google_secrets.py`.
+
+For the Google config case, the selector runs the focused Google credential config
+tests without database, Node, or browser setup. Documentation-only fast MRs select
+no pytest tests. `mr_e2e` and `migration_reversibility` log the fast-path decision
+and exit before dependency/browser/database setup; their runner services may still
+start. Lint, route validation, security/secret scanning, dependency auditing,
+data-store checks, and the main-green gate remain active.
+
+The selector inspects committed config snapshots and rejects any other config key
+change, any additional application/CI/dependency/production file, unreadable config,
+or an absent focused test. Mixed or ineligible diffs use normal CI even with the
+label. Deleted files are included in the diff so deleting application code cannot
+masquerade as documentation-only work. The exact label is recognised only in
+`merge_request_event` pipelines; the full `main` release pipeline is unaffected.
+
+Local preview (use the actual MR diff base and committed head):
+
+```bash
+CI_PIPELINE_SOURCE=merge_request_event CI_MERGE_REQUEST_LABELS=ci::fast \
+  python3 scripts/select_relevant_tests.py --base origin/main --head HEAD --format json
+```
+
+Expand the allow-list deliberately with regression tests for each new low-impact
+category. The label alone does not provide a blanket test bypass.
+
+The test rollback job declares the `test` environment with `action: prepare`, so it
+receives the same environment-scoped authentication secrets as the candidate
+deployment without recording a separate successful release.
