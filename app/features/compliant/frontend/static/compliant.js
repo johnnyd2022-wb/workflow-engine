@@ -109,7 +109,7 @@
     if (!frameworks.length) return;
     frameworks.forEach(function (framework) {
       var health = moduleSummaryHealth(framework);
-      var card = document.createElement('article'); card.className = 'module-health-card compliant-framework-summary state-' + framework.state;
+      var card = document.createElement('article'); card.className = 'module-health-card compliant-framework-summary workspace-tile state-' + framework.state;
       card.appendChild(textElement('h2', framework.name, 'compliant-framework-summary__title'));
       card.appendChild(textElement('p', 'Compliance score: ' + health.score + '%', 'compliant-framework-summary__score'));
       if (framework.slug === 'np3-food-control') card.appendChild(np3ReadinessBar(health));

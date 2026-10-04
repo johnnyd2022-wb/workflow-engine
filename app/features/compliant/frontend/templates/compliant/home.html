@@ -48,5 +48,7 @@
     </a>
     {% endif %}
   </section>
+  {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
 </main>
 {% endblock %}
+{% block workspace_links %}{% endblock %}

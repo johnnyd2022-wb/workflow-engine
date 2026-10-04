@@ -204,15 +204,14 @@ def test_production_overview_reads_health_first_and_opens_a_batch(browser, app_u
         expect(health.get_by_role("group", name="At a glance")).to_be_visible()
         expect(health.get_by_role("group", name="Operational status").get_by_role("link")).to_have_count(5)
         manage = page.get_by_role("region", name="Production workspace actions", exact=True)
-        expect(manage.get_by_role("link")).to_have_count(4)
-        board = page.get_by_role("link", name="View production board", exact=True)
+        expect(manage.get_by_role("link")).to_have_count(5)
+        board = manage.get_by_role("link", name="View production board", exact=True)
         expect(board).to_have_attribute("href", "/core/executions/live")
         active = page.get_by_role("region", name="Active production", exact=True)
         stack = [
             health,
             page.get_by_role("region", name="Get to work", exact=True),
             manage,
-            board,
             active,
         ]
         boxes = [item.bounding_box() for item in stack]
@@ -220,7 +219,10 @@ def test_production_overview_reads_health_first_and_opens_a_batch(browser, app_u
         assert len({round(box["width"]) for box in boxes}) == 1, "every block spans the content column"
         links = [link.bounding_box() for link in manage.get_by_role("link").all()]
         assert links[0]["y"] == links[1]["y"] and links[2]["y"] == links[3]["y"] > links[0]["y"]
-        assert len({round(link["width"]) for link in links}) == 1
+        assert len({round(link["width"]) for link in links[:4]}) == 1
+        assert links[4]["y"] > links[3]["y"] and links[4]["width"] > links[0]["width"] * 2
+        plain = manage.get_by_role("link").first.evaluate("link => getComputedStyle(link).backgroundColor")
+        expect(board).to_have_css("background-color", plain)
 
         batch = active.locator("details").first
         record = batch.get_by_role("link", name="Record next step", exact=True)
@@ -237,5 +239,37 @@ def test_production_overview_reads_health_first_and_opens_a_batch(browser, app_u
         batch.locator("summary").click()
         record.click()
         expect(page).to_have_url(re.compile(r"/core/flows/batches/start\?.*execution_id="))
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+def test_compliance_overview_groups_obligations_and_actions_in_cards(browser, app_url, workspace_user, width):
+    context, page = _page(browser, app_url, workspace_user, width)
+    try:
+        saved = page.request.put(
+            "/api/compliant/profile",
+            headers=csrf_headers(page),
+            data={"enabled": True, "settings": {"food_control_programme": "np3", "liquor_licence_types": ["on"]}},
+        )
+        assert saved.ok, saved.text()
+        page.goto("/compliant/nz-alcohol")
+        readiness = page.get_by_role("region", name="Evidence readiness", exact=True)
+        obligations = page.get_by_role("region", name="Your obligations", exact=True)
+        manage = page.get_by_role("region", name="Compliance workspace actions", exact=True)
+        cards = obligations.get_by_role("article")
+        expect(cards.first).to_be_visible()
+        outer = obligations.bounding_box()
+        for card in cards.all():
+            box = card.bounding_box()
+            assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
+        boxes = [item.bounding_box() for item in [readiness, obligations, manage]]
+        assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
+        assert len({round(box["width"]) for box in boxes}) == 1, "every block spans the content column"
+        links = [link.bounding_box() for link in manage.get_by_role("link").all()]
+        assert len(links) >= 2 and links[0]["y"] == links[1]["y"]
+        assert len({round(link["width"]) for link in links}) == 1
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "compliance-layout", width)
     finally:
         context.close()

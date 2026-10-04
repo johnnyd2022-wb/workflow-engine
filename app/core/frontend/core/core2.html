@@ -72,10 +72,8 @@
               <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
             </section>
             {% if core2_focus_mode == '' %}
-            {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
-            {% if can('production.view') %}
-            <a class="workspace-button workspace-button--primary workspace-button--block" href="/core/executions/live" data-core2-overview-only>View production board</a>
-            {% endif %}
+            {% set production_board = {'label': 'View production board', 'href': '/core/executions/live'} if active_tab == 'overview' and can('production.view') else none %}
+            {% with workspace_links_card = true, workspace_links_footer = production_board %}{% include 'shared/workspace_links.html' %}{% endwith %}
             {% endif %}
           </div>
 
