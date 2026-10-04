@@ -88,14 +88,14 @@ Boost is set on `<body>` in `app/core/frontend/shared/base_spa.html`, with `hx-t
 
 ## Target information architecture
 
-Five sidebar tabs, each with **one shared section sub-nav component** (a horizontal tab bar under the page title) plus in-page links for third-level pages.
+Five sidebar tabs, with **one shared section sub-nav component** and at most four primary destinations per product workspace. Secondary destinations use contextual page actions. The founder requested this simpler navigation on 4 October 2026; it supersedes the larger tab catalogue from the original audit.
 
 | Main tab | Sub-nav tabs | Pages that move there |
 |---|---|---|
 | **Dashboard** `/core/dashboard` | none | Go-live (setup) becomes a dashboard card or a step-through launched from it. The notifications bell stays in the top bar. |
-| **Production** `/core` | Overview · **Planner** · Batches · Workflows · Inventory · **Contract orders** · Suppliers | Planner: `/core/planner`, `/board`, demand. Batches: `/core/executions/live`, execution queue. Workflows: `/core/processes`, `/core/flows*`, template catalog. Inventory: view, add (manual, barcode, CSV), stocktake, disposal, live, **Trace and recall** (`/core/sourcemap`), site transfers. Contract orders: `/core/contracts`, materials, portal sharing (inside the order). Overview holds "Needs attention" (cases, tasks). |
-| **Compliance** `/compliant` | Overview · NP3 · Customs · Licensing · Premises · Food registrations · Tools | Make `/compliant/tools` reachable. Collapse the `food-safety` and `evidence` aliases with redirects. Compliance configuration opens from a "Compliance settings" link, so it isn't a peer tab. |
-| **Sales** `/crm` | Overview · Customers · Tasks · Batch matching · **Analytics** | Analytics becomes reachable. Sales configuration moves to Settings, or a settings cog in the section header. |
+| **Production** `/core` | Overview · **Planner** · Workflows · Inventory | Planner: `/core/planner`, `/board`, demand. Batches: `/core/executions/live`, execution queue. Workflows: `/core/processes`, `/core/flows*`, template catalog. Inventory: view, add (manual, barcode, CSV), stocktake, disposal, live, **Trace and recall** (`/core/sourcemap`), site transfers. Contract orders: `/core/contracts`, materials, portal sharing (inside the order). Batches, Contract orders, Suppliers and Production tasks are contextual actions; relevant parent pages also expose their secondary destinations. |
+| **Compliance** `/compliant` | Overview · Food safety (NP1/NP2/NP3) · Customs · Licensing | Premises, Food registrations, Tools and Configuration are contextual actions. Collapse the `food-safety` and `evidence` aliases with redirects. Compliance configuration opens from a "Compliance settings" link, so it isn't a peer tab. |
+| **Sales** `/crm` | Overview · Customers · Tasks · **Analytics** | Batch matching and Sales configuration are contextual actions. A later settings restructure moves Sales configuration to Settings, or a settings cog in the section header. |
 | **Settings** `/core/settings` | My account · Organisation · People and roles · Sites · Integrations · Notifications · Section settings | My account covers profile, password, 2FA, session and appearance. Organisation covers the company. Integrations covers Xero (today `/crm/configuration` and `/core/integrations`). Section settings covers the task board configuration and links to compliance and sales configuration. |
 
 **Why contract orders live under Production:** a contract order is work Whistlebird makes for a customer. It drives planned batches, reserves customer-supplied materials, and is fulfilled by production runs, so its home is next to Planner. Two deliberate cross-links, not duplicates:
@@ -135,6 +135,8 @@ Keep existing URLs working. Where a page moves, keep the old URL as a 301 redire
 - [ ] **2.5** **Settings restructure.** Add a sub-nav, move integrations (Xero), sites, people and section settings in, and reduce each form to its own card with one save button.
 - [ ] **2.6** **The two contract-order cross-links** (Planner demand to order; Sales customer to their orders).
 
+- [x] **2.7** (!478) At most four primary tabs in Production, Compliance and Sales; secondary destinations stay available through permission-aware contextual actions. Keep URLs, programme conditions, restricted-role fallbacks, legacy query links and breadcrumbs.
+
 **Done when:** every page in the registry is reachable in at most 2 clicks from its main tab, and no page is linked only by typed URL. Add a test that walks the registry and asserts an in-app link exists to each page.
 
 ### 3. Consistent components and styling (goal 3)
@@ -162,10 +164,9 @@ Go through the audit screenshots in this order; each item is a small MR or a bat
    - the collapse toggle aligned with it, not a floating blue circle;
    - Logout moved into the account (bee) menu;
    - notifications and account menu aligned right in the top bar.
-- [ ] **4.2** **Production overview:**
-   - page header with the primary action ("Add to inventory") top-right;
-   - the setup stepper as a dismissible card under the header, shown only until setup is complete;
-   - consistent stat tiles.
+- [x] **4.2** (!478) **Production overview:** standard header, one primary tab row,
+  grouped rectangular action buttons, an in-page setup/health card with explicit status
+  wording, and scan-friendly metric tiles. Desktop/mobile and light/dark screenshots inspected.
 - [ ] **4.3** **Planner board:**
    - controls (view, date, Today) in a toolbar row;
    - batch sizes and site capacity as styled disclosures or a side panel;
@@ -175,16 +176,15 @@ Go through the audit screenshots in this order; each item is a small MR or a bat
    - the list first, with the primary action "New order" top-right opening a form page or drawer;
    - customers as its own sub-tab or a panel with "Add customer";
    - the order form grouped into sections (Customer and reference, Product and quantity, Materials and specification, Duty and status).
-- [ ] **4.5** **Sales:**
-   - fix the tab contrast;
-   - "Add widget" goes into the page header actions;
-   - widget controls show only on hover or in an edit mode.
+- [x] **4.5** (!478) **Sales:** clear primary tab contrast, Add widget in the
+  page header, and widget controls shown on hover/focus on pointer devices and always
+  available on touch devices.
 - [ ] **4.6** **Settings:** cards per the style guide; inputs sized by content.
 - [ ] **4.7** **Dashboard:**
    - trim the go-live card;
    - consistent eyebrow casing;
    - hide sparklines when all values are zero.
-- [ ] **4.8** **Compliance:** make the hero banner consistent with other section overviews (or drop it for the standard page header).
+- [x] **4.8** (!478) **Compliance:** replace the oversized overview hero with the standard workspace header, a concise evidence-readiness card and spacious framework cards.
 
 Re-run the audit harness after each area and attach before/after screenshots to the MR description.
 
@@ -200,3 +200,5 @@ Re-run the audit harness after each area and attach before/after screenshots to 
 - **Worktrees:** use your own worktree; no scripted forced checkouts in shared ones.
 - **Before/after screenshots** in each MR description, taken with the harness.
 - **Ask Johnny** before removing any page outright. Moving or redirecting is fine without asking.
+
+Workspace refresh evidence: `.agents/reports/workspace-ui-refresh/e2e.md` and the linked MR screenshots.
