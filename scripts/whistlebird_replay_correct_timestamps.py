@@ -27,6 +27,7 @@ import whistlebird_disposals as disposals  # noqa: E402
 import whistlebird_legacy as legacy  # noqa: E402
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_np3 as np3  # noqa: E402
+import whistlebird_recent_batches as recent_batches  # noqa: E402
 from whistlebird_replay_timeline import ReplayEvent, build_timeline  # noqa: E402
 
 
@@ -38,11 +39,35 @@ def _marker_of(event: ReplayEvent) -> str | None:
     if event.event_type == "create_inventory_item":
         return event.payload["marker"]
     if event.event_type in ("create_execution", "complete_step"):
-        record = event.payload.get("batch") or event.payload.get("trial") or event.payload.get("green_gold")
+        record = (
+            event.payload.get("batch")
+            or event.payload.get("trial")
+            or event.payload.get("green_gold")
+            or event.payload.get("recent_batch")
+        )
         return record.marker
     if event.event_type == "create_customs_lodgement":
         return f"customs-{event.payload['row']['id']}"
     return None
+
+
+def _recent_batch_events(batches: tuple[recent_batches.RecentBatch, ...]) -> list[ReplayEvent]:
+    """Only date the operations recorded by the recent-batch manifest."""
+    events = []
+    for batch in batches:
+        create_id = f"recent-exec:{batch.marker}"
+        events.append(ReplayEvent(create_id, "create_execution", batch.started, (), {"recent_batch": batch}))
+        for index, step in enumerate(batch.steps_completed):
+            events.append(
+                ReplayEvent(
+                    f"recent-step:{batch.marker}:{step}",
+                    "complete_step",
+                    batch.started,
+                    (create_id,),
+                    {"recent_batch": batch, "step_index": index},
+                )
+            )
+    return events
 
 
 def _audit_days(events: list[ReplayEvent]) -> dict[str, date]:
@@ -139,8 +164,13 @@ def _date_process_definitions(conn, org_id, events, times, counts):
     first_by_name: dict[str, date] = {}
     for event in events:
         if event.event_type == "create_execution":
-            record = event.payload.get("batch") or event.payload.get("trial") or event.payload.get("green_gold")
-            name = record.workflow_name
+            record = (
+                event.payload.get("batch")
+                or event.payload.get("trial")
+                or event.payload.get("green_gold")
+                or event.payload.get("recent_batch")
+            )
+            name = record.workflow if event.payload.get("recent_batch") else record.workflow_name
             audit_day = times[event.event_id].astimezone(wm.DERIVED_TIMEZONE).date()
             first_by_name[name] = min(first_by_name.get(name, audit_day), audit_day)
 
@@ -320,10 +350,13 @@ def correct_timestamps(
     production_manifest_path: Path = wm.DEFAULT_PRODUCTION_MANIFEST,
     crm_manifest_path: Path | None = crm.DEFAULT_CRM_MANIFEST,
     dry_run: bool = False,
+    recent_batches_manifest_path: Path | None = None,
 ) -> dict[str, int]:
     if org_name != wm.WHISTLEBIRD_ORG_NAME:
         raise ValueError(f"timestamp correction is only permitted for {wm.WHISTLEBIRD_ORG_NAME!r}")
     events = build_timeline(legacy_source, Path(production_manifest_path))
+    if recent_batches_manifest_path:
+        events.extend(_recent_batch_events(recent_batches.load_recent_batches_manifest(recent_batches_manifest_path)))
     times = _event_times(events)
     moved_purchase_events = _purchase_audit_days(events)
     moved_purchase_markers = {_marker_of(event) for event in events if event.event_id in moved_purchase_events}
@@ -748,6 +781,8 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--target-url", default=os.environ.get("BIZE_MIGRATION_DATABASE_URL"))
     parser.add_argument("--org-name", default=wm.WHISTLEBIRD_ORG_NAME)
     parser.add_argument("--production-manifest", type=Path, default=wm.DEFAULT_PRODUCTION_MANIFEST)
+    parser.add_argument("--recent-batches-manifest", type=Path, default=recent_batches.DEFAULT_RECENT_BATCHES_MANIFEST)
+    parser.add_argument("--skip-recent-batches", action="store_true")
     parser.add_argument("--crm-manifest", type=Path, default=crm.DEFAULT_CRM_MANIFEST)
     parser.add_argument("--skip-crm-config", action="store_true")
     parser.add_argument("--disposals-manifest", type=Path, default=disposals.DEFAULT_DISPOSALS_MANIFEST)
@@ -774,6 +809,7 @@ def main() -> int:
         production_manifest_path=args.production_manifest,
         crm_manifest_path=None if args.skip_crm_config else args.crm_manifest,
         dry_run=args.dry_run,
+        recent_batches_manifest_path=None if args.skip_recent_batches else args.recent_batches_manifest,
     )
     print(result)
     return 0

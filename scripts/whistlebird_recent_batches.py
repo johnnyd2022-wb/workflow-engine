@@ -21,8 +21,9 @@ Idempotent: an execution is identified by `execution_data->>'batch_ref'` (the sa
 so a full rebuild replays a given batch's maceration exactly once, and a later step (once this
 script supports it) will complete on the *same* execution rather than creating a new one.
 
-Unlike NP3/CRM/suppliers, this is never dated by the timestamp-correction pass: it is a real
-event happening now, so it keeps the real timestamp the API call itself stamps.
+The timestamp-correction pass dates these replayed operations to the manifest’s
+`started` date, including their audit events. Rebuilding later must not make a recorded
+September maceration appear as new production in October.
 
     uv run python scripts/whistlebird_recent_batches.py apply \\
         --base-url https://localhost:8005 --insecure --target-url postgresql://...
@@ -182,9 +183,8 @@ def expected_verification_contribution(
     """What an API replay of these batches adds on top of the historical-import baseline
     that `whistlebird_migration.build_import_verification` otherwise checks against:
     one execution per batch, its still-pending steps counted as incomplete, and its
-    markers -- so the date-drift check doesn't mistake a batch's real, correctly-today
-    completion timestamp for the backdating bug it exists to catch (recent batches are
-    never run through the timestamp-correction pass; see this module's docstring).
+    markers. Their replay timestamps are corrected to the recorded start date, while
+    genuinely unfinished steps remain unfinished.
 
     Only maceration is supported today (`_SUPPORTED_STEPS`), so every batch's pending
     count is "all steps except maceration" -- this falls out of the workflow's real step

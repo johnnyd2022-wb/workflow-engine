@@ -173,6 +173,7 @@ def rebuild(args: argparse.Namespace) -> dict[str, Any]:
         disposals_manifest_path=args.disposals_manifest,
         production_manifest_path=args.production_manifest,
         crm_manifest_path=args.crm_manifest,
+        recent_batches_manifest_path=args.recent_batches_manifest,
     )
     report["lot_details"] = lot_details.apply_lot_details(args.target_url, args.org_name)
     report["trace_dates"] = trace_dates.apply_trace_dates(args.target_url, args.org_name)

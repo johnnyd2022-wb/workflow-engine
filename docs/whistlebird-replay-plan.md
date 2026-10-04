@@ -741,9 +741,11 @@ already defined in `whistlebird_migration.py`); it draws every tracked ingredien
 (oldest `purchase_date` first) via `MarkerStore.consume_available_raw_material` -- the same
 read-only live-inventory lookup the historical replay itself uses for its NGS shortfall
 draws. Idempotent via the same `execution_data->>'batch_ref'` marker convention as the
-historical replay, so a rebuild replays a given batch's maceration exactly once. Unlike
-NP3/CRM/suppliers, it is never dated by the timestamp-correction pass -- it's a real event
-happening now, so it keeps the timestamp the API call itself stamps.
+historical replay, so a rebuild replays a given batch's maceration exactly once. The
+timestamp-correction pass dates the recorded batch start, completed maceration, its
+stock movements and audit events to the manifest’s `started` date. This remains true
+when the tenant is rebuilt later. Pending production steps stay incomplete; unrelated
+live events, including Xero connection and sync activity, keep their actual timestamps.
 
 First entry: a Solstice maceration put on the night of 2026-09-22, applied to the live
 tenant and verified (226.8g Macedonian juniper from lot JBM006, 97.2g Himalayan juniper from

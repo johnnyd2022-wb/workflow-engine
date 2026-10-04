@@ -81,3 +81,55 @@ def test_production_prerequisites_move_before_earlier_dated_diversion():
     assert days["execution:base"] == days["step:base"] == date(2026, 7, 31)
     timestamps = _event_times(events)
     assert timestamps["execution:base"] < timestamps["step:base"] < timestamps["execution:diversion"]
+
+
+def test_recent_batch_dates_follow_manifest_and_only_include_recorded_steps():
+    import whistlebird_recent_batches as rb
+    from whistlebird_replay_correct_timestamps import _recent_batch_events
+
+    batches = rb.parse_recent_batches_manifest(
+        {
+            "batches": [
+                {
+                    "marker": "solstice-2026-09-22-maceration",
+                    "product_line": "solstice",
+                    "started": "2026-09-22",
+                    "steps_completed": ["maceration"],
+                }
+            ]
+        }
+    )
+    events = _recent_batch_events(batches)
+    assert [e.event_type for e in events] == ["create_execution", "complete_step"]
+    assert {_marker_of(e) for e in events} == {batches[0].marker}
+    times = _event_times(events)
+    assert all(at.astimezone(wm.DERIVED_TIMEZONE).date() == date(2026, 9, 22) for at in times.values())
+    assert times[events[0].event_id] < times[events[1].event_id]
+    assert events[1].payload["step_index"] == 0
+
+
+def test_recent_batch_with_no_recorded_steps_does_not_invent_completion():
+    import whistlebird_recent_batches as rb
+    from whistlebird_replay_correct_timestamps import _recent_batch_events
+
+    batches = rb.parse_recent_batches_manifest(
+        {
+            "batches": [
+                {
+                    "marker": "started-only",
+                    "product_line": "wildflower",
+                    "started": "2026-09-22",
+                    "steps_completed": [],
+                }
+            ]
+        }
+    )
+    assert [e.event_type for e in _recent_batch_events(batches)] == ["create_execution"]
+
+
+def test_timestamp_correction_refuses_other_organisations_before_connecting():
+    import pytest
+    from whistlebird_replay_correct_timestamps import correct_timestamps
+
+    with pytest.raises(ValueError, match="only permitted"):
+        correct_timestamps("unused", "unused", "Other tenant")

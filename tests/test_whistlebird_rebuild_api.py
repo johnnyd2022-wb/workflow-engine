@@ -213,3 +213,11 @@ def test_transport_failure_prints_recovery_message_without_traceback(steps, monk
         rebuild_api.main(["--target-url=postgresql://target", f"--np3-manifest={steps['manifest']}", "--resume"]) == 1
     )
     assert "use --resume" in capsys.readouterr().err
+
+
+def test_rebuild_passes_recent_manifest_into_timestamp_correction(steps, monkeypatch):
+    calls = []
+    monkeypatch.setattr(rebuild_api.correct, "correct_timestamps", lambda *_a, **kw: calls.append(kw) or {})
+    args = _args(steps, "--resume")
+    rebuild_api.rebuild(args)
+    assert calls[0]["recent_batches_manifest_path"] == args.recent_batches_manifest
