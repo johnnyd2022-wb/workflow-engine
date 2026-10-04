@@ -4,14 +4,14 @@
 {% block content %}
 <main class="contract-workspace">
   <header><h1>Contract orders</h1><p>Orders made for your customers.</p></header>
-  {% if can('inventory.view') %}<a href="{{ url_for('contracts.materials_page') }}" hx-boost="false">Customer raw materials</a>{% endif %}
+  {% if can('inventory.view') %}<a href="{{ url_for('contracts.materials_page') }}">Customer raw materials</a>{% endif %}
   <p class="contract-error" role="alert" hidden></p>
   <section class="contract-card">
     <h2>Orders</h2>
     {% if orders %}
     <div class="contract-table"><table><thead><tr><th>Order</th><th>Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
     {% for order in orders %}
-    <tr><td><a href="{{ url_for('contracts.order_page', order_id=order.id) }}" hx-boost="false">{{ order.reference }}</a></td>
+    <tr><td><a href="{{ url_for('contracts.order_page', order_id=order.id) }}">{{ order.reference }}</a></td>
       <td>{{ order.customer_name }}</td><td>{{ order.due_date }}</td><td>{{ order.status|capitalize }}</td>
       <td>{% for line in order.lines %}{{ line.quantity }} {{ line.unit }} {{ line.product_name }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>
     {% endfor %}

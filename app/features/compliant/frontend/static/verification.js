@@ -258,8 +258,6 @@
     api('GET', '/api/compliant/verification').then(render).catch(fail);
   }
 
-  function boot() { init(document.querySelector('[data-verification-root]')); }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
-  document.addEventListener('htmx:afterSwap', boot);
+  // Runs at first load and after every boosted swap that brings the page in (page-init.js).
+  bize.onPage('[data-verification-root]', init);
 })();

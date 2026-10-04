@@ -4,10 +4,10 @@ import calendar
 import csv
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from io import StringIO
+from io import BytesIO, StringIO
 from uuid import UUID
 
-from flask import Blueprint, Response, g, jsonify, render_template, request
+from flask import Blueprint, Response, g, jsonify, render_template, request, send_file
 from sqlalchemy.exc import IntegrityError
 
 from app.core.backend.evidence.evidence_service import get_evidence_for_download
@@ -16,7 +16,8 @@ from app.core.db.models.execution_evidence import EVIDENCE_STATUS_ACTIVE, Execut
 from app.core.db.models.user import User, UserRole
 from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
-from app.features.compliant.models import ComplianceReport
+from app.features.compliant import record_files as record_files_module
+from app.features.compliant.models import ComplianceRecord, ComplianceReport
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
 from app.features.compliant.modules.nz_alcohol.national_programmes import GUIDANCE
 from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook, np3_log_template
@@ -166,8 +167,19 @@ def np3_audit():
                     "error": error,
                 }
             )
+        record_files = {}
+        for row in audit["rows"]:
+            for item in (*row["history"], *row["log_entries"]):
+                for attachment in item.get("files") or []:
+                    stored = record_files_module.get_file(
+                        db_session, _org_id(), UUID(str(item["id"])), UUID(attachment["id"])
+                    )
+                    record_files[attachment["id"]] = {
+                        **attachment,
+                        "content": record_files_module.read_content(stored) if stored else None,
+                    }
         return Response(
-            build_np3_evidence_register_pdf(audit, uploaded_evidence),
+            build_np3_evidence_register_pdf(audit, uploaded_evidence, record_files),
             mimetype="application/pdf",
             headers={"Content-Disposition": "attachment; filename=np3-verification-evidence.pdf"},
         )
@@ -404,6 +416,64 @@ def add_np3_check_log(control_id: str):
         {"framework": framework["slug"], "control": control_id, "log": template["key"]},
     )
     return jsonify({"record": serialise_record(record)}), 201
+
+
+def _np3_record(record_id: str) -> ComplianceRecord | None:
+    """The org's own NP attestation or log entry, or None (also for another org's id)."""
+    try:
+        rid = UUID(record_id)
+    except ValueError:
+        return None
+    record = (
+        db_session.query(ComplianceRecord)
+        .filter(ComplianceRecord.id == rid, ComplianceRecord.org_id == _org_id())
+        .one_or_none()
+    )
+    if record is None or record.framework_slug not in {f"{programme}-food-control" for programme in _NP_PROGRAMMES}:
+        return None
+    is_log = bool((record.details or {}).get("np3_log_type"))
+    return record if record.record_type == "attestation" or is_log else None
+
+
+@api_bp.route("/api/compliant/np3-audit/records/<record_id>/files", methods=["POST"])
+@requires_auth
+def attach_np3_record_file(record_id: str):
+    """Attach a PDF or image to an NP attestation or log entry the org already recorded."""
+    record = _np3_record(record_id)
+    if record is None:
+        return jsonify({"error": "Record not found"}), 404
+    if record_files_module.file_count(db_session, _org_id(), record.id) >= record_files_module.MAX_FILES_PER_RECORD:
+        return (
+            jsonify({"error": f"At most {record_files_module.MAX_FILES_PER_RECORD} files can be attached to a record"}),
+            409,
+        )
+    temp_path, mime, name, _size, error = record_files_module.receive_upload()
+    if temp_path is None:
+        return jsonify({"error": error}), 400
+    row = record_files_module.attach_file(db_session, _org_id(), record, g.current_user.id, temp_path, mime, name)
+    log_action("create", "compliance_record_file", row.id, {"record_id": str(record.id), "mime_type": mime})
+    attached = record_files_module.files_by_record(db_session, _org_id(), [record.id])[record.id]
+    return jsonify({"file": next(item for item in attached if item["id"] == str(row.id))}), 201
+
+
+@api_bp.route("/api/compliant/np3-audit/records/<record_id>/files/<file_id>", methods=["GET"])
+@requires_auth
+def download_np3_record_file(record_id: str, file_id: str):
+    record = _np3_record(record_id)
+    try:
+        fid = UUID(file_id)
+    except ValueError:
+        fid = None
+    row = record_files_module.get_file(db_session, _org_id(), record.id, fid) if record and fid else None
+    content = record_files_module.read_content(row) if row else None
+    if row is None or content is None:
+        return jsonify({"error": "File not found"}), 404
+    response = send_file(
+        BytesIO(content), mimetype=row.mime_type, as_attachment=True, download_name=row.file_name, max_age=0
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 @api_bp.route("/api/compliant/capture-context", methods=["GET"])

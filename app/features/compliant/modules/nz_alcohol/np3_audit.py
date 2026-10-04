@@ -1800,6 +1800,7 @@ def build_np3_audit_rows(
                     "training_matrix": training_matrix,
                     "history": [
                         {
+                            "id": getattr(record, "id", None),
                             "title": record.title,
                             "record_type": getattr(record, "record_type", None),
                             "status": record.status,

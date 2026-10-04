@@ -58,8 +58,8 @@ rum_posthog_api_key =
 # storage_uri = redis://localhost:6379/0
 
 [google_sign_in]
-# Enable after provisioning a separate OAuth web client for this environment.
-enabled = false
+# Requires OAuth credentials from KeePassXC locally or protected environment variables.
+enabled = true
 redirect_uri = https://biz-e.app/auth/google/callback
 keepass_client_id_entry = workflow-engine/google/client_id
 keepass_client_secret_entry = workflow-engine/google/client_secret

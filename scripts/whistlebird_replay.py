@@ -34,7 +34,7 @@ import os
 import re
 import sys
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_FLOOR, Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -159,6 +159,19 @@ class ReplayClient:
 
     def post(self, path: str, json_body: dict[str, Any]) -> dict[str, Any]:
         response = self.session.post(f"{self.base_url}{path}", json=json_body, headers=self._headers(), timeout=60)
+        if response.status_code not in (200, 201):
+            raise ReplayRejectedError(f"POST {path} -> {response.status_code}: {response.text[:1000]}")
+        return response.json()
+
+    def post_file(self, path: str, file_path: Path) -> dict[str, Any]:
+        """Upload one file as multipart form data (the browser's attach-a-file request)."""
+        with open(file_path, "rb") as handle:
+            response = self.session.post(
+                f"{self.base_url}{path}",
+                files={"file": (file_path.name, handle)},
+                headers=self._headers(),
+                timeout=120,
+            )
         if response.status_code not in (200, 201):
             raise ReplayRejectedError(f"POST {path} -> {response.status_code}: {response.text[:1000]}")
         return response.json()
@@ -746,7 +759,12 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
             if vat_item is not None:
                 actual_inputs.append(_consume_whole_item(vat_item))
             if batch.bottlings:
-                total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
+                source_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
+                # Whole bottles only (plan 1.2): the source's part-filled bottle goes to
+                # Library stock as mL rather than a fractional bottle count.
+                total_bottles = source_bottles.to_integral_value(rounding=ROUND_FLOOR)
+                bottle_size_ml = Decimal(str(batch.bottlings[0].get("bottle_size_ml") or wm.DEFAULT_BOTTLE_SIZE_ML))
+                remainder_ml = (source_bottles - total_bottles) * bottle_size_ml
                 if total_bottles > 0:
                     # The same physical label-batch allocation must follow bottles
                     # through both Bottling and Labelling.  Splitting here also keeps
@@ -757,6 +775,8 @@ def _execute_complete_step(client: ReplayClient, store: MarkerStore, event: Repl
                         if batch_number is not None:
                             output["batch_number"] = batch_number
                         actual_outputs.append(output)
+                    if remainder_ml > 0:
+                        actual_outputs[-1]["library_remainder_ml"] = str(remainder_ml)
 
         if step_key == "labelling":
             bottled_items: list[dict[str, Any]] = []

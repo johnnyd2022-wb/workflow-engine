@@ -44,6 +44,7 @@ from app.features.compliant.modules.nz_alcohol.np3_audit import (
     build_np3_audit_rows,
     prioritise_work_queue,
 )
+from app.features.compliant.record_files import files_by_record
 from app.features.crm.models.product_mapping import ProductMapping
 
 
@@ -849,6 +850,11 @@ class ComplianceService:
             row["default_review_interval_months"] = check_review_intervals.get(
                 row["control_id"], review_interval_months
             )
+        record_ids = {item["id"] for row in rows for item in (*row["history"], *row["log_entries"]) if item.get("id")}
+        attached = files_by_record(self.session, org_id, list(record_ids))
+        for row in rows:
+            for item in (*row["history"], *row["log_entries"]):
+                item["files"] = attached.get(item.get("id"), [])
         signer_ids = {
             event["created_by_user_id"] for row in rows for event in row["history"] if event["created_by_user_id"]
         }

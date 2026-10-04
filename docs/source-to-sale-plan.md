@@ -119,6 +119,9 @@ Small, and everything else builds on it.
   - [ ] e. Block merges while `main` is red.
     - [x] Repair the main image-build runner and document Docker socket access (!422);
       full main build/publication validation follows merge.
+    - [x] An MR pipeline fails if the latest `main` pipeline is not green. (!325)
+    - [ ] Enforce freshness at merge time so a later red `main` invalidates an older
+      green MR pipeline.
   - Done when: a fresh clone passes lint and every test on the first run.
 
 - [x] **0.4 Team roles and permissions.** *Critical · L*
@@ -319,7 +322,7 @@ want it, and never produce a recall list that can't be trusted.
   - Done when: a new producer goes live in one sitting without inventing a past date, and
     the first sale after go-live traces to an opening batch.
 
-- [ ] **1.4 Build the recall screen for the call to NZFS.** *High · M*
+- [x] **1.4 Build the recall screen for the call to NZFS.** *High · M* (!460)
   - Evidence: sales on a traced batch are listed without quantities or totals, process
     steps appear out of order, there's no export, and lots with 0 units are listed under
     "In stock" in the batch picker.
@@ -336,6 +339,8 @@ want it, and never produce a recall list that can't be trusted.
       - [x] an invoice (backward).
     - [x] g. Sold-out lots under their own heading, not "In stock".
   - Done when: the timed mock recall is under 5 minutes.
+    A stopwatch in `tests/e2e/source_to_sale/test_mock_recall.py` (!460) fails the scripted drill at five
+    minutes; it runs in about a second, so rehearse the real call with a person before relying on it.
 
 - [x] **1.5 Show when something happened and when it was entered.** *High · M* (!407, !408)
   - Evidence: a step entered days later looks the same as one recorded live, which
@@ -627,6 +632,10 @@ Sales matter here because they finish the trace. Make them readable and complete
 Start after Phase 1 so redesigned screens show correct numbers; 4.1 and 4.7 can start at
 any time.
 
+The navigation, page-loading, layout and style work that came out of the 1 Oct 2026 audit of
+all 47 pages is tracked in its own checklist, `docs/ux-overhaul-plan.md` (boost-safe loading,
+five main tabs, shared components, page-by-page fixes). Items there are not repeated here.
+
 - [x] **4.1 Put data at the top of every page.** *High · S* (!395)
   - Evidence: every Core and CRM page (dashboard, product workflows, active batches, live
     inventory, source map, CRM) opens with a decorative three-node illustration and a
@@ -777,6 +786,7 @@ split.
         - [x] Extract compact inventory loading and cache into `process-modal-inventory-loader.js` (!401).
         - [x] Extract searchable inventory dropdown into `process-modal-inventory-dropdown.js` (!402).
         - [x] Extract saved input restoration into `process-modal-input-restore.js` (!403).
+        - [x] Remove three unused session-overlay helpers (85 lines, no callers) (!458).
         - [ ] Continue splitting stateful wizard logic into focused files.
     - [ ] g. Rename `app/core/` → `app/platform/` last, once the carve has emptied
       `app/core/backend/` (slicing plan decision 3, open item 4).
@@ -876,6 +886,10 @@ Founder decisions for this phase:
       lineage travel with the stock, so a recall still traces through a move. Drag a lot
       (or part of one) between sites or locations on a stock board, or scan to pick and
       receive on a phone (4.6). A printable transfer docket.
+      - [x] Accounting prerequisite: producer-owned dispatch, transit, partial receipt,
+        immutable batch-lineage fragments, confirmed-loss policy checks and printable
+        carrier/consignment docket (!438). Operational release stays internally off;
+        overage resolution, drag/scan and the complete movement workflow remain open.
     - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
       "stock movement" seam in the Compliant platform (like workflow rules and stock
       measures, see `docs/compliant-core-contract.md`), a module can require fields,
@@ -886,6 +900,12 @@ Founder decisions for this phase:
       - [x] Generic movement decision/evidence seam and initial CCA authority policy
         (!431). Transfer wiring, additional authorities, findings and duty accounting
         remain open; multi-site operations stay gated.
+      - [x] Module-owned destination activity/food/liquor missing-record findings on
+        authorised dispatch and receipt, with dated immutable evidence and periodic
+        review (!441). Other movement authorities and excise accounting remain open.
+      - [x] Source-CCA movement register and frozen tested-spirits/LAL measurement
+        basis (!442). Physical removal authorisation, contract duty, complete
+        per-CCA drafts/lodgement and release remain open.
       - out of a CCA to a site without one (a cellar door) is a removal in the excise
         entry of the licence it left (2.1);
       - into a site with no food registration covering the activity, or with no liquor
@@ -898,6 +918,10 @@ Founder decisions for this phase:
       stock; stocktakes per site or per licence (2.6); each sales channel or Xero
       tracking category maps to the site it ships from, so FIFO matches from the right
       shelf (1.1); excise drafts per CCA licence.
+      - [x] Guard prerequisite: production inputs/output reconciliation match the
+        persisted execution site, outputs inherit it, and FIFO/manual sales use the
+        shipping/default site (!429). Additional-site release remains internally
+        gated off pending transfer and module integration. This does not complete f.
       - [x] Refuse the legacy location-based nil return and lodgement after multi-site
         opt-in, and show observed producer home-removal excise by source CCA without
         claiming a complete entry (!446). Full per-CCA entry/lodgement remains open.
@@ -1066,8 +1090,11 @@ Founder decisions for this phase:
       week, and the steps that use them. The planner flags overloaded days and offers to
       move lower-priority batches; it doesn't try to optimise every minute.
       - [x] Site resource groups, per-step assignments and a read-only daily overload
-        view suggest an unpinned lower-priority batch to review (!449). Calendars,
-        automatic moves and capacity-backed promise dates remain open.
+        view suggest an unpinned lower-priority batch to review (!449). Automatic moves
+        and capacity-backed promise dates remain open.
+      - [x] Per-resource working weekdays and explicit closed dates (!464), with
+        zero-capacity overloads on closed days and legacy seven-day defaults. Site-wide
+        verification/stocktake closures and capacity-backed forecasts remain open.
     - [ ] f. **The daily driver.** A plan board (week and month) with a priority list for
       today: drag a batch to move it, pin a date so the planner won't move it, change a
       priority. When reality changes (a batch finishes late, a ready date or expiry is
@@ -1076,8 +1103,10 @@ Founder decisions for this phase:
       executions from the board, and today's list feeds the dashboard (4.5).
       - [x] Responsive week/month/day board with priority, pin/unpin, explicit date
         changes and cancellation, revisions, audit and a guarded idempotent start
-        seam (!440); trusted start checks, drag, automatic replan and dashboard
-        integration remain.
+        seam (!440); trusted start checks, automatic replan and dashboard integration remain.
+      - [x] Drag unpinned batches between dates (!459), using the guarded reschedule API
+        and refreshing stale cards after conflicts; date forms remain available on phones
+        and to keyboard users.
     - [ ] g. **Promise dates.** For a new order, "when can we deliver n?" from stock on
       hand, then what's planned, then capacity (available-to-promise). The same forecast
       ready date feeds the portal (7.2e) and the order.
@@ -1088,78 +1117,6 @@ Founder decisions for this phase:
     lays out the batches, flags a botanical short for the second one and moves its date;
     the owner pins the first, drags the second, and the next morning the dashboard shows
     today's priorities, with the order's forecast date updated in the customer's portal.
-
----
-
-## Phase 7: Multiple sites (7.1 scope)
-
-This branch carries the 7.1 scope from !421. The other Phase 7 items remain in that
-plan branch and are delivered separately.
-
-- [ ] **7.1 Multiple sites.** *High · L+*
-  - Why: a producer grows into a second site (a bond store or off-site storage area, a
-    cellar door, a warehouse or 3PL, a shared facility) and needs to run the business
-    across them. Customs, food safety and liquor licensing attach to premises, so they
-    have to know which site stock and production are at.
-  - Evidence (28 Sep 2026): one org is one site. 2.1 added stock locations with an
-    "inside the licensed area" flag and moves between them (`stock_locations_bp`), but
-    there is no site, no transit or receipt, and no per-site registration or licence.
-  - Change:
-    - [ ] a. **Switch it on.** An org setting "multiple sites". Off (the default) keeps
-      everything exactly as today. On, the org defines its sites (name, address, kind:
-      manufacturing, storage/bond, cellar door or retail, warehouse/3PL, event) and one
-      is the default. Existing stock and executions go to the default site.
-    - [ ] b. **Tag, don't fork.** Inventory items and executions carry a site. Stock
-      locations (2.1) become places within a site. Screens and APIs filter by site; every
-      total can be shown per site or for the whole business. No separate database or org
-      per site.
-    - [ ] c. **Registrations belong to sites, as the business has them.** Each site can
-      be linked to zero or more registrations: a Customs CCA licence (one licence may
-      cover several sites, or none), a food registration (NP/FCP, 2.2 becomes per
-      registration), a liquor licence (2.5 register gains the site). "Inside a licensed
-      area" comes from the site's CCA, replacing the manual flag.
-    - [ ] d. **Moving stock between sites.** Dispatch (what, from where, carrier,
-      consignment note) → in transit (on the books, on no shelf) → received, with short,
-      over or damaged quantities resolved like stocktake differences (2.6). Batch IDs and
-      lineage travel with the stock, so a recall still traces through a move. Drag a lot
-      (or part of one) between sites or locations on a stock board, or scan to pick and
-      receive on a phone (4.6). A printable transfer docket.
-      - [x] Accounting prerequisite: producer-owned dispatch, transit, partial receipt,
-        immutable batch-lineage fragments, confirmed-loss policy checks and printable
-        carrier/consignment docket (!438). Operational release stays internally off;
-        overage resolution, drag/scan and the complete movement workflow remain open.
-    - [ ] e. **Compliance modules enforce their rules on a move.** Through a generic
-      "stock movement" seam in the Compliant platform (like workflow rules and stock
-      measures, see `docs/compliant-core-contract.md`), a module can require fields,
-      block a move, or raise an alert. NZ Alcohol:
-      - CCA to CCA without duty records the applicable movement authority and both
-        licences. Prior Customs approval is required for an OSS destination or a move
-        outside Customs' listed authorities; record its reference before dispatch.
-      - out of a CCA to a site without one (a cellar door) is a removal in the excise
-        entry of the licence it left (2.1);
-      - into a site with no food registration covering the activity, or with no liquor
-        licence for selling, raises a finding.
-      - [x] Module-owned destination activity/food/liquor missing-record findings on
-        authorised dispatch and receipt, with dated immutable evidence and periodic
-        review (!441). Other movement authorities and excise accounting remain open.
-    - [ ] f. **Per-site operations.** Batches start at a site and consume that site's
-      stock; stocktakes per site or per licence (2.6); each sales channel or Xero
-      tracking category maps to the site it ships from, so FIFO matches from the right
-      shelf (1.1); excise drafts per CCA licence.
-      - [x] Source-CCA movement register and frozen tested-spirits/LAL measurement
-        basis (!442). Physical removal authorisation, contract duty, complete
-        per-CCA drafts/lodgement and release remain open.
-      - [x] Guard prerequisite: production inputs/output reconciliation match the
-        persisted execution site, outputs inherit it, and FIFO/manual sales use the
-        shipping/default site (!429). Additional-site release remains internally
-        gated off pending transfer and module integration. This does not complete f.
-    - [ ] g. **Staff by site.** A role can be limited to some sites (extends 0.4c),
-      enforced on the server like every other permission.
-  - Done when: with multiple sites on, a pallet moves from the distillery (licence A) to
-    a bond store (licence B, with the underbond approval recorded) and on to a cellar door
-    (no CCA, so it's a removal on licence B's excise draft); every screen agrees where it
-    is at each step; and a recall of that batch lists the cellar door's sales. With
-    multiple sites off, nothing changes.
 
 ---
 

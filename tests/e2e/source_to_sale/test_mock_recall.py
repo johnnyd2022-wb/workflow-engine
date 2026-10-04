@@ -1,6 +1,7 @@
 """A recall reaches every allocated customer and exports their contacts."""
 
 import csv
+import time
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,10 @@ from app.features.crm.models.xero_contact import XeroContact
 from tests.e2e.source_to_sale.conftest import BATCH, PRODUCT
 
 pytestmark = pytest.mark.e2e
+
+# Plan 1.4 "done when": the timed mock recall is under five minutes. This is the scripted stopwatch, from
+# opening the source map to the exported contact list and the backward trace from an invoice.
+RECALL_DRILL_LIMIT_SECONDS = 300
 
 
 def test_mock_recall_from_supplier_lot_and_invoice(alcohol_scenario):
@@ -44,6 +49,7 @@ def test_mock_recall_from_supplier_lot_and_invoice(alcohol_scenario):
     sale_nodes = [item for item in body["all_items"] if item.get("node_type") == "sale"]
     assert {item["invoice_number"] for item in sale_nodes} == {"SCENARIO-INV-1", "SCENARIO-INV-2", "SCENARIO-INV-3"}
 
+    drill_started = time.monotonic()
     page.goto("/core/sourcemap")
     page.locator(".sm-browse-card", has_text="Bulk spirit").first.click()
     page.get_by_role("tab", name="Recall").click()
@@ -71,3 +77,9 @@ def test_mock_recall_from_supplier_lot_and_invoice(alcohol_scenario):
     expect(page.locator(".sm-recall-header__batch")).to_contain_text("SCENARIO-INV-1")
     expect(page.locator(".sm-recall-header__product")).to_have_text(PRODUCT)
     expect(page.locator(".sm-recall-header__batch")).to_contain_text(BATCH)
+
+    elapsed = time.monotonic() - drill_started
+    print(f"mock recall drill took {elapsed:.1f}s (limit {RECALL_DRILL_LIMIT_SECONDS}s)")
+    assert elapsed < RECALL_DRILL_LIMIT_SECONDS, (
+        f"mock recall took {elapsed:.0f}s; plan 1.4 requires under five minutes"
+    )

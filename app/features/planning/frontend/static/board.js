@@ -14,6 +14,54 @@
   let materialAssessment = null;
   let capacityReview = null;
   let boardRequest = 0;
+  let draggedBatch = null;
+  let dragPending = false;
+  const batchDragType = 'application/x-bize-planned-batch';
+  function clearDrag() {
+    draggedBatch = null;
+    root.querySelectorAll('.board-drop-target').forEach(section => section.classList.remove('board-drop-target'));
+  }
+  function dragHandle(card, batch) {
+    const handle = node('button', 'Drag to move');
+    handle.type = 'button'; handle.className = 'board-drag-handle'; handle.draggable = true;
+    handle.title = 'Drag to a day, or use the new start date form';
+    handle.addEventListener('dragstart', function (event) {
+      if (dragPending || !event.dataTransfer) { event.preventDefault(); return; }
+      draggedBatch = batch;
+      event.dataTransfer.setData(batchDragType, batch.id);
+      event.dataTransfer.effectAllowed = 'move';
+    });
+    handle.addEventListener('dragend', clearDrag);
+    handle.addEventListener('click', function () { card.querySelector('[name="start_date"]')?.focus(); });
+    card.append(handle);
+  }
+  function dropDay(section, date) {
+    section.dataset.boardDate = date;
+    if (!canRecord) return;
+    section.addEventListener('dragover', function (event) {
+      if (!draggedBatch || dragPending || draggedBatch.proposed_start_date === date) return;
+      event.preventDefault(); event.dataTransfer.dropEffect = 'move';
+      section.classList.add('board-drop-target');
+    });
+    section.addEventListener('dragleave', function (event) {
+      if (!section.contains(event.relatedTarget)) section.classList.remove('board-drop-target');
+    });
+    section.addEventListener('drop', async function (event) {
+      const batch = draggedBatch;
+      if (!batch || dragPending || !event.dataTransfer || event.dataTransfer.getData(batchDragType) !== batch.id) return;
+      event.preventDefault(); clearDrag();
+      if (batch.proposed_start_date === date) return;
+      dragPending = true; error.hidden = true;
+      try {
+        await api('/api/core/planner/batches/' + batch.id + '/action', {action: 'reschedule', expected_revision: batch.revision, start_date: date});
+        await loadBoard(); notice.textContent = 'Batch moved to ' + date;
+      } catch (exc) {
+        fail(exc);
+        // A pin, cancellation or concurrent edit may have made this card stale.
+        try { await loadBoard(); } catch (reloadError) { fail(reloadError); }
+      } finally { dragPending = false; }
+    });
+  }
   function node(tag, text) { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; }
   function iso(day) { return day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0'); }
   function day(value) { const parts = value.split('-').map(Number); return new Date(parts[0], parts[1] - 1, parts[2], 12); }
@@ -43,6 +91,7 @@
   }
   function batchCard(batch) {
     const card = node('article'); card.className = 'board-batch'; card.dataset.batchId = batch.id;
+    if (canRecord && !batch.pinned && !['started', 'cancelled'].includes(batch.status)) dragHandle(card, batch);
     card.append(node('h4', batch.snapshot.demand_reference + ' · Batch ' + batch.batch_number));
     card.append(node('p', batch.quantity + ' ' + batch.unit + ' · ' + batch.snapshot.output_name));
     card.append(node('p', batch.snapshot.site_name + ' · Priority ' + batch.priority + (batch.pinned ? ' · Pinned' : '')));
@@ -96,7 +145,7 @@
     output.append(node('p', overloads.length ? overloads.length + ' overloaded resource-day(s) in this view.' : 'No overload in configured groups for this view. Unassigned work may still exist.'));
     const list = node('ul');
     overloads.forEach(row => list.append(node('li', row.day + ' · ' + row.group_name + ': ' + row.load_minutes + '/' + row.capacity_minutes + ' minutes' +
-      (row.suggest_move_batch_id ? ' · consider moving batch ' + row.suggest_move_batch_id.slice(0, 8) : ' · all affected batches pinned'))));
+      (row.calendar_closed ? ' · resource closed' : '') + (row.suggest_move_batch_id ? ' · consider moving batch ' + row.suggest_move_batch_id.slice(0, 8) : ' · all affected batches pinned'))));
     if (overloads.length) output.append(list);
     if (capacityReview.unresolved.length) output.append(node('p', capacityReview.unresolved.length + ' batch(es) have incomplete capacity assignments or timing; no clearance can be inferred.'));
   }
@@ -112,7 +161,28 @@
     if (capacityReview.sites.some(site => site.id === selected)) select.value = selected;
     const config = currentCapacity();
     const list = root.querySelector('[data-capacity-groups]'); list.replaceChildren();
-    config.groups.forEach(group => list.append(node('p', group.name + ' · ' + group.minutes_per_day + ' minutes per day')));
+    config.groups.forEach(group => {
+      list.append(node('p', group.name + ' · ' + group.minutes_per_day + ' minutes per working day'));
+      const form = node('form'); form.setAttribute('hx-boost', 'false'); form.dataset.capacityCalendar = group.id;
+      const days = node('fieldset'); days.className = 'board-calendar-days'; days.append(node('legend', group.name + ' working days'));
+      ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].forEach((name, index) => {
+        const label = node('label'); const input = node('input'); input.type = 'checkbox'; input.name = 'working_days'; input.value = index;
+        input.checked = (group.working_days || [0,1,2,3,4,5,6]).includes(index); label.append(input, node('span', name)); days.append(label);
+      });
+      form.append(days);
+      const label = node('label', 'Closed dates, one per line (YYYY-MM-DD)'); const dates = node('textarea');
+      dates.name = 'closed_dates'; dates.rows = 3; dates.value = (group.closed_dates || []).join('\n'); label.append(dates); form.append(label);
+      const button = node('button', 'Save calendar'); button.type = 'submit'; form.append(button);
+      form.addEventListener('submit', async function (event) {
+        event.preventDefault(); button.disabled = true; error.hidden = true; notice.textContent = '';
+        const updated = {...group, working_days: Array.from(form.querySelectorAll('[name="working_days"]:checked'), input => Number(input.value)), closed_dates: dates.value.trim() ? dates.value.trim().split(/\s+/) : []};
+        try {
+          await saveCapacity({...config, groups: config.groups.map(item => item.id === group.id ? updated : item)});
+          notice.textContent = 'Resource calendar saved';
+        } catch (exc) { fail(exc); button.disabled = false; }
+      });
+      list.append(form);
+    });
     const steps = root.querySelector('[data-capacity-step]'); const priorStep = steps.value; steps.replaceChildren();
     workflows.forEach(workflow => workflow.steps.forEach(step => option(steps, step.step_id, workflow.process_name + ' · ' + step.name)));
     if (Array.from(steps.options).some(item => item.value === priorStep)) steps.value = priorStep;
@@ -132,12 +202,14 @@
       if (requestNumber !== boardRequest) return;
       materialAssessment = observed.assessment;
       capacityReview = capacity; renderCapacity(); showCapacitySettings();
+      clearDrag();
       const days = root.querySelector('[data-board-days]'); days.replaceChildren();
       root.querySelector('[data-board-title]').textContent = iso(dates.start) + ' – ' + iso(dates.end);
       root.querySelector('[data-board-empty]').hidden = result.batches.length !== 0;
       if (result.truncated) notice.textContent = 'Showing the first 1,000 batches. Choose a shorter period to see more.';
       for (let current = dates.start; current <= dates.end; current = add(current, 1)) {
         const key = iso(current); const section = node('section'); section.className = 'board-day';
+        dropDay(section, key);
         section.append(node('h3', current.toLocaleDateString(undefined, {weekday: 'short', day: 'numeric', month: 'short'})));
         result.batches.filter(batch => batch.proposed_start_date === key).forEach(batch => section.append(batchCard(batch)));
         days.append(section);

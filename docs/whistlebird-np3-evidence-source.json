@@ -340,11 +340,11 @@
       "signed_on": "2026-09-23",
       "due_date": "2027-09-23",
       "review_interval_months": 12,
-      "how_we_meet": "Whistlebird's written food and drink recall policy covers supplier-notified and self-initiated recalls, immediate stock holds and source-to-sale tracing, risk assessment and recall decisions, NZFS notification within 24 hours of a recall decision, trade and consumer communication, product disposition, reconciliation, corrective action and an annual simulated recall. Johnny Dempsey is the decision maker, with Nikolai Scott as deputy.",
+      "how_we_meet": "Whistlebird's written food and drink recall policy covers supplier-notified and self-initiated recalls, immediate stock holds and source-to-sale tracing, risk assessment and recall decisions, NZFS notification within 24 hours of a recall decision, trade and consumer communication, product disposition, reconciliation, corrective action and an annual simulated recall. Johnny Dempsey and Nikolai Scott are both recall decision makers with equal authority, and either of them can authorise a recall.",
       "evidence_reference": "docs/whistlebird-recall-policy.md",
       "evidence_fields": {
         "policy_reference": "docs/whistlebird-recall-policy.md",
-        "last_policy_review": "2026-09-23"
+        "last_policy_review": "2026-09-30"
       }
     },
     {
@@ -974,6 +974,32 @@
         "event_date": "2026-09-23",
         "training_topic": "recall-policy-procedures"
       }
+    },
+    {
+      "control_id": "recall-policy",
+      "fields": {
+        "covers_nzfs_notification": "yes",
+        "covers_self_initiated": "yes",
+        "covers_supplier_notified": "yes",
+        "event_date": "2026-09-30",
+        "policy_reference": "docs/whistlebird-recall-policy.md"
+      },
+      "files": [
+        "docs/evidence/whistlebird/recall-policy.pdf"
+      ]
+    },
+    {
+      "control_id": "trace-and-recall",
+      "fields": {
+        "batch_or_product": "SIMULATED RECALL: Whistlebird gin batches SIM-G-201 and SIM-G-202 (1,000 bottles), made with juniper berry lot SIM-JB-14",
+        "elapsed_time": "Completed in one session on 30 September 2026 (desk-based). Individual step times were not recorded; the next exercise will time each step against targets of 1 hour to trace the lot and list all customers, 4 hours to contact every store, and 24 hours from the decision to NZFS drafts.",
+        "event_date": "2026-09-30",
+        "improvement_action": "Supplier certificate of analysis and botanical identification for each juniper lot (Johnny Dempsey, 31 Dec 2026); check and photograph each juniper lot on receipt and keep a retained sample of every botanical lot (Nikolai Scott, from the next delivery); record every tasting, event and gift bottle in inventory (Johnny Dempsey and Nikolai Scott, from 1 Oct 2026); decide who posts to the website and social media in a recall (Johnny Dempsey and Nikolai Scott, 31 Oct 2026); time each step in the next exercise (Johnny Dempsey and Nikolai Scott, by 30 Sep 2027).",
+        "trace_result": "Desk-based simulated recall completed 30 September 2026, led by Johnny Dempsey, following the recall policy. Scenario: our supplier tells us juniper berry lot SIM-JB-14 contains a toxic look-alike berry (savin juniper). Investigate and contain (policy section 1): lot held and traced in Biz-E to two gin batches (1,000 bottles); the Recall screen listed all 32 bottle stores (834 bottles) with contact details, and 120 bottles on hand. Inform and assess (section 2): risk assessment completed; consumer-level recall decided. Check and communicate (section 3): drafts prepared to NZFS (within 24 hours of the decision), to all 32 stores, a point-of-sale notice and consumer messages; none sent. Reconcile (section 4): 1,000 produced = 120 on hold + 12 samples + 28 staff and marketing + 834 with stores + 6 at a trade tasting that had not been recorded in inventory. Full record: Whistlebird mock recall pack, juniper berries, 30 September 2026. All figures are simulated."
+      },
+      "files": [
+        "docs/evidence/whistlebird/mock-recall-juniper-berries.pdf"
+      ]
     }
   ]
 }

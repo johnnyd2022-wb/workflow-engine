@@ -71,7 +71,6 @@
     });
     load().catch(function (error) { say(error.message); });
   }
-  function boot() { document.querySelectorAll('[data-sites-root]').forEach(init); }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-  document.addEventListener('htmx:afterSwap', boot);
+  // Runs at first load and after every boosted swap that brings the page in (page-init.js).
+  bize.onPage('[data-sites-root]', init);
 }());
