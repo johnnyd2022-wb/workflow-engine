@@ -57,25 +57,9 @@ def create_app():
     if upload_limits_mb:
         app.config["MAX_CONTENT_LENGTH"] = max(upload_limits_mb) * 1024 * 1024
 
-    # Set secret key for sessions. This key signs every session cookie and CSRF token
-    # app-wide (shell review, .agents/reports/shell/security-audit.md F1) — a hardcoded
-    # fallback here is a full session-forgery/CSRF-bypass vector the moment it's the
-    # live value, not just a placeholder, so it may only stand in for local/test.
-    _secret_key = config.get("app", "secret_key", fallback=None)
-    if not _secret_key:
-        if config.environment not in ("local", "test"):
-            raise RuntimeError(
-                "app.secret_key is not configured. Refusing to start with an insecure "
-                "default outside local/test — set [app] secret_key via this environment's "
-                "config (KeePassXC locally, env var in CI/CD, per this repo's secrets "
-                "pattern)."
-            )
-        logger.warning(
-            "secret_key_using_insecure_default",
-            detail="[app] secret_key unset — using dev fallback, allowed only for local/test",
-        )
-        _secret_key = "dev-secret-key-change-in-production"
-    app.secret_key = _secret_key
+    # Session cookies and CSRF tokens require a stable, private key in every environment.
+    # Publicly reachable test deployments must never fall back to a known development key.
+    app.secret_key = config.session_secret_key
 
     # Configure session cookies for production security
     # CRITICAL: Always use Secure=True (HTTPS is used in both local dev and production)

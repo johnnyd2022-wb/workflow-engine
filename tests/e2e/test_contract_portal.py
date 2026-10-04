@@ -100,6 +100,9 @@ def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, 
         portal.get_by_role("button", name="Send message").click()
         expect(portal.locator('[data-message="customer"]')).to_have_count(1)
         assert "<b>Thanks</b>" in portal.locator('[data-message="customer"]').inner_text()
+        expect(portal.get_by_role("heading", name="Order timeline", exact=True)).to_be_visible()
+        expect(portal.locator('[data-timeline-kind="proof_response"]')).to_have_count(1)
+        expect(portal.locator('[data-timeline-kind="message"]')).to_have_count(1)
         assert portal.locator("h2").count() == 10
         assert portal.locator("main script").count() == 0
         assert portal.locator("main b").count() == 0
@@ -127,6 +130,8 @@ def test_publish_invite_and_customer_readonly_portal_at_390px(browser, app_url, 
         assert reordered.value.status == 201
         expect(portal.get_by_text("Reorder requested", exact=False)).to_be_visible()
         expect(portal.get_by_role("button", name="Request reorder", exact=True)).to_have_count(0)
+        expect(portal.locator('[data-timeline-kind="reorder_requested"]')).to_have_count(1)
+        expect(portal.locator('[data-timeline-kind="proof_response"]')).to_have_count(0)
         assert portal.locator("main b").count() == 0
         assert portal.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         page.reload()

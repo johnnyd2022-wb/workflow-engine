@@ -4,6 +4,12 @@
 
 set -e
 
+# This is an isolated CI server, not a deployed environment. Keep one private key
+# across its processes and use nonfunctional OAuth values for mocked provider tests.
+export FLASK_SECRET_KEY="${FLASK_SECRET_KEY:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')}"
+export GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-ci-test.apps.googleusercontent.com}"
+export GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET:-ci-test-only-secret}"
+
 echo "🚀 Setting up Flask application server..."
 
 APP_PORT="$(python3 -c "import configparser; config = configparser.ConfigParser(); config.read('app/config/test.ini'); print(config.getint('app', 'port'))")"
