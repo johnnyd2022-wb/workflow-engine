@@ -63,6 +63,17 @@
         </ul>
       </section>
 
+      {% if can('production.view') %}
+      <section class="dash-card" aria-labelledby="dashboard-planned-work-title">
+        <div class="dash-card-header">
+          <h2 id="dashboard-planned-work-title">Today's planned production</h2>
+          <a href="/core/planner/board" hx-boost="false">Review production board</a>
+        </div>
+        <p data-planned-work-summary>Loading planned priorities...</p>
+        <ul class="dash-list" data-planned-work-list></ul>
+      </section>
+      {% endif %}
+
       <section class="dash-workspace-section" aria-labelledby="dashboard-workspaces-title">
         <div class="dash-section-heading">
           <div>

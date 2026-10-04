@@ -1027,9 +1027,16 @@ def get_dashboard_summary():
         cumulative=True,
     )
 
+    planned_work = None
+    if has_permission(g.current_user, "production.view"):
+        from app.features.planning.dashboard_service import today_work
+
+        planned_work = today_work(db_session, org_id, today)
+
     return (
         jsonify(
             {
+                "planned_work": planned_work,
                 "generated_at": datetime.now().isoformat(),
                 "window_days": window_days,
                 "tasks": tasks_summary,

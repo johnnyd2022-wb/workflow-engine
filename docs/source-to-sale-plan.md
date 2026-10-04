@@ -1103,10 +1103,13 @@ Founder decisions for this phase:
       executions from the board, and today's list feeds the dashboard (4.5).
       - [x] Responsive week/month/day board with priority, pin/unpin, explicit date
         changes and cancellation, revisions, audit and a guarded idempotent start
-        seam (!440); trusted start checks, automatic replan and dashboard integration remain.
+        seam (!440); trusted start checks and automatic replan remain.
       - [x] Drag unpinned batches between dates (!459), using the guarded reschedule API
         and refreshing stale cards after conflicts; date forms remain available on phones
         and to keyboard users.
+      - [x] Today's planned production priorities on the dashboard (!463): due and overdue
+        open batches, current priority and pin/check state, bounded display and a review
+        link to the board. Production permission is required for query and rendering.
     - [ ] g. **Promise dates.** For a new order, "when can we deliver n?" from stock on
       hand, then what's planned, then capacity (available-to-promise). The same forecast
       ready date feeds the portal (7.2e) and the order.
