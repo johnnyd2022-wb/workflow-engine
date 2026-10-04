@@ -2,6 +2,7 @@
 
 import fnmatch
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -52,6 +53,11 @@ def main() -> int:
     if not claims:
         print("Feature Index has no route claims.", file=sys.stderr)
         return 2
+
+    # This process only inspects routes; it does not serve requests or use OAuth.
+    os.environ.setdefault("FLASK_SECRET_KEY", secrets.token_urlsafe(48))
+    os.environ.setdefault("GOOGLE_CLIENT_ID", "route-check.apps.googleusercontent.com")
+    os.environ.setdefault("GOOGLE_CLIENT_SECRET", "route-check-only-secret")
 
     from app.app import app
 
