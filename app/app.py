@@ -12,7 +12,7 @@ import datetime
 # Import xero client stuff here
 import subprocess
 
-from flask import redirect, url_for
+from flask import make_response, redirect, render_template, url_for
 
 from app.api.app_factory import create_app
 from app.core.security.permissions import requires_auth
@@ -65,22 +65,11 @@ log_feature_status()
 
 @app.route("/")
 def index():
-    """Landing page with sign-up and login.
-
-    Served as a static file, like /landing-diagram below. It was previously read from disk
-    and passed through render_template_string on every request, which re-compiled the
-    whole page each hit and gave semgrep a server-side-template-injection finding
-    (python.flask.security.audit.render-template-string) — all to render a file that
-    contains no Jinja syntax at all. send_from_directory adds conditional-GET/etag
-    handling for free on the app's most-hit public page.
-    """
-    import os
-
-    from flask import send_from_directory
-
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    templates_dir = os.path.join(app_dir, "ui", "templates")
-    return send_from_directory(templates_dir, "landing.html")
+    """Render sign-in feature flags and a CSRF token bound to this browser's session."""
+    response = make_response(render_template("landing.html"))
+    # This page contains a session-specific token and must not be reused by a cache.
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/favicon.ico")

@@ -2,6 +2,7 @@
 
 import time
 from datetime import UTC, datetime, timedelta
+from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
@@ -440,6 +441,74 @@ def test_google_posts_are_not_exempt_from_csrf(world):
     app, browser, _, _ = world
     app.config["WTF_CSRF_ENABLED"] = True
     assert browser.post("/auth/google/start").status_code == 400
+
+
+class _GoogleLoginForm(HTMLParser):
+    def __init__(self, html):
+        super().__init__()
+        self.in_google_form = False
+        self.token = None
+        self.feed(html)
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "form":
+            self.in_google_form = attrs.get("action") == "/auth/google/start"
+        if self.in_google_form and tag == "input" and attrs.get("name") == "csrf_token":
+            self.token = attrs.get("value")
+
+    def handle_endtag(self, tag):
+        if tag == "form":
+            self.in_google_form = False
+
+
+@pytest.mark.parametrize("workspace", [False, True])
+def test_landing_google_form_with_csrf_signs_into_existing_account(world, monkeypatch, workspace):
+    from app.app import index
+
+    app, browser, users, db = world
+    app.add_url_rule("/", "index", index)
+    app.config["WTF_CSRF_ENABLED"] = True
+    user = users[0]
+    hd = None
+    if workspace:
+        user.email = f"{uuid4().hex}@workspace.test"
+        hd = "workspace.test"
+        db.commit()
+    response = browser.get("/")
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "{%" not in html and "{{" not in html
+    assert response.headers["Cache-Control"] == "no-store"
+    token = _GoogleLoginForm(html).token
+    assert token
+    with browser.session_transaction() as s:
+        assert s.get("csrf_token")
+    assert (
+        app.test_client()
+        .post("/auth/google/start", data={"csrf_token": token}, base_url="https://localhost")
+        .status_code
+        == 400
+    )
+    browser.environ_base["HTTP_REFERER"] = "https://localhost/"
+    response = _sign_in(browser, _claims(user.email.upper(), hd=hd), monkeypatch, data={"csrf_token": token})
+    assert response.location == "/dashboard"
+    with browser.session_transaction() as s:
+        assert s["user_id"] == str(user.id)
+        assert s["org_id"] == str(user.org_id)
+    assert db.query(UserIdentity).filter_by(user_id=user.id, org_id=user.org_id).count() == 1
+
+
+def test_landing_hides_google_when_disabled(world):
+    from app.app import index
+
+    app, browser, _, _ = world
+    app.add_url_rule("/", "index", index)
+    app.config.update(GOOGLE_SIGN_IN_ENABLED=False, WTF_CSRF_ENABLED=True)
+    html = browser.get("/").get_data(as_text=True)
+    assert "{%" not in html and "{{" not in html
+    assert 'action="/auth/google/start"' not in html
+    assert 'id="login-form"' in html
 
 
 def test_authlib_verifies_real_signed_token_and_rejects_hostile_tokens(world, monkeypatch):
