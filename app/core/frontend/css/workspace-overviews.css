@@ -146,7 +146,12 @@
 #page-content .compliance-overview .compliant-framework-summary__title { font-size: 17px; font-weight: 600; line-height: 1.45; }
 #page-content .compliance-overview .compliant-framework-summary__metrics { padding-top: 14px; margin-top: 8px; }
 #page-content .sales-overview .crm-widget-grid { gap: 24px; }
-#page-content .sales-overview .crm-kpi-grid { margin-bottom: 24px; }
+#page-content .sales-overview { padding-bottom: 40px; }
+#page-content .sales-overview .workspace-links--card { margin-top: 24px; }
+#page-content .sales-overview .crm-kpi-grid { gap: 16px; margin: 18px 0 0; }
+#page-content .sales-kpi { display: block; width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+#page-content .sales-kpi:hover { border-color: var(--ui-accent, #0d9488); }
+#page-content .sales-kpi:focus-visible { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: 2px; }
 #page-content .sales-overview .crm-widget-card__header { padding: 20px 24px 0; }
 #page-content .sales-overview .crm-widget-card__body { padding: 18px 24px 24px; }
 @media (hover: hover) {

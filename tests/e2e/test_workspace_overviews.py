@@ -273,3 +273,27 @@ def test_compliance_overview_groups_obligations_and_actions_in_cards(browser, ap
         _capture(page, "compliance-layout", width)
     finally:
         context.close()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+def test_sales_overview_groups_figures_and_tools_in_cards(browser, app_url, workspace_user, width):
+    context, page = _page(browser, app_url, workspace_user, width)
+    try:
+        page.goto("/crm")
+        glance = page.get_by_role("region", name="At a glance", exact=True)
+        tools = page.get_by_role("region", name="Sales workspace actions", exact=True)
+        expect(glance.get_by_role("button").first).to_be_visible()
+        outer = glance.bounding_box()
+        for figure in glance.get_by_role("button").all():
+            if figure.is_visible():
+                box = figure.bounding_box()
+                assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
+        assert glance.bounding_box()["y"] < tools.bounding_box()["y"]
+        assert round(glance.bounding_box()["width"]) == round(tools.bounding_box()["width"])
+        links = [link.bounding_box() for link in tools.get_by_role("link").all()]
+        assert len(links) == 2 and links[0]["y"] == links[1]["y"]
+        assert round(links[0]["width"]) == round(links[1]["width"])
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "sales-layout", width)
+    finally:
+        context.close()
