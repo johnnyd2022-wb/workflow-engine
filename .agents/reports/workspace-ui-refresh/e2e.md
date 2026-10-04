@@ -46,9 +46,12 @@ raise SystemExit(pytest.main([
 PY
 ```
 
-The changed browser test is selected automatically by the MR test selector and brings
-Chromium/app-server setup into the required `relevant_tests` job. The normal MR smoke,
-security and migration jobs also remain enabled. This UI MR does not use `ci::fast`.
+The shared base-template change triggers the selector’s conservative full-suite
+fallback. CI collects but skips the detailed browser cases under its existing
+ENVIRONMENT=test policy; these passed in the real local HTTPS runs above. The
+separate MR browser smoke job passed all three cases. Remote regression passed
+2,828 tests, with 539 skipped. Normal security and migration jobs remain enabled.
+This UI MR does not use `ci::fast`.
 
 Updated Compliance module/browser checks also passed 23 cases in three repetitions.
 
