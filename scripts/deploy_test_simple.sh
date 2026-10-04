@@ -18,6 +18,33 @@ echo "Config file: config/$ENVIRONMENT.ini"
 
 IMAGE_REF="${1:-}"
 
+# Session signing must use a private, stable key; validate before replacing the app.
+FLASK_SECRET_KEY="${FLASK_SECRET_KEY:-}"
+if [ -z "${FLASK_SECRET_KEY:-}" ] && [ -z "$IMAGE_REF" ]; then
+    FLASK_SECRET_KEY="$(uv run python -c 'from scripts.local_secrets import get_keepass_entry; print(get_keepass_entry(entry_name="workflow-engine/FLASK_SECRET_KEY_TEST").get("Password", "").strip())')"
+fi
+if [ "${#FLASK_SECRET_KEY}" -lt 32 ] || [ "$FLASK_SECRET_KEY" = "dev-secret-key-change-in-production" ]; then
+    echo "A strong FLASK_SECRET_KEY is required before deploying test."
+    exit 1
+fi
+export FLASK_SECRET_KEY
+
+# Resolve test Google credentials on the host; KeePassXC is unavailable in Docker.
+# CD supplies protected environment variables instead of reading the host database.
+if [ -z "$IMAGE_REF" ]; then
+    if [ -z "${GOOGLE_CLIENT_ID:-}" ]; then
+        GOOGLE_CLIENT_ID="$(uv run python -c 'from scripts.local_secrets import get_keepass_entry; print(get_keepass_entry(entry_name="workflow-engine/GOOGLE_CLIENT_ID").get("Password", "").strip())')"
+    fi
+    if [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
+        GOOGLE_CLIENT_SECRET="$(uv run python -c 'from scripts.local_secrets import get_keepass_entry; print(get_keepass_entry(entry_name="workflow-engine/GOOGLE_CLIENT_SECRET").get("Password", "").strip())')"
+    fi
+fi
+if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
+    echo "Google sign-in requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET before deploying test."
+    exit 1
+fi
+export GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
+
 # Build and run Docker container for test.
 # The filter must match the app container's name exactly -- "name=workflow-engine-test"
 # is a substring filter and also matches "workflow-engine-test-db", which stops and
@@ -57,6 +84,9 @@ DOCKER_RUN_ARGS=(
     -p 8001:8001
     --network workflow-observability
     -e ENVIRONMENT=test
+    -e FLASK_SECRET_KEY
+    -e GOOGLE_CLIENT_ID
+    -e GOOGLE_CLIENT_SECRET
     -e XERO_CLIENT_ID_TEST="${XERO_CLIENT_ID_TEST:-}"
     -e XERO_CLIENT_SECRET_TEST="${XERO_CLIENT_SECRET_TEST:-}"
     -e xero_client_id_test="${xero_client_id_test:-}"

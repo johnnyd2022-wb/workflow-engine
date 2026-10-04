@@ -10,6 +10,8 @@ This file also owns the live-server gate (see the `live_server` marker below), w
 owned by the suite-warden skill.
 """
 
+import os
+import secrets
 import socket
 
 import pytest
@@ -18,6 +20,14 @@ from app.core.db import db_session
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import User
 from tests.factories import OrganisationFactory, UserFactory
+
+# In-process tests need no deployment secret or KeePassXC database. All app
+# instances in this pytest process share one private, ephemeral signing key.
+os.environ.setdefault("FLASK_SECRET_KEY", secrets.token_urlsafe(48))
+# OAuth-enabled app startup needs configuration even when provider verification
+# is mocked. Isolated tests must not depend on a customer's live Google client.
+os.environ.setdefault("GOOGLE_CLIENT_ID", "pytest.apps.googleusercontent.com")
+os.environ.setdefault("GOOGLE_CLIENT_SECRET", "pytest-only-secret")
 
 # --------------------------------------------------------------------------------------
 # live-server gate (owned by suite-warden)

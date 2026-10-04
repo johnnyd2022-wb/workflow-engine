@@ -24,6 +24,7 @@ class Config:
         self._keepass_creds: dict | None = None
         self._xero_keepass_creds: dict | None = None
         self._google_keepass_creds: dict[str, str] = {}
+        self._session_keepass_key = ""
         self._observability_keepass_creds: dict[str, str] = {}
         self.load_config()
         self._load_keepass_creds()
@@ -103,13 +104,15 @@ class Config:
             except Exception:
                 pass  # silently fall back to env var / ini
 
-        # Google sign-in secrets stay in the same local KeePassXC store. Loading is
-        # opt-in so disabled environments never prompt for Google credentials.
-        if self.environment == "local" and self.getboolean("google_sign_in", "enabled", False):
+        # Host runs of local/test can read KeePassXC. Containers use injected env vars.
+        # Skip entries already supplied by the deployment environment.
+        if self.environment in {"local", "test"} and self.getboolean("google_sign_in", "enabled", False):
             try:
                 from scripts.local_secrets import get_keepass_entry
 
                 for key in ("client_id", "client_secret"):
+                    if self._clean_config_secret(os.getenv(f"GOOGLE_{key.upper()}")):
+                        continue
                     entry_name = self.get("google_sign_in", f"keepass_{key}_entry", f"workflow-engine/google/{key}")
                     entry = get_keepass_entry(entry_name=entry_name)
                     value = entry.get("Password", "").strip() if entry else ""
@@ -170,6 +173,30 @@ class Config:
     @property
     def debug(self) -> bool:
         return self.getboolean("app", "debug", False)
+
+    @property
+    def session_secret_key(self) -> str:
+        """Load a stable private key shared by all workers in this environment."""
+        value = self._clean_config_secret(os.getenv("FLASK_SECRET_KEY"))
+        if not value and self.environment in {"local", "test"}:
+            value = getattr(self, "_session_keepass_key", "")
+            if not value:
+                from scripts.local_secrets import get_keepass_entry
+
+                entry_name = self.get(
+                    "app",
+                    "keepass_session_secret_entry",
+                    f"workflow-engine/FLASK_SECRET_KEY_{self.environment.upper()}",
+                )
+                entry = get_keepass_entry(entry_name=entry_name)
+                value = self._clean_config_secret(entry.get("Password")) if entry else ""
+                self._session_keepass_key = value
+        if len(value.encode("utf-8")) < 32 or value in {"PROTECTED", "dev-secret-key-change-in-production"}:
+            raise RuntimeError(
+                "A strong session-signing key is required. Set FLASK_SECRET_KEY to a random secret of at least "
+                "32 bytes, or provision the configured KeePassXC entry for local/test."
+            )
+        return value
 
     @property
     def is_production(self) -> bool:
