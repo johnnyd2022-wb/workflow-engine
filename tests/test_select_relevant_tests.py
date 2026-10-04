@@ -87,3 +87,103 @@ def test_node_requirement_is_precise():
 
     assert plan["needs_node"] is True
     assert plan["needs_database"] is False
+
+
+def _request_fast(monkeypatch):
+    monkeypatch.setenv("CI_PIPELINE_SOURCE", "merge_request_event")
+    monkeypatch.setenv("CI_MERGE_REQUEST_LABELS", "bug,ci::fast")
+
+
+def test_fast_docs_have_no_runtime_requirements(monkeypatch):
+    _request_fast(monkeypatch)
+    plan = selector.fast_plan(["docs/go-live-checklist.md"], "base", "head")
+    assert plan["mode"] == "fast"
+    assert plan["tests"] == []
+    assert not any(plan[key] for key in plan if key.startswith("needs_"))
+
+
+def test_fast_google_pointer_change_runs_focused_config_tests(monkeypatch):
+    _request_fast(monkeypatch)
+    old = {("google_sign_in", "keepass_client_id_entry"): "old", ("app", "debug"): "true"}
+    new = {**old, ("google_sign_in", "keepass_client_id_entry"): "workflow-engine/GOOGLE_CLIENT_ID"}
+    monkeypatch.setattr(selector, "_config_snapshot", lambda ref, path: old if ref == "base" else new)
+    plan = selector.fast_plan(["app/config/local.ini", selector.FAST_TEST], "base", "head")
+    assert plan["mode"] == "fast"
+    assert plan["tests"] == [selector.FAST_TEST]
+    assert not plan["needs_database"]
+    assert not plan["needs_browser"]
+
+
+def test_fast_label_cannot_bypass_unrelated_config_values(monkeypatch):
+    _request_fast(monkeypatch)
+    for key in (("app", "debug"), ("google_sign_in", "enabled"), ("DEFAULT", "password")):
+        monkeypatch.setattr(selector, "_config_snapshot", lambda ref, path: {key: ref})
+        assert selector.fast_plan(["app/config/local.ini"], "base", "head") is None
+
+
+def test_fast_label_cannot_bypass_code_ci_dependencies_or_production(monkeypatch):
+    _request_fast(monkeypatch)
+    for path in (
+        "app/config/prod.ini",
+        "app/config/test.ini",
+        "app/api/app_factory.py",
+        "app/api/routes/auth_routes.py",
+        "ci/setup_server.sh",
+        ".gitlab-ci.yml",
+        "uv.lock",
+        "scripts/select_relevant_tests.py",
+        "tests/conftest.py",
+        "tests/test_auth_login_security.py",
+        "docs/tool.py",
+    ):
+        assert selector.fast_plan(["docs/setup.md", path], "base", "head") is None
+
+
+def test_fast_requires_exact_label_and_mr_pipeline(monkeypatch):
+    for source, labels in (
+        ("push", "ci::fast"),
+        ("schedule", "ci::fast"),
+        ("web", "ci::fast"),
+        ("merge_request_event", ""),
+        ("merge_request_event", "ci::fast-extra"),
+    ):
+        monkeypatch.setenv("CI_PIPELINE_SOURCE", source)
+        monkeypatch.setenv("CI_MERGE_REQUEST_LABELS", labels)
+        assert selector.fast_plan(["docs/setup.md"], "base", "head") is None
+
+
+def test_fast_inspection_failure_falls_back(monkeypatch):
+    _request_fast(monkeypatch)
+
+    def unavailable(ref, path):
+        raise RuntimeError("missing config revision")
+
+    monkeypatch.setattr(selector, "_config_snapshot", unavailable)
+    assert selector.fast_plan(["app/config/local.ini"], "base", "head") is None
+
+
+def test_deleted_files_are_included_in_diff(monkeypatch):
+    from types import SimpleNamespace
+
+    commands = []
+
+    def diff(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout="app/api/routes/auth_routes.py\n", stderr="")
+
+    monkeypatch.setattr(selector.subprocess, "run", diff)
+    assert selector.changed_paths("base", "head") == ["app/api/routes/auth_routes.py"]
+    assert not any(arg.startswith("--diff-filter") for arg in commands[0])
+    assert "--no-renames" in commands[0]
+
+
+def test_fast_eligibility_does_not_read_mr_diff_on_main(monkeypatch):
+    monkeypatch.setenv("CI_PIPELINE_SOURCE", "push")
+    monkeypatch.setenv("CI_MERGE_REQUEST_LABELS", "ci::fast")
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT), "--fast-eligible", "--base", ""])
+
+    def unexpected(*args):
+        raise AssertionError("main must not inspect an empty MR diff base")
+
+    monkeypatch.setattr(selector, "changed_paths", unexpected)
+    assert selector.main() == 1

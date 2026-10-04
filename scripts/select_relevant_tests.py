@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import configparser
 import fnmatch
 import json
 import os
@@ -27,6 +28,9 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 NO_TESTS = "__NO_TESTS__"
+FAST_CONFIG_PATHS = frozenset({"app/config/local.ini", "app/config/local.ini.template"})
+FAST_TEST = "tests/test_config_google_secrets.py"
+FAST_CONFIG_KEYS = frozenset({"keepass_client_id_entry", "keepass_client_secret_entry"})
 
 
 @dataclass(frozen=True)
@@ -186,6 +190,7 @@ DATABASE_FREE_TESTS = frozenset(
         "tests/test_execution_shared_utils_js.py",
         "tests/test_inventory_csv_validation.py",
         "tests/test_ui_shared_access_denied.py",
+        FAST_TEST,
     }
 )
 NODE_TESTS = frozenset({"tests/test_execution_shared_utils_js.py"})
@@ -212,7 +217,7 @@ def _validate_rules() -> None:
 def changed_paths(base: str, head: str) -> list[str]:
     """Return the committed files changed from ``base`` to ``head`` in stable order."""
     result = subprocess.run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMR", f"{base}...{head}"],
+        ["git", "diff", "--name-only", "--no-renames", f"{base}...{head}"],
         cwd=REPO_ROOT,
         text=True,
         capture_output=True,
@@ -220,6 +225,68 @@ def changed_paths(base: str, head: str) -> list[str]:
     if result.returncode:
         raise RuntimeError(f"could not diff {base}...{head}: {result.stderr.strip()}")
     return sorted({line.strip() for line in result.stdout.splitlines() if line.strip()})
+
+
+def fast_requested() -> bool:
+    """Only the exact opt-in label on an MR may request the fast path."""
+    return os.environ.get("CI_PIPELINE_SOURCE") == "merge_request_event" and "ci::fast" in {
+        label.strip() for label in os.environ.get("CI_MERGE_REQUEST_LABELS", "").split(",")
+    }
+
+
+def _config_snapshot(ref: str, path: str) -> dict[tuple[str, str], str]:
+    result = subprocess.run(["git", "show", f"{ref}:{path}"], cwd=REPO_ROOT, text=True, capture_output=True)
+    if result.returncode:
+        raise RuntimeError(f"cannot inspect config {path} at {ref}")
+    config = configparser.ConfigParser(interpolation=None)
+    config.read_string(result.stdout)
+    values = {("DEFAULT", key): value for key, value in config.defaults().items()}
+    for section in config.sections():
+        values.update({(section, key): value for key, value in config.items(section, raw=True)})
+        # Preserve empty sections too, so unrelated structural changes are rejected.
+        values[(section, "")] = ""
+    return values
+
+
+def fast_plan(paths: list[str], base: str, head: str) -> dict[str, Any] | None:
+    """Allow Markdown docs or just the local Google credential-entry pointers.
+
+    Content checks use committed snapshots, not the worktree. Unknown files, other
+    config keys, additions/deletions of config files, and inspection errors fall back
+    to the normal pipeline. The base is the MR diff base supplied by GitLab.
+    """
+    if not fast_requested() or not paths:
+        return None
+    if any(
+        path not in FAST_CONFIG_PATHS
+        and path != FAST_TEST
+        and path != "README.md"
+        and not (path.startswith("docs/") and path.endswith(".md"))
+        for path in paths
+    ):
+        return None
+    try:
+        for path in set(paths) & FAST_CONFIG_PATHS:
+            before, after = _config_snapshot(base, path), _config_snapshot(head, path)
+            changed = {key for key in before.keys() | after.keys() if before.get(key) != after.get(key)}
+            if not changed.issubset({("google_sign_in", key) for key in FAST_CONFIG_KEYS}):
+                return None
+    except (RuntimeError, configparser.Error):
+        return None
+    tests = [FAST_TEST] if set(paths) & (FAST_CONFIG_PATHS | {FAST_TEST}) else []
+    if any(not _existing_test(test) for test in tests):
+        return None
+    return {
+        "changed_paths": sorted(paths),
+        "mode": "fast",
+        "tests": tests,
+        "reasons": {test: ["ci::fast: local Google credential pointers / focused config coverage"] for test in tests},
+        "needs_browser": False,
+        "needs_server": False,
+        "needs_e2e": False,
+        "needs_database": False,
+        "needs_node": False,
+    }
 
 
 def _direct_test_for_source(path: str) -> str | None:
@@ -338,10 +405,23 @@ def main() -> int:
         "--needs-database", action="store_true", help="Exit 0 only when the selection needs PostgreSQL."
     )
     parser.add_argument("--needs-node", action="store_true", help="Exit 0 only when the selection needs Node.js.")
+    parser.add_argument("--fast-eligible", action="store_true", help="Exit 0 only for an approved ci::fast MR diff.")
     args = parser.parse_args()
 
+    if args.fast_eligible and not fast_requested():
+        print("Normal CI: ci::fast requires an opted-in merge request.")
+        return 1
+
     try:
-        plan = select(args.paths if args.paths is not None else changed_paths(args.base, args.head))
+        paths = args.paths if args.paths is not None else changed_paths(args.base, args.head)
+        fast = fast_plan(paths, args.base, args.head)
+        if args.fast_eligible:
+            if fast:
+                print("ci::fast: approved low-impact diff; expensive MR checks are omitted.")
+                return 0
+            print("Normal CI: ci::fast absent or diff outside the low-impact allow-list.")
+            return 1
+        plan = fast or select(paths)
     except RuntimeError as exc:
         print(f"test selection failed: {exc}", file=sys.stderr)
         return 2
