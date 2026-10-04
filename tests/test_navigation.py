@@ -87,7 +87,7 @@ def test_admin_sees_exactly_five_main_tabs_and_the_production_sub_nav(db, flask_
         assert 'href="/core/planner"' in html  # a sub-nav tab, not a sidebar item
         assert re.search(r'class="nav-link active"[^>]*>\s*<div[^>]*>.*?Production', html, re.S) or "active" in html
         tabs = _tabs(html)
-        assert [key for key, _ in tabs] == [t.key for t in SECTION_TABS["production"]]
+        assert [key for key, _ in tabs] == ["overview", "planner", "workflows", "inventory"]
         assert [key for key, active in tabs if active] == ["planner"]
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
@@ -103,9 +103,10 @@ def test_sub_nav_shows_only_the_tabs_a_role_may_open(db, flask_app):  # noqa: F8
         assert "contracts" in keys and "inventory" in keys
         assert not {"planner", "batches", "workflows"} & set(keys)  # need production.view
         assert [key for key, _ in _tabs(client.get("/crm").get_data(as_text=True))] == [
-            t.key
-            for t in SECTION_TABS["sales"]
-            if t.key != "configuration"  # needs sales.manage
+            "overview",
+            "customers",
+            "tasks",
+            "analytics",
         ]
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
@@ -230,6 +231,52 @@ def test_rendered_pages_tell_the_back_arrow_where_up_is(db, flask_app):  # noqa:
         assert 'data-nav-back=""' in root
         wizard = client.get("/core/flows/create/step/1").get_data(as_text=True)
         assert "data-nav-back" not in wizard  # keeps the wizard's own back handling
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+@pytest.mark.parametrize("role", list(UserRole))
+def test_every_role_has_at_most_four_workspace_destinations(role):
+    from types import SimpleNamespace
+
+    from app.ui.navigation import section_tabs
+
+    user = SimpleNamespace(role=role)
+    for section in ("production", "compliance", "sales"):
+        assert len(section_tabs(section, user)) <= 4
+
+
+def test_secondary_pages_select_their_primary_parent_and_keep_a_trail(db, flask_app):  # noqa: F811
+    org, client = _client(flask_app, db, UserRole.ADMIN)
+    try:
+        for path, parent in [
+            ("/core/contracts", "planner"),
+            ("/core/suppliers", "inventory"),
+            ("/compliant/tools", "overview"),
+            ("/crm/matching", "analytics"),
+        ]:
+            html = client.get(path).get_data(as_text=True)
+            assert [key for key, active in _tabs(html) if active] == [parent]
+            assert 'aria-label="Breadcrumb"' in html or 'aria-label="Breadcrumbs"' in html
+        assert _trail("/core/contracts") == [("Production", "/core"), ("Contract orders", None)]
+    finally:
+        db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_contextual_actions_follow_role_permissions(db, flask_app):  # noqa: F811
+    org, client = _client(flask_app, db, UserRole.SALES)
+    try:
+        html = client.get("/core").get_data(as_text=True)
+        assert 'data-workspace-link="contracts"' in html
+        assert 'data-workspace-link="suppliers"' in html
+        assert 'data-workspace-link="batches"' not in html
+        assert 'data-workspace-link="tasks"' not in html
+        assert 'data-can-adjust="false"' in html and 'data-can-record="false"' in html
+        sales = client.get("/crm").get_data(as_text=True)
+        assert 'data-workspace-link="matching"' in sales
+        assert 'data-workspace-link="configuration"' not in sales
     finally:
         db.query(Organisation).filter(Organisation.id == org.id).delete(synchronize_session=False)
         db.commit()

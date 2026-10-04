@@ -13,43 +13,34 @@
 
 {% block content %}
         {% set core2_focus_mode = core2_focus if core2_focus is defined else '' %}
-        <div class="max-content">
-          {# Dark mode: full-bleed yellow sleeve (spa-theme.css) pulls into #page-content top padding so fill meets the header. #}
-          <div class="spa-hub-yellow-sleeve">
-            <section class="spa-form-section core2-journey-section" aria-label="Traceability bar">
-              <div id="core2-journey-bar"></div>
+        <div class="max-content workspace-overview production-overview">
+          <header class="workspace-header" aria-labelledby="core2-hub-title">
+            <div>
+              <h1 id="core2-hub-title" class="page-title">{% if core2_focus_mode == 'inventory_live' %}Live inventory{% elif core2_focus_mode == 'active_batches_live' %}Active batches{% else %}Production{% endif %}</h1>
+              <p>Keep production moving, from stock to finished batches.</p>
+            </div>
+            <a id="core2-overview-return" class="workspace-button" href="/core" hidden>Back to overview</a>
+          </header>
+
+          <div class="production-overview__start">
+            <section class="workspace-card production-actions" aria-labelledby="production-actions-title">
+              <h2 id="production-actions-title">Get to work</h2>
+              <p class="workspace-caption">Your next step, with everyday actions close by.</p>
+              <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
+            </section>
+            <section class="workspace-card production-health" aria-labelledby="production-health-title">
+              <h2 id="production-health-title">Production health</h2>
+              <div id="core2-journey-bar" role="status" aria-live="polite"><p class="workspace-caption">Checking production health…</p></div>
             </section>
           </div>
 
-          <section class="spa-form-section spa-page-hero spa-page-hero--core" aria-labelledby="core2-hub-title">
-            <h1 id="core2-hub-title" class="page-title">
-              {% if core2_focus_mode == 'inventory_live' %}Live inventory
-              {% elif core2_focus_mode == 'active_batches_live' %}Active batches
-              {% else %}Production
-              {% endif %}
-            </h1>
-          </section>
-
-          <section class="spa-form-section core2-journey-section core2-journey-section--actions" aria-label="Traceability actions">
-            <div id="core2-journey-actions"></div>
-          </section>
-
           {% if core2_focus_mode == '' %}
-          <section class="spa-form-section core2-main-tabs-wrap" aria-label="Production sections">
-            <div class="flow-mode-segmented core2-main-tabs" role="tablist" aria-label="Production pages">
-              <button id="core2-tab-overview" type="button" class="flow-mode-segment flow-mode-segment--active" data-core2-tab-target="overview" role="tab" aria-controls="core2-panel-overview" aria-selected="true" tabindex="0">Overview</button>
-              <button id="core2-tab-inventory" type="button" class="flow-mode-segment" data-core2-tab-target="inventory" role="tab" aria-controls="core2-panel-inventory" aria-selected="false" tabindex="-1">Inventory</button>
-              <button id="core2-tab-workflows" type="button" class="flow-mode-segment" data-core2-tab-target="workflows" role="tab" aria-controls="core2-panel-workflows" aria-selected="false" tabindex="-1">Product workflows</button>
-              <button id="core2-tab-tasks" type="button" class="flow-mode-segment" data-core2-tab-target="tasks" role="tab" aria-controls="core2-panel-tasks" aria-selected="false" tabindex="-1">Tasks</button>
-            </div>
-          </section>
-
-          <div id="core2-panel-overview" class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview" role="tabpanel" aria-labelledby="core2-tab-overview">
+          <div id="core2-panel-overview" class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview" role="region" aria-label="Production overview">
             <div class="spa-form-section core2-summary-layout">
               <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-overview-summary-title">
                 <div class="core2-section-heading">
                   <div>
-                    <h2 id="core2-overview-summary-title" class="spa-form-section-title">Overview</h2>
+                    <h2 id="core2-overview-summary-title" class="spa-form-section-title">At a glance</h2>
                   </div>
                 </div>
                 <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Production metrics">
@@ -99,7 +90,7 @@
             </div>
           </div>
 
-          <div id="core2-panel-inventory" class="core2-tab-panel" data-core2-tab-panel="inventory" role="tabpanel" aria-labelledby="core2-tab-inventory" hidden>
+          <div id="core2-panel-inventory" class="core2-tab-panel" data-core2-tab-panel="inventory" role="region" aria-label="Inventory workspace" hidden>
             <div class="spa-form-section core2-summary-layout core2-tab-summary" aria-label="Inventory summary">
               <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-inventory-overview-title">
                 <div class="core2-section-heading"><div><h2 id="core2-inventory-overview-title" class="spa-form-section-title">Overview</h2></div></div>
@@ -159,7 +150,7 @@
               </div>
           </div>
 
-          <div id="core2-panel-workflows" class="core2-tab-panel" data-core2-tab-panel="workflows" role="tabpanel" aria-labelledby="core2-tab-workflows" hidden>
+          <div id="core2-panel-workflows" class="core2-tab-panel" data-core2-tab-panel="workflows" role="region" aria-label="Product workflows" hidden>
             <div class="spa-form-section core2-summary-layout core2-tab-summary" aria-label="Product workflow summary">
               <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-workflows-overview-title">
                 <div class="core2-section-heading"><div><h2 id="core2-workflows-overview-title" class="spa-form-section-title">Overview</h2></div></div>
@@ -231,7 +222,7 @@
               </section>
             </div>
           </div>
-          <div id="core2-panel-tasks" class="core2-tab-panel" data-core2-tab-panel="tasks" role="tabpanel" aria-labelledby="core2-tab-tasks" hidden>
+          <div id="core2-panel-tasks" class="core2-tab-panel" data-core2-tab-panel="tasks" role="region" aria-label="Production tasks" hidden>
             <section class="spa-form-section" aria-label="Tasks">
               {% include "tasks/_board.html" %}
             </section>
@@ -542,11 +533,14 @@
       window.showNotification('error', 'Error', message);
     };
 
+    let core2HealthReturnFocus = null;
     function closeCore2HealthSheet() {
       const overlay = document.getElementById('core2-health-sheet-overlay');
       if (!overlay || overlay.hidden) return;
       overlay.hidden = true;
       document.body.classList.remove('core2-sheet-open');
+      if (core2HealthReturnFocus && core2HealthReturnFocus.isConnected) core2HealthReturnFocus.focus();
+      core2HealthReturnFocus = null;
     }
 
     function openCore2HealthSheet(state, signals) {
@@ -555,11 +549,13 @@
       const title = document.getElementById('core2-health-sheet-title');
       if (!overlay || !body || !title) return;
 
+      core2HealthReturnFocus = document.activeElement;
       title.textContent = core2HealthCollapsedTitle(state || 'healthy', signals || []);
       body.innerHTML = '';
       body.appendChild(buildCore2HealthCategoryNav(state || 'healthy', signals || []));
       overlay.hidden = false;
       document.body.classList.add('core2-sheet-open');
+      overlay.querySelector('[data-core2-health-close]').focus();
     }
 
     let _core2EscBound = false;
@@ -570,6 +566,15 @@
       if (!_core2EscBound) {
         document.addEventListener('keydown', function(event) {
           if (event.key === 'Escape') closeCore2HealthSheet();
+          if (event.key === 'Tab') {
+            const overlay = document.getElementById('core2-health-sheet-overlay');
+            if (!overlay || overlay.hidden) return;
+            const controls = Array.from(overlay.querySelectorAll('a[href], button:not([disabled])'));
+            const first = controls[0], last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+          }
+
         });
         _core2EscBound = true;
       }
@@ -592,21 +597,18 @@
       options = options || {};
       var historyMode = options.historyMode || 'replace';
       const safeTab = (tab === 'inventory' || tab === 'workflows' || tab === 'tasks') ? tab : 'overview';
-      const tabButtons = document.querySelectorAll('[data-core2-tab-target]');
       const tabPanels = document.querySelectorAll('[data-core2-tab-panel]');
-
-      tabButtons.forEach((btn) => {
-        const isActive = btn.getAttribute('data-core2-tab-target') === safeTab;
-        btn.classList.toggle('flow-mode-segment--active', isActive);
-        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
-        btn.setAttribute('tabindex', isActive ? '0' : '-1');
-      });
 
       tabPanels.forEach((panel) => {
         const isActive = panel.getAttribute('data-core2-tab-panel') === safeTab;
         panel.classList.toggle('core2-tab-panel--active', isActive);
         panel.hidden = !isActive;
       });
+
+      const heading = document.getElementById('core2-hub-title');
+      const back = document.getElementById('core2-overview-return');
+      if (heading) heading.textContent = { overview: 'Production', inventory: 'Inventory', workflows: 'Product workflows', tasks: 'Production tasks' }[safeTab];
+      if (back) back.hidden = safeTab === 'overview';
 
       // Defensive cleanup: prevent stale overlays from intercepting clicks after SPA/tab transitions.
       closeCore2HealthSheet();
@@ -633,34 +635,7 @@
     }
 
     function initCore2MainTabs() {
-      const buttons = document.querySelectorAll('[data-core2-tab-target]');
-      if (!buttons.length) return;
-
-      buttons.forEach((btn) => {
-        if (btn.dataset.boundCore2MainTab) return;
-        btn.addEventListener('click', () => {
-          setCore2MainTab(btn.getAttribute('data-core2-tab-target'), { historyMode: 'push' });
-        });
-        btn.addEventListener('keydown', (event) => {
-          const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
-          if (keys.indexOf(event.key) === -1) return;
-          event.preventDefault();
-          const allButtons = Array.from(document.querySelectorAll('[data-core2-tab-target]'));
-          const currentIndex = allButtons.indexOf(btn);
-          let nextIndex = currentIndex;
-          if (event.key === 'Home') nextIndex = 0;
-          else if (event.key === 'End') nextIndex = allButtons.length - 1;
-          else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-            nextIndex = (currentIndex - 1 + allButtons.length) % allButtons.length;
-          } else {
-            nextIndex = (currentIndex + 1) % allButtons.length;
-          }
-          const nextButton = allButtons[nextIndex];
-          nextButton.focus();
-          setCore2MainTab(nextButton.getAttribute('data-core2-tab-target'), { historyMode: 'push' });
-        });
-        btn.dataset.boundCore2MainTab = '1';
-      });
+      if (!document.querySelector('[data-core2-tab-panel]')) return;
 
       let selectedTab = 'overview';
       try {
@@ -1153,7 +1128,7 @@
       } else if (stage === 3) {
         primary = { label: 'Record production step', href: '/core/processes', icon: 'execution' };
       } else {
-        primary = { label: 'Trace', href: '/core/sourcemap', icon: 'trace' };
+        primary = { label: 'Trace and recall', href: '/core/sourcemap', icon: 'trace' };
       }
 
       var addInv = { kind: 'addInventory' };
@@ -1166,6 +1141,20 @@
       } else if (stage === 4) {
         secondaries.push(addInv, recordExec);
       }
+
+      const permissions = actionsWrap ? actionsWrap.dataset : {};
+      function actionAllowed(item) {
+        if (item.kind === 'addInventory' || item.addInventoryDropdown) return permissions.canAdjust === 'true';
+        if (item.href === '/core/flows/create') return permissions.canDesign === 'true';
+        if (item.href === '/core/processes') return permissions.canRecord === 'true';
+        if (item.href === '/core/sourcemap') return permissions.canTrace === 'true';
+        return true;
+      }
+      secondaries = secondaries.filter(function (item) { return item.label !== primary.label && actionAllowed(item); });
+      if (!actionAllowed(primary)) {
+        primary = permissions.canTrace === 'true' ? { label: 'View inventory', href: '/core/inventory/view', icon: 'inventory' } : { label: 'View product workflows', href: '/core/processes', icon: 'workflow' };
+      }
+
 
       var milestones = [
         { complete: hasInventory, label: hasInventory ? 'Inventory populated' : 'Populate inventory', aria: hasInventory ? 'Inventory populated' : 'Populate inventory to unlock next step' },
@@ -1181,140 +1170,48 @@
       if (barWrap) barWrap.innerHTML = '';
       if (actionsWrap) actionsWrap.innerHTML = '';
 
-      let barFinalEl;
-
-      if (!allComplete) {
-        const barRootNc = document.createElement('div');
-        barRootNc.className = 'core2-journey';
-        barRootNc.setAttribute('role', 'navigation');
-        barRootNc.setAttribute('aria-label', 'Traceability setup');
-
-        const barNc = document.createElement('div');
-        barNc.className = 'core2-journey-bar';
-        barNc.setAttribute('role', 'progressbar');
-        barNc.setAttribute('aria-valuemin', '0');
-        barNc.setAttribute('aria-valuemax', '4');
-        barNc.setAttribute('aria-valuenow', String(filledCount));
-        barNc.setAttribute('aria-label', 'Traceability milestones: ' + filledCount + ' of 4 complete');
-        if (hasExecution) {
-          barNc.classList.add('core2-journey-bar--trace-unlocked');
-        }
-        milestones.forEach(function (m) {
-          const seg = document.createElement('div');
-          seg.className = 'core2-journey-bar__segment' + (m.complete ? ' core2-journey-bar__segment--complete' : '');
-          seg.setAttribute('aria-hidden', 'true');
-          barNc.appendChild(seg);
-        });
-        barRootNc.appendChild(barNc);
-
-        const labelsRow = document.createElement('div');
-        labelsRow.className = 'core2-journey-labels';
-        milestones.forEach(function (m) {
-          const cell = document.createElement('div');
-          cell.className = 'core2-journey-labels__item' + (m.complete ? ' core2-journey-labels__item--complete' : '');
-          const span = document.createElement('span');
-          span.className = 'core2-journey-labels__text';
-          span.textContent = m.label;
-          span.setAttribute('title', m.aria);
-          cell.appendChild(span);
-          labelsRow.appendChild(cell);
-        });
-        barRootNc.appendChild(labelsRow);
-        barFinalEl = barRootNc;
-      } else if (systemStatus && systemStatus.mode === 'health') {
-        const state = systemStatus.state || 'healthy';
-        const signals = systemStatus.signals || [];
-
-        const barRootH = document.createElement('div');
-        barRootH.className = 'core2-journey core2-journey--health core2-journey--health-' + state;
-        barRootH.setAttribute('role', 'navigation');
-        barRootH.setAttribute('aria-label', 'Production integrity status');
-
-        const titleH = document.createElement('div');
-        titleH.className = 'core2-journey-system-health-title core2-journey-system-health-title--' + state;
-        titleH.textContent = core2HealthCollapsedTitle(state, signals);
-        barRootH.appendChild(titleH);
-
-        const barH = document.createElement('div');
-        barH.className = 'core2-journey-bar core2-journey-bar--health';
-        barH.setAttribute('role', 'presentation');
-        const fillH = document.createElement('div');
-        fillH.className = 'core2-journey-bar__health-fill core2-journey-bar__health-fill--' + state;
-        barH.appendChild(fillH);
-        barRootH.appendChild(barH);
-
-        const detailsH = document.createElement('details');
-        detailsH.className = 'core2-journey-system-active-details core2-journey-health-details';
-
-        const summaryH = document.createElement('summary');
-        summaryH.setAttribute('aria-label', 'Open production integrity details');
-        summaryH.textContent = '';
-        summaryH.appendChild(barRootH);
-        summaryH.addEventListener('click', function(event) {
-          event.preventDefault();
-          openCore2HealthSheet(state, signals);
-        });
-        detailsH.appendChild(summaryH);
-
-        barFinalEl = detailsH;
-      } else {
-        const barRoot = document.createElement('div');
-        barRoot.className = 'core2-journey';
-        barRoot.setAttribute('role', 'navigation');
-        barRoot.setAttribute('aria-label', 'Traceability setup');
-        barRoot.classList.add('core2-journey--all-complete');
-
-        const bar = document.createElement('div');
-        bar.className = 'core2-journey-bar core2-journey-bar--all-complete';
+      const barFinalEl = document.createElement('div');
+      barFinalEl.className = 'production-health__content';
+      const state = !allComplete ? 'setup' :
+        (systemStatus && systemStatus.mode === 'health' && ['healthy', 'degraded', 'critical'].includes(systemStatus.state)) ? systemStatus.state :
+        (systemStatus && systemStatus.mode === 'unavailable') ? 'unavailable' : 'pending';
+      barFinalEl.dataset.healthState = state;
+      const titles = { healthy: 'Production healthy', degraded: 'Needs attention', critical: 'Action required', setup: 'Finish your setup', pending: 'Checking production health…', unavailable: 'Health check unavailable' };
+      const title = document.createElement('strong');
+      title.className = 'production-health__state';
+      title.textContent = titles[state];
+      barFinalEl.appendChild(title);
+      const bar = document.createElement('div');
+      bar.className = 'production-health__bar';
+      bar.dataset.testid = 'production-health-bar';
+      const fill = document.createElement('span');
+      fill.style.width = state === 'setup' ? (filledCount / 4 * 100) + '%' : '100%';
+      bar.appendChild(fill);
+      if (state === 'setup') {
         bar.setAttribute('role', 'progressbar');
+        bar.setAttribute('aria-label', 'Traceability setup');
         bar.setAttribute('aria-valuemin', '0');
         bar.setAttribute('aria-valuemax', '4');
-        bar.setAttribute('aria-valuenow', '4');
-        bar.setAttribute('aria-label', 'Traceability milestones: 4 of 4 complete');
-
-        const title = document.createElement('div');
-        title.className = 'core2-journey-system-active-title';
-        title.textContent = 'System active';
-        barRoot.appendChild(title);
-
-        milestones.forEach(function (m) {
-          const seg = document.createElement('div');
-          seg.className = 'core2-journey-bar__segment' + (m.complete ? ' core2-journey-bar__segment--complete' : '');
-          seg.setAttribute('aria-hidden', 'true');
-          bar.appendChild(seg);
-        });
-        barRoot.appendChild(bar);
-
-        const details = document.createElement('details');
-        details.className = 'core2-journey-system-active-details';
-
-        const summary = document.createElement('summary');
-        summary.setAttribute('aria-label', 'System active milestones');
-        summary.textContent = '';
-        summary.appendChild(barRoot);
-        details.appendChild(summary);
-
-        const list = document.createElement('div');
-        list.className = 'core2-journey-system-active-details__list';
-
-        milestones.forEach(function (m) {
-          const item = document.createElement('div');
-          item.className = 'core2-journey-system-active-details__item';
-
-          const check = document.createElement('span');
-          check.className = 'core2-journey-system-active-details__check';
-          check.textContent = '✓';
-          item.appendChild(check);
-
-          const text = document.createElement('span');
-          text.textContent = m.label;
-          item.appendChild(text);
-
-          list.appendChild(item);
-        });
-
-        details.appendChild(list);
-        barFinalEl = details;
+        bar.setAttribute('aria-valuenow', String(filledCount));
+      } else bar.setAttribute('aria-hidden', 'true');
+      barFinalEl.appendChild(bar);
+      const detail = document.createElement('p');
+      detail.className = 'workspace-caption';
+      const signals = systemStatus && Array.isArray(systemStatus.signals) ? systemStatus.signals : [];
+      const issue = signals.find(function (signal) { return signal && signal.has_issue && typeof signal.message === 'string' && signal.message.trim(); });
+      detail.textContent = state === 'setup' ? filledCount + ' of 4 foundations ready. ' + milestones.find(function (m) { return !m.complete; }).label + ' to continue.' :
+        state === 'healthy' ? 'No current production integrity issues.' :
+        state === 'pending' ? 'Your latest checks are on their way.' :
+        state === 'unavailable' ? 'We could not load the latest checks. Refresh to try again.' :
+        issue ? issue.message : 'Review the findings before your next production step.';
+      barFinalEl.appendChild(detail);
+      if (['healthy', 'degraded', 'critical'].includes(state)) {
+        const review = document.createElement('button');
+        review.type = 'button';
+        review.className = 'workspace-button production-health__review';
+        review.textContent = 'View health details';
+        review.addEventListener('click', function () { openCore2HealthSheet(state, signals); });
+        barFinalEl.appendChild(review);
       }
 
       const actionsRoot = document.createElement('div');
@@ -2720,6 +2617,7 @@
             if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner(sf || undefined);
           }).catch(function (err) {
             console.warn('Could not load system status for journey bar:', err);
+            updateCore2JourneyCtasFromData(invStub, procStub, execStub, { mode: 'unavailable' });
             if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
           });
         } else if (window.loadSystemFindingsBanner) {
@@ -2727,6 +2625,10 @@
         }
       } catch (error) {
         console.error('Failed to load core overview:', error);
+        const health = document.getElementById('core2-journey-bar');
+        if (health) health.textContent = 'Production health could not be loaded. Refresh to try again.';
+        const actions = document.getElementById('core2-journey-actions');
+        if (actions) actions.innerHTML = '<a class="workspace-button" href="/core/processes">View product workflows</a>';
         if (window.loadSystemFindingsBanner) window.loadSystemFindingsBanner();
       } finally {
         window.__core2HubOverviewPending = false;

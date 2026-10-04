@@ -70,6 +70,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Momo+Trust+Display&display=swap" rel="stylesheet">
 
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='workspace-overviews.css') }}">
+
   {# Page-level head customisation #}
   {% block head_extras %}{% endblock %}
 </head>
@@ -296,6 +298,7 @@
         {% block section_tabs %}{% include 'shared/section_tabs.html' %}{% endblock %}
         {% block breadcrumbs %}{% include 'shared/breadcrumbs.html' %}{% endblock %}
         {% block content %}{% endblock %}
+        {% include 'shared/workspace_links.html' %}
         {% if boosted %}<div hidden data-page-assets>{{ self.scripts() }}</div>{% endif %}
       </main>
     </div>

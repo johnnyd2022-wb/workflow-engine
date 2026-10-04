@@ -8,10 +8,10 @@
   function showError(message) { error.textContent = message || ''; error.hidden = !message; }
   function selected(name) { return Array.prototype.map.call(form.querySelectorAll('input[name="' + name + '"]:checked'), function (input) { return input.value; }); }
   function updateFoodSafetyTab(programme) {
-    var tab = document.querySelector('[data-food-safety-tab]');
-    if (!tab) return;
-    tab.textContent = programme === 'np1' || programme === 'np2' || programme === 'np3' ? programme.toUpperCase() : 'Food safety';
-    tab.hidden = programme === 'none';
+    document.querySelectorAll('[data-food-safety-tab]').forEach(function (tab) {
+      if (tab.dataset.sectionTab === 'np3') tab.textContent = ['np1', 'np2', 'np3'].includes(programme) ? programme.toUpperCase() : 'Food safety';
+      tab.hidden = programme === 'none';
+    });
   }
   function populate(overview) {
     var profile = overview.profile || {}; var settings = profile.settings || {}; profileSettings = settings; form.enabled.checked = Boolean(profile.enabled);
