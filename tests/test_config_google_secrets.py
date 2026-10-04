@@ -1,11 +1,20 @@
 """Google credentials resolve per environment without exposing secret values."""
 
 import configparser
+from pathlib import Path
 
 import pytest
 
 from app.utils.config_loader import Config
 from scripts import local_secrets
+
+
+@pytest.mark.parametrize("filename", ["local.ini", "local.ini.template", "test.ini", "test.ini.template"])
+def test_dev_test_google_configs_use_provisioned_keepass_entries(filename):
+    cfg = configparser.ConfigParser()
+    cfg.read(Path(__file__).resolve().parents[1] / "app" / "config" / filename)
+    assert cfg.get("google_sign_in", "keepass_client_id_entry") == "workflow-engine/GOOGLE_CLIENT_ID"
+    assert cfg.get("google_sign_in", "keepass_client_secret_entry") == "workflow-engine/GOOGLE_CLIENT_SECRET"
 
 
 @pytest.mark.parametrize("environment", ["test", "prod", "production"])

@@ -21,8 +21,9 @@ password. Other email domains accept the password invite first, then link explic
 
 Sign-in is enabled in all environment configs and their templates. Provision OAuth
 credentials before starting each environment. Never put credentials in tracked ini files.
-Use a separate Google Cloud OAuth **web application** client for each environment,
-with scopes `openid email` and its exact redirect URI:
+Use a separate production Google Cloud OAuth **web application** client. Dev/test
+can share a client with both exact redirect URIs registered. Use scopes
+`openid email` and the exact redirect URIs below:
 
 | Environment | Default redirect URI |
 | --- | --- |
@@ -32,12 +33,10 @@ with scopes `openid email` and its exact redirect URI:
 
 Override the URI with `GOOGLE_REDIRECT_URI` for another HTTPS deployment hostname;
 it must end in `/auth/google/callback`, with no query, fragment or embedded credentials.
-Register that same URI in Google Cloud. Provision local KeePassXC entries
-`workflow-engine/google/client_id` and `workflow-engine/google/client_secret`, each
+Register those same URIs in Google Cloud. Local and test use KeePassXC entries
+`workflow-engine/GOOGLE_CLIENT_ID` and `workflow-engine/GOOGLE_CLIENT_SECRET`, each
 with the credential in its Password field. Entry paths are configurable under
-`[google_sign_in]`. Host runs with `ENVIRONMENT=test` use KeePassXC entries
-`workflow-engine/GOOGLE_CLIENT_ID` and `workflow-engine/GOOGLE_CLIENT_SECRET` for
-the test client. The test Docker scripts resolve these entries on the host and
+`[google_sign_in]`. The test Docker scripts resolve these entries on the host and
 inject them into the container.
 CI/deployment uses protected masked `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` variables. Enabled configurations fail startup if incomplete.
