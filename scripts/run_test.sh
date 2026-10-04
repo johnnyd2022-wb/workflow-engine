@@ -2,6 +2,27 @@
 
 # Test environment runner
 export ENVIRONMENT=test
+# Resolve the session key on the host; Docker receives it through its environment.
+if [ -z "${FLASK_SECRET_KEY:-}" ]; then
+    FLASK_SECRET_KEY="$(uv run python -c 'from scripts.local_secrets import get_keepass_entry; print(get_keepass_entry(entry_name="workflow-engine/FLASK_SECRET_KEY_TEST").get("Password", "").strip())')"
+fi
+if [ "${#FLASK_SECRET_KEY}" -lt 32 ] || [ "$FLASK_SECRET_KEY" = "dev-secret-key-change-in-production" ]; then
+    echo "A strong FLASK_SECRET_KEY is required before starting test."
+    exit 1
+fi
+export FLASK_SECRET_KEY
+# Load credentials before replacing the running container. Values stay in the environment.
+if [ -z "${GOOGLE_CLIENT_ID:-}" ]; then
+    GOOGLE_CLIENT_ID="$(uv run python -c 'from scripts.local_secrets import get_keepass_entry; print(get_keepass_entry(entry_name="workflow-engine/GOOGLE_CLIENT_ID").get("Password", "").strip())')"
+fi
+if [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
+    GOOGLE_CLIENT_SECRET="$(uv run python -c 'from scripts.local_secrets import get_keepass_entry; print(get_keepass_entry(entry_name="workflow-engine/GOOGLE_CLIENT_SECRET").get("Password", "").strip())')"
+fi
+if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
+    echo "Google sign-in requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET before starting test."
+    exit 1
+fi
+export GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
 echo "🧪 Starting Workflow Engine app in TEST environment..."
 echo "Environment: $ENVIRONMENT"
 echo "Config file: config/$ENVIRONMENT.ini"
@@ -29,6 +50,9 @@ docker run -d \
     -p 8001:8001 \
     --network workflow-observability \
     -e ENVIRONMENT=test \
+    -e FLASK_SECRET_KEY \
+    -e GOOGLE_CLIENT_ID \
+    -e GOOGLE_CLIENT_SECRET \
     -e POSTHOG_PROJECT_API_KEY="$POSTHOG_PROJECT_API_KEY" \
     -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD_TEST \
     -e XERO_CLIENT_ID_TEST="$XERO_CLIENT_ID_TEST" \

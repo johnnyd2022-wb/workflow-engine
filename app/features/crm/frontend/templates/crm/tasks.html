@@ -6,22 +6,12 @@
   <link rel="stylesheet" href="/crm/static/css/crm.css">
 {% endblock %}
 
-{% block topbar %}
-  <a href="/crm" class="spa-banner-back" id="spa-banner-back" aria-label="Back to Sales" hx-boost="false">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M11 19l-7-7 7-7"/>
-      <path d="M4 12h16"/>
-    </svg>
-  </a>
-{% endblock %}
 
 {% block content %}
 <div class="max-content crm-root crm-tasks-page" x-data="crmTasks()" x-init="init()">
   {% set crm_heading = "Tasks" %}
   {% set crm_subtitle = "Manage follow-ups and actions for your customers" %}
   {% include "crm/_crm_banner.html" %}
-  {% set active_crm_tab = "tasks" %}
-  {% include "crm/_crm_section_tabs.html" %}
 
   {# Error #}
   <div x-show="error" class="crm-error-banner" x-cloak>

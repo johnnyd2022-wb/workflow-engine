@@ -330,8 +330,13 @@
       <!-- Flask-WTF uses the csrf_token hidden field below; this Django-only rule does not recognize it. -->
       <form action="/auth/google/start" method="post" style="margin-bottom:1rem;"> <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-primary" style="width:100%;">Sign in with Google</button>
+        <button type="submit" class="btn btn-glass btn-lg" style="width:100%;">Sign in with Google</button>
       </form>
+      <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem; color:var(--text-secondary); font-size:0.875rem;">
+        <span style="flex:1; height:1px; background:var(--glass-border);"></span>
+        <span>or sign in with email</span>
+        <span style="flex:1; height:1px; background:var(--glass-border);"></span>
+      </div>
       {% endif %}
       <form id="login-form" style="display: flex; flex-direction: column; gap: 1rem;">
         <div>
@@ -1640,4 +1645,3 @@
   <script src="/ui/shared/password-policy.js"></script>
 </body>
 </html>
-

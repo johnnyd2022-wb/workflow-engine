@@ -20,7 +20,7 @@ import json
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -349,7 +349,11 @@ def _assign_label_batches(
     """
     by_product: dict[str, list[tuple[date, wm.ProductionBatch, Decimal]]] = defaultdict(list)
     for batch in batches:
-        total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0"))
+        # Whole bottles only (plan 1.2): a part-filled bottle in the source becomes
+        # Library stock at Bottling, so it is never numbered into a label batch.
+        total_bottles = sum((Decimal(str(b["bottles"])) for b in batch.bottlings), Decimal("0")).to_integral_value(
+            rounding=ROUND_FLOOR
+        )
         if total_bottles <= 0:
             continue
         labelling_date = _resolved_step_dates(batch)[-1]

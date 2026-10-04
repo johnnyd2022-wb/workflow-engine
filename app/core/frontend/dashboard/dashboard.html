@@ -11,7 +11,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 {% endblock %}
 
-{% block topbar %}{% endblock %}
 
 {% block content %}
   <div class="workflow-dashboard dashboard-v3" data-dashboard-root>
@@ -64,6 +63,17 @@
         </ul>
       </section>
 
+      {% if can('production.view') %}
+      <section class="dash-card" aria-labelledby="dashboard-planned-work-title">
+        <div class="dash-card-header">
+          <h2 id="dashboard-planned-work-title">Today's planned production</h2>
+          <a href="/core/planner/board" hx-boost="false">Review production board</a>
+        </div>
+        <p data-planned-work-summary>Loading planned priorities...</p>
+        <ul class="dash-list" data-planned-work-list></ul>
+      </section>
+      {% endif %}
+
       <section class="dash-workspace-section" aria-labelledby="dashboard-workspaces-title">
         <div class="dash-section-heading">
           <div>
@@ -81,7 +91,7 @@
           {% endif %}
 
           {% if compliant_subscribed and can('compliance.view') %}
-          <a class="dash-workspace-card" href="/compliant" hx-boost="false" data-dashboard-compliant-card aria-label="Open Compliance evidence workspace">
+          <a class="dash-workspace-card" href="/compliant" data-dashboard-compliant-card aria-label="Open Compliance evidence workspace">
             <span class="dash-workspace-card__eyebrow">COMPLIANCE</span>
             <h3>Prove compliance with evidence</h3>
             <p data-dashboard-compliant-summary>Loading evidence summary...</p>
