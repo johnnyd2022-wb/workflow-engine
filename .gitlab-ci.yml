@@ -658,6 +658,10 @@ promote_test_stable:
 rollback_test_on_failure:
   stage: deploy
   image: docker:27
+  # The rollback needs the same scoped auth secrets as the candidate deploy.
+  environment:
+    name: test
+    action: prepare
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - echo "cd_e2e failed -- rolling back to last known-good :test-stable"

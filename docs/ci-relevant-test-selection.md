@@ -95,3 +95,7 @@ CI_PIPELINE_SOURCE=merge_request_event CI_MERGE_REQUEST_LABELS=ci::fast \
 
 Expand the allow-list deliberately with regression tests for each new low-impact
 category. The label alone does not provide a blanket test bypass.
+
+The test rollback job declares the `test` environment with `action: prepare`, so it
+receives the same environment-scoped authentication secrets as the candidate
+deployment without recording a separate successful release.
