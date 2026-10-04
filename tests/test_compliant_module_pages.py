@@ -33,7 +33,8 @@ def test_nz_alcohol_module_has_a_dedicated_page():
     ).read_text(encoding="utf-8")
     routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
     assert 'route("/compliant/nz-alcohol"' in routes
-    assert "COMPLIANT / NZ ALCOHOL" in dashboard
+    assert "<h1>Compliance</h1>" in dashboard
+    assert 'data-compliant-surface="overview"' in dashboard
     assert "Food safety programme" in configuration
     assert "Liquor licence" in configuration
 

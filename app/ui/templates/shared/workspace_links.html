@@ -1,0 +1,10 @@
+{% if workspace_links %}
+<section class="workspace-links" aria-label="{{ section_label }} workspace actions">
+  <h2>{{ 'Sales tools' if active_section == 'sales' else 'Manage ' ~ section_label|lower }}</h2>
+  <div class="workspace-links__list">
+    {% for link in workspace_links %}
+    <a class="workspace-button" href="{{ link.href }}" data-workspace-link="{{ link.key }}"{% if link.food_safety %} data-food-safety-tab{% endif %}{% if link.hidden %} hidden{% endif %}>{{ link.label }} <span aria-hidden="true">↗</span></a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}

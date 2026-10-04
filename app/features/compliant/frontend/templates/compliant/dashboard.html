@@ -3,19 +3,19 @@
 {% block body_class %}compliant-page{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
 {% block content %}
-<main class="compliant-shell" data-compliant-root data-compliant-surface="overview" aria-busy="true">
-  <header class="compliant-hero">
-    <div>
-      <p class="compliant-eyebrow">COMPLIANT / NZ ALCOHOL</p>
-      <h1>Run your business. Know what needs proving.</h1>
-    </div>
-    <div class="compliant-summary" role="status" aria-live="polite"><strong data-compliant-summary>Loading status…</strong><span data-readiness>Finding your fastest path to audit readiness…</span></div>
+<main class="compliant-shell workspace-overview compliance-overview" data-compliant-root data-compliant-surface="overview" aria-busy="true">
+  <header class="workspace-header">
+    <div><h1>Compliance</h1><p>Your obligations, evidence and next actions.</p></div>
   </header>
+  <section class="workspace-card compliance-status" aria-labelledby="compliance-status-title">
+    <h2 id="compliance-status-title">Evidence readiness</h2>
+    <div class="compliant-summary" role="status" aria-live="polite"><strong data-compliant-summary>Loading status…</strong><span data-readiness>Checking your applicable obligations…</span></div>
+  </section>
 
   <p class="compliant-error" data-compliant-error hidden></p>
 
   <section class="compliant-framework-section" aria-labelledby="framework-evidence-heading">
-    <div class="section-heading"><div><p class="compliant-eyebrow">YOUR APPLICABLE OBLIGATIONS</p></div><p>Open the relevant workspace to act. Coverage is evidence status, not a legal compliance score.</p></div>
+    <div class="section-heading"><div><h2 id="framework-evidence-heading">Your obligations</h2></div><p>Coverage shows current evidence, not a legal compliance score.</p></div>
     <section class="compliant-frameworks" aria-label="Applicable frameworks" data-frameworks></section>
   </section>
 </main>

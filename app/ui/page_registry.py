@@ -173,7 +173,7 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
             when="food_safety",
         ),
         Tab("tools", "Tools", "/compliant/tools", ("production.view", "compliance.view")),
-        # Transitional (plan 2.5 turns this into a "Compliance settings" link and drops the tab).
+        # Secondary workspace action; plan 2.5 also links it from Settings.
         Tab("configuration", "Configuration", "/compliant/nz-alcohol/configuration", ("compliance.manage",)),
     ),
     "sales": (
@@ -182,7 +182,26 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("tasks", "Tasks", "/crm/tasks", ("sales.view",)),
         Tab("matching", "Batch matching", "/crm/matching", ("sales.view",)),
         Tab("analytics", "Analytics", "/crm/analytics", ("sales.view",)),
-        # Transitional (plan 2.5 moves Xero and Sales settings into Settings > Integrations).
+        # Secondary workspace action; plan 2.5 moves Xero into Settings > Integrations.
         Tab("configuration", "Configuration", "/crm/configuration", ("sales.manage",)),
     ),
+}
+
+# Four primary destinations per workspace. Secondary pages retain their registry
+# entries, URLs and permissions; a permitted secondary can stand in for a primary
+# that a restricted role cannot open.
+WORKSPACE_TAB_GROUPS = {
+    "production": (
+        ("overview",),
+        ("planner", "contracts"),
+        ("workflows", "batches"),
+        ("inventory", "suppliers"),
+    ),
+    "compliance": (
+        ("overview", "premises", "tools", "configuration"),
+        ("np3", "food-registrations"),
+        ("customs",),
+        ("licensing",),
+    ),
+    "sales": (("overview", "configuration"), ("customers",), ("tasks",), ("analytics", "matching")),
 }
