@@ -47,7 +47,13 @@
 <button type="submit" name="decision" value="changes_requested">Request changes</button>
 </form>{% endif %}
 {% else %}<p>{{ order.waiting_on_you.reason }}</p>{% endfor %}
-<h3>Messages with the producer</h3>
+<h3>Order timeline</h3>
+<p>Shared order updates, proof decisions, messages and reorder requests.</p>
+{% if order.timeline.truncated %}<p>Showing the most recent shared events.</p>{% endif %}
+<ol data-order-timeline>
+{% for event in order.timeline.events %}<li data-timeline-kind="{{ event.kind }}"><time datetime="{{ event.occurred_at }}">{{ event.occurred_at[:16]|replace('T',' ') }} UTC</time> · {{ event.label }}{% if event.kind == 'message' %} · <a href="#order-messages">Read conversation</a>{% endif %}</li>{% endfor %}
+</ol>
+<h3 id="order-messages">Messages with the producer</h3>
 {% for message in order.messages %}<p data-message="{{ message.sender }}"><strong>{{ 'You' if message.sender == 'customer' else 'Producer' }}</strong> · {{ message.created_at[:16]|replace('T',' ') }} UTC<br>{{ message.body }}</p>
 {% else %}<p>No messages yet.</p>{% endfor %}
 <form data-portal-api="/portal/api/orders/{{ order.order_id }}/messages">
