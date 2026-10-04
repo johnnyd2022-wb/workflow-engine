@@ -318,6 +318,9 @@ def shared_order(db, principal, order_id):
     if approvals:
         result["waiting_on_you"]["available"] = True
         result["waiting_on_you"]["reason"] = "Label proof approval requests and responses"
+    from app.features.contract_manufacturing.services.portal_timeline import order_timeline
+
+    result["timeline"] = order_timeline(db, principal, row.order_id, result)
     return result
 
 

@@ -144,8 +144,32 @@
     const overloads = capacityReview.days.filter(row => row.overloaded);
     output.append(node('p', overloads.length ? overloads.length + ' overloaded resource-day(s) in this view.' : 'No overload in configured groups for this view. Unassigned work may still exist.'));
     const list = node('ul');
-    overloads.forEach(row => list.append(node('li', row.day + ' · ' + row.group_name + ': ' + row.load_minutes + '/' + row.capacity_minutes + ' minutes' +
-      (row.calendar_closed ? ' · resource closed' : '') + (row.suggest_move_batch_id ? ' · consider moving batch ' + row.suggest_move_batch_id.slice(0, 8) : ' · all affected batches pinned'))));
+    overloads.forEach(row => {
+      const item = node('li', row.day + ' · ' + row.group_name + ': ' + row.load_minutes + '/' + row.capacity_minutes + ' minutes' +
+        (row.calendar_closed ? ' · resource closed' : '') + (row.suggest_move_batch_id ? ' · consider moving batch ' + row.suggest_move_batch_id.slice(0, 8) : ' · all affected batches pinned'));
+      if (canRecord && row.suggest_move_batch_id) {
+        const button = node('button', 'Review and move suggested batch'); button.type = 'button';
+        button.addEventListener('click', async function () {
+          button.disabled = true; error.hidden = true;
+          function findCard() { return Array.from(root.querySelectorAll('[data-batch-id]')).find(card => card.dataset.batchId === row.suggest_move_batch_id); }
+          try {
+            let card = findCard();
+            if (!card) {
+              rangeForm.elements.date.value = row.suggest_move_start_date;
+              rangeForm.elements.view.value = 'day';
+              await loadBoard(); card = findCard();
+            }
+            const dateInput = card?.querySelector('[name="start_date"]');
+            if (!dateInput) { notice.textContent = 'This batch can no longer be moved. Review its current state on the board.'; return; }
+            dateInput.scrollIntoView({block: 'center'}); dateInput.focus();
+            notice.textContent = 'Choose a new start date, then move the suggested batch.';
+          } catch (exc) { fail(exc); }
+          finally { button.disabled = false; }
+        });
+        item.append(button);
+      }
+      list.append(item);
+    });
     if (overloads.length) output.append(list);
     if (capacityReview.unresolved.length) output.append(node('p', capacityReview.unresolved.length + ' batch(es) have incomplete capacity assignments or timing; no clearance can be inferred.'));
   }

@@ -232,7 +232,13 @@ def review(db, org_id, start, end):
                 key = (str(batch.site_id), group_id, cursor.date().isoformat())
                 loads[key]["minutes"] += minutes
                 loads[key]["batches"].append(
-                    {"batch_id": str(batch.id), "minutes": minutes, "priority": batch.priority, "pinned": batch.pinned}
+                    {
+                        "batch_id": str(batch.id),
+                        "minutes": minutes,
+                        "priority": batch.priority,
+                        "pinned": batch.pinned,
+                        "proposed_start_date": batch.proposed_start_date.isoformat(),
+                    }
                 )
                 cursor = min(next_day, boundary)
     days = []
@@ -264,6 +270,9 @@ def review(db, org_id, start, end):
                         "overloaded": overloaded,
                         "batches": load["batches"],
                         "suggest_move_batch_id": movable[0]["batch_id"] if overloaded and movable else None,
+                        "suggest_move_start_date": movable[0]["proposed_start_date"]
+                        if overloaded and movable
+                        else None,
                     }
                 )
     return {

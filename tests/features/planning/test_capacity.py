@@ -42,6 +42,7 @@ def test_three_batches_overload_one_day_and_suggest_low_priority_unpinned(db, de
     day = result["days"][0]
     assert day["load_minutes"] == 180 and day["capacity_minutes"] == 120 and day["overloaded"]
     assert day["suggest_move_batch_id"] in {str(row.id) for row in rows}
+    assert day["suggest_move_start_date"] == date.today().isoformat()
     assert result["unresolved"] == []
     assert not result["complete_capacity_clearance"] and result["forecast_ready_date"] is None
     assert not result["reservations_created"]
