@@ -298,7 +298,7 @@
         {% block section_tabs %}{% include 'shared/section_tabs.html' %}{% endblock %}
         {% block breadcrumbs %}{% include 'shared/breadcrumbs.html' %}{% endblock %}
         {% block content %}{% endblock %}
-        {% include 'shared/workspace_links.html' %}
+        {% block workspace_links %}{% include 'shared/workspace_links.html' %}{% endblock %}
         {% if boosted %}<div hidden data-page-assets>{{ self.scripts() }}</div>{% endif %}
       </main>
     </div>

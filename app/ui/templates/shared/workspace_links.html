@@ -1,10 +1,16 @@
+{# Secondary workspace actions. A page that places them itself (the Production and Compliance
+   overviews) overrides the `workspace_links` block in base_spa.html and includes this with
+   `workspace_links_card` set; `workspace_links_footer` ({label, href}) adds one full-width action. #}
 {% if workspace_links %}
-<section class="workspace-links" aria-label="{{ section_label }} workspace actions">
+<section class="workspace-links{% if workspace_links_card %} workspace-links--card workspace-card{% endif %}" aria-label="{{ section_label }} workspace actions">
   <h2>{{ 'Sales tools' if active_section == 'sales' else 'Manage ' ~ section_label|lower }}</h2>
-  <div class="workspace-links__list">
+  <div class="workspace-links__list{% if workspace_links_card %} workspace-action-grid{% endif %}">
     {% for link in workspace_links %}
     <a class="workspace-button" href="{{ link.href }}" data-workspace-link="{{ link.key }}"{% if link.food_safety %} data-food-safety-tab{% endif %}{% if link.hidden %} hidden{% endif %}>{{ link.label }} <span aria-hidden="true">↗</span></a>
     {% endfor %}
   </div>
+  {% if workspace_links_footer %}
+  <a class="workspace-button workspace-button--block workspace-links__footer" href="{{ workspace_links_footer.href }}">{{ workspace_links_footer.label }}</a>
+  {% endif %}
 </section>
 {% endif %}

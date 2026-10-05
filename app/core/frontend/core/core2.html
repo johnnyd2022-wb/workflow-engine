@@ -11,6 +11,9 @@
   {% if not core2_focus %}{{ super() }}{% endif %}
 {% endblock %}
 
+{# The overview places its own workspace links, under Get to work. #}
+{% block workspace_links %}{% if core2_focus %}{{ super() }}{% endif %}{% endblock %}
+
 {% block content %}
         {% set core2_focus_mode = core2_focus if core2_focus is defined else '' %}
         <div class="max-content workspace-overview production-overview">
@@ -22,72 +25,67 @@
             <a id="core2-overview-return" class="workspace-button" href="/core" hidden>Back to overview</a>
           </header>
 
-          <div class="production-overview__start">
+          <div class="production-overview__start workspace-stack">
+            <section class="workspace-card production-health" aria-labelledby="production-health-title">
+              <h2 id="production-health-title">Production health</h2>
+              <div id="core2-journey-bar" role="status" aria-live="polite"><p class="workspace-caption">Checking production health…</p></div>
+              {% if core2_focus_mode == '' %}
+              <div class="production-health__details" data-core2-overview-only>
+                <div class="production-health__group" role="group" aria-labelledby="core2-overview-summary-title">
+                  <div class="workspace-subheading">
+                    <h3 id="core2-overview-summary-title">At a glance</h3>
+                  </div>
+                  <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Production metrics">
+                    <div class="core2-stats-hybrid__cell">
+                      <div class="core2-stats-hybrid__label">Product workflows</div>
+                      <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
+                    </div>
+                    <div class="core2-stats-hybrid__cell">
+                      <div class="core2-stats-hybrid__label">Active Batches</div>
+                      <div class="core2-stats-hybrid__value" id="metric-active-executions">0</div>
+                    </div>
+                    <div class="core2-stats-hybrid__cell">
+                      <div class="core2-stats-hybrid__label">Finished batches</div>
+                      <div class="core2-stats-hybrid__value" id="metric-completed">0</div>
+                    </div>
+                    <div class="core2-stats-hybrid__cell">
+                      <div class="core2-stats-hybrid__label">Stock lines</div>
+                      <div class="core2-stats-hybrid__value" id="metric-inventory">0</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="production-health__group" role="group" aria-labelledby="core2-overview-attention-title">
+                  <div class="workspace-subheading">
+                    <h3 id="core2-overview-attention-title">Operational status</h3>
+                    <a href="/core/notifications" class="core2-text-link">View all alerts</a>
+                  </div>
+                  <div id="core2-overview-attention" class="core2-attention-grid" aria-live="polite">
+                    <p class="core2-active-batches-empty">Loading operational priorities...</p>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
+            </section>
             <section class="workspace-card production-actions" aria-labelledby="production-actions-title">
               <h2 id="production-actions-title">Get to work</h2>
               <p class="workspace-caption">Your next step, with everyday actions close by.</p>
               <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
             </section>
-            <section class="workspace-card production-health" aria-labelledby="production-health-title">
-              <h2 id="production-health-title">Production health</h2>
-              <div id="core2-journey-bar" role="status" aria-live="polite"><p class="workspace-caption">Checking production health…</p></div>
-            </section>
+            {% if core2_focus_mode == '' %}
+            {% set production_board = {'label': 'View production board', 'href': '/core/executions/live'} if active_tab == 'overview' and can('production.view') else none %}
+            {% with workspace_links_card = true, workspace_links_footer = production_board %}{% include 'shared/workspace_links.html' %}{% endwith %}
+            {% endif %}
           </div>
 
           {% if core2_focus_mode == '' %}
           <div id="core2-panel-overview" class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview" role="region" aria-label="Production overview">
-            <div class="spa-form-section core2-summary-layout">
-              <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-overview-summary-title">
-                <div class="core2-section-heading">
-                  <div>
-                    <h2 id="core2-overview-summary-title" class="spa-form-section-title">At a glance</h2>
-                  </div>
-                </div>
-                <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Production metrics">
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Product workflows</div>
-                  <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
-                </div>
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Active Batches</div>
-                  <div class="core2-stats-hybrid__value" id="metric-active-executions">0</div>
-                </div>
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Finished batches</div>
-                  <div class="core2-stats-hybrid__value" id="metric-completed">0</div>
-                </div>
-                <div class="core2-stats-hybrid__cell">
-                  <div class="core2-stats-hybrid__label">Stock lines</div>
-                  <div class="core2-stats-hybrid__value" id="metric-inventory">0</div>
-                </div>
-                </div>
-              </section>
-
-              <section class="core2-workspace-container core2-summary-container" aria-labelledby="core2-overview-attention-title">
-                <div class="core2-section-heading">
-                  <div>
-                    <h2 id="core2-overview-attention-title" class="spa-form-section-title">Operational status</h2>
-                  </div>
-                  <a href="/core/notifications" class="core2-text-link">View all alerts</a>
-                </div>
-                <div id="core2-overview-attention" class="core2-attention-grid" aria-live="polite">
-                  <p class="core2-active-batches-empty">Loading operational priorities...</p>
-                </div>
-              </section>
-
-              <section class="core2-workspace-container core2-summary-container core2-summary-layout__full core2-active-production-container" aria-labelledby="core2-overview-batches-title">
-                <div class="core2-section-heading">
-                  <div>
-                    <p class="core2-eyebrow">Workflow</p>
-                    <h3 id="core2-overview-batches-title" class="spa-form-section-title">Active production</h3>
-                  </div>
-                  <a href="/core/executions/live" class="core2-text-link">Open production board</a>
-                </div>
-                <div id="core2-overview-active-batches" class="core2-work-list" aria-live="polite">
-                  <p class="core2-active-batches-empty">Loading active batches...</p>
-                </div>
-              </section>
-            </div>
+            <section class="workspace-card production-active" aria-labelledby="core2-overview-batches-title">
+              <h2 id="core2-overview-batches-title">Active production</h2>
+              <p class="workspace-caption">Select a batch to see where it is up to.</p>
+              <div id="core2-overview-active-batches" class="workspace-disclosure-list" aria-live="polite">
+                <p class="core2-active-batches-empty">Loading active batches...</p>
+              </div>
+            </section>
           </div>
 
           <div id="core2-panel-inventory" class="core2-tab-panel" data-core2-tab-panel="inventory" role="region" aria-label="Inventory workspace" hidden>
@@ -609,6 +607,7 @@
       const back = document.getElementById('core2-overview-return');
       if (heading) heading.textContent = { overview: 'Production', inventory: 'Inventory', workflows: 'Product workflows', tasks: 'Production tasks' }[safeTab];
       if (back) back.hidden = safeTab === 'overview';
+      document.querySelectorAll('[data-core2-overview-only]').forEach(function (el) { el.hidden = safeTab !== 'overview'; });
 
       // Defensive cleanup: prevent stale overlays from intercepting clicks after SPA/tab transitions.
       closeCore2HealthSheet();
@@ -2555,15 +2554,43 @@
         }).join('');
       }
 
-      core2RenderWorkList('core2-overview-active-batches', (wf.active_executions || []).slice(0, 6).map(function (execution) {
-        var current = execution.current_step && execution.current_step.name ? execution.current_step.name : 'Ready to start';
-        return {
-          title: execution.process_name || 'Untitled workflow',
-          meta: current,
-          value: execution.status === 'pending' ? 'Ready to record' : 'In progress',
-          href: '/core/executions/live',
-        };
-      }), 'No batches are active right now. Start a batch from a product workflow when work begins.');
+      core2RenderActiveProduction((wf.active_executions || []).slice(0, 6));
+    }
+
+    // Active production: one disclosure per batch, with a single way on to its next step.
+    function core2RenderActiveProduction(executions) {
+      var host = document.getElementById('core2-overview-active-batches');
+      if (!host) return;
+      if (!executions.length) {
+        host.innerHTML = '<p class="core2-active-batches-empty">No batches are active right now. Start a batch from a product workflow when work begins.</p>';
+        return;
+      }
+      // A live refresh re-renders the list; keep whatever the user had open.
+      var open = Array.prototype.map.call(host.querySelectorAll('details[open]'), function (el) { return el.dataset.executionId; });
+      var actions = document.getElementById('core2-journey-actions');
+      var canRecord = !!actions && actions.dataset.canRecord === 'true';
+      host.innerHTML = executions.map(function (execution) {
+        var id = String(execution.id || '');
+        var step = execution.current_step || null;
+        var total = Number(execution.total_steps || 0);
+        var done = (execution.steps || []).filter(function (s) { return s && s.status === 'completed'; }).length;
+        var started = execution.started_at ? new Date(execution.started_at) : null;
+        var facts = [
+          ['Status', execution.status === 'pending' ? 'Ready to record' : 'In progress'],
+          ['Next step', step && step.name ? step.name + (total ? ' (step ' + step.step_number + ' of ' + total + ')' : '') : 'No step is ready to record'],
+          ['Progress', total ? done + ' of ' + total + ' steps done' : 'No steps recorded yet'],
+          ['Started', started && !isNaN(started) ? started.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Not recorded'],
+        ];
+        var href = '/core/flows/batches/start?id=' + encodeURIComponent(String(execution.process_id || '')) + '&execution_id=' + encodeURIComponent(id);
+        return '<details class="workspace-disclosure" data-execution-id="' + escapeHtml(id) + '"' + (open.indexOf(id) !== -1 ? ' open' : '') + '>' +
+          '<summary class="workspace-disclosure__summary"><span class="workspace-disclosure__text"><span class="workspace-disclosure__title">' +
+          escapeHtml(execution.process_name || 'Untitled workflow') + '</span><span class="workspace-disclosure__meta">' +
+          escapeHtml(step && step.name ? step.name : 'Ready to start') + '</span></span><span class="workspace-disclosure__value">' +
+          escapeHtml(facts[0][1]) + '</span></summary><div class="workspace-disclosure__body"><dl class="workspace-facts">' +
+          facts.map(function (fact) { return '<div><dt>' + escapeHtml(fact[0]) + '</dt><dd>' + escapeHtml(fact[1]) + '</dd></div>'; }).join('') +
+          '</dl>' + (canRecord ? '<a class="workspace-button workspace-button--primary" href="' + escapeHtml(href) + '">Record next step</a>' : '') +
+          '</div></details>';
+      }).join('');
     }
 
     function core2RenderWorkList(targetId, rows, emptyCopy) {

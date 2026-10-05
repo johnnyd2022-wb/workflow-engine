@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from pathlib import Path
 from uuid import UUID
 
@@ -182,5 +183,151 @@ def test_ac3_setup_and_pending_never_claim_healthy(browser, app_url, workspace_u
         directory = os.environ.get("UI_SCREENSHOT_DIR")
         if directory:
             page.screenshot(path=str(Path(directory) / f"production-pending-{width}.png"), full_page=True)
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+def test_production_overview_reads_health_first_and_opens_a_batch(browser, app_url, workspace_user, width):
+    context, page = _page(browser, app_url, workspace_user, width)
+    try:
+        page.goto("/core")
+        tabs = page.get_by_role("navigation", name="Production sections", exact=True).get_by_role("tab")
+        fills = tabs.evaluate_all("tabs => tabs.map(tab => getComputedStyle(tab).backgroundColor)")
+        assert fills[0] != "rgba(0, 0, 0, 0)" and set(fills[1:]) == {"rgba(0, 0, 0, 0)"}, (
+            "only the current page is filled"
+        )
+        widths = {round(tab.bounding_box()["width"]) for tab in tabs.all()}
+        assert len(widths) == 1, "the selector spans the column in equal segments"
+
+        health = page.get_by_role("region", name="Production health", exact=True)
+        expect(health.get_by_role("group", name="At a glance")).to_be_visible()
+        expect(health.get_by_role("group", name="Operational status").get_by_role("link")).to_have_count(5)
+        manage = page.get_by_role("region", name="Production workspace actions", exact=True)
+        expect(manage.get_by_role("link")).to_have_count(5)
+        board = manage.get_by_role("link", name="View production board", exact=True)
+        expect(board).to_have_attribute("href", "/core/executions/live")
+        active = page.get_by_role("region", name="Active production", exact=True)
+        stack = [
+            health,
+            page.get_by_role("region", name="Get to work", exact=True),
+            manage,
+            active,
+        ]
+        boxes = [item.bounding_box() for item in stack]
+        assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
+        assert len({round(box["width"]) for box in boxes}) == 1, "every block spans the content column"
+        links = [link.bounding_box() for link in manage.get_by_role("link").all()]
+        assert links[0]["y"] == links[1]["y"] and links[2]["y"] == links[3]["y"] > links[0]["y"]
+        assert len({round(link["width"]) for link in links[:4]}) == 1
+        assert links[4]["y"] > links[3]["y"] and links[4]["width"] > links[0]["width"] * 2
+        plain = manage.get_by_role("link").first.evaluate("link => getComputedStyle(link).backgroundColor")
+        expect(board).to_have_css("background-color", plain)
+
+        batch = active.locator("details").first
+        record = batch.get_by_role("link", name="Record next step", exact=True)
+        expect(record).not_to_be_visible()
+        batch.locator("summary").click()
+        for label in ["Status", "Next step", "Progress", "Started"]:
+            expect(batch.get_by_text(label, exact=True)).to_be_visible()
+        expect(batch.get_by_role("link")).to_have_count(1)
+        assert "/core/flows/batches/start?id=" in record.get_attribute("href")
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "production-layout", width)
+        batch.locator("summary").click()
+        expect(record).not_to_be_visible()
+        batch.locator("summary").click()
+        record.click()
+        expect(page).to_have_url(re.compile(r"/core/flows/batches/start\?.*execution_id="))
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+def test_compliance_overview_groups_obligations_and_actions_in_cards(browser, app_url, workspace_user, width):
+    context, page = _page(browser, app_url, workspace_user, width)
+    try:
+        saved = page.request.put(
+            "/api/compliant/profile",
+            headers=csrf_headers(page),
+            data={"enabled": True, "settings": {"food_control_programme": "np3", "liquor_licence_types": ["on"]}},
+        )
+        assert saved.ok, saved.text()
+        page.goto("/compliant/nz-alcohol")
+        readiness = page.get_by_role("region", name="Evidence readiness", exact=True)
+        obligations = page.get_by_role("region", name="Your obligations", exact=True)
+        manage = page.get_by_role("region", name="Compliance workspace actions", exact=True)
+        cards = obligations.get_by_role("article")
+        expect(cards.first).to_be_visible()
+        outer = obligations.bounding_box()
+        for card in cards.all():
+            box = card.bounding_box()
+            assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
+        boxes = [item.bounding_box() for item in [readiness, obligations, manage]]
+        assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
+        assert len({round(box["width"]) for box in boxes}) == 1, "every block spans the content column"
+        links = [link.bounding_box() for link in manage.get_by_role("link").all()]
+        assert len(links) >= 2 and links[0]["y"] == links[1]["y"]
+        assert len({round(link["width"]) for link in links}) == 1
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "compliance-layout", width)
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+def test_sales_overview_groups_figures_and_tools_in_cards(browser, app_url, workspace_user, width):
+    context, page = _page(browser, app_url, workspace_user, width)
+    try:
+        page.goto("/crm")
+        glance = page.get_by_role("region", name="At a glance", exact=True)
+        tools = page.get_by_role("region", name="Sales workspace actions", exact=True)
+        expect(glance.get_by_role("button").first).to_be_visible()
+        outer = glance.bounding_box()
+        for figure in glance.get_by_role("button").all():
+            if figure.is_visible():
+                box = figure.bounding_box()
+                assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
+        assert glance.bounding_box()["y"] < tools.bounding_box()["y"]
+        assert round(glance.bounding_box()["width"]) == round(tools.bounding_box()["width"])
+        links = [link.bounding_box() for link in tools.get_by_role("link").all()]
+        assert len(links) == 2 and links[0]["y"] == links[1]["y"]
+        assert round(links[0]["width"]) == round(links[1]["width"])
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "sales-layout", width)
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+def test_dashboard_groups_priorities_workspaces_and_signals_in_cards(browser, app_url, workspace_user, width):
+    context, page = _page(browser, app_url, workspace_user, width)
+    try:
+        page.goto("/core/dashboard")
+        expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+        names = ["Needs attention", "Today's planned production", "Workspaces", "Business signals"]
+        names += ["Production flow this week", "Logged events"]
+        regions = [page.get_by_role("region", name=name, exact=True) for name in names]
+        boxes = [region.bounding_box() for region in regions]
+        assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
+        full = [box for name, box in zip(names, boxes) if name != "Production flow this week"]
+        assert len({round(box["width"]) for box in full}) == 1, "every block spans the content column"
+        for name, tiles in [("Workspaces", "a, article"), ("Business signals", "article")]:
+            region = page.get_by_role("region", name=name, exact=True)
+            outer = region.bounding_box()
+            visible = [tile.bounding_box() for tile in region.locator(tiles).all() if tile.is_visible()]
+            assert len(visible) >= 3
+            for box in visible:
+                assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
+        flow = page.get_by_role("region", name="Production flow this week", exact=True)
+        expect(flow.locator("[data-ops-active]")).to_have_text("1")
+        for hidden in page.locator(".dash-stat-row[hidden], .dash-kpi-card[hidden]").all():
+            expect(hidden).not_to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "dashboard-layout", width)
+        page.evaluate("localStorage.setItem('spa-theme', 'dark')")
+        page.goto("/core/dashboard")
+        expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+        _capture(page, "dashboard-layout-dark", width)
     finally:
         context.close()

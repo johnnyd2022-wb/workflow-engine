@@ -24,26 +24,29 @@
     </div>
   </template>
 
-  <div x-show="!loading" x-cloak>
+  <div class="workspace-stack" x-show="!loading" x-cloak>
+    <section class="workspace-card sales-glance" aria-labelledby="sales-glance-title">
+    <h2 id="sales-glance-title">At a glance</h2>
     <div class="crm-kpi-grid">
-      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openInvoiceModal('this_month')">
+      <button type="button" class="workspace-tile sales-kpi" @click="openInvoiceModal('this_month')">
         <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">This Month</div>
         <div class="crm-kpi-value" x-text="formatCurrency2(overview.current_month_revenue)"></div>
         <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`${overview.current_month_invoice_count || 0} invoices`"></div>
       </button>
-      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openInvoiceModal('outstanding')">
+      <button type="button" class="workspace-tile sales-kpi" @click="openInvoiceModal('outstanding')">
         <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">Outstanding</div>
         <div class="crm-kpi-value" x-text="formatCurrency2(overview.outstanding_receivables)"></div>
         <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`${overview.outstanding_invoice_count || 0} invoices`"></div>
       </button>
-      <button type="button" class="crm-card" style="padding:18px; text-align:left; border:none; cursor:pointer;" @click="openMoMModal()" x-show="monthOnMonthChangePct != null">
+      <button type="button" class="workspace-tile sales-kpi" @click="openMoMModal()" x-show="monthOnMonthChangePct != null">
         <div style="font-size:.75rem; color:var(--text-secondary,#6b7280); font-weight:700; text-transform:uppercase;">Month on month change</div>
         <div class="crm-kpi-value" :style="monthOnMonthChangePct == null ? 'color:var(--text-primary,#111827);' : (monthOnMonthChangePct >= 0 ? 'color:var(--crm-teal);' : 'color:var(--crm-red);')" x-text="formatPercent(monthOnMonthChangePct)"></div>
         <div style="font-size:.78rem; color:var(--text-secondary,#6b7280);" x-text="`Last ${momPeriodMonths} month${momPeriodMonths > 1 ? 's' : ''} vs prior period`"></div>
       </button>
     </div>
+    </section>
 
-    <section class="crm-card" style="padding:16px 20px; margin:0 0 18px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;" x-show="Number(overview.contact_completeness?.missing_any || 0) > 0" x-cloak>
+    <section class="crm-card" style="padding:16px 20px; margin:0; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;" x-show="Number(overview.contact_completeness?.missing_any || 0) > 0" x-cloak>
       <div>
         <h2 class="crm-section-title">Recall contact details</h2>
         <p style="margin:4px 0 0; color:var(--text-secondary,#6b7280);">
@@ -282,6 +285,7 @@
     </div>
 
   </div>
+  {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
 
   <div class="crm-lane-sheet-overlay" x-show="showWidgetModal" x-cloak @click.self="closeWidgetModal()" style="display:flex;">
     <div class="crm-lane-sheet">
@@ -490,3 +494,5 @@
   </div>
 </div>
 {% endblock %}
+{# The overview places its own workspace links, inside the page column. #}
+{% block workspace_links %}{% endblock %}
