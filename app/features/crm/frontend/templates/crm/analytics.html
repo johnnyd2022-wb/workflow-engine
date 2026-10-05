@@ -8,156 +8,147 @@
 
 
 {% block content %}
-<div class="max-content crm-root crm-analytics-page" x-data="crmAnalytics()" x-init="init()">
+<div class="max-content crm-root crm-analytics-page workspace-overview sales-analytics" x-data="crmAnalytics()" x-init="init()">
 
-  {# ── Header ── #}
-  <div class="crm-page-header">
-    <div>
-      <h1 class="crm-page-title">Analytics</h1>
-      <p class="crm-page-subtitle">Sales performance and customer insights</p>
-    </div>
-    <div style="display:flex; gap:10px; align-items:center;">
-      <label style="font-size:0.8rem; color:var(--text-secondary,#9ca3af); font-weight:600;">Months</label>
-      <select class="crm-form-select" style="width:auto; padding:6px 10px;" x-model.number="monthsBack" @change="loadAll()">
+  <header class="workspace-header">
+    <div><h1>Analytics</h1><p>Sales performance and customer insights.</p></div>
+    <label class="sales-analytics__range">
+      <span>Months</span>
+      <select class="crm-form-select" x-model.number="monthsBack" @change="loadSales()">
         <option value="3">Last 3</option>
         <option value="6">Last 6</option>
         <option value="12">Last 12</option>
         <option value="24">Last 24</option>
       </select>
-    </div>
-  </div>
+    </label>
+  </header>
 
-  {# Error #}
   <div x-show="error" class="crm-error-banner" x-cloak>
     <span x-text="error"></span>
     <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
   </div>
 
-  {# ── Monthly Sales Chart ── #}
-  <div class="crm-card">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-      <div>
-        <h2 class="crm-section-title">Monthly Sales</h2>
-        <p style="font-size:0.78rem; color:var(--text-secondary,#9ca3af); margin-top:2px;">Total invoice value per month (paid + authorised)</p>
-      </div>
-      <template x-if="!loadingSales && salesData.length > 0">
-        <div style="text-align:right;">
-          <div style="font-size:1.4rem; font-weight:700; color:var(--crm-teal);" x-text="formatCurrency(totalSales)"></div>
-          <div style="font-size:0.72rem; color:var(--text-secondary,#9ca3af);">Total period</div>
+  <div class="workspace-stack">
+    <section class="workspace-card" aria-labelledby="analytics-sales-title">
+      <div class="workspace-card__header">
+        <div>
+          <h2 id="analytics-sales-title">Monthly sales</h2>
+          <p class="workspace-caption">Total invoice value per month (paid and authorised).</p>
         </div>
-      </template>
+        <div class="sales-analytics__total" x-show="!loadingSales && salesData.length > 0" x-cloak>
+          <strong x-text="formatCurrency(totalSales)"></strong>
+          <span>Total for the period</span>
+        </div>
+      </div>
+      <div class="sales-analytics__chart">
+        <div class="crm-skeleton" style="height:240px; border-radius:8px;" x-show="loadingSales"></div>
+        <p class="sales-analytics__empty" x-show="!loadingSales && salesData.length === 0" x-cloak>No sales in this period.</p>
+        <canvas id="salesChart" x-show="!loadingSales && salesData.length > 0" x-cloak></canvas>
+      </div>
+    </section>
+
+    <div class="workspace-columns">
+      <section class="workspace-card" aria-labelledby="analytics-top-title">
+        <h2 id="analytics-top-title">Top customers</h2>
+        <p class="workspace-caption">By total invoiced revenue.</p>
+        <div class="sales-analytics__body">
+          <div x-show="loadingBreakdown"><template x-for="i in 5" :key="i"><div class="crm-skeleton" style="height:36px; border-radius:6px; margin-bottom:8px;"></div></template></div>
+          <p class="sales-analytics__empty" x-show="!loadingBreakdown && breakdown.length === 0" x-cloak>No authorised sales yet.</p>
+          <div x-show="!loadingBreakdown && breakdown.length > 0" x-cloak>
+            <table class="crm-table crm-table--compact sales-analytics__table">
+              <thead><tr><th class="sales-analytics__rank">#</th><th>Customer</th><th class="sales-analytics__num">Revenue</th><th class="sales-analytics__num sales-analytics__optional">Invoices</th></tr></thead>
+              <tbody>
+                <template x-for="(row, idx) in visible(breakdown, showAllTop)" :key="row.contact_id">
+                  <tr>
+                    <td class="sales-analytics__rank" x-text="idx + 1"></td>
+                    <td class="sales-analytics__name"><a :href="`/crm/customers/${row.contact_id}`" x-text="row.contact_name"></a></td>
+                    <td class="sales-analytics__num sales-analytics__money" x-text="formatCurrency(row.total)"></td>
+                    <td class="sales-analytics__num sales-analytics__optional" x-text="row.invoice_count"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <button type="button" class="workspace-button sales-analytics__more" x-show="breakdown.length > pageSize" :aria-expanded="showAllTop ? 'true' : 'false'" @click="showAllTop = !showAllTop" x-text="showAllTop ? `Show top ${pageSize}` : `Show all ${breakdown.length}`"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace-card" aria-labelledby="analytics-churn-title">
+        <h2 id="analytics-churn-title">Churn risk</h2>
+        <p class="workspace-caption">Time since the last purchase, against each customer's usual gap.</p>
+        <div class="sales-analytics__body">
+          <div x-show="loadingChurn"><template x-for="i in 5" :key="i"><div class="crm-skeleton" style="height:36px; border-radius:6px; margin-bottom:8px;"></div></template></div>
+          <p class="sales-analytics__empty" x-show="!loadingChurn && churnData.length === 0" x-cloak>No authorised sales yet.</p>
+          <div x-show="!loadingChurn && churnData.length > 0" x-cloak>
+            <table class="crm-table crm-table--compact sales-analytics__table">
+              <thead><tr><th>Customer</th><th class="sales-analytics__num">Last purchase</th><th class="sales-analytics__num sales-analytics__optional">Usual gap</th><th class="sales-analytics__num">Risk</th></tr></thead>
+              <tbody>
+                <template x-for="row in visible(churnData, showAllChurn)" :key="row.contact_id">
+                  <tr>
+                    <td class="sales-analytics__name"><a :href="`/crm/customers/${row.contact_id}`" x-text="row.contact_name"></a></td>
+                    <td class="sales-analytics__num" x-text="daysAgo(row.days_since_last_invoice)"></td>
+                    <td class="sales-analytics__num sales-analytics__optional" x-text="row.avg_days_between_purchases != null ? `${row.avg_days_between_purchases}d` : '—'"></td>
+                    <td class="sales-analytics__num"><span class="crm-badge" :class="riskClass(row.risk_tier)" x-text="row.risk_tier || '—'"></span></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <button type="button" class="workspace-button sales-analytics__more" x-show="churnData.length > pageSize" :aria-expanded="showAllChurn ? 'true' : 'false'" @click="showAllChurn = !showAllChurn" x-text="showAllChurn ? `Show first ${pageSize}` : `Show all ${churnData.length}`"></button>
+          </div>
+        </div>
+      </section>
     </div>
-    <template x-if="loadingSales">
-      <div class="crm-skeleton" style="height:200px; border-radius:8px;"></div>
-    </template>
-    <template x-if="!loadingSales && salesData.length === 0">
-      <div style="text-align:center; padding:40px 16px; color:var(--text-secondary,#9ca3af); font-size:0.85rem;">
-        No sales data available for this period.
-      </div>
-    </template>
-    <template x-if="!loadingSales && salesData.length > 0">
-      <div style="position:relative;">
-        <canvas id="salesChart" style="width:100%; height:220px; display:block;"></canvas>
-      </div>
-    </template>
-  </div>
 
-  {# ── Bottom two panels ── #}
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-
-    {# Top Customers #}
-    <div class="crm-card">
-      <div style="margin-bottom:14px;">
-        <h2 class="crm-section-title">Top Customers</h2>
-        <p style="font-size:0.78rem; color:var(--text-secondary,#9ca3af); margin-top:2px;">By total invoice spend</p>
-      </div>
-      <template x-if="loadingBreakdown">
-        <div>
-          <template x-for="i in 5" :key="i">
-            <div class="crm-skeleton" style="height:36px; border-radius:6px; margin-bottom:8px;"></div>
-          </template>
-        </div>
-      </template>
-      <template x-if="!loadingBreakdown && breakdown.length === 0">
-        <div style="text-align:center; padding:32px 16px; color:var(--text-secondary,#9ca3af); font-size:0.82rem;">No customer data yet.</div>
-      </template>
-      <template x-if="!loadingBreakdown && breakdown.length > 0">
-        <div>
-          <table class="crm-table crm-table--compact" style="width:100%;">
-            <thead>
-              <tr>
-                <th style="width:32px;">#</th>
-                <th>Customer</th>
-                <th style="text-align:right;">Revenue</th>
-                <th style="text-align:right;">Invoices</th>
-              </tr>
-            </thead>
+    <section class="workspace-card" aria-labelledby="analytics-contact-title">
+      <h2 id="analytics-contact-title">Customer contact</h2>
+      <p class="workspace-caption">Each customer's most recent sale or task. Select a group to see who is in it.</p>
+      <div class="sales-analytics__body">
+        <div class="crm-skeleton" style="height:96px; border-radius:8px;" x-show="loadingContact"></div>
+        <p class="sales-analytics__empty" x-show="!loadingContact && contactRows.length === 0" x-cloak>No customers yet. Sync Xero to bring them in.</p>
+        <div x-show="!loadingContact && contactRows.length > 0" x-cloak>
+          <div class="sales-analytics__groups" role="group" aria-label="Customers by last contact">
+            <template x-for="group in contactGroups" :key="group.key">
+              <button type="button" class="workspace-tile sales-kpi" :aria-pressed="contactFilter === group.key ? 'true' : 'false'" @click="setContactFilter(group.key)">
+                <span class="sales-analytics__group-label" x-text="group.label"></span>
+                <strong class="crm-kpi-value" x-text="contactSummary[group.key] || 0"></strong>
+                <span class="sales-analytics__group-hint" x-text="group.hint"></span>
+              </button>
+            </template>
+          </div>
+          <table class="crm-table crm-table--compact sales-analytics__table">
+            <thead><tr><th>Customer</th><th class="sales-analytics__num sales-analytics__optional">Last contact</th><th class="sales-analytics__num sales-analytics__optional">From</th><th class="sales-analytics__num">How long ago</th></tr></thead>
             <tbody>
-              <template x-for="(row, idx) in breakdown" :key="row.contact_id">
+              <template x-for="row in visible(filteredContactRows, showAllContact)" :key="row.contact_id">
                 <tr>
-                  <td style="color:var(--text-secondary,#9ca3af); font-size:0.75rem;" x-text="idx + 1"></td>
-                  <td>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                      <div style="width:24px;height:24px;border-radius:50%;background:var(--crm-teal);display:flex;align-items:center;justify-content:center;font-size:0.58rem;font-weight:700;color:#0f1a1a;flex-shrink:0;" x-text="initials(row.name)"></div>
-                      <span style="font-size:0.82rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;" x-text="row.name"></span>
-                    </div>
-                  </td>
-                  <td style="text-align:right; font-size:0.82rem; font-weight:600; color:var(--crm-teal);" x-text="formatCurrency(row.total_spend)"></td>
-                  <td style="text-align:right; font-size:0.82rem; color:var(--text-secondary,#9ca3af);" x-text="row.invoice_count"></td>
+                  <td class="sales-analytics__name"><a :href="`/crm/customers/${row.contact_id}`" x-text="row.contact_name"></a></td>
+                  <td class="sales-analytics__num sales-analytics__optional" x-text="formatDate(row.last_contact_date)"></td>
+                  <td class="sales-analytics__num sales-analytics__optional" x-text="row.last_contact_source ? (row.last_contact_source === 'sale' ? 'Sale' : 'Task') : '—'"></td>
+                  <td class="sales-analytics__num" x-text="row.days_since_contact == null ? 'No contact recorded' : daysAgo(row.days_since_contact)"></td>
                 </tr>
               </template>
             </tbody>
           </table>
+          <p class="sales-analytics__empty" x-show="filteredContactRows.length === 0">No customers in this group.</p>
+          <button type="button" class="workspace-button sales-analytics__more" x-show="filteredContactRows.length > pageSize" :aria-expanded="showAllContact ? 'true' : 'false'" @click="showAllContact = !showAllContact" x-text="showAllContact ? `Show first ${pageSize}` : `Show all ${filteredContactRows.length}`"></button>
         </div>
-      </template>
-    </div>
-
-    {# Churn Risk #}
-    <div class="crm-card">
-      <div style="margin-bottom:14px;">
-        <h2 class="crm-section-title">Churn Risk</h2>
-        <p style="font-size:0.78rem; color:var(--text-secondary,#9ca3af); margin-top:2px;">Based on purchase cadence</p>
       </div>
-      <template x-if="loadingChurn">
-        <div>
-          <template x-for="i in 5" :key="i">
-            <div class="crm-skeleton" style="height:36px; border-radius:6px; margin-bottom:8px;"></div>
-          </template>
-        </div>
-      </template>
-      <template x-if="!loadingChurn && churnData.length === 0">
-        <div style="text-align:center; padding:32px 16px; color:var(--text-secondary,#9ca3af); font-size:0.82rem;">No churn data yet.</div>
-      </template>
-      <template x-if="!loadingChurn && churnData.length > 0">
-        <div>
-          <table class="crm-table crm-table--compact" style="width:100%;">
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th style="text-align:right;">Last Purchase</th>
-                <th style="text-align:right;">Avg Interval</th>
-                <th style="text-align:center;">Risk</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template x-for="row in churnData" :key="row.contact_id">
-                <tr>
-                  <td>
-                    <span style="font-size:0.82rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px; display:block;" x-text="row.name"></span>
-                  </td>
-                  <td style="text-align:right; font-size:0.78rem; color:var(--text-secondary,#9ca3af);" x-text="row.days_since_last_purchase != null ? row.days_since_last_purchase + 'd ago' : '—'"></td>
-                  <td style="text-align:right; font-size:0.78rem; color:var(--text-secondary,#9ca3af);" x-text="row.avg_purchase_interval_days != null ? Math.round(row.avg_purchase_interval_days) + 'd' : '—'"></td>
-                  <td style="text-align:center;">
-                    <span class="crm-badge" :class="riskClass(row.risk_tier)" x-text="row.risk_tier || '—'"></span>
-                  </td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-      </template>
-    </div>
+    </section>
 
+    <section class="workspace-card" aria-labelledby="analytics-recall-title" x-show="Number(contactCompleteness.missing_any || 0) > 0" x-cloak>
+      <div class="workspace-card__header">
+        <div>
+          <h2 id="analytics-recall-title">Recall contact details</h2>
+          <p class="workspace-caption">
+            <strong x-text="contactCompleteness.missing_any || 0"></strong>
+            customers are missing a phone number or email. Of <span x-text="contactCompleteness.total || 0"></span>,
+            <span x-text="contactCompleteness.with_phone || 0"></span> have a phone and
+            <span x-text="contactCompleteness.with_email || 0"></span> have an email.
+            Update contacts in Xero, then sync.
+          </p>
+        </div>
+        <a class="workspace-button" href="/crm/customers?missing_contact=1">Review missing contacts</a>
+      </div>
+    </section>
   </div>
 
 </div>
@@ -169,13 +160,25 @@ function crmAnalytics() {
     salesData: [],
     breakdown: [],
     churnData: [],
+    contactRows: [],
+    contactSummary: {},
+    contactCompleteness: {},
+    contactFilter: null,
+    recentDays: 30,
+    staleDays: 90,
+    pageSize: 10,
+    showAllTop: false,
+    showAllChurn: false,
+    showAllContact: false,
     loadingSales: true,
     loadingBreakdown: true,
     loadingChurn: true,
+    loadingContact: true,
     error: null,
     _chartInstance: null,
 
     async init() {
+      window.addEventListener('resize', () => this.drawChart());
       await this.loadAll();
     },
 
@@ -183,26 +186,29 @@ function crmAnalytics() {
       this.loadingSales = true;
       this.loadingBreakdown = true;
       this.loadingChurn = true;
+      this.loadingContact = true;
       this.error = null;
-      await Promise.all([this.loadSales(), this.loadBreakdown(), this.loadChurn()]);
+      await Promise.all([this.loadSales(), this.loadBreakdown(), this.loadChurn(), this.loadContact()]);
     },
 
     async loadSales() {
+      this.loadingSales = true;
       try {
         const data = await CRMAPI.getMonthlySales(this.monthsBack);
-        this.salesData = data.months || [];
-        await this.$nextTick();
-        this.drawChart();
+        // The API returns the newest month first; the chart reads left to right.
+        this.salesData = (data.months || []).slice().sort((a, b) => String(a.month).localeCompare(String(b.month)));
       } catch (e) {
         this.error = e.message || 'Failed to load sales data.';
       } finally {
         this.loadingSales = false;
+        await this.$nextTick();
+        this.drawChart();
       }
     },
 
     async loadBreakdown() {
       try {
-        const data = await CRMAPI.getCustomerBreakdown(20);
+        const data = await CRMAPI.getCustomerBreakdown(50);
         this.breakdown = data.customers || [];
       } catch (e) {
         this.error = e.message || 'Failed to load customer breakdown.';
@@ -214,12 +220,73 @@ function crmAnalytics() {
     async loadChurn() {
       try {
         const data = await CRMAPI.getChurnRisk();
-        this.churnData = data.customers || [];
+        // Highest risk first, then whoever has been quiet longest.
+        const order = { high: 0, medium: 1, low: 2 };
+        this.churnData = (data.customers || []).slice().sort((a, b) =>
+          (order[a.risk_tier] ?? 3) - (order[b.risk_tier] ?? 3) ||
+          (b.days_since_last_invoice || 0) - (a.days_since_last_invoice || 0));
       } catch (e) {
         this.error = e.message || 'Failed to load churn risk data.';
       } finally {
         this.loadingChurn = false;
       }
+    },
+
+    async loadContact() {
+      try {
+        const data = await CRMAPI.getCustomerContact();
+        this.contactRows = data.customers || [];
+        this.contactSummary = data.summary || {};
+        this.contactCompleteness = data.contact_completeness || {};
+        this.recentDays = data.recent_days || 30;
+        this.staleDays = data.stale_days || 90;
+      } catch (e) {
+        this.error = e.message || 'Failed to load customer contact data.';
+      } finally {
+        this.loadingContact = false;
+      }
+    },
+
+    get contactGroups() {
+      return [
+        { key: 'recent', label: 'Recent contact', hint: `In the last ${this.recentDays} days` },
+        { key: 'cooling', label: 'Cooling off', hint: `${this.recentDays + 1} to ${this.staleDays} days ago` },
+        { key: 'stale', label: 'Gone quiet', hint: `More than ${this.staleDays} days ago` },
+        { key: 'never', label: 'No contact recorded', hint: 'No sale or task yet' },
+      ];
+    },
+
+    contactGroupOf(row) {
+      const days = row.days_since_contact;
+      if (days == null) return 'never';
+      if (days <= this.recentDays) return 'recent';
+      return days <= this.staleDays ? 'cooling' : 'stale';
+    },
+
+    get filteredContactRows() {
+      if (!this.contactFilter) return this.contactRows;
+      return this.contactRows.filter(row => this.contactGroupOf(row) === this.contactFilter);
+    },
+
+    setContactFilter(key) {
+      this.contactFilter = this.contactFilter === key ? null : key;
+      this.showAllContact = false;
+    },
+
+    visible(rows, showAll) {
+      return showAll ? rows : rows.slice(0, this.pageSize);
+    },
+
+    daysAgo(days) {
+      if (days == null) return '—';
+      if (days === 0) return 'Today';
+      return days === 1 ? '1 day ago' : `${days} days ago`;
+    },
+
+    formatDate(value) {
+      if (!value) return '—';
+      const dt = new Date(`${value}T00:00:00`);
+      return isNaN(dt) ? '—' : dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
     },
 
     get totalSales() {
@@ -232,8 +299,9 @@ function crmAnalytics() {
 
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.parentElement.getBoundingClientRect();
-      const W = rect.width || 600;
-      const H = 220;
+      if (!rect.width) return;
+      const W = rect.width;
+      const H = 240;
       canvas.width = W * dpr;
       canvas.height = H * dpr;
       canvas.style.width = W + 'px';
@@ -281,11 +349,14 @@ function crmAnalytics() {
       // Bars
       const n = this.salesData.length;
       const gap = 6;
-      const barW = Math.max(4, (chartW - gap * (n - 1)) / n);
+      // Cap the bar width so a short period does not render as a few slabs.
+      const slot = (chartW - gap * (n - 1)) / n;
+      const barW = Math.max(4, Math.min(slot, 56));
+      const inset = (slot - barW) / 2;
 
       this.salesData.forEach((m, i) => {
         const barH = ((m.total || 0) / niceMax) * chartH;
-        const x = pad.left + i * (barW + gap);
+        const x = pad.left + i * (slot + gap) + inset;
         const y = pad.top + chartH - barH;
 
         // Bar fill
@@ -310,7 +381,9 @@ function crmAnalytics() {
           ctx.fillStyle = textColor;
           ctx.textAlign = 'center';
           ctx.font = `10px -apple-system, system-ui, sans-serif`;
-          ctx.fillText(display, x + barW / 2, pad.top + chartH + 14);
+          // Skip labels that would overlap when many months are shown in a narrow card.
+          const every = Math.max(1, Math.ceil(44 / (slot + gap)));
+          if (i % every === (n - 1) % every) ctx.fillText(display, x + barW / 2, pad.top + chartH + 14);
         }
       });
     },

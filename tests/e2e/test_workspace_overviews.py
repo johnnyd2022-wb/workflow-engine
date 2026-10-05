@@ -3,14 +3,18 @@
 import json
 import os
 import re
+from datetime import date, timedelta
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from playwright.sync_api import expect
 
 from app.core.db.models.user import UserRole
 from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+from app.features.crm.models.crm_task import CRMTask
+from app.features.crm.models.xero_contact import XeroContact
+from app.features.crm.models.xero_invoice import XeroInvoice
 from tests.e2e.conftest import csrf_headers, login_through_ui
 from tests.factories import ExecutionFactory, InventoryItemFactory, ProcessFactory
 
@@ -359,5 +363,97 @@ def test_settings_groups_account_security_and_organisation_in_cards(browser, app
         expect(sites).to_be_visible()
         _capture(page, "settings-layout-dark", width)
         page.evaluate("localStorage.removeItem('spa-theme')")
+    finally:
+        context.close()
+
+
+@pytest.fixture
+def sales_history(workspace_user, db):
+    """Fourteen customers with sales across four months, one with only a task, one with nothing."""
+    org_id = UUID(workspace_user["org_id"])
+    today = date.today()
+    for index in range(14):
+        contact = XeroContact(
+            org_id=org_id,
+            xero_contact_id=f"e2e-contact-{uuid4()}",
+            xero_tenant_id="e2e-tenant",
+            name=f"Customer {index + 1:02d} with a long trading name Limited",
+            email_address=None if index == 0 else f"customer{index}@example.test",
+        )
+        db.add(contact)
+        db.flush()
+        for age in (index * 9 + 2, index * 9 + 40):
+            db.add(
+                XeroInvoice(
+                    org_id=org_id,
+                    xero_invoice_id=f"e2e-invoice-{uuid4()}",
+                    xero_tenant_id="e2e-tenant",
+                    contact_id=contact.id,
+                    invoice_type="ACCREC",
+                    status="AUTHORISED",
+                    date=today - timedelta(days=age),
+                    total=1000 * (14 - index),
+                )
+            )
+    task_only = XeroContact(
+        org_id=org_id, xero_contact_id=f"e2e-contact-{uuid4()}", xero_tenant_id="e2e-tenant", name="Task only"
+    )
+    silent = XeroContact(
+        org_id=org_id, xero_contact_id=f"e2e-contact-{uuid4()}", xero_tenant_id="e2e-tenant", name="Never contacted"
+    )
+    db.add_all([task_only, silent])
+    db.flush()
+    db.add(CRMTask(org_id=org_id, contact_id=task_only.id, title="Call about the spring order", status="pending"))
+    db.commit()
+    return workspace_user
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+def test_sales_analytics_shows_ranked_customers_contact_groups_and_recall(browser, app_url, sales_history, width):
+    context, page = _page(browser, app_url, sales_history, width)
+    try:
+        page.goto("/crm/analytics")
+        top = page.get_by_role("region", name="Top customers", exact=True)
+        churn = page.get_by_role("region", name="Churn risk", exact=True)
+        contact = page.get_by_role("region", name="Customer contact", exact=True)
+        for region, total in [(top, 14), (churn, 14), (contact, 16)]:
+            expect(region.locator("tbody tr")).to_have_count(10)
+            more = region.get_by_role("button", name=f"Show all {total}", exact=True)
+            expect(more).to_have_attribute("aria-expanded", "false")
+            more.click()
+            expect(region.locator("tbody tr")).to_have_count(total)
+            region.get_by_role("button", name=re.compile(r"^Show (top|first) 10$")).click()
+            expect(region.locator("tbody tr")).to_have_count(10)
+        expect(top.locator("tbody tr").first).to_contain_text("Customer 01")
+        expect(top.locator("tbody tr").first).to_contain_text("$28,000")
+        expect(churn.locator("tbody tr").first).to_contain_text("high")
+        expect(contact.locator("tbody tr").first).to_contain_text("Never contacted")
+        expect(contact.locator("tbody tr").first).to_contain_text("No contact recorded")
+
+        groups = contact.get_by_role("group", name="Customers by last contact")
+        counts = [int(text) for text in groups.locator("strong").all_inner_texts()]
+        assert sum(counts) == 16 and counts[3] == 1
+        groups.get_by_role("button", name=re.compile("No contact recorded")).click()
+        expect(contact.locator("tbody tr")).to_have_count(1)
+        groups.get_by_role("button", name=re.compile("Recent contact")).click()
+        expect(contact.locator("tbody tr").filter(has_text="Task only")).to_have_count(1)
+        groups.get_by_role("button", name=re.compile("Recent contact")).click()
+        expect(contact.locator("tbody tr")).to_have_count(10)
+
+        recall = page.get_by_role("region", name="Recall contact details", exact=True)
+        expect(recall).to_contain_text("customers are missing a phone number or email")
+        expect(page.get_by_role("region", name="Monthly sales", exact=True).locator("canvas")).to_be_visible()
+        side_by_side = top.bounding_box()["y"] == churn.bounding_box()["y"]
+        assert side_by_side == (width >= 1440), "the pair stacks until each table has a wide column"
+        for region in (top, churn, contact):
+            outer = region.bounding_box()
+            table = region.locator("table").bounding_box()
+            assert table["x"] >= outer["x"] and table["x"] + table["width"] <= outer["x"] + outer["width"] + 1
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "sales-analytics", width)
+
+        page.goto("/crm")
+        expect(page.get_by_role("region", name="At a glance", exact=True)).to_be_visible()
+        expect(page.get_by_text("Recall contact details")).to_have_count(0)
     finally:
         context.close()

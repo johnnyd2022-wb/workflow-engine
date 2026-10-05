@@ -110,6 +110,10 @@
               <span x-text="customer.contact_status || '—'">—</span>
             </div>
             <div class="crm-detail-field">
+              <label>Last contact</label>
+              <span x-text="customer.last_contact_date ? `${formatDate(customer.last_contact_date)} (${customer.last_contact_source})` : 'None recorded'">—</span>
+            </div>
+            <div class="crm-detail-field">
               <label>Last Synced</label>
               <span x-text="formatDate(customer.last_synced_at)">—</span>
             </div>

@@ -46,20 +46,6 @@
     </div>
     </section>
 
-    <section class="crm-card" style="padding:16px 20px; margin:0; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;" x-show="Number(overview.contact_completeness?.missing_any || 0) > 0" x-cloak>
-      <div>
-        <h2 class="crm-section-title">Recall contact details</h2>
-        <p style="margin:4px 0 0; color:var(--text-secondary,#6b7280);">
-          <strong x-text="overview.contact_completeness?.missing_any || 0"></strong>
-          customers are missing a phone number or email. Of <span x-text="overview.contact_completeness?.total || 0"></span>,
-          <span x-text="overview.contact_completeness?.with_phone || 0"></span> have a phone and
-          <span x-text="overview.contact_completeness?.with_email || 0"></span> have an email.
-          Update contacts in Xero, then sync.
-        </p>
-      </div>
-      <a class="crm-btn crm-btn--secondary crm-btn--sm" href="/crm/customers?missing_contact=1">Review missing contacts</a>
-    </section>
-
     <div class="crm-widget-grid" :class="showGridGuide ? 'crm-widget-grid--guide' : ''">
       <template x-for="widget in widgetLayout" :key="widget.id">
         <section

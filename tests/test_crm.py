@@ -12,7 +12,7 @@ Coverage:
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -1096,6 +1096,143 @@ class TestCRMAnalyticsAPI:
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert "customers" in data
+
+    def _customer(self, db, org, name, **fields):
+        from app.features.crm.models.xero_contact import XeroContact
+
+        contact = XeroContact(
+            org_id=org.id, xero_contact_id=f"contact-{uuid4()}", xero_tenant_id="contact-tenant", name=name, **fields
+        )
+        db.add(contact)
+        db.flush()
+        return contact
+
+    def _sale(self, db, org, contact, days_ago, *, status="AUTHORISED", invoice_type="ACCREC", total=100):
+        from app.features.crm.models.xero_invoice import XeroInvoice
+
+        db.add(
+            XeroInvoice(
+                org_id=org.id,
+                xero_invoice_id=f"contact-invoice-{uuid4()}",
+                xero_tenant_id="contact-tenant",
+                contact_id=contact.id,
+                invoice_type=invoice_type,
+                status=status,
+                date=date.today() - timedelta(days=days_ago),
+                total=total,
+            )
+        )
+
+    def _task(self, db, org, contact, *, created_days_ago, completed_days_ago=None, status="pending"):
+        from app.features.crm.models.crm_task import CRMTask
+
+        now = datetime.now(UTC)
+        db.add(
+            CRMTask(
+                org_id=org.id,
+                contact_id=contact.id,
+                title="Call",
+                status=status,
+                created_at=now - timedelta(days=created_days_ago),
+                completed_at=None if completed_days_ago is None else now - timedelta(days=completed_days_ago),
+            )
+        )
+
+    def test_customer_contact_takes_the_latest_sale_or_task(self, app_client, db, org):
+        """AC: a customer's contact date is their most recent sale or task, whichever is later."""
+        sale_led = self._customer(db, org, "Sale led")
+        self._sale(db, org, sale_led, 5)
+        self._task(db, org, sale_led, created_days_ago=40)
+        task_led = self._customer(db, org, "Task led")
+        self._sale(db, org, task_led, 200)
+        self._task(db, org, task_led, created_days_ago=80, completed_days_ago=60, status="completed")
+        quiet = self._customer(db, org, "Gone quiet")
+        self._sale(db, org, quiet, 120)
+        never = self._customer(db, org, "Never contacted")
+        # None of these is contact: a draft, a supplier bill, a cancelled task and a future-dated sale.
+        self._sale(db, org, never, 1, status="DRAFT")
+        self._sale(db, org, never, 1, invoice_type="ACCPAY")
+        self._sale(db, org, never, -10)
+        self._task(db, org, never, created_days_ago=2, status="cancelled")
+        self._customer(db, org, "Archived", contact_status="ARCHIVED")
+        self._customer(db, org, "Supplier only", is_customer=False)
+        db.commit()
+
+        data = json.loads(app_client.get("/api/crm/analytics/customer-contact").data)
+        rows = {row["contact_name"]: row for row in data["customers"]}
+        assert set(rows) == {"Sale led", "Task led", "Gone quiet", "Never contacted"}
+        assert (rows["Sale led"]["last_contact_source"], rows["Sale led"]["days_since_contact"]) == ("sale", 5)
+        assert rows["Sale led"]["last_contact_date"] == (date.today() - timedelta(days=5)).isoformat()
+        assert rows["Task led"]["last_contact_source"] == "task"
+        assert rows["Task led"]["days_since_contact"] in (59, 60, 61)  # UTC completion vs local today
+        assert rows["Gone quiet"]["days_since_contact"] == 120
+        assert rows["Never contacted"] == {
+            "contact_id": rows["Never contacted"]["contact_id"],
+            "contact_name": "Never contacted",
+            "last_contact_date": None,
+            "last_contact_source": None,
+            "days_since_contact": None,
+        }
+        # Longest silence first, with never-contacted customers ahead of everyone.
+        assert [row["contact_name"] for row in data["customers"]] == [
+            "Never contacted",
+            "Gone quiet",
+            "Task led",
+            "Sale led",
+        ]
+        assert data["summary"] == {"total": 4, "recent": 1, "cooling": 1, "stale": 1, "never": 1}
+        assert data["contact_completeness"]["total"] == 6
+
+    def test_customer_list_and_detail_carry_the_contact_date(self, app_client, db, org):
+        contact = self._customer(db, org, "Listed customer")
+        self._sale(db, org, contact, 3)
+        db.commit()
+        expected = (date.today() - timedelta(days=3)).isoformat()
+
+        listed = json.loads(app_client.get("/api/crm/customers").data)["customers"]
+        assert [(c["name"], c["last_contact_date"], c["last_contact_source"]) for c in listed] == [
+            ("Listed customer", expected, "sale")
+        ]
+        detail = json.loads(app_client.get(f"/api/crm/customers/{contact.id}").data)["customer"]
+        assert (detail["last_contact_date"], detail["days_since_contact"]) == (expected, 3)
+
+    def test_customer_contact_excludes_other_orgs(self, app_client, db, org):
+        other = OrganisationRepository(db).create_org(f"CRM Other Org {uuid4()}")
+        db.flush()
+        theirs = self._customer(db, other, "Their customer")
+        self._sale(db, other, theirs, 1)
+        db.commit()
+        try:
+            data = json.loads(app_client.get("/api/crm/analytics/customer-contact").data)
+            assert data["customers"] == []
+            assert data["summary"]["total"] == 0
+        finally:
+            db.query(Organisation).filter(Organisation.id == other.id).delete(synchronize_session=False)
+            db.commit()
+
+    def test_analytics_rows_use_the_names_the_page_reads(self, app_client, db, org):
+        """The Analytics tables were blank because the page read fields the API never sent."""
+        contact = self._customer(db, org, "Named customer")
+        self._sale(db, org, contact, 10, total=250)
+        self._sale(db, org, contact, 40, total=250, status="PAID")
+        db.commit()
+
+        top = json.loads(app_client.get("/api/crm/analytics/customer-breakdown?top_n=50").data)["customers"]
+        assert [(r["contact_name"], r["total"], r["invoice_count"]) for r in top] == [("Named customer", 500.0, 2)]
+        churn = json.loads(app_client.get("/api/crm/analytics/churn-risk").data)["customers"]
+        assert [(r["contact_name"], r["days_since_last_invoice"], r["avg_days_between_purchases"]) for r in churn] == [
+            ("Named customer", 10, 30)
+        ]
+        page = (Path(__file__).parents[1] / "app/features/crm/frontend/templates/crm/analytics.html").read_text()
+        for field in (
+            "row.contact_name",
+            "row.total)",
+            "row.days_since_last_invoice",
+            "row.avg_days_between_purchases",
+        ):
+            assert field in page
+        for stale in ("row.name", "row.total_spend", "days_since_last_purchase", "avg_purchase_interval_days"):
+            assert stale not in page
 
 
 # ─────────────────────────────────────────────

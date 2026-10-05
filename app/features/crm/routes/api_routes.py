@@ -623,6 +623,12 @@ def churn_risk():
     return jsonify({"churn_risk": data, "customers": data}), 200
 
 
+@api_bp.route("/api/crm/analytics/customer-contact", methods=["GET"])
+@requires_auth
+def customer_contact():
+    return jsonify(_crm_service().customer_contact(UUID(g.org_id))), 200
+
+
 @api_bp.route("/api/crm/overview", methods=["GET"])
 @requires_auth
 def crm_overview():

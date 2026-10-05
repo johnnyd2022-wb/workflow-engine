@@ -155,6 +155,7 @@ window.CRMAPI = (function () {
     return request(`/analytics/rankings${qs ? '?' + qs : ''}`);
   }
   async function getChurnRisk() { return request('/analytics/churn-risk'); }
+  async function getCustomerContact() { return request('/analytics/customer-contact'); }
   async function getOverview() { return request('/overview'); }
   async function getTraceabilityConfig() { return request('/traceability-config'); }
   async function updateTraceabilityConfig(data) { return request('/traceability-config', { method: 'PUT', body: data }); }
@@ -174,7 +175,7 @@ window.CRMAPI = (function () {
     getCustomers, getCustomer, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice, getInvoiceViewUrl, invoicePdfUrl,
     createNote, updateNote, deleteNote,
     getTasks, createTask, updateTask, deleteTask, getTaskLanes, createTaskLane, updateTaskLane, reorderTaskLanes, deleteTaskLane, assignTaskLane,
-    getMonthlySales, getCustomerBreakdown, getRankings, getChurnRisk, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
+    getMonthlySales, getCustomerBreakdown, getRankings, getChurnRisk, getCustomerContact, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
     getProductMappings, getFinalProducts, createProductMapping, createProductMappings, updateProductMapping, deleteProductMapping,
   };
 })();
