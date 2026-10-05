@@ -218,6 +218,7 @@ ENDPOINT_COVERAGE = {
     ("crm.crm_api.assign_task_lane", "PUT"): "blocked",
     ("crm.crm_api.authorise_invoice", "POST"): "blocked",
     ("crm.crm_api.churn_risk", "GET"): "blocked",
+    ("crm.crm_api.customer_contact", "GET"): "blocked",
     ("crm.crm_api.confirm_matching_line", "POST"): "blocked",
     ("crm.crm_api.create_customer_invoice", "POST"): "blocked",
     ("crm.crm_api.create_mapping", "POST"): "blocked",
