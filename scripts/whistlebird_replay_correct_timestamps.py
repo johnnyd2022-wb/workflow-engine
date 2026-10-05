@@ -14,7 +14,7 @@ import json
 import os
 import sys
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -62,7 +62,7 @@ def _recent_batch_events(batches: tuple[recent_batches.RecentBatch, ...]) -> lis
                 ReplayEvent(
                     f"recent-step:{batch.marker}:{step}",
                     "complete_step",
-                    batch.started,
+                    batch.date_of(step),
                     (create_id,),
                     {"recent_batch": batch, "step_index": index},
                 )
@@ -341,6 +341,81 @@ def _date_crm_config(conn, org_id, manifest: crm.CrmManifest, counts: dict[str, 
         ).rowcount
 
 
+def _sale_event_time(invoice_date: date, stock_created_at: datetime | None, now: datetime) -> datetime | None:
+    """When a synced sale's stock draw happened: the invoice date, never before the stock existed.
+
+    A sale invoiced ahead of its batch (a pre-sale) is dated just after that batch was made.
+    Returns None for an invoice dated in the future, which keeps its real sync time.
+    """
+    at = _business_at(invoice_date)
+    if stock_created_at is not None and at <= stock_created_at:
+        at = stock_created_at + timedelta(seconds=1)
+    return None if at > now else at
+
+
+def _date_synced_sales(conn, org_id, counts: dict[str, int]) -> set:
+    """Date each Xero sale's stock draw to its invoice, not to the sync that imported it.
+
+    Reconnecting Xero after a rebuild draws stock for every past sale in one sync, which
+    otherwise reads as hundreds of stock actions on the day of the rebuild. Reversals and
+    the connection/sync events themselves are real actions and keep their own time.
+    """
+    rows = conn.execute(
+        text(
+            "SELECT e.id, e.entity_id, e.payload->>'reference', e.created_at, i.date, "
+            "(SELECT min(c.created_at) FROM entity_events c WHERE c.org_id = e.org_id "
+            " AND c.entity_id = e.entity_id AND c.event_type = 'inventory_item.created') "
+            "FROM entity_events e JOIN xero_invoices i ON i.org_id = e.org_id "
+            " AND i.xero_invoice_id = split_part(e.payload->>'reference', ':', 2) "
+            "WHERE e.org_id = :org AND e.event_type = 'inventory_item.quantity_adjusted' "
+            "AND e.payload->>'reason' = 'sales_fifo_consumption' "
+            "AND e.payload->>'reference' LIKE 'xero:%' AND i.date IS NOT NULL"
+        ),
+        {"org": org_id},
+    ).fetchall()
+    now = datetime.now(UTC)
+    touched = set()
+    for event_id, item_id, reference, current, invoice_date, stock_created_at in rows:
+        at = _sale_event_time(invoice_date, stock_created_at, now)
+        if at is None or at == current:
+            continue
+        counts["sale_events"] += conn.execute(
+            text("UPDATE entity_events SET created_at = :at WHERE org_id = :org AND id = :id"),
+            {"at": at, "org": org_id, "id": event_id},
+        ).rowcount
+        _prefix, invoice_id, line_key = reference.split(":", 2)
+        counts["sale_allocations"] += conn.execute(
+            text(
+                "UPDATE crm_sales_fifo_allocations SET created_at = :at WHERE org_id = :org "
+                "AND xero_invoice_id = :invoice AND xero_line_key = :line AND inventory_item_id = :item"
+            ),
+            {"at": at, "org": org_id, "invoice": invoice_id, "line": line_key, "item": item_id},
+        ).rowcount
+        touched.add(item_id)
+    return touched
+
+
+def date_synced_sales(target_url: str, org_name: str, dry_run: bool = False) -> dict[str, int]:
+    """Run only the synced-sales dating: for use after reconnecting Xero on a rebuilt tenant."""
+    if org_name != wm.WHISTLEBIRD_ORG_NAME:
+        raise ValueError(f"timestamp correction is only permitted for {wm.WHISTLEBIRD_ORG_NAME!r}")
+    counts = dict.fromkeys(("sale_events", "sale_allocations", "entity_event_summaries"), 0)
+    engine = create_engine(target_url)
+    try:
+        with engine.connect() as conn, conn.begin() as transaction:
+            org_id = _one(
+                conn, "SELECT id FROM organisations WHERE name = :name", {"name": org_name}, f"org {org_name}"
+            )[0]
+            counts["entity_event_summaries"] = _sync_summary_dates(
+                conn, org_id, _date_synced_sales(conn, org_id, counts)
+            )
+            if dry_run:
+                transaction.rollback()
+    finally:
+        engine.dispose()
+    return counts
+
+
 def correct_timestamps(
     legacy_source: str | Path,
     target_url: str,
@@ -381,6 +456,8 @@ def correct_timestamps(
             "compliance_profiles",
             "feature_subscriptions",
             "purchase_audits_moved",
+            "sale_events",
+            "sale_allocations",
         ),
         0,
     )
@@ -761,6 +838,7 @@ def correct_timestamps(
                 )
             if crm_manifest:
                 _date_crm_config(conn, org_id, crm_manifest, counts)
+            touched_entities |= _date_synced_sales(conn, org_id, counts)
             counts["entity_event_summaries"] = _sync_summary_dates(conn, org_id, touched_entities)
             counts["purchase_audits_moved"] = len(moved_purchase_markers)
             if dry_run:
@@ -790,6 +868,11 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--np3-manifest", type=Path, default=np3.DEFAULT_NP3_MANIFEST)
     parser.add_argument("--skip-np3", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="Validate Core corrections then roll back all writes.")
+    parser.add_argument(
+        "--sales-only",
+        action="store_true",
+        help="Only date synced Xero sales to their invoice dates. Run this after reconnecting Xero on a rebuilt tenant.",
+    )
     args = parser.parse_args()
     if not args.target_url:
         parser.error("--target-url is required (or set BIZE_MIGRATION_DATABASE_URL)")
@@ -800,6 +883,9 @@ def _arguments() -> argparse.Namespace:
 
 def main() -> int:
     args = _arguments()
+    if args.sales_only:
+        print(date_synced_sales(args.target_url, args.org_name, dry_run=args.dry_run))
+        return 0
     result = correct_timestamps(
         args.legacy_source,
         args.target_url,

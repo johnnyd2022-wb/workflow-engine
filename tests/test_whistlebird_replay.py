@@ -6,6 +6,8 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 import whistlebird_migration as wm  # noqa: E402
 import whistlebird_replay as replay  # noqa: E402
@@ -349,3 +351,45 @@ def test_complete_step_stops_if_lost_response_has_no_durable_completion(monkeypa
     with pytest.raises(replay.ReplayTransportError):
         replay._execute_complete_step(client, _Store(), event)
     assert len(client.calls) == 1
+
+
+class _ProfileClient:
+    def __init__(self):
+        self.puts = []
+
+    def put(self, path, body):
+        self.puts.append((path, body))
+
+
+class _ProfileStore:
+    def __init__(self, settings):
+        self.settings = settings
+
+    def required_evidence_settings(self):
+        return self.settings
+
+
+def test_resume_lifts_required_evidence_for_the_replay_and_always_restores_it():
+    """A rebuilt tenant requires an evidence file on every Core step; adding new history must
+    not be refused by that rule, and must never leave it switched off."""
+    settings = {"food_control_programme": "np3", "np3_execution_evidence_mode": "required", "abv_rules": [1]}
+    client = _ProfileClient()
+
+    with pytest.raises(replay.ReplayRejectedError):
+        with replay._evidence_requirement_lifted(client, _ProfileStore(settings)):
+            assert client.puts == [
+                ("/api/compliant/profile", {"settings": {**settings, "np3_execution_evidence_mode": "recommended"}})
+            ]
+            raise replay.ReplayRejectedError("a step was refused")
+
+    assert client.puts[-1] == ("/api/compliant/profile", {"settings": settings})
+    assert len(client.puts) == 2
+
+
+def test_replay_leaves_the_profile_alone_when_evidence_is_not_required():
+    client = _ProfileClient()
+
+    with replay._evidence_requirement_lifted(client, _ProfileStore(None)):
+        pass
+
+    assert client.puts == []

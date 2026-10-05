@@ -921,15 +921,21 @@
           "confidence": "clean"
         },
         "bottling": {
-          "pending": true
+          "date": "2026-09-29",
+          "confidence": "clean"
         },
         "labelling": {
           "pending": true
         }
       },
-      "bottlings": [],
+      "bottlings": [
+        {
+          "date": "2026-09-29",
+          "bottles": "78"
+        }
+      ],
       "sheet_rows": "2063-2080",
-      "notes": "Distilled 2026-09-03, stored in fridge (row 2063, 'Distilled WF (VAT57) - stored in fridge until 08/09/2026'); filled 2026-09-08 (row 2066 date, row 2067 'Filling VAT57'), matching the sheet's own fridge note. Not yet bottled as of the 2026-09-18 pull; in progress, not excluded."
+      "notes": "Distilled 2026-09-03, stored in fridge (row 2063, 'Distilled WF (VAT57) - stored in fridge until 08/09/2026'); filled 2026-09-08 (row 2066 date, row 2067 'Filling VAT57'), matching the sheet's own fridge note. Bottled 2026-09-29, 78 bottles ('Bottled VAT57 (WF) 78 bottles', founder-confirmed 2026-10-05, not yet reflected in the Production!! sheet pull). Labelling still pending."
     },
     {
       "global_vat": 58,

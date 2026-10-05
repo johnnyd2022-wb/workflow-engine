@@ -9,10 +9,11 @@ tracked ingredients from whatever real stock the live tenant currently holds (FI
 live-inventory lookup the historical replay itself uses for its NGS shortfall draws), not from
 a historical purchase ledger, since these ARE that stock.
 
-Only the maceration step is supported today, on Wildflower or Solstice (the recipe already
-defined in `whistlebird_migration.py`). Extending this to later steps (distilling, aging,
-bottling) as the founder actually performs them is a deliberate follow-up, not something this
-script should guess at -- `load_manifest` refuses any other step name.
+Maceration, distilling and aging (the VAT fill) are supported, on Wildflower or Solstice (the
+recipe already defined in `whistlebird_migration.py`). A step is replayed only once the founder
+has actually performed it: distilling needs the two flask codes, aging needs the VAT number
+chosen at the fill, and each may carry its own date in `step_dates`. Bottling and labelling
+remain a deliberate follow-up -- `load_manifest` refuses any other step name.
 
 Source of truth for the manifest: `docs/whistlebird-recent-batches-source.json`.
 
@@ -22,7 +23,7 @@ so a full rebuild replays a given batch's maceration exactly once, and a later s
 script supports it) will complete on the *same* execution rather than creating a new one.
 
 The timestamp-correction pass dates these replayed operations to the manifest’s
-`started` date, including their audit events. Rebuilding later must not make a recorded
+`started` date (or the step's own `step_dates` entry), including their audit events. Rebuilding later must not make a recorded
 September maceration appear as new production in October.
 
     uv run python scripts/whistlebird_recent_batches.py apply \\
@@ -56,7 +57,14 @@ _MACERATION_RECIPE_BY_PRODUCT_LINE: dict[str, tuple[str, tuple[dict[str, Any], .
     "solstice": (wm.SOLSTICE_WORKFLOW, wm._SOLSTICE_MACERATION_INPUTS),
     "wildflower": (wm.WILDFLOWER_WORKFLOW, wm._WILDFLOWER_MACERATION_INPUTS),
 }
-_SUPPORTED_STEPS = ("maceration",)
+# product_line -> (tracked NGS, untracked water) for the VAT fill at aging
+_VAT_FILL_BY_PRODUCT_LINE: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {
+    "solstice": (wm._SOLSTICE_FILL_NGS_INPUT, wm._SOLSTICE_FILL_WATER_INPUT),
+    "wildflower": (wm._WILDFLOWER_FILL_NGS_INPUT, wm._WILDFLOWER_FILL_WATER_INPUT),
+}
+# In workflow order: a batch's completed steps are always a prefix of this.
+_SUPPORTED_STEPS = ("maceration", "distilling", "aging")
+_AGING_OUTPUT_NAME = "Aged Gin"
 
 
 class RecentBatchesError(RuntimeError):
@@ -71,6 +79,18 @@ class RecentBatch:
     started: date
     steps_completed: tuple[str, ...]
     note: str
+    step_dates: tuple[tuple[str, date], ...] = ()
+    flask_codes: tuple[str, ...] = ()
+    vat_number: int | None = None
+
+    def date_of(self, step: str) -> date:
+        """The day a step was really done: its own recorded date, else the day the batch started."""
+        return dict(self.step_dates).get(step, self.started)
+
+    @property
+    def batch_label(self) -> str:
+        """The VAT label once one has been chosen at the fill; the marker until then."""
+        return f"VAT{self.vat_number}" if self.vat_number is not None else self.marker
 
 
 def parse_recent_batches_manifest(data: Any) -> tuple[RecentBatch, ...]:
@@ -100,10 +120,28 @@ def parse_recent_batches_manifest(data: Any) -> tuple[RecentBatch, ...]:
         unsupported = [step for step in steps if step not in _SUPPORTED_STEPS]
         if unsupported:
             raise RecentBatchesError(f"{where}: step(s) {unsupported} are not supported yet (only {_SUPPORTED_STEPS})")
+        if steps != _SUPPORTED_STEPS[: len(steps)]:
+            raise RecentBatchesError(f"{where}: steps_completed must follow the workflow order {_SUPPORTED_STEPS}")
         try:
             started = date.fromisoformat(str(entry.get("started")))
         except (TypeError, ValueError):
             raise RecentBatchesError(f"{where}: started must be a YYYY-MM-DD date") from None
+        raw_dates = entry.get("step_dates") or {}
+        if not isinstance(raw_dates, dict) or set(raw_dates) - set(steps):
+            raise RecentBatchesError(f"{where}: step_dates may only date steps listed in steps_completed")
+        try:
+            step_dates = tuple((step, date.fromisoformat(str(raw_dates[step]))) for step in steps if step in raw_dates)
+        except (TypeError, ValueError):
+            raise RecentBatchesError(f"{where}: step_dates must be YYYY-MM-DD dates") from None
+        ordered = [started] + [dict(step_dates).get(step, started) for step in steps]
+        if ordered != sorted(ordered):
+            raise RecentBatchesError(f"{where}: step_dates must not run backwards from started")
+        flask_codes = tuple(str(code).strip() for code in entry.get("flask_codes") or ())
+        if "distilling" in steps and (len(flask_codes) != 2 or not all(flask_codes)):
+            raise RecentBatchesError(f"{where}: distilling needs the two flask_codes used")
+        vat_number = entry.get("vat_number")
+        if "aging" in steps and (not isinstance(vat_number, int) or isinstance(vat_number, bool) or vat_number <= 0):
+            raise RecentBatchesError(f"{where}: aging needs the vat_number chosen at the fill")
         batches.append(
             RecentBatch(
                 marker=marker,
@@ -112,6 +150,9 @@ def parse_recent_batches_manifest(data: Any) -> tuple[RecentBatch, ...]:
                 started=started,
                 steps_completed=steps,
                 note=str(entry.get("note") or ""),
+                step_dates=step_dates,
+                flask_codes=flask_codes,
+                vat_number=vat_number if "aging" in steps else None,
             )
         )
     return tuple(batches)
@@ -140,6 +181,50 @@ def _maceration_actual_inputs(store: replay.MarkerStore, batch: RecentBatch) -> 
     return actual_inputs
 
 
+def _previous_output(store: replay.MarkerStore, steps: list[dict[str, Any]], step_number: int, name: str):
+    """Consume, whole, what the step before this one produced."""
+    previous = next(s for s in steps if s["step_number"] == step_number - 1)
+    item = store.produced_item_for_step(previous["id"], name)
+    if item is None:
+        raise RecentBatchesError(f"step {step_number} has no {name!r} from the step before it to consume")
+    return {
+        "inventory_item_id": str(item["id"]),
+        "name": item["name"],
+        "quantity": str(item["quantity"]),
+        "unit": item["unit"],
+    }
+
+
+def _step_completion(
+    store: replay.MarkerStore, batch: RecentBatch, step: str, steps: list[dict[str, Any]], step_number: int
+) -> dict[str, Any]:
+    """What the founder would record in the app for this step."""
+    execution_data: dict[str, Any] = {"batch_ref": batch.marker, "batch_label": batch.marker}
+    if step == "maceration":
+        inputs = _maceration_actual_inputs(store, batch)
+        output = (wm._MACERATION_OUTPUT_NAME, wm._MACERATION_OUTPUT_QUANTITY, wm._MACERATION_OUTPUT_UNIT)
+    elif step == "distilling":
+        inputs = [_previous_output(store, steps, step_number, wm._MACERATION_OUTPUT_NAME)]
+        output = (wm._DISTILLATE_OUTPUT_NAME, wm._DISTILLATE_OUTPUT_QUANTITY, wm._DISTILLATE_OUTPUT_UNIT)
+        execution_data["Flask code"] = ", ".join(batch.flask_codes)
+    else:
+        # The VAT fill: the concentrate, plus the product line's usual NGS (real stock, FIFO) and water.
+        ngs, water = _VAT_FILL_BY_PRODUCT_LINE[batch.product_line]
+        ngs_l, water_l = Decimal(ngs["quantity"]), Decimal(water["quantity"])
+        inputs = [_previous_output(store, steps, step_number, wm._DISTILLATE_OUTPUT_NAME)]
+        inputs.extend(store.consume_available_raw_material(ngs["name"], ngs_l, ngs["unit"], as_of=batch.date_of(step)))
+        inputs.append({"name": water["name"], "quantity": str(water_l), "unit": water["unit"]})
+        # Same convention as the historical VATs: the VAT's volume is its NGS plus water fill.
+        output = (_AGING_OUTPUT_NAME, str(ngs_l + water_l), "L")
+        execution_data.update(batch_label=batch.batch_label, global_vat=batch.vat_number)
+        execution_data["VAT number"] = batch.vat_number
+    return {
+        "actual_inputs": inputs,
+        "actual_outputs": [{"name": output[0], "quantity": output[1], "unit": output[2]}],
+        "execution_data": execution_data,
+    }
+
+
 def replay_recent_batches(
     client: replay.ReplayClient, store: replay.MarkerStore, batches: tuple[RecentBatch, ...]
 ) -> dict[str, int]:
@@ -152,28 +237,19 @@ def replay_recent_batches(
             execution_id = response["id"]
             store.note_created_execution(batch.marker, execution_id)
             counts["executions_created"] += 1
-        if "maceration" not in batch.steps_completed:
-            continue
-        if store.step_already_completed(execution_id, 1):
-            counts["skipped"] += 1
-            continue
-        step_row = next(s for s in store.execution_steps(execution_id) if s["step_number"] == 1)
-        _workflow, recipe_inputs = _MACERATION_RECIPE_BY_PRODUCT_LINE[batch.product_line]
-        client.post(
-            f"/api/core/executions/{execution_id}/steps/{step_row['id']}/complete",
-            {
-                "actual_inputs": _maceration_actual_inputs(store, batch),
-                "actual_outputs": [
-                    {
-                        "name": wm._MACERATION_OUTPUT_NAME,
-                        "quantity": wm._MACERATION_OUTPUT_QUANTITY,
-                        "unit": wm._MACERATION_OUTPUT_UNIT,
-                    }
-                ],
-                "execution_data": {"batch_ref": batch.marker, "batch_label": batch.marker},
-            },
-        )
-        counts["steps_completed"] += 1
+        for step in batch.steps_completed:
+            step_number = _SUPPORTED_STEPS.index(step) + 1
+            if store.step_already_completed(execution_id, step_number):
+                counts["skipped"] += 1
+                continue
+            # Re-read each time: completing a step is what makes the next one's inputs exist.
+            steps = store.execution_steps(execution_id)
+            step_row = next(s for s in steps if s["step_number"] == step_number)
+            client.post(
+                f"/api/core/executions/{execution_id}/steps/{step_row['id']}/complete",
+                _step_completion(store, batch, step, steps, step_number),
+            )
+            counts["steps_completed"] += 1
     return counts
 
 
@@ -186,9 +262,8 @@ def expected_verification_contribution(
     markers. Their replay timestamps are corrected to the recorded start date, while
     genuinely unfinished steps remain unfinished.
 
-    Only maceration is supported today (`_SUPPORTED_STEPS`), so every batch's pending
-    count is "all steps except maceration" -- this falls out of the workflow's real step
-    list rather than assuming a fixed shape, so it keeps working once a later step is.
+    A batch's pending count is "every workflow step it has not listed as completed" --
+    this falls out of the workflow's real step list rather than assuming a fixed shape.
     """
     workflow_counts: dict[str, int] = {}
     incomplete_steps = 0
