@@ -9,22 +9,15 @@
   {# CSS moved to settings_spa.css and inventory-spa-header.css — both loaded globally in base_spa.html. #}
 {% endblock %}
 
-
 {% block content %}
-  <div class="max-content">
+  <div class="max-content workspace-overview settings-overview">
 
-    <section class="spa-form-section spa-page-hero" aria-label="Settings header">
-      <h1 class="page-title">Settings</h1>
-      <p class="page-subtitle" style="color: var(--text-secondary, #6b7280);">
-        Configure your account and preferences
-      </p>
-    </section>
-
-    {% if can('settings.manage') %}
-    <section class="card settings-card">
-      <div class="card-content"><a href="/core/sites" class="btn btn-secondary">Sites</a></div>
-    </section>
-    {% endif %}
+    <header class="workspace-header" aria-label="Settings header">
+      <div>
+        <h1 class="page-title">Settings</h1>
+        <p>Your account, security and organisation setup.</p>
+      </div>
+    </header>
 
     <!-- Long-session warning: security nudge when timeout > 24h and 2FA disabled; not an enforcement mechanism -->
     <div id="long-session-banner" class="long-session-banner" role="alert" aria-live="polite" style="display: none;">
@@ -36,9 +29,10 @@
         </div>
       </div>
     </div>
-          <section class="card settings-card">
-            <div class="card-header" style="padding-bottom: 12px;">
-              <h2 class="card-title" style="margin-bottom: 0;">Account Information</h2>
+    <div class="workspace-stack">
+          <section class="workspace-card settings-card">
+            <div class="card-header">
+              <h2 class="card-title">Account information</h2>
             </div>
             <div class="card-content">
           
@@ -103,72 +97,32 @@
           </div>
           </div>
 
-          <button id="settings-save-btn" class="btn btn-primary" onclick="saveSettings()">Save Changes</button>
+          <button id="settings-save-btn" class="workspace-button workspace-button--primary" onclick="saveSettings()">Save Changes</button>
             </div>
           </section>
 
-          <section class="card settings-card">
-            <div class="card-header" style="padding-bottom: 12px;">
-              <h2 class="card-title" style="margin-bottom: 0;">Notification Preferences</h2>
-            </div>
-            <div class="card-content">
-              <div class="settings-section-list">
-              <div class="toggle-row">
-                <div>
-                  <div class="toggle-label">Email Notifications</div>
-                  <div class="toggle-desc">Receive email alerts for important events</div>
-                </div>
-                <label class="switch">
-                  <input type="checkbox" checked>
-                  <span class="switch-slider"></span>
-                </label>
-              </div>
-              <div class="toggle-row">
-                <div>
-                  <div class="toggle-label">Compliance Alerts</div>
-                  <div class="toggle-desc">Get notified about compliance status changes</div>
-                </div>
-                <label class="switch">
-                  <input type="checkbox" checked>
-                  <span class="switch-slider"></span>
-                </label>
-              </div>
-              <div class="toggle-row">
-                <div>
-                  <div class="toggle-label">Weekly Reports</div>
-                  <div class="toggle-desc">Receive weekly summary reports</div>
-                </div>
-                <label class="switch">
-                  <input type="checkbox">
-                  <span class="switch-slider"></span>
-                </label>
-              </div>
-              </div>
-            </div>
-          </section>
+          {% if can('settings.manage') or can('users.manage') %}
+          <div class="workspace-columns">
+            {% if can('settings.manage') %}
+            <section class="workspace-card settings-card" aria-labelledby="settings-sites-title">
+              <h2 id="settings-sites-title">Manage sites</h2>
+              <p class="workspace-caption">Add the places you make and store product, and choose which one is your default.</p>
+              <a class="workspace-button" href="/core/sites">View sites</a>
+            </section>
+            {% endif %}
+            {% if can('users.manage') %}
+            <section class="workspace-card settings-card" aria-labelledby="settings-people-title">
+              <h2 id="settings-people-title">People and roles</h2>
+              <p class="workspace-caption">Invite people, choose what each person can see and do, and remove access.</p>
+              <a class="workspace-button" href="/core/people">Manage people</a>
+            </section>
+            {% endif %}
+          </div>
+          {% endif %}
 
-          <section class="card settings-card" aria-label="Appearance">
-            <div class="card-header" style="padding-bottom: 12px;">
-              <h2 class="card-title" style="margin-bottom: 0;">Appearance</h2>
-            </div>
-            <div class="card-content">
-              <div class="settings-section-list">
-                <div class="toggle-row">
-                  <div>
-                    <div class="toggle-label">Dark mode</div>
-                  </div>
-                  <label class="switch">
-                    <input type="checkbox" id="spa-theme-dark-toggle" name="spa-theme-dark" aria-label="Dark mode" />
-                    <span class="switch-slider"></span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="card settings-card">
-            <div class="card-header" style="padding-bottom: 12px;">
-              <h2 class="card-title" style="margin-bottom: 0;">Security</h2>
+          <section class="workspace-card settings-card">
+            <div class="card-header">
+              <h2 class="card-title">Security</h2>
             </div>
             <div class="card-content">
           <form id="password-reset-form" style="display: flex; flex-direction: column; gap: 1rem;">
@@ -208,14 +162,35 @@
             
             <div id="password-reset-error" class="text-error" style="display: none; padding: 0.75rem; border-radius: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);"></div>
             
-            <button type="submit" id="password-reset-btn" class="btn btn-primary">Update Password</button>
+            <button type="submit" id="password-reset-btn" class="workspace-button workspace-button--primary">Update Password</button>
           </form>
             </div>
           </section>
 
-          <section class="card settings-card">
-            <div class="card-header" style="padding-bottom: 12px;">
-              <h2 class="card-title" style="margin-bottom: 0;">Session Settings</h2>
+          <section class="workspace-card settings-card">
+            <div class="card-header">
+              <h2 class="card-title">Two-factor authentication</h2>
+            </div>
+            <div class="card-content">
+          <div id="2fa-required-banner" class="settings-2fa-required" role="alert" hidden>
+            <strong>Two-factor authentication is required for administrators.</strong>
+            <span id="2fa-required-banner-text">Set it up now to continue using the app.</span>
+          </div>
+          <div id="2fa-status-section" class="settings-2fa-block">
+            <p class="settings-2fa-status" id="2fa-status-text">
+              Status: <span id="2fa-status-value">Loading...</span>
+            </p>
+            <div id="2fa-action-buttons" class="settings-2fa-actions">
+              <button id="enable-2fa-btn" class="workspace-button workspace-button--primary" style="display: none;">Enable 2FA</button>
+              <button id="disable-2fa-btn" class="workspace-button workspace-button--primary" style="display: none;">Disable 2FA</button>
+            </div>
+          </div>
+            </div>
+          </section>
+
+          <section class="workspace-card settings-card">
+            <div class="card-header">
+              <h2 class="card-title">Session settings</h2>
             </div>
             <div class="card-content">
           <div class="form-group">
@@ -231,46 +206,73 @@
             <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.5rem;">
               Automatically log me out after <span id="session-timeout-display">—</span> of inactivity
             </div>
-            <button id="save-session-timeout-btn" class="btn btn-primary" style="margin-top: 1rem;">Save Session Timeout</button>
+            <button id="save-session-timeout-btn" class="workspace-button workspace-button--primary" style="margin-top: 1rem;">Save Session Timeout</button>
             <div id="session-timeout-message" style="margin-top: 0.5rem; display: none;"></div>
           </div>
             </div>
           </section>
 
-          {% if can('users.manage') %}
-          <section class="card settings-card">
-            <div class="card-header" style="padding-bottom: 12px;">
-              <h2 class="card-title" style="margin-bottom: 0;">People and roles</h2>
-            </div>
-            <div class="card-content">
-              <p style="color: var(--text-secondary); font-size: 14px; margin: 0 0 12px;">Invite people, choose what each person can see and do, and remove access.</p>
-              <a class="btn btn-primary" href="/core/people">Manage people</a>
-            </div>
-          </section>
-          {% endif %}
-
           {% include 'google_account_settings.html' %}
 
-          <section class="card settings-card">
-            <div class="card-header" style="padding-bottom: 12px;">
-              <h2 class="card-title" style="margin-bottom: 0;">Two-Factor Authentication</h2>
+          <section class="workspace-card settings-card">
+            <div class="card-header">
+              <h2 class="card-title">Notification preferences</h2>
             </div>
             <div class="card-content">
-          <div id="2fa-required-banner" class="settings-2fa-required" role="alert" hidden>
-            <strong>Two-factor authentication is required for administrators.</strong>
-            <span id="2fa-required-banner-text">Set it up now to continue using the app.</span>
-          </div>
-          <div id="2fa-status-section" class="settings-2fa-block">
-            <p class="settings-2fa-status" id="2fa-status-text">
-              Status: <span id="2fa-status-value">Loading...</span>
-            </p>
-            <div id="2fa-action-buttons" class="settings-2fa-actions">
-              <button id="enable-2fa-btn" class="btn btn-primary" style="display: none;">Enable 2FA</button>
-              <button id="disable-2fa-btn" class="btn btn-primary" style="display: none;">Disable 2FA</button>
-            </div>
-          </div>
+              <div class="settings-section-list">
+              <div class="toggle-row">
+                <div>
+                  <div class="toggle-label">Email Notifications</div>
+                  <div class="toggle-desc">Receive email alerts for important events</div>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              <div class="toggle-row">
+                <div>
+                  <div class="toggle-label">Compliance Alerts</div>
+                  <div class="toggle-desc">Get notified about compliance status changes</div>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked>
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              <div class="toggle-row">
+                <div>
+                  <div class="toggle-label">Weekly Reports</div>
+                  <div class="toggle-desc">Receive weekly summary reports</div>
+                </div>
+                <label class="switch">
+                  <input type="checkbox">
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+              </div>
             </div>
           </section>
+
+          <section class="workspace-card settings-card" aria-label="Appearance">
+            <div class="card-header">
+              <h2 class="card-title">Appearance</h2>
+            </div>
+            <div class="card-content">
+              <div class="settings-section-list">
+                <div class="toggle-row">
+                  <div>
+                    <div class="toggle-label">Dark mode</div>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="spa-theme-dark-toggle" name="spa-theme-dark" aria-label="Dark mode" />
+                    <span class="switch-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+
         </div>
   </div>
   

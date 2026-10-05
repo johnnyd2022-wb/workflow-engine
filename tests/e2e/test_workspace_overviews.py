@@ -331,3 +331,33 @@ def test_dashboard_groups_priorities_workspaces_and_signals_in_cards(browser, ap
         _capture(page, "dashboard-layout-dark", width)
     finally:
         context.close()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+def test_settings_groups_account_security_and_organisation_in_cards(browser, app_url, workspace_user, width):
+    context, page = _page(browser, app_url, workspace_user, width)
+    try:
+        page.goto("/core/settings")
+        expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
+        sites = page.get_by_role("region", name="Manage sites", exact=True)
+        people = page.get_by_role("region", name="People and roles", exact=True)
+        expect(sites.get_by_role("link", name="View sites", exact=True)).to_have_attribute("href", "/core/sites")
+        expect(people.get_by_role("link", name="Manage people", exact=True)).to_have_attribute("href", "/core/people")
+        side_by_side = sites.bounding_box()["y"] == people.bounding_box()["y"]
+        assert side_by_side == (width >= 1024)
+        headings = page.locator(".settings-overview .workspace-card h2").all_inner_texts()
+        expected = ["Account information", "Manage sites", "People and roles", "Security"]
+        expected += ["Two-factor authentication", "Session settings"]
+        assert [heading for heading in headings if heading in expected] == expected
+        assert headings[-2:] == ["Notification preferences", "Appearance"]
+        lefts = {round(card.bounding_box()["x"]) for card in page.locator(".settings-overview .workspace-card").all()}
+        assert len(lefts) == (2 if side_by_side else 1)
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "settings-layout", width)
+        page.evaluate("localStorage.setItem('spa-theme', 'dark')")
+        page.goto("/core/settings")
+        expect(sites).to_be_visible()
+        _capture(page, "settings-layout-dark", width)
+        page.evaluate("localStorage.removeItem('spa-theme')")
+    finally:
+        context.close()
