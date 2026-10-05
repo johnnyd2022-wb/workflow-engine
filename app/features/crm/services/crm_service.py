@@ -135,8 +135,11 @@ class CRMService:
             page_size=page_size,
             missing_contact=missing_contact,
         )
+        last_contact = self.contact_repo.last_contact_for_org(org_id, [c.id for c in contacts]) if contacts else {}
         return {
-            "customers": [_serialise_contact(c) for c in contacts],
+            "customers": [
+                {**_serialise_contact(c), **_serialise_last_contact(last_contact.get(c.id))} for c in contacts
+            ],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -152,8 +155,9 @@ class CRMService:
         notes = self.note_repo.list_for_contact(contact_id, org_id)
         tasks = self.task_repo.list_for_org(org_id, contact_id=contact_id)
         mappings = self.mapping_repo.list_for_org(org_id)
+        last_contact = self.contact_repo.last_contact_for_org(org_id, [contact.id])
         return {
-            "customer": _serialise_contact(contact),
+            "customer": {**_serialise_contact(contact), **_serialise_last_contact(last_contact.get(contact.id))},
             "recent_invoices": [_serialise_invoice(i, with_line_items=True, db=self.db) for i in invoices],
             "notes": [_serialise_note(n) for n in notes],
             "tasks": [_serialise_task(t, db=self.db) for t in tasks],
@@ -854,6 +858,37 @@ class CRMService:
     def churn_risk(self, org_id: UUID) -> list[dict]:
         return self.invoice_repo.churn_risk_data(org_id)
 
+    def customer_contact(self, org_id: UUID) -> dict:
+        """Each customer's last contact (latest sale or task), longest-silent first, with a summary."""
+        contacts = self.contact_repo.list_customers_for_org(org_id)
+        last_contact = self.contact_repo.last_contact_for_org(org_id)
+        customers = [
+            {"contact_id": str(c.id), "contact_name": c.name, **_serialise_last_contact(last_contact.get(c.id))}
+            for c in contacts
+        ]
+        # Never contacted first, then the longest gap; names break ties.
+        customers.sort(
+            key=lambda row: (
+                row["days_since_contact"] is not None,
+                -(row["days_since_contact"] or 0),
+                row["contact_name"].casefold(),
+            )
+        )
+        days = [row["days_since_contact"] for row in customers]
+        return {
+            "customers": customers,
+            "recent_days": RECENT_CONTACT_DAYS,
+            "stale_days": STALE_CONTACT_DAYS,
+            "summary": {
+                "total": len(customers),
+                "recent": sum(1 for d in days if d is not None and d <= RECENT_CONTACT_DAYS),
+                "cooling": sum(1 for d in days if d is not None and RECENT_CONTACT_DAYS < d <= STALE_CONTACT_DAYS),
+                "stale": sum(1 for d in days if d is not None and d > STALE_CONTACT_DAYS),
+                "never": sum(1 for d in days if d is None),
+            },
+            "contact_completeness": self.contact_repo.contact_completeness_for_org(org_id),
+        }
+
     def _top_mapped_products(
         self,
         org_id: UUID,
@@ -1237,6 +1272,21 @@ def _prepare_mapping_data(data: dict) -> dict:
         "xero_description_pattern": xero_pattern,
         "match_type": match_type,
         "notes": str(notes).strip() if notes else None,
+    }
+
+
+# Contact within this many days is "recent"; beyond the second, a customer has gone quiet.
+RECENT_CONTACT_DAYS = 30
+STALE_CONTACT_DAYS = 90
+
+
+def _serialise_last_contact(entry: dict | None) -> dict:
+    if not entry:
+        return {"last_contact_date": None, "last_contact_source": None, "days_since_contact": None}
+    return {
+        "last_contact_date": entry["date"].isoformat(),
+        "last_contact_source": entry["source"],
+        "days_since_contact": (date.today() - entry["date"]).days,
     }
 
 

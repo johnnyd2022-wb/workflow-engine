@@ -117,6 +117,61 @@ class XeroContactRepository:
     def count_for_org(self, org_id: UUID) -> int:
         return self.db.query(XeroContact).filter(XeroContact.org_id == org_id).count()
 
+    def last_contact_for_org(self, org_id: UUID, contact_ids: list[UUID] | None = None) -> dict[UUID, dict]:
+        """The most recent contact with each customer: their latest sale or the latest task against them.
+
+        A sale is an authorised or paid sales invoice, dated by its invoice date. A task counts on the
+        day it was completed, or the day it was raised while it is still open; cancelled tasks and
+        dates in the future are not contact. Returns ``{contact_id: {"date", "source"}}`` for the
+        customers that have any.
+        """
+        from datetime import date
+
+        from app.features.crm.models.crm_task import CRMTask
+        from app.features.crm.models.xero_invoice import XeroInvoice
+
+        today = date.today()
+        sales = self.db.query(XeroInvoice.contact_id, func.max(XeroInvoice.date)).filter(
+            XeroInvoice.org_id == org_id,
+            XeroInvoice.contact_id.isnot(None),
+            XeroInvoice.invoice_type == "ACCREC",
+            XeroInvoice.status.in_(["AUTHORISED", "PAID"]),
+            XeroInvoice.date <= today,
+        )
+        task_day = func.date(func.coalesce(CRMTask.completed_at, CRMTask.created_at))
+        tasks = self.db.query(CRMTask.contact_id, func.max(task_day)).filter(
+            CRMTask.org_id == org_id,
+            CRMTask.contact_id.isnot(None),
+            CRMTask.status != "cancelled",
+            task_day <= today,
+        )
+        if contact_ids is not None:
+            sales = sales.filter(XeroInvoice.contact_id.in_(contact_ids))
+            tasks = tasks.filter(CRMTask.contact_id.in_(contact_ids))
+
+        latest: dict[UUID, dict] = {}
+        for source, rows in (
+            ("sale", sales.group_by(XeroInvoice.contact_id).all()),
+            ("task", tasks.group_by(CRMTask.contact_id).all()),
+        ):
+            for contact_id, day in rows:
+                if day is not None and (contact_id not in latest or day > latest[contact_id]["date"]):
+                    latest[contact_id] = {"date": day, "source": source}
+        return latest
+
+    def list_customers_for_org(self, org_id: UUID) -> list[XeroContact]:
+        """Every active customer contact, by name."""
+        return (
+            self.db.query(XeroContact)
+            .filter(
+                XeroContact.org_id == org_id,
+                XeroContact.is_customer.is_(True),
+                func.coalesce(XeroContact.contact_status, "ACTIVE") != "ARCHIVED",
+            )
+            .order_by(XeroContact.name.asc())
+            .all()
+        )
+
     def contact_completeness_for_org(self, org_id: UUID) -> dict[str, int]:
         has_email = func.nullif(func.trim(XeroContact.email_address), "").isnot(None)
         has_phone = func.nullif(func.trim(XeroContact.phone_number), "").isnot(None)

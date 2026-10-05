@@ -126,6 +126,7 @@
                 <th>Email</th>
                 <th>Phone</th>
                 <th>Status</th>
+                <th>Last contact</th>
                 <th class="sortable" :class="sortBy==='synced' ? 'sort-active' : ''" @click="setSort('synced')">
                   Last Synced <span class="sort-arrow" x-text="sortBy==='synced' ? (sortDir==='asc' ? '↑' : '↓') : '↕'"></span>
                 </th>
@@ -145,6 +146,7 @@
                   <td>
                     <span class="crm-badge" :class="statusBadgeClass(c.contact_status)" x-text="c.contact_status || '—'">—</span>
                   </td>
+                  <td class="col-secondary" x-text="c.last_contact_date ? `${formatDate(c.last_contact_date)} · ${c.last_contact_source}` : 'None recorded'">—</td>
                   <td class="col-secondary" x-text="formatDate(c.last_synced_at)">—</td>
                 </tr>
               </template>
