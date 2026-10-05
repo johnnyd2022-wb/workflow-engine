@@ -754,3 +754,41 @@ pepper, 0.746L NGS from lot GNS-2026-06-03-16 -- all drawn from real stock; the 
 `IN_PROGRESS`, Distilling now `READY`). Extending this to later steps (distilling, aging,
 bottling) as the founder actually performs them is a deliberate follow-up, not something
 this script should guess at -- `load_recent_batches_manifest` refuses any other step name.
+
+## 29 September entries, resume on a live tenant, and synced-sale dates, 2026-10-05
+
+Three founder-confirmed entries dated 2026-09-29, none yet in the Production!! sheet pull:
+
+- **Bottled VAT57 (WF), 78 bottles** -- `docs/whistlebird-production-sheet-source.json`, VAT57's
+  bottling step and `bottlings`. Labelling stays pending.
+- **Distilled Solstice (VAT60)** and **Filled VAT60 with the usual Solstice VAT measurements** --
+  the Solstice maceration put on 2026-09-22 (`docs/whistlebird-recent-batches-source.json`),
+  carried through distilling and aging. Flask codes WBSS29/WBSS30 continue the Solstice
+  sequence after VAT54; the fill is the standard 17.776L NGS (real stock, FIFO) + 25.064L water,
+  recorded as a 42.84L VAT like earlier Solstice VATs. Bottling is still to come.
+
+`scripts/whistlebird_recent_batches.py` now replays distilling and aging as well as maceration.
+A batch lists its completed steps in workflow order; `step_dates` dates a later step to the day
+it was done (default: `started`), distilling needs `flask_codes`, aging needs `vat_number`. The
+timestamp pass dates each step from the same source. Bottling/labelling of a recent batch remain
+a follow-up; when VAT60 is bottled, decide then whether it moves to the production sheet.
+
+**Resuming on a tenant that is already live.** `--resume` used to stop at the first new Core
+step: a rebuilt tenant carries the NP3 manifest's `np3_execution_evidence_mode: required`
+profile, and the app refuses a step with no uploaded file (409 `compliance_requirement_not_met`).
+`run_replay` now lifts that requirement for the Core replay only and restores the exact settings
+afterwards, including when a step is rejected. Applied this way to the existing tenant (which
+holds a Xero connection and synced sales, so no reset): 575 events skipped, 1 issued, 2
+recent-batch steps completed, verification exact.
+
+**Synced sales are dated to their invoices.** Reconnecting Xero after a rebuild draws stock for
+every past sale in one sync, so the Dashboard showed ~500 stock actions on the day of the
+rebuild. The timestamp pass now dates each `sales_fifo_consumption` event, and its allocation
+row, to the invoice date (a pre-sale: just after its batch was made; a future-dated invoice:
+left alone). Reversals and the `crm_xero.connected` / `sync_completed` events keep their real
+time. This supersedes the earlier "sync activity keeps its actual timestamps" note for sales
+only. Because the sync happens after the rebuild, run it again once Xero is reconnected:
+
+    uv run python scripts/whistlebird_replay_correct_timestamps.py --sales-only --target-url postgresql://...
+
+The live API is unchanged and still records request time.
