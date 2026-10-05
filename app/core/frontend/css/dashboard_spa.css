@@ -3,11 +3,6 @@
 body.dashboard-page #page-content.page-content {
   padding: 0 !important;
   min-height: calc(100vh - var(--spa-mobile-topbar-height, 66px));
-  background: #edf3f8;
-}
-
-body.dashboard-page .app-layout .main-content {
-  background: #edf3f8;
 }
 
 body.dashboard-page #page-content .workflow-dashboard {
@@ -29,23 +24,9 @@ body.dashboard-page #page-content .workflow-dashboard {
   --dash-radius: 18px;
   --dash-shadow: 0 18px 40px rgba(17, 42, 71, 0.08);
   color: var(--dash-text);
-  background:
-    radial-gradient(circle at 10% 6%, rgba(25, 107, 204, 0.09), transparent 38%),
-    radial-gradient(circle at 93% 0%, rgba(0, 127, 109, 0.07), transparent 35%),
-    linear-gradient(170deg, var(--dash-bg-0) 0%, var(--dash-bg-1) 48%, var(--dash-bg-2) 100%);
   box-sizing: border-box;
   width: 100%;
   min-height: calc(100vh - var(--spa-mobile-topbar-height, 66px));
-  padding: clamp(14px, 2.2vw, 30px);
-  font-family: "Manrope", "Roboto", sans-serif;
-}
-
-html[data-spa-theme="dark"] body.dashboard-page #page-content.page-content {
-  background: #081421;
-}
-
-html[data-spa-theme="dark"] body.dashboard-page .app-layout .main-content {
-  background: #081421;
 }
 
 html[data-spa-theme="dark"] #page-content .workflow-dashboard.dashboard-v3 {
@@ -62,12 +43,6 @@ html[data-spa-theme="dark"] #page-content .workflow-dashboard.dashboard-v3 {
   --dash-alert: #f16d6d;
 }
 
-.dashboard-v3 .dashboard-shell {
-  max-width: 1280px;
-  margin: 0 auto;
-  display: grid;
-  gap: 14px;
-}
 
 .dashboard-v3 .dash-page-hero {
   margin-bottom: 2px;
@@ -648,10 +623,6 @@ html[data-spa-theme="dark"] .dashboard-v3 .dash-stat-row {
 }
 
 @media (max-width: 900px) {
-  .dashboard-v3 {
-    padding: 12px;
-  }
-
   .dashboard-v3 .dash-grid {
     grid-template-columns: 1fr;
   }

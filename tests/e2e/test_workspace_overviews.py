@@ -297,3 +297,37 @@ def test_sales_overview_groups_figures_and_tools_in_cards(browser, app_url, work
         _capture(page, "sales-layout", width)
     finally:
         context.close()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440])
+def test_dashboard_groups_priorities_workspaces_and_signals_in_cards(browser, app_url, workspace_user, width):
+    context, page = _page(browser, app_url, workspace_user, width)
+    try:
+        page.goto("/core/dashboard")
+        expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+        names = ["Needs attention", "Today's planned production", "Workspaces", "Business signals"]
+        names += ["Production flow this week", "Logged events"]
+        regions = [page.get_by_role("region", name=name, exact=True) for name in names]
+        boxes = [region.bounding_box() for region in regions]
+        assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
+        full = [box for name, box in zip(names, boxes) if name != "Production flow this week"]
+        assert len({round(box["width"]) for box in full}) == 1, "every block spans the content column"
+        for name, tiles in [("Workspaces", "a, article"), ("Business signals", "article")]:
+            region = page.get_by_role("region", name=name, exact=True)
+            outer = region.bounding_box()
+            visible = [tile.bounding_box() for tile in region.locator(tiles).all() if tile.is_visible()]
+            assert len(visible) >= 3
+            for box in visible:
+                assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
+        flow = page.get_by_role("region", name="Production flow this week", exact=True)
+        expect(flow.locator("[data-ops-active]")).to_have_text("1")
+        for hidden in page.locator(".dash-stat-row[hidden], .dash-kpi-card[hidden]").all():
+            expect(hidden).not_to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+        _capture(page, "dashboard-layout", width)
+        page.evaluate("localStorage.setItem('spa-theme', 'dark')")
+        page.goto("/core/dashboard")
+        expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+        _capture(page, "dashboard-layout-dark", width)
+    finally:
+        context.close()
