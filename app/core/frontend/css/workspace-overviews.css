@@ -283,3 +283,24 @@ html[data-spa-theme="dark"] #page-content .compliance-overview .compliant-framew
   #page-content .dashboard-overview .dash-kpi-card { padding: 16px; }
   #page-content .workspace-columns { gap: 20px; }
 }
+
+/* Settings: one card per group of settings, on the shared card and buttons. */
+#page-content .settings-overview { padding-bottom: 40px; }
+#page-content .settings-overview .settings-card { margin: 0; }
+#page-content .settings-overview .card-header,
+#page-content .settings-overview .card-content { padding: 0; border: 0; }
+#page-content .settings-overview .card-content { margin-top: 12px; }
+#page-content .settings-overview .settings-card > .workspace-button { margin-top: 18px; }
+#page-content .settings-overview .settings-card .workspace-button { align-self: flex-start; }
+#page-content .settings-overview .settings-card form { display: grid; gap: 14px; justify-items: start; }
+#page-content .settings-overview .settings-card form .form-group,
+#page-content .settings-overview .settings-card form .form-label { width: 100%; }
+#page-content .settings-overview .long-session-banner { margin-bottom: 24px; border: 1px solid hsl(38 92% 50% / 35%); border-radius: 12px; }
+#page-content .settings-overview .settings-2fa-actions { align-items: flex-start; }
+@media (max-width: 767px) {
+  #page-content .settings-overview .settings-card .workspace-button { width: 100%; box-sizing: border-box; }
+}
+@media (min-width: 641px) {
+  #page-content .settings-overview #session-timeout-input { width: 100px !important; }
+  #page-content .settings-overview #session-timeout-unit { width: 130px !important; }
+}
