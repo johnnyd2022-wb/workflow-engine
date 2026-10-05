@@ -1,36 +1,30 @@
-.production-board { max-width: 1400px; margin: 0 auto; padding: 1.25rem; overflow-wrap: anywhere; }
-.production-board header p { max-width: 75ch; }
-.production-board [role="alert"] { color: #a12525; }
-.board-toolbar, .board-settings { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin: 1rem 0; }
-.board-toolbar label, .board-settings > label { display: grid; flex: 1 1 160px; gap: .4rem; min-width: 0; }
-.board-capacity form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin: .75rem 0; }
-.board-capacity form label { display: grid; flex: 1 1 160px; gap: .4rem; min-width: 0; }
-.board-capacity [data-capacity-results] { max-width: 75ch; }
-.production-board input, .production-board select { width: 100%; box-sizing: border-box; min-width: 0; padding: .55rem; }
-.production-board button { padding: .6rem .8rem; white-space: normal; }
-.board-settings fieldset, .board-settings > p { flex-basis: 100%; min-width: 0; }
-.board-step { display: flex; flex-wrap: wrap; gap: .7rem; margin: .7rem 0; }
-.board-step p { flex: 1 1 160px; }
-.board-step label { display: grid; flex: 1 1 130px; min-width: 0; gap: .4rem; }
-.board-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .5rem; }
-.board-day { min-width: 0; border: 1px solid #d9dfdf; border-radius: .5rem; padding: .5rem; }
-.board-day h3 { font-size: .95rem; margin: .25rem 0 .6rem; }
-.board-batch { padding: .65rem; margin-bottom: .5rem; background: var(--surface-secondary, #f5f7f7); border: 1px solid #d9dfdf; border-radius: .4rem; }
-.board-batch h4 { margin: 0; font-size: .95rem; }
-.board-batch p, .board-batch ul { font-size: .85rem; margin: .5rem 0; }
-.board-batch ul { padding-left: 1.1rem; }
-.board-batch form { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .6rem; }
-.board-batch form label { display: grid; width: 100%; gap: .3rem; font-size: .85rem; }
-.board-batch button { width: 100%; }
-.production-board details { border: 1px solid #d9dfdf; border-radius: .5rem; padding: .75rem; margin: .75rem 0; }
-.production-board summary { cursor: pointer; }
-@media (max-width: 1100px) { .board-days { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 650px) { .production-board { padding: .8rem; } .board-days { grid-template-columns: minmax(0, 1fr); } .board-toolbar button { flex: 1 1 100px; } }
-
-.board-capacity .board-calendar-days { flex: 1 1 100%; min-width: 0; }
-.board-capacity .board-calendar-days label { display: inline-flex; align-items: center; gap: .4rem; margin: .3rem .75rem .3rem 0; }
-.board-capacity .board-calendar-days input { width: auto; }
-.board-capacity textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+/* Layout comes from the shared workspace cards and forms (workspace-overviews.css); only the
+   board's own pieces are styled here. */
+#page-content .production-board .board-settings-disclosure { margin-top: 18px; }
+#page-content .production-board .workspace-disclosure__body { justify-items: stretch; }
+#page-content .production-board .board-capacity__results { margin-top: 14px; font-size: 14px; color: var(--ui-text-muted, #64748b); }
+#page-content .production-board .board-capacity__results:empty,
+#page-content .production-board .board-capacity__groups:empty { display: none; }
+.board-step { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 12px 0; }
+.board-step p { flex: 1 1 160px; margin: 0; font-weight: 600; }
+.board-step label { flex: 1 1 130px; }
+.board-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.board-day { min-width: 0; padding: 12px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 8px; background: var(--ui-surface-subtle, #f8fafc); }
+#page-content .board-day h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ui-text-muted, #64748b); }
+.board-batch { padding: 12px; margin-bottom: 10px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 8px; background: var(--ui-surface, #fff); }
+#page-content .board-batch h4 { margin: 0; font-size: 14px; font-weight: 600; color: var(--ui-text, #172033); }
+.board-batch p, .board-batch ul { margin: 8px 0; font-size: 13px; color: var(--ui-text-muted, #64748b); }
+.board-batch ul { padding-left: 18px; }
+.board-batch form { display: grid; gap: 8px; margin-top: 10px; }
+.board-batch form label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+#page-content .board-batch input,
+#page-content .board-batch select { width: 100%; box-sizing: border-box; min-height: 40px; padding: 8px 10px; border: 1px solid var(--ui-border, #dce4e9); border-radius: 8px; background: var(--ui-surface, #fff); color: var(--ui-text, #172033); font: inherit; font-size: 14px; }
+#page-content .board-batch button { width: 100%; min-height: 40px; padding: 8px 12px; border: 1px solid var(--ui-border, #dce4e9); border-radius: 8px; background: var(--ui-surface, #fff); color: var(--ui-accent-strong, #115e59); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.board-capacity .board-calendar-days label { display: inline-flex; align-items: center; gap: 6px; margin: 4px 12px 4px 0; font-weight: 400; }
+.board-capacity .board-calendar-days input { width: auto; min-height: 0; }
 .board-drag-handle { cursor: grab; }
 .board-drag-handle:active { cursor: grabbing; }
-.board-day.board-drop-target { outline: 3px solid #246c59; outline-offset: -3px; background: #edf8f2; }
+.board-day.board-drop-target { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: -3px; background: var(--ui-accent-soft, #f0fdfa); }
+/* A week does not fit a laptop or a phone: three days across, then one, so every control stays on screen. */
+@media (max-width: 1100px) { .board-days { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .board-days { grid-template-columns: minmax(0, 1fr); } }

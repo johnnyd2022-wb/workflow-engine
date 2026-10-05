@@ -3,16 +3,19 @@
 {% block body_class %}operational-cases-page{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="/core/cases/static/cases.css">{% endblock %}
 {% block content %}
-<main class="oc-shell" data-oc-queue-root>
-  <header class="oc-header">
+<main class="oc-queue workspace-overview workspace-page" data-oc-queue-root>
+  <header class="workspace-header">
     <div>
-      <p class="oc-eyebrow">CASES</p>
-      <h1>Shared operational work</h1>
-      <p>Give an exception a durable owner, due date and next action, through to evidence-backed closure.</p>
+      <h1>Cases</h1>
+      <p>Give an exception an owner, a due date and a next action, through to evidence-backed closure.</p>
     </div>
+    <div class="workspace-header__actions"><a class="workspace-button workspace-button--primary" href="/core/cases/new">New case</a></div>
   </header>
 
-  <div class="oc-filter-tabs" role="tablist" aria-label="Case queue filters" data-oc-filter-tabs>
+  <div class="workspace-stack">
+  <section class="workspace-card" aria-labelledby="cases-queue-title">
+  <h2 id="cases-queue-title">Case queue</h2>
+  <div class="oc-filter-tabs workspace-chips" role="tablist" aria-label="Case queue filters" data-oc-filter-tabs>
     <button type="button" role="tab" data-oc-filter="needs_attention" aria-selected="true">Needs attention</button>
     <button type="button" role="tab" data-oc-filter="me" aria-selected="false">My cases</button>
     <button type="button" role="tab" data-oc-filter="needs_owner" aria-selected="false">Needs owner</button>
@@ -25,11 +28,13 @@
   <p class="oc-status oc-status--stale" data-oc-stale hidden>Showing the last successful result — <button type="button" data-oc-retry>Retry</button></p>
 
   <ul class="oc-queue-list" data-oc-list aria-live="polite"></ul>
-  <p class="oc-empty" data-oc-empty hidden></p>
+  <p class="oc-empty workspace-empty" data-oc-empty hidden></p>
   <div class="oc-loading" data-oc-loading hidden>Loading cases…</div>
 
   <div class="oc-pagination" data-oc-pagination hidden>
-    <button type="button" data-oc-load-more>Load more</button>
+    <button type="button" class="workspace-button" data-oc-load-more>Load more</button>
+  </div>
+  </section>
   </div>
 </main>
 {% endblock %}

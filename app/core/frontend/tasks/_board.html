@@ -1,16 +1,14 @@
-<div class="core-tasks" x-data="coreTasksBoard()" x-init="init()">
-  <section class="core-tasks__hero">
-    <div class="core-tasks__heading">
-      <div><h2>Tasks</h2><p>Plan operational work alongside Sales follow-ups.</p></div>
-      <div class="core-tasks__heading-actions">
-        <a href="/core/tasks/configuration" class="btn btn-secondary">Task settings</a>
+<div class="core-tasks workspace-stack" x-data="coreTasksBoard()" x-init="init()">
+  <section class="core-tasks__calendar-card workspace-card" aria-labelledby="core-tasks-upcoming-title">
+    <div class="workspace-card__header">
+      <h2 id="core-tasks-upcoming-title">Upcoming</h2>
+      <div class="workspace-header__actions">
+        <a href="/core/tasks/configuration" class="workspace-button">Task settings</a>
+        <button type="button" class="workspace-button workspace-button--primary core-tasks__new-task" @click="openCreate()">New task</button>
       </div>
     </div>
-  </section>
-
-  <section class="core-tasks__calendar-card">
     <div class="core-tasks__calendar-heading">
-      <p>Upcoming — click a date to filter</p>
+      <p class="workspace-caption">Select a date to filter the board.</p>
       <span x-text="calVisibleMonthLabel"></span>
     </div>
     <div x-ref="calStrip" class="core-tasks__cal-strip"
@@ -29,22 +27,21 @@
       <button type="button" class="btn btn-secondary" @click="calSelectedDate = null">Clear</button>
     </div>
 
-    <div class="core-tasks__calendar-actions">
-      <div class="core-tasks__search-wrap">
-        <input type="search" class="form-input" placeholder="Search tasks" x-model="searchQuery" autocomplete="off">
-      </div>
-      <button type="button" class="btn btn-primary core-tasks__new-task" @click="openCreate()">New task</button>
-    </div>
   </section>
 
-  <section class="core-tasks__filters">
-      <select class="form-select" x-model="sourceFilter" aria-label="Task source"><option value="all">All task sources</option><option value="core">System tasks</option><option value="crm">Sales tasks</option></select>
-      <select class="form-select" x-model="assigneeFilter" aria-label="Assignee"><option value="">All assignees</option><template x-for="user in users" :key="user.id"><option :value="user.id" x-text="user.display_name || user.email"></option></template></select>
+  <section class="workspace-card" aria-labelledby="core-tasks-board-title">
+    <h2 id="core-tasks-board-title">Task board</h2>
+    <div class="core-tasks__filters workspace-form">
+      <input type="search" class="workspace-input" placeholder="Search tasks" aria-label="Search tasks" x-model="searchQuery" autocomplete="off">
+      <select x-model="sourceFilter" aria-label="Task source"><option value="all">All task sources</option><option value="core">System tasks</option><option value="crm">Sales tasks</option></select>
+      <select x-model="assigneeFilter" aria-label="Assignee"><option value="">All assignees</option><template x-for="user in users" :key="user.id"><option :value="user.id" x-text="user.display_name || user.email"></option></template></select>
       <label class="core-tasks__toggle"><input type="checkbox" x-model="onlyAssigned"> Assigned only</label>
-      <button type="button" class="btn btn-secondary" @click="openLaneManager()">Manage lanes</button>
-      <button type="button" class="btn btn-secondary" @click="openLaneModal()">Add lane</button>
-      <button type="button" class="btn btn-secondary" @click="toggleArchive()" :disabled="archiveLoading" x-text="showArchive ? 'Back to active tasks' : 'Load archive'"></button>
-  </section>
+      <div class="workspace-form__actions workspace-form__wide">
+        <button type="button" class="workspace-button" @click="openLaneManager()">Manage lanes</button>
+        <button type="button" class="workspace-button" @click="openLaneModal()">Add lane</button>
+        <button type="button" class="workspace-button" @click="toggleArchive()" :disabled="archiveLoading" x-text="showArchive ? 'Back to active tasks' : 'Load archive'"></button>
+      </div>
+    </div>
 
   <p class="core-tasks__error" x-show="error" x-text="error" x-cloak></p>
   <div class="core-tasks__loading" x-show="loading">Loading tasks…</div>
@@ -72,6 +69,7 @@
         </div>
       </div>
     </template>
+  </section>
   </section>
 
   <div class="core-tasks__modal" x-show="showDrawer" x-cloak @click.self="closeDrawer()"><form class="core-tasks__dialog" @submit.prevent="saveTask()"><header><h3 x-text="editingTask ? 'Edit task' : 'New task'"></h3><button type="button" @click="closeDrawer()">×</button></header><label>Title<input class="form-input" required maxlength="500" x-model="form.title"></label><label>Notes (optional)<textarea class="form-input" rows="4" maxlength="20000" x-model="form.description"></textarea></label><div class="core-tasks__dialog-grid"><label>Due date<input class="form-input" type="date" x-model="form.due_date"></label><label>Priority<select class="form-select" x-model="form.priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label></div><div class="core-tasks__dialog-grid"><label>Assign to<select class="form-select" x-model="form.assigned_to_user_id"><option value="">Unassigned</option><template x-for="user in activeUsers" :key="user.id"><option :value="user.id" x-text="user.display_name || user.email"></option></template></select></label><label>Status<select class="form-select" x-model="form.status"><option value="pending">To do</option><option value="in_progress">In progress</option><option value="completed">Done</option><option value="cancelled">Cancelled</option></select></label></div><p class="core-tasks__readonly" x-show="editingTask && !editingTask.editable">Sales tasks are managed from Sales so their customer context is retained.</p><footer><button type="button" class="btn btn-secondary" x-show="editingTask && editingTask.editable" @click="deleteTask()">Delete</button><span></span><button type="button" class="btn btn-secondary" @click="closeDrawer()">Cancel</button><button type="button" class="btn btn-primary" x-show="editingTask && !editingTask.editable" @click="openCrmTask()">Open in Sales</button><button class="btn btn-primary" x-show="!editingTask || editingTask.editable" :disabled="saving" x-text="saving ? 'Saving…' : 'Save task'"></button></footer></form></div>

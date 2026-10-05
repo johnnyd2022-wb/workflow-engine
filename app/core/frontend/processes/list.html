@@ -7,35 +7,39 @@
 {% endblock %}
 
 {% block content %}
-  <div class="max-content">
-
-    <section class="card spa-primary-flat processes-list-hero spa-form-section spa-page-hero">
-      <div class="card-header processes-list-hero__header">
-        <h1 class="card-title">Product workflows</h1>
-        <a href="/core/flows/create/start" class="btn btn-primary processes-list-create">Create product workflow</a>
+  <div class="max-content workspace-overview workspace-page processes-list-page">
+    <header class="workspace-header">
+      <div><h1>Workflows</h1><p>The product workflows you run, and the batches made on each.</p></div>
+      <div class="workspace-header__actions">
+        <a href="/core/flows/create/start" class="workspace-button workspace-button--primary processes-list-create">Create product workflow</a>
       </div>
-      <div class="card-content">
-        <div class="processes-list-toolbar">
+    </header>
+    <div class="workspace-stack">
+      <section class="workspace-card processes-list-hero" aria-labelledby="processes-list-title">
+        <div class="workspace-card__header">
+          <h2 id="processes-list-title">Product workflows</h2>
+          <p id="processes-list-count" class="processes-list-count workspace-caption" role="status" aria-live="polite">Loading product workflows…</p>
+        </div>
+        <div class="workspace-form processes-list-toolbar">
           <label class="processes-list-search" for="processes-list-search">
             <span>Find a workflow</span>
             <input
               id="processes-list-search"
-              class="spa-inp"
               type="search"
               placeholder="Search by workflow name"
               autocomplete="off"
               aria-controls="processes-list-stack"
             >
           </label>
-          <p id="processes-list-count" class="processes-list-count" role="status" aria-live="polite">Loading product workflows…</p>
         </div>
-        <div class="spa-card-form" style="gap: 0;">
-          <div id="processes-list-loading" class="processes-list-loading">Loading product workflows…</div>
-          <div id="processes-list-empty" class="processes-list-empty" style="display: none;"></div>
+        <div class="processes-list-results">
+          <div id="processes-list-loading" class="processes-list-loading workspace-empty">Loading product workflows…</div>
+          <div id="processes-list-empty" class="processes-list-empty workspace-empty" style="display: none;"></div>
           <div id="processes-list-stack" class="processes-list-stack" style="display: none;"></div>
         </div>
-      </div>
-    </section>
+      </section>
+      {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
+    </div>
   </div>
   <script>
     (function () {
@@ -334,3 +338,4 @@
 {% block scripts %}
   {{ super() }}
 {% endblock %}
+{% block workspace_links %}{% endblock %}

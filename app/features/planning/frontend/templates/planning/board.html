@@ -4,61 +4,84 @@
 <link rel="stylesheet" href="{{ url_for('planning.static', filename='board.css') }}">
 {% endblock %}
 {% block content %}
-<main class="production-board" data-board-root data-can-record="{{ 'true' if can('production.record') else 'false' }}">
-  <nav><a href="{{ url_for('planning.planner_page') }}">Production demand</a></nav>
-  <header><h1>Production board</h1><p>Proposed work dates. A delivery estimate is available once materials, capacity and site checks are complete.</p></header>
-  <p role="alert" data-board-error hidden></p>
-  <p role="status" data-board-notice></p>
-  <form class="board-toolbar" data-board-range hx-boost="false">
-    <label>View<select name="view"><option value="week">Week</option><option value="month">Month</option><option value="day">Day</option></select></label>
-    <label>Date<input type="date" name="date" required></label>
-    <button type="submit">Show board</button>
-    <button type="button" data-board-today>Today</button>
-  </form>
-  {% if can('production.record') %}
-  <details data-workflow-settings>
-    <summary>Workflow batch sizes and timings</summary>
-    <form data-setting-form class="board-settings" hx-boost="false">
-      <label>Product output<select name="output" required data-workflow-output></select></label>
-      <label>Usual batch quantity<input name="batch_quantity" type="number" min="0.0001" step="0.0001" required></label>
-      <p data-setting-help></p>
-      <fieldset data-step-timings><legend>Step durations and waiting time (minutes)</legend></fieldset>
-      <button type="submit">Save planning settings</button>
-    </form>
-  </details>
-  <form data-plan-form class="board-toolbar" hx-boost="false">
-    <label>Production demand<select name="demand" required data-plan-demand></select></label>
-    <label>Site<select name="site" data-plan-site><option value="">Main site</option></select></label>
-    <button type="submit">Plan batches</button>
-    <button type="button" data-check-materials>Check materials</button>
-  </form>
-  {% endif %}
-  <section class="board-capacity" aria-labelledby="capacity-title">
-    <h2 id="capacity-title">Rough site capacity</h2>
-    <p>Observed minutes by resource group and day. Overloads suggest a lower-priority batch to move; no resource is reserved and no delivery date is promised.</p>
-    <div data-capacity-results aria-live="polite"></div>
+<main class="production-board workspace-overview workspace-page" data-board-root data-can-record="{{ 'true' if can('production.record') else 'false' }}">
+  <header class="workspace-header">
+    <div><h1>Production board</h1><p>Proposed work dates. A delivery estimate is available once materials, capacity and site checks are complete.</p></div>
+    <div class="workspace-header__actions">
+      <a class="workspace-button" href="{{ url_for('planning.planner_page') }}">Production demand</a>
+    </div>
+  </header>
+  <p class="workspace-notice" role="alert" data-board-error hidden></p>
+  <p class="workspace-notice" role="status" data-board-notice></p>
+  <div class="workspace-stack">
+    <section class="workspace-card" aria-labelledby="board-view-title">
+      <h2 id="board-view-title">Period</h2>
+      <form class="board-toolbar workspace-form" data-board-range hx-boost="false">
+        <label>View<select name="view"><option value="week">Week</option><option value="month">Month</option><option value="day">Day</option></select></label>
+        <label>Date<input type="date" name="date" required></label>
+        <div class="workspace-form__actions">
+          <button type="submit" class="workspace-button workspace-button--primary">Show board</button>
+          <button type="button" class="workspace-button" data-board-today>Today</button>
+        </div>
+      </form>
+    </section>
     {% if can('production.record') %}
-    <details data-capacity-settings>
-      <summary>Set resource capacity, working calendars and workflow steps</summary>
-      <form data-capacity-group-form hx-boost="false">
-        <label>Site<select name="site_id" required data-capacity-site></select></label>
-        <label>Resource name<input name="name" maxlength="100" required placeholder="Still, bottling line, tanks"></label>
-        <label>Minutes per day<input name="minutes_per_day" type="number" min="1" max="1440" step="1" required></label>
-        <button type="submit">Add group</button>
+    <section class="workspace-card" aria-labelledby="board-plan-title">
+      <h2 id="board-plan-title">Plan batches</h2>
+      <p class="workspace-caption">Turn a demand into proposed batches, and check the materials they need.</p>
+      <form data-plan-form class="board-toolbar workspace-form" hx-boost="false">
+        <label>Production demand<select name="demand" required data-plan-demand></select></label>
+        <label>Site<select name="site" data-plan-site><option value="">Main site</option></select></label>
+        <div class="workspace-form__actions">
+          <button type="submit" class="workspace-button workspace-button--primary">Plan batches</button>
+          <button type="button" class="workspace-button" data-check-materials>Check materials</button>
+        </div>
       </form>
-      <div data-capacity-groups></div>
-      <form data-capacity-assignment-form hx-boost="false">
-        <label>Workflow step<select name="step_id" required data-capacity-step></select></label>
-        <label>Resource group<select name="group_id" required data-capacity-group></select></label>
-        <button type="submit">Assign step</button>
-      </form>
-    </details>
+      <details class="workspace-disclosure board-settings-disclosure" data-workflow-settings>
+        <summary class="workspace-disclosure__summary"><span class="workspace-disclosure__text"><span class="workspace-disclosure__title">Workflow batch sizes and timings</span></span></summary>
+        <div class="workspace-disclosure__body">
+          <form data-setting-form class="board-settings workspace-form" hx-boost="false">
+            <label>Product output<select name="output" required data-workflow-output></select></label>
+            <label>Usual batch quantity<input name="batch_quantity" type="number" min="0.0001" step="0.0001" required></label>
+            <p data-setting-help></p>
+            <fieldset data-step-timings><legend>Step durations and waiting time (minutes)</legend></fieldset>
+            <button type="submit" class="workspace-button workspace-button--primary">Save planning settings</button>
+          </form>
+        </div>
+      </details>
+    </section>
     {% endif %}
-  </section>
-  {% if can('production.record') %}<p>Drag an unpinned batch to another day to move it, or use its new start date form.</p>{% endif %}
-  <h2 data-board-title>Planned work</h2>
-  <p data-board-empty hidden>No planned batches in this period.</p>
-  <section class="board-days" data-board-days aria-label="Planned production by day"></section>
+    <section class="board-capacity workspace-card" aria-labelledby="capacity-title">
+      <h2 id="capacity-title">Rough site capacity</h2>
+      <p class="workspace-caption">Observed minutes by resource group and day. Overloads suggest a lower-priority batch to move; no resource is reserved and no delivery date is promised.</p>
+      <div class="board-capacity__results" data-capacity-results aria-live="polite"></div>
+      {% if can('production.record') %}
+      <details class="workspace-disclosure board-settings-disclosure" data-capacity-settings>
+        <summary class="workspace-disclosure__summary"><span class="workspace-disclosure__text"><span class="workspace-disclosure__title">Set resource capacity, working calendars and workflow steps</span></span></summary>
+        <div class="workspace-disclosure__body">
+          <form class="workspace-form" data-capacity-group-form hx-boost="false">
+            <label>Site<select name="site_id" required data-capacity-site></select></label>
+            <label>Resource name<input name="name" maxlength="100" required placeholder="Still, bottling line, tanks"></label>
+            <label>Minutes per day<input name="minutes_per_day" type="number" min="1" max="1440" step="1" required></label>
+            <button type="submit" class="workspace-button">Add group</button>
+          </form>
+          <div class="board-capacity__groups" data-capacity-groups></div>
+          <form class="workspace-form" data-capacity-assignment-form hx-boost="false">
+            <label>Workflow step<select name="step_id" required data-capacity-step></select></label>
+            <label>Resource group<select name="group_id" required data-capacity-group></select></label>
+            <button type="submit" class="workspace-button">Assign step</button>
+          </form>
+        </div>
+      </details>
+      {% endif %}
+    </section>
+    <section class="workspace-card" aria-labelledby="board-days-title">
+      <h2 id="board-days-title" data-board-title>Planned work</h2>
+      {% if can('production.record') %}<p class="workspace-caption">Drag an unpinned batch to another day to move it, or use its new start date form.</p>{% endif %}
+      <p class="workspace-empty" data-board-empty hidden>No planned batches in this period.</p>
+      <section class="board-days" data-board-days aria-label="Planned production by day"></section>
+    </section>
+  </div>
 </main>
 {% endblock %}
 {% block scripts %}{{ super() }}

@@ -348,3 +348,153 @@ html[data-spa-theme="dark"] #page-content .sales-analytics .crm-kpi-value { colo
   /* On a phone each table keeps the name and the one figure that matters. */
   #page-content .sales-analytics__optional { display: none; }
 }
+
+/* ---- Workspace pages --------------------------------------------------------------------
+   The same header, stack and cards as the overviews, for the pages behind each tab, plus the
+   shared pieces those pages need: header actions, forms, lists, notices and empty states. */
+#page-content .workspace-page { padding-bottom: 40px; overflow-wrap: anywhere; }
+#page-content .workspace-header__actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+#page-content .workspace-card > h2 + .workspace-form,
+#page-content .workspace-card > .workspace-caption + .workspace-form,
+#page-content .workspace-card > .workspace-card__header + .workspace-form { margin-top: 18px; }
+#page-content .workspace-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 16px; align-items: end; min-width: 0; }
+#page-content .workspace-form label,
+#page-content .workspace-field { display: grid; gap: 6px; min-width: 0; margin: 0; font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--ui-text, #172033); }
+#page-content .workspace-form input:not([type="checkbox"]):not([type="radio"]),
+#page-content .workspace-form select,
+#page-content .workspace-form textarea,
+#page-content .workspace-input { width: 100%; max-width: none; min-width: 0; box-sizing: border-box; min-height: 44px; margin: 0; padding: 10px 12px; border: 1px solid var(--ui-border, #dce4e9); border-radius: 8px; background: var(--ui-surface, #fff); color: var(--ui-text, #172033); font: inherit; font-size: 14px; font-weight: 400; box-shadow: none; }
+#page-content .workspace-form input:focus-visible,
+#page-content .workspace-form select:focus-visible,
+#page-content .workspace-form textarea:focus-visible,
+#page-content .workspace-input:focus-visible { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: 1px; border-color: var(--ui-accent, #0d9488); }
+#page-content .workspace-form fieldset { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 14px 16px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 8px; }
+#page-content .workspace-form legend { padding: 0 6px; font-size: 13px; font-weight: 600; color: var(--ui-text-muted, #64748b); }
+#page-content .workspace-form > p { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--ui-text-muted, #64748b); }
+#page-content .workspace-form__wide { grid-column: 1 / -1; }
+#page-content .workspace-form__actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+/* Buttons a page script creates without a class still read as workspace buttons. */
+#page-content .workspace-form button:not([class]),
+#page-content .workspace-list button:not([class]) { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border: 1px solid var(--ui-border, #dce4e9); border-radius: 8px; background: var(--ui-surface, #fff); color: var(--ui-accent-strong, #115e59); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+#page-content .workspace-form button:not([class]):hover,
+#page-content .workspace-list button:not([class]):hover { background: var(--ui-surface-subtle, #f8fafc); border-color: var(--ui-accent, #0d9488); }
+#page-content .workspace-button:disabled,
+#page-content .workspace-form button:disabled { opacity: .55; cursor: not-allowed; }
+#page-content .workspace-list { display: grid; margin-top: 18px; min-width: 0; }
+#page-content .workspace-list:empty { display: none; }
+#page-content .workspace-list > * { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 14px 0; border-top: 1px solid var(--ui-border, #e2e8f0); min-width: 0; }
+#page-content .workspace-list > *:first-child { border-top: 0; padding-top: 0; }
+#page-content .workspace-list > *:last-child { padding-bottom: 0; }
+#page-content .workspace-list h2,
+#page-content .workspace-list h3 { flex: 1 1 220px; margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; letter-spacing: 0; text-transform: none; color: var(--ui-text, #172033); }
+#page-content .workspace-list p { margin: 0; font-size: 14px; color: var(--ui-text-muted, #64748b); }
+#page-content .workspace-empty { margin: 18px 0 0; padding: 20px 16px; border: 1px dashed var(--ui-border, #dce4e9); border-radius: 8px; text-align: center; font-size: 14px; color: var(--ui-text-muted, #64748b); }
+#page-content .workspace-empty[hidden],
+#page-content .workspace-notice[hidden],
+#page-content .workspace-notice:empty { display: none; }
+#page-content .workspace-notice { margin: 0 0 24px; padding: 12px 16px; border: 1px solid var(--ui-border, #dce4e9); border-radius: 8px; background: var(--ui-surface, #fff); font-size: 14px; color: var(--ui-text, #172033); }
+#page-content .workspace-notice[role="alert"] { border-color: #f1b5b5; background: #fdf1f1; color: #8f1d1d; }
+html[data-spa-theme="dark"] #page-content .workspace-notice[role="alert"] { border-color: #7f2a2a; background: #3a1616; color: #fecaca; }
+#page-content .workspace-scroll { overflow-x: auto; min-width: 0; }
+@media (max-width: 767px) {
+  #page-content .workspace-header__actions { width: 100%; }
+  #page-content .workspace-header__actions .workspace-button { flex: 1 1 auto; }
+  #page-content .workspace-form { gap: 12px; }
+  #page-content .workspace-form__actions .workspace-button,
+  #page-content .workspace-form > .workspace-button,
+  #page-content .workspace-form > button { width: 100%; box-sizing: border-box; }
+}
+
+/* Tables, selectable chips and stacked edit forms inside a card. */
+#page-content .workspace-table { width: 100%; border-collapse: collapse; text-align: left; margin-top: 18px; }
+#page-content .workspace-table th { padding: 10px 12px; font-size: 12px; font-weight: 600; color: var(--ui-text-muted, #64748b); border-bottom: 1px solid var(--ui-border, #e2e8f0); white-space: nowrap; }
+#page-content .workspace-table td { padding: 12px; font-size: 14px; border-bottom: 1px solid var(--ui-border, #e2e8f0); vertical-align: top; }
+#page-content .workspace-table tr:last-child td { border-bottom: 0; }
+#page-content .workspace-table th:first-child,
+#page-content .workspace-table td:first-child { padding-left: 0; }
+#page-content .workspace-table a { color: var(--ui-accent-strong, #115e59); font-weight: 600; text-decoration: none; }
+#page-content .workspace-table a:hover { text-decoration: underline; }
+#page-content .workspace-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+#page-content .workspace-chips button,
+#page-content .workspace-chips a { min-height: 40px; padding: 8px 14px; border: 1px solid var(--ui-border, #dce4e9); border-radius: 999px; background: var(--ui-surface, #fff); color: var(--ui-text-muted, #64748b); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
+#page-content .workspace-chips button:hover,
+#page-content .workspace-chips a:hover { color: var(--ui-text, #172033); border-color: var(--ui-accent, #0d9488); }
+#page-content .workspace-chips [aria-selected="true"],
+#page-content .workspace-chips [aria-pressed="true"],
+#page-content .workspace-chips [aria-current="true"] { background: var(--ui-accent, #0d9488); border-color: var(--ui-accent, #0d9488); color: #fff; }
+html[data-spa-theme="dark"] #page-content .workspace-chips [aria-selected="true"],
+html[data-spa-theme="dark"] #page-content .workspace-chips [aria-pressed="true"] { color: #10201f; }
+#page-content .workspace-chips button:focus-visible { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: 2px; }
+#page-content .workspace-form-list { display: grid; margin-top: 18px; }
+#page-content .workspace-form-list > .workspace-form { padding: 16px 0; border-top: 1px solid var(--ui-border, #e2e8f0); }
+#page-content .workspace-form-list > .workspace-form:first-child { padding-top: 0; border-top: 0; }
+#page-content .workspace-form-list > .workspace-form:last-child { padding-bottom: 0; }
+#page-content .workspace-form-list > .workspace-empty { margin-top: 0; }
+#page-content .workspace-card > .workspace-form:not(:first-child) { margin-top: 18px; }
+
+/* Stock transfers and Cases: their rows, on the shared tile look. */
+#page-content .transfers-list { display: grid; gap: 12px; margin-top: 18px; }
+#page-content .transfers-list:empty { display: none; }
+#page-content .transfers-list .transfers-card { padding: 16px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 8px; background: var(--ui-surface-subtle, #f8fafc); }
+#page-content .transfers-shell [hidden] { display: none !important; }
+#page-content .oc-queue .oc-queue-list { list-style: none; display: grid; gap: 12px; margin: 18px 0 0; padding: 0; }
+#page-content .oc-queue .oc-queue-list:empty { display: none; }
+#page-content .oc-queue .oc-card { border: 1px solid var(--ui-border, #e2e8f0); border-radius: 8px; background: var(--ui-surface-subtle, #f8fafc); overflow: hidden; }
+#page-content .oc-queue .oc-card--overdue { border-color: #dc2626; }
+#page-content .oc-queue .oc-card__link { display: block; padding: 14px 16px; color: inherit; text-decoration: none; }
+#page-content .oc-queue .oc-card__link:hover { background: var(--ui-surface, #fff); }
+#page-content .oc-queue .oc-status,
+#page-content .oc-queue .oc-loading,
+#page-content .oc-queue .oc-pagination { margin-top: 18px; }
+
+/* Batches, Live inventory and Tasks share the Production template; each opens on its own cards. */
+#page-content .production-overview .workspace-card.core2-stats-panel,
+#page-content .production-overview .workspace-card.core2-live-inv,
+#page-content .production-overview .workspace-card.core2-active-batches-panel { margin: 0; }
+#page-content .production-overview .core2-stats-panel .core2-live-inv__snapshot { margin-top: 18px; padding: 0; border: 0; background: none; box-shadow: none; }
+#page-content .production-overview .core2-live-inv__header { margin-bottom: 18px; }
+#page-content .production-overview .core2-live-inv__subline { display: flex; align-items: center; gap: 8px; letter-spacing: 0; text-transform: none; }
+#page-content .production-overview .core2-active-batches-panel .core2-active-details-body { padding: 0; }
+#page-content .production-overview .core2-active-subline { letter-spacing: 0; text-transform: none; }
+#page-content .production-overview .core2-tab-panel { margin: 0; }
+#page-content .core-tasks.workspace-stack { padding: 0; max-width: none; }
+#page-content .core-tasks .core-tasks__calendar-card { margin: 0; }
+#page-content .core-tasks .core-tasks__calendar-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; }
+#page-content .core-tasks .core-tasks__calendar-heading p { margin: 0; letter-spacing: 0; text-transform: none; font-weight: 400; }
+#page-content .core-tasks .core-tasks__filters { margin: 18px 0 0; padding: 0; border: 0; background: none; }
+#page-content .core-tasks .core-tasks__toggle { display: flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 400; }
+#page-content .core-tasks .core-tasks__board { margin-top: 18px; }
+#page-content .workspace-stack[hidden],
+#page-content .workspace-card[hidden],
+#page-content .workspace-columns[hidden] { display: none; }
+#page-content .production-overview .core2-active-control .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Workflows, Inventory and the pages behind the Inventory tab. */
+#page-content .processes-list-page .processes-list-toolbar { margin-top: 18px; grid-template-columns: minmax(0, 420px); }
+#page-content .processes-list-page .processes-list-search { max-width: none; }
+#page-content .processes-list-page .processes-list-count { margin: 0; text-align: right; }
+#page-content .processes-list-page .processes-list-results { margin-top: 18px; }
+#page-content .processes-list-page .processes-list-results > .workspace-empty { margin-top: 0; }
+#page-content .inv-view-page .inv-view-filters { margin-top: 18px; }
+#page-content .inv-view-page .inv-view-table-wrap,
+#page-content .inv-view-page .inv-view-cards,
+#page-content .inv-view-page .inv-view-loading,
+#page-content .inv-view-page .inv-view-empty { margin-top: 18px; }
+#page-content .inv-view-page .inv-view-count { margin-top: 6px; }
+#page-content .inventory-add-choices .workspace-button { min-height: 72px; padding: 14px 16px; }
+#page-content .inventory-add-choices strong { display: block; font-size: 15px; color: var(--ui-text, #172033); }
+#page-content .inventory-add-choices small { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--ui-text-muted, #64748b); }
+#page-content #dispose-inventory-page .dispose-form { margin-top: 18px; }
+#page-content #dispose-inventory-page .dispose-form__reason { margin-top: 18px; }
+#page-content .sup-shell { color: var(--ui-text, #172033); }
+#page-content .sup-shell .sup-cards { margin-top: 18px; gap: 16px; }
+#page-content .sup-shell .sup-card { border-radius: 8px; border-color: var(--ui-border, #e2e8f0); background: var(--ui-surface-subtle, #f8fafc); }
+#page-content .sup-shell .sup-register { margin: 0; }
+#page-content .sm-page .sm-search-bar { margin-top: 18px; padding: 0; background: none; }
+#page-content .sm-page .sm-findings.workspace-card { margin: 0; }
+#page-content .sm-page .sm-wastage-bar { margin-top: 12px; padding: 0; }
+@media (max-width: 767px) {
+  #page-content .processes-list-page .processes-list-count { text-align: left; }
+  #page-content .inventory-add-choices { grid-template-columns: 1fr; }
+  #page-content .sup-shell .sup-cards { gap: 12px; }
+}
