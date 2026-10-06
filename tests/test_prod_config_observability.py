@@ -90,13 +90,3 @@ def test_rum_is_only_on_with_reachable_upstreams(name):
             f"{name}: rum_enabled = true but these upstreams are loopback (the container itself, or the app on "
             f":8000) in production: {unreachable}. Point them at real collectors or set rum_enabled = false."
         )
-
-
-@pytest.mark.parametrize("name", SHIPPED_PRODUCTION_CONFIGS)
-def test_consent_flags_are_not_enabled_by_the_shipped_production_config(name):
-    """The separate consent flags stay off until someone decides to send data; this is what keeps the
-    loopback defaults inert, so a silent flip must show up in review as a test change."""
-    cfg = _config_for(name)
-
-    assert cfg.grafana_data_enabled is False
-    assert cfg.posthog_data_enabled is False

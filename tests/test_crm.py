@@ -1424,6 +1424,14 @@ class TestCRMAnalyticsAPI:
         assert named in json.loads(resp.data)["error"]
 
     def test_rankings_only_include_the_callers_own_org(self, app_client, db, org, other_org):
+        # The caller maps "Gin" to a product, so the other org's "Gin" line would join the product
+        # ranking if it leaked; the two orgs' lines alone would sum to 9100 rather than 100.
+        created = app_client.post(
+            "/api/crm/product-mappings",
+            json={"biz_e_product_name": "Gin", "xero_description_pattern": "Gin", "match_type": "exact"},
+            content_type="application/json",
+        )
+        assert created.status_code in (200, 201)
         mine = self._customer(db, org, "Mine")
         theirs = self._customer(db, other_org, "Theirs")
         on = date(2025, 2, 10)
@@ -1436,6 +1444,10 @@ class TestCRMAnalyticsAPI:
                 self._rankings(app_client, entity=entity, start_date="2025-01-01", end_date="2025-12-31").data
             )["rankings"]
             assert [r["contact_name"] for r in rows] == ["Mine"], entity
+        products = json.loads(
+            self._rankings(app_client, entity="products", start_date="2025-01-01", end_date="2025-12-31").data
+        )["rankings"]
+        assert [(r["description"], r["total_qty"], r["total_revenue"]) for r in products] == [("Gin", 1.0, 100.0)]
 
     def test_customer_analytics_report_monthly_totals_and_top_products(self, app_client, db, org):
         contact = self._customer(db, org, "Analysed")

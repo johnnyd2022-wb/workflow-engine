@@ -1,7 +1,7 @@
 # Production bring-up checklist
 
 Written 2026-10-05 from reading the scripts and config, plus read-only checks on this
-machine. Nothing here has been changed yet. Work through it top to bottom: each section
+machine. Items are ticked as they are done. Work through it top to bottom: each section
 says what is missing, why it matters, and what "done" looks like.
 
 The goal: bring production up with the Whistlebird Ltd tenant, and nothing from the test
@@ -37,7 +37,7 @@ Production will not start, or will start insecurely, without these. None is pass
 | `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET` | Xero connect fails | `prod.ini` leaves both blank. Use the production Xero app's credentials, not the test app's. |
 | `XERO_REDIRECT_URI` | Xero connect fails | `prod.ini` has no `redirect_uri` at all. Must match the URI registered on the production Xero app. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in fails | Known and deferred: no Google tenant wired yet. Either supply them or set `[google_sign_in] enabled = false` in `prod.ini` so the button does not show. |
-| `XERO_TOKEN_ENCRYPTION_KEY` | App refuses to start (`RuntimeError`) while `crm_enabled` is on | Random, at least 32 bytes. Stored Xero tokens are encrypted under it; production never reads `[app] secret_key` and rejects the public development default. Set it before the first Xero connection: changing it afterwards means reconnecting Xero. |
+| `XERO_TOKEN_ENCRYPTION_KEY` | App refuses to start (`RuntimeError`) while `crm_enabled` is on | Random, at least 32 bytes. Stored Xero tokens are encrypted under it; production never reads `[app] secret_key` and rejects the public development default. Set it before the first Xero connection: changing it afterwards means reconnecting Xero. local/test deployments still use the development key, so a dump of a deployed test database is decryptable with a string in this repository. |
 | `POSTHOG_PROJECT_API_KEY` | No product analytics | Optional. `posthog_data_enabled` is already `false`. |
 
 ## 2. `scripts/run_prod.sh` fixes

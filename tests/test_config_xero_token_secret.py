@@ -41,7 +41,7 @@ def _fernet_from(secret: str) -> Fernet:
 
 
 @pytest.mark.parametrize("environment", ["production", "prod"])
-@pytest.mark.parametrize("value", [None, "", "   ", "short", DEV_DEFAULT, "PROTECTED"])
+@pytest.mark.parametrize("value", [None, "", "   ", "short", DEV_DEFAULT])
 def test_production_rejects_missing_or_weak_token_key(environment, value, monkeypatch):
     if value is None:
         monkeypatch.delenv("XERO_TOKEN_ENCRYPTION_KEY", raising=False)

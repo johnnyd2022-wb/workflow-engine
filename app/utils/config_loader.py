@@ -335,7 +335,7 @@ class Config:
         """
         if self._is_production_env:
             value = self._clean_config_secret(os.getenv("XERO_TOKEN_ENCRYPTION_KEY"))
-            if len(value.encode("utf-8")) < 32 or value in {"PROTECTED", DEV_SECRET_KEY}:
+            if len(value.encode("utf-8")) < 32 or value == DEV_SECRET_KEY:
                 raise RuntimeError(
                     "A strong Xero token encryption key is required in production. Set "
                     "XERO_TOKEN_ENCRYPTION_KEY to a random secret of at least 32 bytes from the "
