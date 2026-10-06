@@ -27,11 +27,43 @@ variables:
   # .agents/plans/repo-modernisation-plan.md.
   UV_VERSION: "0.11.29"
 
+# One pipeline per push (docs/ci-speedup-plan.md). A branch with an open merge request
+# gets only its merge-request pipeline; without this every push also started a branch
+# pipeline that held a runner slot. main, tags, schedules and branches with no merge
+# request yet are unchanged.
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # main is the release gate and deploys: a later merge never cancels it.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      auto_cancel:
+        on_new_commit: none
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# A new push to a merge request cancels the superseded pipeline's running jobs instead of
+# letting them hold runner slots. main opts out through the workflow rule above.
+default:
+  interruptible: true
+
 include:
 - template: Security/SAST.gitlab-ci.yml
 
 sast:
   stage: test
+
+# The SAST template only runs on branch pipelines. With the branch pipeline gone for
+# merge-request branches, run the scan in the merge-request pipeline instead.
+semgrep-sast:
+  rules:
+    - if: $SAST_DISABLED == "true" || $SAST_DISABLED == "1"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
 
 # Guards that uv.lock still matches pyproject.toml -- catches an edited pyproject that
 # never got re-locked. This is a consistency check, not an upgrade check: it does NOT
