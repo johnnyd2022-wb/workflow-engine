@@ -7,21 +7,17 @@
 {% endblock %}
 
 {% block content %}
-  <div class="max-content" id="dispose-inventory-page">
-    {% from "shared/primary_card.html" import primary_card %}
-
-
-    {% call primary_card(
-      title="Dispose of inventory",
-      subtitle="Record disposal of waste, overage, lost, or expired stock."
-    ) %}
-      <form id="dispose-inventory-form" class="spa-card-form" style="gap: 0;">
-        <section class="spa-form-section" aria-label="Inventory disposal">
-          <div class="dispose-intro">
-            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 8px 0;">
-              Enter a quantity for any item to dispose it from inventory. Quantities are disposed in the same unit as they are stored. Items with zero quantity no longer appear in stock.
-            </p>
-          </div>
+  <div class="max-content workspace-overview workspace-page" id="dispose-inventory-page">
+    <header class="workspace-header">
+      <div><h1>Record disposal</h1><p>Record waste, overage, lost or expired stock.</p></div>
+      <div class="workspace-header__actions"><a class="workspace-button" href="/core/inventory/view">Back to inventory</a></div>
+    </header>
+    <div class="workspace-stack">
+    <section class="workspace-card" aria-labelledby="dispose-title">
+      <h2 id="dispose-title">What are you disposing of?</h2>
+      <p class="workspace-caption">Enter a quantity against any item. Quantities are disposed in the unit they are stored in, and an item at zero no longer appears in stock.</p>
+      <form id="dispose-inventory-form" class="dispose-form">
+        <section aria-label="Inventory disposal">
           <div class="dispose-tabs" id="dispose-type-tabs" role="tablist" aria-label="Filter inventory by type">
             <button type="button" class="dispose-tab" data-type="raw_material" role="tab" aria-selected="true">
               Raw materials <span class="dispose-tab__count" id="dispose-tab-count-raw">0</span>
@@ -37,25 +33,24 @@
             <p style="padding: 16px; color: var(--text-secondary);">Loading inventory...</p>
           </div>
         </section>
-        <div style="padding: 0 0 16px;">
-          <label for="dispose-bulk-reason" style="display: block; font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">
-            Reason for disposal <span style="color: var(--error, #ef4444);">*</span>
+        <div class="workspace-form dispose-form__reason">
+          <label class="workspace-form__wide" for="dispose-bulk-reason">
+            <span>Reason for disposal <span style="color: var(--error, #ef4444);">*</span></span>
+            <textarea
+              id="dispose-bulk-reason"
+              rows="2"
+              maxlength="500"
+              placeholder="e.g. Damaged in transit, failed quality check, expired stock…"
+              required
+            ></textarea>
           </label>
-          <textarea
-            id="dispose-bulk-reason"
-            class="spa-inp"
-            rows="2"
-            maxlength="500"
-            placeholder="e.g. Damaged in transit, failed quality check, expired stock…"
-            style="width: 100%; resize: vertical; font-size: 0.9375rem; box-sizing: border-box;"
-            required
-          ></textarea>
-        </div>
-        <div style="display: flex; gap: 12px; justify-content: center; align-items: center;">
-          <button type="submit" id="dispose-inventory-submit" class="btn btn-primary" style="min-height: 44px;">Dispose of selected quantity of inventory items</button>
+          <div class="workspace-form__actions workspace-form__wide">
+            <button type="submit" id="dispose-inventory-submit" class="workspace-button workspace-button--primary">Dispose of selected quantity of inventory items</button>
+          </div>
         </div>
       </form>
-    {% endcall %}
+    </section>
+    </div>
   </div>
   <script>
     (function () {

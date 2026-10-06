@@ -1,27 +1,42 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Production demand | biz-e{% endblock %}
 {% block head_extras %}{{ super() }}
-<link rel="stylesheet" href="{{ url_for('planning.static', filename='demand.css') }}">
 {% endblock %}
 {% block content %}
-<main class="planning-demand" data-planning-root>
-  <nav><a href="{{ url_for('planning.planner_board') }}">Production board</a></nav>
-  <header><h1>Production demand</h1><p>What needs making, and when it is due.</p></header>
-  <p role="alert" data-planning-error hidden></p>
-  {% if can('production.record') %}
-  <form data-demand-form class="planning-form" hx-boost="false">
-    <label>Order or demand reference<input name="reference" required maxlength="200"></label>
-    <label>Product output<select name="source_output_id" required data-output-select></select></label>
-    <label>Quantity<input name="quantity" required inputmode="decimal" type="number" min="0.0001" step="0.0001"></label>
-    <label>Due date<input name="due_date" required type="date"></label>
-    <label>Priority (0–100)<input name="priority" type="number" min="0" max="100" step="1" value="0" required></label>
-    <button type="submit">Add demand</button>
-  </form>
-  {% endif %}
-  <p data-planning-empty hidden>No production demand yet.</p>
-  <section aria-label="Production demand" data-demand-list data-can-record="{{ 'true' if can('production.record') else 'false' }}"></section>
+<main class="planning-demand workspace-overview workspace-page" data-planning-root>
+  <header class="workspace-header">
+    <div><h1>Planner</h1><p>What needs making, and when it is due.</p></div>
+    <div class="workspace-header__actions">
+      <a class="workspace-button" href="{{ url_for('planning.planner_board') }}">Production board</a>
+    </div>
+  </header>
+  <p class="workspace-notice" role="alert" data-planning-error hidden></p>
+  <div class="workspace-stack">
+    {% if can('production.record') %}
+    <section class="workspace-card" aria-labelledby="planner-add-title">
+      <h2 id="planner-add-title">Add demand</h2>
+      <p class="workspace-caption">An order or forecast that production needs to meet.</p>
+      <form data-demand-form class="planning-form workspace-form" hx-boost="false">
+        <label>Order or demand reference<input name="reference" required maxlength="200"></label>
+        <label>Product output<select name="source_output_id" required data-output-select></select></label>
+        <label>Quantity<input name="quantity" required inputmode="decimal" type="number" min="0.0001" step="0.0001"></label>
+        <label>Due date<input name="due_date" required type="date"></label>
+        <label>Priority (0–100)<input name="priority" type="number" min="0" max="100" step="1" value="0" required></label>
+        <button type="submit" class="workspace-button workspace-button--primary">Add demand</button>
+      </form>
+    </section>
+    {% endif %}
+    <section class="workspace-card" aria-labelledby="planner-demand-title">
+      <h2 id="planner-demand-title">Production demand</h2>
+      <p class="workspace-caption">Open and past demand, most recent first.</p>
+      <p class="workspace-empty" data-planning-empty hidden>No production demand yet.</p>
+      <section class="workspace-list" aria-label="Production demand" data-demand-list data-can-record="{{ 'true' if can('production.record') else 'false' }}"></section>
+    </section>
+    {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
+  </div>
 </main>
 {% endblock %}
 {% block scripts %}{{ super() }}
 <script src="{{ url_for('planning.static', filename='demand.js') }}"></script>
 {% endblock %}
+{% block workspace_links %}{% endblock %}

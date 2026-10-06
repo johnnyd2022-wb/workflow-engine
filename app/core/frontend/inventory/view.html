@@ -7,16 +7,18 @@
 {% endblock %}
 
 {% block content %}
-  <div class="max-content">
-    {% from "shared/primary_card.html" import primary_card %}
-
-    <p><a href="{{ url_for('site_transfers.page') }}">Stock transfers and transit</a></p>
-
-    {% call primary_card(
-      title="View inventory",
-      subtitle="Search, filter by type or dates, and inspect metadata stored with each line."
-    ) %}
-      <div class="spa-card-form" style="gap: 1rem;">
+  <div class="max-content workspace-overview workspace-page inv-view-page">
+    <header class="workspace-header">
+      <div><h1>Inventory</h1><p>Everything on hand, with where it came from and where it has been used.</p></div>
+      <div class="workspace-header__actions">
+        <a class="workspace-button" href="/core/inventory/live">Live inventory</a>
+        {% if can('inventory.adjust') %}<a class="workspace-button workspace-button--primary" href="/core/inventory/add">Add to inventory</a>{% endif %}
+      </div>
+    </header>
+    <div class="workspace-stack">
+      <section class="workspace-card" aria-labelledby="inv-view-filters-title">
+        <h2 id="inv-view-filters-title">Find stock</h2>
+        <p class="workspace-caption">Search, or narrow by type, supplier, process and dates.</p>
         <div class="inv-view-filters" id="inv-view-filters">
           <div class="inv-view-filters__full">
             <label class="spa-field-label" for="inv-filter-search">Search</label>
@@ -71,9 +73,15 @@
           </div>
         </div>
 
-        <div class="inv-view-toolbar">
-          <span class="inv-view-count" id="inv-view-count" aria-live="polite">Loading…</span>
-          <button type="button" class="btn btn-secondary btn-sm" id="inv-view-clear-filters" style="min-height: 44px;">Clear filters</button>
+      </section>
+
+      <section class="workspace-card" aria-labelledby="inv-view-results-title">
+        <div class="workspace-card__header">
+          <div>
+            <h2 id="inv-view-results-title">Stock on hand</h2>
+            <p class="workspace-caption inv-view-count" id="inv-view-count" aria-live="polite">Loading…</p>
+          </div>
+          <button type="button" class="workspace-button" id="inv-view-clear-filters">Clear filters</button>
         </div>
 
         <div id="inv-view-loading" class="inv-view-loading">Loading inventory…</div>
@@ -101,8 +109,19 @@
         </div>
 
         <div class="inv-view-cards" id="inv-view-cards"></div>
-      </div>
-    {% endcall %}
+      </section>
+
+      <section class="workspace-card" aria-labelledby="inv-view-tools-title">
+        <h2 id="inv-view-tools-title">Inventory tools</h2>
+        <div class="workspace-action-grid">
+          <a class="workspace-button" href="/core/sourcemap">Trace and recall <span aria-hidden="true">↗</span></a>
+          <a class="workspace-button" href="/core/stocktake">Stocktake <span aria-hidden="true">↗</span></a>
+          <a class="workspace-button" href="{{ url_for('site_transfers.page') }}">Stock transfers <span aria-hidden="true">↗</span></a>
+          {% if can('inventory.adjust') %}<a class="workspace-button" href="/core/inventory/dispose">Record disposal <span aria-hidden="true">↗</span></a>{% endif %}
+          {% for link in workspace_links %}<a class="workspace-button" href="{{ link.href }}" data-workspace-link="{{ link.key }}">{{ link.label }} <span aria-hidden="true">↗</span></a>{% endfor %}
+        </div>
+      </section>
+    </div>
   </div>
   <script>
     (function () {
@@ -560,3 +579,4 @@
     window.invAdjustOnSave = function() { load(); };
   </script>
 {% endblock %}
+{% block workspace_links %}{% endblock %}

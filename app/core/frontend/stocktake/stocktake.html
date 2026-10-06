@@ -7,12 +7,12 @@
 {% block head_extras %}
   <meta name="description" content="Where every product is, count it, and resolve every difference">
   <style>
-    .st-shell { display: flex; flex-direction: column; gap: 18px; padding-block: 24px 56px; max-width: 72rem; }
+    .st-shell .st-message { margin-bottom: 24px; }
     .st-shell [hidden] { display: none !important; }
     .st-head h1 { margin: 0; font-size: 26px; color: var(--text-primary); }
     .st-head p { margin: 6px 0 0; color: var(--text-secondary); font-size: 15px; max-width: 66ch; line-height: 1.5; }
-    .st-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
-    .st-card h2 { margin: 0; font-size: 17px; color: var(--text-primary); }
+    .st-card { display: flex; flex-direction: column; gap: 12px; }
+    #page-content .st-shell .workspace-header { margin-bottom: 0; }
     .st-card h3 { margin: 4px 0 0; font-size: 14px; color: var(--text-primary); }
     .st-hint { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.5; max-width: 72ch; }
     .st-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
@@ -58,17 +58,21 @@
 
 
 {% block content %}
-  <div class="max-content st-shell" data-stocktake-root
+  <div class="max-content st-shell workspace-overview workspace-page" data-stocktake-root
        data-can-adjust="{{ '1' if can('inventory.adjust') else '0' }}"
        data-can-manage="{{ '1' if can('compliance.manage') else '0' }}">
-    <header class="st-head">
-      <h1>Stocktake</h1>
-      <p>Where every product is right now, a count against it, and a reason for every difference. Resolving a difference records the real stock movement, so anything built on stock movements (such as a duty return) follows on its own.</p>
+    <header class="workspace-header">
+      <div>
+        <h1>Stocktake</h1>
+        <p>Where every product is right now, a count against it, and a reason for every difference.</p>
+      </div>
+      <div class="workspace-header__actions"><a class="workspace-button" href="/core/inventory/view">Back to inventory</a></div>
     </header>
 
     <div class="st-message" data-st-message role="status" hidden></div>
 
-    <section class="st-card" data-st-home aria-labelledby="st-schedule-title">
+    <div class="workspace-stack">
+    <section class="st-card workspace-card" data-st-home aria-labelledby="st-schedule-title">
       <h2 id="st-schedule-title">Schedule</h2>
       <p class="st-hint" data-st-schedule-text>Loading…</p>
       <div class="st-row" data-st-schedule-form hidden>
@@ -91,12 +95,12 @@
       </div>
     </section>
 
-    <section class="st-card" data-st-home data-st-variances-wrap hidden aria-labelledby="st-variances-title">
+    <section class="st-card workspace-card" data-st-home data-st-variances-wrap hidden aria-labelledby="st-variances-title">
       <h2 id="st-variances-title">Differences still open</h2>
       <ul class="st-list" data-st-variances></ul>
     </section>
 
-    <section class="st-card" data-st-home aria-labelledby="st-position-title">
+    <section class="st-card workspace-card" data-st-home aria-labelledby="st-position-title">
       <div class="st-row" style="justify-content: space-between; align-items: center">
         <h2 id="st-position-title">Stock position</h2>
         <a class="btn btn-secondary" href="/api/core/stock-position?format=csv" download>Download (CSV)</a>
@@ -105,12 +109,12 @@
       <div data-st-position>Loading…</div>
     </section>
 
-    <section class="st-card" data-st-home data-st-history-wrap hidden aria-labelledby="st-history-title">
+    <section class="st-card workspace-card" data-st-home data-st-history-wrap hidden aria-labelledby="st-history-title">
       <h2 id="st-history-title">Stocktakes</h2>
       <ul class="st-list" data-st-history></ul>
     </section>
 
-    <section class="st-card" data-st-count-view hidden aria-labelledby="st-count-title">
+    <section class="st-card workspace-card" data-st-count-view hidden aria-labelledby="st-count-title">
       <div class="st-row" style="justify-content: space-between; align-items: center">
         <h2 id="st-count-title" data-st-count-title>Count</h2>
         <button type="button" class="st-link-btn" data-st-back>Back to stocktakes</button>
@@ -125,7 +129,7 @@
       </div>
     </section>
 
-    <section class="st-card" data-st-recon-view hidden aria-labelledby="st-recon-title">
+    <section class="st-card workspace-card" data-st-recon-view hidden aria-labelledby="st-recon-title">
       <h2 id="st-recon-title">Reconciliation</h2>
       <p class="st-hint" data-st-recon-hint></p>
       <div class="st-table-wrap"><table class="st-table">
@@ -135,6 +139,7 @@
         <tbody data-st-recon-rows></tbody>
       </table></div>
     </section>
+    </div>
   </div>
 {% endblock %}
 

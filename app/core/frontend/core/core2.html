@@ -16,16 +16,25 @@
 
 {% block content %}
         {% set core2_focus_mode = core2_focus if core2_focus is defined else '' %}
-        <div class="max-content workspace-overview production-overview">
+        <div class="max-content workspace-overview workspace-page production-overview{% if core2_focus_mode %} production-overview--focus{% endif %}">
           <header class="workspace-header" aria-labelledby="core2-hub-title">
             <div>
-              <h1 id="core2-hub-title" class="page-title">{% if core2_focus_mode == 'inventory_live' %}Live inventory{% elif core2_focus_mode == 'active_batches_live' %}Active batches{% else %}Production{% endif %}</h1>
-              <p>Keep production moving, from stock to finished batches.</p>
+              <h1 id="core2-hub-title" class="page-title">{% if core2_focus_mode == 'inventory_live' %}Live inventory{% elif core2_focus_mode == 'active_batches_live' %}Batches{% else %}Production{% endif %}</h1>
+              <p id="core2-hub-caption">{% if core2_focus_mode == 'inventory_live' %}Stock on hand, what has moved, and what each process holds.{% elif core2_focus_mode == 'active_batches_live' %}Every batch in production, by the step it is at.{% else %}Keep production moving, from stock to finished batches.{% endif %}</p>
             </div>
+            {% if core2_focus_mode == 'inventory_live' %}
+            <div class="workspace-header__actions"><a class="workspace-button" href="/core/inventory/view">Back to inventory</a></div>
+            {% elif core2_focus_mode == 'active_batches_live' %}
+            <div class="workspace-header__actions"><a class="workspace-button" href="/core/processes">Back to workflows</a></div>
+            {% else %}
             <a id="core2-overview-return" class="workspace-button" href="/core" hidden>Back to overview</a>
+            {% endif %}
           </header>
 
-          <div class="production-overview__start workspace-stack">
+          {# Health, next steps and workspace links belong to the overview only; the pages behind
+             the tabs open straight onto their own content. #}
+          {% if core2_focus_mode == '' %}
+          <div class="production-overview__start workspace-stack" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
             <section class="workspace-card production-health" aria-labelledby="production-health-title">
               <h2 id="production-health-title">Production health</h2>
               <div id="core2-journey-bar" role="status" aria-live="polite"><p class="workspace-caption">Checking production health…</p></div>
@@ -76,6 +85,7 @@
             {% with workspace_links_card = true, workspace_links_footer = production_board %}{% include 'shared/workspace_links.html' %}{% endwith %}
             {% endif %}
           </div>
+          {% endif %}
 
           {% if core2_focus_mode == '' %}
           <div id="core2-panel-overview" class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview" role="region" aria-label="Production overview">
@@ -221,15 +231,12 @@
             </div>
           </div>
           <div id="core2-panel-tasks" class="core2-tab-panel" data-core2-tab-panel="tasks" role="region" aria-label="Production tasks" hidden>
-            <section class="spa-form-section" aria-label="Tasks">
-              {% include "tasks/_board.html" %}
-            </section>
+            {% include "tasks/_board.html" %}
           </div>
           {% elif core2_focus_mode == 'inventory_live' %}
-          <section class="spa-form-section core2-focus-nav">
-            <a href="/core?tab=inventory" class="core2-focus-nav__back">← Back to inventory</a>
-          </section>
-          <section class="spa-form-section core2-stats-panel" aria-label="Live inventory snapshot">
+          <div class="workspace-stack">
+          <section class="workspace-card core2-stats-panel" aria-labelledby="core2-live-snapshot-title">
+            <h2 id="core2-live-snapshot-title">At a glance</h2>
             <div class="core2-live-inv__snapshot" id="core2-live-inv-snapshot">
               <div class="core2-live-inv__snapshot-main">
                 <div class="core2-live-inv__snap-cell"><span class="core2-live-inv__snap-value" id="core2-inv-snap-lines">0</span><span class="core2-live-inv__snap-label">Lines</span></div>
@@ -247,11 +254,11 @@
             </div>
           </section>
 
-          <section class="spa-form-section core2-live-inv" aria-label="Live inventory">
+          <section class="workspace-card core2-live-inv" aria-labelledby="core2-live-inv-title">
             <div class="core2-live-inv__header">
               <div>
-                <h2 class="spa-form-section-title">LIVE INVENTORY</h2>
-                <p class="core2-live-inv__subline">INVENTORY <span class="core2-active-live-dot"></span> LIVE</p>
+                <h2 id="core2-live-inv-title">Stock</h2>
+                <p class="workspace-caption core2-live-inv__subline"><span class="core2-active-live-dot"></span> Updates as stock moves</p>
               </div>
               <div class="core2-live-inv__actions">
                 <div class="flow-mode-segmented core2-live-inv__mode" role="tablist" aria-label="Inventory view mode">
@@ -325,6 +332,7 @@
               <div id="core2-inv-process-groups" class="core2-live-inv__process-groups"></div>
             </div>
           </section>
+          </div>
 
           <div class="core2-inv-sheet-overlay" id="core2-inv-sheet-overlay" hidden>
             <div class="core2-inv-sheet" role="dialog" aria-modal="true" aria-labelledby="core2-inv-sheet-title">
@@ -340,15 +348,13 @@
             </div>
           </div>
           {% elif core2_focus_mode == 'active_batches_live' %}
-          <section class="spa-form-section core2-focus-nav">
-            <a href="/core?tab=workflows" class="core2-focus-nav__back">← Back to product workflows</a>
-          </section>
-          <section id="core2-active-batches-panel" class="spa-form-section core2-active-batches-panel" aria-labelledby="core2-active-batches-title" data-core2-active-board="full">
+          <div class="workspace-stack">
+          <section id="core2-active-batches-panel" class="workspace-card core2-active-batches-panel" aria-labelledby="core2-active-batches-title" data-core2-active-board="full">
               <div class="core2-active-details-body">
               <div class="core2-active-header-row">
                 <div class="core2-active-heading-wrap">
-                  <h2 id="core2-active-batches-title" class="spa-form-section-title">Production board</h2>
-                  <p class="core2-active-subline">Every batch currently in production, grouped by the step it is at. Select a batch to see its history.</p>
+                  <h2 id="core2-active-batches-title">Production board</h2>
+                  <p class="workspace-caption core2-active-subline">Select a batch to see its history.</p>
                 </div>
                 <div class="core2-active-controls">
                   <label class="core2-active-control">
@@ -403,6 +409,7 @@
               </div>
               </div>
           </section>
+          </div>
           {% endif %}
 
           <div class="core2-health-sheet-overlay" id="core2-health-sheet-overlay" hidden>
@@ -607,6 +614,8 @@
       const back = document.getElementById('core2-overview-return');
       if (heading) heading.textContent = { overview: 'Production', inventory: 'Inventory', workflows: 'Product workflows', tasks: 'Production tasks' }[safeTab];
       if (back) back.hidden = safeTab === 'overview';
+      const caption = document.getElementById('core2-hub-caption');
+      if (caption) caption.textContent = { overview: 'Keep production moving, from stock to finished batches.', inventory: 'Stock on hand and what needs attention.', workflows: 'Product workflows and the batches running on them.', tasks: 'Plan operational work alongside Sales follow-ups.' }[safeTab];
       document.querySelectorAll('[data-core2-overview-only]').forEach(function (el) { el.hidden = safeTab !== 'overview'; });
 
       // Defensive cleanup: prevent stale overlays from intercepting clicks after SPA/tab transitions.

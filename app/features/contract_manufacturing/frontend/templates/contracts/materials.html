@@ -2,16 +2,24 @@
 {% block title %}Customer materials · biz-e{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}
 {% block content %}
-<main class="contract-workspace">
-<header><h1>Customer materials</h1><p>Raw stock held for your contract customers. Free-issue receipts carry no producer acquisition value.</p></header>
-<p data-material-error class="contract-error" role="alert" hidden></p>
-<section class="contract-card">
+<main class="contract-workspace workspace-overview workspace-page">
+<header class="workspace-header">
+<div><h1>Customer materials</h1><p>Raw stock held for your contract customers. Free-issue receipts carry no producer acquisition value.</p></div>
+<div class="workspace-header__actions"><a class="workspace-button" href="/core/contracts">Contract orders</a></div>
+</header>
+<p data-material-error class="contract-error workspace-notice" role="alert" hidden></p>
+<div class="workspace-stack">
+<section class="contract-card workspace-card" aria-labelledby="materials-held-title">
+<h2 id="materials-held-title">Materials held</h2>
+<p class="workspace-caption">Choose a customer to see the raw stock you hold for them.</p>
+<div class="workspace-form">
 <label>Customer<select data-material-customer><option value="">Choose a customer</option>{% for customer in customers %}<option value="{{ customer.id }}">{{ customer.name }}</option>{% endfor %}</select></label>
-<div data-material-list></div>
+</div>
+<div class="workspace-list" data-material-list></div>
 </section>
 {% if materials_enabled and can('inventory.adjust') %}
-<section class="contract-card"><h2>Receive raw materials</h2>
-<form hx-boost="false" data-material-receipt>
+<section class="contract-card workspace-card" aria-labelledby="materials-receive-title"><h2 id="materials-receive-title">Receive raw materials</h2>
+<form class="workspace-form" hx-boost="false" data-material-receipt>
 <label>Material<input name="name" maxlength="255" required></label>
 <label>Quantity<input name="quantity" type="number" min="0.0001" step="0.0001" required></label>
 <label>Unit<input name="unit" maxlength="50" required></label>
@@ -22,9 +30,10 @@
 <label>Expiry<input name="expiry_date" type="date"></label>
 <label>Delivery evidence reference<input name="evidence_reference" maxlength="255" required></label>
 <p>Each receipt creates a distinct lot at the default site. Customer title stays with the lot through recorded transfers. Finished goods title is a separate decision.</p>
-<button class="btn btn-primary" type="submit">Receive materials</button>
+<button class="workspace-button workspace-button--primary" type="submit">Receive materials</button>
 </form></section>
-{% elif not materials_enabled %}<p>Customer material receipts are not enabled yet.</p>{% endif %}
+{% elif not materials_enabled %}<p class="workspace-empty">Customer material receipts are not enabled yet.</p>{% endif %}
+</div>
 </main>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('contracts.static', filename='materials.js') }}"></script>{% endblock %}

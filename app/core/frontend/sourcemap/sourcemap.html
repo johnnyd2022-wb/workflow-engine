@@ -8,13 +8,20 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-content">
+<div class="max-content workspace-overview workspace-page sm-page">
 
-  <!-- Compact page title; the trace search is the primary action. -->
-  <section class="spa-form-section spa-page-hero" aria-labelledby="sm-page-title" data-sm-can-production="{{ 'true' if can('production.view') else 'false' }}">
-    <h1 class="page-title" id="sm-page-title">Source Map</h1>
-  </section>
+  <header class="workspace-header" aria-labelledby="sm-page-title" data-sm-can-production="{{ 'true' if can('production.view') else 'false' }}">
+    <div>
+      <h1 class="page-title" id="sm-page-title">Trace and recall</h1>
+      <p>Follow any item back to its suppliers and forward to the customers it reached.</p>
+    </div>
+    <div class="workspace-header__actions"><a class="workspace-button" href="/core/inventory/view">Back to inventory</a></div>
+  </header>
 
+  <div class="workspace-stack">
+  <section class="workspace-card" aria-labelledby="sm-trace-title">
+  <h2 id="sm-trace-title">Source map</h2>
+  <p class="workspace-caption">Search, then select an item, batch or supplier to trace it.</p>
   <!-- Search bar (no dropdown — filters the browse grid inline) -->
   <div class="sm-search-bar">
     <div class="sm-search-wrap">
@@ -75,9 +82,12 @@
     </table>
   </div>
   <div id="sm-recall-wrap" class="sm-recall-wrap" style="display:none;"></div>
-  <div class="sm-section-divider" role="separator"></div>
+  </section>
 
   <!-- Wastage log toggle — always visible, independent of trace state -->
+  <section class="workspace-card" aria-labelledby="sm-wastage-title">
+  <h2 id="sm-wastage-title">Wastage log</h2>
+  <p class="workspace-caption">Every disposal recorded, with its reason.</p>
   <div class="sm-wastage-bar">
     <button id="sm-wastage-toggle" class="spa-advanced-toggle" aria-expanded="false" aria-controls="sm-wastage-inline" role="switch" aria-checked="false">
       <span class="spa-advanced-toggle__label sm-wastage-toggle__label">View wastage log</span>
@@ -87,11 +97,10 @@
     </button>
   </div>
   <div id="sm-wastage-inline" style="display:none; padding-top: 12px;"></div>
-
-  <div class="sm-section-divider" role="separator"></div>
+  </section>
 
   <!-- System findings (collapsible, collapsed by default) -->
-  <section class="sm-findings sm-findings--collapsed" id="sm-findings-section" aria-label="System findings">
+  <section class="sm-findings sm-findings--collapsed workspace-card" id="sm-findings-section" aria-label="System findings">
     <div class="sm-findings__title-bar">
       <h2 class="sm-findings__title">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -126,6 +135,7 @@
       </div>
     </div>
   </section>
+  </div>
 
 </div>
 
