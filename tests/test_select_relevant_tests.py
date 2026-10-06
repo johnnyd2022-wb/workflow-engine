@@ -114,6 +114,42 @@ def test_fast_google_pointer_change_runs_focused_config_tests(monkeypatch):
     assert not plan["needs_browser"]
 
 
+def test_fast_ci_gate_script_change_runs_only_its_own_test(monkeypatch):
+    """A change to the red-main gate should not wait on the browser smoke or a database."""
+    _request_fast(monkeypatch)
+    script, test = "scripts/check_main_pipeline.py", "tests/test_check_main_pipeline.py"
+    assert selector.FAST_CI_SCRIPTS[script] == test
+    for paths in ([script], [test], [script, test], [script, test, "docs/ci-relevant-test-selection.md"]):
+        plan = selector.fast_plan(paths, "base", "head")
+        assert plan["mode"] == "fast"
+        assert plan["tests"] == [test]
+        assert plan["reasons"][test] == [f"ci::fast: CI gate script {script} / its focused test"]
+        assert not any(plan[key] for key in plan if key.startswith("needs_"))
+
+
+def test_fast_ci_gate_scripts_each_have_a_database_free_test_that_exists():
+    for script, test in selector.FAST_CI_SCRIPTS.items():
+        assert (selector.REPO_ROOT / script).is_file() and (selector.REPO_ROOT / test).is_file()
+        assert test in selector.DATABASE_FREE_TESTS
+
+
+def test_fast_ci_gate_script_mixed_with_other_code_uses_normal_ci(monkeypatch):
+    _request_fast(monkeypatch)
+    script = "scripts/check_main_pipeline.py"
+    for other in (
+        "scripts/check_backend_size.py",
+        "app/core/security/staff_site_endpoint_registry.py",
+        ".gitlab-ci.yml",
+    ):
+        assert selector.fast_plan([script, other], "base", "head") is None
+
+
+def test_ci_gate_script_without_the_label_uses_normal_ci(monkeypatch):
+    monkeypatch.setenv("CI_PIPELINE_SOURCE", "merge_request_event")
+    monkeypatch.setenv("CI_MERGE_REQUEST_LABELS", "bug")
+    assert selector.fast_plan(["scripts/check_main_pipeline.py"], "base", "head") is None
+
+
 def test_fast_label_cannot_bypass_unrelated_config_values(monkeypatch):
     _request_fast(monkeypatch)
     for key in (("app", "debug"), ("google_sign_in", "enabled"), ("DEFAULT", "password")):

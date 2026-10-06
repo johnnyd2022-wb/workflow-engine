@@ -31,6 +31,10 @@ NO_TESTS = "__NO_TESTS__"
 FAST_CONFIG_PATHS = frozenset({"app/config/local.ini", "app/config/local.ini.template"})
 FAST_TEST = "tests/test_config_google_secrets.py"
 FAST_CONFIG_KEYS = frozenset({"keepass_client_id_entry", "keepass_client_secret_entry"})
+# Stdlib-only CI gate scripts that never ship in the app, each with the focused test that
+# covers it. A ci::fast MR touching only these runs those tests and nothing else. Add a
+# script here only together with a database-free test of its own.
+FAST_CI_SCRIPTS = {"scripts/check_main_pipeline.py": "tests/test_check_main_pipeline.py"}
 
 
 @dataclass(frozen=True)
@@ -191,6 +195,7 @@ DATABASE_FREE_TESTS = frozenset(
         "tests/test_inventory_csv_validation.py",
         "tests/test_ui_shared_access_denied.py",
         FAST_TEST,
+        *FAST_CI_SCRIPTS.values(),
     }
 )
 NODE_TESTS = frozenset({"tests/test_execution_shared_utils_js.py"})
@@ -249,7 +254,7 @@ def _config_snapshot(ref: str, path: str) -> dict[tuple[str, str], str]:
 
 
 def fast_plan(paths: list[str], base: str, head: str) -> dict[str, Any] | None:
-    """Allow Markdown docs or just the local Google credential-entry pointers.
+    """Allow Markdown docs, the local Google credential-entry pointers, or CI gate scripts.
 
     Content checks use committed snapshots, not the worktree. Unknown files, other
     config keys, additions/deletions of config files, and inspection errors fall back
@@ -260,6 +265,8 @@ def fast_plan(paths: list[str], base: str, head: str) -> dict[str, Any] | None:
     if any(
         path not in FAST_CONFIG_PATHS
         and path != FAST_TEST
+        and path not in FAST_CI_SCRIPTS
+        and path not in FAST_CI_SCRIPTS.values()
         and path != "README.md"
         and not (path.startswith("docs/") and path.endswith(".md"))
         for path in paths
@@ -273,14 +280,20 @@ def fast_plan(paths: list[str], base: str, head: str) -> dict[str, Any] | None:
                 return None
     except (RuntimeError, configparser.Error):
         return None
-    tests = [FAST_TEST] if set(paths) & (FAST_CONFIG_PATHS | {FAST_TEST}) else []
+    reasons: dict[str, list[str]] = {}
+    if set(paths) & (FAST_CONFIG_PATHS | {FAST_TEST}):
+        reasons[FAST_TEST] = ["ci::fast: local Google credential pointers / focused config coverage"]
+    for script, test in FAST_CI_SCRIPTS.items():
+        if script in paths or test in paths:
+            reasons[test] = [f"ci::fast: CI gate script {script} / its focused test"]
+    tests = sorted(reasons)
     if any(not _existing_test(test) for test in tests):
         return None
     return {
         "changed_paths": sorted(paths),
         "mode": "fast",
         "tests": tests,
-        "reasons": {test: ["ci::fast: local Google credential pointers / focused config coverage"] for test in tests},
+        "reasons": reasons,
         "needs_browser": False,
         "needs_server": False,
         "needs_e2e": False,

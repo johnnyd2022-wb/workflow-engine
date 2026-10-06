@@ -71,9 +71,13 @@ The first allow-list covers:
 - Changes to only `google_sign_in.keepass_client_id_entry` and
   `google_sign_in.keepass_client_secret_entry` in `app/config/local.ini` and its
   template, optionally with `tests/test_config_google_secrets.py`.
+- CI gate scripts listed in `FAST_CI_SCRIPTS` (today `scripts/check_main_pipeline.py`),
+  optionally with their focused test (`tests/test_check_main_pipeline.py`) and Markdown docs.
 
 For the Google config case, the selector runs the focused Google credential config
-tests without database, Node, or browser setup. Documentation-only fast MRs select
+tests without database, Node, or browser setup. For a CI gate script, it runs only that
+script's own test, the same way. These scripts are stdlib-only and never ship in the app;
+add one to `FAST_CI_SCRIPTS` only together with a database-free test of its own. Documentation-only fast MRs select
 no pytest tests. `mr_e2e` and `migration_reversibility` log the fast-path decision
 and exit before dependency/browser/database setup; their runner services may still
 start. Lint, route validation, security/secret scanning, dependency auditing,
