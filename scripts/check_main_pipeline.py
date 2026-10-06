@@ -1,4 +1,9 @@
-"""Fail an MR gate while the default branch has no successful pipeline."""
+"""Fail an MR gate while the default branch has no successful pipeline.
+
+A red main would otherwise block the very merge request that repairs it. A merge request
+labelled ``fixes-main`` passes this gate while main is red; every other job still has to
+pass. The label is read when the pipeline is created, so add it before running the pipeline.
+"""
 
 import json
 import os
@@ -6,6 +11,14 @@ import ssl
 import sys
 from http.client import HTTPSConnection
 from urllib.parse import quote, urlsplit
+
+
+FIX_LABEL = "fixes-main"
+
+
+def _repairs_main() -> bool:
+    labels = os.environ.get("CI_MERGE_REQUEST_LABELS", "")
+    return FIX_LABEL in {label.strip() for label in labels.split(",")}
 
 
 def main() -> int:
@@ -46,7 +59,16 @@ def main() -> int:
     status = pipeline.get("status")
     print(f"{target} {sha[:8] if isinstance(sha, str) else '?'}: pipeline {status or 'missing'}")
     if pipeline.get("sha") != sha or pipeline.get("ref") != target or status != "success":
-        print(f"Merge blocked until the latest {target} pipeline succeeds.", file=sys.stderr)
+        if _repairs_main():
+            print(
+                f"{target} is not green, but this merge request is labelled {FIX_LABEL!r}: allowed through to repair it."
+            )
+            return 0
+        print(
+            f"Merge blocked until the latest {target} pipeline succeeds. "
+            f"Label the merge request that repairs {target} {FIX_LABEL!r}.",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
