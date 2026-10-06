@@ -1,0 +1,36 @@
+# The image CI jobs run in: the tools and locked dependencies they would otherwise install
+# on every run. See docs/ci-speedup-plan.md.
+#
+# A job never depends on this image being current. Each still runs `uv sync`, which is a
+# no-op when the lockfile matches and installs only the difference when it does not, so a
+# stale image costs seconds, not correctness. scripts/ci_image_tag.py derives the tag from
+# this file, pyproject.toml and uv.lock; main builds and pushes any tag that is missing.
+FROM python:3.14-bookworm
+
+ARG UV_VERSION=0.11.29
+
+# What the test, migration and browser jobs install with apt: the PostgreSQL client for
+# ci/setup_database.sh, curl/openssl for the local TLS app, and Node.js 20 for tests/js.
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends postgresql-client curl openssl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y -qq --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir "uv==${UV_VERSION}"
+
+# Jobs check out the repository somewhere else, so the environment lives outside it.
+# UV_PROJECT_ENVIRONMENT makes `uv sync` and `uv run` in the checkout use this one.
+ENV UV_PROJECT_ENVIRONMENT=/opt/ci-venv \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright \
+    CI_PREBUILT=1
+
+WORKDIR /opt/ci-deps
+COPY pyproject.toml uv.lock ./
+RUN uv sync --extra dev --frozen --no-install-project --no-cache
+
+# Chromium and the system libraries it needs, for the browser smoke and selected e2e tests.
+RUN uv run --no-sync playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /

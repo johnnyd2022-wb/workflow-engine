@@ -26,6 +26,16 @@ variables:
   # deliberately, not via drift — see the uv-audit-migration workstream in
   # .agents/plans/repo-modernisation-plan.md.
   UV_VERSION: "0.11.29"
+  # The pre-built CI image (ci/Dockerfile.ci): tools and locked dependencies the Python
+  # jobs would otherwise install on every run. The tag is `scripts/ci_image_tag.py`'s hash
+  # of the image's inputs; `ci_image_current` warns when it falls behind, and main builds
+  # any tag that is missing. A stale tag only costs time: every job still runs `uv sync`.
+  CI_IMAGE_TAG: "1ec1fed1ea484a7e"
+
+# Each step is skipped when the pre-built image already provides it (CI_PREBUILT is set
+# inside that image), and still works on a bare python image.
+.install_uv: &install_uv >-
+  uv --version 2>/dev/null | grep -q " ${UV_VERSION} " || pip install "uv==${UV_VERSION}"
 
 # One pipeline per push (docs/ci-speedup-plan.md). A branch with an open merge request
 # gets only its merge-request pipeline; without this every push also started a branch
@@ -70,9 +80,9 @@ semgrep-sast:
 # look for newer versions (that's Renovate's job, see .agents/plans/repo-modernisation-plan.md
 # §3) and Renovate does not replace it -- Renovate's own MRs still need to pass this.
 lockfile_consistency:
-  image: python:3.14-bookworm
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
   script:
-    - pip install "uv==${UV_VERSION}"
+    - *install_uv
     - uv lock --check
   only:
     - schedules
@@ -105,9 +115,9 @@ renovate:
 # Note: This checks only. To auto-fix locally, run: uv run workflow lint --fix
 ruff:
   stage: test
-  image: python:3.14-bookworm
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
   script:
-    - pip install "uv==${UV_VERSION}"
+    - *install_uv
     - uv sync --extra dev
     # Check-only: --fix / a plain `format` rewrite files inside the CI container and exit 0,
     # so the job could never fail on formatting and unformatted code reached main.
@@ -151,6 +161,18 @@ main_green:
     - merge_requests
   allow_failure: false
 
+# Warns (never blocks) when the pinned CI image no longer matches its inputs, so the tag
+# gets bumped after a dependency change instead of jobs quietly reinstalling every run.
+ci_image_current:
+  stage: test
+  image: python:3.14-bookworm
+  script:
+    - python3 scripts/ci_image_tag.py --check
+  only:
+    - merge_requests
+    - main
+  allow_failure: true
+
 # Guard the agent-written data stores (AER metrics ledger + findings history). These are
 # append-only JSONL that unattended skills write; a malformed line should fail fast here
 # rather than silently corrupt a scorecard or suppress the wrong finding. Stdlib-only.
@@ -172,11 +194,11 @@ data_stores:
 # composed app. The test environment mounts every optional product blueprint.
 feature_index_routes:
   stage: test
-  image: python:3.14-bookworm
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
   variables:
     ENVIRONMENT: test
   script:
-    - pip install "uv==${UV_VERSION}"
+    - *install_uv
     - uv sync --extra dev
     - uv run python scripts/check_feature_index_routes.py
   only:
@@ -190,7 +212,7 @@ feature_index_routes:
 # finish before dependency/database setup. See docs/ci-relevant-test-selection.md.
 relevant_tests:
   stage: test
-  image: python:3.14-bookworm
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
   services:
     - name: postgres:16
       alias: postgres
@@ -211,27 +233,27 @@ relevant_tests:
         echo "No Python tests selected for this approved documentation-only change."
         exit 0
       fi
-    - pip install "uv==${UV_VERSION}"
+    - *install_uv
     - uv sync --extra dev
     - |
       if python3 scripts/select_relevant_tests.py --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --needs-database; then
-        apt-get update -o Acquire::AllowInsecureRepositories=true -qq
-        apt-get install -y -qq postgresql-client curl openssl ca-certificates
+        test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq
+        test -n "${CI_PREBUILT:-}" || apt-get install -y -qq postgresql-client curl openssl ca-certificates
         chmod +x ci/*.sh
         ./ci/setup_database.sh
       fi
     - |
       if python3 scripts/select_relevant_tests.py --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --needs-node; then
-        apt-get update -o Acquire::AllowInsecureRepositories=true -qq
-        apt-get install -y -qq curl ca-certificates
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-        apt-get install -y -qq nodejs
+        test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq
+        test -n "${CI_PREBUILT:-}" || apt-get install -y -qq curl ca-certificates
+        test -n "${CI_PREBUILT:-}" || curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        test -n "${CI_PREBUILT:-}" || apt-get install -y -qq nodejs
       fi
   script:
     - |
       if python3 scripts/select_relevant_tests.py --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --needs-browser; then
         for attempt in 1 2 3; do
-          uv run playwright install --with-deps chromium && break
+          uv run playwright install $(test -n "${CI_PREBUILT:-}" || echo --with-deps) chromium && break
           if [ "$attempt" -eq 3 ]; then exit 1; fi
           sleep "$((attempt * 15))"
         done
@@ -260,7 +282,7 @@ relevant_tests:
 # browser regressions remain tracked under the parent 0.3 main-green work.
 mr_e2e:
   stage: test
-  image: python:3.14-bookworm
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
   services:
     - name: postgres:16
       alias: postgres
@@ -278,15 +300,15 @@ mr_e2e:
         echo "Skipping expensive setup for an approved ci::fast MR."
         exit 0
       fi
-    - pip install "uv==${UV_VERSION}"
+    - *install_uv
     - uv sync --extra dev
-    - apt-get update -o Acquire::AllowInsecureRepositories=true -qq
-    - apt-get install -y -qq postgresql-client curl openssl ca-certificates
+    - test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq
+    - test -n "${CI_PREBUILT:-}" || apt-get install -y -qq postgresql-client curl openssl ca-certificates
     - chmod +x ci/*.sh
     - ./ci/setup_database.sh
     - |
       for attempt in 1 2 3; do
-        uv run playwright install --with-deps chromium && break
+        uv run playwright install $(test -n "${CI_PREBUILT:-}" || echo --with-deps) chromium && break
         if [ "$attempt" -eq 3 ]; then exit 1; fi
         sleep "$((attempt * 15))"
       done
@@ -302,7 +324,7 @@ mr_e2e:
 # stages on main; merge requests run selected regressions and browser smoke above.
 unit_tests:
   stage: test
-  image: python:3.14-bookworm
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
   services:
     - name: postgres:16
       alias: postgres
@@ -318,13 +340,13 @@ unit_tests:
     POSTGRES_HOST_AUTH_METHOD: trust
   before_script:
     # Install dependencies
-    - pip install "uv==${UV_VERSION}"
+    - *install_uv
     - uv sync --extra dev
     # Install PostgreSQL client and curl for health checks
-    - apt-get update -o Acquire::AllowInsecureRepositories=true -qq && apt-get install -y -qq postgresql-client curl openssl ca-certificates
+    - test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq && test -n "${CI_PREBUILT:-}" || apt-get install -y -qq postgresql-client curl openssl ca-certificates
     # Node.js for tests/js/*.test.js (node --test); see tests/test_execution_shared_utils_js.py
-    - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    - apt-get install -y -qq nodejs
+    - test -n "${CI_PREBUILT:-}" || curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    - test -n "${CI_PREBUILT:-}" || apt-get install -y -qq nodejs
     # Make CI scripts executable
     - chmod +x ci/*.sh
     # Setup database (wait for postgres, update config, run migrations)
@@ -338,8 +360,12 @@ unit_tests:
     - main
   allow_failure: false
 
+# The security and migration jobs carry `needs: []` so they start with the pipeline instead
+# of waiting for the test stage: they do not depend on it, and on main that stage is the
+# ten-minute full suite. Build and deploy still wait for every earlier stage.
 semgrep:
   stage: security
+  needs: []
   image: semgrep/semgrep:latest
   script:
     - semgrep --config .semgrep/rules/ app/ --include="*.py" --include="*.js" --error
@@ -350,6 +376,7 @@ semgrep:
 
 semgrep_observability:
   stage: security
+  needs: []
   image: semgrep/semgrep:latest
   script:
     - semgrep --config .semgrep/rules/observability.yml app/ --include="*.py" --severity ERROR --error
@@ -364,6 +391,7 @@ semgrep_observability:
 # "write the rule, prove it catches the bug" (security-audit §3) mechanical, not a promise.
 semgrep_learned_rules:
   stage: security
+  needs: []
   image: semgrep/semgrep:latest
   script:
     - python3 scripts/rule_candidates.py verify
@@ -381,6 +409,7 @@ semgrep_learned_rules:
 # clone) so the diff base commit is always present to compute the range against.
 gitleaks:
   stage: security
+  needs: []
   image:
     name: zricethezav/gitleaks:latest
     entrypoint: [""]
@@ -411,9 +440,10 @@ gitleaks:
 # routes to the dependency-update skill, same as the old pip_audit job did.
 uv_audit:
   stage: security
-  image: python:3.14-bookworm
+  needs: []
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
   script:
-    - pip install "uv==${UV_VERSION}"
+    - *install_uv
     - uv sync --extra dev
     - mkdir -p .agents/reports/security
     - >
@@ -457,6 +487,7 @@ uv_audit:
 #   2. Add SOCKET_SECURITY_API_TOKEN as a masked, protected GitLab CI/CD variable.
 socket_security:
   stage: security
+  needs: []
   image: python:3.14-bookworm
   script:
     - pip install socketsecurity
@@ -490,7 +521,8 @@ socket_security:
 # second upgrade from scratch — see .agents/reports/inventory/review.md follow-up #1.
 migration_reversibility:
   stage: migrations
-  image: python:3.14-bookworm
+  needs: []
+  image: $CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG
   services:
     - name: postgres:16
       alias: postgres
@@ -508,9 +540,9 @@ migration_reversibility:
         echo "Skipping expensive setup for an approved ci::fast MR."
         exit 0
       fi
-    - pip install "uv==${UV_VERSION}"
+    - *install_uv
     - uv sync --extra dev
-    - apt-get update -o Acquire::AllowInsecureRepositories=true -qq && apt-get install -y -qq postgresql-client
+    - test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq && test -n "${CI_PREBUILT:-}" || apt-get install -y -qq postgresql-client
     - chmod +x ci/*.sh
     - ./ci/setup_database.sh
   script:
@@ -574,6 +606,41 @@ docker_build_publish:
       docker push "$CI_REGISTRY_IMAGE/app:prod-$CI_COMMIT_SHORT_SHA"
   only:
     - main
+
+# Builds the CI image for this checkout when the registry does not have it yet (see
+# ci/Dockerfile.ci). Runs here, not on merge requests, for the same reason as the app
+# image: only merged code builds on the host's Docker. Never blocks a deploy; until the
+# tag is bumped, jobs keep using the previous image and `uv sync` covers the difference.
+ci_image_build:
+  stage: build
+  needs: []
+  tags:
+    - deploy-target
+  resource_group: workflow-registry-build
+  variables:
+    DOCKER_HOST: "unix:///var/run/docker.sock"
+    DOCKER_API_VERSION: "1.43"
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_TLS_VERIFY: ""
+  script:
+    - |
+      set -eu
+      TAG=$(cat ci/Dockerfile.ci pyproject.toml uv.lock | sha256sum | cut -c1-16)
+      IMAGE="$CI_REGISTRY_IMAGE/ci:$TAG"
+      CI_DOCKER_CONFIG_DIR=$(mktemp -d)
+      export DOCKER_CONFIG="$CI_DOCKER_CONFIG_DIR"
+      trap 'rm -rf -- "$CI_DOCKER_CONFIG_DIR"' EXIT
+      printf '%s' "$CI_REGISTRY_PASSWORD" | docker login --username "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+      if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+        echo "CI image $IMAGE already exists."
+        exit 0
+      fi
+      docker build --build-arg "UV_VERSION=$UV_VERSION" -f ci/Dockerfile.ci -t "$IMAGE" .
+      docker push "$IMAGE"
+      echo "Built $IMAGE. Set CI_IMAGE_TAG to $TAG in .gitlab-ci.yml to use it."
+  only:
+    - main
+  allow_failure: true
 
 # ============================================================================
 # CD: deploy stage -- decoupled from CI (pulls the built artifact, never rebuilds),
