@@ -31,6 +31,42 @@ NO_TESTS = "__NO_TESTS__"
 FAST_CONFIG_PATHS = frozenset({"app/config/local.ini", "app/config/local.ini.template"})
 FAST_TEST = "tests/test_config_google_secrets.py"
 FAST_CONFIG_KEYS = frozenset({"keepass_client_id_entry", "keepass_client_secret_entry"})
+# Tooling that never ships in the app, each script with the focused test that covers it.
+# A ci::fast MR touching only these runs those tests and nothing else: no database, Node
+# or browser. Every test here must pass with no network (see the selector's own tests).
+# Add a script only together with such a test. The selector itself is deliberately absent.
+_FAST_CI_GATES = ("check_main_pipeline",)
+_FAST_AGENT_TOOLING = (
+    "agent_launch",
+    "e2e_coverage",
+    "finding_history",
+    "findings_index",
+    "mr_conflict_plan",
+    "mr_conflict_watch",
+    "rule_candidates",
+    "session_sweep",
+    "skill_metrics",
+    "test_map_check",
+    "worktree_sweep",
+)
+_FAST_REPLAY_TOOLING = (
+    "whistlebird_legacy",
+    "whistlebird_lot_details",
+    "whistlebird_recent_batches",
+    "whistlebird_replay",
+    "whistlebird_replay_correct_timestamps",
+    "whistlebird_replay_timeline",
+    "whistlebird_suppliers",
+)
+FAST_TOOLING = {
+    f"scripts/{name}.py": f"tests/test_{name}.py"
+    for name in (*_FAST_CI_GATES, *_FAST_AGENT_TOOLING, *_FAST_REPLAY_TOOLING)
+}
+# Agent workspaces hold skills, plans and reports that the agent tooling reads. A change
+# there cannot affect the app, but it can break that tooling, so its tests run.
+FAST_AGENT_WORKSPACES = (".agents/", ".claude/", ".cursor/", "cursor_instructions/")
+FAST_AGENT_WORKSPACE_TESTS = tuple(f"tests/test_{name}.py" for name in _FAST_AGENT_TOOLING)
+FAST_DOC_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".pdf")
 
 
 @dataclass(frozen=True)
@@ -191,6 +227,7 @@ DATABASE_FREE_TESTS = frozenset(
         "tests/test_inventory_csv_validation.py",
         "tests/test_ui_shared_access_denied.py",
         FAST_TEST,
+        *FAST_TOOLING.values(),
     }
 )
 NODE_TESTS = frozenset({"tests/test_execution_shared_utils_js.py"})
@@ -248,8 +285,13 @@ def _config_snapshot(ref: str, path: str) -> dict[tuple[str, str], str]:
     return values
 
 
+def _fast_documentation(path: str) -> bool:
+    """Markdown anywhere, and images or PDFs under docs/. The app reads neither at runtime."""
+    return path.endswith(".md") or (path.startswith("docs/") and path.endswith(FAST_DOC_IMAGE_SUFFIXES))
+
+
 def fast_plan(paths: list[str], base: str, head: str) -> dict[str, Any] | None:
-    """Allow Markdown docs or just the local Google credential-entry pointers.
+    """Allow documentation, agent workspaces, non-app tooling, or the Google credential pointers.
 
     Content checks use committed snapshots, not the worktree. Unknown files, other
     config keys, additions/deletions of config files, and inspection errors fall back
@@ -260,8 +302,10 @@ def fast_plan(paths: list[str], base: str, head: str) -> dict[str, Any] | None:
     if any(
         path not in FAST_CONFIG_PATHS
         and path != FAST_TEST
-        and path != "README.md"
-        and not (path.startswith("docs/") and path.endswith(".md"))
+        and path not in FAST_TOOLING
+        and path not in FAST_TOOLING.values()
+        and not _fast_documentation(path)
+        and not path.startswith(FAST_AGENT_WORKSPACES)
         for path in paths
     ):
         return None
@@ -273,14 +317,24 @@ def fast_plan(paths: list[str], base: str, head: str) -> dict[str, Any] | None:
                 return None
     except (RuntimeError, configparser.Error):
         return None
-    tests = [FAST_TEST] if set(paths) & (FAST_CONFIG_PATHS | {FAST_TEST}) else []
+    reasons: dict[str, list[str]] = {}
+    if set(paths) & (FAST_CONFIG_PATHS | {FAST_TEST}):
+        reasons[FAST_TEST] = ["ci::fast: local Google credential pointers / focused config coverage"]
+    for script, test in FAST_TOOLING.items():
+        if script in paths or test in paths:
+            reasons.setdefault(test, []).append(f"ci::fast: non-app tooling {script} / its focused test")
+    workspace = sorted(path for path in paths if path.startswith(FAST_AGENT_WORKSPACES))
+    if workspace:
+        for test in FAST_AGENT_WORKSPACE_TESTS:
+            reasons.setdefault(test, []).append(f"ci::fast: agent workspace change ({workspace[0]})")
+    tests = sorted(reasons)
     if any(not _existing_test(test) for test in tests):
         return None
     return {
         "changed_paths": sorted(paths),
         "mode": "fast",
         "tests": tests,
-        "reasons": {test: ["ci::fast: local Google credential pointers / focused config coverage"] for test in tests},
+        "reasons": reasons,
         "needs_browser": False,
         "needs_server": False,
         "needs_e2e": False,

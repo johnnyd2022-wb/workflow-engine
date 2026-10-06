@@ -65,16 +65,43 @@ Add the GitLab label **`ci::fast`** before creating an MR pipeline. For an exist
 MR, add the label then use **Run pipeline** in its Pipelines tab to create a new
 MR pipeline. Retrying jobs from an old pipeline does not refresh its label values.
 
-The first allow-list covers:
+The allow-list covers four kinds of change that cannot affect the running app:
 
-- Markdown files under `docs/` and `README.md`.
-- Changes to only `google_sign_in.keepass_client_id_entry` and
-  `google_sign_in.keepass_client_secret_entry` in `app/config/local.ini` and its
-  template, optionally with `tests/test_config_google_secrets.py`.
+- **Documentation.** Markdown anywhere in the repository, and images or PDFs under
+  `docs/`. No pytest tests are selected.
+- **Agent workspaces.** Anything under `.agents/`, `.claude/`, `.cursor/` or
+  `cursor_instructions/`. The agent-tooling tests run, because that tooling reads these
+  files (a routing table pointing at a deleted skill, for example).
+- **Non-app tooling scripts**, each with its own focused test, listed in `FAST_TOOLING`:
+  - the CI gate `scripts/check_main_pipeline.py`;
+  - agent tooling: `agent_launch`, `e2e_coverage`, `finding_history`, `findings_index`,
+    `mr_conflict_plan`, `mr_conflict_watch`, `rule_candidates`, `session_sweep`,
+    `skill_metrics`, `test_map_check`, `worktree_sweep`;
+  - Whistlebird replay tooling: `whistlebird_legacy`, `whistlebird_lot_details`,
+    `whistlebird_recent_batches`, `whistlebird_replay`,
+    `whistlebird_replay_correct_timestamps`, `whistlebird_replay_timeline`,
+    `whistlebird_suppliers`.
 
-For the Google config case, the selector runs the focused Google credential config
-tests without database, Node, or browser setup. Documentation-only fast MRs select
-no pytest tests. `mr_e2e` and `migration_reversibility` log the fast-path decision
+  Only the tests for the scripts touched are run.
+- **Google credential pointers.** Changes to only
+  `google_sign_in.keepass_client_id_entry` and `google_sign_in.keepass_client_secret_entry`
+  in `app/config/local.ini` and its template, optionally with
+  `tests/test_config_google_secrets.py`. The focused config tests run.
+
+Every selected test runs without database, Node, or browser setup.
+
+Deliberately not covered, so they use normal CI even with the label: the selector itself
+(`scripts/select_relevant_tests.py`), scripts with no focused test (`check_backend_size`,
+`check_feature_index_routes`, `database_recovery`, shell scripts), replay scripts whose
+tests need a database (`whistlebird_migration`, `whistlebird_np3`, `whistlebird_crm`,
+`whistlebird_rebuild_api`), the replay manifests under `docs/*.json`, and anything under
+`app/`, including CSS and templates.
+
+To add a script, give it a test that passes with no network and add it to `FAST_TOOLING`;
+`tests/test_select_relevant_tests.py` checks every listed test exists and never reaches for
+the app or a database.
+
+`mr_e2e` and `migration_reversibility` log the fast-path decision
 and exit before dependency/browser/database setup; their runner services may still
 start. Lint, route validation, security/secret scanning, dependency auditing,
 data-store checks, and the main-green gate remain active.
