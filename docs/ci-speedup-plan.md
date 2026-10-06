@@ -30,14 +30,20 @@ Status: `[ ]` to do, `[x]` done.
       never cancels the release pipeline or a deploy.
 
 ### Runner configuration (on the runner host, not in the repository)
-Both need a runner restart, which kills jobs in flight, so do them when nothing is running.
+Applied 2026-10-06 in `/etc/gitlab-runner/config.toml` inside the `gitlab-runner` container
+(`~/.config/gitlab-runner/config.toml` on the host). The runner reloads this file on its
+own, so no restart was needed and running jobs were not interrupted. The previous file is
+kept beside it as `config.toml.bak-2026-10-06`.
 
-- [ ] **Raise `concurrent` from 3 to 6.** Six jobs at about 1 to 1.5 GB each fit in WSL's
+- [x] **`concurrent` raised from 3 to 6.** Six jobs at about 1 to 1.5 GB each fit in WSL's
       15.5 GB with the app and databases already running. Going higher needs more memory
       for WSL (`.wslconfig`, then a WSL restart).
-- [ ] **Stop re-pulling images and cache uv downloads.** `pull_policy = ["if-not-present"]`
-      on the Docker runner, and a shared uv cache volume with `UV_CACHE_DIR` pointing at it.
-      Images then need a deliberate `docker pull` to pick up a new base image.
+- [x] **Images are no longer re-pulled every job** (`pull_policy = ["if-not-present"]` on
+      the Docker runner). A new base image now needs a deliberate `docker pull` on the host,
+      for example `docker pull python:3.14-bookworm`.
+- [x] **uv downloads are cached across jobs.** The host directory
+      `~/.cache/gitlab-runner-uv` is mounted at `/uv-cache`, with `UV_CACHE_DIR=/uv-cache`
+      and `UV_LINK_MODE=copy` set for every job on this runner.
 
 ### Later, as their own pieces of work
 - [ ] **Pre-built CI image** with uv, the locked dependencies, the PostgreSQL client and
