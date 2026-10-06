@@ -14,6 +14,10 @@ LOGGER = get_logger(__name__)
 # credentials, or a `prod` deploy would silently read the tracked config file.
 PRODUCTION_ENVIRONMENTS = frozenset({"prod", "production"})
 
+# Public development fallback for ``[app] secret_key``. Fine locally; never acceptable as a
+# production secret, which is why production paths reject it by name.
+DEV_SECRET_KEY = "dev-secret-key-change-in-production"
+
 
 class Config:
     """Configuration loader for environment-specific settings"""
@@ -320,6 +324,25 @@ class Config:
     @property
     def xero_redirect_uri(self) -> str:
         return self._clean_config_secret(os.getenv("XERO_REDIRECT_URI") or self.get("xero", "redirect_uri", ""))
+
+    @property
+    def xero_token_secret(self) -> str:
+        """Secret the Xero OAuth tokens at rest are encrypted under.
+
+        Production takes it from ``XERO_TOKEN_ENCRYPTION_KEY`` only -- never a tracked config
+        file -- and refuses a missing or publicly-known value. local/test keep the historical
+        ``[app] secret_key`` / development fallback so tokens already stored there keep decrypting.
+        """
+        if self._is_production_env:
+            value = self._clean_config_secret(os.getenv("XERO_TOKEN_ENCRYPTION_KEY"))
+            if len(value.encode("utf-8")) < 32 or value in {"PROTECTED", DEV_SECRET_KEY}:
+                raise RuntimeError(
+                    "A strong Xero token encryption key is required in production. Set "
+                    "XERO_TOKEN_ENCRYPTION_KEY to a random secret of at least 32 bytes from the "
+                    "deployment secret store; it is never read from a tracked config file."
+                )
+            return value
+        return self.get("app", "secret_key", DEV_SECRET_KEY)
 
     @property
     def sender_email(self) -> str:

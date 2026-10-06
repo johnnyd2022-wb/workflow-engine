@@ -37,15 +37,15 @@ class XeroOAuthService:
         self.tenant_repo = XeroTenantRepository(db)
 
     # ------------------------------------------------------------------
-    # Encryption helpers — Fernet key derived from app secret_key
+    # Encryption helpers — Fernet key derived from config.xero_token_secret
+    # (XERO_TOKEN_ENCRYPTION_KEY in production; see Config.xero_token_secret)
     # ------------------------------------------------------------------
 
     @staticmethod
     def _fernet():
         from cryptography.fernet import Fernet
 
-        secret = config.get("app", "secret_key", fallback="dev-secret-key-change-in-production")
-        key = hashlib.sha256(secret.encode()).digest()
+        key = hashlib.sha256(config.xero_token_secret.encode()).digest()
         return Fernet(base64.urlsafe_b64encode(key))
 
     @classmethod
