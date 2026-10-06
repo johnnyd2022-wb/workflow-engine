@@ -114,26 +114,62 @@ def test_fast_google_pointer_change_runs_focused_config_tests(monkeypatch):
     assert not plan["needs_browser"]
 
 
-def test_fast_ci_gate_script_change_runs_only_its_own_test(monkeypatch):
+def test_fast_tooling_change_runs_only_its_own_test(monkeypatch):
     """A change to the red-main gate should not wait on the browser smoke or a database."""
     _request_fast(monkeypatch)
     script, test = "scripts/check_main_pipeline.py", "tests/test_check_main_pipeline.py"
-    assert selector.FAST_CI_SCRIPTS[script] == test
+    assert selector.FAST_TOOLING[script] == test
     for paths in ([script], [test], [script, test], [script, test, "docs/ci-relevant-test-selection.md"]):
         plan = selector.fast_plan(paths, "base", "head")
         assert plan["mode"] == "fast"
         assert plan["tests"] == [test]
-        assert plan["reasons"][test] == [f"ci::fast: CI gate script {script} / its focused test"]
+        assert plan["reasons"][test] == [f"ci::fast: non-app tooling {script} / its focused test"]
         assert not any(plan[key] for key in plan if key.startswith("needs_"))
 
 
-def test_fast_ci_gate_scripts_each_have_a_database_free_test_that_exists():
-    for script, test in selector.FAST_CI_SCRIPTS.items():
+def test_fast_tooling_covers_gates_agent_tooling_and_replay_tooling(monkeypatch):
+    _request_fast(monkeypatch)
+    paths = ["scripts/whistlebird_replay.py", "scripts/skill_metrics.py", "tests/test_worktree_sweep.py"]
+    plan = selector.fast_plan(paths, "base", "head")
+    assert plan["tests"] == [
+        "tests/test_skill_metrics.py",
+        "tests/test_whistlebird_replay.py",
+        "tests/test_worktree_sweep.py",
+    ]
+
+
+def test_fast_tooling_scripts_each_have_a_database_free_test_that_exists():
+    assert len(selector.FAST_TOOLING) == 19
+    for script, test in selector.FAST_TOOLING.items():
         assert (selector.REPO_ROOT / script).is_file() and (selector.REPO_ROOT / test).is_file()
         assert test in selector.DATABASE_FREE_TESTS
 
 
-def test_fast_ci_gate_script_mixed_with_other_code_uses_normal_ci(monkeypatch):
+def test_fast_tooling_tests_never_reach_for_the_app_or_a_database():
+    """The fast path starts no database, so a listed test must not need one."""
+    needs_runtime = ("db_session", "create_app", "flask_app", "from app.", "import app", "psycopg", "live_server")
+    for test in selector.FAST_TOOLING.values():
+        source = (selector.REPO_ROOT / test).read_text(encoding="utf-8")
+        assert not [marker for marker in needs_runtime if marker in source], test
+
+
+def test_fast_never_covers_the_selector_or_scripts_without_a_focused_test(monkeypatch):
+    _request_fast(monkeypatch)
+    for path in (
+        "scripts/select_relevant_tests.py",
+        "tests/test_select_relevant_tests.py",
+        "scripts/check_backend_size.py",
+        "scripts/check_feature_index_routes.py",
+        "scripts/whistlebird_migration.py",
+        "scripts/whistlebird_np3.py",
+        "scripts/database_recovery.py",
+        "scripts/run_prod.sh",
+        "docs/whistlebird-recent-batches-source.json",
+    ):
+        assert selector.fast_plan([path], "base", "head") is None, path
+
+
+def test_fast_tooling_mixed_with_app_or_ci_code_uses_normal_ci(monkeypatch):
     _request_fast(monkeypatch)
     script = "scripts/check_main_pipeline.py"
     for other in (
@@ -144,10 +180,29 @@ def test_fast_ci_gate_script_mixed_with_other_code_uses_normal_ci(monkeypatch):
         assert selector.fast_plan([script, other], "base", "head") is None
 
 
-def test_ci_gate_script_without_the_label_uses_normal_ci(monkeypatch):
+def test_fast_tooling_without_the_label_uses_normal_ci(monkeypatch):
     monkeypatch.setenv("CI_PIPELINE_SOURCE", "merge_request_event")
     monkeypatch.setenv("CI_MERGE_REQUEST_LABELS", "bug")
     assert selector.fast_plan(["scripts/check_main_pipeline.py"], "base", "head") is None
+
+
+def test_fast_documentation_is_markdown_anywhere_and_images_under_docs(monkeypatch):
+    _request_fast(monkeypatch)
+    for path in ("CLAUDE.md", "DEPLOYMENT.md", "app/features/planning/README.md", "docs/img/board.png", "docs/a.pdf"):
+        plan = selector.fast_plan([path], "base", "head")
+        assert plan["mode"] == "fast" and plan["tests"] == [], path
+    for path in ("app/static/logo.png", "docs/data.json", "docs/tool.py", "app/core/frontend/css/core2.css"):
+        assert selector.fast_plan([path], "base", "head") is None, path
+
+
+def test_fast_agent_workspace_change_runs_the_agent_tooling_tests(monkeypatch):
+    """Skills, plans and reports cannot affect the app, but the tooling that reads them can break."""
+    _request_fast(monkeypatch)
+    for path in (".claude/skills/ci-gate/SKILL.md", ".agents/plans/feature-slicing-plan.md", ".agents/routing.json"):
+        plan = selector.fast_plan([path], "base", "head")
+        assert plan["mode"] == "fast"
+        assert plan["tests"] == sorted(selector.FAST_AGENT_WORKSPACE_TESTS)
+        assert not any(plan[key] for key in plan if key.startswith("needs_"))
 
 
 def test_fast_label_cannot_bypass_unrelated_config_values(monkeypatch):
