@@ -33,6 +33,7 @@ import argparse
 import os
 import re
 import sys
+from contextlib import contextmanager
 from datetime import date
 from decimal import ROUND_FLOOR, Decimal
 from pathlib import Path
@@ -270,6 +271,10 @@ class MarkerStore:
             ).fetchall()
             return [{"id": r[0], "step_number": r[1], "status": r[2]} for r in rows]
 
+    def produced_item_for_step(self, execution_step_id: UUID, name: str) -> dict[str, Any] | None:
+        """The first item a step produced with this name (see `_produced_items_for_step`)."""
+        return _produced_item_for_step(self, execution_step_id, name)
+
     def step_already_completed(self, execution_id: UUID, step_number: int) -> bool:
         # execution_steps.status is stored as the Python enum's member NAME (upper-case,
         # e.g. "COMPLETED"), not its lower-case .value the app compares against
@@ -310,6 +315,19 @@ class MarkerStore:
                 {"org_id": str(self.org_id)},
             ).first()
             return bool(row and row[0])
+
+    def required_evidence_settings(self) -> dict[str, Any] | None:
+        """The NZ-alcohol profile settings, only when they make evidence files mandatory on Core steps."""
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT settings FROM compliance_profiles "
+                    "WHERE org_id = :org_id AND industry_module = 'nz_alcohol' AND enabled LIMIT 1"
+                ),
+                {"org_id": str(self.org_id)},
+            ).first()
+        settings = dict(row[0] or {}) if row else {}
+        return settings if settings.get("np3_execution_evidence_mode") == "required" else None
 
     def execution_id_for_global_vat(self, global_vat: int) -> str | None:
         """Find an execution by its global_vat marker regardless of product line -- a
@@ -941,6 +959,28 @@ DISPATCH = {
 }
 
 
+@contextmanager
+def _evidence_requirement_lifted(client: ReplayClient, store: MarkerStore):
+    """Let the replay complete Core steps on a tenant that already requires evidence files.
+
+    A tenant rebuilt earlier carries the manifest's `np3_execution_evidence_mode: required`
+    profile, which refuses every Core step that has no uploaded file -- so resuming to add
+    newly recorded history would stop at its first new step. The requirement is lifted for
+    the replay only, and put back whatever happens.
+    """
+    required_settings = store.required_evidence_settings()
+    if required_settings is None:
+        yield
+        return
+    client.put(
+        "/api/compliant/profile", {"settings": {**required_settings, "np3_execution_evidence_mode": "recommended"}}
+    )
+    try:
+        yield
+    finally:
+        client.put("/api/compliant/profile", {"settings": required_settings})
+
+
 def run_replay(
     base_url: str,
     legacy_source: str | Path,
@@ -990,43 +1030,44 @@ def run_replay(
     client.login(admin_email, admin_password)
 
     counts = {"issued": 0, "skipped": 0, "total": len(events)}
-    for index, event in enumerate(events):
-        handler = DISPATCH[event.event_type]
-        try:
-            issued = handler(client, store, event)
-        except ReplayRejectedError:
-            print(f"[{index + 1}/{len(events)}] REJECTED at {event.event_id} ({event.real_date})", file=sys.stderr)
-            raise
-        if not issued:
-            counts["skipped"] += 1
-        else:
-            counts["issued"] += 1
-        if (index + 1) % 25 == 0:
-            print(f"[{index + 1}/{len(events)}] {event.event_id} ({event.real_date})")
+    with _evidence_requirement_lifted(client, store):
+        for index, event in enumerate(events):
+            handler = DISPATCH[event.event_type]
+            try:
+                issued = handler(client, store, event)
+            except ReplayRejectedError:
+                print(f"[{index + 1}/{len(events)}] REJECTED at {event.event_id} ({event.real_date})", file=sys.stderr)
+                raise
+            if not issued:
+                counts["skipped"] += 1
+            else:
+                counts["issued"] += 1
+            if (index + 1) % 25 == 0:
+                print(f"[{index + 1}/{len(events)}] {event.event_id} ({event.real_date})")
 
-    # Expired stock is written off only after every consumption has happened, so the wastage
-    # API sees each lot's true remainder.
-    if disposal_list is not None and limit is None:
-        try:
-            counts["disposals"] = disposals.replay_disposals(client, store, disposal_list)
-        except disposals.DisposalReplayError as exc:
-            raise ReplayRejectedError(str(exc)) from exc
+        # Expired stock is written off only after every consumption has happened, so the wastage
+        # API sees each lot's true remainder.
+        if disposal_list is not None and limit is None:
+            try:
+                counts["disposals"] = disposals.replay_disposals(client, store, disposal_list)
+            except disposals.DisposalReplayError as exc:
+                raise ReplayRejectedError(str(exc)) from exc
 
-    # CRM mappings need each final product to exist, so they follow the Core history.
-    if crm_manifest is not None and limit is None:
-        try:
-            counts["crm"] = crm.replay_crm_config(client, crm_manifest)
-        except crm.CrmReplayError as exc:
-            raise ReplayRejectedError(str(exc)) from exc
+        # CRM mappings need each final product to exist, so they follow the Core history.
+        if crm_manifest is not None and limit is None:
+            try:
+                counts["crm"] = crm.replay_crm_config(client, crm_manifest)
+            except crm.CrmReplayError as exc:
+                raise ReplayRejectedError(str(exc)) from exc
 
-    # Suppliers are the address book for the names on the inventory the replay just created.
-    if supplier_list is not None and limit is None:
-        counts["suppliers"] = suppliers.replay_suppliers(client, supplier_list)
+        # Suppliers are the address book for the names on the inventory the replay just created.
+        if supplier_list is not None and limit is None:
+            counts["suppliers"] = suppliers.replay_suppliers(client, supplier_list)
 
-    # Recent real batches draw from whatever stock the Core replay above just created, so
-    # they run after it -- but leave NP3 last, since it can otherwise block Core step completions.
-    if recent_batch_list is not None and limit is None:
-        counts["recent_batches"] = recent_batches.replay_recent_batches(client, store, recent_batch_list)
+        # Recent real batches draw from whatever stock the Core replay above just created, so
+        # they run after it -- but leave NP3 last, since it can otherwise block Core step completions.
+        if recent_batch_list is not None and limit is None:
+            counts["recent_batches"] = recent_batches.replay_recent_batches(client, store, recent_batch_list)
 
     # NP3 evidence goes last: an `np3_execution_evidence_mode: required` profile (part of
     # the manifest) would otherwise block the Core step completions above.

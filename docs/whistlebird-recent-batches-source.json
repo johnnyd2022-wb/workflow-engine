@@ -1,12 +1,25 @@
 {
-  "_comment": "Real, currently-in-progress production batches -- distinct from docs/whistlebird-production-sheet-source.json, which is the founder's historical spreadsheet of batches that have already finished every step. An entry here started recently and has NOT finished every step yet: it draws its tracked ingredients from whatever real stock the live tenant currently holds (FIFO, oldest purchase_date first), not from a historical purchase ledger, since these ARE that stock. Only the maceration step is supported today; extending to distilling/aging/bottling is a deliberate follow-up. See scripts/whistlebird_recent_batches.py.",
+  "_comment": "Real, currently-in-progress production batches -- distinct from docs/whistlebird-production-sheet-source.json, which is the founder's historical spreadsheet of batches that have already finished every step. An entry here started recently and has NOT finished every step yet: it draws its tracked ingredients from whatever real stock the live tenant currently holds (FIFO, oldest purchase_date first), not from a historical purchase ledger, since these ARE that stock. Maceration, distilling and aging (the VAT fill) are supported; each later step may carry its own date in step_dates, distilling records the two flask_codes, and aging records the vat_number chosen at the fill. Bottling/labelling are a deliberate follow-up. See scripts/whistlebird_recent_batches.py.",
   "batches": [
     {
       "marker": "solstice-2026-09-22-maceration",
       "product_line": "solstice",
       "started": "2026-09-22",
-      "steps_completed": ["maceration"],
-      "note": "Founder-confirmed (2026-09-22): maceration put on tonight for a new Solstice batch. VAT number is chosen later, at Aging."
+      "steps_completed": [
+        "maceration",
+        "distilling",
+        "aging"
+      ],
+      "note": "Founder-confirmed (2026-09-22): maceration put on tonight for a new Solstice batch. Founder-confirmed (2026-10-05): distilled 2026-09-29 ('Distilled Solstice (VAT60)') and VAT60 filled the same day with the usual Solstice VAT measurements (17.776L NGS + 25.064L water, as previous Solstice VATs). Flask codes continue the Solstice sequence after VAT54's WBSS27/WBSS28. Not yet bottled.",
+      "step_dates": {
+        "distilling": "2026-09-29",
+        "aging": "2026-09-29"
+      },
+      "flask_codes": [
+        "WBSS29",
+        "WBSS30"
+      ],
+      "vat_number": 60
     }
   ]
 }

@@ -1,8 +1,9 @@
 """Whistlebird recent-batches replay (scripts/whistlebird_recent_batches.py): manifest rules and
-the maceration replay logic, against a stub client/store (no real database or server)."""
+the maceration, distilling and VAT-fill replay logic, against a stub client/store (no real database or server)."""
 
 import copy
 import sys
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -30,7 +31,19 @@ def test_committed_manifest_is_valid():
     assert len(batches) >= 1
     solstice = next(b for b in batches if b.marker == "solstice-2026-09-22-maceration")
     assert solstice.product_line == "solstice"
-    assert solstice.steps_completed == ("maceration",)
+    assert solstice.steps_completed == ("maceration", "distilling", "aging")
+    # 2026-09-29: distilled and VAT60 filled, a week after the maceration went on.
+    assert solstice.date_of("maceration") == date(2026, 9, 22)
+    assert solstice.date_of("distilling") == solstice.date_of("aging") == date(2026, 9, 29)
+    assert (solstice.vat_number, solstice.batch_label, solstice.flask_codes) == (60, "VAT60", ("WBSS29", "WBSS30"))
+
+
+def test_committed_production_manifest_records_vat57_bottling():
+    batches, _excluded = rb.wm._load_manifest(rb.wm.DEFAULT_PRODUCTION_MANIFEST)
+    batch = next(b for b in batches if b.global_vat == 57)
+
+    assert [(b["date"], Decimal(str(b["bottles"]))) for b in batch.bottlings] == [("2026-09-29", Decimal("78"))]
+    assert batch.pending_steps == frozenset({"labelling"})
 
 
 @pytest.mark.parametrize(
@@ -40,7 +53,12 @@ def test_committed_manifest_is_valid():
         (lambda d: d["batches"][0].update(marker=""), "marker is required"),
         (lambda d: d["batches"].append(copy.deepcopy(d["batches"][0])), "duplicate marker"),
         (lambda d: d["batches"][0].update(product_line="rosella"), "product_line must be one of"),
-        (lambda d: d["batches"][0].update(steps_completed=["distilling"]), "not supported yet"),
+        (lambda d: d["batches"][0].update(steps_completed=["bottling"]), "not supported yet"),
+        (lambda d: d["batches"][0].update(steps_completed=["distilling"]), "must follow the workflow order"),
+        (lambda d: d["batches"][0].update(steps_completed=["maceration", "distilling"]), "two flask_codes"),
+        (lambda d: d["batches"][0].update(**_through_aging(vat_number=None)), "vat_number chosen at the fill"),
+        (lambda d: d["batches"][0].update(step_dates={"aging": "2026-09-29"}), "only date steps listed"),
+        (lambda d: d["batches"][0].update(**_through_aging(step_dates={"aging": "2026-09-01"})), "run backwards"),
         (lambda d: d["batches"][0].update(started="22/09/2026"), "YYYY-MM-DD"),
     ],
 )
@@ -50,6 +68,17 @@ def test_manifest_rejects_what_the_replay_cannot_do(mutate, message):
 
     with pytest.raises(rb.RecentBatchesError, match=message):
         rb.parse_recent_batches_manifest(data)
+
+
+def _through_aging(**overrides):
+    fields = {
+        "steps_completed": ["maceration", "distilling", "aging"],
+        "step_dates": {"distilling": "2026-09-29", "aging": "2026-09-29"},
+        "flask_codes": ["WBSS29", "WBSS30"],
+        "vat_number": 60,
+    }
+    fields.update(overrides)
+    return fields
 
 
 class _Client:
@@ -64,8 +93,16 @@ class _Client:
         if path == "/api/core/executions":
             return {"id": "exec-1"}
         if path.endswith("/complete"):
-            execution_id = path.split("/")[4]
-            self.store._steps_completed.add((execution_id, 1))
+            execution_id, step_id = path.split("/")[4], path.split("/")[6]
+            step_number = int(step_id.rsplit("-", 1)[1])
+            self.store._steps_completed.add((execution_id, step_number))
+            for index, output in enumerate(body["actual_outputs"]):
+                self.store._produced[(step_id, output["name"])] = {
+                    "id": f"wip-{step_number}-{index}",
+                    "name": output["name"],
+                    "unit": output["unit"],
+                    "quantity": Decimal(output["quantity"]),
+                }
         return {}
 
 
@@ -76,6 +113,7 @@ class _Store:
         self.stock = dict(stock)  # name -> (inventory_item_id, quantity available)
         self._executions = {}
         self._steps_completed = set()
+        self._produced = {}
 
     def existing_execution_id(self, marker):
         return self._executions.get(marker)
@@ -87,7 +125,10 @@ class _Store:
         return "process-1"
 
     def execution_steps(self, execution_id):
-        return [{"id": "step-1", "step_number": 1, "status": "ready"}]
+        return [{"id": f"step-{number}", "step_number": number, "status": "ready"} for number in range(1, 6)]
+
+    def produced_item_for_step(self, execution_step_id, name):
+        return self._produced.get((execution_step_id, name))
 
     def step_already_completed(self, execution_id, step_number):
         return (execution_id, step_number) in self._steps_completed
@@ -197,3 +238,75 @@ def test_expected_verification_contribution_sums_across_multiple_batches():
     wildflower_steps = len(rb.wm.PRODUCT_WORKFLOWS[rb.wm.WILDFLOWER_WORKFLOW][1])
     assert incomplete_steps == (solstice_steps - 1) + (wildflower_steps - 1)
     assert set(markers) == {"solstice-2026-09-22-maceration", "wildflower-2026-09-22-maceration"}
+
+
+def _through_aging_manifest():
+    data = copy.deepcopy(VALID)
+    data["batches"][0].update(_through_aging())
+    return rb.parse_recent_batches_manifest(data)
+
+
+def test_replay_carries_a_batch_through_distilling_and_the_vat_fill():
+    """AC: 'Distilled Solstice (VAT60)' and 'Filled VAT60 with the usual Solstice VAT measurements'."""
+    store = _Store(_solstice_stock())
+    client = _Client(store)
+
+    counts = rb.replay_recent_batches(client, store, _through_aging_manifest())
+
+    assert counts == {"executions_created": 1, "steps_completed": 3, "skipped": 0}
+    (_, _maceration), (distil_path, distilling), (aging_path, aging) = client.calls[1:]
+    assert distil_path == "/api/core/executions/exec-1/steps/step-2/complete"
+    assert distilling["actual_inputs"] == [
+        {
+            "inventory_item_id": "wip-1-0",
+            "name": "Maceration charge (2 x 1.8L, 20% ABV)",
+            "quantity": "3.6",
+            "unit": "L",
+        }
+    ]
+    assert distilling["actual_outputs"] == [{"name": "Gin concentrate", "quantity": "2.16", "unit": "L"}]
+    assert distilling["execution_data"]["Flask code"] == "WBSS29, WBSS30"
+
+    assert aging_path == "/api/core/executions/exec-1/steps/step-3/complete"
+    assert aging["actual_inputs"] == [
+        {"inventory_item_id": "wip-2-0", "name": "Gin concentrate", "quantity": "2.16", "unit": "L"},
+        {"inventory_item_id": "inv-7", "name": "Neutral grain spirit", "quantity": "17.776", "unit": "L"},
+        {"name": "Water", "quantity": "25.064", "unit": "L"},
+    ]
+    assert aging["actual_outputs"] == [{"name": "Aged Gin", "quantity": "42.840", "unit": "L"}]
+    assert aging["execution_data"] == {
+        "batch_ref": "solstice-2026-09-22-maceration",
+        "batch_label": "VAT60",
+        "global_vat": 60,
+        "VAT number": 60,
+    }
+
+
+def test_replay_adds_only_the_new_steps_to_a_batch_already_macerated():
+    """The live tenant already holds the maceration; a later manifest must only add to it."""
+    store = _Store(_solstice_stock())
+    client = _Client(store)
+    rb.replay_recent_batches(client, store, rb.parse_recent_batches_manifest(VALID))
+
+    counts = rb.replay_recent_batches(client, store, _through_aging_manifest())
+
+    assert counts == {"executions_created": 0, "steps_completed": 2, "skipped": 1}
+    assert rb.replay_recent_batches(client, store, _through_aging_manifest()) == {
+        "executions_created": 0,
+        "steps_completed": 0,
+        "skipped": 3,
+    }
+
+
+def test_vat_fill_refuses_to_run_without_the_concentrate():
+    store = _Store(_solstice_stock())
+    batch = _through_aging_manifest()[0]
+
+    with pytest.raises(rb.RecentBatchesError, match="Gin concentrate"):
+        rb._step_completion(store, batch, "aging", store.execution_steps("exec-1"), 3)
+
+
+def test_verification_expects_two_pending_steps_once_the_vat_is_filled():
+    _workflows, incomplete_steps, _markers = rb.expected_verification_contribution(_through_aging_manifest())
+
+    assert incomplete_steps == len(rb.wm.PRODUCT_WORKFLOWS[rb.wm.SOLSTICE_WORKFLOW][1]) - 3
