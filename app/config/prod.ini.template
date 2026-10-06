@@ -38,13 +38,16 @@ workflow_engine_enabled = true
 [observability]
 log_level = INFO
 log_format = json
-otel_enabled = true
+# Keep both pipelines off until their endpoints name a real, non-loopback collector: inside the
+# container `localhost` is the container itself (and :8000 is this app). Set the endpoints first,
+# THEN the switch, and enable the matching grafana_data_enabled / posthog_data_enabled consent flag.
+otel_enabled = false
 otel_service_name = workflow-engine
 otel_sample_rate = 0.1
 otel_exporter_endpoint = http://localhost:4317
 otel_exporter_protocol = grpc
 otel_capture_metrics = true
-rum_enabled = true
+rum_enabled = false
 rum_collector_url = /telemetry
 rum_sample_rate = 1.0
 rum_mask_inputs = true
