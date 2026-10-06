@@ -45,17 +45,34 @@ kept beside it as `config.toml.bak-2026-10-06`.
       `~/.cache/gitlab-runner-uv` is mounted at `/uv-cache`, with `UV_CACHE_DIR=/uv-cache`
       and `UV_LINK_MODE=copy` set for every job on this runner.
 
-### Later, as their own pieces of work
-- [ ] **Pre-built CI image** with uv, the locked dependencies, the PostgreSQL client and
-      Chromium installed. Expected: `mr_e2e` from about 110 to about 30 seconds, and about
-      10 seconds off each of eight other jobs. The image must be rebuilt when `uv.lock`
-      changes, so it needs a build job and a tag derived from the lockfile.
+### Second MR: pre-built image and parallel stages
+- [x] **Pre-built CI image.** `ci/Dockerfile.ci` holds uv, the locked dependencies, the
+      PostgreSQL client, Node.js 20 and Chromium. The eight Python jobs that installed these
+      on every run now use `$CI_REGISTRY_IMAGE/ci:$CI_IMAGE_TAG`. Measured inside the image:
+      dependency setup about 1 second instead of 10, Chromium already present.
+  - The tag is a hash of `ci/Dockerfile.ci`, `pyproject.toml` and `uv.lock`
+    (`scripts/ci_image_tag.py`), because the runner caches images and a reused tag would
+    never be re-pulled.
+  - A stale image is safe. Every job still runs `uv sync`, which installs only the
+    difference, and every install step is skipped only when `CI_PREBUILT` is set, so the
+    jobs also still run on a bare `python` image.
+  - After a dependency or Dockerfile change: `main` builds the new image
+    (`ci_image_build`), `ci_image_current` shows a warning until `CI_IMAGE_TAG` in
+    `.gitlab-ci.yml` is bumped to the tag it prints. Bump it only after `main` has built
+    the image; a tag that does not exist yet fails every job at image pull.
+  - The first image (`1ec1fed1ea484a7e`) was built and pushed by hand, since nothing on
+    `main` could build it before this change merged.
+- [x] **`main`'s security and migration checks no longer wait for its tests.** Those jobs
+      carry `needs: []` and start with the pipeline. Build and deploy still wait for every
+      earlier stage. On `main` this takes the scans and the migration check off the end of
+      the ten-minute suite, which is also how long each merge request's `main_green` waits.
+
+### Later, as its own piece of work
 - [ ] **Run the full suite in parallel** (pytest-xdist). Expected: 10 minutes to perhaps 3.
-      Blocked on test isolation: the suite shares one database and some tests assert global
-      row counts, so each worker needs its own database first.
-- [ ] **Let `main`'s security and migration stages run alongside its tests** (`needs:`),
-      so the release pipeline, which every merge request's `main_green` waits on, finishes
-      sooner.
+      Blocked on test isolation: the suite shares one database and 99 assertions across 20
+      test files check exact row counts, so each worker needs its own database first.
+      Land it in stages: per-worker databases with parallelism off, then parallel on merge
+      requests, then on `main`.
 
 ## Not worth doing
 - More runner slots than memory allows: jobs would start sooner and then swap.
