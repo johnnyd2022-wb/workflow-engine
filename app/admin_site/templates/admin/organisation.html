@@ -13,11 +13,16 @@
   <section class="workspace-card" aria-labelledby="summary-heading">
     <div class="workspace-card__header">
       <h2 id="summary-heading">Summary</h2>
+      <a class="workspace-link" href="{{ url_for('admin.audit', org_id=org.id) }}">History</a>
     </div>
     <dl class="workspace-facts">
       <div><dt>Status</dt><dd><span class="admin-status{% if not active %} admin-status--off{% endif %}">{{ org.status.value|capitalize }}</span></dd></div>
       <div><dt>People</dt><dd>{{ users|length }}</dd></div>
+      <div><dt>Last sign-in</dt><dd>{{ overview.last_sign_in.strftime('%-d %b %Y') if overview.last_sign_in else 'Never' }}</dd></div>
       <div><dt>Created</dt><dd>{{ org.created_at.strftime('%-d %b %Y') }}</dd></div>
+      <div><dt>Go-live date</dt><dd>{{ overview.go_live_date.strftime('%-d %b %Y') if overview.go_live_date else 'Not live yet' }}</dd></div>
+      <div><dt>Sites</dt><dd>{{ overview.sites }}{% if overview.multiple_sites %} (multiple sites on){% endif %}</dd></div>
+      <div><dt>Xero</dt><dd>{% if overview.xero_name %}{{ overview.xero_name }}{% if overview.xero_last_sync %}, synced {{ overview.xero_last_sync.strftime('%-d %b %Y') }}{% endif %}{% else %}Not connected{% endif %}</dd></div>
       <div><dt>ID</dt><dd>{{ org.id }}</dd></div>
     </dl>
   </section>
@@ -29,12 +34,13 @@
     {% if users %}
     <div class="workspace-scroll">
       <table class="workspace-table">
-        <thead><tr><th>Email</th><th>Role</th><th>State</th><th>2FA</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Email</th><th>Role</th><th>State</th><th>2FA</th><th>Last signed in</th></tr></thead>
         <tbody>
           {% for user in users %}
           {% set invited = not user.is_active and user.invite_token_hash %}
+          {% set seen = overview.last_sign_ins.get(user.id) %}
           <tr>
-            <td>{{ user.email }}</td>
+            <td><a href="{{ url_for('admin.person', org_id=org.id, user_id=user.id) }}">{{ user.email }}</a></td>
             <td>{{ user.role.value|capitalize }}</td>
             <td>
               {% if is_locked(user) %}<span class="admin-status admin-status--off">Locked</span>
@@ -43,27 +49,7 @@
               {% else %}<span class="admin-status admin-status--muted">Inactive</span>{% endif %}
             </td>
             <td>{{ 'On' if user.two_factor_enabled else 'Off' }}</td>
-            <td>
-              <div class="admin-row-actions">
-                {% if invited %}
-                <form method="post" action="{{ url_for('admin.reissue_invite', org_id=org.id, user_id=user.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="workspace-button">New setup link</button>
-                </form>
-                {% elif user.is_active %}
-                <form method="post" action="{{ url_for('admin.reset_password', org_id=org.id, user_id=user.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="workspace-button">Reset password</button>
-                </form>
-                {% endif %}
-                {% if is_locked(user) %}
-                <form method="post" action="{{ url_for('admin.unlock_user', org_id=org.id, user_id=user.id) }}">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="workspace-button">Unlock</button>
-                </form>
-                {% endif %}
-              </div>
-            </td>
+            <td>{{ seen.strftime('%-d %b %Y') if seen else 'Never' }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -119,6 +105,21 @@
         </tbody>
       </table>
     </div>
+  </section>
+
+  <section class="workspace-card" aria-labelledby="rename-heading">
+    <div class="workspace-card__header">
+      <h2 id="rename-heading">Rename</h2>
+    </div>
+    <form class="workspace-form" method="post" action="{{ url_for('admin.rename_organisation', org_id=org.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Organisation name
+        <input type="text" name="name" value="{{ org.name }}" maxlength="255" required>
+      </label>
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button">Rename</button>
+      </div>
+    </form>
   </section>
 
   <section class="workspace-card" aria-labelledby="access-heading">
