@@ -1,5 +1,8 @@
 # Production bring-up checklist
 
+> **2026-10-07:** most of this is now done. `docs/production-and-admin-plan.md` is the live
+> plan and status; this file is kept as the original review of what was missing.
+
 Written 2026-10-05 from reading the scripts and config, plus read-only checks on this
 machine. Items are ticked as they are done. Work through it top to bottom: each section
 says what is missing, why it matters, and what "done" looks like.

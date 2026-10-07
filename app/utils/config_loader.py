@@ -204,8 +204,13 @@ class Config:
 
     @property
     def is_production(self) -> bool:
-        """True when running with production config (used to omit sensitive API error details)."""
-        return (self.environment or "").strip().lower() == "production"
+        """True when running with production config, under either spelling (``prod`` or ``production``).
+
+        ``scripts/run_prod.sh`` and the production image both use ``prod``, which is also the name
+        of the config file; before this accepted both, a ``prod`` deployment was not treated as
+        production by the code that asks.
+        """
+        return self._is_production_env
 
     @property
     def _is_production_env(self) -> bool:

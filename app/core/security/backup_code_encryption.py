@@ -34,8 +34,12 @@ class BackupCodeEncryption:
                     # If not a valid Fernet key, derive one from the material
                     self.fernet = self._derive_fernet_key(key_material)
             else:
-                # Development fallback: derive from a default (NOT for production!)
-                # In production, BACKUP_CODE_ENCRYPTION_KEY must be set
+                from app.utils.config_loader import config
+
+                if config.is_production:
+                    # Production must never encrypt 2FA backup codes with the built-in development key.
+                    raise RuntimeError("BACKUP_CODE_ENCRYPTION_KEY must be set in production (a Fernet key).")
+                # Development fallback: derive from a default.
                 default_key_material = "workflow-engine-backup-codes-default-key-change-in-production"
                 self.fernet = self._derive_fernet_key(default_key_material)
 

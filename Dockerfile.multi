@@ -34,7 +34,8 @@ CMD ["uv", "run", "gunicorn", "--config", "gunicorn.conf.py", "app.app:app"]
 
 # Production environment stage
 FROM base as production
-ENV ENVIRONMENT=production
+# `prod` selects app/config/prod.ini, the same name scripts/run_prod.sh uses.
+ENV ENVIRONMENT=prod
 EXPOSE 8000
 EXPOSE 443
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

@@ -110,3 +110,56 @@ def test_prod_ini_template_carries_no_plaintext_db_password():
         "prod.ini.template documents POSTGRES_PASSWORD as the source of truth; "
         "it must not seed a literal password value"
     )
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected"), [("prod", True), ("production", True), ("test", False), ("local", False)]
+)
+def test_both_production_spellings_count_as_production(environment, expected):
+    """scripts/run_prod.sh and the image run as ``prod``; code asking ``is_production`` must agree."""
+    assert _config(environment).is_production is expected
+
+
+def test_production_image_and_run_script_use_the_config_file_name():
+    """``ENVIRONMENT`` picks ``app/config/<name>.ini``; only ``prod.ini`` exists."""
+    dockerfile = (REPO_ROOT / "Dockerfile.multi").read_text()
+    production_stage = dockerfile.split("as production", 1)[1]
+    assert "ENV ENVIRONMENT=prod\n" in production_stage
+    assert "ENVIRONMENT=prod" in (REPO_ROOT / "scripts" / "run_prod.sh").read_text()
+    assert (REPO_ROOT / "app" / "config" / "prod.ini").is_file()
+    assert not (REPO_ROOT / "app" / "config" / "production.ini").exists()
+
+
+@pytest.mark.parametrize("environment", ["prod", "production"])
+def test_production_refuses_the_built_in_backup_code_key(environment, monkeypatch):
+    """2FA backup codes must never be encrypted with the development default in production."""
+    from app.core.security import backup_code_encryption
+    from app.utils import config_loader
+
+    monkeypatch.delenv("BACKUP_CODE_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(config_loader, "config", _config(environment))
+    with pytest.raises(RuntimeError, match="BACKUP_CODE_ENCRYPTION_KEY"):
+        backup_code_encryption.BackupCodeEncryption()
+
+    monkeypatch.setattr(config_loader, "config", _config("test"))
+    assert (
+        backup_code_encryption.BackupCodeEncryption().decrypt(
+            backup_code_encryption.BackupCodeEncryption().encrypt("ABCD-1234")
+        )
+        == "ABCD-1234"
+    )
+
+
+def test_production_config_keeps_uploads_on_a_volume_and_the_database_off_the_host():
+    parser = configparser.ConfigParser()
+    parser.read(REPO_ROOT / "app" / "config" / "prod.ini")
+    assert parser.get("evidence", "storage_root") == "/data/evidence"
+    assert parser.get("process_docs", "storage_root") == "/data/process_docs"
+    assert parser.get("database", "host") == "workflow-engine-prod-db"
+    assert parser.get("xero", "redirect_uri").startswith("https://")
+    run_script = (REPO_ROOT / "scripts" / "run_prod.sh").read_text()
+    assert "workflow-engine-prod-evidence:/data/evidence" in run_script
+    assert "workflow-engine-prod-process-docs:/data/process_docs" in run_script
+    # Secrets reach the container by name from the environment, never as values on the command line.
+    assert "-e POSTGRES_PASSWORD=" not in run_script and "-e FLASK_SECRET_KEY=" not in run_script
+    assert "127.0.0.1:${HOST_PORT}:8000" in run_script
