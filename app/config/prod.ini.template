@@ -5,10 +5,12 @@ host = host.docker.internal
 port = 5000
 
 [database]
-host = host.docker.internal
-port = 8432
+# The app and its database share the `workflow-engine-prod` Docker network (scripts/prod_db.sh),
+# so the app reaches the database by container name and the port is never published.
+host = workflow-engine-prod-db
+port = 5432
 name = workflow-engine
-user = postgres
+user = workflow_rw
 # The database password comes from the deployment environment, NOT this file:
 # set POSTGRES_PASSWORD from the secret store. App startup fails if unset.
 password =
@@ -21,8 +23,21 @@ password =
 
 
 [xero]
-client_id = YOUR_PROD_XERO_CLIENT_ID
-client_secret = YOUR_PROD_XERO_CLIENT_SECRET
+# Credentials come from XERO_CLIENT_ID / XERO_CLIENT_SECRET in the deployment environment.
+client_id =
+client_secret =
+redirect_uri = https://biz-e.app/crm/xero/callback
+
+[evidence]
+; Uploads live on a named Docker volume mounted here (scripts/run_prod.sh), so they survive redeploys.
+storage_root = /data/evidence
+max_file_size_mb = 10
+allowed_mime_types = image/jpeg, image/png, application/pdf
+
+[process_docs]
+storage_root = /data/process_docs
+max_file_size_mb = 20
+allowed_mime_types = application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document, text/markdown, text/plain
 
 [email]
 sender_email = your-email@example.com
@@ -62,7 +77,8 @@ rum_posthog_api_key =
 
 [google_sign_in]
 # Requires OAuth credentials from KeePassXC locally or protected environment variables.
-enabled = true
+# Off until a production Google OAuth client exists; turn on together with GOOGLE_CLIENT_ID / _SECRET.
+enabled = false
 redirect_uri = https://biz-e.app/auth/google/callback
 keepass_client_id_entry = workflow-engine/google/client_id
 keepass_client_secret_entry = workflow-engine/google/client_secret
