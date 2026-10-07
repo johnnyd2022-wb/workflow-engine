@@ -275,6 +275,10 @@ def get_invoice_view_url(invoice_id: str):
 @requires_auth
 def get_customer_analytics(contact_id: str):
     org_id = UUID(g.org_id)
+    try:
+        contact_uuid = UUID(contact_id)
+    except ValueError:
+        return jsonify({"error": "Invalid customer ID"}), 400
     start_date = None
     end_date = None
     start_raw = (request.args.get("start_date") or "").strip()
@@ -290,7 +294,7 @@ def get_customer_analytics(contact_id: str):
         except ValueError:
             return jsonify({"error": "end_date must be YYYY-MM-DD"}), 400
     data = _crm_service().get_customer_analytics(
-        UUID(contact_id),
+        contact_uuid,
         org_id,
         start_date=start_date,
         end_date=end_date,
@@ -495,7 +499,10 @@ def assign_task_lane(task_id: str):
 @requires_auth
 def monthly_sales():
     org_id = UUID(g.org_id)
-    months = min(24, max(1, int(request.args.get("months", 12))))
+    try:
+        months = min(24, max(1, int(request.args.get("months", 12))))
+    except ValueError:
+        return jsonify({"error": "months must be an integer"}), 400
     data = _crm_service().monthly_sales(org_id, months=months)
     return jsonify({"monthly_sales": data, "months": data}), 200
 
@@ -504,7 +511,10 @@ def monthly_sales():
 @requires_auth
 def customer_breakdown():
     org_id = UUID(g.org_id)
-    top_n = min(50, max(1, int(request.args.get("top_n", 20))))
+    try:
+        top_n = min(50, max(1, int(request.args.get("top_n", 20))))
+    except ValueError:
+        return jsonify({"error": "top_n must be an integer"}), 400
     data = _crm_service().customer_breakdown(org_id, top_n=top_n)
     return jsonify({"customer_breakdown": data, "customers": data}), 200
 
@@ -521,7 +531,10 @@ def rankings():
     if direction not in {"top", "bottom"}:
         return jsonify({"error": "direction must be top or bottom"}), 400
 
-    limit = min(50, max(1, int(request.args.get("limit", 10))))
+    try:
+        limit = min(50, max(1, int(request.args.get("limit", 10))))
+    except ValueError:
+        return jsonify({"error": "limit must be an integer"}), 400
     months = request.args.get("months")
     period_n = request.args.get("period_n")
     period_unit = (request.args.get("period_unit") or "months").strip().lower()
