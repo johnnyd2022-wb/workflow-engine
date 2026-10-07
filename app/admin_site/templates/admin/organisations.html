@@ -1,0 +1,78 @@
+{% extends "admin/base.html" %}
+{% set section = 'organisations' %}
+{% block title %}Organisations{% endblock %}
+{% block content %}
+<header class="workspace-header">
+  <div>
+    <h1>Organisations</h1>
+    <p>Every business signed up to biz-e.</p>
+  </div>
+</header>
+<div class="workspace-stack">
+  <section class="workspace-card" aria-labelledby="orgs-heading">
+    <div class="workspace-card__header">
+      <h2 id="orgs-heading">{{ total }} organisation{{ '' if total == 1 else 's' }}</h2>
+    </div>
+    <form class="workspace-form" method="get" action="{{ url_for('admin.organisations') }}">
+      <label>Search by name
+        <input type="search" name="q" value="{{ search }}" maxlength="255">
+      </label>
+      <label>Status
+        <select name="status">
+          {% for value, label in (('all', 'All'), ('active', 'Active'), ('suspended', 'Suspended')) %}
+          <option value="{{ value }}"{% if status == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button">Search</button>
+      </div>
+    </form>
+    {% if organisations %}
+    <div class="workspace-scroll">
+      <table class="workspace-table">
+        <thead><tr><th>Name</th><th>Status</th><th>People</th><th>Created</th></tr></thead>
+        <tbody>
+          {% for org in organisations %}
+          <tr>
+            <td><a href="{{ url_for('admin.organisation', org_id=org.id) }}">{{ org.name }}</a></td>
+            <td><span class="admin-status{% if org.status.value != 'active' %} admin-status--off{% endif %}">{{ org.status.value|capitalize }}</span></td>
+            <td>{{ org.user_count }}</td>
+            <td>{{ org.created_at.strftime('%-d %b %Y') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="admin-pager">
+      <span>Page {{ page }} of {{ pages }}</span>
+      <span class="admin-row-actions">
+        {% if page > 1 %}<a class="workspace-button" href="{{ url_for('admin.organisations', q=search, status=status, page=page - 1) }}">Previous</a>{% endif %}
+        {% if page < pages %}<a class="workspace-button" href="{{ url_for('admin.organisations', q=search, status=status, page=page + 1) }}">Next</a>{% endif %}
+      </span>
+    </div>
+    {% else %}
+    <p class="workspace-empty">No organisations match.</p>
+    {% endif %}
+  </section>
+
+  <section class="workspace-card" aria-labelledby="new-org-heading">
+    <div class="workspace-card__header">
+      <h2 id="new-org-heading">Add an organisation</h2>
+    </div>
+    <p class="workspace-caption">Creates the organisation and invites its first admin. You get a setup link to send them; they choose their own password.</p>
+    <form class="workspace-form" method="post" action="{{ url_for('admin.create_organisation') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Organisation name
+        <input type="text" name="name" value="{{ form.name|default('') }}" maxlength="255" required>
+      </label>
+      <label>Admin's email
+        <input type="email" name="admin_email" value="{{ form.admin_email|default('') }}" maxlength="255" required>
+      </label>
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button workspace-button--primary">Create and invite</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

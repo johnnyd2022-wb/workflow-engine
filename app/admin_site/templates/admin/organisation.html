@@ -1,0 +1,152 @@
+{% extends "admin/base.html" %}
+{% set section = 'organisations' %}
+{% set active = org.status.value == 'active' %}
+{% block title %}{{ org.name }}{% endblock %}
+{% block content %}
+<header class="workspace-header">
+  <div>
+    <p><a class="workspace-link" href="{{ url_for('admin.organisations') }}">Organisations</a></p>
+    <h1>{{ org.name }}</h1>
+  </div>
+</header>
+<div class="workspace-stack">
+  <section class="workspace-card" aria-labelledby="summary-heading">
+    <div class="workspace-card__header">
+      <h2 id="summary-heading">Summary</h2>
+    </div>
+    <dl class="workspace-facts">
+      <div><dt>Status</dt><dd><span class="admin-status{% if not active %} admin-status--off{% endif %}">{{ org.status.value|capitalize }}</span></dd></div>
+      <div><dt>People</dt><dd>{{ users|length }}</dd></div>
+      <div><dt>Created</dt><dd>{{ org.created_at.strftime('%-d %b %Y') }}</dd></div>
+      <div><dt>ID</dt><dd>{{ org.id }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="workspace-card" aria-labelledby="people-heading">
+    <div class="workspace-card__header">
+      <h2 id="people-heading">People</h2>
+    </div>
+    {% if users %}
+    <div class="workspace-scroll">
+      <table class="workspace-table">
+        <thead><tr><th>Email</th><th>Role</th><th>State</th><th>2FA</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for user in users %}
+          {% set invited = not user.is_active and user.invite_token_hash %}
+          <tr>
+            <td>{{ user.email }}</td>
+            <td>{{ user.role.value|capitalize }}</td>
+            <td>
+              {% if is_locked(user) %}<span class="admin-status admin-status--off">Locked</span>
+              {% elif invited %}<span class="admin-status admin-status--muted">Invited</span>
+              {% elif user.is_active %}<span class="admin-status">Active</span>
+              {% else %}<span class="admin-status admin-status--muted">Inactive</span>{% endif %}
+            </td>
+            <td>{{ 'On' if user.two_factor_enabled else 'Off' }}</td>
+            <td>
+              <div class="admin-row-actions">
+                {% if invited %}
+                <form method="post" action="{{ url_for('admin.reissue_invite', org_id=org.id, user_id=user.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="workspace-button">New setup link</button>
+                </form>
+                {% elif user.is_active %}
+                <form method="post" action="{{ url_for('admin.reset_password', org_id=org.id, user_id=user.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="workspace-button">Reset password</button>
+                </form>
+                {% endif %}
+                {% if is_locked(user) %}
+                <form method="post" action="{{ url_for('admin.unlock_user', org_id=org.id, user_id=user.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="workspace-button">Unlock</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="workspace-empty">No one yet.</p>
+    {% endif %}
+    <h3 class="workspace-subheading">Invite someone</h3>
+    <form class="workspace-form" method="post" action="{{ url_for('admin.invite_user', org_id=org.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Email
+        <input type="email" name="email" maxlength="255" required>
+      </label>
+      <label>Role
+        <select name="role">
+          <option value="member">Member</option>
+          <option value="admin">Admin</option>
+        </select>
+      </label>
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button workspace-button--primary">Invite</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="workspace-card" aria-labelledby="features-heading">
+    <div class="workspace-card__header">
+      <h2 id="features-heading">Features</h2>
+    </div>
+    <p class="workspace-caption">Paid areas switched on for this organisation.</p>
+    <div class="workspace-scroll">
+      <table class="workspace-table">
+        <thead><tr><th>Feature</th><th>State</th><th>Since</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for key in feature_keys %}
+          {% set row = features.get(key) %}
+          {% set on = row and row.active %}
+          <tr>
+            <td>{{ key }}</td>
+            <td><span class="admin-status{% if not on %} admin-status--muted{% endif %}">{{ 'On' if on else 'Off' }}</span></td>
+            <td>{{ row.granted_at.strftime('%-d %b %Y') if on else '' }}</td>
+            <td>
+              <form method="post" action="{{ url_for('admin.set_feature', org_id=org.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="feature" value="{{ key }}">
+                <input type="hidden" name="state" value="{{ 'off' if on else 'on' }}">
+                <button type="submit" class="workspace-button">Switch {{ 'off' if on else 'on' }}</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="workspace-card" aria-labelledby="access-heading">
+    <div class="workspace-card__header">
+      <h2 id="access-heading">{{ 'Suspend' if active else 'Reactivate' }} this organisation</h2>
+    </div>
+    {% if active %}
+    <p class="workspace-caption">No one in {{ org.name }} will be able to sign in until it is reactivated. Nothing is deleted.</p>
+    <form class="workspace-form" method="post" action="{{ url_for('admin.set_status', org_id=org.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="status" value="suspended">
+      <label>Type the organisation's name to confirm
+        <input type="text" name="confirm_name" autocomplete="off" required>
+      </label>
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button">Suspend</button>
+      </div>
+    </form>
+    {% else %}
+    <p class="workspace-caption">People in {{ org.name }} will be able to sign in again.</p>
+    <form class="workspace-form" method="post" action="{{ url_for('admin.set_status', org_id=org.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="status" value="active">
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button workspace-button--primary">Reactivate</button>
+      </div>
+    </form>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

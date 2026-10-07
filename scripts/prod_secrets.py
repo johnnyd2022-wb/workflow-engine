@@ -7,6 +7,7 @@ reads them on the host and hands them to the container as environment variables.
     python3 scripts/prod_secrets.py check   # which entries exist (never prints a value)
     python3 scripts/prod_secrets.py init    # generate the ones that can be generated
     eval "$(python3 scripts/prod_secrets.py export)"   # load them into a script's environment
+    eval "$(python3 scripts/prod_secrets.py export --scope admin)"   # the admin site's instead
 
 `init` never overwrites an entry. Rotating one is deliberate: delete it in KeePassXC, then
 run `init` again -- and read the note against that secret first, because some cannot be
@@ -47,6 +48,7 @@ class Secret:
     generate: object | None  # callable producing a value, or None when a person must supply it
     note: str
     username: str = ""
+    scopes: tuple[str, ...] = ("app",)  # which container needs it: the customer app, the admin site
 
 
 SECRETS = (
@@ -57,6 +59,7 @@ SECRETS = (
         "Database password. Set when the database container is first created; changing it "
         "later needs ALTER ROLE in the database as well.",
         username="workflow_rw",
+        scopes=("app", "admin"),
     ),
     Secret(
         f"{GROUP}/FLASK_SECRET_KEY_PROD",
@@ -78,6 +81,27 @@ SECRETS = (
     ),
     Secret(f"{GROUP}/xero_client_id", "XERO_CLIENT_ID", None, "Client id of the PRODUCTION Xero app."),
     Secret(f"{GROUP}/xero_client_secret", "XERO_CLIENT_SECRET", None, "Client secret of the PRODUCTION Xero app."),
+    Secret(
+        f"{GROUP}/ADMIN_FLASK_SECRET_KEY_PROD",
+        "ADMIN_FLASK_SECRET_KEY",
+        _random_token,
+        "Signs admin-site sessions. Never the same as FLASK_SECRET_KEY. Rotating it signs the admins out.",
+        scopes=("admin",),
+    ),
+    Secret(
+        f"{GROUP}/ADMIN_GOOGLE_CLIENT_ID",
+        "ADMIN_GOOGLE_CLIENT_ID",
+        None,
+        "Google OAuth client for admin.biz-e.app (redirect URI https://admin.biz-e.app/auth/google/callback).",
+        scopes=("admin",),
+    ),
+    Secret(
+        f"{GROUP}/ADMIN_GOOGLE_CLIENT_SECRET",
+        "ADMIN_GOOGLE_CLIENT_SECRET",
+        None,
+        "Client secret of the admin-site Google OAuth client.",
+        scopes=("admin",),
+    ),
 )
 
 
@@ -112,12 +136,14 @@ def create(secret: Secret, value: str, database_password: str) -> bool:
     return result.returncode == 0
 
 
-def _export(database_password: str) -> int:
+def _export(database_password: str, scope: str = "app") -> int:
     """Print `export NAME='value'` lines for `eval` in scripts/run_prod.sh. Never run this bare
     in a terminal: its whole output is secret."""
     os.environ["KEEPASS_PASSWORD"] = database_password
     missing = []
     for secret in SECRETS:
+        if scope not in secret.scopes:
+            continue
         value = local_secrets.get_keepass_entry(entry_name=secret.entry).get("Password", "")
         if not value or value == "PROTECTED":
             missing.append(secret.entry)
@@ -132,10 +158,11 @@ def _export(database_password: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("check", "init", "export"))
+    parser.add_argument("--scope", choices=("app", "admin"), default="app", help="which container to export for")
     args = parser.parse_args(argv)
     database_password = _database_password()
     if args.command == "export":
-        return _export(database_password)
+        return _export(database_password, args.scope)
     missing_manual = 0
     for secret in SECRETS:
         present = exists(secret.entry, database_password)

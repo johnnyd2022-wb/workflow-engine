@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}
+{% set section = 'demo' %}
+{% block title %}Demo{% endblock %}
+{% block content %}
+<header class="workspace-header">
+  <div>
+    <h1>Demo organisation</h1>
+    <p>A made-up business with a believable history, rebuilt before each customer demo.</p>
+  </div>
+</header>
+<div class="workspace-stack">
+  <section class="workspace-card" aria-labelledby="reset-heading">
+    <div class="workspace-card__header">
+      <h2 id="reset-heading">Reset the demo</h2>
+    </div>
+    <p class="workspace-caption">Not available yet. The demo organisation and its scenario are the next piece of work; when they exist, this button wipes the demo and rebuilds it from scratch.</p>
+    <div class="workspace-form__actions">
+      <button type="button" class="workspace-button workspace-button--primary" disabled>Reset demo</button>
+    </div>
+  </section>
+</div>
+{% endblock %}

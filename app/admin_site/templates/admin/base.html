@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}Admin{% endblock %} · biz-e admin</title>
+  <link rel="stylesheet" href="{{ url_for('shared_style', name='design-system.css') }}">
+  <link rel="stylesheet" href="{{ url_for('shared_style', name='workspace-overviews.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body>
+  <header class="admin-bar">
+    <div>
+      <a class="admin-bar__brand" href="{{ url_for('admin.organisations') }}">biz-e admin</a>
+      <span class="admin-bar__env{% if environment in ('prod', 'production') %} admin-bar__env--prod{% endif %}">{{ environment }}</span>
+    </div>
+    <nav aria-label="Admin sections">
+      {% set section = section|default('') %}
+      <a href="{{ url_for('admin.organisations') }}"{% if section == 'organisations' %} aria-current="page"{% endif %}>Organisations</a>
+      <a href="{{ url_for('admin.demo') }}"{% if section == 'demo' %} aria-current="page"{% endif %}>Demo</a>
+      <a href="{{ url_for('admin.system') }}"{% if section == 'system' %} aria-current="page"{% endif %}>System</a>
+    </nav>
+    <div class="admin-bar__who">
+      <span>{{ admin_email }}</span>
+      <form method="post" action="{{ url_for('admin_auth.sign_out') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="admin-sign-out">Sign out</button>
+      </form>
+    </div>
+  </header>
+  <main id="page-content">
+    <div class="workspace-page">
+      {% if error %}<p class="workspace-notice" role="alert">{{ error }}</p>{% endif %}
+      {% if notice %}<p class="workspace-notice" role="status">{{ notice }}</p>{% endif %}
+      {% if secret %}
+      <div class="admin-secret">
+        <p>{{ secret_label }}</p>
+        <code>{{ secret }}</code>
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</body>
+</html>

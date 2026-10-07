@@ -12,11 +12,13 @@ def setup_google_oidc(app, config):
     app.config["GOOGLE_SIGN_IN_ENABLED"] = config.getboolean("google_sign_in", "enabled", False)
     if not app.config["GOOGLE_SIGN_IN_ENABLED"]:
         return
+    register_google_client(app, config.google_client_id, config.google_client_secret, config.google_redirect_uri)
+
+
+def register_google_client(app, client_id, client_secret, redirect_uri):
+    """Register the one Google client an app signs in with. Shared with the admin site."""
     if not app.config.get("SESSION_COOKIE_SECURE") or not app.config.get("SESSION_COOKIE_HTTPONLY"):
         raise RuntimeError("Google sign-in requires Secure and HttpOnly session cookies")
-    client_id = config.google_client_id
-    client_secret = config.google_client_secret
-    redirect_uri = config.google_redirect_uri
     parsed = urlsplit(redirect_uri)
     if (
         not client_id
@@ -30,6 +32,7 @@ def setup_google_oidc(app, config):
         or parsed.path != "/auth/google/callback"
     ):
         raise RuntimeError("Google sign-in requires credentials and a fixed HTTPS /auth/google/callback redirect URI")
+    app.config["GOOGLE_SIGN_IN_ENABLED"] = True
     app.config["GOOGLE_CLIENT_ID"] = client_id
     app.config["GOOGLE_REDIRECT_URI"] = redirect_uri
     oauth = OAuth(app)

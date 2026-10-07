@@ -65,16 +65,25 @@ A fictional distillery with a believable history, rebuilt on demand.
 
 ## Phase 3: admin site (`admin.biz-e.app`)
 
-A separate container, not part of the customer app, for people who are not developers.
+A separate container, not part of the customer app, for biz-e staff only. The skeleton is
+built (`app/admin_site/`); it needs a Google client and a route before anyone can sign in.
 
 | | Step | Owner |
 | --- | --- | --- |
-| [ ] | **Decisions**: who may sign in (proposal: a short allow-list of platform staff, separate from tenant users, 2FA required); whether it can act on production (proposal: yes, with every action written to an audit log and destructive ones needing a typed confirmation). | Johnny |
-| [ ] | **Admin service**: its own container and image target, its own port, talks to the same database through a small set of admin operations shared with the CLI, so the CLI and the site can never disagree. | Claude |
-| [ ] | **Screens, first cut**: organisations (list, create, suspend, features on/off), users (list, invite, role, lock, reset 2FA, reset password), demo (reset the demo organisation, see when it was last reset and by whom), system (version deployed, last backup, health). Built from the same shared `workspace-*` elements as the app. | Claude |
-| [ ] | **CLI parity**: every admin action available as `workflow admin …` too. `create-org` and `create-user` exist; add the rest alongside the screens. | Claude |
-| [ ] | **Cloudflare route** for `admin.biz-e.app` to the admin container, behind Cloudflare Access as a second gate. | Johnny |
-| [ ] | **Audit log** of admin actions, visible in the site. | Claude |
+| [x] | **Decisions.** Sign-in is Google only, for an allow-list: `johnny@whistlebird.co.nz` and `niko@whistlebird.co.nz`. It acts on production; every change is written to the organisation's audit log with the admin's email, and suspending takes typing the organisation's name. | done |
+| [x] | **Admin service**: its own Flask app, image target (`admin` in `Dockerfile.multi`), container (`workflow-engine-admin`, `127.0.0.1:8020`), session cookie and signing key. Started with `scripts/run_admin.sh`. It is given the database password and its own keys, none of the customer app's. | done |
+| [x] | **Sign-in**: the customer app's Google flow (code + PKCE, verified ID token), then the allow-list. The address must also be one Google is the authority for (Workspace domain or gmail.com), so a personal Google account registered against a listed address is refused. Access is denied by default: one check guards every route not named public. Sessions end after 30 minutes idle or 12 hours. | done |
+| [x] | **One implementation for the site and the CLI** (`app/admin_site/operations.py`). `workflow create_org`, `create_user`, `reset-password`, `grant-feature` and `revoke-feature` now run through it, and are audited as `cli`. | done |
+| [x] | **Screens, first cut**: organisations (search, list, create with an invited admin, suspend and reactivate, features on and off); people (invite, new setup link, reset password, unlock); system (environment, version, database, schema, counts, who can sign in). Built from the shared `workspace-*` elements; no scripts on any page. | done |
+| [ ] | **Google client for the admin site.** In Google Cloud, create an OAuth client (type: web application) with redirect URI `https://admin.biz-e.app/auth/google/callback`, then add its id and secret to KeePassXC as `workflow-engine/ADMIN_GOOGLE_CLIENT_ID` and `workflow-engine/ADMIN_GOOGLE_CLIENT_SECRET` (the value goes in the password field). `python3 scripts/prod_secrets.py check` shows whether they are there. | Johnny |
+| [ ] | **Cloudflare route** for `admin.biz-e.app` to `https://localhost:8020` ("No TLS Verify" on, as for the app), behind Cloudflare Access limited to the same two addresses as a second gate. | Johnny |
+| [ ] | **Start it**: `scripts/run_admin.sh`, once the two steps above are done. | Johnny or Claude |
+| [ ] | **Confirm `whistlebird.co.nz` is a Google Workspace domain.** If the two addresses are personal Google accounts instead, sign-in is refused until `[admin_site] require_authoritative_email = false` is set in `prod.ini`. | Johnny |
+| [ ] | **Demo reset** on the Demo page (a placeholder today); arrives with phase 2. | Claude |
+| [ ] | **More people actions**: change role, deactivate, reset 2FA. And the rest of the CLI (`list_orgs`, `list_users`, `get_backup_codes`) moved onto the shared operations. | Claude |
+| [ ] | **Audit log page** in the site, and a platform-level log for events with no organisation (sign-ins, refused sign-ins); those go to the container log only today. | Claude |
+| [ ] | **System page**: last backup and customer-app health. | Claude |
+| [ ] | **Database role of its own** for the admin site, in place of the app's `workflow_rw`. | Claude |
 
 ## Phase 4: retire the Whistlebird replay
 
@@ -88,5 +97,5 @@ A separate container, not part of the customer app, for people who are not devel
 
 1. Is `workflow-engine/xero_client_id` in KeePassXC the production Xero app?
 2. Demo scenario: happy with the proposal above, or a different company and product mix?
-3. Admin site: who signs in, and may it act on production?
+3. Is `whistlebird.co.nz` on Google Workspace? (Admin sign-in assumes so; see phase 3.)
 4. `biz-e.app` for production and `admin.biz-e.app` for admin: confirm both names.

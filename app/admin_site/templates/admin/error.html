@@ -1,0 +1,6 @@
+{% extends "admin/base.html" %}
+{% block title %}Not found{% endblock %}
+{% block content %}
+<header class="workspace-header"><div><h1>That didn't work</h1><p>{{ message }}</p></div></header>
+<p><a class="workspace-link" href="{{ url_for('admin.organisations') }}">Back to organisations</a></p>
+{% endblock %}

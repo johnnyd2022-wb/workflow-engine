@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Build and (re)start the admin site (admin.biz-e.app) on this machine.
+#
+#   scripts/run_admin.sh
+#   ADMIN_HOST_PORT=8020 scripts/run_admin.sh
+#
+# The admin site is its own container from the same code (Dockerfile.multi target `admin`),
+# on production's Docker network so it reaches the production database by name. It runs no
+# migrations and takes no backup: scripts/run_prod.sh owns the schema. It listens on
+# 127.0.0.1:${ADMIN_HOST_PORT} only; the Cloudflare tunnel connects to it there.
+#
+# Secrets come from KeePassXC (scripts/prod_secrets.py --scope admin), never from a file.
+# It gets the database password and its own session key and Google client: none of the
+# customer app's other keys.
+set -euo pipefail
+
+CONTAINER=workflow-engine-admin
+IMAGE=workflow-engine:admin
+NETWORK=workflow-engine-prod
+HOST_PORT="${ADMIN_HOST_PORT:-8020}"
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+echo "== Secrets"
+eval "$(python3 scripts/prod_secrets.py export --scope admin)"
+for name in POSTGRES_PASSWORD ADMIN_FLASK_SECRET_KEY ADMIN_GOOGLE_CLIENT_ID ADMIN_GOOGLE_CLIENT_SECRET; do
+    [ -n "${!name:-}" ] || { echo "Missing $name." >&2; exit 1; }
+    export "${name?}"
+done
+export APP_VERSION="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
+echo "== Build"
+docker build --target admin -f Dockerfile.multi -t "$IMAGE" .
+
+echo "== Database"
+scripts/prod_db.sh up
+
+echo "== Admin site"
+# Exact-name match: a plain "name=" filter is a substring match.
+docker stop $(docker ps -aqf "name=^${CONTAINER}$") 2>/dev/null || true
+docker rm $(docker ps -aqf "name=^${CONTAINER}$") 2>/dev/null || true
+docker run -d --name "$CONTAINER" --restart unless-stopped \
+    --network "$NETWORK" -p "127.0.0.1:${HOST_PORT}:8020" \
+    -e ENVIRONMENT=prod -e POSTGRES_PASSWORD -e ADMIN_FLASK_SECRET_KEY \
+    -e ADMIN_GOOGLE_CLIENT_ID -e ADMIN_GOOGLE_CLIENT_SECRET -e APP_VERSION \
+    "$IMAGE" >/dev/null
+
+echo "== Health"
+for _ in $(seq 1 60); do
+    if curl -kfs "https://127.0.0.1:${HOST_PORT}/healthcheck" >/dev/null 2>&1; then
+        echo "The admin site is up at https://127.0.0.1:${HOST_PORT} (container $CONTAINER)."
+        echo "Logs: docker logs -f $CONTAINER"
+        exit 0
+    fi
+    sleep 2
+done
+echo "The admin site did not pass its health check. Last log lines:" >&2
+docker logs --tail 40 "$CONTAINER" >&2
+exit 1
