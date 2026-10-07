@@ -65,7 +65,8 @@ A fictional distillery with a believable history, rebuilt on demand.
 
 ## Phase 3: admin site (`admin.biz-e.app`)
 
-A separate container, not part of the customer app, for biz-e staff only. The skeleton is
+A separate container, not part of the customer app, for biz-e staff only. Its scope is managing
+organisations and customer support; backups, deploys and data copies are not part of it. The skeleton is
 built (`app/admin_site/`); it needs a Google client and a route before anyone can sign in.
 
 | | Step | Owner |
@@ -80,9 +81,12 @@ built (`app/admin_site/`); it needs a Google client and a route before anyone ca
 | [ ] | **Start it**: `scripts/run_admin.sh`, once the two steps above are done. | Johnny or Claude |
 | [ ] | **Confirm `whistlebird.co.nz` is a Google Workspace domain.** If the two addresses are personal Google accounts instead, sign-in is refused until `[admin_site] require_authoritative_email = false` is set in `prod.ini`. | Johnny |
 | [ ] | **Demo reset** on the Demo page (a placeholder today); arrives with phase 2. | Claude |
-| [ ] | **More people actions**: change role, deactivate, reset 2FA. And the rest of the CLI (`list_orgs`, `list_users`, `get_backup_codes`) moved onto the shared operations. | Claude |
-| [ ] | **Audit log page** in the site, and a platform-level log for events with no organisation (sign-ins, refused sign-ins); those go to the container log only today. | Claude |
-| [ ] | **System page**: last backup and customer-app health. | Claude |
+| [x] | **Support actions on a person**, each on the site and as a CLI command: change role, deactivate and reactivate, change email, reset 2FA (also removes backup codes and remembered devices), unlock, new setup link. An organisation's only admin cannot be demoted or deactivated. | done |
+| [x] | **Find a person by email** across every organisation (`find-user`). | done |
+| [x] | **Organisation at a glance**: last sign-in (per person and overall), go-live date, sites, Xero connection and last sync, Google sign-in linked. Rename an organisation (`rename-org`); `suspend-org` and `reactivate-org` on the CLI. | done |
+| [x] | **History page** per organisation (`org-history`): the audit log, with changes made by biz-e staff marked. | done |
+| [ ] | **Platform-level log** for events with no organisation (admin sign-ins, refused sign-ins); those go to the container log only today. | Claude |
+| [ ] | **Sign in as a customer** (impersonation), if wanted: the most useful support tool and the riskiest. Not built. | Johnny to decide |
 | [ ] | **Database role of its own** for the admin site, in place of the app's `workflow_rw`. | Claude |
 
 ## Phase 4: retire the Whistlebird replay

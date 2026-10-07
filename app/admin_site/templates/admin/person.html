@@ -1,0 +1,108 @@
+{% extends "admin/base.html" %}
+{% set section = 'organisations' %}
+{% block title %}{{ person.email }}{% endblock %}
+{% macro post(endpoint) %}<form class="workspace-form" method="post" action="{{ url_for(endpoint, org_id=org.id, user_id=person.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+{% block content %}
+<header class="workspace-header">
+  <div>
+    <p><a class="workspace-link" href="{{ url_for('admin.organisations') }}">Organisations</a> / <a class="workspace-link" href="{{ url_for('admin.organisation', org_id=org.id) }}">{{ org.name }}</a></p>
+    <h1>{{ person.email }}</h1>
+  </div>
+</header>
+<div class="workspace-stack">
+  <section class="workspace-card" aria-labelledby="person-summary-heading">
+    <div class="workspace-card__header">
+      <h2 id="person-summary-heading">Summary</h2>
+    </div>
+    <dl class="workspace-facts">
+      <div><dt>State</dt><dd>
+        {% if locked %}<span class="admin-status admin-status--off">Locked</span>
+        {% elif invited %}<span class="admin-status admin-status--muted">Invited</span>
+        {% elif person.is_active %}<span class="admin-status">Active</span>
+        {% else %}<span class="admin-status admin-status--muted">Inactive</span>{% endif %}
+      </dd></div>
+      <div><dt>Role</dt><dd>{{ person.role.value|capitalize }}</dd></div>
+      <div><dt>2FA</dt><dd>{{ 'On' if person.two_factor_enabled else 'Off' }}</dd></div>
+      <div><dt>Google sign-in</dt><dd>{{ 'Linked' if google_linked else 'Not linked' }}</dd></div>
+      <div><dt>Last signed in</dt><dd>{{ last_sign_in.strftime('%-d %b %Y, %H:%M UTC') if last_sign_in else 'Never' }}</dd></div>
+      <div><dt>Failed sign-ins</dt><dd>{{ person.failed_login_attempts or 0 }}</dd></div>
+      <div><dt>Added</dt><dd>{{ person.created_at.strftime('%-d %b %Y') }}</dd></div>
+      <div><dt>ID</dt><dd>{{ person.id }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="workspace-card" aria-labelledby="sign-in-heading">
+    <div class="workspace-card__header">
+      <h2 id="sign-in-heading">Can't sign in</h2>
+    </div>
+    <div class="workspace-form-list">
+      {% if invited %}
+      {{ post('admin.reissue_invite') }}
+        <p>They have not set up their account yet. A new link replaces the old one and lasts 7 days.</p>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button workspace-button--primary">New setup link</button></div>
+      </form>
+      {% endif %}
+      {% if locked %}
+      {{ post('admin.unlock_user') }}
+        <p>Locked after too many wrong passwords. Unlocking keeps their password.</p>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button workspace-button--primary">Unlock</button></div>
+      </form>
+      {% endif %}
+      {% if person.is_active %}
+      {{ post('admin.reset_password') }}
+        <p>Forgotten password. Sets a temporary one, shown once, and clears any lockout.</p>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button">Reset password</button></div>
+      </form>
+      {% endif %}
+      {% if person.two_factor_enabled %}
+      {{ post('admin.reset_two_factor') }}
+        <p>Lost authenticator. Switches 2FA off and removes their backup codes and remembered devices. Confirm who you are talking to first.</p>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button">Reset 2FA</button></div>
+      </form>
+      {% endif %}
+      {% if not invited and not locked and not person.is_active %}
+      <p class="workspace-empty">This person is deactivated. Reactivate them below to let them sign in.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="workspace-card" aria-labelledby="account-heading">
+    <div class="workspace-card__header">
+      <h2 id="account-heading">Account</h2>
+    </div>
+    <div class="workspace-form-list">
+      {{ post('admin.change_email') }}
+        <label>Email
+          <input type="email" name="email" value="{{ person.email }}" maxlength="255" required>
+        </label>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button">Change email</button></div>
+      </form>
+      {% if person.role.value in ('admin', 'member') %}
+      {{ post('admin.set_role') }}
+        <label>Role
+          <select name="role">
+            <option value="member"{% if person.role.value == 'member' %} selected{% endif %}>Member</option>
+            <option value="admin"{% if person.role.value == 'admin' %} selected{% endif %}>Admin</option>
+          </select>
+        </label>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button">Change role</button></div>
+      </form>
+      {% endif %}
+      {% if person.is_active %}
+      {{ post('admin.set_active') }}
+        <input type="hidden" name="active" value="no">
+        <p>Deactivating stops them signing in. Their records stay.</p>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button">Deactivate</button></div>
+      </form>
+      {% elif not invited %}
+      {{ post('admin.set_active') }}
+        <input type="hidden" name="active" value="yes">
+        <p>They will be able to sign in again with their existing password.</p>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button workspace-button--primary">Reactivate</button></div>
+      </form>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

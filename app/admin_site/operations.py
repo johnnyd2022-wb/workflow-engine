@@ -17,16 +17,21 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
+from app.core.db.models.audit_log import AuditLog
 from app.core.db.models.feature_subscription import FeatureSubscription
 from app.core.db.models.organisation import Organisation, OrganisationStatus
+from app.core.db.models.site import Site
+from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
 from app.core.db.models.user import User, UserRole
+from app.core.db.models.user_identity import UserIdentity
 from app.core.db.repositories.audit_repo import AuditRepository
 from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
+from app.core.db.repositories.trusted_device_repo import TrustedDeviceRepository
 from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
-from app.core.security.people import PeopleError, issue_invite, validate_new_password
+from app.core.security.people import PeopleError, active_admins, issue_invite, validate_new_password
 from app.core.security.tenant_scope import unscoped
 from app.observability import get_logger
 
@@ -34,6 +39,7 @@ LOGGER = get_logger(__name__)
 
 CLI_ACTOR = "cli"
 PAGE_SIZE = 50
+SIGN_IN_ACTIONS = ("login", "login_google")
 # Features that are switched on per organisation (`feature_subscriptions`).
 KNOWN_FEATURES = ("compliant",)
 
@@ -183,7 +189,102 @@ def set_organisation_status(db: Session, org_id, status: OrganisationStatus, *, 
     return org
 
 
+def rename_organisation(db: Session, org_id, name: str, *, actor: str) -> Organisation:
+    org = get_organisation(db, org_id)
+    name = (name or "").strip()
+    if not name or len(name) > 255:
+        raise AdminOperationError("Enter an organisation name of up to 255 characters.")
+    if name == org.name:
+        return org
+    before = org.name
+    with unscoped():
+        repo = OrganisationRepository(db)
+        if repo.get_org_by_name(name):
+            raise AdminOperationError(f"Organisation with name '{name}' already exists")
+        org = repo.update_org(org.id, name=name)
+    _audit(org.id, "rename", "organisation", org.id, actor, before=before, after=name)
+    return org
+
+
+def organisation_overview(db: Session, org_id) -> dict:
+    """What support needs to see about an organisation before asking the customer anything."""
+    # Imported here: Sales is an optional area and its models are not loaded by every caller.
+    from app.features.crm.models.xero_tenant import XeroTenant
+
+    org = get_organisation(db, org_id)
+    with unscoped():
+        sites = db.query(func.count(Site.id)).filter(Site.org_id == org.id).scalar()
+        xero = (
+            db.query(XeroTenant)
+            .filter(XeroTenant.org_id == org.id, XeroTenant.is_connected.is_(True))
+            .order_by(XeroTenant.connected_at.desc())
+            .first()
+        )
+        last_sign_ins = dict(
+            db.query(AuditLog.user_id, func.max(AuditLog.timestamp))
+            .filter(AuditLog.org_id == org.id, AuditLog.action.in_(SIGN_IN_ACTIONS))
+            .group_by(AuditLog.user_id)
+            .all()
+        )
+        google_linked = {
+            user_id for (user_id,) in db.query(UserIdentity.user_id).filter(UserIdentity.org_id == org.id).all()
+        }
+    return {
+        "go_live_date": org.go_live_date,
+        "sites": sites,
+        "multiple_sites": bool(org.multiple_sites_enabled),
+        "contract_materials": bool(org.contract_materials_enabled),
+        "xero_name": (xero.xero_tenant_name or "Connected") if xero else None,
+        "xero_last_sync": xero.last_successful_sync_at if xero else None,
+        "last_sign_ins": last_sign_ins,
+        "last_sign_in": max(last_sign_ins.values(), default=None),
+        "google_linked": google_linked,
+    }
+
+
+def list_audit(db: Session, org_id, *, limit: int = PAGE_SIZE, offset: int = 0) -> tuple[list[tuple], int]:
+    """One page of an organisation's audit log, newest first: (entry, user email or None)."""
+    org = get_organisation(db, org_id)
+    with unscoped():
+        total = db.query(func.count(AuditLog.id)).filter(AuditLog.org_id == org.id).scalar()
+        rows = (
+            db.query(AuditLog, User.email)
+            .outerjoin(User, (User.id == AuditLog.user_id) & (User.org_id == AuditLog.org_id))
+            .filter(AuditLog.org_id == org.id)
+            .order_by(AuditLog.timestamp.desc(), AuditLog.id)
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
+    return [(entry, email) for entry, email in rows], total
+
+
 # ── Users ──────────────────────────────────────────────────────────────────────
+
+
+def find_people(db: Session, search: str, *, limit: int = PAGE_SIZE) -> list[tuple[User, Organisation]]:
+    """People in any organisation whose email contains ``search``. Support requests arrive
+    as an email address, not an organisation."""
+    search = (search or "").strip().lower()
+    if len(search) < 3:
+        return []
+    literal = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    with unscoped():
+        rows = (
+            db.query(User, Organisation)
+            .join(Organisation, Organisation.id == User.org_id)
+            .filter(User.email.ilike(f"%{literal}%", escape="\\"))
+            .order_by(User.email)
+            .limit(limit)
+            .all()
+        )
+    return [(user, org) for user, org in rows]
+
+
+def get_user(db: Session, org_id, user_id) -> User:
+    org = get_organisation(db, org_id)
+    with unscoped():
+        return _user_in_org(db, org, user_id=user_id)
 
 
 def list_users(db: Session, org_id, *, active_only: bool = False) -> list[User]:
@@ -290,6 +391,78 @@ def unlock_user(db: Session, org_id, user_id, *, actor: str) -> User:
         user = _user_in_org(db, org, user_id=user_id)
         UserRepository(db).unlock_account(user.id)
     _audit(org.id, "unlock", "user", user.id, actor, email=user.email)
+    return user
+
+
+def _keeps_an_admin(db: Session, org: Organisation, user: User) -> None:
+    """Refuse a change that would leave the organisation with no one able to administer it."""
+    admins = active_admins(UserRepository(db).list_users_for_org(org.id))
+    if [admin.id for admin in admins] == [user.id]:
+        raise AdminOperationError(f"{user.email} is the organisation's only admin. Make someone else an admin first.")
+
+
+def set_user_role(db: Session, org_id, user_id, role, *, actor: str) -> User:
+    org, new_role = get_organisation(db, org_id), _role(role)
+    with unscoped():
+        user = _user_in_org(db, org, user_id=user_id)
+        if user.role == new_role:
+            return user
+        if user.role not in (UserRole.ADMIN, UserRole.MEMBER):
+            raise AdminOperationError(f"{user.email} has the role {user.role.value}; change it in the app.")
+        if new_role != UserRole.ADMIN:
+            _keeps_an_admin(db, org, user)
+        before = user.role
+        user = UserRepository(db).update_user(user.id, org_id=org.id, role=new_role)
+    _audit(org.id, "set_role", "user", user.id, actor, email=user.email, before=before.value, after=new_role.value)
+    return user
+
+
+def set_user_active(db: Session, org_id, user_id, active: bool, *, actor: str) -> User:
+    """Deactivate someone (they can no longer sign in; nothing is deleted) or bring them back."""
+    org = get_organisation(db, org_id)
+    with unscoped():
+        user = _user_in_org(db, org, user_id=user_id)
+        if bool(user.is_active) == active:
+            return user
+        if active and user.invite_token_hash:
+            raise AdminOperationError(f"{user.email} has not accepted their invite yet. Send them a new setup link.")
+        if not active:
+            _keeps_an_admin(db, org, user)
+        user = UserRepository(db).update_user(user.id, org_id=org.id, is_active=active)
+    _audit(org.id, "reactivate" if active else "deactivate", "user", user.id, actor, email=user.email)
+    return user
+
+
+def change_user_email(db: Session, org_id, user_id, email: str, *, actor: str) -> User:
+    org, email = get_organisation(db, org_id), _clean_email(email)
+    with unscoped():
+        user = _user_in_org(db, org, user_id=user_id)
+        before = user.email
+        if email == before:
+            return user
+        try:
+            user = UserRepository(db).update_user(user.id, org_id=org.id, email=email)
+        except EmailConflictError:
+            raise AdminOperationError(f"User with email '{email}' already exists") from None
+    _audit(org.id, "change_email", "user", user.id, actor, before=before, after=email)
+    return user
+
+
+def reset_two_factor(db: Session, org_id, user_id, *, actor: str) -> User:
+    """Switch 2FA off for someone who has lost their authenticator, with everything tied to
+    that enrolment: backup codes and remembered devices. An admin is asked to enrol again
+    the next time they sign in."""
+    org = get_organisation(db, org_id)
+    with unscoped():
+        user = _user_in_org(db, org, user_id=user_id)
+        if not user.two_factor_enabled and not user.totp_secret:
+            raise AdminOperationError(f"{user.email} does not have 2FA switched on.")
+        db.query(TwoFactorBackupCode).filter(
+            TwoFactorBackupCode.org_id == org.id, TwoFactorBackupCode.user_id == user.id
+        ).delete(synchronize_session=False)
+        TrustedDeviceRepository(db).delete_user_devices(user.id)
+        UserRepository(db).disable_two_factor(user.id)  # commits
+    _audit(org.id, "reset_two_factor", "user", user.id, actor, email=user.email)
     return user
 
 

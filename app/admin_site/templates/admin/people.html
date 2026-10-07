@@ -1,0 +1,47 @@
+{% extends "admin/base.html" %}
+{% set section = 'people' %}
+{% block title %}Find a person{% endblock %}
+{% block content %}
+<header class="workspace-header">
+  <div>
+    <h1>Find a person</h1>
+    <p>Look someone up by email across every organisation.</p>
+  </div>
+</header>
+<div class="workspace-stack">
+  <section class="workspace-card" aria-labelledby="find-heading">
+    <div class="workspace-card__header">
+      <h2 id="find-heading">Search</h2>
+    </div>
+    <form class="workspace-form" method="get" action="{{ url_for('admin.people') }}">
+      <label>Email, or part of one
+        <input type="search" name="q" value="{{ search }}" maxlength="255" minlength="3" required>
+      </label>
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button workspace-button--primary">Search</button>
+      </div>
+    </form>
+    {% if results %}
+    <div class="workspace-scroll">
+      <table class="workspace-table">
+        <thead><tr><th>Email</th><th>Organisation</th><th>Role</th><th>State</th></tr></thead>
+        <tbody>
+          {% for person, org in results %}
+          <tr>
+            <td><a href="{{ url_for('admin.person', org_id=org.id, user_id=person.id) }}">{{ person.email }}</a></td>
+            <td><a href="{{ url_for('admin.organisation', org_id=org.id) }}">{{ org.name }}</a>{% if org.status.value != 'active' %} <span class="admin-status admin-status--off">Suspended</span>{% endif %}</td>
+            <td>{{ person.role.value|capitalize }}</td>
+            <td>{% if person.is_active %}<span class="admin-status">Active</span>{% else %}<span class="admin-status admin-status--muted">{{ 'Invited' if person.invite_token_hash else 'Inactive' }}</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif search|length >= 3 %}
+    <p class="workspace-empty">No one with an email containing "{{ search }}".</p>
+    {% elif search %}
+    <p class="workspace-empty">Type at least three characters.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

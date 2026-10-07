@@ -95,6 +95,7 @@ def _organisation_page(org_id, *, notice=None, error=None, secret=None, secret_l
             "admin/organisation.html",
             org=org,
             users=ops.list_users(db, org.id),
+            overview=ops.organisation_overview(db, org.id),
             is_locked=ops.is_locked,
             features=features,
             feature_keys=sorted(set(ops.KNOWN_FEATURES) | set(features)),
@@ -118,16 +119,72 @@ def organisation(org_id):
     return _organisation_page(org_id)
 
 
-def _act(org_id, action):
-    """Run one change against an organisation and show its page again with the outcome."""
+def _person_page(org_id, user_id, *, notice=None, error=None, secret=None, secret_label=None, status_code=200):
     db = db_session()
     org = ops.get_organisation(db, org_id)
+    person = ops.get_user(db, org.id, user_id)
+    overview = ops.organisation_overview(db, org.id)
+    return (
+        render_template(
+            "admin/person.html",
+            org=org,
+            person=person,
+            locked=ops.is_locked(person),
+            invited=bool(not person.is_active and person.invite_token_hash),
+            last_sign_in=overview["last_sign_ins"].get(person.id),
+            google_linked=person.id in overview["google_linked"],
+            notice=notice,
+            error=error,
+            secret=secret,
+            secret_label=secret_label,
+        ),
+        status_code,
+    )
+
+
+def _act(org_id, action, user_id=None):
+    """Run one change and show the page it was made from again, with the outcome: the
+    person's page when ``user_id`` is given, otherwise the organisation's."""
+    db = db_session()
+    org = ops.get_organisation(db, org_id)
+
+    def page(**outcome):
+        if user_id is not None:
+            return _person_page(org.id, user_id, **outcome)
+        return _organisation_page(org.id, **outcome)
+
+    if user_id is not None:
+        ops.get_user(db, org.id, user_id)  # not this organisation's person: 404 before anything runs
     try:
         outcome = action(db, org) or {}
     except ops.AdminOperationError as exc:
         db.rollback()
-        return _organisation_page(org.id, error=str(exc), status_code=400)
-    return _organisation_page(org.id, **outcome)
+        return page(error=str(exc), status_code=400)
+    return page(**outcome)
+
+
+@admin_bp.route("/organisations/<org_id>/name", methods=["POST"])
+def rename_organisation(org_id):
+    def action(db, org):
+        before = org.name
+        renamed = ops.rename_organisation(db, org.id, _field("name"), actor=g.admin_email)
+        return {"notice": f"{before} is now called {renamed.name}."}
+
+    return _act(org_id, action)
+
+
+@admin_bp.route("/organisations/<org_id>/audit", methods=["GET"])
+def audit(org_id):
+    db = db_session()
+    org = ops.get_organisation(db, org_id)
+    try:
+        page = max(1, int(request.args.get("page", "1")))
+    except ValueError:
+        page = 1
+    entries, total = ops.list_audit(db, org.id, offset=(page - 1) * ops.PAGE_SIZE)
+    return render_template(
+        "admin/audit.html", org=org, entries=entries, total=total, page=page, pages=max(1, -(-total // ops.PAGE_SIZE))
+    )
 
 
 @admin_bp.route("/organisations/<org_id>/status", methods=["POST"])
@@ -181,7 +238,7 @@ def reissue_invite(org_id, user_id):
             "secret_label": f"Setup link for {user.email} (valid for 7 days)",
         }
 
-    return _act(org_id, action)
+    return _act(org_id, action, user_id)
 
 
 @admin_bp.route("/organisations/<org_id>/users/<user_id>/reset-password", methods=["POST"])
@@ -194,7 +251,7 @@ def reset_password(org_id, user_id):
             "secret_label": f"Temporary password for {user.email}. Ask them to change it after signing in.",
         }
 
-    return _act(org_id, action)
+    return _act(org_id, action, user_id)
 
 
 @admin_bp.route("/organisations/<org_id>/users/<user_id>/unlock", methods=["POST"])
@@ -203,7 +260,55 @@ def unlock_user(org_id, user_id):
         user = ops.unlock_user(db, org.id, user_id, actor=g.admin_email)
         return {"notice": f"{user.email} unlocked."}
 
-    return _act(org_id, action)
+    return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/organisations/<org_id>/users/<user_id>", methods=["GET"])
+def person(org_id, user_id):
+    return _person_page(org_id, user_id)
+
+
+@admin_bp.route("/organisations/<org_id>/users/<user_id>/role", methods=["POST"])
+def set_role(org_id, user_id):
+    def action(db, org):
+        user = ops.set_user_role(db, org.id, user_id, _field("role"), actor=g.admin_email)
+        return {"notice": f"{user.email} is now {'an admin' if user.role.value == 'admin' else 'a member'}."}
+
+    return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/organisations/<org_id>/users/<user_id>/active", methods=["POST"])
+def set_active(org_id, user_id):
+    def action(db, org):
+        active = _field("active") == "yes"
+        user = ops.set_user_active(db, org.id, user_id, active, actor=g.admin_email)
+        return {"notice": f"{user.email} {'can sign in again' if active else 'can no longer sign in'}."}
+
+    return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/organisations/<org_id>/users/<user_id>/email", methods=["POST"])
+def change_email(org_id, user_id):
+    def action(db, org):
+        user = ops.change_user_email(db, org.id, user_id, _field("email"), actor=g.admin_email)
+        return {"notice": f"Email changed to {user.email}. They sign in with the new address from now on."}
+
+    return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/organisations/<org_id>/users/<user_id>/two-factor", methods=["POST"])
+def reset_two_factor(org_id, user_id):
+    def action(db, org):
+        user = ops.reset_two_factor(db, org.id, user_id, actor=g.admin_email)
+        return {"notice": f"2FA switched off for {user.email}. Their backup codes and remembered devices are gone."}
+
+    return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/people", methods=["GET"])
+def people():
+    search = request.args.get("q", "").strip()[:255]
+    return render_template("admin/people.html", search=search, results=ops.find_people(db_session(), search))
 
 
 # ── Demo and system ────────────────────────────────────────────────────────────

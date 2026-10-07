@@ -117,7 +117,9 @@ def created(db):
     db.rollback()
     with unscoped():
         ids = [org.id for org in db.query(Organisation).filter(Organisation.name.in_(names)).all()]
-        for model in (AuditLog, FeatureSubscription, Site, User):
+        from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
+
+        for model in (AuditLog, FeatureSubscription, TwoFactorBackupCode, Site, User):
             db.query(model).filter(model.org_id.in_(ids)).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id.in_(ids)).delete(synchronize_session=False)
         db.commit()
@@ -393,7 +395,7 @@ def test_a_person_is_only_reachable_through_their_own_organisation(site, db, org
     )
     before = outsider.password_hash
     response = browser.post(f"/organisations/{org.id}/users/{outsider.id}/reset-password")
-    assert response.status_code == 400
+    assert response.status_code == 404
     db.expire_all()
     with unscoped():
         assert db.query(User).filter(User.id == outsider.id).one().password_hash == before
@@ -407,3 +409,155 @@ def test_demo_and_system_pages_render(site):
     assert "Not available yet" in browser.get("/demo").get_data(as_text=True)
     system = browser.get("/system").get_data(as_text=True)
     assert JOHNNY in system and NIKO in system and "Reachable" in system
+
+
+# ── Support actions ────────────────────────────────────────────────────────────
+
+
+def _admin_of(db, org):
+    return next(user for user in ops.list_users(db, org.id) if user.role is UserRole.ADMIN)
+
+
+def _reload(db, user):
+    db.expire_all()
+    with unscoped():
+        return db.query(User).filter(User.id == user.id).one()
+
+
+def test_the_only_admin_cannot_be_demoted_or_deactivated(site, db, org):
+    _, browser = site
+    _signed_in(browser)
+    admin = _admin_of(db, org)
+    base = f"/organisations/{org.id}/users/{admin.id}"
+    for path, data in ((f"{base}/role", {"role": "member"}), (f"{base}/active", {"active": "no"})):
+        response = browser.post(path, data=data)
+        assert response.status_code == 400 and "only admin" in response.get_data(as_text=True)
+    admin = _reload(db, admin)
+    assert admin.role is UserRole.ADMIN and admin.is_active
+
+    # With a second admin in place, the first can step down and be deactivated, then return.
+    second, _ = ops.create_user(
+        db, org.id, email=f"{uuid4().hex}@example.test", role="admin", password="a-long-test-password", actor="test"
+    )
+    assert browser.post(f"{base}/role", data={"role": "member"}).status_code == 200
+    assert browser.post(f"{base}/active", data={"active": "no"}).status_code == 200
+    admin = _reload(db, admin)
+    assert admin.role is UserRole.MEMBER and not admin.is_active
+    assert browser.post(f"{base}/active", data={"active": "yes"}).status_code == 200
+    assert _reload(db, admin).is_active
+    assert browser.post(f"{base}/role", data={"role": "owner"}).status_code == 400
+
+
+def test_an_invited_person_is_not_activated_around_their_invite(site, db, org):
+    _, browser = site
+    _signed_in(browser)
+    invited, _ = ops.create_user(db, org.id, email=f"{uuid4().hex}@example.test", actor="test")
+    response = browser.post(f"/organisations/{org.id}/users/{invited.id}/active", data={"active": "yes"})
+    assert response.status_code == 400 and not _reload(db, invited).is_active
+
+
+def test_changing_an_email_refuses_one_already_in_use(site, db, org):
+    _, browser = site
+    _signed_in(browser)
+    admin = _admin_of(db, org)
+    other, _ = ops.create_user(db, org.id, email=f"{uuid4().hex}@example.test", actor="test")
+    url = f"/organisations/{org.id}/users/{admin.id}/email"
+    assert browser.post(url, data={"email": other.email}).status_code == 400
+    assert browser.post(url, data={"email": "not an email"}).status_code == 400
+    new_email = f"{uuid4().hex}@example.test"
+    assert browser.post(url, data={"email": new_email.upper()}).status_code == 200
+    assert _reload(db, admin).email == new_email
+
+
+def test_resetting_2fa_removes_everything_tied_to_the_enrolment(site, db, org):
+    from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
+    from app.core.db.repositories.backup_code_repo import BackupCodeRepository
+
+    _, browser = site
+    _signed_in(browser)
+    admin = _admin_of(db, org)
+    url = f"/organisations/{org.id}/users/{admin.id}/two-factor"
+    assert browser.post(url).status_code == 400  # nothing to reset
+
+    with unscoped():
+        admin.totp_secret, admin.two_factor_enabled = "JBSWY3DPEHPK3PXP", True
+        db.commit()
+        BackupCodeRepository(db).generate_and_store_codes(org.id, admin.id, commit=True)
+        assert db.query(TwoFactorBackupCode).filter(TwoFactorBackupCode.user_id == admin.id).count() == 10
+    assert "Reset 2FA" in browser.get(f"/organisations/{org.id}/users/{admin.id}").get_data(as_text=True)
+    assert browser.post(url).status_code == 200
+    admin = _reload(db, admin)
+    assert not admin.two_factor_enabled and admin.totp_secret is None
+    with unscoped():
+        assert db.query(TwoFactorBackupCode).filter(TwoFactorBackupCode.user_id == admin.id).count() == 0
+
+
+def test_renaming_an_organisation(site, db, org, created):
+    _, browser = site
+    _signed_in(browser)
+    other_name = f"Admin site test {uuid4().hex[:12]}"
+    created.append(other_name)
+    ops.create_organisation(db, name=other_name, admin_email=f"{uuid4().hex}@example.test", actor="test")
+    url = f"/organisations/{org.id}/name"
+    assert browser.post(url, data={"name": other_name}).status_code == 400
+    assert browser.post(url, data={"name": "  "}).status_code == 400
+    new_name = f"Admin site test {uuid4().hex[:12]}"
+    created.append(new_name)
+    assert browser.post(url, data={"name": new_name}).status_code == 200
+    db.expire_all()
+    assert ops.get_organisation(db, org.id).name == new_name
+
+
+def test_finding_a_person_by_email_across_organisations(site, db, org):
+    _, browser = site
+    _signed_in(browser)
+    admin = _admin_of(db, org)
+    page = browser.get("/people", query_string={"q": admin.email[:20].upper()}).get_data(as_text=True)
+    assert admin.email in page and org.name in page and f"/organisations/{org.id}/users/{admin.id}" in page
+    assert "at least three characters" in browser.get("/people", query_string={"q": "a@"}).get_data(as_text=True)
+    # Wildcards are matched literally, not as "everything".
+    assert ops.find_people(db, "%%%") == [] and ops.find_people(db, "___") == []
+
+
+def test_history_shows_what_staff_and_customers_did(site, db, org):
+    _, browser = site
+    _signed_in(browser)
+    admin = _admin_of(db, org)
+    with unscoped():
+        from app.core.db.repositories.audit_repo import AuditRepository
+
+        AuditRepository(db).write_log(org_id=org.id, user_id=admin.id, action="login", entity="user")
+    browser.post(f"/organisations/{org.id}/features", data={"feature": "compliant", "state": "on"})
+    page = browser.get(f"/organisations/{org.id}/audit").get_data(as_text=True)
+    assert "grant feature" in page and JOHNNY in page and "biz-e staff" in page
+    assert admin.email in page and "login" in page
+    overview = ops.organisation_overview(db, org.id)
+    assert overview["last_sign_ins"][admin.id] == overview["last_sign_in"] and overview["sites"] == 1
+    assert "Last sign-in" in browser.get(f"/organisations/{org.id}").get_data(as_text=True)
+
+
+def test_the_cli_runs_the_same_operations(db, org):
+    from click.testing import CliRunner
+
+    from app.cli import cli
+
+    runner = CliRunner()
+    admin = _admin_of(db, org)
+    found = runner.invoke(cli, ["find-user", "--email", admin.email])
+    assert found.exit_code == 0 and str(admin.id) in found.output and org.name in found.output
+
+    person = ["--org-id", str(org.id), "--user-id", str(admin.id)]
+    refused = runner.invoke(cli, ["set-role", *person, "--role", "member"])
+    assert refused.exit_code == 1 and "only admin" in refused.output
+    assert runner.invoke(cli, ["deactivate-user", *person]).exit_code == 1
+    assert runner.invoke(cli, ["reset-2fa", *person]).exit_code == 1
+
+    invited = runner.invoke(cli, ["invite-user", "--org-id", str(org.id), "--email", f"{uuid4().hex}@example.test"])
+    assert invited.exit_code == 0 and "/invite/" in invited.output
+    assert runner.invoke(cli, ["suspend-org", "--org-id", str(org.id)]).exit_code == 0
+    db.expire_all()
+    assert ops.get_organisation(db, org.id).status is OrganisationStatus.SUSPENDED
+    assert runner.invoke(cli, ["reactivate-org", "--org-id", str(org.id)]).exit_code == 0
+    history = runner.invoke(cli, ["org-history", "--org-id", str(org.id)])
+    assert history.exit_code == 0 and "platform_admin.set_status" in history.output and "cli" in history.output
+    assert runner.invoke(cli, ["org-history", "--org-id", "nope"]).exit_code == 1

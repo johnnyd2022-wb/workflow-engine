@@ -338,3 +338,179 @@ def list_features(org_id):
         raise SystemExit(1) from e
     finally:
         db.close()
+
+
+# ── Support commands ───────────────────────────────────────────────────────────
+# Each is one call into app.admin_site.operations, the code behind the same button on
+# the admin site, so a change made here is audited (as `cli`) and behaves identically.
+
+
+def _run(operation, describe):
+    """Run one admin operation, print its outcome, and exit non-zero if it was refused."""
+    db = db_session()
+    try:
+        click.echo(f"✅ {describe(operation(db))}")
+    except ops.AdminOperationError as e:
+        db.rollback()
+        click.echo(f"❌ {e}", err=True)
+        raise SystemExit(1) from e
+    finally:
+        db.close()
+
+
+def _person_options(command):
+    command = click.option("--user-id", required=True, help="User ID (see find-user)")(command)
+    return click.option("--org-id", required=True, help="Organisation ID")(command)
+
+
+@click.command(name="find-user")
+@click.option("--email", required=True, help="Email, or part of one (at least 3 characters)")
+def find_user(email):
+    """Find people by email across every organisation."""
+    db = db_session()
+    try:
+        results = ops.find_people(db, email)
+        if not results:
+            click.echo("No users found")
+            return
+        for user, org in results:
+            state = "active" if user.is_active else ("invited" if user.invite_token_hash else "inactive")
+            click.echo(f"  {user.email}  {user.role.value}  {state}  2FA {'on' if user.two_factor_enabled else 'off'}")
+            click.echo(f"    user {user.id}  org {org.id} ({org.name}, {org.status.value})")
+    finally:
+        db.close()
+
+
+@click.command(name="invite-user")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--email", required=True, help="User email")
+@click.option("--role", default="member", type=click.Choice(["admin", "member"]), help="User role")
+def invite_user(org_id, email, role):
+    """Add a person who chooses their own password; prints a one-time setup token."""
+    _run(
+        lambda db: ops.create_user(db, org_id, email=email, role=role, actor=ops.CLI_ACTOR),
+        lambda result: f"Invited {result[0].email}. Setup link (valid 7 days): <app URL>/invite/{result[1]}",
+    )
+
+
+@click.command(name="reissue-invite")
+@_person_options
+def reissue_invite(org_id, user_id):
+    """A new setup token for someone who has not accepted yet; the old one stops working."""
+    _run(
+        lambda db: ops.reissue_invite(db, org_id, user_id, actor=ops.CLI_ACTOR),
+        lambda result: f"New setup link for {result[0].email}: <app URL>/invite/{result[1]}",
+    )
+
+
+@click.command(name="set-role")
+@_person_options
+@click.option("--role", required=True, type=click.Choice(["admin", "member"]))
+def set_role(org_id, user_id, role):
+    """Make someone an admin or a member."""
+    _run(
+        lambda db: ops.set_user_role(db, org_id, user_id, role, actor=ops.CLI_ACTOR),
+        lambda user: f"{user.email} is now {user.role.value}",
+    )
+
+
+@click.command(name="deactivate-user")
+@_person_options
+def deactivate_user(org_id, user_id):
+    """Stop someone signing in. Nothing is deleted."""
+    _run(
+        lambda db: ops.set_user_active(db, org_id, user_id, False, actor=ops.CLI_ACTOR),
+        lambda user: f"{user.email} deactivated",
+    )
+
+
+@click.command(name="reactivate-user")
+@_person_options
+def reactivate_user(org_id, user_id):
+    """Let a deactivated person sign in again."""
+    _run(
+        lambda db: ops.set_user_active(db, org_id, user_id, True, actor=ops.CLI_ACTOR),
+        lambda user: f"{user.email} reactivated",
+    )
+
+
+@click.command(name="unlock-user")
+@_person_options
+def unlock_user(org_id, user_id):
+    """Clear a sign-in lockout without changing the password."""
+    _run(
+        lambda db: ops.unlock_user(db, org_id, user_id, actor=ops.CLI_ACTOR),
+        lambda user: f"{user.email} unlocked",
+    )
+
+
+@click.command(name="change-email")
+@_person_options
+@click.option("--email", required=True, help="New email address")
+def change_email(org_id, user_id, email):
+    """Change the address someone signs in with."""
+    _run(
+        lambda db: ops.change_user_email(db, org_id, user_id, email, actor=ops.CLI_ACTOR),
+        lambda user: f"Email changed to {user.email}",
+    )
+
+
+@click.command(name="reset-2fa")
+@_person_options
+def reset_2fa(org_id, user_id):
+    """Switch 2FA off for someone who lost their authenticator (also removes their backup
+    codes and remembered devices)."""
+    _run(
+        lambda db: ops.reset_two_factor(db, org_id, user_id, actor=ops.CLI_ACTOR),
+        lambda user: f"2FA switched off for {user.email}",
+    )
+
+
+@click.command(name="rename-org")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--name", required=True, help="New organisation name")
+def rename_org(org_id, name):
+    """Rename an organisation."""
+    _run(
+        lambda db: ops.rename_organisation(db, org_id, name, actor=ops.CLI_ACTOR),
+        lambda org: f"Organisation renamed to {org.name}",
+    )
+
+
+@click.command(name="suspend-org")
+@click.option("--org-id", required=True, help="Organisation ID")
+def suspend_org(org_id):
+    """Suspend an organisation: no one in it can sign in. Nothing is deleted."""
+    _run(
+        lambda db: ops.set_organisation_status(db, org_id, OrganisationStatus.SUSPENDED, actor=ops.CLI_ACTOR),
+        lambda org: f"{org.name} suspended",
+    )
+
+
+@click.command(name="reactivate-org")
+@click.option("--org-id", required=True, help="Organisation ID")
+def reactivate_org(org_id):
+    """Make a suspended organisation active again."""
+    _run(
+        lambda db: ops.set_organisation_status(db, org_id, OrganisationStatus.ACTIVE, actor=ops.CLI_ACTOR),
+        lambda org: f"{org.name} is active",
+    )
+
+
+@click.command(name="org-history")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--limit", default=50, show_default=True, type=click.IntRange(1, 500))
+def org_history(org_id, limit):
+    """Recent sign-ins and changes recorded for an organisation, newest first."""
+    db = db_session()
+    try:
+        entries, total = ops.list_audit(db, org_id, limit=limit)
+        click.echo(f"{total} entries; showing {len(entries)}")
+        for entry, email in entries:
+            who = (entry.meta_data or {}).get("platform_admin") or email or "system"
+            click.echo(f"  {entry.timestamp:%Y-%m-%d %H:%M}  {who}  {entry.action}  {entry.entity}")
+    except ops.AdminOperationError as e:
+        click.echo(f"❌ {e}", err=True)
+        raise SystemExit(1) from e
+    finally:
+        db.close()
