@@ -353,6 +353,13 @@ DISPOSITION_CLOSED = re.compile(r"\b(?:false[- ]positive|accepted[- ]risk|wont?[
 # `<slug>`, `<one-line description>`, or an alternation of every allowed disposition.
 TEMPLATE_RE = re.compile(r"<[a-z][\w :|-]*>|\[[a-z-]+\|[a-z-]+(?:\|[a-z-]+)*\]", re.I)
 
+# A code span that starts with `/` is a URL route (`/api/crm/customers/<id>/analytics`), and
+# the `<id>` in it is a Flask path parameter, not a format-spec placeholder. Without removing
+# these first, TEMPLATE_RE dropped the whole bullet and the finding never reached the worklist
+# (the test-map's Row 19 gap went unindexed that way). File-path templates such as
+# `.agents/reports/<slug>/review.md` do not start with `/`, so they are still rejected.
+ROUTE_SPAN_RE = re.compile(r"`/[^`\s]*`")
+
 # `patch: not applied` keeps an item open; `patch: <commit sha / diff summary>` means it
 # already shipped. Read only when a disposition line is present, so ordinary prose using
 # the word "patch" cannot accidentally close an item.
@@ -788,7 +795,7 @@ def _item_from_bullet(body: str, rel: str, line_no: int, kind: str) -> Item | No
         return None
 
     # Format-spec placeholder, not a finding.
-    if TEMPLATE_RE.search(body):
+    if TEMPLATE_RE.search(ROUTE_SPAN_RE.sub("", body)):
         return None
 
     # A tagged finding carries its own disposition; honour it.

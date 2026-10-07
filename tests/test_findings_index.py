@@ -359,6 +359,26 @@ def test_format_template_placeholders_are_rejected(tmp_path, monkeypatch):
     assert [i.detail[:2] for i in items] == ["F2"]
 
 
+def test_route_parameter_in_a_code_span_is_not_mistaken_for_a_format_placeholder(tmp_path, monkeypatch):
+    """`/api/crm/customers/<id>/analytics` is a Flask route, not a format spec. The placeholder
+    filter used to drop any bullet containing `<id>`, so the test-map's Row 19 gap (malformed
+    params -> 500) never reached the worklist. A placeholder outside a route span still drops."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "docs/g.md",
+        """## Known gaps
+- the `/api/crm/customers/<id>/analytics` route raises ValueError on a non-UUID id (a 500)
+- F1 [fix] `.agents/reports/<slug>/review.md` <one-line description>
+- F2 [fix] write the audit to `.agents/reports/<slug>/review.md` once the run completes
+""",
+    )
+    items = fi.parse_doc(path)
+    # F2's only placeholder sits in a code span that does not start with `/`: still a template.
+    assert len(items) == 1
+    assert "`/api/crm/customers/<id>/analytics`" in items[0].detail
+
+
 def test_ticked_checkbox_and_resolved_prose_are_skipped(tmp_path, monkeypatch):
     path = write_doc(
         tmp_path,
