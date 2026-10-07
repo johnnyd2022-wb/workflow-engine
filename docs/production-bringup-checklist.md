@@ -1,7 +1,7 @@
 # Production bring-up checklist
 
 Written 2026-10-05 from reading the scripts and config, plus read-only checks on this
-machine. Nothing here has been changed yet. Work through it top to bottom: each section
+machine. Items are ticked as they are done. Work through it top to bottom: each section
 says what is missing, why it matters, and what "done" looks like.
 
 The goal: bring production up with the Whistlebird Ltd tenant, and nothing from the test
@@ -37,15 +37,8 @@ Production will not start, or will start insecurely, without these. None is pass
 | `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET` | Xero connect fails | `prod.ini` leaves both blank. Use the production Xero app's credentials, not the test app's. |
 | `XERO_REDIRECT_URI` | Xero connect fails | `prod.ini` has no `redirect_uri` at all. Must match the URI registered on the production Xero app. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in fails | Known and deferred: no Google tenant wired yet. Either supply them or set `[google_sign_in] enabled = false` in `prod.ini` so the button does not show. |
+| `XERO_TOKEN_ENCRYPTION_KEY` | App refuses to start (`RuntimeError`) while `crm_enabled` is on | Random, at least 32 bytes. Stored Xero tokens are encrypted under it; production never reads `[app] secret_key` and rejects the public development default. Set it before the first Xero connection: changing it afterwards means reconnecting Xero. local/test deployments still use the development key, so a dump of a deployed test database is decryptable with a string in this repository. |
 | `POSTHOG_PROJECT_API_KEY` | No product analytics | Optional. `posthog_data_enabled` is already `false`. |
-
-One more key is not an environment variable:
-
-- **Xero token encryption key.** Stored Xero tokens are encrypted with a key derived from
-  `[app] secret_key`. No config file sets it, so every environment falls back to the
-  hard-coded string `dev-secret-key-change-in-production`. Set a real `secret_key` for
-  production (ideally from an environment variable, which needs a small code change) before
-  any Xero connection is made there. Changing it afterwards means reconnecting Xero.
 
 ## 2. `scripts/run_prod.sh` fixes
 
@@ -80,12 +73,16 @@ One more key is not an environment variable:
 - [ ] `[xero] redirect_uri` is missing.
 - [ ] `[evidence]` and `[process_docs]` sections are missing (storage roots, size limits,
       allowed types). They fall back to in-container defaults.
-- [ ] `[app]` has no `secret_key` (see the Xero token key above).
+- [x] `[app]` has no `secret_key`: not needed. Production takes the Xero token key from
+      `XERO_TOKEN_ENCRYPTION_KEY` (section 1) and refuses to start without it.
 - [ ] `[google_sign_in] enabled = true` with KeePass entry names that production cannot read.
-- [ ] `[observability]`: `otel_enabled = true` pointing at `localhost:4317`, and
-      `rum_enabled = true` with Faro at `localhost:12347` and PostHog at `localhost:8000`.
-      Inside the container `localhost` is the container itself, so nothing is collected, and
-      `localhost:8000` is the app. Either point these at real collectors or switch them off.
+- [x] `[observability]`: `otel_enabled` and `rum_enabled` are now `false`. They pointed at
+      `localhost:4317`, `localhost:12347` and `localhost:8000`, which inside the container is
+      the container itself (and the app), so nothing could be collected. They were inert
+      (the `grafana_data_enabled` / `posthog_data_enabled` consent flags are off), so this
+      changes no behaviour. To turn a pipeline on, point its endpoints at a real collector
+      first, then set the switch and the consent flag;
+      `tests/test_prod_config_observability.py` fails if the switch is on with a loopback endpoint.
 - [ ] `[docker]` names a `workflow-engine-prod-db` container on host port 8432 that is not
       running and does not match `[database] port = 5432`. Reconcile with decision 1.
 

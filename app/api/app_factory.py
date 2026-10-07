@@ -61,6 +61,12 @@ def create_app():
     # Publicly reachable test deployments must never fall back to a known development key.
     app.secret_key = config.session_secret_key
 
+    # Xero tokens at rest are sealed under a deployment secret in production. Resolve it now so a
+    # missing key stops startup: inside XeroOAuthService.decrypt the error would be swallowed into
+    # XeroTokenExpiredError, and _refresh_token would then invalidate every stored token.
+    if config.crm_enabled:
+        config.xero_token_secret
+
     # Configure session cookies for production security
     # CRITICAL: Always use Secure=True (HTTPS is used in both local dev and production)
     # This prevents session cookies from being sent over unencrypted connections

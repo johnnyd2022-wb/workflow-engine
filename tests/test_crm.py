@@ -891,6 +891,20 @@ class TestCRMAPIAuth:
             resp = client.get("/api/crm/customers")
         assert resp.status_code in (401, 302)
 
+    @pytest.mark.parametrize(
+        "path", ["/api/crm/analytics/rankings", f"/api/crm/customers/{uuid4()}/analytics"], ids=["rankings", "customer"]
+    )
+    def test_analytics_endpoints_require_auth(self, path):
+        from app.api.app_factory import create_app
+
+        flask_app = create_app()
+        flask_app.config["TESTING"] = True
+        with flask_app.test_client() as client:
+            client.environ_base["wsgi.url_scheme"] = "https"
+            client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+            resp = client.get(path)
+        assert resp.status_code in (401, 302)
+
 
 class TestCRMTasksAPI:
     def test_list_tasks_empty(self, app_client):
@@ -1233,6 +1247,277 @@ class TestCRMAnalyticsAPI:
             assert field in page
         for stale in ("row.name", "row.total_spend", "days_since_last_purchase", "avg_purchase_interval_days"):
             assert stale not in page
+
+    # ── /api/crm/analytics/rankings and /api/crm/customers/<id>/analytics ──
+    # Findings-Index: 45664d36 -- test-map row 19 listed both as uncovered.
+
+    def _invoice(self, db, org, contact, on, lines, *, status="AUTHORISED", invoice_type="ACCREC"):
+        """An invoice dated *on* carrying ``(description, quantity, amount)`` line items."""
+        from app.features.crm.models.xero_invoice import XeroInvoice
+        from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+
+        invoice = XeroInvoice(
+            org_id=org.id,
+            xero_invoice_id=f"analytics-invoice-{uuid4()}",
+            xero_tenant_id="analytics-tenant",
+            contact_id=contact.id,
+            invoice_type=invoice_type,
+            status=status,
+            date=on,
+            total=sum((Decimal(str(amount)) for _, _, amount in lines), Decimal("0")),
+        )
+        db.add(invoice)
+        db.flush()
+        for description, quantity, amount in lines:
+            db.add(
+                XeroInvoiceLineItem(
+                    org_id=org.id,
+                    invoice_id=invoice.id,
+                    description=description,
+                    quantity=Decimal(str(quantity)),
+                    line_amount=Decimal(str(amount)),
+                )
+            )
+        return invoice
+
+    def _rankings(self, app_client, **params):
+        return app_client.get("/api/crm/analytics/rankings", query_string=params)
+
+    def _customer_analytics(self, app_client, contact, **params):
+        return app_client.get(f"/api/crm/customers/{contact.id}/analytics", query_string=params)
+
+    @pytest.fixture()
+    def other_org(self, db):
+        """A second tenant, removed on its own connection: committing ``db`` here would expire the
+        ``org`` fixture's instance just before ``app_client`` detaches it, breaking ``org``'s teardown."""
+        from sqlalchemy import delete
+
+        from app.core.db import engine
+
+        org_b = OrganisationRepository(db).create_org(f"Analytics Org B {uuid4()}")
+        db.commit()
+        org_b_id = org_b.id
+        yield org_b
+        with engine.begin() as conn:
+            conn.execute(delete(Organisation).where(Organisation.id == org_b_id))
+
+    def test_rankings_order_customers_by_revenue_top_and_bottom(self, app_client, db, org):
+        window = {"start_date": "2025-01-01", "end_date": "2025-12-31"}
+        for name, amount in (("Alpha", 300), ("Bravo", 200), ("Charlie", 100)):
+            self._invoice(db, org, self._customer(db, org, name), date(2025, 2, 10), [("Gin", 1, amount)])
+        db.commit()
+
+        default = json.loads(self._rankings(app_client, limit=2, **window).data)["rankings"]
+        top = json.loads(self._rankings(app_client, entity="customers", direction="top", limit=2, **window).data)
+        bottom = json.loads(self._rankings(app_client, entity="customers", direction="bottom", limit=2, **window).data)
+
+        assert [r["contact_name"] for r in default] == ["Alpha", "Bravo"]
+        assert [(r["contact_name"], r["total"], r["invoice_count"]) for r in top["rankings"]] == [
+            ("Alpha", 300.0, 1),
+            ("Bravo", 200.0, 1),
+        ]
+        assert [r["contact_name"] for r in bottom["rankings"]] == ["Charlie", "Bravo"]
+
+    def test_rankings_limit_is_clamped_to_at_least_one(self, app_client, db, org):
+        for name in ("Alpha", "Bravo"):
+            self._invoice(db, org, self._customer(db, org, name), date(2025, 2, 10), [("Gin", 1, 100)])
+        db.commit()
+
+        rows = json.loads(self._rankings(app_client, limit=0, start_date="2025-01-01").data)["rankings"]
+
+        assert len(rows) == 1
+
+    def test_rankings_count_only_authorised_or_paid_sales(self, app_client, db, org):
+        contact = self._customer(db, org, "Mixed")
+        on = date(2025, 2, 10)
+        self._invoice(db, org, contact, on, [("Gin", 1, 100)])
+        self._invoice(db, org, contact, on, [("Gin", 1, 50)], status="PAID")
+        self._invoice(db, org, contact, on, [("Gin", 1, 500)], status="DRAFT")
+        self._invoice(db, org, contact, on, [("Gin", 1, 600)], status="VOIDED")
+        self._invoice(db, org, contact, on, [("Gin", 1, 700)], invoice_type="ACCPAY")
+        db.commit()
+
+        rows = json.loads(self._rankings(app_client, start_date="2025-01-01", end_date="2025-12-31").data)["rankings"]
+
+        assert [(r["contact_name"], r["total"], r["invoice_count"]) for r in rows] == [("Mixed", 150.0, 2)]
+
+    def test_rankings_end_date_is_inclusive_and_the_window_excludes_the_rest(self, app_client, db, org):
+        contact = self._customer(db, org, "Windowed")
+        for on, amount in ((date(2024, 12, 31), 50), (date(2025, 3, 31), 100), (date(2025, 4, 1), 900)):
+            self._invoice(db, org, contact, on, [("Gin", 1, amount)])
+        db.commit()
+
+        bounded = json.loads(self._rankings(app_client, start_date="2025-01-01", end_date="2025-03-31").data)
+        open_ended = json.loads(self._rankings(app_client, start_date="2025-01-01").data)
+
+        assert [(r["total"], r["invoice_count"]) for r in bounded["rankings"]] == [(100.0, 1)]
+        assert [(r["total"], r["invoice_count"]) for r in open_ended["rankings"]] == [(1000.0, 2)]
+
+    def test_rankings_relative_windows_keep_today_and_drop_old_sales(self, app_client, db, org):
+        contact = self._customer(db, org, "Recent")
+        self._invoice(db, org, contact, date.today(), [("Gin", 1, 50)])
+        self._invoice(db, org, contact, date.today() - timedelta(days=400), [("Gin", 1, 900)])
+        db.commit()
+
+        for params in ({"months": 1}, {"period_n": 7, "period_unit": "days"}, {"period_n": 1, "period_unit": "weeks"}):
+            rows = json.loads(self._rankings(app_client, **params).data)["rankings"]
+            assert [(r["contact_name"], r["total"]) for r in rows] == [("Recent", 50.0)], params
+
+    def test_rankings_customers_by_product_rank_each_customer_product_pair(self, app_client, db, org):
+        alpha = self._customer(db, org, "Alpha")
+        bravo = self._customer(db, org, "Bravo")
+        on = date(2025, 2, 10)
+        self._invoice(db, org, alpha, on, [("Gin", 2, 200), ("Tonic", 10, 100)])
+        self._invoice(db, org, bravo, on, [("Gin", 1, 150)])
+        db.commit()
+        window = {"entity": "customers_by_product", "start_date": "2025-01-01", "end_date": "2025-12-31"}
+
+        def pairs(**extra):
+            rows = json.loads(self._rankings(app_client, **window, **extra).data)["rankings"]
+            return [(r["contact_name"], r["description"], r["total_revenue"], r["total_qty"]) for r in rows]
+
+        assert pairs() == [("Alpha", "Gin", 200.0, 2.0), ("Bravo", "Gin", 150.0, 1.0), ("Alpha", "Tonic", 100.0, 10.0)]
+        assert pairs(direction="bottom", limit=1) == [("Alpha", "Tonic", 100.0, 10.0)]
+
+    def test_rankings_products_group_xero_lines_under_the_mapped_product(self, app_client, db, org):
+        created = app_client.post(
+            "/api/crm/product-mappings",
+            json={
+                "biz_e_product_name": "Wildflower Gin",
+                "xero_description_pattern": "Wildflower Gin 700ml",
+                "match_type": "exact",
+            },
+            content_type="application/json",
+        )
+        assert created.status_code in (200, 201)
+        on = date(2025, 2, 10)
+        self._invoice(db, org, self._customer(db, org, "Alpha"), on, [("Wildflower Gin 700ml", 3, 300)])
+        self._invoice(db, org, self._customer(db, org, "Bravo"), on, [("Wildflower Gin 700ml", 2, 200)])
+        self._invoice(db, org, self._customer(db, org, "Charlie"), on, [("Unmapped merchandise", 1, 999)])
+        db.commit()
+
+        rows = json.loads(
+            self._rankings(app_client, entity="products", start_date="2025-01-01", end_date="2025-12-31").data
+        )["rankings"]
+
+        assert [(r["description"], r["total_qty"], r["total_revenue"]) for r in rows] == [
+            ("Wildflower Gin", 5.0, 500.0)
+        ]
+
+    @pytest.mark.parametrize(
+        ("params", "named"),
+        [
+            ({"entity": "bogus"}, "entity"),
+            ({"direction": "sideways"}, "direction"),
+            ({"period_n": "abc"}, "period_n"),
+            ({"start_date": "nope"}, "start_date"),
+            ({"start_date": "2025-01-01", "end_date": "nope"}, "end_date"),
+            ({"months": "abc"}, "months"),
+            ({"start_month": "2025-13"}, "start_month"),
+            ({"start_month": "2025-01", "end_month": "nope"}, "end_month"),
+        ],
+    )
+    def test_rankings_reject_bad_parameters_with_a_named_400(self, app_client, params, named):
+        resp = self._rankings(app_client, **params)
+
+        assert resp.status_code == 400
+        assert named in json.loads(resp.data)["error"]
+
+    def test_rankings_only_include_the_callers_own_org(self, app_client, db, org, other_org):
+        # The caller maps "Gin" to a product, so the other org's "Gin" line would join the product
+        # ranking if it leaked; the two orgs' lines alone would sum to 9100 rather than 100.
+        created = app_client.post(
+            "/api/crm/product-mappings",
+            json={"biz_e_product_name": "Gin", "xero_description_pattern": "Gin", "match_type": "exact"},
+            content_type="application/json",
+        )
+        assert created.status_code in (200, 201)
+        mine = self._customer(db, org, "Mine")
+        theirs = self._customer(db, other_org, "Theirs")
+        on = date(2025, 2, 10)
+        self._invoice(db, org, mine, on, [("Gin", 1, 100)])
+        self._invoice(db, other_org, theirs, on, [("Gin", 1, 9000)])
+        db.commit()
+
+        for entity in ("customers", "customers_by_product"):
+            rows = json.loads(
+                self._rankings(app_client, entity=entity, start_date="2025-01-01", end_date="2025-12-31").data
+            )["rankings"]
+            assert [r["contact_name"] for r in rows] == ["Mine"], entity
+        products = json.loads(
+            self._rankings(app_client, entity="products", start_date="2025-01-01", end_date="2025-12-31").data
+        )["rankings"]
+        assert [(r["description"], r["total_qty"], r["total_revenue"]) for r in products] == [("Gin", 1.0, 100.0)]
+
+    def test_customer_analytics_report_monthly_totals_and_top_products(self, app_client, db, org):
+        contact = self._customer(db, org, "Analysed")
+        self._invoice(db, org, contact, date(2025, 1, 15), [("Gin", 2, 200), ("Tonic", 10, 100)])
+        self._invoice(db, org, contact, date(2025, 3, 10), [("Gin", 2, 200)], status="PAID")
+        # None of these is a sale: a draft, and a bill the business owes.
+        self._invoice(db, org, contact, date(2025, 3, 12), [("Gin", 99, 9999)], status="DRAFT")
+        self._invoice(db, org, contact, date(2025, 2, 1), [("Gin", 1, 777)], invoice_type="ACCPAY")
+        db.commit()
+
+        resp = self._customer_analytics(app_client, contact)
+
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["monthly_sales"] == [
+            {"month": "2025-01", "total": 300.0, "invoice_count": 1},
+            {"month": "2025-03", "total": 200.0, "invoice_count": 1},
+        ]
+        assert data["total_revenue"] == 500.0
+        assert data["total_invoices"] == 2
+        assert [(p["description"], p["total_qty"], p["total_revenue"]) for p in data["top_products"]] == [
+            ("Gin", 4.0, 400.0),
+            ("Tonic", 10.0, 100.0),
+        ]
+
+    def test_customer_analytics_end_date_is_inclusive(self, app_client, db, org):
+        contact = self._customer(db, org, "Windowed")
+        for on, amount in ((date(2025, 1, 15), 300), (date(2025, 3, 31), 200), (date(2025, 4, 1), 900)):
+            self._invoice(db, org, contact, on, [("Gin", 1, amount)])
+        db.commit()
+
+        data = json.loads(
+            self._customer_analytics(app_client, contact, start_date="2025-02-01", end_date="2025-03-31").data
+        )
+
+        assert data["monthly_sales"] == [{"month": "2025-03", "total": 200.0, "invoice_count": 1}]
+        assert data["total_revenue"] == 200.0
+        assert [p["total_revenue"] for p in data["top_products"]] == [200.0]
+
+    @pytest.mark.parametrize(
+        ("params", "named"),
+        [({"start_date": "nope"}, "start_date"), ({"end_date": "2025-13-45"}, "end_date")],
+    )
+    def test_customer_analytics_reject_bad_dates_with_a_named_400(self, app_client, db, org, params, named):
+        contact = self._customer(db, org, "Dated")
+        db.commit()
+
+        resp = self._customer_analytics(app_client, contact, **params)
+
+        assert resp.status_code == 400
+        assert named in json.loads(resp.data)["error"]
+
+    def test_customer_analytics_never_expose_another_orgs_customer(self, app_client, db, org, other_org):
+        mine = self._customer(db, org, "Mine")
+        theirs = self._customer(db, other_org, "Theirs")
+        self._invoice(db, org, mine, date(2025, 2, 10), [("Gin", 1, 100)])
+        self._invoice(db, other_org, theirs, date(2025, 2, 10), [("Secret Gin", 1, 9000)])
+        db.commit()
+
+        own = json.loads(self._customer_analytics(app_client, mine).data)
+        foreign = self._customer_analytics(app_client, theirs)
+
+        assert own["total_revenue"] == 100.0  # the endpoint works for the caller's own customer
+        assert foreign.status_code == 200
+        assert json.loads(foreign.data) == {
+            "monthly_sales": [],
+            "top_products": [],
+            "total_invoices": 0,
+            "total_revenue": 0,
+        }
 
 
 # ─────────────────────────────────────────────
