@@ -22,13 +22,17 @@ Two things are wrong with this, both grounded in real code:
    `execution-open-step.js`, `create-process-modal.js`, `process-flow-next-steps-steps.js`) —
    there is no server-side reference to it at all (`grep` for it in `backend.py` and every
    repository returns zero hits). It has nothing to do with whether a produced output becomes
-   `WORK_IN_PROGRESS` or `FINAL_PRODUCT` inventory.
+   `WORK_IN_PROGRESS` or `FINAL_PRODUCT` inventory. Resolved: the spec now decides this with
+   `extra_data.sample_only`, honoured at `app/core/backend/execution_routes.py:912-928` and pinned by
+   `test_ac9_*` in `tests/test_process_templates.py` (verified 2026-10-08 by findings-sweep).
 
 2. The actual mechanism that decides `InventoryType.WORK_IN_PROGRESS` vs
    `InventoryType.FINAL_PRODUCT` is **`execution_step.is_terminal_step`**
    (`app/core/backend/backend.py:2297-2303`), which is computed in
    `execution_repo.py:97-110` as "is this step the last one by position order **within its
-   process**" — pure DAG topology, not any output-level flag or label.
+   process**" — pure DAG topology, not any output-level flag or label. Resolved by the same
+   `sample_only` override, which takes precedence over terminal-step position for the output
+   it marks (verified 2026-10-08 by findings-sweep).
 
 The spec's own **Architecture decisions ASSUMPTION** ("one catalogue template = one `Process`
 with exactly **one** `Step`") means every template's single step is, by construction, always

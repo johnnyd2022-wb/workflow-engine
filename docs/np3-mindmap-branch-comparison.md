@@ -356,11 +356,15 @@ are **two separate MPI cards**, each with its own mandatory numeric record requi
   **0.85** prevents bug growth. Must be verified per batch by one of: a calibrated water
   activity meter, an accredited-lab sample, or a proven consistent method (only
   acceptable if the target water activity is below 0.80). **Required records**: the
-  method used to dry/concentrate, and the water-activity test result — per batch.
+  method used to dry/concentrate, and the water-activity test result — per batch. Already
+  built: `water-activity-control` is in `nz_alcohol/catalogue.py`, `national_programmes.py` and
+  `np3_audit.py` (method + `test_result` log template, playbook p55) (verified 2026-10-08 by findings-sweep).
 - **Acidification/fermentation** (the mind map correctly says "not applicable" for
   Whistlebird): pH < 3.6 kills most harmful bugs; pH 3.6–4.6 still needs added
   pasteurising/cooking; measured by a calibrated pH meter or accredited lab, proven to
-  ±0.1 of target. **Required records**: the method used, and pH test results.
+  ±0.1 of target. **Required records**: the method used, and pH test results. Already built:
+  `acidification-fermentation-control` is in the same three modules (playbook p57)
+  (verified 2026-10-08 by findings-sweep).
 
 **Proposed change — bigger than the original "richer example text" suggestion.** Given
 both are separately named, separately record-required cards, the more faithful design
