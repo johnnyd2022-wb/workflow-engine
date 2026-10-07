@@ -26,6 +26,8 @@
       <div><dt>2FA</dt><dd>{{ 'On' if person.two_factor_enabled else 'Off' }}</dd></div>
       <div><dt>Google sign-in</dt><dd>{{ 'Linked' if google_linked else 'Not linked' }}</dd></div>
       <div><dt>Last signed in</dt><dd>{{ last_sign_in.strftime('%-d %b %Y, %H:%M UTC') if last_sign_in else 'Never' }}</dd></div>
+      <div><dt>Access ends</dt><dd>{{ person.access_expires_at.strftime('%-d %b %Y') if person.access_expires_at else 'No end date' }}</dd></div>
+      <div><dt>Remembered devices</dt><dd>{{ devices }}</dd></div>
       <div><dt>Failed sign-ins</dt><dd>{{ person.failed_login_attempts or 0 }}</dd></div>
       <div><dt>Added</dt><dd>{{ person.created_at.strftime('%-d %b %Y') }}</dd></div>
       <div><dt>ID</dt><dd>{{ person.id }}</dd></div>
@@ -61,6 +63,18 @@
         <div class="workspace-form__actions"><button type="submit" class="workspace-button">Reset 2FA</button></div>
       </form>
       {% endif %}
+      {% if devices %}
+      {{ post('admin.forget_devices') }}
+        <p>Lost or shared device. Forgets every browser allowed to skip 2FA; the next sign-in asks for a code.</p>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button">Forget remembered devices</button></div>
+      </form>
+      {% endif %}
+      {% if google_linked %}
+      {{ post('admin.unlink_google') }}
+        <p>Linked the wrong Google account. Removes the link; they sign in with their password and can link again in Settings.</p>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button">Unlink Google</button></div>
+      </form>
+      {% endif %}
       {% if not invited and not locked and not person.is_active %}
       <p class="workspace-empty">This person is deactivated. Reactivate them below to let them sign in.</p>
       {% endif %}
@@ -89,6 +103,13 @@
         <div class="workspace-form__actions"><button type="submit" class="workspace-button">Change role</button></div>
       </form>
       {% endif %}
+      {{ post('admin.set_access') }}
+        <label>Access ends
+          <input type="date" name="until" value="{{ person.access_expires_at.strftime('%Y-%m-%d') if person.access_expires_at else '' }}">
+        </label>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button">Set end date</button></div>
+        <p>Through the end of that day, New Zealand time. Leave empty for no end date. Auditors need one within 90 days.</p>
+      </form>
       {% if person.is_active %}
       {{ post('admin.set_active') }}
         <input type="hidden" name="active" value="no">
@@ -103,6 +124,32 @@
       </form>
       {% endif %}
     </div>
+  </section>
+  <section class="workspace-card" aria-labelledby="person-history-heading">
+    <div class="workspace-card__header">
+      <h2 id="person-history-heading">Recent history</h2>
+      <a class="workspace-link" href="{{ url_for('admin.audit', org_id=org.id, user=person.id) }}">All history</a>
+    </div>
+    {% if history %}
+    <div class="workspace-scroll">
+      <table class="workspace-table">
+        <thead><tr><th>When (UTC)</th><th>Who</th><th>What</th><th>On</th></tr></thead>
+        <tbody>
+          {% for entry, email in history %}
+          {% set staff = (entry.meta_data or {}).get('platform_admin') %}
+          <tr>
+            <td>{{ entry.timestamp.strftime('%-d %b %Y, %H:%M') }}</td>
+            <td>{% if staff %}{{ staff }} <span class="admin-status admin-status--muted">biz-e staff</span>{% else %}{{ email or 'System' }}{% endif %}</td>
+            <td>{{ entry.action|replace('platform_admin.', '')|replace('_', ' ') }}</td>
+            <td>{{ entry.entity|replace('_', ' ') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="workspace-empty">Nothing recorded for this person yet.</p>
+    {% endif %}
   </section>
 </div>
 {% endblock %}

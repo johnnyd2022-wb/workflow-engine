@@ -107,6 +107,21 @@
     </div>
   </section>
 
+  {% if overview.xero_name %}
+  <section class="workspace-card" aria-labelledby="xero-heading">
+    <div class="workspace-card__header">
+      <h2 id="xero-heading">Xero</h2>
+    </div>
+    <p class="workspace-caption">Connected to {{ overview.xero_name }}. If syncing is stuck, disconnect here and ask them to connect again from Sales. Synced invoices and customers stay.</p>
+    <form class="workspace-form" method="post" action="{{ url_for('admin.disconnect_xero', org_id=org.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button">Disconnect Xero</button>
+      </div>
+    </form>
+  </section>
+
+  {% endif %}
   <section class="workspace-card" aria-labelledby="rename-heading">
     <div class="workspace-card__header">
       <h2 id="rename-heading">Rename</h2>

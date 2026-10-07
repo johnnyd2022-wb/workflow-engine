@@ -6,7 +6,11 @@
   <div>
     <p><a class="workspace-link" href="{{ url_for('admin.organisations') }}">Organisations</a> / <a class="workspace-link" href="{{ url_for('admin.organisation', org_id=org.id) }}">{{ org.name }}</a></p>
     <h1>History</h1>
+    {% if person %}
+    <p>What {{ person.email }} did, and what was done to their account, newest first. <a class="workspace-link" href="{{ url_for('admin.audit', org_id=org.id) }}">Show everyone</a></p>
+    {% else %}
     <p>Sign-ins and changes recorded for {{ org.name }}, newest first.</p>
+    {% endif %}
   </div>
 </header>
 <div class="workspace-stack">
@@ -34,8 +38,8 @@
     <div class="admin-pager">
       <span>Page {{ page }} of {{ pages }}</span>
       <span class="admin-row-actions">
-        {% if page > 1 %}<a class="workspace-button" href="{{ url_for('admin.audit', org_id=org.id, page=page - 1) }}">Newer</a>{% endif %}
-        {% if page < pages %}<a class="workspace-button" href="{{ url_for('admin.audit', org_id=org.id, page=page + 1) }}">Older</a>{% endif %}
+        {% if page > 1 %}<a class="workspace-button" href="{{ url_for('admin.audit', org_id=org.id, user=person.id if person else none, page=page - 1) }}">Newer</a>{% endif %}
+        {% if page < pages %}<a class="workspace-button" href="{{ url_for('admin.audit', org_id=org.id, user=person.id if person else none, page=page + 1) }}">Older</a>{% endif %}
       </span>
     </div>
     {% else %}

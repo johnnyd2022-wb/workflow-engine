@@ -497,14 +497,80 @@ def reactivate_org(org_id):
     )
 
 
+@click.command(name="set-access-expiry")
+@_person_options
+@click.option("--until", default="", help="Last day of access, YYYY-MM-DD. Omit to remove the end date.")
+def set_access_expiry(org_id, user_id, until):
+    """Give someone's access an end date, extend it, or remove it."""
+    _run(
+        lambda db: ops.set_access_expiry(db, org_id, user_id, until, actor=ops.CLI_ACTOR),
+        lambda user: (
+            f"{user.email} has access until {user.access_expires_at:%Y-%m-%d %H:%M %Z}"
+            if user.access_expires_at
+            else f"{user.email} has no access end date"
+        ),
+    )
+
+
+@click.command(name="unlink-google")
+@_person_options
+def unlink_google(org_id, user_id):
+    """Remove someone's Google sign-in link; they sign in with their password."""
+    _run(
+        lambda db: ops.unlink_google(db, org_id, user_id, actor=ops.CLI_ACTOR),
+        lambda user: f"Google sign-in unlinked for {user.email}",
+    )
+
+
+@click.command(name="forget-devices")
+@_person_options
+def forget_devices(org_id, user_id):
+    """Forget every browser allowed to skip 2FA for someone."""
+    _run(
+        lambda db: ops.forget_devices(db, org_id, user_id, actor=ops.CLI_ACTOR),
+        lambda result: f"Forgot {result[1]} remembered device(s) for {result[0].email}",
+    )
+
+
+@click.command(name="disconnect-xero")
+@click.option("--org-id", required=True, help="Organisation ID")
+def disconnect_xero(org_id):
+    """Drop an organisation's stuck Xero connection so they can connect again."""
+    _run(
+        lambda db: ops.disconnect_xero(db, org_id, actor=ops.CLI_ACTOR),
+        lambda org: f"Xero disconnected for {org.name}",
+    )
+
+
+@click.command(name="needs-attention")
+def needs_attention():
+    """Who is locked out, whose invite or access has run out, and organisations with no admin."""
+    db = db_session()
+    try:
+        attention = ops.needs_attention(db)
+        titles = (("locked", "Locked out"), ("invite_expired", "Invite ran out"), ("access_expired", "Access ended"))
+        for key, title in titles:
+            rows, total = attention[key]
+            click.echo(f"{title}: {total}")
+            for user, org in rows:
+                click.echo(f"  {user.email}  user {user.id}  org {org.id} ({org.name})")
+        orgs, total = attention["no_admin"]
+        click.echo(f"No admin who can sign in: {total}")
+        for org in orgs:
+            click.echo(f"  {org.name}  org {org.id}")
+    finally:
+        db.close()
+
+
 @click.command(name="org-history")
 @click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--user-id", default=None, help="Only this person's history")
 @click.option("--limit", default=50, show_default=True, type=click.IntRange(1, 500))
-def org_history(org_id, limit):
+def org_history(org_id, user_id, limit):
     """Recent sign-ins and changes recorded for an organisation, newest first."""
     db = db_session()
     try:
-        entries, total = ops.list_audit(db, org_id, limit=limit)
+        entries, total = ops.list_audit(db, org_id, user_id=user_id, limit=limit)
         click.echo(f"{total} entries; showing {len(entries)}")
         for entry, email in entries:
             who = (entry.meta_data or {}).get("platform_admin") or email or "system"

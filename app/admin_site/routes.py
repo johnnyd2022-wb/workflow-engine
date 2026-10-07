@@ -132,6 +132,8 @@ def _person_page(org_id, user_id, *, notice=None, error=None, secret=None, secre
             locked=ops.is_locked(person),
             invited=bool(not person.is_active and person.invite_token_hash),
             last_sign_in=overview["last_sign_ins"].get(person.id),
+            devices=ops.remembered_devices(db, person),
+            history=ops.list_audit(db, org.id, user_id=person.id, limit=10)[0],
             google_linked=person.id in overview["google_linked"],
             notice=notice,
             error=error,
@@ -181,10 +183,28 @@ def audit(org_id):
         page = max(1, int(request.args.get("page", "1")))
     except ValueError:
         page = 1
-    entries, total = ops.list_audit(db, org.id, offset=(page - 1) * ops.PAGE_SIZE)
-    return render_template(
-        "admin/audit.html", org=org, entries=entries, total=total, page=page, pages=max(1, -(-total // ops.PAGE_SIZE))
+    person = ops.get_user(db, org.id, request.args["user"]) if request.args.get("user") else None
+    entries, total = ops.list_audit(
+        db, org.id, user_id=person.id if person else None, offset=(page - 1) * ops.PAGE_SIZE
     )
+    return render_template(
+        "admin/audit.html",
+        org=org,
+        person=person,
+        entries=entries,
+        total=total,
+        page=page,
+        pages=max(1, -(-total // ops.PAGE_SIZE)),
+    )
+
+
+@admin_bp.route("/organisations/<org_id>/xero", methods=["POST"])
+def disconnect_xero(org_id):
+    def action(db, org):
+        ops.disconnect_xero(db, org.id, actor=g.admin_email)
+        return {"notice": f"Xero disconnected for {org.name}. They can connect again from Sales."}
+
+    return _act(org_id, action)
 
 
 @admin_bp.route("/organisations/<org_id>/status", methods=["POST"])
@@ -303,6 +323,40 @@ def reset_two_factor(org_id, user_id):
         return {"notice": f"2FA switched off for {user.email}. Their backup codes and remembered devices are gone."}
 
     return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/organisations/<org_id>/users/<user_id>/access", methods=["POST"])
+def set_access(org_id, user_id):
+    def action(db, org):
+        user = ops.set_access_expiry(db, org.id, user_id, _field("until"), actor=g.admin_email)
+        if user.access_expires_at:
+            return {"notice": f"{user.email} has access until {user.access_expires_at:%-d %b %Y}."}
+        return {"notice": f"{user.email}'s access no longer has an end date."}
+
+    return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/organisations/<org_id>/users/<user_id>/google", methods=["POST"])
+def unlink_google(org_id, user_id):
+    def action(db, org):
+        user = ops.unlink_google(db, org.id, user_id, actor=g.admin_email)
+        return {"notice": f"Google sign-in unlinked for {user.email}. They sign in with their password."}
+
+    return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/organisations/<org_id>/users/<user_id>/devices", methods=["POST"])
+def forget_devices(org_id, user_id):
+    def action(db, org):
+        user, removed = ops.forget_devices(db, org.id, user_id, actor=g.admin_email)
+        return {"notice": f"Forgot {removed} remembered device{'' if removed == 1 else 's'} for {user.email}."}
+
+    return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/attention", methods=["GET"])
+def attention():
+    return render_template("admin/attention.html", attention=ops.needs_attention(db_session()))
 
 
 @admin_bp.route("/people", methods=["GET"])

@@ -117,9 +117,13 @@ def created(db):
     db.rollback()
     with unscoped():
         ids = [org.id for org in db.query(Organisation).filter(Organisation.name.in_(names)).all()]
+        from app.core.db.models.trusted_device import TrustedDevice
         from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
+        from app.core.db.models.user_identity import UserIdentity
 
-        for model in (AuditLog, FeatureSubscription, TwoFactorBackupCode, Site, User):
+        user_ids = [row.id for row in db.query(User.id).filter(User.org_id.in_(ids)).all()]
+        db.query(TrustedDevice).filter(TrustedDevice.user_id.in_(user_ids)).delete(synchronize_session=False)
+        for model in (AuditLog, FeatureSubscription, TwoFactorBackupCode, UserIdentity, Site, User):
             db.query(model).filter(model.org_id.in_(ids)).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id.in_(ids)).delete(synchronize_session=False)
         db.commit()
@@ -561,3 +565,170 @@ def test_the_cli_runs_the_same_operations(db, org):
     history = runner.invoke(cli, ["org-history", "--org-id", str(org.id)])
     assert history.exit_code == 0 and "platform_admin.set_status" in history.output and "cli" in history.output
     assert runner.invoke(cli, ["org-history", "--org-id", "nope"]).exit_code == 1
+
+
+# ── More support actions ───────────────────────────────────────────────────────
+
+
+def test_access_end_dates_follow_the_apps_own_rules(site, db, org):
+    from datetime import UTC, datetime, timedelta
+
+    _, browser = site
+    _signed_in(browser)
+    member, _ = ops.create_user(
+        db, org.id, email=f"{uuid4().hex}@example.test", password="a-long-test-password", actor="test"
+    )
+    url = f"/organisations/{org.id}/users/{member.id}/access"
+    soon = (datetime.now(UTC) + timedelta(days=14)).date().isoformat()
+    assert browser.post(url, data={"until": "2020-01-01"}).status_code == 400
+    assert browser.post(url, data={"until": "soon"}).status_code == 400
+    assert browser.post(url, data={"until": soon}).status_code == 200
+    assert _reload(db, member).access_expires_at is not None
+    assert browser.post(url, data={"until": ""}).status_code == 200
+    assert _reload(db, member).access_expires_at is None
+
+    # An auditor always has an end date, at most 90 days out.
+    with unscoped():
+        member.role = UserRole.AUDITOR
+        db.commit()
+    assert browser.post(url, data={"until": ""}).status_code == 400
+    far = (datetime.now(UTC) + timedelta(days=120)).date().isoformat()
+    assert browser.post(url, data={"until": far}).status_code == 400
+    assert browser.post(url, data={"until": soon}).status_code == 200
+
+
+def test_unlinking_google_needs_a_password_to_fall_back_on(site, db, org):
+    from app.core.db.models.user_identity import UserIdentity
+
+    _, browser = site
+    _signed_in(browser)
+    admin = _admin_of(db, org)
+    url = f"/organisations/{org.id}/users/{admin.id}/google"
+    assert browser.post(url).status_code == 400  # nothing linked
+    with unscoped():
+        db.add(
+            UserIdentity(
+                org_id=org.id, user_id=admin.id, provider="google", subject=uuid4().hex, email_at_link=admin.email
+            )
+        )
+        original, admin.password_hash = admin.password_hash, ""
+        db.commit()
+    refused = browser.post(url)
+    assert refused.status_code == 400 and "Reset their password first" in refused.get_data(as_text=True)
+    with unscoped():
+        admin.password_hash = original
+        db.commit()
+    assert "Unlink Google" in browser.get(f"/organisations/{org.id}/users/{admin.id}").get_data(as_text=True)
+    assert browser.post(url).status_code == 200
+    with unscoped():
+        assert db.query(UserIdentity).filter(UserIdentity.user_id == admin.id).count() == 0
+
+
+def test_forgetting_remembered_devices(site, db, org):
+    from datetime import UTC, datetime, timedelta
+
+    from app.core.db.models.trusted_device import TrustedDevice
+
+    _, browser = site
+    _signed_in(browser)
+    admin = _admin_of(db, org)
+    with unscoped():
+        db.add(
+            TrustedDevice(
+                org_id=org.id,
+                user_id=admin.id,
+                device_token=uuid4().hex,
+                device_fingerprint="fp",
+                expires_at=datetime.now(UTC) + timedelta(days=30),
+            )
+        )
+        db.commit()
+    assert ops.remembered_devices(db, admin) == 1
+    response = browser.post(f"/organisations/{org.id}/users/{admin.id}/devices")
+    assert response.status_code == 200 and "Forgot 1 remembered device " in response.get_data(as_text=True)
+    assert ops.remembered_devices(db, admin) == 0
+
+
+def test_disconnecting_xero_invalidates_the_stored_connection(site, db, org):
+    from app.core.utils.time import utc_now
+    from app.features.crm.models.xero_tenant import XeroTenant
+
+    _, browser = site
+    _signed_in(browser)
+    url = f"/organisations/{org.id}/xero"
+    assert browser.post(url).status_code == 400  # not connected
+    with unscoped():
+        db.add(
+            XeroTenant(org_id=org.id, xero_tenant_id=uuid4().hex, xero_tenant_name="Demo Co", connected_at=utc_now())
+        )
+        db.commit()
+    assert "Disconnect Xero" in browser.get(f"/organisations/{org.id}").get_data(as_text=True)
+    assert browser.post(url).status_code == 200
+    db.expire_all()
+    assert ops.organisation_overview(db, org.id)["xero_name"] is None
+    with unscoped():
+        db.query(XeroTenant).filter(XeroTenant.org_id == org.id).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_needs_attention_finds_who_is_stuck(site, db, org):
+    from datetime import UTC, datetime, timedelta
+
+    from click.testing import CliRunner
+
+    from app.cli import cli
+    from app.core.db.repositories.user_repo import UserRepository
+
+    _, browser = site
+    _signed_in(browser)
+    past = datetime.now(UTC) - timedelta(days=1)
+    locked, _ = ops.create_user(
+        db, org.id, email=f"{uuid4().hex}@example.test", password="a-long-test-password", actor="test"
+    )
+    lapsed, _ = ops.create_user(db, org.id, email=f"{uuid4().hex}@example.test", actor="test")
+    ended, _ = ops.create_user(
+        db, org.id, email=f"{uuid4().hex}@example.test", password="a-long-test-password", actor="test"
+    )
+    with unscoped():
+        UserRepository(db).lock_account(locked.id, 30)
+        lapsed.invite_expires_at = past
+        ended.access_expires_at = past
+        db.commit()
+
+    def emails(key):
+        return {user.email for user, _ in ops.needs_attention(db, limit=5000)[key][0]}
+
+    assert locked.email in emails("locked") and lapsed.email in emails("invite_expired")
+    assert ended.email in emails("access_expired")
+    assert org.id not in {o.id for o in ops.needs_attention(db, limit=5000)["no_admin"][0]}
+
+    # Its only admin deactivated directly (the site refuses to do this): now it has none.
+    with unscoped():
+        _admin_of(db, org).is_active = False
+        db.commit()
+    assert org.id in {o.id for o in ops.needs_attention(db, limit=5000)["no_admin"][0]}
+
+    page = browser.get("/attention")
+    assert page.status_code == 200 and "Locked out" in page.get_data(as_text=True)
+    listed = CliRunner().invoke(cli, ["needs-attention"])
+    assert listed.exit_code == 0 and "Locked out:" in listed.output and "No admin who can sign in:" in listed.output
+
+
+def test_a_persons_history_is_only_theirs(site, db, org):
+    from app.core.db.repositories.audit_repo import AuditRepository
+
+    _, browser = site
+    _signed_in(browser)
+    admin = _admin_of(db, org)
+    other, _ = ops.create_user(
+        db, org.id, email=f"{uuid4().hex}@example.test", password="a-long-test-password", actor="test"
+    )
+    with unscoped():
+        AuditRepository(db).write_log(org_id=org.id, user_id=other.id, action="login", entity="user")
+    ops.unlock_user(db, org.id, admin.id, actor=JOHNNY)
+    entries, total = ops.list_audit(db, org.id, user_id=admin.id)
+    assert total == 1 and entries[0][0].action == "platform_admin.unlock"
+    page = browser.get(f"/organisations/{org.id}/audit", query_string={"user": str(admin.id)}).get_data(as_text=True)
+    assert "unlock" in page and "Show everyone" in page
+    assert "Recent history" in browser.get(f"/organisations/{org.id}/users/{admin.id}").get_data(as_text=True)
+    assert browser.get(f"/organisations/{org.id}/audit", query_string={"user": str(uuid4())}).status_code == 404

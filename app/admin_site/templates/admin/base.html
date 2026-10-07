@@ -20,6 +20,7 @@
       {% set section = section|default('') %}
       <a href="{{ url_for('admin.organisations') }}"{% if section == 'organisations' %} aria-current="page"{% endif %}>Organisations</a>
       <a href="{{ url_for('admin.people') }}"{% if section == 'people' %} aria-current="page"{% endif %}>Find a person</a>
+      <a href="{{ url_for('admin.attention') }}"{% if section == 'attention' %} aria-current="page"{% endif %}>Needs attention</a>
       <a href="{{ url_for('admin.demo') }}"{% if section == 'demo' %} aria-current="page"{% endif %}>Demo</a>
       <a href="{{ url_for('admin.system') }}"{% if section == 'system' %} aria-current="page"{% endif %}>System</a>
     </nav>
