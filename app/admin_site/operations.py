@@ -21,6 +21,7 @@ from app.core.db.models.audit_log import AuditLog
 from app.core.db.models.feature_subscription import FeatureSubscription
 from app.core.db.models.organisation import Organisation, OrganisationStatus
 from app.core.db.models.site import Site
+from app.core.db.models.trusted_device import TrustedDevice
 from app.core.db.models.two_factor_backup_code import TwoFactorBackupCode
 from app.core.db.models.user import User, UserRole
 from app.core.db.models.user_identity import UserIdentity
@@ -31,7 +32,13 @@ from app.core.db.repositories.trusted_device_repo import TrustedDeviceRepository
 from app.core.db.repositories.user_repo import EmailConflictError, UserRepository
 from app.core.security.auth_service import AuthService
 from app.core.security.org_manager import OrgManager
-from app.core.security.people import PeopleError, active_admins, issue_invite, validate_new_password
+from app.core.security.people import (
+    PeopleError,
+    active_admins,
+    issue_invite,
+    parse_access_expiry,
+    validate_new_password,
+)
 from app.core.security.tenant_scope import unscoped
 from app.observability import get_logger
 
@@ -242,15 +249,72 @@ def organisation_overview(db: Session, org_id) -> dict:
     }
 
 
-def list_audit(db: Session, org_id, *, limit: int = PAGE_SIZE, offset: int = 0) -> tuple[list[tuple], int]:
-    """One page of an organisation's audit log, newest first: (entry, user email or None)."""
+def disconnect_xero(db: Session, org_id, *, actor: str) -> Organisation:
+    """Drop an organisation's Xero connection when it is stuck, so the customer can connect
+    again from Sales. The stored token is invalidated here; it is not revoked at Xero (that
+    needs the token key, which the admin site is not given), so it simply lapses."""
+    from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
+    from app.features.crm.repositories.xero_token_repo import XeroTokenRepository
+
     org = get_organisation(db, org_id)
+    if organisation_overview(db, org.id)["xero_name"] is None:
+        raise AdminOperationError(f"{org.name} is not connected to Xero.")
     with unscoped():
-        total = db.query(func.count(AuditLog.id)).filter(AuditLog.org_id == org.id).scalar()
+        XeroTokenRepository(db).invalidate(org.id)
+        XeroTenantRepository(db).mark_disconnected(org.id)
+        db.commit()
+    _audit(org.id, "disconnect_xero", "organisation", org.id, actor)
+    return org
+
+
+def needs_attention(db: Session, *, limit: int = 25) -> dict:
+    """People and organisations likely to need help, across the platform: who is locked out,
+    whose invite or access has run out, and which organisations have no admin who can sign in.
+    Each entry is ``(rows, total)``; rows are ``(user, organisation)`` or organisations."""
+    now = datetime.now(UTC)
+
+    def people(*conditions):
+        query = (
+            db.query(User, Organisation)
+            .join(Organisation, Organisation.id == User.org_id)
+            .filter(Organisation.status == OrganisationStatus.ACTIVE, *conditions)
+        )
+        return [(user, org) for user, org in query.order_by(User.email).limit(limit).all()], query.count()
+
+    with unscoped():
+        has_admin = (
+            db.query(User.id)
+            .filter(User.org_id == Organisation.id, User.role == UserRole.ADMIN, User.is_active.is_(True))
+            .filter((User.access_expires_at.is_(None)) | (User.access_expires_at > now))
+            .exists()
+        )
+        no_admin = db.query(Organisation).filter(Organisation.status == OrganisationStatus.ACTIVE, ~has_admin)
+        return {
+            "locked": people(User.account_locked_until > now),
+            "invite_expired": people(
+                User.is_active.is_(False), User.invite_token_hash.isnot(None), User.invite_expires_at < now
+            ),
+            "access_expired": people(User.is_active.is_(True), User.access_expires_at < now),
+            "no_admin": (no_admin.order_by(Organisation.created_at.desc()).limit(limit).all(), no_admin.count()),
+        }
+
+
+def list_audit(
+    db: Session, org_id, *, user_id=None, limit: int = PAGE_SIZE, offset: int = 0
+) -> tuple[list[tuple], int]:
+    """One page of an organisation's audit log, newest first: (entry, user email or None).
+    With ``user_id``, only what that person did and what was done to their account."""
+    org = get_organisation(db, org_id)
+    scope = [AuditLog.org_id == org.id]
+    if user_id is not None:
+        person = parse_id(user_id, "user ID")
+        scope.append((AuditLog.user_id == person) | ((AuditLog.entity == "user") & (AuditLog.entity_id == person)))
+    with unscoped():
+        total = db.query(func.count(AuditLog.id)).filter(*scope).scalar()
         rows = (
             db.query(AuditLog, User.email)
             .outerjoin(User, (User.id == AuditLog.user_id) & (User.org_id == AuditLog.org_id))
-            .filter(AuditLog.org_id == org.id)
+            .filter(*scope)
             .order_by(AuditLog.timestamp.desc(), AuditLog.id)
             .limit(limit)
             .offset(offset)
@@ -464,6 +528,70 @@ def reset_two_factor(db: Session, org_id, user_id, *, actor: str) -> User:
         UserRepository(db).disable_two_factor(user.id)  # commits
     _audit(org.id, "reset_two_factor", "user", user.id, actor, email=user.email)
     return user
+
+
+def set_access_expiry(db: Session, org_id, user_id, until, *, actor: str) -> User:
+    """Give someone's access an end date, or extend it: ``until`` is a date (YYYY-MM-DD, to
+    the end of that day in New Zealand). Empty removes the limit, which an auditor cannot have."""
+    org = get_organisation(db, org_id)
+    with unscoped():
+        user = _user_in_org(db, org, user_id=user_id)
+        try:
+            expires = parse_access_expiry(until, user.role)
+        except PeopleError as exc:
+            raise AdminOperationError(str(exc)) from None
+        before = user.access_expires_at
+        user.access_expires_at = expires
+        db.commit()
+    _audit(
+        org.id,
+        "set_access_expiry",
+        "user",
+        user.id,
+        actor,
+        email=user.email,
+        before=before.isoformat() if before else None,
+        after=expires.isoformat() if expires else None,
+    )
+    return user
+
+
+def unlink_google(db: Session, org_id, user_id, *, actor: str) -> User:
+    """Remove someone's Google sign-in link, e.g. when they linked the wrong Google account.
+    They must have a password to fall back on."""
+    org = get_organisation(db, org_id)
+    with unscoped():
+        user = _user_in_org(db, org, user_id=user_id)
+        linked = db.query(UserIdentity).filter(UserIdentity.org_id == org.id, UserIdentity.user_id == user.id)
+        if linked.count() == 0:
+            raise AdminOperationError(f"{user.email} has no Google account linked.")
+        if not user.password_hash:
+            raise AdminOperationError(f"{user.email} signs in with Google only. Reset their password first.")
+        linked.delete(synchronize_session=False)
+        db.commit()
+    _audit(org.id, "unlink_google", "user", user.id, actor, email=user.email)
+    return user
+
+
+def remembered_devices(db: Session, user: User) -> int:
+    with unscoped():
+        return (
+            db.query(func.count(TrustedDevice.id))
+            .filter(TrustedDevice.org_id == user.org_id, TrustedDevice.user_id == user.id)
+            .scalar()
+        )
+
+
+def forget_devices(db: Session, org_id, user_id, *, actor: str) -> tuple[User, int]:
+    """Forget every browser that may skip 2FA for this person, e.g. after a lost laptop.
+    Their next sign-in anywhere asks for a code."""
+    org = get_organisation(db, org_id)
+    with unscoped():
+        user = _user_in_org(db, org, user_id=user_id)
+        removed = TrustedDeviceRepository(db).delete_user_devices(user.id)
+        db.commit()
+    _audit(org.id, "forget_devices", "user", user.id, actor, email=user.email, removed=removed)
+    return user, removed
 
 
 def is_locked(user: User) -> bool:

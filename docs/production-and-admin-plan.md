@@ -85,6 +85,9 @@ built (`app/admin_site/`); it needs a Google client and a route before anyone ca
 | [x] | **Find a person by email** across every organisation (`find-user`). | done |
 | [x] | **Organisation at a glance**: last sign-in (per person and overall), go-live date, sites, Xero connection and last sync, Google sign-in linked. Rename an organisation (`rename-org`); `suspend-org` and `reactivate-org` on the CLI. | done |
 | [x] | **History page** per organisation (`org-history`): the audit log, with changes made by biz-e staff marked. | done |
+| [x] | **Needs attention page** (`needs-attention`): who is locked out, whose invite or access end date has passed, and active organisations with no admin who can sign in. | done |
+| [x] | **More on a person**: access end date (`set-access-expiry`, the app's own rules for auditors), unlink Google (`unlink-google`), forget remembered devices (`forget-devices`), and their own recent history (`org-history --user-id`). | done |
+| [x] | **Disconnect a stuck Xero connection** (`disconnect-xero`). Invalidates the stored token; it is not revoked at Xero, because the admin site is not given the token key. | done |
 | [ ] | **Platform-level log** for events with no organisation (admin sign-ins, refused sign-ins); those go to the container log only today. | Claude |
 | [ ] | **Sign in as a customer** (impersonation), if wanted: the most useful support tool and the riskiest. Not built. | Johnny to decide |
 | [ ] | **Database role of its own** for the admin site, in place of the app's `workflow_rw`. | Claude |

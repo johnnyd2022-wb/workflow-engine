@@ -1,0 +1,71 @@
+{% extends "admin/base.html" %}
+{% set section = 'attention' %}
+{% block title %}Needs attention{% endblock %}
+{% macro people(title, caption, key, when=none) %}
+  {% set rows, total = attention[key] %}
+  <section class="workspace-card" aria-labelledby="{{ key }}-heading">
+    <div class="workspace-card__header">
+      <h2 id="{{ key }}-heading">{{ title }}</h2>
+      <span class="admin-status{% if not total %} admin-status--muted{% endif %}">{{ total }}</span>
+    </div>
+    <p class="workspace-caption">{{ caption }}</p>
+    {% if rows %}
+    <div class="workspace-scroll">
+      <table class="workspace-table">
+        <thead><tr><th>Email</th><th>Organisation</th><th>Role</th></tr></thead>
+        <tbody>
+          {% for person, org in rows %}
+          <tr>
+            <td><a href="{{ url_for('admin.person', org_id=org.id, user_id=person.id) }}">{{ person.email }}</a></td>
+            <td><a href="{{ url_for('admin.organisation', org_id=org.id) }}">{{ org.name }}</a></td>
+            <td>{{ person.role.value|capitalize }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if total > rows|length %}<p class="workspace-caption">Showing the first {{ rows|length }}.</p>{% endif %}
+    {% else %}
+    <p class="workspace-empty">No one.</p>
+    {% endif %}
+  </section>
+{% endmacro %}
+{% block content %}
+<header class="workspace-header">
+  <div>
+    <h1>Needs attention</h1>
+    <p>People and organisations likely to need a hand, in active organisations.</p>
+  </div>
+</header>
+<div class="workspace-stack">
+  {{ people('Locked out', 'Too many wrong passwords. Open the person to unlock them or reset their password.', 'locked') }}
+  {{ people('Invite ran out', 'Invited but never set up, and the link has expired. Open the person to send a new one.', 'invite_expired') }}
+  {{ people('Access ended', 'Their access had an end date and it has passed. Open the person to extend it.', 'access_expired') }}
+  {% set orgs, total = attention.no_admin %}
+  <section class="workspace-card" aria-labelledby="no-admin-heading">
+    <div class="workspace-card__header">
+      <h2 id="no-admin-heading">No admin who can sign in</h2>
+      <span class="admin-status{% if not total %} admin-status--muted{% endif %}">{{ total }}</span>
+    </div>
+    <p class="workspace-caption">No active admin, so no one there can manage people or settings. Invite one or make someone an admin.</p>
+    {% if orgs %}
+    <div class="workspace-scroll">
+      <table class="workspace-table">
+        <thead><tr><th>Organisation</th><th>Created</th></tr></thead>
+        <tbody>
+          {% for org in orgs %}
+          <tr>
+            <td><a href="{{ url_for('admin.organisation', org_id=org.id) }}">{{ org.name }}</a></td>
+            <td>{{ org.created_at.strftime('%-d %b %Y') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if total > orgs|length %}<p class="workspace-caption">Showing the newest {{ orgs|length }}.</p>{% endif %}
+    {% else %}
+    <p class="workspace-empty">None.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
