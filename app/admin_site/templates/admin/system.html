@@ -1,0 +1,37 @@
+{% extends "admin/base.html" %}
+{% set section = 'system' %}
+{% block title %}System{% endblock %}
+{% block content %}
+<header class="workspace-header">
+  <div>
+    <h1>System</h1>
+    <p>What this admin site is connected to.</p>
+  </div>
+</header>
+<div class="workspace-stack">
+  <section class="workspace-card" aria-labelledby="platform-heading">
+    <div class="workspace-card__header">
+      <h2 id="platform-heading">Platform</h2>
+    </div>
+    <dl class="workspace-facts">
+      <div><dt>Environment</dt><dd>{{ environment }}</dd></div>
+      <div><dt>Version</dt><dd>{{ version }}</dd></div>
+      <div><dt>Database</dt><dd><span class="admin-status{% if status.database != 'reachable' %} admin-status--off{% endif %}">{{ status.database|capitalize }}</span></dd></div>
+      <div><dt>Schema version</dt><dd>{{ status.schema_version|default('Unknown', true) }}</dd></div>
+      <div><dt>Organisations</dt><dd>{{ status.organisations|default('Unknown') }}</dd></div>
+      <div><dt>Suspended</dt><dd>{{ status.suspended|default('Unknown') }}</dd></div>
+      <div><dt>People</dt><dd>{{ status.users|default('Unknown') }}</dd></div>
+      <div><dt>Customer app</dt><dd>{{ customer_app_url }}</dd></div>
+    </dl>
+  </section>
+  <section class="workspace-card" aria-labelledby="access-heading">
+    <div class="workspace-card__header">
+      <h2 id="access-heading">Who can sign in here</h2>
+    </div>
+    <p class="workspace-caption">Google sign-in only, for these addresses. Sessions end after {{ idle_minutes }} minutes idle or {{ session_hours }} hours.</p>
+    <ul class="workspace-list">
+      {% for email in admins %}<li>{{ email }}</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+{% endblock %}

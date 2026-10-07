@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>Sign in · biz-e admin</title>
+  <link rel="stylesheet" href="{{ url_for('shared_style', name='design-system.css') }}">
+  <link rel="stylesheet" href="{{ url_for('shared_style', name='workspace-overviews.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">
+</head>
+<body>
+  <div class="admin-sign-in">
+    <main id="page-content">
+      <section class="workspace-card">
+        <h1>biz-e admin</h1>
+        <p>For biz-e staff. Sign in with your Google account.</p>
+        {% if error %}<p class="workspace-notice" role="alert">{{ error }}</p>{% endif %}
+        <form method="post" action="{{ url_for('admin_auth.start') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="workspace-button workspace-button--primary workspace-button--block">Sign in with Google</button>
+        </form>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

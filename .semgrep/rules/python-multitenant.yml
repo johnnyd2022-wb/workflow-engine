@@ -25,6 +25,10 @@ rules:
     paths:
       exclude:
         - "**/auth_routes.py"
+        # The admin site is a separate app that denies by default: one before_request
+        # (app/admin_site/auth.py require_admin) guards every endpoint not named public,
+        # and tests/test_admin_site.py proves it for each registered route.
+        - "**/admin_site/**"
     patterns:
       - pattern-either:
           - pattern: |

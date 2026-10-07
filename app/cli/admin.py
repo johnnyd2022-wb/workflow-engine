@@ -1,19 +1,21 @@
-"""Admin CLI commands for organisations and users"""
+"""Admin CLI commands for organisations and users.
+
+Anything that changes data goes through `app.admin_site.operations`, the same code the
+admin site runs, so the two cannot drift apart and both leave an audit entry.
+"""
 
 from uuid import UUID
 
 import click
 
+from app.admin_site import operations as ops
 from app.core.db import db_session
 from app.core.db.models.organisation import OrganisationStatus
-from app.core.db.models.user import UserRole
 from app.core.db.repositories.backup_code_repo import BackupCodeRepository
 from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
-from app.core.security.auth_service import AuthService
 from app.core.security.backup_code_encryption import BackupCodeEncryption
-from app.core.security.org_manager import OrgManager
 from app.core.security.tenant_scope import unscoped
 
 
@@ -28,9 +30,7 @@ def create_org(name, email, password):
         # Creating a brand-new org's first admin user: there is no ambient tenant context to
         # check against (this call establishes the tenant), and this CLI never runs inside a
         # Flask request context. Explicit, not just fail-open silence.
-        with unscoped():
-            org_manager = OrgManager(db)
-            org, user = org_manager.create_org_with_admin_user(name, email, password)
+        org, user, _ = ops.create_organisation(db, name=name, admin_email=email, password=password, actor=ops.CLI_ACTOR)
 
         click.echo(f"✅ Created organisation: {org.name} (ID: {org.id})")
         click.echo(f"✅ Created admin user: {user.email} (ID: {user.id})")
@@ -60,24 +60,11 @@ def create_user(org_id, email, password, role):
     try:
         # Admin command targets an arbitrary org via --org-id, not the caller's own tenant --
         # there is no ambient tenant context here to check against anyway (no Flask request).
-        with unscoped():
-            user_repo = UserRepository(db)
-            auth_service = AuthService(db)
-
-            # Check if user already exists
-            existing_user = user_repo.get_user_by_email(email)
-            if existing_user:
-                click.echo(f"❌ User with email '{email}' already exists", err=True)
-                return
-
-            # Create user
-            password_hash = auth_service.hash_password(password)
-            user_role = UserRole.ADMIN if role == "admin" else UserRole.MEMBER
-            user = user_repo.create_user(
-                org_id=org_uuid, email=email, password_hash=password_hash, role=user_role, is_active=True
-            )
-
+        user, _ = ops.create_user(db, org_uuid, email=email, role=role, password=password, actor=ops.CLI_ACTOR)
         click.echo(f"✅ Created user: {user.email} (ID: {user.id}, Role: {user.role.value})")
+    except ops.AdminOperationError as e:
+        click.echo(f"❌ {e}", err=True)
+        db.rollback()
     except Exception as e:
         click.echo(f"❌ Failed to create user: {e}", err=True)
         db.rollback()
@@ -107,21 +94,11 @@ def reset_password(org_id, email, password):
     db = db_session()
     try:
         # Admin command targets an arbitrary org via --org-id, same reasoning as create_user.
-        with unscoped():
-            user_repo = UserRepository(db)
-            auth_service = AuthService(db)
-
-            user = user_repo.get_user_by_email(email, org_id=org_uuid)
-            if not user:
-                click.echo(f"❌ No user with email '{email}' in organisation {org_id}", err=True)
-                return
-
-            password_hash = auth_service.hash_password(password)
-            user = user_repo.update_user(user.id, org_id=org_uuid, password_hash=password_hash)
-            user_repo.reset_failed_login_attempts(user.id)
-            user_repo.unlock_account(user.id)
-
+        user, _ = ops.reset_password(db, org_uuid, email=email, password=password, actor=ops.CLI_ACTOR)
         click.echo(f"✅ Password reset for {user.email} (ID: {user.id})")
+    except ops.AdminOperationError as e:
+        click.echo(f"❌ {e}", err=True)
+        db.rollback()
     except Exception as e:
         click.echo(f"❌ Failed to reset password: {e}", err=True)
         db.rollback()
@@ -297,7 +274,7 @@ def grant_feature(org_id, feature, note):
             org = _resolve_org(db, org_id)
             if org is None:
                 raise SystemExit(1)
-            row = FeatureSubscriptionRepository(db).grant(org.id, feature, notes=note)
+        row = ops.grant_feature(db, org.id, feature, note=note, actor=ops.CLI_ACTOR)
         click.echo(f"✅ {org.name}: feature '{row.feature_key}' active (granted {row.granted_at:%Y-%m-%d %H:%M})")
     except SystemExit:
         raise
@@ -320,7 +297,7 @@ def revoke_feature(org_id, feature):
             org = _resolve_org(db, org_id)
             if org is None:
                 raise SystemExit(1)
-            changed = FeatureSubscriptionRepository(db).revoke(org.id, feature)
+        changed = ops.revoke_feature(db, org.id, feature, actor=ops.CLI_ACTOR)
         if changed:
             click.echo(f"✅ {org.name}: feature '{feature}' revoked")
         else:
