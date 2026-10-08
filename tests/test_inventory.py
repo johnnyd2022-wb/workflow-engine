@@ -28,6 +28,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import or_
 
 from app.core.db import db_session
 from app.core.db.models.api_idempotency_key import ApiIdempotencyKey
@@ -91,6 +92,18 @@ def _purge_org(db, org_id):
             db.query(model).filter(model.org_id == org_id).delete(synchronize_session=False)
         exec_ids = [e.id for e in db.query(Execution).filter(Execution.org_id == org_id).all()]
         if exec_ids:
+            # The cross-tenant tests plant ANOTHER org's inventory item pointing at this org's
+            # execution and step (that is what they probe). Fixtures unwind in reverse order of
+            # creation, so `other_org` is purged while `org` still holds those items and the
+            # NO ACTION FKs reject the delete below -- swallowed by the except, leaving the org
+            # behind. Clear the reference; the item itself goes with its own org's purge.
+            step_ids = [s.id for s in db.query(ExecutionStep).filter(ExecutionStep.execution_id.in_(exec_ids)).all()]
+            db.query(InventoryItem).filter(
+                or_(
+                    InventoryItem.source_execution_id.in_(exec_ids),
+                    InventoryItem.source_execution_step_id.in_(step_ids),
+                )
+            ).update({"source_execution_id": None, "source_execution_step_id": None}, synchronize_session=False)
             db.query(ExecutionStep).filter(ExecutionStep.execution_id.in_(exec_ids)).delete(synchronize_session=False)
         db.query(Execution).filter(Execution.org_id == org_id).delete(synchronize_session=False)
         proc_ids = [p.id for p in db.query(Process).filter(Process.org_id == org_id).all()]
@@ -209,6 +222,28 @@ def _foreign_execution_step(db, other_org, name_prefix="Neighbour Secret"):
         .first()
     )
     return process, execution, step
+
+
+def test_purge_org_removes_an_org_another_orgs_item_points_into(db, org, other_org):
+    """[REGRESSION] findings-index 4ff460ee: `_purge_org` swallows its own failures, so when
+    `org` held an item pointing at `other_org`'s execution step the neighbour's purge failed
+    on the inventory FK and its row stayed in the shared test DB (100 leftover "Inventory
+    Audit Neighbour" orgs by 2026-10-08). Assert the post-state, not the teardown's silence."""
+    _process, execution, foreign_step = _foreign_execution_step(db, other_org)
+    planted = _plant_item_with_foreign_ref(
+        db, org.id, "Planted Item", execution_id=execution.id, step_id=foreign_step.id
+    )
+    other_org_id = other_org.id
+
+    _purge_org(db, other_org_id)
+
+    assert db.query(Organisation).filter(Organisation.id == other_org_id).count() == 0
+    # The caller's own item survives (it goes with `org`'s purge) -- only the dangling
+    # reference into the purged org is cleared.
+    kept = db.query(InventoryItem).filter(InventoryItem.id == planted.id).one()
+    db.refresh(kept)  # the purge's bulk UPDATE does not touch the session's identity map
+    assert kept.source_execution_id is None
+    assert kept.source_execution_step_id is None
 
 
 # --------------------------------------------------------------------------------------
