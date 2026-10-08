@@ -2,7 +2,7 @@ name: workflow-engine-terraform
 
 services:
   state-db:
-    image: postgres:17-bookworm
+    image: postgres:18-bookworm
     restart: unless-stopped
     environment:
       POSTGRES_DB: terraform_state
@@ -11,7 +11,7 @@ services:
     ports:
       - "127.0.0.1:${TERRAFORM_STATE_DB_PORT:-8402}:5432"
     volumes:
-      - state-db:/var/lib/postgresql/data
+      - state-db-pg18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U terraform -d terraform_state"]
       interval: 2s
@@ -20,4 +20,4 @@ services:
     stop_grace_period: 30s
 
 volumes:
-  state-db:
+  state-db-pg18:

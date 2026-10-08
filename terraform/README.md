@@ -71,15 +71,23 @@ or starting Docker; `validate` expects providers to have been installed by
 
 ## State database
 
-`compose.yml` runs a dedicated `postgres:17-bookworm` container in Compose
+`compose.yml` runs a dedicated `postgres:18-bookworm` container in Compose
 project `workflow-engine-terraform`, database `terraform_state`, user
 `terraform`, exposed only at `127.0.0.1:8402`. To choose another port, set
 `TERRAFORM_STATE_DB_PORT` consistently on wrapper invocations.
-The Docker named volume `workflow-engine-terraform_state-db` retains state
-across container restarts and `db-stop`. Back up that volume or use `pg_dump`
+The Docker named volume `workflow-engine-terraform_state-db-pg18` retains state
+across container restarts and `db-stop`. PostgreSQL 18 stores its data in
+`/var/lib/postgresql/18/docker`, with the volume mounted at `/var/lib/postgresql`.
+The `18-bookworm` tag follows stable PostgreSQL 18 patch releases (currently 18.6).
+Back up that volume or use `pg_dump`
 with the KeePassXC credentials before moving/removing it. PostgreSQL only uses
 `POSTGRES_PASSWORD` to initialize a new volume: changing the KeePassXC password
 later also requires rotating the database role password.
+
+Major version upgrades require a dump/restore or `pg_upgrade`; changing the image
+tag alone does not migrate data. The initial PostgreSQL 17 backend was dumped
+and restored into the new PostgreSQL 18 volume. The original
+`workflow-engine-terraform_state-db` volume is retained for rollback.
 
 The `pg` backend uses PostgreSQL advisory locks for concurrent operations;
 locks release when the database connection closes. `force-unlock` is not
