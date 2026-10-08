@@ -1043,6 +1043,89 @@ class TestCRMCustomersAPI:
         assert "is_connected" in data
 
 
+class TestCRMMalformedParameters:
+    """Findings-Index 85554cca (``.agents/test-map.md`` row 18): a hand-typed ``?page=abc`` or a
+    non-UUID id in the path raised ``ValueError`` out of the view, which the client sees as a 500
+    and the error aggregates count as a server fault. Each now answers a named 400."""
+
+    @pytest.mark.parametrize(
+        "path",
+        ["/api/crm/customers", "/api/crm/invoices", f"/api/crm/customers/{uuid4()}/invoices"],
+        ids=["customers", "org-invoices", "customer-invoices"],
+    )
+    @pytest.mark.parametrize(
+        "query",
+        [{"page": "abc"}, {"page_size": "abc"}, {"page": "1.5"}, {"page_size": ""}],
+        ids=["page-word", "page-size-word", "page-fraction", "page-size-empty"],
+    )
+    def test_list_routes_reject_a_non_integer_page_with_a_named_400(self, app_client, path, query):
+        resp = app_client.get(path, query_string=query)
+
+        assert resp.status_code == 400
+        assert json.loads(resp.data)["error"] == "page and page_size must be integers"
+
+    @pytest.mark.parametrize("path", ["/api/crm/customers", "/api/crm/invoices"], ids=["customers", "org-invoices"])
+    def test_list_routes_still_clamp_an_out_of_range_page_instead_of_rejecting_it(self, app_client, path):
+        """[CONTROL] Only a non-integer is a client error; ``page=0`` / ``page_size=9999`` keep their
+        old clamp, so the 400 above is not an over-tightening."""
+        resp = app_client.get(path, query_string={"page": "0", "page_size": "9999"})
+
+        assert resp.status_code == 200
+        body = json.loads(resp.data)
+        assert body["page"] == 1
+        assert body["page_size"] == 100
+
+    @pytest.mark.parametrize(
+        ("method", "path", "error"),
+        [
+            ("get", "/api/crm/customers/not-a-uuid", "Invalid customer ID"),
+            ("get", "/api/crm/customers/not-a-uuid/invoices", "Invalid customer ID"),
+            ("get", "/api/crm/customers/not-a-uuid/line-item-descriptions", "Invalid customer ID"),
+            ("get", "/api/crm/customers/not-a-uuid/line-item-pricing", "Invalid customer ID"),
+            ("put", "/api/crm/notes/not-a-uuid", "Invalid note ID"),
+            ("delete", "/api/crm/notes/not-a-uuid", "Invalid note ID"),
+            ("delete", "/api/crm/tasks/not-a-uuid", "Invalid task ID"),
+            ("put", "/api/crm/product-mappings/not-a-uuid", "Invalid mapping ID"),
+            ("delete", "/api/crm/product-mappings/not-a-uuid", "Invalid mapping ID"),
+            ("get", "/api/crm/tasks?contact_id=not-a-uuid", "contact_id must be a UUID"),
+            ("get", "/api/crm/tasks?assigned_to=not-a-uuid", "assigned_to must be a UUID"),
+        ],
+    )
+    def test_routes_reject_a_malformed_uuid_with_a_named_400(self, app_client, method, path, error):
+        kwargs = {"json": {"content": "edited"}} if method == "put" else {}
+
+        resp = getattr(app_client, method)(path, **kwargs)
+
+        assert resp.status_code == 400
+        assert json.loads(resp.data)["error"] == error
+
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            ("get", f"/api/crm/customers/{uuid4()}"),
+            ("delete", f"/api/crm/notes/{uuid4()}"),
+            ("delete", f"/api/crm/tasks/{uuid4()}"),
+            ("put", f"/api/crm/product-mappings/{uuid4()}"),
+            ("delete", f"/api/crm/product-mappings/{uuid4()}"),
+        ],
+        ids=["customer", "note", "task", "mapping-update", "mapping-delete"],
+    )
+    def test_routes_still_404_a_well_formed_id_that_does_not_exist(self, app_client, method, path):
+        """[CONTROL] A valid-but-unknown UUID reaches the service and is a 404, not a 400."""
+        kwargs = {"json": {}} if method == "put" else {}
+
+        resp = getattr(app_client, method)(path, **kwargs)
+
+        assert resp.status_code == 404
+
+    def test_task_list_accepts_well_formed_uuid_filters(self, app_client):
+        """[CONTROL] The new filter validation still lets a real UUID through."""
+        resp = app_client.get("/api/crm/tasks", query_string={"contact_id": str(uuid4()), "assigned_to": str(uuid4())})
+
+        assert resp.status_code == 200
+        assert json.loads(resp.data)["tasks"] == []
+
+
 class TestProductMappingAPI:
     def test_create_mapping(self, app_client):
         resp = app_client.post(
