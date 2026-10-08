@@ -79,7 +79,10 @@ def create_admin_app(settings=None) -> Flask:
         response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "no-referrer"
+        # same-origin, not no-referrer: CSRF protection on HTTPS checks that a form post
+        # comes from this site by its Referer, so our own forms must send one. Nothing is
+        # sent to any other site.
+        response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["X-Robots-Tag"] = "noindex, nofollow"
         if response.mimetype != "text/css":

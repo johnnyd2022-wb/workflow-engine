@@ -195,6 +195,28 @@ def test_starting_sign_in_needs_a_csrf_token():
     assert browser.post("/auth/google/start").status_code == 400
 
 
+def test_the_sign_in_form_works_with_csrf_on_as_a_browser_sends_it():
+    """Over HTTPS, CSRF protection also checks the Referer. A browser only sends one if the
+    page's referrer policy allows it, so the policy and the check are tested together."""
+    import re
+
+    browser = _browser(_app(csrf=True))
+    base = "https://admin.biz-e.app"
+    page = browser.get("/sign-in", base_url=base)
+    assert page.headers["Referrer-Policy"] == "same-origin"
+    html = page.get_data(as_text=True)
+    assert 'name="referrer" content="same-origin"' in html and "no-referrer" not in html
+    token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+
+    def start(**headers):
+        return browser.post("/auth/google/start", base_url=base, data={"csrf_token": token}, headers=headers)
+
+    assert start().status_code == 400  # what a no-referrer policy made every browser send
+    assert start(Referer="https://attacker.test/").status_code == 400
+    sent = start(Referer=f"{base}/sign-in")
+    assert sent.status_code == 302 and sent.location.startswith("https://accounts.google.com/")
+
+
 # ── What stays shut ────────────────────────────────────────────────────────────
 
 
