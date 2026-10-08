@@ -63,7 +63,7 @@ A fictional distillery with a believable history, rebuilt on demand.
 | [ ] | **Run it in CI** against the test database on `main`, so a change that breaks the API breaks the demo rebuild visibly. | Claude |
 | [ ] | **Replace the old demo reset** (`app/features/demo_data`, `demo@whistlebird.co.nz`, local/test only) with this, or keep it as the fast fixture for tests; decide once the new one exists. | Claude to propose |
 
-## Phase 3: admin site (`admin.biz-e.app`)
+## Phase 3: admin site (`admin-test.biz-e.app` for now)
 
 A separate container, not part of the customer app, for biz-e staff only. Its scope is managing
 organisations and customer support; backups, deploys and data copies are not part of it. The skeleton is
@@ -76,8 +76,8 @@ built (`app/admin_site/`); it needs a Google client and a route before anyone ca
 | [x] | **Sign-in**: the customer app's Google flow (code + PKCE, verified ID token), then the allow-list. The address must also be one Google is the authority for (Workspace domain or gmail.com), so a personal Google account registered against a listed address is refused. Access is denied by default: one check guards every route not named public. Sessions end after 30 minutes idle or 12 hours. | done |
 | [x] | **One implementation for the site and the CLI** (`app/admin_site/operations.py`). `workflow create_org`, `create_user`, `reset-password`, `grant-feature` and `revoke-feature` now run through it, and are audited as `cli`. | done |
 | [x] | **Screens, first cut**: organisations (search, list, create with an invited admin, suspend and reactivate, features on and off); people (invite, new setup link, reset password, unlock); system (environment, version, database, schema, counts, who can sign in). Built from the shared `workspace-*` elements; no scripts on any page. | done |
-| [ ] | **Google client for the admin site.** In Google Cloud, create an OAuth client (type: web application) with redirect URI `https://admin.biz-e.app/auth/google/callback`, then add its id and secret to KeePassXC as `workflow-engine/ADMIN_GOOGLE_CLIENT_ID` and `workflow-engine/ADMIN_GOOGLE_CLIENT_SECRET` (the value goes in the password field). `python3 scripts/prod_secrets.py check` shows whether they are there. | Johnny |
-| [ ] | **Cloudflare route** for `admin.biz-e.app` to `https://localhost:8020` ("No TLS Verify" on, as for the app), behind Cloudflare Access limited to the same two addresses as a second gate. | Johnny |
+| [ ] | **Google client for the admin site.** In Google Cloud, create an OAuth client (type: web application) with redirect URI `https://admin-test.biz-e.app/auth/google/callback`, then add its id and secret to KeePassXC as `workflow-engine/ADMIN_GOOGLE_CLIENT_ID` and `workflow-engine/ADMIN_GOOGLE_CLIENT_SECRET` (the value goes in the password field). `python3 scripts/prod_secrets.py check` shows whether they are there. | Johnny |
+| [x] | **Cloudflare route** for `admin-test.biz-e.app` to `https://localhost:8020` ("No TLS Verify" on, as for the app), behind Cloudflare Access limited to the same two addresses as a second gate. | Johnny |
 | [ ] | **Start it**: `scripts/run_admin.sh`, once the two steps above are done. | Johnny or Claude |
 | [ ] | **Confirm `whistlebird.co.nz` is a Google Workspace domain.** If the two addresses are personal Google accounts instead, sign-in is refused until `[admin_site] require_authoritative_email = false` is set in `prod.ini`. | Johnny |
 | [ ] | **Demo reset** on the Demo page (a placeholder today); arrives with phase 2. | Claude |
@@ -109,4 +109,4 @@ built (`app/admin_site/`); it needs a Google client and a route before anyone ca
 1. Is `workflow-engine/xero_client_id` in KeePassXC the production Xero app?
 2. Demo scenario: happy with the proposal above, or a different company and product mix?
 3. Is `whistlebird.co.nz` on Google Workspace? (Admin sign-in assumes so; see phase 3.)
-4. `biz-e.app` for production and `admin.biz-e.app` for admin: confirm both names.
+4. `biz-e.app` for production: confirm. The admin site is at `admin-test.biz-e.app` (the default in `scripts/run_admin.sh`), connected to the production database.
