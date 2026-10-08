@@ -52,7 +52,6 @@ Thumbs.db
 *.log
 
 # Docker
-.dockerignore
 observability/posthog-stack/.env
 observability/posthog-stack/geoip/
 
@@ -126,3 +125,16 @@ htmlcov/
 # Runtime evidence file storage (org_id/execution_id dirs written by uploads, incl. tests)
 app/core/evidence_storage/
 app/admin_site/document_storage/
+
+# Terraform runtime data and potentially sensitive state / plan / variable files.
+terraform/**/.terraform/
+terraform/**/terraform.tfstate*
+terraform/**/terraform.tfstate.d/
+terraform/**/errored.tfstate
+terraform/**/*.tfplan
+terraform/**/*.tfvars
+terraform/**/*.tfvars.json
+terraform/**/crash.log
+terraform/**/crash.*.log
+terraform/**/.env
+terraform/**/__pycache__/

@@ -1,0 +1,23 @@
+name: workflow-engine-terraform
+
+services:
+  state-db:
+    image: postgres:18-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: terraform_state
+      POSTGRES_USER: terraform
+      POSTGRES_PASSWORD: ${TERRAFORM_STATE_DB_PASSWORD:?Load the state database password using tf.py}
+    ports:
+      - "127.0.0.1:${TERRAFORM_STATE_DB_PORT:-8402}:5432"
+    volumes:
+      - state-db-pg18:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U terraform -d terraform_state"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    stop_grace_period: 30s
+
+volumes:
+  state-db-pg18:

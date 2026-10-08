@@ -1,0 +1,2 @@
+# Infrastructure and its local credentials/state never enter application images.
+terraform/
