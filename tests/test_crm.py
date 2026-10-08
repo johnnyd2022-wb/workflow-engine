@@ -1409,6 +1409,7 @@ class TestCRMAnalyticsAPI:
         [
             ({"entity": "bogus"}, "entity"),
             ({"direction": "sideways"}, "direction"),
+            ({"limit": "abc"}, "limit"),
             ({"period_n": "abc"}, "period_n"),
             ({"start_date": "nope"}, "start_date"),
             ({"start_date": "2025-01-01", "end_date": "nope"}, "end_date"),
@@ -1422,6 +1423,65 @@ class TestCRMAnalyticsAPI:
 
         assert resp.status_code == 400
         assert named in json.loads(resp.data)["error"]
+
+    @pytest.mark.parametrize(
+        ("path", "param"),
+        [
+            ("/api/crm/analytics/monthly-sales", "months"),
+            ("/api/crm/analytics/customer-breakdown", "top_n"),
+        ],
+    )
+    def test_chart_endpoints_reject_a_non_integer_size_with_a_named_400(self, app_client, path, param):
+        """A hand-typed ``?months=abc`` used to raise ValueError out of the view (a 500)."""
+        resp = app_client.get(path, query_string={param: "abc"})
+
+        assert resp.status_code == 400
+        assert param in json.loads(resp.data)["error"]
+
+    def test_monthly_sales_totals_receivables_per_month_newest_first(self, app_client, db, org, other_org):
+        mine = self._customer(db, org, "Mine")
+        theirs = self._customer(db, other_org, "Theirs")
+        self._invoice(db, org, mine, date(2025, 1, 10), [("Gin", 1, 100)])
+        self._invoice(db, org, mine, date(2025, 1, 20), [("Gin", 1, 50)])
+        self._invoice(db, org, mine, date(2025, 2, 5), [("Gin", 1, 200)], status="PAID")
+        self._invoice(db, org, mine, date(2025, 3, 15), [("Gin", 1, 300)])
+        # None of these is a sale: a draft, a supplier bill, and another tenant's invoice.
+        self._invoice(db, org, mine, date(2025, 3, 16), [("Gin", 1, 9000)], status="DRAFT")
+        self._invoice(db, org, mine, date(2025, 3, 17), [("Gin", 1, 9000)], invoice_type="ACCPAY")
+        self._invoice(db, other_org, theirs, date(2025, 3, 18), [("Secret Gin", 1, 7000)])
+        db.commit()
+
+        body = json.loads(app_client.get("/api/crm/analytics/monthly-sales?months=24").data)
+
+        assert body["monthly_sales"] == [
+            {"month": "2025-03", "total": 300.0, "invoice_count": 1},
+            {"month": "2025-02", "total": 200.0, "invoice_count": 1},
+            {"month": "2025-01", "total": 150.0, "invoice_count": 2},
+        ]
+        assert body["months"] == body["monthly_sales"]
+
+    @pytest.mark.parametrize(
+        ("requested", "expected"),
+        [("2", 2), ("0", 1), ("-5", 1), ("999", 24), (None, 12)],
+        ids=["two", "zero-floors-to-one", "negative-floors-to-one", "huge-caps-at-24", "default-is-12"],
+    )
+    def test_monthly_sales_clamps_the_months_window(self, app_client, db, org, requested, expected):
+        mine = self._customer(db, org, "Mine")
+        for index in range(26):  # 2023-01 .. 2025-02, so the 24-month cap is reachable
+            self._invoice(db, org, mine, date(2023 + index // 12, index % 12 + 1, 10), [("Gin", 1, 100)])
+        db.commit()
+
+        query = {} if requested is None else {"months": requested}
+        rows = json.loads(app_client.get("/api/crm/analytics/monthly-sales", query_string=query).data)["monthly_sales"]
+
+        assert len(rows) == expected
+        assert rows[0]["month"] == "2025-02"
+
+    def test_customer_analytics_rejects_a_malformed_customer_id_with_400(self, app_client):
+        resp = app_client.get("/api/crm/customers/not-a-uuid/analytics")
+
+        assert resp.status_code == 400
+        assert json.loads(resp.data)["error"] == "Invalid customer ID"
 
     def test_rankings_only_include_the_callers_own_org(self, app_client, db, org, other_org):
         # The caller maps "Gin" to a product, so the other org's "Gin" line would join the product

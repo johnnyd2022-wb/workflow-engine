@@ -238,7 +238,7 @@ when chromium/cert/DB is absent.
 
 ## D. Known-failing / deferred
 
-- **Nothing is failing.** The one test that failed on a real bug
+- **Nothing is failing.** A status line, not a finding (verified 2026-10-08 by findings-sweep). The one test that failed on a real bug
   (`test_landing_page_renders_clean`) now passes because the bug is fixed, not because the
   test was weakened.
 - **Test DB hygiene (pre-existing, untouched):** the test database holds months of
