@@ -138,3 +138,6 @@ terraform/**/crash.log
 terraform/**/crash.*.log
 terraform/**/.env
 terraform/**/__pycache__/
+
+# Terraform CI local plans (only selected reports are uploaded as artifacts).
+terraform/**/.ci/
