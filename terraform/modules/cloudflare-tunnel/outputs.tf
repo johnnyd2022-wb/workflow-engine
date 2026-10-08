@@ -3,5 +3,5 @@ output "id" {
 }
 
 output "hostnames" {
-  value = sort(keys(var.routes))
+  value = sort(tolist(local.dns_hostnames))
 }
