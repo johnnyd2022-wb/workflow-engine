@@ -34,6 +34,20 @@
     </dl>
   </section>
 
+  {% if codes %}
+  <section class="workspace-card" aria-labelledby="codes-heading">
+    <div class="workspace-card__header">
+      <h2 id="codes-heading">Backup codes</h2>
+    </div>
+    <p class="workspace-caption">Give them one unused code. It stops working once used. Leave this page when you are done.</p>
+    <ul class="admin-codes">
+      {% for code, used in codes %}
+      <li{% if used %} class="admin-codes__used"{% endif %}><code>{{ code }}</code>{% if used %} <span class="admin-status admin-status--muted">Used</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   <section class="workspace-card" aria-labelledby="sign-in-heading">
     <div class="workspace-card__header">
       <h2 id="sign-in-heading">Can't sign in</h2>
@@ -61,6 +75,12 @@
       {{ post('admin.reset_two_factor') }}
         <p>Lost authenticator. Switches 2FA off and removes their backup codes and remembered devices. Confirm who you are talking to first.</p>
         <div class="workspace-form__actions"><button type="submit" class="workspace-button">Reset 2FA</button></div>
+      </form>
+      {% endif %}
+      {% if person.two_factor_enabled %}
+      {{ post('admin.backup_codes') }}
+        <p>Lost authenticator but needs in now. Shows their backup codes so you can read one out; each works once. Confirm who you are talking to first. Every look is recorded.</p>
+        <div class="workspace-form__actions"><button type="submit" class="workspace-button">Show backup codes</button></div>
       </form>
       {% endif %}
       {% if devices %}

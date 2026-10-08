@@ -27,6 +27,80 @@
     </dl>
   </section>
 
+  <section class="workspace-card" aria-labelledby="notes-heading">
+    <div class="workspace-card__header">
+      <h2 id="notes-heading">Notes</h2>
+    </div>
+    <p class="workspace-caption">For biz-e staff only. {{ org.name }} never sees these.</p>
+    <form class="workspace-form" method="post" action="{{ url_for('admin.add_note', org_id=org.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="workspace-form__wide">Add a note
+        <textarea name="body" rows="3" maxlength="10000" required></textarea>
+      </label>
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button workspace-button--primary">Add note</button>
+      </div>
+    </form>
+    {% if notes %}
+    <ul class="workspace-list admin-notes">
+      {% for note in notes %}
+      <li>
+        <div class="admin-note">
+          <p class="admin-note__body">{{ note.body }}</p>
+          <p>{{ note.author_email }}, {{ note.created_at.strftime('%-d %b %Y, %H:%M UTC') }}</p>
+        </div>
+        <form method="post" action="{{ url_for('admin.delete_note', org_id=org.id, note_id=note.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="workspace-button">Delete</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <section class="workspace-card" aria-labelledby="documents-heading">
+    <div class="workspace-card__header">
+      <h2 id="documents-heading">Documents</h2>
+    </div>
+    <p class="workspace-caption">Contracts and other files about {{ org.name }}, for biz-e staff only. Up to 20 MB each: PDF, Word, Excel, PowerPoint, images, email, text.</p>
+    {% if documents %}
+    <div class="workspace-scroll">
+      <table class="workspace-table">
+        <thead><tr><th>Document</th><th>Size</th><th>Added by</th><th>Added</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for document in documents %}
+          <tr>
+            <td><a href="{{ url_for('admin.download_document', org_id=org.id, document_id=document.id) }}">{{ document.title }}</a>{% if document.title != document.original_filename %}<br>{{ document.original_filename }}{% endif %}</td>
+            <td>{{ '%.1f MB'|format(document.size_bytes / 1048576) if document.size_bytes >= 1048576 else '%d KB'|format([1, (document.size_bytes / 1024)|round|int]|max) }}</td>
+            <td>{{ document.uploaded_by }}</td>
+            <td>{{ document.created_at.strftime('%-d %b %Y') }}</td>
+            <td>
+              <form method="post" action="{{ url_for('admin.delete_document', org_id=org.id, document_id=document.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="workspace-button">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    <form class="workspace-form" method="post" enctype="multipart/form-data" action="{{ url_for('admin.upload_document', org_id=org.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>File
+        <input type="file" name="file" required>
+      </label>
+      <label>Title (optional)
+        <input type="text" name="title" maxlength="255" placeholder="e.g. Signed contract 2026">
+      </label>
+      <div class="workspace-form__actions">
+        <button type="submit" class="workspace-button workspace-button--primary">Upload</button>
+      </div>
+    </form>
+  </section>
+
   <section class="workspace-card" aria-labelledby="people-heading">
     <div class="workspace-card__header">
       <h2 id="people-heading">People</h2>

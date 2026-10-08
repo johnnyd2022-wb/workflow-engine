@@ -43,3 +43,13 @@ body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-seri
   #page-content { padding: 24px 16px 48px; }
 }
 #page-content ul.workspace-list { list-style: none; padding: 0; }
+#page-content .admin-notes > li { align-items: flex-start; justify-content: space-between; }
+#page-content .admin-note { flex: 1 1 320px; min-width: 0; }
+#page-content .admin-note__body { color: var(--ui-text, #172033); white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 6px; }
+#page-content .admin-notes form { margin: 0; }
+#page-content .workspace-form textarea { min-height: 88px; resize: vertical; }
+#page-content .workspace-form input[type="file"] { padding: 8px 12px; }
+#page-content .admin-codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 18px 0 0; padding: 0; list-style: none; }
+#page-content .admin-codes li { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--ui-border, #dce4e9); border-radius: 8px; background: var(--ui-surface-subtle, #f8fafc); }
+#page-content .admin-codes code { font-size: 16px; letter-spacing: .06em; user-select: all; }
+#page-content .admin-codes__used code { text-decoration: line-through; color: var(--ui-text-muted, #5d6778); }

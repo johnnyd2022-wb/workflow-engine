@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from flask import Blueprint, g, redirect, render_template, request, url_for
+from flask import Blueprint, g, redirect, render_template, request, send_file, url_for
 
 from app.admin_site import operations as ops
 from app.admin_site.auth import settings
@@ -96,6 +96,8 @@ def _organisation_page(org_id, *, notice=None, error=None, secret=None, secret_l
             org=org,
             users=ops.list_users(db, org.id),
             overview=ops.organisation_overview(db, org.id),
+            notes=ops.list_notes(db, org.id),
+            documents=ops.list_documents(db, org.id),
             is_locked=ops.is_locked,
             features=features,
             feature_keys=sorted(set(ops.KNOWN_FEATURES) | set(features)),
@@ -119,7 +121,9 @@ def organisation(org_id):
     return _organisation_page(org_id)
 
 
-def _person_page(org_id, user_id, *, notice=None, error=None, secret=None, secret_label=None, status_code=200):
+def _person_page(
+    org_id, user_id, *, notice=None, error=None, secret=None, secret_label=None, codes=None, status_code=200
+):
     db = db_session()
     org = ops.get_organisation(db, org_id)
     person = ops.get_user(db, org.id, user_id)
@@ -135,6 +139,7 @@ def _person_page(org_id, user_id, *, notice=None, error=None, secret=None, secre
             devices=ops.remembered_devices(db, person),
             history=ops.list_audit(db, org.id, user_id=person.id, limit=10)[0],
             google_linked=person.id in overview["google_linked"],
+            codes=codes,
             notice=notice,
             error=error,
             secret=secret,
@@ -352,6 +357,68 @@ def forget_devices(org_id, user_id):
         return {"notice": f"Forgot {removed} remembered device{'' if removed == 1 else 's'} for {user.email}."}
 
     return _act(org_id, action, user_id)
+
+
+@admin_bp.route("/organisations/<org_id>/users/<user_id>/backup-codes", methods=["POST"])
+def backup_codes(org_id, user_id):
+    def action(db, org):
+        user, codes = ops.get_backup_codes(db, org.id, user_id, actor=g.admin_email)
+        return {"notice": f"Backup codes for {user.email}. Shown once; this look is recorded.", "codes": codes}
+
+    return _act(org_id, action, user_id)
+
+
+# ── Notes and documents ────────────────────────────────────────────────────────
+
+
+@admin_bp.route("/organisations/<org_id>/notes", methods=["POST"])
+def add_note(org_id):
+    def action(db, org):
+        ops.add_note(db, org.id, request.form.get("body", ""), actor=g.admin_email)
+        return {"notice": "Note added."}
+
+    return _act(org_id, action)
+
+
+@admin_bp.route("/organisations/<org_id>/notes/<note_id>/delete", methods=["POST"])
+def delete_note(org_id, note_id):
+    def action(db, org):
+        ops.delete_note(db, org.id, note_id, actor=g.admin_email)
+        return {"notice": "Note deleted."}
+
+    return _act(org_id, action)
+
+
+@admin_bp.route("/organisations/<org_id>/documents", methods=["POST"])
+def upload_document(org_id):
+    def action(db, org):
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            raise ops.AdminOperationError("Choose a file to upload.")
+        document = ops.add_document(
+            db, org.id, upload.stream, upload.filename, title=_field("title"), actor=g.admin_email
+        )
+        return {"notice": f"{document.title} uploaded."}
+
+    return _act(org_id, action)
+
+
+@admin_bp.route("/organisations/<org_id>/documents/<document_id>", methods=["GET"])
+def download_document(org_id, document_id):
+    document, path = ops.get_document(db_session(), org_id, document_id)
+    # Always a download, never rendered: an uploaded file must not run in this site's origin.
+    return send_file(
+        path, mimetype="application/octet-stream", as_attachment=True, download_name=document.original_filename
+    )
+
+
+@admin_bp.route("/organisations/<org_id>/documents/<document_id>/delete", methods=["POST"])
+def delete_document(org_id, document_id):
+    def action(db, org):
+        title = ops.delete_document(db, org.id, document_id, actor=g.admin_email)
+        return {"notice": f"{title} deleted."}
+
+    return _act(org_id, action)
 
 
 @admin_bp.route("/attention", methods=["GET"])

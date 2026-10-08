@@ -16,6 +16,8 @@ from uuid import UUID
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from app.admin_site import documents
+from app.admin_site.models import AdminOrgDocument, AdminOrgNote
 from app.core.db import SessionLocal
 from app.core.db.models.audit_log import AuditLog
 from app.core.db.models.feature_subscription import FeatureSubscription
@@ -596,6 +598,164 @@ def forget_devices(db: Session, org_id, user_id, *, actor: str) -> tuple[User, i
 
 def is_locked(user: User) -> bool:
     return bool(user.account_locked_until and user.account_locked_until > datetime.now(UTC))
+
+
+def get_backup_codes(db: Session, org_id, user_id, *, actor: str) -> tuple[User, list[tuple[str, bool]]]:
+    """Someone's 2FA backup codes, decrypted, as (code, already used). For a person who is
+    locked out and has lost both their authenticator and their own copy of the codes: read
+    one unused code to them once you are sure who they are. Every look is audited."""
+    from app.core.db.repositories.backup_code_repo import BackupCodeRepository
+    from app.core.security.backup_code_encryption import BackupCodeEncryption
+
+    org = get_organisation(db, org_id)
+    with unscoped():
+        user = _user_in_org(db, org, user_id=user_id)
+        if not user.two_factor_enabled:
+            raise AdminOperationError(f"{user.email} does not have 2FA switched on.")
+        try:
+            encryption = BackupCodeEncryption()
+        except RuntimeError:
+            raise AdminOperationError("This site has not been given the backup-code key.") from None
+        rows = BackupCodeRepository(db, encryption).get_all_codes_for_user(user.id)
+        if not rows:
+            raise AdminOperationError(f"{user.email} has no backup codes. Reset their 2FA instead.")
+        try:
+            codes = [(encryption.decrypt(row.encrypted_code), bool(row.consumed)) for row in rows]
+        except Exception:
+            raise AdminOperationError("The backup codes could not be decrypted with this site's key.") from None
+    _audit(org.id, "view_backup_codes", "user", user.id, actor, email=user.email)
+    return user, codes
+
+
+# ── Notes and documents ────────────────────────────────────────────────────────
+# Internal to biz-e: the organisation never sees these, so they are not written to its
+# audit log. Each row carries who added it; removals go to the application log.
+
+
+def list_notes(db: Session, org_id) -> list[AdminOrgNote]:
+    org = get_organisation(db, org_id)
+    with unscoped():
+        return (
+            db.query(AdminOrgNote)
+            .filter(AdminOrgNote.org_id == org.id)
+            .order_by(AdminOrgNote.created_at.desc(), AdminOrgNote.id)
+            .limit(200)
+            .all()
+        )
+
+
+def add_note(db: Session, org_id, body: str, *, actor: str) -> AdminOrgNote:
+    org = get_organisation(db, org_id)
+    body = (body or "").strip()
+    if not body or len(body) > 10_000:
+        raise AdminOperationError("Write a note of up to 10,000 characters.")
+    with unscoped():
+        note = AdminOrgNote(org_id=org.id, body=body, author_email=actor)
+        db.add(note)
+        db.commit()
+    LOGGER.info("admin_note_added", org_id=str(org.id), note_id=str(note.id), actor=actor)
+    return note
+
+
+def delete_note(db: Session, org_id, note_id, *, actor: str) -> None:
+    org = get_organisation(db, org_id)
+    with unscoped():
+        deleted = (
+            db.query(AdminOrgNote)
+            .filter(AdminOrgNote.org_id == org.id, AdminOrgNote.id == parse_id(note_id, "note ID"))
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+    if not deleted:
+        raise AdminOperationError("That note no longer exists.")
+    LOGGER.info("admin_note_deleted", org_id=str(org.id), note_id=str(note_id), actor=actor)
+
+
+def list_documents(db: Session, org_id) -> list[AdminOrgDocument]:
+    org = get_organisation(db, org_id)
+    with unscoped():
+        return (
+            db.query(AdminOrgDocument)
+            .filter(AdminOrgDocument.org_id == org.id)
+            .order_by(AdminOrgDocument.created_at.desc(), AdminOrgDocument.id)
+            .limit(200)
+            .all()
+        )
+
+
+def add_document(db: Session, org_id, stream, filename: str, *, title: str = "", actor: str) -> AdminOrgDocument:
+    """Keep a file about an organisation, e.g. a signed contract."""
+    org = get_organisation(db, org_id)
+    filename = documents.clean_filename(filename)
+    if not filename:
+        raise AdminOperationError("Choose a file to upload.")
+    title = (title or "").strip()[:255] or filename
+    try:
+        stored_name, size, sha256 = documents.store(org.id, stream, filename)
+    except documents.DocumentError as exc:
+        raise AdminOperationError(str(exc)) from None
+    try:
+        with unscoped():
+            document = AdminOrgDocument(
+                org_id=org.id,
+                title=title,
+                original_filename=filename,
+                stored_name=stored_name,
+                size_bytes=size,
+                sha256=sha256,
+                uploaded_by=actor,
+            )
+            db.add(document)
+            db.commit()
+    except Exception:
+        db.rollback()
+        documents.remove(org.id, stored_name)
+        raise
+    LOGGER.info("admin_document_added", org_id=str(org.id), document_id=str(document.id), size=size, actor=actor)
+    return document
+
+
+def get_document(db: Session, org_id, document_id):
+    """(row, path on disk) for one of an organisation's documents."""
+    org = get_organisation(db, org_id)
+    with unscoped():
+        document = (
+            db.query(AdminOrgDocument)
+            .filter(AdminOrgDocument.org_id == org.id, AdminOrgDocument.id == parse_id(document_id, "document ID"))
+            .first()
+        )
+    if document is None:
+        raise AdminOperationError("That document no longer exists.")
+    try:
+        path = documents.path_for(org.id, document.stored_name)
+    except documents.DocumentError as exc:
+        raise AdminOperationError(str(exc)) from None
+    if path is None:
+        raise AdminOperationError(f"The file for '{document.title}' is missing from storage.")
+    return document, path
+
+
+def delete_document(db: Session, org_id, document_id, *, actor: str) -> str:
+    org = get_organisation(db, org_id)
+    with unscoped():
+        document = (
+            db.query(AdminOrgDocument)
+            .filter(AdminOrgDocument.org_id == org.id, AdminOrgDocument.id == parse_id(document_id, "document ID"))
+            .first()
+        )
+        if document is None:
+            raise AdminOperationError("That document no longer exists.")
+        title, stored_name = document.title, document.stored_name
+        db.delete(document)
+        db.commit()
+    try:
+        documents.remove(org.id, stored_name)
+    except documents.DocumentError:
+        pass
+    LOGGER.info(
+        "admin_document_deleted", org_id=str(org.id), document_id=str(document_id), title=title[:80], actor=actor
+    )
+    return title
 
 
 # ── Features ───────────────────────────────────────────────────────────────────
