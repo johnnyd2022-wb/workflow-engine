@@ -1,48 +1,57 @@
 locals {
-  ingress_order = concat(var.ingress_order, sort(tolist(setsubtract(keys(var.routes), var.ingress_order))))
-  dns_hostnames = toset([for hostname, route in var.routes : hostname if route.dns])
-  access        = { for hostname, route in var.routes : hostname => route.access if route.access != null }
-  # A hostname this root publishes must sit behind Access unless it says, in so many words,
-  # that it is meant to be open to the internet.
-  unprotected = [
-    for hostname, route in var.routes : hostname if route.dns && route.access == null && !route.public
-  ]
+  # The same settings for every site, so a route is only ever a hostname and an origin.
+  # Each timeout is the longest any route had before they were made the same.
+  http_origin = {
+    no_tls_verify          = true # origins serve a self-signed certificate
+    http2_origin           = true
+    connect_timeout        = 1800
+    tls_timeout            = 600
+    tcp_keep_alive         = 600
+    keep_alive_timeout     = 1800
+    keep_alive_connections = 600
+  }
+
+  # Who gets in, and how they sign in: the same for every published site.
+  access_session    = "730h"
+  founders_group    = "1ddc91a4-287b-488c-8d7e-529479a9ea64" # Access group, managed in the dashboard
+  identity_provider = "d64aecc5-00f5-439f-a87a-ce249fe4c347" # the one sign-in method offered
+
+  hostnames = sort(keys(var.routes))
+  # Hostnames in this root's zone: the apex and anything under it.
+  published = toset([
+    for hostname in local.hostnames : hostname
+    if hostname == var.zone_name || endswith(hostname, ".${var.zone_name}")
+  ])
 }
 
 resource "cloudflare_zero_trust_tunnel_cloudflared" "this" {
   account_id = var.account_id
   name       = var.name
   config_src = "cloudflare"
-
-  lifecycle {
-    precondition {
-      condition     = length(setsubtract(var.ingress_order, keys(var.routes))) == 0 && length(var.ingress_order) == length(toset(var.ingress_order))
-      error_message = "ingress_order may only list route hostnames, each at most once."
-    }
-    precondition {
-      condition     = length(local.unprotected) == 0
-      error_message = "These hostnames would be published without Cloudflare Access: ${join(", ", local.unprotected)}. Give each an access block, or public = true if that is intended."
-    }
-    precondition {
-      condition = alltrue(flatten([
-        for access in values(local.access) : [for key in access.policies : contains(keys(var.access_policy_ids), key)]
-      ]))
-      error_message = "A route names an Access policy that is not in access_policy_ids."
-    }
-  }
 }
 
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "this" {
   account_id = var.account_id
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.this.id
   config = {
-    ingress = concat([
-      for hostname in local.ingress_order : {
-        hostname       = hostname
-        service        = var.routes[hostname].service
-        origin_request = var.routes[hostname].origin_request
-      }
-    ], [{ service = "http_status:404" }])
+    ingress = concat(
+      [
+        for hostname in local.hostnames : {
+          hostname       = hostname
+          service        = var.routes[hostname]
+          origin_request = local.http_origin
+        } if startswith(var.routes[hostname], "http")
+      ],
+      # Other protocols (rdp://) take none of the HTTP origin settings.
+      [
+        for hostname in local.hostnames : {
+          hostname       = hostname
+          service        = var.routes[hostname]
+          origin_request = {}
+        } if !startswith(var.routes[hostname], "http")
+      ],
+      [{ service = "http_status:404" }],
+    )
   }
 
   # A hostname is reachable once it has both a route and a DNS record. Neither exists
@@ -51,29 +60,32 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "this" {
 }
 
 resource "cloudflare_zero_trust_access_application" "this" {
-  for_each = local.access
+  for_each = local.published
 
   account_id                 = var.account_id
-  name                       = coalesce(each.value.name, each.key)
+  name                       = each.value
   type                       = "self_hosted"
-  domain                     = each.key
-  destinations               = [{ type = "public", uri = each.key }]
-  session_duration           = each.value.session_duration
-  allowed_idps               = each.value.allowed_idps
-  auto_redirect_to_identity  = each.value.auto_redirect_to_identity
-  http_only_cookie_attribute = each.value.http_only_cookie_attribute
+  domain                     = each.value
+  destinations               = [{ type = "public", uri = each.value }]
+  session_duration           = local.access_session
+  allowed_idps               = [local.identity_provider]
+  auto_redirect_to_identity  = true # one sign-in method, so skip the chooser
+  http_only_cookie_attribute = true
   enable_binding_cookie      = false
   options_preflight_bypass   = false
-  policies = [
-    for index, key in each.value.policies : {
-      id         = var.access_policy_ids[key]
-      precedence = index + 1
-    }
-  ]
+  policies                   = [{ id = cloudflare_zero_trust_access_policy.founders.id, precedence = 1 }]
 }
 
-resource "cloudflare_dns_record" "routes" {
-  for_each = local.dns_hostnames
+resource "cloudflare_zero_trust_access_policy" "founders" {
+  account_id       = var.account_id
+  name             = "Founder access"
+  decision         = "allow"
+  session_duration = "168h"
+  include          = [{ group = { id = local.founders_group } }]
+}
+
+resource "cloudflare_dns_record" "this" {
+  for_each = local.published
 
   zone_id = var.zone_id
   name    = each.value
