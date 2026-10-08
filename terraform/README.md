@@ -134,3 +134,24 @@ Review `plan` before applying changes to the shared tunnel.
 Origin addresses resolve from the **cloudflared connector**. The existing
 origins and connector are retained. Access applications/policies are not
 managed by this root.
+
+## Publishing production
+
+`biz-e.app` is not routed today. `cloudflare/main.tf` holds the route to the production
+app (`https://host.docker.internal:8010`, started by `scripts/run_prod.sh`) behind one
+switch, `publish_production`, and `cloudflare/access.tf` holds the Cloudflare Access
+application that must sit in front of it. Turning the switch on creates the Access policy
+and application first, then the tunnel route and the DNS record; if Access cannot be
+created, the route is not either. Production is never published without Access.
+
+Before turning it on:
+
+1. Give the API token **Access: Apps and Policies Write** (account level). Without it the
+   apply stops at the Access policy with a 403 and changes nothing.
+2. Check `production_access_emails` in `cloudflare/variables.tf`: only those addresses get
+   as far as the biz-e sign-in page.
+3. The apex has no DNS record at present (an old parked-page `A` record,
+   `27.124.125.171`, was removed on 2026-10-08; `www.biz-e.app` still points there).
+
+Then set `publish_production = true`, `./terraform/tf.py plan -out=review.tfplan`, expect
+"3 to add, 1 to change", and apply.

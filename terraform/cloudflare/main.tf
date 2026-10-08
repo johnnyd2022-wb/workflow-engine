@@ -1,10 +1,28 @@
 locals {
+  # Production (https://biz-e.app -> scripts/run_prod.sh on loopback port 8010) is published
+  # only together with the Cloudflare Access application in access.tf, never without it.
+  # Turn this on once the API token can manage Access (see README, "Publishing production").
+  publish_production = false
+
+  production_hostname  = "biz-e.app"
+  production_hostnames = local.publish_production ? [local.production_hostname] : []
+  production_routes = {
+    for hostname in local.production_hostnames : hostname => {
+      service = "https://host.docker.internal:8010"
+      origin_request = {
+        http2_origin       = true
+        no_tls_verify      = true
+        keep_alive_timeout = 1800
+      }
+    }
+  }
+
   # The existing local connector serves this one shared, remotely managed tunnel.
   # Its complete ingress map includes Whistlebird routes that must be retained.
   tunnels = {
     maungaraki = {
       name = "wb_inventory_maungaraki"
-      routes = {
+      routes = merge(local.production_routes, {
         "inventory.whistlebird.co.nz" = {
           service = "https://host.docker.internal:5000"
           origin_request = {
@@ -57,18 +75,18 @@ locals {
             keep_alive_timeout = 1800
           }
         }
-      }
+      })
       # Preserve Cloudflare's existing rule order; the module appends the 404 rule.
-      ingress_order = [
+      ingress_order = concat([
         "inventory.whistlebird.co.nz",
         "test-inventory.whistlebird.co.nz",
         "access.whistlebird.co.nz",
         "test.biz-e.app",
         "dev.biz-e.app",
         "admin-test.biz-e.app",
-      ]
+      ], local.production_hostnames)
       # Whistlebird DNS records are outside this Terraform root's scope.
-      dns_hostnames = ["test.biz-e.app", "admin-test.biz-e.app", "dev.biz-e.app"]
+      dns_hostnames = concat(["test.biz-e.app", "admin-test.biz-e.app", "dev.biz-e.app"], local.production_hostnames)
     }
   }
 }
@@ -83,4 +101,8 @@ module "tunnels" {
   routes        = each.value.routes
   ingress_order = each.value.ingress_order
   dns_hostnames = each.value.dns_hostnames
+
+  # The production hostname must already be behind Access before it gets a route or a
+  # DNS record. If the Access application cannot be created, nothing here changes.
+  depends_on = [cloudflare_zero_trust_access_application.production]
 }
