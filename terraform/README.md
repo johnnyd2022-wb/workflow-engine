@@ -123,12 +123,13 @@ active in the map, including routes outside the managed DNS zone. The module
 validates that the explicit ingress order includes every route exactly once
 and that managed DNS hostnames are present in the route map.
 
-`cloudflare/imports.tf` records the existing tunnel, tunnel configuration and
-three DNS record IDs using the account/zone IDs loaded from KeePassXC. On an
-empty backend, `plan` proposes importing those existing resources instead of
-creating duplicates. After adoption the import blocks are no-ops. Review the
-plan before applying: resource imports do not themselves change live routing,
-but differences in the configuration can still propose updates.
+The existing tunnel, its configuration and the three biz-e.app DNS records
+have been imported into the PostgreSQL backend. Their resource IDs are kept
+in state; no import blocks are needed in the ongoing configuration. Keep the
+backend volume backed up. If initializing an empty backend, import the existing
+resources with `./terraform/tf.py import` before applying, using the resource
+addresses in the configuration and their IDs from the Cloudflare console.
+Review `plan` before applying changes to the shared tunnel.
 
 Origin addresses resolve from the **cloudflared connector**. The existing
 origins and connector are retained. Access applications/policies are not
