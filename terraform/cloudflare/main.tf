@@ -1,86 +1,25 @@
-locals {
-  # The existing local connector serves this one shared, remotely managed tunnel.
-  # Its complete ingress map includes Whistlebird routes that must be retained.
-  tunnels = {
-    maungaraki = {
-      name = "wb_inventory_maungaraki"
-      routes = {
-        "inventory.whistlebird.co.nz" = {
-          service = "https://host.docker.internal:5000"
-          origin_request = {
-            tls_timeout            = 600
-            no_tls_verify          = true
-            tcp_keep_alive         = 600
-            connect_timeout        = 1800
-            keep_alive_timeout     = 1800
-            keep_alive_connections = 600
-          }
-        }
-        "test-inventory.whistlebird.co.nz" = {
-          service = "https://host.docker.internal:5001"
-          origin_request = {
-            tls_timeout              = 600
-            http2_origin             = true
-            no_tls_verify            = true
-            tcp_keep_alive           = 600
-            connect_timeout          = 1800
-            keep_alive_timeout       = 600
-            keep_alive_connections   = 100
-            disable_chunked_encoding = false
-          }
-        }
-        "access.whistlebird.co.nz" = {
-          service        = "rdp://host.docker.internal:3389"
-          origin_request = {}
-        }
-        "test.biz-e.app" = {
-          service = "https://host.docker.internal:8001"
-          origin_request = {
-            http2_origin       = true
-            no_tls_verify      = true
-            keep_alive_timeout = 1800
-          }
-        }
-        "dev.biz-e.app" = {
-          service = "https://172.26.121.16:8005"
-          origin_request = {
-            http2_origin       = true
-            no_tls_verify      = true
-            keep_alive_timeout = 1800
-          }
-        }
-        "admin-test.biz-e.app" = {
-          service = "https://host.docker.internal:8020"
-          origin_request = {
-            http2_origin       = true
-            no_tls_verify      = true
-            keep_alive_timeout = 1800
-          }
-        }
-      }
-      # Preserve Cloudflare's existing rule order; the module appends the 404 rule.
-      ingress_order = [
-        "inventory.whistlebird.co.nz",
-        "test-inventory.whistlebird.co.nz",
-        "access.whistlebird.co.nz",
-        "test.biz-e.app",
-        "dev.biz-e.app",
-        "admin-test.biz-e.app",
-      ]
-      # Whistlebird DNS records are outside this Terraform root's scope.
-      dns_hostnames = ["test.biz-e.app", "admin-test.biz-e.app", "dev.biz-e.app"]
-    }
+# Everything Cloudflare serves from the one tunnel on this machine: hostname => origin.
+#
+# To add a site, add a line and apply. The module puts Cloudflare Access (founders only)
+# in front of it, then creates the tunnel route and the DNS record, with the same settings
+# as every other site. The whistlebird.co.nz hostnames share the tunnel; their DNS records
+# and Access applications are managed outside this root.
+module "tunnel" {
+  source = "../modules/cloudflare-tunnel"
+
+  account_id = var.account_id
+  zone_id    = var.zone_id
+  zone_name  = "biz-e.app"
+  name       = "wb_inventory_maungaraki"
+
+  routes = {
+    "biz-e.app"            = "https://host.docker.internal:8010" # production (scripts/run_prod.sh)
+    "test.biz-e.app"       = "https://host.docker.internal:8001" # test
+    "admin-test.biz-e.app" = "https://host.docker.internal:8020" # test admin site (scripts/run_admin.sh)
+    "dev.biz-e.app"        = "https://172.26.121.16:8005"        # local development
+
+    "inventory.whistlebird.co.nz"      = "https://host.docker.internal:5000"
+    "test-inventory.whistlebird.co.nz" = "https://host.docker.internal:5001"
+    "access.whistlebird.co.nz"         = "rdp://host.docker.internal:3389"
   }
-}
-
-module "tunnels" {
-  source   = "../modules/cloudflare-tunnel"
-  for_each = local.tunnels
-
-  account_id    = var.account_id
-  zone_id       = var.zone_id
-  name          = each.value.name
-  routes        = each.value.routes
-  ingress_order = each.value.ingress_order
-  dns_hostnames = each.value.dns_hostnames
 }

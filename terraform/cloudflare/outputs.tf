@@ -1,9 +1,8 @@
-output "tunnels" {
-  description = "Tunnel IDs and DNS routes; connector tokens are not exported."
+output "tunnel" {
+  description = "The tunnel and what it serves; connector tokens are not exported."
   value = {
-    for key, tunnel in module.tunnels : key => {
-      id        = tunnel.id
-      hostnames = tunnel.hostnames
-    }
+    id          = module.tunnel.id
+    published   = module.tunnel.published
+    routed_only = module.tunnel.routed_only
   }
 }

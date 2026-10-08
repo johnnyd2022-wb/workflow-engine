@@ -97,40 +97,57 @@ workspaces, if used, are separate rows within that schema. Normal use is the
 is local to this Docker host; remote runners need a separately configured,
 reachable backend before they can share this state.
 
-## Existing shared Cloudflare tunnel
+## Cloudflare tunnel and sites
 
-`cloudflare/main.tf` models the existing remotely managed tunnel
-`wb_inventory_maungaraki` (Terraform key `maungaraki`). The local cloudflared
-container already connects to this tunnel; no new connector or tunnel token is
-needed to adopt its resources in Terraform.
+`cloudflare/main.tf` is one call to `modules/cloudflare-tunnel`: the tunnel's name and a
+map of hostname => origin. The module does the rest, the same way for every site.
 
-| Managed DNS hostname | Origin | No TLS verify |
-| --- | --- | --- |
-| `test.biz-e.app` | `https://host.docker.internal:8001` | true |
-| `admin-test.biz-e.app` | `https://host.docker.internal:8020` | true |
-| `dev.biz-e.app` | `https://172.26.121.16:8005` | true |
+### Adding a site
 
-The same tunnel carries `inventory.whistlebird.co.nz`,
-`test-inventory.whistlebird.co.nz` and `access.whistlebird.co.nz`. The complete
-route map retains those origins, origin settings, existing ingress order and
-final 404 rule. Only the three biz-e.app DNS records are managed here;
-Whistlebird DNS records are outside this root's scope.
+Add a line to `routes` and apply:
 
-The reusable module accepts a complete route map, an optional ingress order,
-and an optional subset of hostnames to manage in DNS. Shared tunnel
-configuration is managed as a whole: keep every route that needs to remain
-active in the map, including routes outside the managed DNS zone. The module
-validates that the explicit ingress order includes every route exactly once
-and that managed DNS hostnames are present in the route map.
+```hcl
+"new-site.biz-e.app" = "https://host.docker.internal:8030"
+```
 
-The existing tunnel, its configuration and the three biz-e.app DNS records
-have been imported into the PostgreSQL backend. Their resource IDs are kept
-in state; no import blocks are needed in the ongoing configuration. Keep the
-backend volume backed up. If initializing an empty backend, import the existing
-resources with `./terraform/tf.py import` before applying, using the resource
-addresses in the configuration and their IDs from the Cloudflare console.
-Review `plan` before applying changes to the shared tunnel.
+```bash
+./terraform/tf.py plan -out=review.tfplan
+./terraform/tf.py apply review.tfplan
+```
 
-Origin addresses resolve from the **cloudflared connector**. The existing
-origins and connector are retained. Access applications/policies are not
-managed by this root.
+For a hostname in the `biz-e.app` zone the module creates, in this order, a Cloudflare
+Access application, the tunnel route, and the DNS record, so a hostname is never reachable
+before Access is in front of it. There is no setting to publish a site without Access.
+
+### What every site gets
+
+All of this lives in the module's `locals`; change it there and it changes everywhere.
+
+| | Setting |
+| --- | --- |
+| Who gets in | The "Founder access" policy: the founders Access group (the group itself is managed in the Cloudflare dashboard). |
+| How they sign in | One identity provider, with the provider chooser skipped. |
+| Access session | 730 hours. |
+| Origin | No TLS verification (origins use a self-signed certificate), HTTP/2 to origin, connect timeout 1800s, TLS timeout 600s, keep-alive 1800s, TCP keep-alive 600s, 600 keep-alive connections. |
+
+Each timeout is the longest any route had before they were made the same. Non-HTTP origins
+(`rdp://`) take none of the origin settings.
+
+### Hostnames in other zones
+
+The tunnel also serves `inventory.whistlebird.co.nz`, `test-inventory.whistlebird.co.nz`
+and `access.whistlebird.co.nz`. They are in `routes` so their tunnel routes are kept, with
+the same origin settings as everything else, but their DNS records and Access applications
+are managed outside this root. Tunnel configuration is managed as a whole: a hostname
+removed from `routes` stops being served. `www.biz-e.app` has an old parked-page `A` record
+that is not managed here.
+
+### State
+
+The tunnel, its configuration, the DNS records, the Access applications and the Founder
+access policy were created in the dashboard and imported; no import blocks are kept in the
+configuration. Keep the backend volume backed up. On an empty backend, import them again
+with `./terraform/tf.py import` before applying.
+
+The API token needs Cloudflare Tunnel Write, DNS Write and **Access: Apps and Policies
+Write**. Origin addresses resolve from the cloudflared connector on this machine.

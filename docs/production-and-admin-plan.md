@@ -32,7 +32,7 @@ Status: `[x]` done, `[~]` started, `[ ]` to do. "Owner" is who has to act next.
 | [x] | **Whistlebird Ltd copied into production**: 6,429 rows across 32 tables, no other organisation, no Xero token, the two `@whistlebird.test` accounts kept but locked. Both NP3 evidence files restored from `docs/evidence/`. | done |
 | [x] | **Smoke test on this machine**: health check passes, the admin signs in and is sent to 2FA enrolment, a locked account is refused, pages are protected. | done |
 | [ ] | **Confirm the Xero app.** `run_prod.sh` reads `workflow-engine/xero_client_id` and `xero_client_secret` from KeePassXC. Confirm those are the production Xero app and that `https://biz-e.app/crm/xero/callback` is registered on it. | Johnny |
-| [ ] | **Route the domain.** Point the Cloudflare tunnel for `biz-e.app` at `https://localhost:8010` (self-signed certificate, so "No TLS Verify" on, as for test). | Johnny |
+| [x] | **Route the domain.** `https://biz-e.app` reaches production through the Cloudflare tunnel, behind a Cloudflare Access application that admits the founders group. Managed in `terraform/cloudflare`; see `terraform/README.md`, "Adding a site". Access must be widened before customers outside that group can use it. | done |
 | [ ] | **First sign-in.** Sign in as `johnny@whistlebird.co.nz`, enrol 2FA, then change the password: it is still the replay's test password. | Johnny |
 | [ ] | **Connect Xero in production** and sync, then run `scripts/whistlebird_replay_correct_timestamps.py --sales-only` against production if the sync re-dates sale stock movements to today. | Johnny, then Claude |
 | [ ] | **Refresh the copy just before go-live** if more has been entered in test since 2026-10-07: `scripts/prod_seed_from_test.sh "Whistlebird Ltd" --disable-user … --replace`. After go-live production is the source of truth and this is never run again. | Claude, on request |
@@ -78,7 +78,7 @@ built (`app/admin_site/`); it needs a Google client and a route before anyone ca
 | [x] | **Screens, first cut**: organisations (search, list, create with an invited admin, suspend and reactivate, features on and off); people (invite, new setup link, reset password, unlock); system (environment, version, database, schema, counts, who can sign in). Built from the shared `workspace-*` elements; no scripts on any page. | done |
 | [ ] | **Google client for the admin site.** In Google Cloud, create an OAuth client (type: web application) with redirect URI `https://admin-test.biz-e.app/auth/google/callback`, then add its id and secret to KeePassXC as `workflow-engine/ADMIN_GOOGLE_CLIENT_ID` and `workflow-engine/ADMIN_GOOGLE_CLIENT_SECRET` (the value goes in the password field). `python3 scripts/prod_secrets.py check` shows whether they are there. | Johnny |
 | [x] | **Cloudflare route** for `admin-test.biz-e.app` to `https://localhost:8020` ("No TLS Verify" on, as for the app), behind Cloudflare Access limited to the same two addresses as a second gate. | Johnny |
-| [ ] | **Start it**: `scripts/run_admin.sh`, once the two steps above are done. | Johnny or Claude |
+| [ ] | **Start it**: `scripts/run_admin.sh` (test, the default) or `scripts/run_admin.sh prod`. | Johnny or Claude |
 | [ ] | **Confirm `whistlebird.co.nz` is a Google Workspace domain.** If the two addresses are personal Google accounts instead, sign-in is refused until `[admin_site] require_authoritative_email = false` is set in `prod.ini`. | Johnny |
 | [ ] | **Demo reset** on the Demo page (a placeholder today); arrives with phase 2. | Claude |
 | [x] | **Support actions on a person**, each on the site and as a CLI command: change role, deactivate and reactivate, change email, reset 2FA (also removes backup codes and remembered devices), unlock, new setup link. An organisation's only admin cannot be demoted or deactivated. | done |
@@ -109,4 +109,4 @@ built (`app/admin_site/`); it needs a Google client and a route before anyone ca
 1. Is `workflow-engine/xero_client_id` in KeePassXC the production Xero app?
 2. Demo scenario: happy with the proposal above, or a different company and product mix?
 3. Is `whistlebird.co.nz` on Google Workspace? (Admin sign-in assumes so; see phase 3.)
-4. `biz-e.app` for production: confirm. The admin site is at `admin-test.biz-e.app` (the default in `scripts/run_admin.sh`), connected to the production database.
+4. `biz-e.app` for production: confirm. The admin site at `admin-test.biz-e.app` is the test one (`scripts/run_admin.sh`, test database); a production admin site is `scripts/run_admin.sh prod` on a hostname still to be chosen.
