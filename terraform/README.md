@@ -135,23 +135,50 @@ Origin addresses resolve from the **cloudflared connector**. The existing
 origins and connector are retained. Access applications/policies are not
 managed by this root.
 
-## Publishing production
+## Adding a site
 
-`biz-e.app` is not routed today. `cloudflare/main.tf` holds the route to the production
-app (`https://host.docker.internal:8010`, started by `scripts/run_prod.sh`) behind one
-switch, `publish_production`, and `cloudflare/access.tf` holds the Cloudflare Access
-application that must sit in front of it. Turning the switch on creates the Access policy
-and application first, then the tunnel route and the DNS record; if Access cannot be
-created, the route is not either. Production is never published without Access.
+Every hostname is one block in `routes` in `cloudflare/main.tf`. For a new site, add:
 
-Before turning it on:
+```hcl
+"new-site.biz-e.app" = {
+  service        = "https://host.docker.internal:8030"
+  origin_request = { http2_origin = true, no_tls_verify = true, keep_alive_timeout = 1800 }
+  access         = { policies = ["founders"] }
+}
+```
 
-1. Give the API token **Access: Apps and Policies Write** (account level). Without it the
-   apply stops at the Access policy with a 403 and changes nothing.
-2. Check `production_access_emails` in `cloudflare/variables.tf`: only those addresses get
-   as far as the biz-e sign-in page.
-3. The apex has no DNS record at present (an old parked-page `A` record,
-   `27.124.125.171`, was removed on 2026-10-08; `www.biz-e.app` still points there).
+then `./terraform/tf.py plan -out=review.tfplan` and apply. That creates, in this order,
+the Cloudflare Access application, the tunnel route, and the DNS record, so a hostname is
+never reachable before Access is in front of it.
 
-Then set `publish_production = true`, `./terraform/tf.py plan -out=review.tfplan`, expect
-"3 to add, 1 to change", and apply.
+| Route setting | Meaning |
+| --- | --- |
+| `service`, `origin_request` | Where the connector sends requests. |
+| `access.policies` | Keys of `local.access_policies`, in order of precedence. Required. |
+| `access.session_duration` | How long an Access session lasts. Default `24h`. |
+| `access.name`, `allowed_idps`, `auto_redirect_to_identity`, `http_only_cookie_attribute` | Optional; match the Cloudflare dashboard settings of the same names. |
+| `public = true` | Publish with **no** Access in front. Without this, a route with no `access` block is refused at plan time. |
+| `dns = false` | The hostname's DNS record and Access application are managed elsewhere (the Whistlebird routes). |
+
+New routes are added after the ones named in `ingress_order`, sorted by hostname; list a
+hostname there only if its position matters.
+
+Access policies are reusable and live in `local.access_policies`. `founders` is the
+existing "Founder access" policy, which admits the founders Access group; that group is
+managed in the Cloudflare dashboard. To let different people into a site, add a policy
+there and name it in the site's `access.policies`.
+
+The API token needs **Access: Apps and Policies Write** as well as Tunnel and DNS write.
+
+## What is managed
+
+| Hostname | Origin | Access |
+| --- | --- | --- |
+| `biz-e.app` | production, `https://host.docker.internal:8010` | founders, 24h |
+| `test.biz-e.app` | test, `https://host.docker.internal:8001` | founders, 730h |
+| `admin-test.biz-e.app` | test admin site, `https://host.docker.internal:8020` | founders, 168h |
+| `dev.biz-e.app` | `https://172.26.121.16:8005` | founders, 730h |
+
+The three Whistlebird routes on the same tunnel are kept in the ingress map; their DNS
+records and Access applications are not managed here. `www.biz-e.app` still has an old
+parked-page `A` record that is not managed here either.
