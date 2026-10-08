@@ -71,7 +71,9 @@ SECRETS = (
         f"{GROUP}/BACKUP_CODE_ENCRYPTION_KEY_PROD",
         "BACKUP_CODE_ENCRYPTION_KEY",
         _fernet_key,
-        "Encrypts 2FA backup codes. Rotating it invalidates every stored backup code.",
+        "Encrypts 2FA backup codes. Rotating it invalidates every stored backup code. The admin site has "
+        "it too, so staff can read a locked-out person their codes.",
+        scopes=("app", "admin"),
     ),
     Secret(
         f"{GROUP}/XERO_TOKEN_ENCRYPTION_KEY_PROD",

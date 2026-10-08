@@ -89,7 +89,11 @@ built (`app/admin_site/`); it needs a Google client and a route before anyone ca
 | [x] | **More on a person**: access end date (`set-access-expiry`, the app's own rules for auditors), unlink Google (`unlink-google`), forget remembered devices (`forget-devices`), and their own recent history (`org-history --user-id`). | done |
 | [x] | **Disconnect a stuck Xero connection** (`disconnect-xero`). Invalidates the stored token; it is not revoked at Xero, because the admin site is not given the token key. | done |
 | [ ] | **Platform-level log** for events with no organisation (admin sign-ins, refused sign-ins); those go to the container log only today. | Claude |
-| [ ] | **Sign in as a customer** (impersonation), if wanted: the most useful support tool and the riskiest. Not built. | Johnny to decide |
+| [x] | **Notes and documents** per organisation, for biz-e staff only: support notes, and files such as signed contracts (up to 20 MB; PDF, Office, images, email, text). Files live on the admin site's own volume, `workflow-engine-admin-documents`. CLI: `add-note`, `org-notes`, `delete-note`, `add-document`, `org-documents`, `delete-document`. | done |
+| [x] | **Backup codes on the site**: show a locked-out person's 2FA backup codes from their page. Every look is written to the organisation's audit log. The admin container now holds the backup-code key for this. | done |
+| [ ] | **Back up the documents volume** along with the database; nothing does yet. | Claude |
+| [ ] | **Limit who may see backup codes** if more people are added to the allow-list; both admins can today. | later |
+| n/a | **Sign in as a customer** (impersonation): decided against, 2026-10-08. | Johnny |
 | [ ] | **Database role of its own** for the admin site, in place of the app's `workflow_rw`. | Claude |
 
 ## Phase 4: retire the Whistlebird replay

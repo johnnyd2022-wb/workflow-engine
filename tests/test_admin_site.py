@@ -123,6 +123,13 @@ def created(db):
 
         user_ids = [row.id for row in db.query(User.id).filter(User.org_id.in_(ids)).all()]
         db.query(TrustedDevice).filter(TrustedDevice.user_id.in_(user_ids)).delete(synchronize_session=False)
+        from app.admin_site import documents as admin_documents
+        from app.admin_site.models import AdminOrgDocument, AdminOrgNote
+
+        for document in db.query(AdminOrgDocument).filter(AdminOrgDocument.org_id.in_(ids)).all():
+            admin_documents.remove(document.org_id, document.stored_name)
+        for model in (AdminOrgNote, AdminOrgDocument):
+            db.query(model).filter(model.org_id.in_(ids)).delete(synchronize_session=False)
         for model in (AuditLog, FeatureSubscription, TwoFactorBackupCode, UserIdentity, Site, User):
             db.query(model).filter(model.org_id.in_(ids)).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id.in_(ids)).delete(synchronize_session=False)
@@ -754,3 +761,194 @@ def test_a_persons_history_is_only_theirs(site, db, org):
     assert "unlock" in page and "Show everyone" in page
     assert "Recent history" in browser.get(f"/organisations/{org.id}/users/{admin.id}").get_data(as_text=True)
     assert browser.get(f"/organisations/{org.id}/audit", query_string={"user": str(uuid4())}).status_code == 404
+
+
+# ── Backup codes, notes and documents ──────────────────────────────────────────
+
+
+def test_staff_can_read_out_backup_codes_and_each_look_is_audited(site, db, org):
+    from click.testing import CliRunner
+
+    from app.cli import admin as cli_admin
+    from app.core.db.repositories.backup_code_repo import BackupCodeRepository
+
+    _, browser = site
+    _signed_in(browser)
+    admin = _admin_of(db, org)
+    url = f"/organisations/{org.id}/users/{admin.id}/backup-codes"
+    assert browser.post(url).status_code == 400  # 2FA is off
+    with unscoped():
+        admin.totp_secret, admin.two_factor_enabled = "JBSWY3DPEHPK3PXP", True
+        db.commit()
+    assert "Reset their 2FA instead" in browser.post(url).get_data(as_text=True)  # on, but no codes
+    with unscoped():
+        codes = BackupCodeRepository(db).generate_and_store_codes(org.id, admin.id, commit=True)
+        assert BackupCodeRepository(db).verify_and_consume_code(admin.id, codes[0])
+        db.commit()
+
+    response = browser.post(url)
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200 and response.headers["Cache-Control"] == "no-store"
+    assert all(code in page for code in codes) and page.count("admin-codes__used") == 1
+    assert not any(
+        code in browser.get(f"/organisations/{org.id}/users/{admin.id}").get_data(as_text=True) for code in codes
+    )
+    with unscoped():
+        looks = db.query(AuditLog).filter(
+            AuditLog.org_id == org.id, AuditLog.action == "platform_admin.view_backup_codes"
+        )
+        assert looks.count() == 1 and looks.one().meta_data["platform_admin"] == JOHNNY
+        assert not any(code in str(looks.one().meta_data) for code in codes)
+
+    listed = CliRunner().invoke(cli_admin.get_backup_codes, ["--user-id", str(admin.id)])
+    assert listed.exit_code == 0 and codes[1] in listed.output and "Available: 9" in listed.output
+
+
+def test_backup_codes_need_the_key_in_production(db, org, monkeypatch):
+    admin = _admin_of(db, org)
+    with unscoped():
+        admin.two_factor_enabled = True
+        db.commit()
+    monkeypatch.delenv("BACKUP_CODE_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(config, "environment", "prod")
+    with pytest.raises(ops.AdminOperationError, match="backup-code key"):
+        ops.get_backup_codes(db, org.id, admin.id, actor="test")
+
+
+def test_notes_are_kept_with_their_author_and_stay_internal(site, db, org):
+    _, browser = site
+    _signed_in(browser)
+    url = f"/organisations/{org.id}/notes"
+    assert browser.post(url, data={"body": "   "}).status_code == 400
+    body = "Spoke to Sam.\nWaiting on <b>their</b> accountant."
+    assert browser.post(url, data={"body": body}).status_code == 200
+    note = ops.list_notes(db, org.id)[0]
+    assert (note.body, note.author_email) == (body, JOHNNY)
+    page = browser.get(f"/organisations/{org.id}").get_data(as_text=True)
+    assert "Waiting on &lt;b&gt;their&lt;/b&gt; accountant." in page and JOHNNY in page
+    # Internal: nothing about notes reaches the organisation's own audit log.
+    with unscoped():
+        assert db.query(AuditLog).filter(AuditLog.org_id == org.id, AuditLog.entity.like("%note%")).count() == 0
+    assert browser.post(f"{url}/{note.id}/delete").status_code == 200
+    assert ops.list_notes(db, org.id) == []
+    assert browser.post(f"{url}/{note.id}/delete").status_code == 400
+
+
+def test_documents_upload_download_and_delete(site, db, org, tmp_path, monkeypatch):
+    import io
+
+    monkeypatch.setenv("ADMIN_DOCUMENTS_ROOT", str(tmp_path))
+    _, browser = site
+    _signed_in(browser)
+    url = f"/organisations/{org.id}/documents"
+    content = b"%PDF-1.7 a signed contract"
+
+    def upload(data, name, **fields):
+        return browser.post(url, data={"file": (io.BytesIO(data), name), **fields}, content_type="multipart/form-data")
+
+    assert upload(content, "../../Signed contract.pdf", title="Contract 2026").status_code == 200
+    document = ops.list_documents(db, org.id)[0]
+    assert (document.title, document.original_filename, document.size_bytes) == (
+        "Contract 2026",
+        "Signed contract.pdf",
+        len(content),
+    )
+    assert document.uploaded_by == JOHNNY and (tmp_path / str(org.id) / document.stored_name).read_bytes() == content
+    assert [path.name for path in tmp_path.rglob("*") if path.is_file()] == [document.stored_name]
+
+    download = browser.get(f"{url}/{document.id}")
+    assert download.data == content and download.mimetype == "application/octet-stream"
+    assert "attachment" in download.headers["Content-Disposition"]
+    assert download.headers["X-Content-Type-Options"] == "nosniff"
+
+    assert browser.post(f"{url}/{document.id}/delete").status_code == 200
+    assert ops.list_documents(db, org.id) == [] and not list(tmp_path.rglob("*.pdf"))
+    assert browser.get(f"{url}/{document.id}").status_code == 404
+
+
+@pytest.mark.parametrize(
+    "data,name",
+    [
+        (b"<script>alert(1)</script>", "page.html"),
+        (b"MZ\x90\x00", "setup.exe"),
+        (b"<html>not a pdf</html>", "contract.pdf"),
+        (b"", "empty.txt"),
+        (b"binary\x00data", "notes.txt"),
+        (b"%PDF-1.7", ""),
+    ],
+)
+def test_documents_that_are_not_what_they_claim_are_refused(site, db, org, tmp_path, monkeypatch, data, name):
+    import io
+
+    monkeypatch.setenv("ADMIN_DOCUMENTS_ROOT", str(tmp_path))
+    _, browser = site
+    _signed_in(browser)
+    response = browser.post(
+        f"/organisations/{org.id}/documents",
+        data={"file": (io.BytesIO(data), name)},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    assert ops.list_documents(db, org.id) == [] and not [p for p in tmp_path.rglob("*") if p.is_file()]
+
+
+def test_documents_are_limited_in_size_and_other_forms_stay_small(site, db, org, tmp_path, monkeypatch):
+    import io
+
+    from app.admin_site import documents
+
+    monkeypatch.setenv("ADMIN_DOCUMENTS_ROOT", str(tmp_path))
+    monkeypatch.setattr(documents, "MAX_BYTES", 1024)
+    _, browser = site
+    _signed_in(browser)
+    too_big = browser.post(
+        f"/organisations/{org.id}/documents",
+        data={"file": (io.BytesIO(b"%PDF" + b"x" * 2048), "big.pdf")},
+        content_type="multipart/form-data",
+    )
+    assert too_big.status_code == 400 and not [p for p in tmp_path.rglob("*") if p.is_file()]
+    assert browser.post(f"/organisations/{org.id}/notes", data={"body": "x" * 100_000}).status_code == 413
+
+
+def test_a_document_belongs_to_one_organisation(site, db, org, created, tmp_path, monkeypatch):
+    import io
+
+    monkeypatch.setenv("ADMIN_DOCUMENTS_ROOT", str(tmp_path))
+    _, browser = site
+    _signed_in(browser)
+    other_name = f"Admin site test {uuid4().hex[:12]}"
+    created.append(other_name)
+    other, _, _ = ops.create_organisation(db, name=other_name, admin_email=f"{uuid4().hex}@example.test", actor="test")
+    document = ops.add_document(db, other.id, io.BytesIO(b"%PDF-1.7"), "theirs.pdf", actor="test")
+    assert browser.get(f"/organisations/{org.id}/documents/{document.id}").status_code == 404
+    assert browser.post(f"/organisations/{org.id}/documents/{document.id}/delete").status_code == 400
+    assert ops.get_document(db, other.id, document.id)[0].id == document.id
+
+
+def test_production_refuses_to_store_documents_without_a_volume(monkeypatch):
+    from app.admin_site import documents
+
+    monkeypatch.delenv("ADMIN_DOCUMENTS_ROOT", raising=False)
+    monkeypatch.setattr(config, "environment", "prod")
+    with pytest.raises(documents.DocumentError):
+        documents.storage_root()
+
+
+def test_notes_and_documents_from_the_cli(db, org, tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    from app.cli import cli
+
+    monkeypatch.setenv("ADMIN_DOCUMENTS_ROOT", str(tmp_path / "store"))
+    runner, target = CliRunner(), ["--org-id", str(org.id)]
+    assert runner.invoke(cli, ["add-note", *target, "--note", "Renewal due in March"]).exit_code == 0
+    assert "Renewal due in March" in runner.invoke(cli, ["org-notes", *target]).output
+    source = tmp_path / "contract.pdf"
+    source.write_bytes(b"%PDF-1.7 contract")
+    added = runner.invoke(cli, ["add-document", *target, "--file", str(source), "--title", "Contract"])
+    assert added.exit_code == 0, added.output
+    listed = runner.invoke(cli, ["org-documents", *target]).output
+    assert "Contract" in listed and "contract.pdf" in listed
+    document = ops.list_documents(db, org.id)[0]
+    assert runner.invoke(cli, ["delete-document", *target, "--document-id", str(document.id)]).exit_code == 0
+    assert runner.invoke(cli, ["delete-document", *target, "--document-id", str(document.id)]).exit_code == 1

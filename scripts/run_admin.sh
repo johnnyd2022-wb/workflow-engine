@@ -11,8 +11,9 @@
 # 127.0.0.1:${ADMIN_HOST_PORT} only; the Cloudflare tunnel connects to it there.
 #
 # Secrets come from KeePassXC (scripts/prod_secrets.py --scope admin), never from a file.
-# It gets the database password and its own session key and Google client: none of the
-# customer app's other keys.
+# It gets the database password, its own session key and Google client, and the 2FA
+# backup-code key (staff can read a locked-out person their codes): none of the customer
+# app's other keys. Documents staff upload live on the volume workflow-engine-admin-documents.
 set -euo pipefail
 
 CONTAINER=workflow-engine-admin
@@ -25,7 +26,8 @@ cd "$repo_root"
 
 echo "== Secrets"
 eval "$(python3 scripts/prod_secrets.py export --scope admin)"
-for name in POSTGRES_PASSWORD ADMIN_FLASK_SECRET_KEY ADMIN_GOOGLE_CLIENT_ID ADMIN_GOOGLE_CLIENT_SECRET; do
+for name in POSTGRES_PASSWORD ADMIN_FLASK_SECRET_KEY ADMIN_GOOGLE_CLIENT_ID ADMIN_GOOGLE_CLIENT_SECRET \
+    BACKUP_CODE_ENCRYPTION_KEY; do
     [ -n "${!name:-}" ] || { echo "Missing $name." >&2; exit 1; }
     export "${name?}"
 done
@@ -42,13 +44,16 @@ echo "== Database"
 scripts/prod_db.sh up
 
 echo "== Admin site"
+docker volume create workflow-engine-admin-documents >/dev/null
 # Exact-name match: a plain "name=" filter is a substring match.
 docker stop $(docker ps -aqf "name=^${CONTAINER}$") 2>/dev/null || true
 docker rm $(docker ps -aqf "name=^${CONTAINER}$") 2>/dev/null || true
 docker run -d --name "$CONTAINER" --restart unless-stopped \
     --network "$NETWORK" -p "127.0.0.1:${HOST_PORT}:8020" \
     -e ENVIRONMENT=prod -e POSTGRES_PASSWORD -e ADMIN_FLASK_SECRET_KEY \
-    -e ADMIN_GOOGLE_CLIENT_ID -e ADMIN_GOOGLE_CLIENT_SECRET -e ADMIN_GOOGLE_REDIRECT_URI -e APP_VERSION \
+    -e ADMIN_GOOGLE_CLIENT_ID -e ADMIN_GOOGLE_CLIENT_SECRET -e ADMIN_GOOGLE_REDIRECT_URI \
+    -e BACKUP_CODE_ENCRYPTION_KEY -e APP_VERSION \
+    -e ADMIN_DOCUMENTS_ROOT=/data/admin_documents -v workflow-engine-admin-documents:/data/admin_documents \
     "$IMAGE" >/dev/null
 
 echo "== Health"

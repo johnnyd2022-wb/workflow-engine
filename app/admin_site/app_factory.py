@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from app.admin_site import documents
 from app.admin_site.auth import admin_auth_bp, limiter, require_admin
 from app.admin_site.routes import admin_bp
 from app.admin_site.settings import SESSION_HOURS, load_settings
@@ -43,11 +44,17 @@ def create_admin_app(settings=None) -> Flask:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",  # Lax, not Strict: Google's redirect back must carry the cookie
         PERMANENT_SESSION_LIFETIME=timedelta(hours=SESSION_HOURS),
-        MAX_CONTENT_LENGTH=64 * 1024,  # forms only; nothing is uploaded here
+        MAX_CONTENT_LENGTH=64 * 1024,  # every form but the one document upload (see below)
         WTF_CSRF_TIME_LIMIT=SESSION_HOURS * 3600,
     )
     # One proxy in front (the Cloudflare tunnel): trust its scheme and client address.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+    @app.before_request
+    def allow_document_uploads():
+        # Registered before CSRF protection, which reads the form and so applies the limit.
+        if request.endpoint == "admin.upload_document":
+            request.max_content_length = documents.MAX_BYTES + 64 * 1024
 
     limiter.init_app(app)
     CSRFProtect(app)

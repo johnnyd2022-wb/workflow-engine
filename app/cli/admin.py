@@ -11,11 +11,9 @@ import click
 from app.admin_site import operations as ops
 from app.core.db import db_session
 from app.core.db.models.organisation import OrganisationStatus
-from app.core.db.repositories.backup_code_repo import BackupCodeRepository
 from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
 from app.core.db.repositories.organisation_repo import OrganisationRepository
 from app.core.db.repositories.user_repo import UserRepository
-from app.core.security.backup_code_encryption import BackupCodeEncryption
 from app.core.security.tenant_scope import unscoped
 
 
@@ -193,54 +191,27 @@ def get_backup_codes(user_id):
 
     db = db_session()
     try:
-        # Admin command targets an arbitrary user by ID, any org -- no ambient tenant context
-        # here to check against anyway (no Flask request).
+        # Targets an arbitrary user by ID, in any organisation.
         with unscoped():
-            user_repo = UserRepository(db)
-            user = user_repo.get_user_by_id(user_uuid)
-
-            if not user:
-                click.echo(f"❌ User not found: {user_id}", err=True)
-                return
-
-            if not user.two_factor_enabled:
-                click.echo(f"❌ User {user.email} does not have 2FA enabled", err=True)
-                return
-
-            # Get backup codes
-            encryption = BackupCodeEncryption()
-            backup_code_repo = BackupCodeRepository(db, encryption)
-            backup_codes = backup_code_repo.get_all_codes_for_user(user_uuid)
-
-        if not backup_codes:
-            click.echo(f"❌ No backup codes found for user {user.email}", err=True)
+            user = UserRepository(db).get_user_by_id(user_uuid)
+        if not user:
+            click.echo(f"❌ User not found: {user_id}", err=True)
             return
+        user, codes = ops.get_backup_codes(db, user.org_id, user.id, actor=ops.CLI_ACTOR)
 
         click.echo(f"\n🔐 Backup codes for user: {user.email} (ID: {user_id})\n")
         click.echo("⚠️  WARNING: These codes are sensitive. Handle with care!\n")
-
-        unconsumed_count = 0
-        consumed_count = 0
-
-        for backup_code in backup_codes:
-            try:
-                decrypted_code = encryption.decrypt(backup_code.encrypted_code)
-                status = "✅ Available" if not backup_code.consumed else "❌ Used"
-                click.echo(f"  {decrypted_code} - {status}")
-
-                if backup_code.consumed:
-                    consumed_count += 1
-                else:
-                    unconsumed_count += 1
-            except Exception as e:
-                click.echo(f"  ❌ Failed to decrypt code (ID: {backup_code.id}): {e}", err=True)
-
+        for code, used in codes:
+            click.echo(f"  {code} - {'❌ Used' if used else '✅ Available'}")
+        available = sum(1 for _, used in codes if not used)
         click.echo("\n📊 Summary:")
-        click.echo(f"  Total codes: {len(backup_codes)}")
-        click.echo(f"  Available: {unconsumed_count}")
-        click.echo(f"  Used: {consumed_count}")
+        click.echo(f"  Total codes: {len(codes)}")
+        click.echo(f"  Available: {available}")
+        click.echo(f"  Used: {len(codes) - available}")
         click.echo()
-
+    except ops.AdminOperationError as e:
+        click.echo(f"❌ {e}", err=True)
+        db.rollback()
     except Exception as e:
         click.echo(f"❌ Failed to retrieve backup codes: {e}", err=True)
         db.rollback()
@@ -580,3 +551,83 @@ def org_history(org_id, user_id, limit):
         raise SystemExit(1) from e
     finally:
         db.close()
+
+
+@click.command(name="add-note")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--note", required=True, help="The note text")
+def add_note(org_id, note):
+    """Add an internal support note to an organisation (never shown to the customer)."""
+    _run(lambda db: ops.add_note(db, org_id, note, actor=ops.CLI_ACTOR), lambda row: f"Note added ({row.id})")
+
+
+@click.command(name="org-notes")
+@click.option("--org-id", required=True, help="Organisation ID")
+def org_notes(org_id):
+    """Internal support notes kept about an organisation, newest first."""
+    db = db_session()
+    try:
+        notes = ops.list_notes(db, org_id)
+        if not notes:
+            click.echo("No notes")
+        for note in notes:
+            click.echo(f"{note.created_at:%Y-%m-%d %H:%M}  {note.author_email}  ({note.id})")
+            click.echo(f"  {note.body}")
+    except ops.AdminOperationError as e:
+        click.echo(f"❌ {e}", err=True)
+        raise SystemExit(1) from e
+    finally:
+        db.close()
+
+
+@click.command(name="delete-note")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--note-id", required=True, help="Note ID (see org-notes)")
+def delete_note(org_id, note_id):
+    """Delete an internal support note."""
+    _run(lambda db: ops.delete_note(db, org_id, note_id, actor=ops.CLI_ACTOR), lambda _: "Note deleted")
+
+
+@click.command(name="add-document")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--file", "path", required=True, type=click.Path(exists=True, dir_okay=False), help="File to store")
+@click.option("--title", default="", help="What the document is, e.g. 'Signed contract 2026'")
+def add_document(org_id, path, title):
+    """Store a document about an organisation, e.g. a contract. Run this where the admin
+    site's document storage is mounted (inside the admin container)."""
+
+    def store(db):
+        with open(path, "rb") as stream:
+            return ops.add_document(db, org_id, stream, path, title=title, actor=ops.CLI_ACTOR)
+
+    _run(store, lambda row: f"Stored '{row.title}' ({row.size_bytes} bytes, {row.id})")
+
+
+@click.command(name="org-documents")
+@click.option("--org-id", required=True, help="Organisation ID")
+def org_documents(org_id):
+    """Documents kept about an organisation, newest first."""
+    db = db_session()
+    try:
+        rows = ops.list_documents(db, org_id)
+        if not rows:
+            click.echo("No documents")
+        for row in rows:
+            click.echo(f"{row.created_at:%Y-%m-%d}  {row.title}  [{row.original_filename}, {row.size_bytes} bytes]")
+            click.echo(f"  {row.id}  added by {row.uploaded_by}  sha256 {row.sha256}")
+    except ops.AdminOperationError as e:
+        click.echo(f"❌ {e}", err=True)
+        raise SystemExit(1) from e
+    finally:
+        db.close()
+
+
+@click.command(name="delete-document")
+@click.option("--org-id", required=True, help="Organisation ID")
+@click.option("--document-id", required=True, help="Document ID (see org-documents)")
+def delete_document(org_id, document_id):
+    """Delete a stored document and its file."""
+    _run(
+        lambda db: ops.delete_document(db, org_id, document_id, actor=ops.CLI_ACTOR),
+        lambda title: f"Deleted '{title}'",
+    )
