@@ -97,35 +97,39 @@ workspaces, if used, are separate rows within that schema. Normal use is the
 is local to this Docker host; remote runners need a separately configured,
 reachable backend before they can share this state.
 
-## Cloudflare tunnel placeholders
+## Existing shared Cloudflare tunnel
 
-`cloudflare/main.tf` contains a map of two remotely managed tunnels:
+`cloudflare/main.tf` models the existing remotely managed tunnel
+`wb_inventory_maungaraki` (Terraform key `maungaraki`). The local cloudflared
+container already connects to this tunnel; no new connector or tunnel token is
+needed to adopt its resources in Terraform.
 
-| Tunnel key / placeholder name | Public hostname | Origin | No TLS verify |
-| --- | --- | --- | --- |
-| `test` / `biz-e-test` | `test.biz-e.app` | `https://host.docker.internal:8001` | true |
-| `test` / `biz-e-test` | `admin-test.biz-e.app` | `https://host.docker.internal:8020` | true |
-| `dev` / `biz-e-dev` | `dev.biz-e.app` | `https://172.26.121.16:8005` | true |
+| Managed DNS hostname | Origin | No TLS verify |
+| --- | --- | --- |
+| `test.biz-e.app` | `https://host.docker.internal:8001` | true |
+| `admin-test.biz-e.app` | `https://host.docker.internal:8020` | true |
+| `dev.biz-e.app` | `https://172.26.121.16:8005` | true |
 
-The module creates each tunnel, a complete ingress configuration with a final
-404 rule, and a proxied CNAME per hostname. Adjust the map for the real tunnel
-names/grouping. Origin addresses resolve from the **cloudflared connector**;
-Docker connectors using `host.docker.internal` on Linux need a host-gateway
-mapping and access to the origin ports.
+The same tunnel carries `inventory.whistlebird.co.nz`,
+`test-inventory.whistlebird.co.nz` and `access.whistlebird.co.nz`. The complete
+route map retains those origins, origin settings, existing ingress order and
+final 404 rule. Only the three biz-e.app DNS records are managed here;
+Whistlebird DNS records are outside this root's scope.
 
-These resources configure tunnels and DNS. Connectors still need to be run
-on their respective hosts using the tunnel token from Cloudflare. Access
-applications/policies are not included in this initial scaffold.
+The reusable module accepts a complete route map, an optional ingress order,
+and an optional subset of hostnames to manage in DNS. Shared tunnel
+configuration is managed as a whole: keep every route that needs to remain
+active in the map, including routes outside the managed DNS zone. The module
+validates that the explicit ingress order includes every route exactly once
+and that managed DNS hostnames are present in the route map.
 
-If resources already exist, import them before applying. Tunnel configuration
-is managed as a whole: include every existing route you want to retain in the
-map before applying. Examples (replace placeholder IDs):
+`cloudflare/imports.tf` records the existing tunnel, tunnel configuration and
+three DNS record IDs using the account/zone IDs loaded from KeePassXC. On an
+empty backend, `plan` proposes importing those existing resources instead of
+creating duplicates. After adoption the import blocks are no-ops. Review the
+plan before applying: resource imports do not themselves change live routing,
+but differences in the configuration can still propose updates.
 
-```bash
-./terraform/tf.py import 'module.tunnels["test"].cloudflare_zero_trust_tunnel_cloudflared.this' 'ACCOUNT_ID/TUNNEL_ID'
-./terraform/tf.py import 'module.tunnels["test"].cloudflare_zero_trust_tunnel_cloudflared_config.this' 'ACCOUNT_ID/TUNNEL_ID'
-./terraform/tf.py import 'module.tunnels["test"].cloudflare_dns_record.routes["test.biz-e.app"]' 'ZONE_ID/DNS_RECORD_ID'
-```
-
-Repeat for the other DNS records and dev tunnel, then review `plan` before
-applying. No Cloudflare resources are created by setting up the backend.
+Origin addresses resolve from the **cloudflared connector**. The existing
+origins and connector are retained. Access applications/policies are not
+managed by this root.
