@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build and (re)start the admin site (admin.biz-e.app) on this machine.
+# Build and (re)start the admin site (admin-test.biz-e.app) on this machine.
 #
 #   scripts/run_admin.sh
 #   ADMIN_HOST_PORT=8020 scripts/run_admin.sh
-#   ADMIN_PUBLIC_URL=https://test-admin.biz-e.app scripts/run_admin.sh   (default https://admin.biz-e.app)
+#   ADMIN_PUBLIC_URL=https://admin.biz-e.app scripts/run_admin.sh   (default https://admin-test.biz-e.app)
 #
 # The admin site is its own container from the same code (Dockerfile.multi target `admin`),
 # on production's Docker network so it reaches the production database by name. It runs no
@@ -32,8 +32,8 @@ for name in POSTGRES_PASSWORD ADMIN_FLASK_SECRET_KEY ADMIN_GOOGLE_CLIENT_ID ADMI
     export "${name?}"
 done
 # Where Google sends people back to. Must match the hostname the site is reached on and be
-# registered on the Google client: ADMIN_PUBLIC_URL=https://test-admin.biz-e.app scripts/run_admin.sh
-export ADMIN_GOOGLE_REDIRECT_URI="${ADMIN_PUBLIC_URL:-https://admin.biz-e.app}/auth/google/callback"
+# registered on the Google client. Override with ADMIN_PUBLIC_URL when the site moves hostname.
+export ADMIN_GOOGLE_REDIRECT_URI="${ADMIN_PUBLIC_URL:-https://admin-test.biz-e.app}/auth/google/callback"
 echo "Google redirect URI: $ADMIN_GOOGLE_REDIRECT_URI"
 export APP_VERSION="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
