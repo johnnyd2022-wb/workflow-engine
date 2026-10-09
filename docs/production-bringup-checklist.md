@@ -38,7 +38,7 @@ Production will not start, or will start insecurely, without these. None is pass
 | `FLASK_SECRET_KEY` | App refuses to start | Random, at least 32 bytes. Signs sessions; must be the same for every worker and stable across restarts. |
 | `BACKUP_CODE_ENCRYPTION_KEY` | 2FA backup codes are encrypted with a development default | Base64 Fernet key. Set it before the first admin enrols in 2FA; changing it later invalidates stored codes. |
 | `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET` | Xero connect fails | `prod.ini` leaves both blank. Use the production Xero app's credentials, not the test app's. |
-| `XERO_REDIRECT_URI` | Xero connect fails | `prod.ini` has no `redirect_uri` at all. Must match the URI registered on the production Xero app. |
+| `XERO_REDIRECT_URI` | None: `prod.ini` sets `redirect_uri = https://biz-e.app/crm/xero/callback` | Optional override. Whichever value is used must match the URI registered on the production Xero app. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in fails | Known and deferred: no Google tenant wired yet. Either supply them or set `[google_sign_in] enabled = false` in `prod.ini` so the button does not show. |
 | `XERO_TOKEN_ENCRYPTION_KEY` | App refuses to start (`RuntimeError`) while `crm_enabled` is on | Random, at least 32 bytes. Stored Xero tokens are encrypted under it; production never reads `[app] secret_key` and rejects the public development default. Set it before the first Xero connection: changing it afterwards means reconnecting Xero. local/test deployments still use the development key, so a dump of a deployed test database is decryptable with a string in this repository. |
 | `POSTHOG_PROJECT_API_KEY` | No product analytics | Optional. `posthog_data_enabled` is already `false`. |
@@ -73,12 +73,16 @@ Production will not start, or will start insecurely, without these. None is pass
 
 ## 3. `app/config/prod.ini` gaps
 
-- [ ] `[xero] redirect_uri` is missing.
-- [ ] `[evidence]` and `[process_docs]` sections are missing (storage roots, size limits,
-      allowed types). They fall back to in-container defaults.
+- [x] `[xero] redirect_uri` is set to `https://biz-e.app/crm/xero/callback`, the route in
+      `app/features/crm/routes/oauth_routes.py`. Pinned by `tests/test_prod_config_bringup.py`.
+- [x] `[evidence]` and `[process_docs]` are present, with `storage_root` set to the two volumes
+      `scripts/run_prod.sh` mounts (`/data/evidence`, `/data/process_docs`). Pinned by
+      `tests/test_prod_config_bringup.py`.
 - [x] `[app]` has no `secret_key`: not needed. Production takes the Xero token key from
       `XERO_TOKEN_ENCRYPTION_KEY` (section 1) and refuses to start without it.
-- [ ] `[google_sign_in] enabled = true` with KeePass entry names that production cannot read.
+- [x] `[google_sign_in] enabled = false` until a production Google OAuth client exists. Enabled
+      without `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in the environment, the app refuses to
+      start. Pinned by `tests/test_prod_config_bringup.py`.
 - [x] `[observability]`: `otel_enabled` and `rum_enabled` are now `false`. They pointed at
       `localhost:4317`, `localhost:12347` and `localhost:8000`, which inside the container is
       the container itself (and the app), so nothing could be collected. They were inert
@@ -86,8 +90,10 @@ Production will not start, or will start insecurely, without these. None is pass
       changes no behaviour. To turn a pipeline on, point its endpoints at a real collector
       first, then set the switch and the consent flag;
       `tests/test_prod_config_observability.py` fails if the switch is on with a loopback endpoint.
-- [ ] `[docker]` names a `workflow-engine-prod-db` container on host port 8432 that is not
-      running and does not match `[database] port = 5432`. Reconcile with decision 1.
+- [x] `[docker]` and `[database]` now agree with `scripts/prod_db.sh`: the app reaches
+      `workflow-engine-prod-db` by name on port 5432 over the shared network, and 8432 is that
+      container's loopback-only published port. `[docker] enabled = false`. Pinned by
+      `tests/test_prod_config_bringup.py`.
 
 ## 4. Database
 

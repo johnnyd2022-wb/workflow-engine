@@ -56,11 +56,15 @@ def other_org(db):
 
 
 def _purge_org(db, org_id):
+    from app.core.db.models.audit_log import AuditLog
     from app.core.db.models.inventory_item import InventoryItem
     from app.core.db.models.user import User
 
+    # AuditLog before User: audit_logs.user_id has no ON DELETE action, so deleting a user that
+    # has logged anything (every login does) raises, the except below swallows it, and the org
+    # row is left behind in the shared test DB (1,170 of them by 2026-10-08).
     try:
-        for model in (EntityEvent, EntityEventSummary, InventoryItem, User):
+        for model in (EntityEvent, EntityEventSummary, InventoryItem, AuditLog, User):
             db.query(model).filter(model.org_id == org_id).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
         db.commit()
@@ -177,6 +181,28 @@ def _plant_summary(db, org_id, *, entity_type, entity_id, summary):
         },
     )
     db.commit()
+
+
+# --------------------------------------------------------------------------------------
+# Fixture hygiene [REGRESSION] -- findings-index 4ff460ee (test DB leftovers).
+# --------------------------------------------------------------------------------------
+
+
+def test_purge_org_removes_an_org_whose_user_has_audit_rows(db, org, user):
+    """`_purge_org` swallows its own failures, so a broken delete order is invisible: the test
+    passes and the org row stays in the shared DB. This file leaked 31 orgs a run that way
+    (users were deleted before the `audit_logs` rows that reference them). Assert the
+    post-state instead of trusting the teardown."""
+    from app.core.db.models.audit_log import AuditLog
+
+    db.add(AuditLog(org_id=org.id, user_id=user.id, action="login", entity="user", entity_id=user.id))
+    db.commit()
+    org_id = org.id
+
+    _purge_org(db, org_id)
+
+    assert db.query(Organisation).filter(Organisation.id == org_id).count() == 0
+    assert db.query(AuditLog).filter(AuditLog.org_id == org_id).count() == 0
 
 
 # --------------------------------------------------------------------------------------

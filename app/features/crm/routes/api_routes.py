@@ -31,6 +31,24 @@ def _crm_service() -> CRMService:
     return CRMService(db_session())
 
 
+def _uuid_or_none(raw: str | None) -> UUID | None:
+    """The UUID in a request-supplied string, or None when it is not one (the caller answers 400)."""
+    try:
+        return UUID(raw)
+    except (ValueError, TypeError):
+        return None
+
+
+def _page_args(default_page_size: int) -> tuple[int, int] | None:
+    """(page, page_size) from the query string, clamped to 1+ and 1-100; None if either is not an integer."""
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        page_size = min(100, max(1, int(request.args.get("page_size", default_page_size))))
+    except ValueError:
+        return None
+    return page, page_size
+
+
 # ------------------------------------------------------------------
 # Customers
 # ------------------------------------------------------------------
@@ -44,8 +62,10 @@ def list_customers():
     status = request.args.get("status") or None
     sort_by = request.args.get("sort_by", "name")
     sort_dir = request.args.get("sort_dir", "asc")
-    page = max(1, int(request.args.get("page", 1)))
-    page_size = min(100, max(1, int(request.args.get("page_size", 50))))
+    paging = _page_args(50)
+    if paging is None:
+        return jsonify({"error": "page and page_size must be integers"}), 400
+    page, page_size = paging
 
     result = _crm_service().list_customers(
         org_id=org_id,
@@ -64,7 +84,10 @@ def list_customers():
 @requires_auth
 def get_customer(contact_id: str):
     org_id = UUID(g.org_id)
-    result = _crm_service().get_customer(UUID(contact_id), org_id)
+    contact_uuid = _uuid_or_none(contact_id)
+    if contact_uuid is None:
+        return jsonify({"error": "Invalid customer ID"}), 400
+    result = _crm_service().get_customer(contact_uuid, org_id)
     if not result:
         return jsonify({"error": "Customer not found"}), 404
     return jsonify(result), 200
@@ -79,9 +102,14 @@ def get_customer(contact_id: str):
 @requires_auth
 def get_customer_invoices(contact_id: str):
     org_id = UUID(g.org_id)
-    page = max(1, int(request.args.get("page", 1)))
-    page_size = min(100, max(1, int(request.args.get("page_size", 25))))
-    result = _crm_service().get_customer_invoices(UUID(contact_id), org_id, page=page, page_size=page_size)
+    contact_uuid = _uuid_or_none(contact_id)
+    if contact_uuid is None:
+        return jsonify({"error": "Invalid customer ID"}), 400
+    paging = _page_args(25)
+    if paging is None:
+        return jsonify({"error": "page and page_size must be integers"}), 400
+    page, page_size = paging
+    result = _crm_service().get_customer_invoices(contact_uuid, org_id, page=page, page_size=page_size)
     return jsonify(result), 200
 
 
@@ -92,8 +120,10 @@ def get_org_invoices():
     kind = (request.args.get("kind") or "all").strip().lower()
     if kind not in {"all", "this_month", "outstanding"}:
         return jsonify({"error": "kind must be all, this_month or outstanding"}), 400
-    page = max(1, int(request.args.get("page", 1)))
-    page_size = min(100, max(1, int(request.args.get("page_size", 50))))
+    paging = _page_args(50)
+    if paging is None:
+        return jsonify({"error": "page and page_size must be integers"}), 400
+    page, page_size = paging
     result = _crm_service().get_org_invoices(org_id, kind=kind, page=page, page_size=page_size)
     return jsonify(result), 200
 
@@ -131,7 +161,10 @@ def get_invoice_trace_items(invoice_id: str):
 @requires_auth
 def get_customer_line_item_descriptions(contact_id: str):
     org_id = UUID(g.org_id)
-    options = _crm_service().get_customer_line_item_options(UUID(contact_id), org_id)
+    contact_uuid = _uuid_or_none(contact_id)
+    if contact_uuid is None:
+        return jsonify({"error": "Invalid customer ID"}), 400
+    options = _crm_service().get_customer_line_item_options(contact_uuid, org_id)
     return jsonify({"line_item_options": options}), 200
 
 
@@ -139,10 +172,13 @@ def get_customer_line_item_descriptions(contact_id: str):
 @requires_auth
 def get_customer_line_item_pricing(contact_id: str):
     org_id = UUID(g.org_id)
+    contact_uuid = _uuid_or_none(contact_id)
+    if contact_uuid is None:
+        return jsonify({"error": "Invalid customer ID"}), 400
     description = (request.args.get("description") or "").strip() or None
     item_code = (request.args.get("item_code") or "").strip() or None
     pricing = _crm_service().get_customer_line_item_pricing(
-        UUID(contact_id),
+        contact_uuid,
         org_id,
         description=description,
         item_code=item_code,
@@ -333,7 +369,10 @@ def update_note(note_id: str):
     if not content:
         return jsonify({"error": "content is required"}), 400
 
-    note = _crm_service().update_note(UUID(note_id), org_id, content)
+    note_uuid = _uuid_or_none(note_id)
+    if note_uuid is None:
+        return jsonify({"error": "Invalid note ID"}), 400
+    note = _crm_service().update_note(note_uuid, org_id, content)
     if not note:
         return jsonify({"error": "Note not found"}), 404
     return jsonify({"note": note}), 200
@@ -343,7 +382,10 @@ def update_note(note_id: str):
 @requires_auth
 def delete_note(note_id: str):
     org_id = UUID(g.org_id)
-    ok = _crm_service().delete_note(UUID(note_id), org_id)
+    note_uuid = _uuid_or_none(note_id)
+    if note_uuid is None:
+        return jsonify({"error": "Invalid note ID"}), 400
+    ok = _crm_service().delete_note(note_uuid, org_id)
     if not ok:
         return jsonify({"error": "Note not found"}), 404
     return jsonify({"ok": True}), 200
@@ -361,12 +403,18 @@ def list_tasks():
     contact_id = request.args.get("contact_id")
     status = request.args.get("status")
     assigned_to = request.args.get("assigned_to")
+    contact_uuid = _uuid_or_none(contact_id) if contact_id else None
+    if contact_id and contact_uuid is None:
+        return jsonify({"error": "contact_id must be a UUID"}), 400
+    assigned_uuid = _uuid_or_none(assigned_to) if assigned_to else None
+    if assigned_to and assigned_uuid is None:
+        return jsonify({"error": "assigned_to must be a UUID"}), 400
 
     tasks = _crm_service().list_tasks(
         org_id=org_id,
-        contact_id=UUID(contact_id) if contact_id else None,
+        contact_id=contact_uuid,
         status=status or None,
-        assigned_to=UUID(assigned_to) if assigned_to else None,
+        assigned_to=assigned_uuid,
     )
     return jsonify({"tasks": tasks}), 200
 
@@ -404,7 +452,10 @@ def update_task(task_id: str):
 @requires_auth
 def delete_task(task_id: str):
     org_id = UUID(g.org_id)
-    ok = _crm_service().delete_task(UUID(task_id), org_id)
+    task_uuid = _uuid_or_none(task_id)
+    if task_uuid is None:
+        return jsonify({"error": "Invalid task ID"}), 400
+    ok = _crm_service().delete_task(task_uuid, org_id)
     if not ok:
         return jsonify({"error": "Task not found"}), 404
     return jsonify({"ok": True}), 200
@@ -824,7 +875,10 @@ def create_mappings_bulk():
 def update_mapping(mapping_id: str):
     org_id = UUID(g.org_id)
     data = request.get_json() or {}
-    mapping = _crm_service().update_mapping(UUID(mapping_id), org_id, data)
+    mapping_uuid = _uuid_or_none(mapping_id)
+    if mapping_uuid is None:
+        return jsonify({"error": "Invalid mapping ID"}), 400
+    mapping = _crm_service().update_mapping(mapping_uuid, org_id, data)
     if not mapping:
         return jsonify({"error": "Mapping not found"}), 404
     return jsonify({"product_mapping": mapping}), 200
@@ -834,7 +888,10 @@ def update_mapping(mapping_id: str):
 @requires_auth
 def delete_mapping(mapping_id: str):
     org_id = UUID(g.org_id)
-    ok = _crm_service().delete_mapping(UUID(mapping_id), org_id)
+    mapping_uuid = _uuid_or_none(mapping_id)
+    if mapping_uuid is None:
+        return jsonify({"error": "Invalid mapping ID"}), 400
+    ok = _crm_service().delete_mapping(mapping_uuid, org_id)
     if not ok:
         return jsonify({"error": "Mapping not found"}), 404
     return jsonify({"ok": True}), 200
