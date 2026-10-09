@@ -1,5 +1,7 @@
 """AC21: the sourcemap page loads. AC3: a forward trace from the browse grid renders.
 
+A trace opens on the Map (the lineage graph) at desktop widths; the Timeline is one tab away.
+
 View-switch and the wastage toggle are asserted not to refetch the trace: `smBindControls`
 (sourcemap.js) re-renders from the cached `lastTraceResult` on view switch, and the wastage
 toggle calls a separate `/inventory/wastage` endpoint entirely -- both are behavioural
@@ -35,7 +37,9 @@ def test_sourcemap_first_paint_uses_compact_inventory_and_drops_dead_calls(trace
     calls: list[str] = []
     page.on(
         "request",
-        lambda r: calls.append(r.url.split("/api/core/", 1)[1]) if r.method == "GET" and "/api/core/" in r.url else None,
+        lambda r: calls.append(r.url.split("/api/core/", 1)[1])
+        if r.method == "GET" and "/api/core/" in r.url
+        else None,
     )
 
     page.goto("/core/sourcemap")
@@ -63,6 +67,10 @@ def test_ac3_forward_trace_from_browse_grid_renders_timeline(traced_chain):
 
     expect(page.locator("#sm-controls")).to_be_visible()
     expect(page.locator(".sm-impact-header__item-name")).to_have_text("R1")
+    expect(page.get_by_role("tab", name="Map")).to_have_attribute("aria-selected", "true")
+    expect(page.locator(".sm-lineage__node").first).to_be_visible()
+
+    page.get_by_role("tab", name="Timeline").click()
     expect(page.locator(".sm-timeline-entry").first).to_be_visible()
     expect(page.locator(".sm-timeline-process").first).to_contain_text("Linear Test Process")
     assert_clean_page(page)
@@ -79,11 +87,15 @@ def test_view_switch_renders_map_and_table_without_refetching_trace(traced_chain
     page.goto("/core/sourcemap")
     page.wait_for_load_state("networkidle")
     page.locator(".sm-browse-card", has_text="R1").first.click()
-    expect(page.locator(".sm-timeline-entry").first).to_be_visible()
+    expect(page.locator(".sm-lineage__node").first).to_be_visible()
     assert len(trace_requests) == 1, f"expected exactly one trace fetch, got {trace_requests}"
 
+    page.get_by_role("tab", name="Timeline").click()
+    expect(page.locator(".sm-timeline-entry").first).to_be_visible()
+    assert len(trace_requests) == 1, "switching to timeline view must not refetch the trace"
+
     page.get_by_role("tab", name="Map").click()
-    expect(page.locator(".sm-tree-root")).to_be_visible()
+    expect(page.locator(".sm-lineage__node").first).to_be_visible()
     assert len(trace_requests) == 1, "switching to map view must not refetch the trace"
 
     page.get_by_role("tab", name="Table").click()
@@ -112,7 +124,7 @@ def test_wastage_toggle_does_not_refetch_trace(traced_chain):
     page.goto("/core/sourcemap")
     page.wait_for_load_state("networkidle")
     page.locator(".sm-browse-card", has_text="R1").first.click()
-    expect(page.locator(".sm-timeline-entry").first).to_be_visible()
+    expect(page.locator(".sm-lineage__node").first).to_be_visible()
     assert len(trace_requests) == 1
 
     page.locator("#sm-wastage-toggle").click()

@@ -22,7 +22,8 @@
   let tracedItemBatch = '';
   let lastTraceResult = null;
   let temporalAsOf = ''; // ISO date string for temporal replay; '' = live
-  let currentView = 'timeline';       // 'timeline' | 'map' | 'table' | 'recall'
+  // The map needs width; a phone opens on the timeline.
+  let currentView = window.matchMedia && window.matchMedia('(min-width: 768px)').matches ? 'map' : 'timeline'; // | 'table' | 'recall'
   let recallMode = false;             // recall tab: unique customers instead of every linked sale
   let currentBrowseTab = 'inventory'; // 'inventory' | 'batches' | 'suppliers' | 'operators' | 'activity'
   let showWastage = false;
@@ -37,6 +38,10 @@
   function smBoot() {
     if (!document.getElementById('sm-trace-area')) return;
     smBindControls();
+    document.querySelectorAll('.sm-view-btn').forEach(btn => {
+      btn.classList.toggle('sm-view-btn--active', btn.dataset.view === currentView);
+      btn.setAttribute('aria-selected', btn.dataset.view === currentView ? 'true' : 'false');
+    });
     smInitSearch();
     smBindModal();
     smLoadAllData();
@@ -889,7 +894,10 @@
     groups.forEach(g => g.raws.forEach(r => rawCountMap.set(r.id, (rawCountMap.get(r.id) || 0) + 1)));
     const sharedSourceIds = new Set([...rawCountMap.entries()].filter(([, c]) => c > 1).map(([id]) => id));
 
-    area.appendChild(smBuildImpactHeader(tracedItem, groups));
+    const saleEdges = connections.filter(connection => connection.edge_type === 'sale');
+    const recall = smBuildRecallScope(tracedItem, allItems, productionConnections, sales, saleEdges, traceResult.recall_start_item_ids || []);
+    // Recall has its own summary line and export; its header carries the same figures.
+    area.appendChild(smBuildImpactHeader(tracedItem, groups, currentView === 'recall' ? null : recall));
 
     // Plan 1.3: opening stock was counted at go-live, so the trace starts there.
     const opening = allItems.filter(item => item && item.extra_data && item.extra_data.opening_stock);
@@ -897,7 +905,6 @@
       const asOf = opening[0].extra_data.opening_as_of;
       const note = document.createElement('p');
       note.className = 'sm-opening-note';
-      note.style.cssText = 'margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #eef4ff; color: #1f3a68; font-size: 13px;';
       note.textContent = 'Opening stock' + (asOf ? ' counted at go-live on ' + new Date(asOf).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ' counted at go-live') +
         '. History before then wasn\'t recorded; production and sales from that date on are traced.';
       area.appendChild(note);
@@ -915,55 +922,80 @@
     if (currentView === 'timeline') {
       area.appendChild(smRenderTimeline(groups, sharedSourceIds));
     } else if (currentView === 'map') {
-      area.appendChild(smRenderMap(groups, tracedItem, sharedSourceIds));
+      area.appendChild(smRenderLineage(allItems, connections, tracedItem));
     } else if (currentView === 'recall') {
       const recallWrap = document.getElementById('sm-recall-wrap');
       if (recallWrap) {
         recallWrap.style.display = 'block';
-        const saleEdges = connections.filter(connection => connection.edge_type === 'sale');
-        const recall = smBuildRecallScope(tracedItem, allItems, productionConnections, sales, saleEdges, traceResult.recall_start_item_ids || []);
         smRenderRecall(recallWrap, tracedItem, groups, recall, traceResult.recall_origin_invoice || '');
       }
     }
-    if (currentView !== 'table' && currentView !== 'recall' && sales.length) area.appendChild(smBuildSalesTerminal(sales));
+    // The map already ends in a customers column.
+    if (currentView === 'timeline' && sales.length) area.appendChild(smBuildSalesTerminal(sales));
 
     if (currentView === 'table') smUpdateTraceTable(allItems, connections, tracedItem.id);
   }
 
   /* ── Impact header ─────────────────────────────────────── */
-  function smBuildImpactHeader(tracedItem, groups) {
+  function smBuildImpactHeader(tracedItem, groups, recall) {
     const div = document.createElement('div');
     div.className = 'sm-impact-header';
 
     const typeClass = smTypeClass(tracedItem.inventory_type);
     const tracedBatch = tracedItem.batch_id || tracedItem.supplier_batch_number;
-    const batchText = tracedBatch ? `Batch ${tracedBatch}` : '';
 
-    const uniqueProcesses = new Set(groups.map(g => g.processId).filter(Boolean)).size || groups.length;
-    const execCount = groups.length;
+    const top = document.createElement('div');
+    top.className = 'sm-impact-header__top';
+    const name = document.createElement('div');
+    name.className = 'sm-impact-header__name';
+    const badge = document.createElement('span');
+    badge.className = `sm-type-badge sm-type-badge--${typeClass}`;
+    badge.textContent = smTypeLabelShort(tracedItem.inventory_type);
+    const title = document.createElement('span');
+    title.className = 'sm-impact-header__item-name';
+    title.textContent = tracedItem.name || 'Unknown item';
+    name.append(badge, title);
+    if (tracedBatch) {
+      const batch = document.createElement('span');
+      batch.className = 'sm-impact-header__batch';
+      batch.textContent = `Batch ${tracedBatch}`;
+      name.appendChild(batch);
+    }
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'sm-trace-clear';
+    back.textContent = '← Back to browse';
+    back.addEventListener('click', smClearTrace);
+    top.append(name, back);
+    div.appendChild(top);
+
+    // The figures a recall is judged on, up front rather than only on the Recall tab.
+    const sales = (recall && recall.sales) || [];
+    const finals = (recall && recall.finalItems) || [];
     const findingCount = smCountFindingsForTrace(groups);
-
-    const stats = [];
-    if (uniqueProcesses) stats.push({ label: `${uniqueProcesses} process${uniqueProcesses !== 1 ? 'es' : ''}`, warn: false });
-    if (execCount) stats.push({ label: `${execCount} execution${execCount !== 1 ? 's' : ''}`, warn: false });
-    if (findingCount) stats.push({ label: `${findingCount} finding${findingCount !== 1 ? 's' : ''}`, warn: true });
-
-    const statsHtml = stats.map(s =>
-      `<span class="sm-impact-stat${s.warn ? ' sm-impact-stat--warn' : ''}">${smEsc(s.label)}</span>`
-    ).join('');
-
-    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
-    div.innerHTML = `
-      <div class="sm-impact-header__left">
-        <div class="sm-impact-header__name">
-          <span class="sm-type-badge sm-type-badge--${typeClass}">${smEsc(smTypeLabelShort(tracedItem.inventory_type))}</span>
-          <span class="sm-impact-header__item-name">${smEsc(tracedItem.name || 'Unknown item')}</span>
-          ${batchText ? `<span class="sm-impact-header__batch">${smEsc(batchText)}</span>` : ''}
-        </div>
-        ${statsHtml ? `<div class="sm-impact-header__stats">${statsHtml}</div>` : ''}
-      </div>
-      <button class="sm-trace-clear" onclick="window.smClearTrace()">← Back to browse</button>
-    `;
+    const figures = [];
+    if (recall && groups.length) figures.push({ label: groups.length === 1 ? 'Batch' : 'Batches', value: String(groups.length) });
+    if (finals.length || sales.length) {
+      figures.push({ label: 'Sold', value: sales.length ? smRecallQuantitySummary(sales, 'recall_quantity') : 'None' });
+      figures.push({ label: 'Customers', value: String(smRecallUniqueCustomerCount(sales)) });
+    }
+    if (finals.length) figures.push({ label: 'On hand', value: smRecallQuantitySummary(finals, 'quantity') });
+    if (recall && findingCount) figures.push({ label: findingCount === 1 ? 'Finding' : 'Findings', value: String(findingCount), warn: true });
+    if (figures.length) {
+      const list = document.createElement('dl');
+      list.className = 'sm-impact-figures';
+      figures.forEach(figure => {
+        const cell = document.createElement('div');
+        cell.className = 'sm-impact-figure' + (figure.warn ? ' sm-impact-figure--warn' : '');
+        const dt = document.createElement('dt');
+        dt.textContent = figure.label;
+        const dd = document.createElement('dd');
+        dd.textContent = figure.value;
+        cell.append(dt, dd);
+        list.appendChild(cell);
+      });
+      div.appendChild(list);
+    }
     return div;
   }
 
@@ -1106,169 +1138,238 @@
   }
 
   /* ── Map view (vertical CSS tree) ──────────────────────── */
-  function smRenderMap(groups, tracedItem, sharedSourceIds) {
-    const container = document.createElement('div');
-    container.className = 'sm-tree-container';
+  /* Map view: a left-to-right lineage graph. Columns are ranks (the longest path from a
+     source lot), so every lot sits to the right of everything it was made from, with the
+     customers each finished lot was sold to as the last column. */
+  function smRenderLineage(allItems, connections, tracedItem) {
+    const wrap = document.createElement('div');
+    wrap.className = 'sm-lineage';
+    const canvas = document.createElement('div');
+    canvas.className = 'sm-lineage__canvas';
+    wrap.appendChild(canvas);
 
-    const rootType = smTypeClass(tracedItem.inventory_type);
-    const rootBatch = tracedItem.batch_id || tracedItem.supplier_batch_number;
-    const rootDiv = document.createElement('div');
-    rootDiv.className = 'sm-tree-root';
-    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
-    rootDiv.innerHTML = `
-      <div class="sm-tree-node sm-tree-node--${rootType}${smIsCheckNeeded(tracedItem.id) ? ' sm-tree-node--check' : ''}">
-        <span class="sm-type-badge sm-type-badge--${rootType}">${smTypeLabelShort(tracedItem.inventory_type)}</span>
-        <span class="sm-tree-node__name">${smEsc(tracedItem.name || 'Unknown')}</span>
-        ${rootBatch ? `<span class="sm-tree-node__meta">Batch: ${smEsc(rootBatch)}</span>` : ''}
-        ${tracedItem.quantity != null ? `<span class="sm-tree-node__meta">${smFmtQty(tracedItem.quantity)}${tracedItem.unit ? ' ' + smEsc(tracedItem.unit) : ''}</span>` : ''}
-      </div>
-    `;
-    container.appendChild(rootDiv);
-
-    if (!groups.length) return container;
-
-    const childrenUl = document.createElement('ul');
-    childrenUl.className = 'sm-tree-children';
-
-    groups.forEach(group => {
-      const groupLi = document.createElement('li');
-      groupLi.className = 'sm-tree-item';
-
-      const groupLabel = document.createElement('div');
-      groupLabel.className = 'sm-tree-group-label';
-      // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
-      groupLabel.innerHTML = `
-        <div class="sm-tree-group__row">
-          <span class="sm-tree-group__label-tag">Process</span>
-          <span class="sm-tree-group__process">${smEsc(group.processName)}</span>
-        </div>
-        ${group.operator ? `<div class="sm-tree-group__row">
-          <span class="sm-tree-group__label-tag">By</span>
-          <span class="sm-tree-group__operator">${smEsc(group.operator)}</span>
-        </div>` : ''}
-      `;
-      groupLi.appendChild(groupLabel);
-
-      // Render steps individually; fall back to flat WIP/Final list if no step data
-      const namedSteps = group.steps.filter(s => s.froms.length || s.tos.length);
-
-      if (namedSteps.length) {
-        const stepsUl = document.createElement('ul');
-        stepsUl.className = 'sm-tree-children';
-
-        namedSteps.forEach(step => {
-          const stepLi = document.createElement('li');
-          stepLi.className = 'sm-tree-item';
-
-          const isTracedHere = tracedItemId && (
-            step.froms.some(i => i.id === tracedItemId) || step.tos.some(i => i.id === tracedItemId)
-          );
-          const stepData = step.tos.length && step.tos[0].step_data ? step.tos[0].step_data : null;
-          const stepDate = stepData ? stepData.completed_at : null;
-          const stepLabel = document.createElement('div');
-          stepLabel.className = 'sm-tree-step-label';
-          // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
-          stepLabel.innerHTML = `
-            <span class="sm-tree-group__label-tag">Step</span>
-            ${step.stepName ? `<span class="sm-tree-step-name">${smEsc(step.stepName)}</span>` : ''}
-            ${stepDate ? `<span class="sm-timeline-step-date">${smFmtDate(stepDate)}</span>` : ''}
-            ${stepData && stepData.entered_later ? `<span class="sm-entered-later" title="Entered ${smEsc(smFmtDate(stepData.entered_at))}">Entered later</span>` : ''}
-            ${isTracedHere ? '<span class="sm-tl-traced-here">traced here</span>' : ''}
-          `;
-          stepLi.appendChild(stepLabel);
-
-          // Render froms (consumed) and tos (produced) as separate tree nodes with IO tags
-          const fromItems = step.froms.filter(i => i.id !== tracedItem.id);
-          const toItems   = step.tos.filter(i => i.id !== tracedItem.id);
-
-          if (fromItems.length || toItems.length) {
-            const producedUl = document.createElement('ul');
-            producedUl.className = 'sm-tree-children';
-            fromItems.forEach(item => {
-              const itemLi = document.createElement('li');
-              itemLi.className = 'sm-tree-item';
-              itemLi.appendChild(smBuildTreeNode(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id), 'in'));
-              producedUl.appendChild(itemLi);
-            });
-            toItems.forEach(item => {
-              const itemLi = document.createElement('li');
-              itemLi.className = 'sm-tree-item';
-              itemLi.appendChild(smBuildTreeNode(item, smTypeClass(item.inventory_type), sharedSourceIds.has(item.id), 'out'));
-              producedUl.appendChild(itemLi);
-            });
-            stepLi.appendChild(producedUl);
-          }
-
-          stepsUl.appendChild(stepLi);
-        });
-
-        groupLi.appendChild(stepsUl);
-      } else {
-        // Fallback: flat WIP → Final structure
-        if (group.wips.length) {
-          const wipUl = document.createElement('ul');
-          wipUl.className = 'sm-tree-children';
-          group.wips.forEach(wip => {
-            const wipLi = document.createElement('li');
-            wipLi.className = 'sm-tree-item';
-            wipLi.appendChild(smBuildTreeNode(wip, 'wip', sharedSourceIds.has(wip.id)));
-            if (group.finals.length) {
-              const finalUl = document.createElement('ul');
-              finalUl.className = 'sm-tree-children';
-              group.finals.forEach(fin => {
-                const finLi = document.createElement('li');
-                finLi.className = 'sm-tree-item';
-                finLi.appendChild(smBuildTreeNode(fin, 'final', false));
-                finalUl.appendChild(finLi);
-              });
-              wipLi.appendChild(finalUl);
-            }
-            wipUl.appendChild(wipLi);
-          });
-          groupLi.appendChild(wipUl);
-        } else if (group.finals.length) {
-          const finalUl = document.createElement('ul');
-          finalUl.className = 'sm-tree-children';
-          group.finals.forEach(fin => {
-            const finLi = document.createElement('li');
-            finLi.className = 'sm-tree-item';
-            finLi.appendChild(smBuildTreeNode(fin, 'final', false));
-            finalUl.appendChild(finLi);
-          });
-          groupLi.appendChild(finalUl);
-        }
-      }
-
-      const otherRaws = group.raws.filter(r => r.id !== tracedItem.id);
-      if (otherRaws.length) {
-        const othersDiv = document.createElement('div');
-        othersDiv.className = 'sm-tree-other-inputs';
-        othersDiv.textContent = `+ combined with: ${otherRaws.map(r => r.name).join(', ')}`;
-        groupLi.appendChild(othersDiv);
-      }
-
-      childrenUl.appendChild(groupLi);
+    const items = allItems.filter(item => item && item.node_type !== 'sale');
+    const sales = allItems.filter(item => item && item.node_type === 'sale');
+    const itemById = new Map(items.map(item => [item.id, item]));
+    const seenEdges = new Set();
+    const edges = [];
+    function addEdge(from, to) {
+      const key = from + '>' + to;
+      if (from === to || seenEdges.has(key)) return;
+      seenEdges.add(key);
+      edges.push({ from, to });
+    }
+    connections.forEach(conn => {
+      if (conn.edge_type !== 'sale' && itemById.has(conn.from_id) && itemById.has(conn.to_id)) addEdge(conn.from_id, conn.to_id);
     });
 
-    container.appendChild(childrenUl);
-    return container;
+    // Longest-path ranks. Bounded passes, so a malformed (cyclic) trace still terminates.
+    const rank = new Map(items.map(item => [item.id, 0]));
+    for (let pass = 0; pass < items.length; pass++) {
+      let moved = false;
+      edges.forEach(edge => {
+        if (rank.get(edge.to) < rank.get(edge.from) + 1) { rank.set(edge.to, rank.get(edge.from) + 1); moved = true; }
+      });
+      if (!moved) break;
+    }
+    const lastRank = items.reduce((max, item) => Math.max(max, rank.get(item.id)), 0);
+
+    // One node per customer, however many invoices they hold.
+    const salesById = new Map(sales.map(sale => [sale.id, sale]));
+    const customers = new Map();
+    function customerKey(sale) {
+      const name = (sale.customer_name || sale.store_name || '').trim();
+      return 'customer:' + (sale.customer_id || (name ? name.toLowerCase() : 'unknown'));
+    }
+    connections.forEach(conn => {
+      if (conn.edge_type !== 'sale' || !itemById.has(conn.from_id)) return;
+      const sale = salesById.get(conn.to_id);
+      if (!sale) return;
+      const key = customerKey(sale);
+      if (!customers.has(key)) {
+        customers.set(key, {
+          id: key,
+          name: (sale.customer_name || sale.store_name || '').trim() || 'Customer not recorded',
+          lines: [],
+          invoices: new Set(),
+          hasContact: false,
+        });
+      }
+      const customer = customers.get(key);
+      customer.lines.push({ unit: sale.unit, quantity: conn.quantity != null ? conn.quantity : sale.quantity });
+      customer.invoices.add(sale.invoice_number || sale.xero_invoice_id || sale.id);
+      customer.hasContact = customer.hasContact || !!(sale.customer_phone || sale.customer_email);
+      addEdge(conn.from_id, key);
+    });
+
+    const incoming = new Map();
+    const outgoing = new Map();
+    edges.forEach(edge => {
+      if (!incoming.has(edge.to)) incoming.set(edge.to, []);
+      if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
+      incoming.get(edge.to).push(edge.from);
+      outgoing.get(edge.from).push(edge.to);
+    });
+
+    // Order each column by where its inputs sit in the column before, to keep edges from crossing.
+    const position = new Map();
+    function ordered(nodes) {
+      const scored = nodes.map(node => {
+        const from = (incoming.get(node.id) || []).map(id => position.get(id)).filter(value => value != null);
+        // A source lot has no inputs; put the ones used latest lowest, so their long edges run under the graph.
+        const uses = (outgoing.get(node.id) || []).map(id => rank.has(id) ? rank.get(id) : lastRank + 1);
+        return {
+          node,
+          score: from.length ? from.reduce((sum, value) => sum + value, 0) / from.length : Infinity,
+          firstUse: uses.length ? Math.min(...uses) : lastRank + 2,
+        };
+      });
+      scored.sort((x, y) => (x.score === y.score ? 0 : x.score - y.score) || (x.firstUse - y.firstUse) ||
+        String(x.node.name || '').localeCompare(String(y.node.name || '')));
+      scored.forEach((entry, index) => position.set(entry.node.id, index));
+      return scored.map(entry => entry.node);
+    }
+
+    const columns = [];
+    for (let r = 0; r <= lastRank; r++) {
+      const nodes = ordered(items.filter(item => rank.get(item.id) === r));
+      if (!nodes.length) continue;
+      const stepNames = new Set(nodes.map(item => item.source_step_name || ''));
+      let title;
+      if (nodes.every(item => item.inventory_type === 'raw_material')) title = nodes.length === 1 ? 'Source lot' : 'Source lots';
+      else if (stepNames.size === 1 && !stepNames.has('')) title = [...stepNames][0];
+      else if (nodes.every(item => item.inventory_type === 'final_product')) title = 'Finished';
+      else title = 'In production';
+      columns.push({ title, nodes, kind: 'item' });
+    }
+    if (customers.size) {
+      columns.push({ title: customers.size === 1 ? 'Customer' : 'Customers', nodes: ordered([...customers.values()]), kind: 'customer' });
+    }
+
+    const nodeEls = new Map();
+    const strip = document.createElement('div');
+    strip.className = 'sm-lineage__columns';
+    columns.forEach(column => {
+      const col = document.createElement('section');
+      col.className = 'sm-lineage__column';
+      const heading = document.createElement('h3');
+      heading.className = 'sm-lineage__title';
+      heading.textContent = column.title;
+      const count = document.createElement('span');
+      count.textContent = String(column.nodes.length);
+      heading.appendChild(count);
+      col.appendChild(heading);
+      column.nodes.forEach(node => {
+        const el = column.kind === 'customer' ? smBuildLineageCustomer(node) : smBuildLineageNode(node, tracedItem);
+        el.dataset.lineageId = node.id;
+        nodeEls.set(node.id, el);
+        col.appendChild(el);
+      });
+      strip.appendChild(col);
+    });
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'sm-lineage__edges');
+    svg.setAttribute('aria-hidden', 'true');
+    const paths = edges.filter(edge => nodeEls.has(edge.from) && nodeEls.has(edge.to)).map(edge => {
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('class', 'sm-lineage__edge');
+      svg.appendChild(path);
+      return { edge, path };
+    });
+    canvas.append(svg, strip);
+    // Columns share the card's width until they would get too narrow to read; then the map scrolls sideways.
+    const narrow = window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
+    canvas.style.minWidth = (columns.length * (narrow ? 188 : 168) + (columns.length - 1) * (narrow ? 40 : 48)) + 'px';
+
+    function draw() {
+      if (!canvas.isConnected) return;
+      const box = canvas.getBoundingClientRect();
+      svg.setAttribute('width', String(canvas.scrollWidth));
+      svg.setAttribute('height', String(canvas.scrollHeight));
+      paths.forEach(({ edge, path }) => {
+        const from = nodeEls.get(edge.from).getBoundingClientRect();
+        const to = nodeEls.get(edge.to).getBoundingClientRect();
+        const x1 = from.right - box.left, y1 = from.top + from.height / 2 - box.top;
+        const x2 = to.left - box.left, y2 = to.top + to.height / 2 - box.top;
+        const bend = Math.max(24, (x2 - x1) / 2);
+        path.setAttribute('d', `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`);
+      });
+    }
+    if (window.ResizeObserver) new ResizeObserver(draw).observe(canvas);
+    requestAnimationFrame(draw);
+
+    // Pointing at a lot lights up everything upstream and downstream of it.
+    function related(id) {
+      const set = new Set([id]);
+      [incoming, outgoing].forEach(direction => {
+        const pending = [id];
+        while (pending.length) {
+          (direction.get(pending.pop()) || []).forEach(next => {
+            if (!set.has(next)) { set.add(next); pending.push(next); }
+          });
+        }
+      });
+      return set;
+    }
+    function focus(id) {
+      const keep = id ? related(id) : null;
+      wrap.classList.toggle('sm-lineage--focused', !!keep);
+      nodeEls.forEach((el, nodeId) => el.classList.toggle('is-related', !!keep && keep.has(nodeId)));
+      paths.forEach(({ edge, path }) => path.classList.toggle('is-related', !!keep && keep.has(edge.from) && keep.has(edge.to)));
+    }
+    nodeEls.forEach((el, id) => {
+      el.addEventListener('mouseenter', () => focus(id));
+      el.addEventListener('mouseleave', () => focus(null));
+      el.addEventListener('focus', () => focus(id));
+      el.addEventListener('blur', () => focus(null));
+    });
+    return wrap;
   }
 
-  function smBuildTreeNode(item, type, isShared, ioTag) {
-    const div = document.createElement('div');
-    div.className = `sm-tree-node sm-tree-node--${type}${smIsCheckNeeded(item.id) ? ' sm-tree-node--check' : ''}`;
-    const nodeBatch = item.batch_id || item.supplier_batch_number;
-    // nosemgrep: innerhtml-template-literal -- audited: all dynamic values here go through smEsc()
-    div.innerHTML = `
-      ${ioTag ? `<span class="sm-tl-io-tag sm-tl-io-tag--${ioTag}">${ioTag === 'in' ? 'In' : 'Out'}</span>` : ''}
-      <span class="sm-type-badge sm-type-badge--${type}">${smTypeLabelShort(item.inventory_type)}</span>
-      <span class="sm-tree-node__name">${smEsc(item.name || 'Unknown')}</span>
-      ${nodeBatch ? `<span class="sm-tree-node__meta">Batch: ${smEsc(nodeBatch)}</span>` : ''}
-      ${item.quantity != null ? `<span class="sm-tree-node__meta">${smFmtQty(item.quantity)}${item.unit ? ' ' + smEsc(item.unit) : ''}</span>` : ''}
-      ${isShared ? '<span class="sm-shared-pill">shared</span>' : ''}
-      ${smIsCheckNeeded(item.id) ? '<span class="sm-check-pill">⚠ check</span>' : ''}
-    `;
-    return div;
+  function smLineageLine(className, text) {
+    const span = document.createElement('span');
+    span.className = className;
+    span.textContent = text;
+    return span;
+  }
+
+  function smBuildLineageNode(item, tracedItem) {
+    const type = smTypeClass(item.inventory_type);
+    const isTraced = !!tracedItem && item.id === tracedItem.id;
+    const check = smIsCheckNeeded(item.id);
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = `sm-lineage__node sm-lineage__node--${type}` + (isTraced ? ' sm-lineage__node--traced' : '') + (check ? ' sm-lineage__node--check' : '');
+    const kind = smLineageLine('sm-lineage__kind', smTypeLabelShort(item.inventory_type));
+    kind.prepend(smLineageLine('sm-lineage__dot', ''));
+    if (isTraced) kind.appendChild(smLineageLine('sm-lineage__tag', 'Traced'));
+    node.appendChild(kind);
+    node.appendChild(smLineageLine('sm-lineage__name', item.name || 'Unknown item'));
+    const batch = item.batch_id || item.supplier_batch_number;
+    const meta = [batch ? 'Batch ' + batch : '', item.quantity != null ? smFmtQty(item.quantity) + (item.unit ? ' ' + item.unit : '') : '']
+      .filter(Boolean).join(' · ');
+    if (meta) node.appendChild(smLineageLine('sm-lineage__meta', meta));
+    if (item.inventory_type === 'raw_material' && item.supplier) node.appendChild(smLineageLine('sm-lineage__meta', item.supplier));
+    if (check) node.appendChild(smLineageLine('sm-lineage__flag', smGetCheckReason(item.id) || 'Check needed'));
+    node.addEventListener('click', () => smOpenStoryPanel(item.id, item.name || 'Item', 'inventory_item'));
+    return node;
+  }
+
+  function smBuildLineageCustomer(customer) {
+    const node = document.createElement('div');
+    node.className = 'sm-lineage__node sm-lineage__node--customer';
+    node.tabIndex = 0;
+    const kind = smLineageLine('sm-lineage__kind', 'Customer');
+    kind.prepend(smLineageLine('sm-lineage__dot', ''));
+    node.appendChild(kind);
+    node.appendChild(smLineageLine('sm-lineage__name', customer.name));
+    const invoices = customer.invoices.size;
+    node.appendChild(smLineageLine('sm-lineage__meta',
+      smRecallQuantitySummary(customer.lines, 'quantity') + ' · ' + invoices + (invoices === 1 ? ' invoice' : ' invoices')));
+    if (!customer.hasContact) node.appendChild(smLineageLine('sm-lineage__flag', 'No contact details'));
+    return node;
   }
 
   /* ── Build execution groups ─────────────────────────────── */
