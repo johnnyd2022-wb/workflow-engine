@@ -475,12 +475,6 @@ html[data-spa-theme="dark"] #page-content .workspace-chips [aria-pressed="true"]
 #page-content .processes-list-page .processes-list-count { margin: 0; text-align: right; }
 #page-content .processes-list-page .processes-list-results { margin-top: 18px; }
 #page-content .processes-list-page .processes-list-results > .workspace-empty { margin-top: 0; }
-#page-content .inv-view-page .inv-view-filters { margin-top: 18px; }
-#page-content .inv-view-page .inv-view-table-wrap,
-#page-content .inv-view-page .inv-view-cards,
-#page-content .inv-view-page .inv-view-loading,
-#page-content .inv-view-page .inv-view-empty { margin-top: 18px; }
-#page-content .inv-view-page .inv-view-count { margin-top: 6px; }
 #page-content .inventory-add-choices .workspace-button { min-height: 72px; padding: 14px 16px; }
 #page-content .inventory-add-choices strong { display: block; font-size: 15px; color: var(--ui-text, #172033); }
 #page-content .inventory-add-choices small { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--ui-text-muted, #64748b); }

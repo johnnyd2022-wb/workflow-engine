@@ -1,5 +1,5 @@
 """Golden-path browser coverage for GET /api/core/entities/<type>/<id>/story, as consumed
-by the inventory item's "Audit history" panel (app/core/frontend/inventory/view.html) --
+by the "Audit history" section of the inventory line panel (app/core/frontend/js/inventory-view.js) --
 the one real frontend caller of this route (AC1-AC6)."""
 
 import re
@@ -26,10 +26,11 @@ def test_ac5_audit_history_panel_renders_created_event(browser, app_url, fresh_u
         row = page.get_by_role("row", name=re.compile("Story Panel Widget"))
         expect(row).to_be_visible()
 
-        toggle = row.get_by_text("Audit history")
-        toggle.click()
+        row.get_by_role("button", name="Story Panel Widget").click()
+        panel = page.get_by_role("dialog", name="Story Panel Widget")
+        expect(panel.get_by_role("heading", name="Audit history")).to_be_visible()
 
-        timeline = row.locator(".inv-audit-timeline")
+        timeline = panel.locator(".inv-audit-timeline")
         expect(timeline).to_be_visible()
         expect(timeline).to_contain_text("Added")
         expect(timeline).to_contain_text("kg")
@@ -53,9 +54,9 @@ def test_ac3_audit_history_panel_shows_exactly_the_creation_event_for_a_fresh_it
 
         page.goto("/core/inventory/view")
         row = page.get_by_role("row", name=re.compile("Freshly Created Widget"))
-        row.get_by_text("Audit history").click()
+        row.get_by_role("button", name="Freshly Created Widget").click()
 
-        timeline = row.locator(".inv-audit-timeline")
+        timeline = page.get_by_role("dialog", name="Freshly Created Widget").locator(".inv-audit-timeline")
         expect(timeline).to_be_visible()
         expect(timeline.locator(".inv-audit-timeline__item")).to_have_count(1)
         assert_clean_page(page)
