@@ -7,8 +7,8 @@ import os
 import secrets as random
 import subprocess
 import sys
-import tomllib
 
+import tomllib
 from tf import Secrets
 
 PROJECT = 76311154
@@ -105,9 +105,7 @@ def runner_block(name, runner_id, token, env):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--plan-only", action="store_true", help="Provision the plan runner while the review PAT is pending"
-    )
+    parser.add_argument("--plan-only", action="store_true", help="Refresh only the plan runner")
     args = parser.parse_args()
     vault = Secrets()
     cf = "workflow-engine/terraform-cloudflare"
@@ -116,18 +114,20 @@ def main():
         "TF_VAR_account_id": vault.read(cf, "Account ID"),
         "TF_VAR_zone_id": vault.read(cf, "Zone ID"),
     }
-    review_token = None if args.plan_only else vault.read("workflow-engine/terraform-gitlab-ci-review", "Password")
+    review_token = vault.read("workflow-engine/terraform-gitlab-ci-review", "Password")
     user = api("user")
     if review_token:
-        # Verify the supplied credential can read the approval endpoint before configuring apply.
+        # Validate the API scope before changing runner configuration.
         from urllib.request import Request, urlopen
 
         req = Request(
-            f"https://gitlab.com/api/v4/projects/{PROJECT}/merge_requests/500/approvals",
+            "https://gitlab.com/api/v4/personal_access_tokens/self",
             headers={"PRIVATE-TOKEN": review_token},
         )
         with urlopen(req, timeout=30) as response:
-            json.load(response)
+            metadata = json.load(response)
+        if "api" not in metadata.get("scopes", []):
+            raise RuntimeError("GitLab token needs api scope to publish MR plan comments; replace it in KeePassXC.")
     config = command(["docker", "exec", MANAGER, "cat", CONFIG])
     blocks = config.split("[[runners]]")
     managed = {"terraform-plan", "terraform-apply"} if not args.plan_only else {"terraform-plan"}
@@ -173,8 +173,7 @@ def main():
             "PG_CONN_STR": f"postgres://{role}@state-db:5432/terraform_state?sslmode=disable",
             "PGPASSWORD": password,
         }
-        if kind == "apply":
-            env |= {"TERRAFORM_GITLAB_READ_TOKEN": review_token, "TERRAFORM_APPROVER_ID": str(user["id"])}
+        env |= {"TERRAFORM_GITLAB_READ_TOKEN": review_token, "TERRAFORM_APPROVER_ID": str(user["id"])}
         retained.append(runner_block(name, runner_id, token, env))
         print(f"Prepared {name}: runner {runner_id}, database role {role}")
     updated = "\n".join(retained)

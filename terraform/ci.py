@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -17,6 +18,7 @@ REPO = Path(__file__).resolve().parent.parent
 STACK = REPO / "terraform/cloudflare"
 ARTIFACTS = STACK / ".ci"
 PLAN_JOB = "terraform_cloudflare_plan"
+PLAN_MARKER = "<!-- workflow-engine:terraform-plan:cloudflare -->"
 
 
 class GateError(RuntimeError):
@@ -45,8 +47,18 @@ class GitLab:
         self.token = os.environ["TERRAFORM_GITLAB_READ_TOKEN"]
         self.opener = build_opener(ArtifactRedirect())
 
-    def fetch(self, path, *, raw=False):
-        req = Request(f"{self.base}/projects/{self.project}/{path}", headers={"PRIVATE-TOKEN": self.token})
+    def fetch(self, path, *, raw=False, method="GET", payload=None):
+        headers = {"PRIVATE-TOKEN": self.token}
+        data = None
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(payload).encode()
+        req = Request(
+            f"{self.base}/projects/{self.project}" + (f"/{path}" if path else ""),
+            headers=headers,
+            data=data,
+            method=method,
+        )
         try:
             with self.opener.open(req, timeout=30) as response:
                 data = response.read()
@@ -156,6 +168,96 @@ def make_plan():
         raise
 
 
+def plan_comment(plan_text, counts, commit, job_url):
+    text = redact(plan_text).strip()
+    fence = "`" * max(3, max((len(match) + 1 for match in re.findall(r"`+", text)), default=3))
+    return (
+        f"{PLAN_MARKER}\n### Terraform plan — review required\n\n"
+        f"**{counts['create']} to add, {counts['update']} to change, {counts['delete']} to destroy.**\n\n"
+        f"Commit: `{commit}` · [Plan job]({job_url})\n\n"
+        "Read the plan below, then **resolve this thread** to acknowledge your review. "
+        "The MR stays blocked until this thread is resolved. "
+        "Approve the MR and merge once the pipeline is green; apply runs after merge.\n\n"
+        f"{fence}text\n{text}\n{fence}\n"
+    )
+
+
+def publish_plan(api, counts):
+    iid = os.environ["CI_MERGE_REQUEST_IID"]
+    mr = api.fetch(f"merge_requests/{iid}")
+    if (
+        mr["state"] != "opened"
+        or mr["diff_refs"]["head_sha"] != os.environ["CI_COMMIT_SHA"]
+        or str((mr.get("head_pipeline") or {}).get("id")) != os.environ["CI_PIPELINE_ID"]
+    ):
+        raise GateError("MR or pipeline has changed; refusing to publish a stale plan")
+    if not api.fetch("").get("only_allow_merge_if_all_discussions_are_resolved"):
+        raise GateError("Enable the project's All threads must be resolved merge check before planning")
+    body = plan_comment(
+        (ARTIFACTS / "plan.txt").read_text(), counts, os.environ["CI_COMMIT_SHA"], os.environ["CI_JOB_URL"]
+    )
+    if len(body.encode()) > 900_000:
+        raise GateError("Plan is too large for an MR thread; reduce the change scope")
+    # Overview discussions are resolvable MR threads, unlike individual notes.
+    discussion = api.fetch(f"merge_requests/{iid}/discussions", method="POST", payload={"body": body})
+    note = discussion["notes"][0]
+    if not note.get("resolvable") or note.get("resolved") or discussion.get("individual_note"):
+        raise GateError("GitLab did not create an unresolved, resolvable plan thread")
+    url = f"{mr['web_url']}#note_{note['id']}"
+    # Retire only older plan threads published by this bot identity. The newest
+    # thread remains unresolved, and only its ID is recorded in the review artifact.
+    for older in api.all(f"merge_requests/{iid}/discussions"):
+        notes = older.get("notes") or []
+        root = notes[0] if notes else {}
+        if (
+            older["id"] != discussion["id"]
+            and len(notes) == 1  # Keep conversations with replies for human resolution.
+            and root.get("body", "").startswith(PLAN_MARKER + "\n")
+            and (root.get("author") or {}).get("id") == note["author"]["id"]
+            and root.get("resolvable")
+            and not root.get("resolved")
+            and root.get("created_at", "") <= note["created_at"]
+        ):
+            api.fetch(
+                f"merge_requests/{iid}/discussions/{older['id']}/notes",
+                method="POST",
+                payload={"body": f"Superseded by the [new Terraform plan]({url}); review the new thread."},
+            )
+            api.fetch(f"merge_requests/{iid}/discussions/{older['id']}", method="PUT", payload={"resolved": True})
+    print(f"Published unresolved Terraform plan thread in MR !{iid}: {url}")
+    return {
+        "discussion_id": discussion["id"],
+        "note_id": note["id"],
+        "note_digest": hashlib.sha256(note["body"].encode()).hexdigest(),
+    }
+
+
+def verify_plan_thread(discussion, review, approver_id, merged_at):
+    if discussion.get("id") != review.get("discussion_id") or discussion.get("individual_note"):
+        raise GateError("Plan review does not belong to the recorded discussion")
+    notes = discussion.get("notes") or []
+    note = next((item for item in notes if item.get("id") == review.get("note_id")), None)
+    if not note or not note.get("resolvable"):
+        raise GateError("The original plan review thread is missing")
+    if hashlib.sha256(note["body"].encode()).hexdigest() != review.get("note_digest"):
+        raise GateError("The published plan has changed; replan and review required")
+    if not note.get("resolved") or any(item.get("resolvable") and not item.get("resolved") for item in notes):
+        raise GateError("The final Terraform plan thread must be resolved before apply")
+    if str((note.get("resolved_by") or {}).get("id")) != str(approver_id):
+        raise GateError("The configured approver must resolve the final Terraform plan thread")
+    if (
+        not note.get("resolved_at")
+        or not note.get("created_at")
+        or datetime.fromisoformat(note["resolved_at"].replace("Z", "+00:00"))
+        < datetime.fromisoformat(note["created_at"].replace("Z", "+00:00"))
+    ):
+        raise GateError("Plan thread resolution must follow publication of the final plan")
+    if not merged_at or datetime.fromisoformat(note["resolved_at"].replace("Z", "+00:00")) > datetime.fromisoformat(
+        merged_at.replace("Z", "+00:00")
+    ):
+        raise GateError("The final plan must be reviewed before the MR is merged")
+
+
 def verify_review(mr, approvals, job, review, digest, approver_id):
     head = mr["diff_refs"]["head_sha"]
     if mr["state"] != "merged" or mr["target_branch"] != os.environ["CI_DEFAULT_BRANCH"]:
@@ -165,7 +267,7 @@ def verify_review(mr, approvals, job, review, digest, approver_id):
     if job["status"] != "success" or job["commit"]["id"] != head:
         raise GateError("The latest MR plan job must have succeeded for its final commit")
     if (
-        review.get("version") != 1
+        review.get("version") != 2
         or review.get("commit_sha") != head
         or review.get("job_id") != str(job["id"])
         or review.get("mr_iid") != str(mr["iid"])
@@ -213,6 +315,8 @@ def reviewed_manifest(api):
         raise GateError("The final MR pipeline must contain one Terraform plan job")
     job = matches[0]
     review = json.loads(api.fetch(f"jobs/{job['id']}/artifacts/terraform/cloudflare/.ci/review.json", raw=True))
+    discussion = api.fetch(f"merge_requests/{mr['iid']}/discussions/{review['discussion_id']}")
+    verify_plan_thread(discussion, review, os.environ["TERRAFORM_APPROVER_ID"], mr.get("merged_at"))
     verify_review(mr, approvals, job, review, config_digest(), os.environ["TERRAFORM_APPROVER_ID"])
     print(f"Verified approved MR !{mr['iid']} and plan job {job['id']}")
     return review
@@ -247,7 +351,7 @@ def main():
         try:
             (ARTIFACTS / "summary.json").write_text(json.dumps(counts) + "\n")
             review = {
-                "version": 1,
+                "version": 2,
                 "commit_sha": os.environ["CI_COMMIT_SHA"],
                 "job_id": os.environ["CI_JOB_ID"],
                 "mr_iid": os.environ["CI_MERGE_REQUEST_IID"],
@@ -255,6 +359,7 @@ def main():
                 "changes_fingerprint": fingerprint,
                 "counts": counts,
             }
+            review.update(publish_plan(GitLab(), counts))
             (ARTIFACTS / "review.json").write_text(json.dumps(review, sort_keys=True) + "\n")
         finally:
             # Raw plan JSON and binary plans can contain secrets. Publish neither.
