@@ -214,6 +214,7 @@ class PublishingTests(unittest.TestCase):
             "notes": [
                 {
                     "id": 8,
+                    "body": "GitLab-normalized plan text",
                     "resolvable": True,
                     "resolved": False,
                     "author": {"id": 7},
@@ -229,6 +230,7 @@ class PublishingTests(unittest.TestCase):
         review = ci.publish_plan(self.api, {"create": 1, "update": 0, "delete": 0})
         self.assertEqual(review["discussion_id"], "new")
         self.assertEqual(review["note_id"], 8)
+        self.assertEqual(review["note_digest"], hashlib.sha256(b"GitLab-normalized plan text").hexdigest())
         self.assertEqual(self.api.fetch.call_args.args, ("merge_requests/4/discussions",))
         self.assertEqual(self.api.fetch.call_args.kwargs["method"], "POST")
 

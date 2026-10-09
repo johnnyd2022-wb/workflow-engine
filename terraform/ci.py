@@ -228,7 +228,7 @@ def publish_plan(api, counts):
     return {
         "discussion_id": discussion["id"],
         "note_id": note["id"],
-        "note_digest": hashlib.sha256(body.encode()).hexdigest(),
+        "note_digest": hashlib.sha256(note["body"].encode()).hexdigest(),
     }
 
 
