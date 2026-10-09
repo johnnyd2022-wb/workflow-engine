@@ -304,28 +304,34 @@ def test_sales_overview_groups_figures_and_tools_in_cards(browser, app_url, work
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_dashboard_groups_priorities_workspaces_and_signals_in_cards(browser, app_url, workspace_user, width):
+def test_dashboard_leads_with_attention_and_health_then_the_week(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core/dashboard")
         expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
-        names = ["Needs attention", "Today's planned production", "Workspaces", "Business signals"]
-        names += ["Production flow this week", "Logged events"]
-        regions = [page.get_by_role("region", name=name, exact=True) for name in names]
-        boxes = [region.bounding_box() for region in regions]
-        assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
-        full = [box for name, box in zip(names, boxes) if name != "Production flow this week"]
-        assert len({round(box["width"]) for box in full}) == 1, "every block spans the content column"
-        for name, tiles in [("Workspaces", "a, article"), ("Business signals", "article")]:
-            region = page.get_by_role("region", name=name, exact=True)
-            outer = region.bounding_box()
-            visible = [tile.bounding_box() for tile in region.locator(tiles).all() if tile.is_visible()]
+        names = ["Needs attention", "Today's planned production", "This week", "Workspaces", "Recent activity"]
+        regions = {name: page.get_by_role("region", name=name, exact=True) for name in names}
+        boxes = {name: region.bounding_box() for name, region in regions.items()}
+        assert [boxes[name]["y"] for name in names] == sorted(boxes[name]["y"] for name in names)
+        # Attention and the day's plan share the left column beside Production health; the
+        # blocks under them span the content column.
+        top = {round(boxes[name]["width"]) for name in names[:2]}
+        full = {round(boxes[name]["width"]) for name in names[2:]}
+        assert len(top) == 1 and len(full) == 1, (top, full)
+        health = page.get_by_role("region", name="Production health", exact=True)
+        expect(health).to_be_visible()
+        if width >= 1024:
+            assert health.bounding_box()["x"] > boxes["Needs attention"]["x"] + boxes["Needs attention"]["width"]
+        else:
+            assert top == full, "one column on a narrow screen"
+        for name, tiles in [("Workspaces", "a, article"), ("This week", "a.dash-figure")]:
+            outer = boxes[name]
+            visible = [tile.bounding_box() for tile in regions[name].locator(tiles).all() if tile.is_visible()]
             assert len(visible) >= 3
             for box in visible:
                 assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
-        flow = page.get_by_role("region", name="Production flow this week", exact=True)
-        expect(flow.locator("[data-ops-active]")).to_have_text("1")
-        for hidden in page.locator(".dash-stat-row[hidden], .dash-kpi-card[hidden]").all():
+        expect(regions["This week"].locator("[data-kpi-active-batches]")).to_have_text("1")
+        for hidden in page.locator(".dash-figure__meta[hidden], .dash-figure__spark[hidden]").all():
             expect(hidden).not_to_be_visible()
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "dashboard-layout", width)
