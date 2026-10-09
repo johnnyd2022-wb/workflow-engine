@@ -38,22 +38,6 @@ terraform_cloudflare_plan:
         - terraform/tests/**/*
         - .gitlab-ci.yml
 
-# A blocking manual job makes review visible in the MR before the pipeline can go green.
-terraform_cloudflare_review:
-  extends: .terraform_cloudflare
-  stage: test
-  tags: [terraform-plan]
-  needs:
-    - job: terraform_cloudflare_plan
-      artifacts: true
-  allow_failure: false
-  script:
-    - python3 terraform/ci.py review
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
-      changes: *terraform_cloudflare_changes
-      when: manual
-
 terraform_cloudflare_apply:
   extends: .terraform_cloudflare
   stage: deploy

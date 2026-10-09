@@ -105,7 +105,7 @@ def runner_block(name, runner_id, token, env):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan-only", action="store_true", help="Refresh only the plan/review runner")
+    parser.add_argument("--plan-only", action="store_true", help="Refresh only the plan runner")
     args = parser.parse_args()
     vault = Secrets()
     cf = "workflow-engine/terraform-cloudflare"
