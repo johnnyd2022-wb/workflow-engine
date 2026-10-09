@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block content %}
-  <div class="max-content workspace-overview workspace-page inv-view-page">
+  <div class="max-content workspace-overview workspace-page inv-view-page" data-inventory-view data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}">
     <header class="workspace-header">
       <div><h1>Inventory</h1><p>Everything on hand, with where it came from and where it has been used.</p></div>
       <div class="workspace-header__actions">
@@ -16,99 +16,69 @@
       </div>
     </header>
     <div class="workspace-stack">
-      <section class="workspace-card" aria-labelledby="inv-view-filters-title">
-        <h2 id="inv-view-filters-title">Find stock</h2>
-        <p class="workspace-caption">Search, or narrow by type, supplier, process and dates.</p>
-        <div class="inv-view-filters" id="inv-view-filters">
-          <div class="inv-view-filters__full">
-            <label class="spa-field-label" for="inv-filter-search">Search</label>
-            <input type="search" id="inv-filter-search" class="spa-inp" placeholder="Name, supplier, unit, process, barcode, or any text in metadata" autocomplete="off">
-          </div>
-          <div>
-            <label class="spa-field-label" for="inv-filter-type">Type</label>
-            <select id="inv-filter-type" class="spa-inp">
-              <option value="">All types</option>
-              <option value="raw_material">Raw</option>
-              <option value="work_in_progress">Intermediate</option>
-              <option value="final_product">Final</option>
-            </select>
-          </div>
-          <div>
-            <label class="spa-field-label" for="inv-filter-supplier">Supplier</label>
-            <select id="inv-filter-supplier" class="spa-inp">
-              <option value="">Any supplier</option>
-            </select>
-          </div>
-          <div>
-            <label class="spa-field-label" for="inv-filter-process">Process</label>
-            <select id="inv-filter-process" class="spa-inp">
-              <option value="">Any process</option>
-            </select>
-          </div>
-          <div>
-            <label class="spa-field-label" for="inv-filter-expiry-from">Expiry from</label>
-            <input type="date" id="inv-filter-expiry-from" class="spa-inp">
-          </div>
-          <div>
-            <label class="spa-field-label" for="inv-filter-expiry-to">Expiry to</label>
-            <input type="date" id="inv-filter-expiry-to" class="spa-inp">
-          </div>
-          <div>
-            <label class="spa-field-label" for="inv-filter-purchase-from">Purchase from</label>
-            <input type="date" id="inv-filter-purchase-from" class="spa-inp">
-          </div>
-          <div>
-            <label class="spa-field-label" for="inv-filter-purchase-to">Purchase to</label>
-            <input type="date" id="inv-filter-purchase-to" class="spa-inp">
-          </div>
-          <div>
-            <label class="spa-field-label" for="inv-filter-meta-key">Metadata field (optional)</label>
-            <select id="inv-filter-meta-key" class="spa-inp">
-              <option value="">Any</option>
-            </select>
-          </div>
-          <div class="inv-view-filters__full">
-            <label class="spa-field-label" for="inv-filter-meta-text">Metadata contains (JSON text)</label>
-            <input type="text" id="inv-filter-meta-text" class="spa-inp" placeholder="Substring match inside stored metadata JSON" autocomplete="off">
-          </div>
-        </div>
-
+      <section class="workspace-card" aria-labelledby="inv-view-glance-title">
+        <h2 id="inv-view-glance-title">At a glance</h2>
+        <p class="workspace-caption">Select a group to filter the list.</p>
+        <div class="inv-glance" data-inv-glance aria-live="polite"></div>
       </section>
 
-      <section class="workspace-card" aria-labelledby="inv-view-results-title">
-        <div class="workspace-card__header">
+      <section class="workspace-card inv-stock" aria-labelledby="inv-view-results-title">
+        <div class="inv-toolbar">
           <div>
             <h2 id="inv-view-results-title">Stock on hand</h2>
             <p class="workspace-caption inv-view-count" id="inv-view-count" aria-live="polite">Loading…</p>
           </div>
-          <button type="button" class="workspace-button" id="inv-view-clear-filters">Clear filters</button>
+          <label class="inv-search">
+            <svg class="inv-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+            <input type="search" id="inv-filter-search" autocomplete="off" aria-label="Search inventory" placeholder="Search name, supplier, batch or barcode">
+          </label>
         </div>
 
-        <div id="inv-view-loading" class="inv-view-loading">Loading inventory…</div>
-        <div id="inv-view-empty" class="inv-view-empty" style="display: none;"></div>
+        <div class="inv-controls" id="inv-view-filters">
+          <div class="inv-segments" role="group" aria-label="Type" data-inv-segments></div>
+          <div class="inv-controls__filters">
+            <select id="inv-filter-supplier" class="inv-select" aria-label="Supplier"><option value="">Supplier</option></select>
+            <select id="inv-filter-process" class="inv-select" aria-label="Process"><option value="">Process</option></select>
+            <button type="button" class="inv-control" data-inv-more-toggle aria-expanded="false" aria-controls="inv-view-more">
+              Dates and details<span class="inv-control__count" data-inv-more-count></span>
+            </button>
+            <button type="button" class="inv-control inv-control--toggle" data-inv-group aria-pressed="false" title="Show one row per product, with its lots underneath">
+              Group lots
+            </button>
+          </div>
+        </div>
 
-        <div class="inv-view-table-wrap" id="inv-view-table-wrap" style="display: none;">
+        <div class="inv-more" id="inv-view-more" data-inv-more hidden>
+          <fieldset class="inv-more__range">
+            <legend>Expiry date</legend>
+            <label><span>From</span><input type="date" id="inv-filter-expiry-from"></label>
+            <label><span>To</span><input type="date" id="inv-filter-expiry-to"></label>
+          </fieldset>
+          <fieldset class="inv-more__range">
+            <legend>Purchase date</legend>
+            <label><span>From</span><input type="date" id="inv-filter-purchase-from"></label>
+            <label><span>To</span><input type="date" id="inv-filter-purchase-to"></label>
+          </fieldset>
+          <fieldset class="inv-more__range inv-more__range--wide">
+            <legend>Recorded details</legend>
+            <label><span>Has field</span><select id="inv-filter-meta-key"><option value="">Any field</option></select></label>
+            <label><span>Contains</span><input type="text" id="inv-filter-meta-text" autocomplete="off" placeholder="Any recorded value"></label>
+          </fieldset>
+        </div>
+
+        <div class="inv-active" data-inv-active hidden></div>
+
+        <div id="inv-view-loading" class="inv-view-loading" aria-hidden="true">
+          {% for _ in range(6) %}<div class="inv-skeleton"><span></span><span></span><span></span><span></span></div>{% endfor %}
+        </div>
+        <div id="inv-view-empty" class="inv-view-empty" hidden></div>
+
+        <div class="inv-view-table-wrap" id="inv-view-table-wrap" hidden>
           <table class="inv-view-table" id="inv-view-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Qty</th>
-                <th>Unit</th>
-                <th>Supplier</th>
-                <th>Batch</th>
-                <th>Purchase</th>
-                <th>Expiry</th>
-                <th>Process</th>
-                <th>Barcode</th>
-                <th>Audit</th>
-              </tr>
-            </thead>
+            <thead></thead>
             <tbody id="inv-view-tbody"></tbody>
           </table>
         </div>
-
-        <div class="inv-view-cards" id="inv-view-cards"></div>
       </section>
 
       <section class="workspace-card" aria-labelledby="inv-view-tools-title">
@@ -122,461 +92,25 @@
         </div>
       </section>
     </div>
+
+    <div class="inv-backdrop" data-inv-backdrop hidden></div>
+    <aside class="inv-drawer" data-inv-drawer role="dialog" aria-modal="true" aria-labelledby="inv-drawer-title" hidden>
+      <header class="inv-drawer__head">
+        <div>
+          <div class="inv-drawer__eyebrow" data-inv-drawer-eyebrow></div>
+          <h2 id="inv-drawer-title"></h2>
+        </div>
+        <button type="button" class="inv-drawer__close" data-inv-drawer-close aria-label="Close">
+          <svg class="inv-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+        </button>
+      </header>
+      <div class="inv-drawer__body" data-inv-drawer-body></div>
+      <footer class="inv-drawer__foot" data-inv-drawer-foot hidden></footer>
+    </aside>
   </div>
-  <script>
-    (function () {
-      if (window.__invViewInit) return;
-      window.__invViewInit = true;
-
-      const TYPE_LABEL = { raw_material: 'Raw', work_in_progress: 'Intermediate', final_product: 'Final' };
-      const TYPE_CLASS = { raw_material: 'inv-view-type--raw', work_in_progress: 'inv-view-type--wip', final_product: 'inv-view-type--final' };
-      let allItems = [];
-
-      function esc(s) {
-        if (s == null || s === '') return '';
-        const d = document.createElement('div');
-        d.textContent = String(s);
-        return d.innerHTML;
-      }
-
-      function parseQty(item) {
-        const q = parseFloat(String(item.quantity || '0').trim());
-        return isNaN(q) ? 0 : q;
-      }
-
-      function itemVisible(item) {
-        return parseQty(item) > 0 && Math.abs(parseQty(item)) >= 0.0001;
-      }
-
-      function datePart(iso) {
-        if (!iso || typeof iso !== 'string') return '';
-        return iso.slice(0, 10);
-      }
-
-      function topLevelKeysFromExtra(extra) {
-        const keys = [];
-        if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
-          Object.keys(extra).forEach(function (k) { keys.push(k); });
-        }
-        return keys.sort();
-      }
-
-      function fmtDate(iso) {
-        if (!iso) return '—';
-        try {
-          return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-        } catch (e) { return iso.slice(0, 10); }
-      }
-
-      function fmtDateTime(iso) {
-        if (!iso) return '—';
-        try {
-          const d = new Date(iso);
-          const date = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-          const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-          return date + '<br><span style="opacity:0.7">' + time + '</span>';
-        } catch (e) { return iso.slice(0, 16); }
-      }
-
-      function buildSparkline(es) {
-        if (!es) return '';
-        var hist = es.quantity_history;
-        if (!hist || hist.length < 2) return '';
-        var vals = hist.map(function (h) { return parseFloat(h.qty) || 0; });
-        var min = Math.min.apply(null, vals);
-        var max = Math.max.apply(null, vals);
-        if (min === max) return '';
-        var W = 80, H = 24, pad = 2;
-        var pts = vals.map(function (v, i) {
-          var x = pad + (i / (vals.length - 1)) * (W - pad * 2);
-          var y = H - pad - ((v - min) / (max - min)) * (H - pad * 2);
-          return x.toFixed(1) + ',' + y.toFixed(1);
-        }).join(' ');
-        return '<svg class="inv-sparkline" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' +
-          '<polyline fill="none" stroke="var(--color-primary,#3b82f6)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" points="' + pts + '"/>' +
-          '</svg>';
-      }
-
-      function buildHistoryToggle(itemId) {
-        return '<details class="inv-audit-history" data-item-id="' + esc(itemId) + '">' +
-          '<summary class="inv-audit-history__toggle">Audit history</summary>' +
-          '<div class="inv-audit-history__body" data-loaded="false"><span class="inv-audit-history__loading">Loading…</span></div>' +
-          '</details>';
-      }
-
-      function renderTimelineEvents(events) {
-        function buildDiffHtml(diffRows) {
-          if (!diffRows || !diffRows.length) return '';
-          var rows = diffRows.map(function (r) {
-            var beforeHtml = r.before != null
-              ? '<span class="inv-audit-diff__before">' + esc(r.before) + '</span>'
-              : '';
-            var arrowHtml = (r.before != null && r.after != null)
-              ? '<span class="inv-audit-diff__arrow">→</span>'
-              : '';
-            var afterHtml = r.after != null
-              ? '<span class="inv-audit-diff__after">' + esc(r.after) + '</span>'
-              : '';
-            return '<li class="inv-audit-diff__row">' +
-              '<span class="inv-audit-diff__label">' + esc(r.label) + '</span>' +
-              beforeHtml + arrowHtml + afterHtml +
-              '</li>';
-          }).join('');
-          return '<ul class="inv-audit-diff">' + rows + '</ul>';
-        }
-        return '<ol class="inv-audit-timeline">' +
-          events.map(function (ev) {
-            var actorHtml = ev.actor
-              ? '<span class="inv-audit-timeline__actor">' + esc(ev.actor) + '</span>'
-              : '';
-            return '<li class="inv-audit-timeline__item">' +
-              '<span class="inv-audit-timeline__dot"></span>' +
-              '<div class="inv-audit-timeline__content">' +
-                '<span class="inv-audit-timeline__text">' + esc(ev.summary || ev.event_type) + '</span>' +
-                buildDiffHtml(ev.diff_rows) +
-                actorHtml +
-              '</div>' +
-              '<span class="inv-audit-timeline__time">' + fmtDateTime(ev.at) + '</span>' +
-              '</li>';
-          }).join('') +
-          '</ol>';
-      }
-
-      function wireHistoryToggles(container) {
-        container.querySelectorAll('.inv-audit-history').forEach(function (det) {
-          var _events = [];
-          var _asc = true;
-
-          function render(body) {
-            var sorted = _asc ? _events : _events.slice().reverse();
-            body.innerHTML =
-              '<div class="inv-audit-sortbar">' +
-                '<button class="inv-audit-sortbar__btn" type="button">' +
-                  (_asc ? '↑ Oldest first' : '↓ Newest first') +
-                '</button>' +
-              '</div>' +
-              renderTimelineEvents(sorted);
-            body.querySelector('.inv-audit-sortbar__btn').addEventListener('click', function () {
-              _asc = !_asc;
-              render(body);
-            });
-          }
-
-          det.addEventListener('toggle', function () {
-            if (!det.open) return;
-            const body = det.querySelector('.inv-audit-history__body');
-            if (!body || body.dataset.loaded === 'true') return;
-            const itemId = det.dataset.itemId;
-            fetch('/api/core/entities/inventory_item/' + encodeURIComponent(itemId) + '/story', { credentials: 'same-origin' })
-              .then(function (r) { return r.json(); })
-              .then(function (data) {
-                body.dataset.loaded = 'true';
-                _events = data.events || [];
-                if (!_events.length) {
-                  body.innerHTML = '<span class="inv-audit-history__empty">No history recorded yet.</span>';
-                  return;
-                }
-                render(body);
-              })
-              .catch(function () {
-                body.dataset.loaded = 'true';
-                body.innerHTML = '<span class="inv-audit-history__empty">Could not load history.</span>';
-              });
-          });
-        });
-      }
-
-      function populateSelect(sel, values, emptyLabel) {
-        const cur = sel.value;
-        sel.innerHTML = '';
-        const opt0 = document.createElement('option');
-        opt0.value = '';
-        opt0.textContent = emptyLabel;
-        sel.appendChild(opt0);
-        values.forEach(function (v) {
-          const o = document.createElement('option');
-          o.value = v;
-          o.textContent = v;
-          sel.appendChild(o);
-        });
-        if (values.indexOf(cur) >= 0) sel.value = cur;
-      }
-
-      function populateMetaKeys(items) {
-        const set = new Set();
-        items.forEach(function (it) {
-          topLevelKeysFromExtra(it.extra_data).forEach(function (k) { set.add(k); });
-        });
-        const metaSel = document.getElementById('inv-filter-meta-key');
-        if (!metaSel) return;
-        const opts = Array.from(set);
-        const cur = metaSel.value;
-        metaSel.innerHTML = '<option value="">Any</option>';
-        opts.forEach(function (k) {
-          const o = document.createElement('option');
-          o.value = k;
-          o.textContent = k;
-          metaSel.appendChild(o);
-        });
-        if (opts.indexOf(cur) >= 0) metaSel.value = cur;
-      }
-
-      function uniqueStrings(items, getter) {
-        const s = new Set();
-        items.forEach(function (it) {
-          const v = getter(it);
-          if (v && String(v).trim()) s.add(String(v).trim());
-        });
-        return Array.from(s).sort(function (a, b) { return a.localeCompare(b); });
-      }
-
-      function passesFilters(item) {
-        const q = (document.getElementById('inv-filter-search') || {}).value || '';
-        const type = (document.getElementById('inv-filter-type') || {}).value || '';
-        const supplier = (document.getElementById('inv-filter-supplier') || {}).value || '';
-        const process = (document.getElementById('inv-filter-process') || {}).value || '';
-        const expFrom = (document.getElementById('inv-filter-expiry-from') || {}).value || '';
-        const expTo = (document.getElementById('inv-filter-expiry-to') || {}).value || '';
-        const purFrom = (document.getElementById('inv-filter-purchase-from') || {}).value || '';
-        const purTo = (document.getElementById('inv-filter-purchase-to') || {}).value || '';
-        const metaKey = (document.getElementById('inv-filter-meta-key') || {}).value || '';
-        const metaText = ((document.getElementById('inv-filter-meta-text') || {}).value || '').trim().toLowerCase();
-
-        if (type && (item.inventory_type || '') !== type) return false;
-        if (supplier && String(item.supplier || '').trim() !== supplier) return false;
-        if (process && String(item.process_name || '').trim() !== process) return false;
-
-        const ed = item.expiry_date ? datePart(item.expiry_date) : '';
-        if (expFrom && (!ed || ed < expFrom)) return false;
-        if (expTo && (!ed || ed > expTo)) return false;
-
-        const pd = item.purchase_date ? datePart(item.purchase_date) : '';
-        if (purFrom && (!pd || pd < purFrom)) return false;
-        if (purTo && (!pd || pd > purTo)) return false;
-
-        if (metaKey) {
-          const ex = item.extra_data;
-          if (!ex || typeof ex !== 'object' || !Object.prototype.hasOwnProperty.call(ex, metaKey)) return false;
-        }
-
-        if (metaText) {
-          let jsonLow = '';
-          try { jsonLow = JSON.stringify(item.extra_data || {}).toLowerCase(); } catch (e) {}
-          if (jsonLow.indexOf(metaText) === -1) return false;
-        }
-
-        if (q.trim()) {
-          const needle = q.trim().toLowerCase();
-          const hay = [
-            item.name,
-            item.unit,
-            item.supplier,
-            item.process_name,
-            item.source_step_name,
-            item.supplier_batch_number,
-            item.barcode,
-            jsonLow
-          ].filter(Boolean).join(' ').toLowerCase();
-          if (hay.indexOf(needle) === -1) return false;
-        }
-
-        return true;
-      }
-
-      function render() {
-        const visibleAll = allItems.filter(itemVisible);
-        const filtered = visibleAll.filter(passesFilters);
-        const countEl = document.getElementById('inv-view-count');
-        const loadingEl = document.getElementById('inv-view-loading');
-        const emptyEl = document.getElementById('inv-view-empty');
-        const wrapEl = document.getElementById('inv-view-table-wrap');
-        const cardsEl = document.getElementById('inv-view-cards');
-        const tbody = document.getElementById('inv-view-tbody');
-
-        if (loadingEl) loadingEl.style.display = 'none';
-
-        if (countEl) {
-          countEl.textContent = filtered.length === visibleAll.length
-            ? filtered.length + ' item' + (filtered.length === 1 ? '' : 's') + ' on hand'
-            : filtered.length + ' of ' + visibleAll.length + ' items shown';
-        }
-
-        if (!filtered.length) {
-          if (emptyEl) {
-            emptyEl.style.display = 'block';
-            emptyEl.textContent = visibleAll.length === 0
-              ? 'No inventory on hand yet.'
-              : 'No items match your filters.';
-          }
-          if (wrapEl) wrapEl.style.display = 'none';
-          if (cardsEl) cardsEl.style.display = 'none';
-          if (tbody) tbody.innerHTML = '';
-          if (cardsEl) cardsEl.innerHTML = '';
-          return;
-        }
-
-        if (emptyEl) emptyEl.style.display = 'none';
-        if (wrapEl) wrapEl.style.removeProperty('display');
-        if (cardsEl) cardsEl.style.removeProperty('display');
-
-        const rows = filtered.map(function (item) {
-          const t = item.inventory_type || 'raw_material';
-          const typeLabel = TYPE_LABEL[t] || t;
-          const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
-
-          const adjBtn =
-            '<div class="inv-adj-wrap">' +
-              '<button class="inv-adj-btn inv-adj-btn--primary" type="button" ' +
-                'data-item-id="' + esc(item.id) + '" ' +
-                'data-name="' + esc(item.name || '') + '" ' +
-                'data-type="' + esc(item.inventory_type || '') + '" ' +
-                'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '" ' +
-                'data-unit="' + esc(item.unit || '') + '" ' +
-                'data-supplier="' + esc(item.supplier || '') + '" ' +
-                'data-batch="' + esc(item.supplier_batch_number || '') + '" ' +
-                'data-purchase="' + esc(datePart(item.purchase_date) || '') + '" ' +
-                'data-expiry="' + esc(datePart(item.expiry_date) || '') + '" ' +
-                'data-barcode="' + esc(item.barcode || '') + '">' +
-                'Edit' +
-              '</button>' +
-            '</div>';
-          return (
-            '<tr>' +
-              '<td><strong>' + esc(item.name) + '</strong>' + adjBtn + '</td>' +
-              '<td><span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span></td>' +
-              '<td>' + esc(String(item.quantity != null ? item.quantity : '')) + '</td>' +
-              '<td>' + esc(item.unit || '') + '</td>' +
-              '<td>' + esc(item.supplier || '—') + '</td>' +
-              '<td>' + esc(item.supplier_batch_number || '—') + '</td>' +
-              '<td>' + esc(datePart(item.purchase_date) || '—') + '</td>' +
-              '<td>' + esc(datePart(item.expiry_date) || '—') + '</td>' +
-              '<td>' + esc(item.process_name || '—') + '</td>' +
-              '<td>' + esc(item.barcode || '—') + '</td>' +
-              '<td>' + (item.id ? buildHistoryToggle(item.id) : '') + '</td>' +
-            '</tr>'
-          );
-        }).join('');
-
-        if (tbody) tbody.innerHTML = rows;
-        if (tbody) wireHistoryToggles(tbody);
-
-        if (cardsEl) {
-          cardsEl.innerHTML = filtered.map(function (item) {
-            const t = item.inventory_type || 'raw_material';
-            const typeLabel = TYPE_LABEL[t] || t;
-            const typeClass = TYPE_CLASS[t] || 'inv-view-type--raw';
-            const es = item.event_summary || null;
-            return (
-              '<article class="inv-view-card">' +
-                '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">' +
-                  '<strong style="font-size:1rem;">' + esc(item.name) + '</strong>' +
-                  '<span class="inv-view-type ' + typeClass + '">' + esc(typeLabel) + '</span>' +
-                '</div>' +
-                '<div class="inv-adj-wrap">' +
-                  '<button class="inv-adj-btn inv-adj-btn--primary" type="button" ' +
-                    'data-item-id="' + esc(item.id) + '" ' +
-                    'data-name="' + esc(item.name || '') + '" ' +
-                    'data-type="' + esc(item.inventory_type || '') + '" ' +
-                    'data-current="' + esc(String(item.quantity != null ? item.quantity : '')) + '" ' +
-                    'data-unit="' + esc(item.unit || '') + '" ' +
-                    'data-supplier="' + esc(item.supplier || '') + '" ' +
-                    'data-batch="' + esc(item.supplier_batch_number || '') + '" ' +
-                    'data-purchase="' + esc(datePart(item.purchase_date) || '') + '" ' +
-                    'data-expiry="' + esc(datePart(item.expiry_date) || '') + '" ' +
-                    'data-barcode="' + esc(item.barcode || '') + '">' +
-                    'Edit' +
-                  '</button>' +
-                '</div>' +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Quantity</span><span class="inv-view-card__val inv-view-card__val--qty">' + esc(String(item.quantity)) + ' ' + esc(item.unit || '') + buildSparkline(es) + '</span></div>' +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Supplier</span><span class="inv-view-card__val">' + esc(item.supplier || '—') + '</span></div>' +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Batch</span><span class="inv-view-card__val">' + esc(item.supplier_batch_number || '—') + '</span></div>' +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Purchase</span><span class="inv-view-card__val">' + esc(datePart(item.purchase_date) || '—') + '</span></div>' +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Expiry</span><span class="inv-view-card__val">' + esc(datePart(item.expiry_date) || '—') + '</span></div>' +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Process</span><span class="inv-view-card__val">' + esc(item.process_name || '—') + '</span></div>' +
-                '<div class="inv-view-card__row"><span class="inv-view-card__label">Barcode</span><span class="inv-view-card__val">' + esc(item.barcode || '—') + '</span></div>' +
-                (item.id ? buildHistoryToggle(item.id) : '') +
-              '</article>'
-            );
-          }).join('');
-          wireHistoryToggles(cardsEl);
-        }
-      }
-
-      function wireFilters() {
-        const ids = ['inv-filter-search', 'inv-filter-type', 'inv-filter-supplier', 'inv-filter-process',
-          'inv-filter-expiry-from', 'inv-filter-expiry-to', 'inv-filter-purchase-from', 'inv-filter-purchase-to',
-          'inv-filter-meta-key', 'inv-filter-meta-text'];
-        ids.forEach(function (id) {
-          const el = document.getElementById(id);
-          if (!el) return;
-          el.addEventListener('input', function () { render(); });
-          el.addEventListener('change', function () { render(); });
-        });
-        const clear = document.getElementById('inv-view-clear-filters');
-        if (clear) {
-          clear.addEventListener('click', function () {
-            document.getElementById('inv-filter-search').value = '';
-            document.getElementById('inv-filter-type').value = '';
-            document.getElementById('inv-filter-supplier').value = '';
-            document.getElementById('inv-filter-process').value = '';
-            document.getElementById('inv-filter-expiry-from').value = '';
-            document.getElementById('inv-filter-expiry-to').value = '';
-            document.getElementById('inv-filter-purchase-from').value = '';
-            document.getElementById('inv-filter-purchase-to').value = '';
-            document.getElementById('inv-filter-meta-key').value = '';
-            document.getElementById('inv-filter-meta-text').value = '';
-            render();
-          });
-        }
-      }
-
-      async function load() {
-        if (!window.CoreAPI || !window.CoreAPI.getInventory) {
-          const loadingEl = document.getElementById('inv-view-loading');
-          if (loadingEl) {
-            loadingEl.textContent = 'Inventory API is not available.';
-          }
-          return;
-        }
-        try {
-          const res = await window.CoreAPI.getInventory();
-          allItems = res.inventory_items || [];
-          populateSelect(
-            document.getElementById('inv-filter-supplier'),
-            uniqueStrings(allItems.filter(itemVisible), function (i) { return i.supplier; }),
-            'Any supplier'
-          );
-          populateSelect(
-            document.getElementById('inv-filter-process'),
-            uniqueStrings(allItems.filter(itemVisible), function (i) { return i.process_name; }),
-            'Any process'
-          );
-          populateMetaKeys(allItems.filter(itemVisible));
-          render();
-        } catch (e) {
-          console.error(e);
-          const loadingEl = document.getElementById('inv-view-loading');
-          if (loadingEl) loadingEl.textContent = 'Failed to load inventory.';
-        }
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function () {
-          wireFilters();
-          load();
-        });
-      } else {
-        wireFilters();
-        load();
-      }
-    })();
-  </script>
-{% endblock %}
-
-{% block scripts %}
-  {{ super() }}
-  <script>
-    window.invAdjustOnSave = function() { load(); };
-  </script>
+  {# Inside the content block, deferred, on purpose: a boosted navigation swaps only #page-content,
+     so this is the one place a page script runs on every visit; `defer` keeps it behind core-api.js
+     on a full load. See suppliers/suppliers.html. #}
+  <script src="{{ url_for('core.serve_core_js', filename='inventory-view.js') }}" defer></script>
 {% endblock %}
 {% block workspace_links %}{% endblock %}
