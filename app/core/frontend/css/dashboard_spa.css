@@ -34,11 +34,7 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
 #page-content .dashboard-v4 .dash-setup__hide { height: 38px; padding: 0 10px; border: 0; background: none; color: var(--ui-text-muted, #64748b); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 #page-content .dashboard-v4 .dash-setup__hide:hover { color: var(--ui-text, #172033); text-decoration: underline; }
 
-/* Top: attention and planned work on the left, health on the right */
-#page-content .dashboard-v4 .dash-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
-#page-content .dashboard-v4 .dash-top--with-health { grid-template-columns: minmax(0, 1fr) 320px; }
-#page-content .dashboard-v4 .dash-top__main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-
+/* Attention, then the plan for the day */
 #page-content .dashboard-v4 .dash-attention,
 #page-content .dashboard-v4 .dash-planned,
 #page-content .dashboard-v4 .dash-activity,
@@ -78,17 +74,21 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
 #page-content .dashboard-v4 .dash-planned strong { font-weight: 600; }
 #page-content .dashboard-v4 .dash-planned p { margin: 0; font-size: 13px; color: var(--ui-text-muted, #64748b); }
 
-/* Health */
-#page-content .dashboard-v4 .dash-health__score { display: flex; align-items: baseline; gap: 8px; margin-top: 16px; }
-#page-content .dashboard-v4 .dash-health__score strong { font-size: 52px; line-height: 1; font-weight: 600; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; }
-#page-content .dashboard-v4 .dash-health__score span { font-size: 15px; color: var(--ui-text-muted, #64748b); }
-#page-content .dashboard-v4 .dash-health__state { display: inline-block; margin: 12px 0 0; padding: 3px 11px; border-radius: 999px; background: var(--dash-ok-soft); color: var(--dash-ok); font-size: 13px; font-weight: 600; }
+/* Health: one band across the page */
+#page-content .dashboard-v4 .dash-health { display: flex; align-items: center; gap: 16px 28px; flex-wrap: wrap; padding: 18px 24px; }
+#page-content .dashboard-v4 .dash-health__score { display: flex; align-items: baseline; gap: 14px; }
+#page-content .dashboard-v4 .dash-health__score h2 { font-size: 15px; }
+#page-content .dashboard-v4 .dash-health__score p { display: flex; align-items: baseline; gap: 6px; margin: 0; }
+#page-content .dashboard-v4 .dash-health__score strong { font-size: 30px; line-height: 1; font-weight: 600; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
+#page-content .dashboard-v4 .dash-health__score span { font-size: 14px; color: var(--ui-text-muted, #64748b); }
+#page-content .dashboard-v4 .dash-health__state { margin: 0; padding: 3px 11px; border-radius: 999px; background: var(--dash-ok-soft); color: var(--dash-ok); font-size: 13px; font-weight: 600; white-space: nowrap; }
 #page-content .dashboard-v4 [data-health-level="degraded"] .dash-health__state { background: var(--dash-attention-soft); color: var(--dash-attention); }
 #page-content .dashboard-v4 [data-health-level="critical"] .dash-health__state { background: var(--dash-alert-soft); color: var(--dash-alert); }
-#page-content .dashboard-v4 .dash-health__drivers { display: grid; gap: 10px; margin: 20px 0; padding-top: 16px; border-top: 1px solid var(--ui-border, #e2e8f0); font-size: 14px; }
-#page-content .dashboard-v4 .dash-health__drivers li { display: flex; justify-content: space-between; gap: 12px; }
+#page-content .dashboard-v4 .dash-health__drivers { display: flex; align-items: center; gap: 6px 22px; flex: 1 1 240px; flex-wrap: wrap; min-width: 0; padding-left: 28px; border-left: 1px solid var(--ui-border, #e2e8f0); font-size: 14px; }
+#page-content .dashboard-v4 .dash-health__drivers li { display: flex; align-items: baseline; gap: 8px; }
 #page-content .dashboard-v4 .dash-health__drivers strong { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--dash-alert); }
 #page-content .dashboard-v4 .dash-health__clear { color: var(--ui-text-muted, #64748b); }
+#page-content .dashboard-v4 .dash-health .workspace-link { white-space: nowrap; }
 
 /* This week: one row of figures */
 #page-content .dashboard-v4 .dash-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; margin: 18px -12px -8px; }
@@ -157,13 +157,6 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
 #page-content .dashboard-v4 .dash-error { color: var(--dash-alert); }
 
 @media (max-width: 1023px) {
-  #page-content .dashboard-v4 .dash-top--with-health { grid-template-columns: minmax(0, 1fr); }
-  /* One column: attention first, then health, then the plan for the day. */
-  #page-content .dashboard-v4 .dash-top__main { display: contents; }
-  #page-content .dashboard-v4 .dash-top__main > :first-child { order: 1; }
-  #page-content .dashboard-v4 .dash-health { order: 2; }
-  #page-content .dashboard-v4 .dash-top__main > :nth-child(2) { order: 3; }
-  #page-content .dashboard-v4 .dash-health__score strong { font-size: 44px; }
   #page-content .dashboard-v4 .dash-workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 767px) {
@@ -174,6 +167,10 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
   #page-content .dashboard-v4 .dash-figure__value { font-size: 24px; }
   #page-content .dashboard-v4 .dash-activity__row { flex-direction: column; gap: 2px; }
   #page-content .dashboard-v4 .dash-setup { padding: 14px 16px; }
+  #page-content .dashboard-v4 .dash-health { gap: 12px 16px; padding: 16px; }
+  #page-content .dashboard-v4 .dash-health__score { flex: 1 1 100%; justify-content: space-between; }
+  #page-content .dashboard-v4 .dash-health__drivers { flex: 1 1 100%; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--ui-border, #e2e8f0); }
+  #page-content .dashboard-v4 .dash-health__drivers li { flex: 1 1 100%; justify-content: space-between; }
   #page-content .dashboard-v4 .dash-footer-note { padding: 0 16px; }
 }
 @media (prefers-reduced-motion: reduce) {

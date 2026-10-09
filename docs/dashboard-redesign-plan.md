@@ -43,12 +43,16 @@ vendor support docs and a third-party breakdown.
 
 1. **Header.** "Dashboard", today's date underneath, and "Updated 8:34 pm" at the right.
 2. **Setup strip.** One line with the go-live button and "Hide". Only until go-live is set.
-3. **Needs attention** (left, wide). One row per item: severity dot, what it is, which
-   workspace, the count, a chevron. The whole row is the link. Empty state: "Nothing needs
-   you right now."
-4. **Production health** (right). The score out of 100, its state in words, and the top
-   drivers with what each costs. New on this page; the data was already in the response.
+3. **Production health.** One band across the page: the score out of 100, its state in
+   words, and the top drivers with what each costs. New on this page; the data was already
+   in the response.
+4. **Needs attention.** One row per item: severity dot, what it is, which workspace, the
+   count, a chevron. The whole row is the link. Empty state: "Nothing needs you right now."
 5. **Today's planned production.** Under attention. One line when there is nothing planned.
+
+Every block is the full width of the content column. The first version of this concept put
+health in a card beside attention; on a busy day the attention list and the plan grew past
+it and left a blank area under the card, so it became a band.
 6. **This week.** One row of figures replacing Business signals, Production flow and
    Commercial pulse: active batches, started, completed (with change on last week), failed
    or cancelled, operator actions; and for Sales roles, revenue this month and customer
@@ -64,6 +68,11 @@ vendor support docs and a third-party breakdown.
   `sales.view`.
 - Currency is still formatted as US dollars in the script; the org's currency is not in the
   response. Follow-up.
+- The summary route takes "today" from the server clock's date (`date.today()`) and then
+  treats it as a New Zealand date. The production image sets its clock to Pacific/Auckland,
+  so the two agree there; on a UTC machine (CI) the NZ morning is filed under yesterday.
+  One line to fix (`datetime.now(_APP_TZ).date()`), but several existing tests build due
+  dates from `date.today()` and would need the same change. Follow-up.
 - Removed from the page (still in the API): the "Open action items" tile, the revenue
   baseline variance and month-on-month rows. They duplicated or qualified other figures.
   Say so if any of them is missed.

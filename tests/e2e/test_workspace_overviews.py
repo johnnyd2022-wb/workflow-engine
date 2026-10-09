@@ -304,26 +304,19 @@ def test_sales_overview_groups_figures_and_tools_in_cards(browser, app_url, work
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_dashboard_leads_with_attention_and_health_then_the_week(browser, app_url, workspace_user, width):
+def test_dashboard_stacks_health_attention_and_the_week_in_one_column(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core/dashboard")
         expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
-        names = ["Needs attention", "Today's planned production", "This week", "Workspaces", "Recent activity"]
+        names = ["Production health", "Needs attention", "Today's planned production", "This week"]
+        names += ["Workspaces", "Recent activity"]
         regions = {name: page.get_by_role("region", name=name, exact=True) for name in names}
         boxes = {name: region.bounding_box() for name, region in regions.items()}
         assert [boxes[name]["y"] for name in names] == sorted(boxes[name]["y"] for name in names)
-        # Attention and the day's plan share the left column beside Production health; the
-        # blocks under them span the content column.
-        top = {round(boxes[name]["width"]) for name in names[:2]}
-        full = {round(boxes[name]["width"]) for name in names[2:]}
-        assert len(top) == 1 and len(full) == 1, (top, full)
-        health = page.get_by_role("region", name="Production health", exact=True)
-        expect(health).to_be_visible()
-        if width >= 1024:
-            assert health.bounding_box()["x"] > boxes["Needs attention"]["x"] + boxes["Needs attention"]["width"]
-        else:
-            assert top == full, "one column on a narrow screen"
+        # Every block spans the content column: nothing sits beside a taller neighbour.
+        assert len({round(box["x"]) for box in boxes.values()}) == 1
+        assert len({round(box["width"]) for box in boxes.values()}) == 1
         for name, tiles in [("Workspaces", "a, article"), ("This week", "a.dash-figure")]:
             outer = boxes[name]
             visible = [tile.bounding_box() for tile in regions[name].locator(tiles).all() if tile.is_visible()]

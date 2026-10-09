@@ -36,43 +36,39 @@
       </section>
       {% endif %}
 
-      <div class="dash-top" data-dashboard-top>
-        <div class="dash-top__main">
-          <section class="workspace-card" aria-labelledby="dashboard-attention-title">
-            <div class="workspace-card__header">
-              <h2 id="dashboard-attention-title">Needs attention</h2>
-              <a class="workspace-link" href="/core/notifications">Review findings</a>
-            </div>
-            <ul class="dash-attention" data-action-list>
-              <li class="dash-skeleton" aria-hidden="true"><span></span><span></span></li>
-              <li class="dash-skeleton" aria-hidden="true"><span></span><span></span></li>
-            </ul>
-          </section>
-
-          {% if can('production.view') %}
-          <section class="workspace-card" aria-labelledby="dashboard-planned-work-title">
-            <div class="workspace-card__header">
-              <h2 id="dashboard-planned-work-title">Today's planned production</h2>
-              <a class="workspace-link" href="/core/planner/board" hx-boost="false">Review production board</a>
-            </div>
-            <p class="workspace-caption" data-planned-work-summary>Loading planned priorities...</p>
-            <ul class="dash-planned" data-planned-work-list></ul>
-          </section>
-          {% endif %}
-        </div>
-
-        {% if can('production.view', 'inventory.view') %}
-        <section class="workspace-card dash-health" data-dashboard-health hidden aria-labelledby="dashboard-health-title">
+      {% if can('production.view', 'inventory.view') %}
+      <section class="workspace-card dash-health" data-dashboard-health hidden aria-labelledby="dashboard-health-title">
+        <div class="dash-health__score">
           <h2 id="dashboard-health-title">Production health</h2>
-          <div class="dash-health__score">
-            <strong data-health-score>0</strong><span>/ 100</span>
-          </div>
-          <p class="dash-health__state" data-health-state></p>
-          <ul class="dash-health__drivers" data-health-drivers></ul>
-          <a class="workspace-link" href="/core">Open Production <span aria-hidden="true">→</span></a>
-        </section>
-        {% endif %}
-      </div>
+          <p><strong data-health-score>0</strong><span>/ 100</span></p>
+        </div>
+        <p class="dash-health__state" data-health-state></p>
+        <ul class="dash-health__drivers" data-health-drivers></ul>
+        <a class="workspace-link" href="/core">Open Production <span aria-hidden="true">→</span></a>
+      </section>
+      {% endif %}
+
+      <section class="workspace-card" aria-labelledby="dashboard-attention-title">
+        <div class="workspace-card__header">
+          <h2 id="dashboard-attention-title">Needs attention</h2>
+          <a class="workspace-link" href="/core/notifications">Review findings</a>
+        </div>
+        <ul class="dash-attention" data-action-list>
+          <li class="dash-skeleton" aria-hidden="true"><span></span><span></span></li>
+          <li class="dash-skeleton" aria-hidden="true"><span></span><span></span></li>
+        </ul>
+      </section>
+
+      {% if can('production.view') %}
+      <section class="workspace-card" aria-labelledby="dashboard-planned-work-title">
+        <div class="workspace-card__header">
+          <h2 id="dashboard-planned-work-title">Today's planned production</h2>
+          <a class="workspace-link" href="/core/planner/board" hx-boost="false">Review production board</a>
+        </div>
+        <p class="workspace-caption" data-planned-work-summary>Loading planned priorities...</p>
+        <ul class="dash-planned" data-planned-work-list></ul>
+      </section>
+      {% endif %}
 
       <section class="workspace-card" aria-labelledby="dashboard-week-title">
         <h2 id="dashboard-week-title">This week</h2>

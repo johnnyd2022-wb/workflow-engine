@@ -1,5 +1,5 @@
-"""The dashboard leads with what needs attention and how healthy production is, then one
-row of figures for the week (docs/dashboard-redesign-plan.md)."""
+"""The dashboard leads with a health band and what needs attention, then one row of figures
+for the week, every block the full width of the column (docs/dashboard-redesign-plan.md)."""
 
 import json
 import re
@@ -93,9 +93,14 @@ def test_production_health_shows_the_score_its_state_and_what_is_driving_it(expi
     expect(health.locator("[data-health-drivers] li")).to_have_text(
         [re.compile(r"Expired materials\s*−12"), re.compile(r"Outputs past ready date\s*−6")]
     )
-    # Health sits beside the attention list, not under it.
-    attention = page.get_by_role("region", name="Needs attention", exact=True).bounding_box()
-    assert health.bounding_box()["x"] >= attention["x"] + attention["width"]
+    # Health is a band across the page above the attention list, the same width as it.
+    band, attention = (
+        health.bounding_box(),
+        page.get_by_role("region", name="Needs attention", exact=True).bounding_box(),
+    )
+    assert band["y"] + band["height"] <= attention["y"]
+    assert (round(band["x"]), round(band["width"])) == (round(attention["x"]), round(attention["width"]))
+    assert band["height"] < 110, "one line, not a card"
     assert_clean_page(page)
 
 
@@ -106,9 +111,7 @@ def test_an_org_with_no_health_state_yet_gets_no_health_card(expired_stock_page)
     _open(page)
 
     expect(page.locator("[data-dashboard-health]")).to_be_hidden()
-    attention = page.get_by_role("region", name="Needs attention", exact=True).bounding_box()
-    week = page.get_by_role("region", name="This week", exact=True).bounding_box()
-    assert round(attention["width"]) == round(week["width"]), "attention takes the full column"
+    expect(page.get_by_role("region", name="Needs attention", exact=True)).to_be_visible()
 
 
 def test_a_quiet_day_says_so_instead_of_showing_an_empty_list(expired_stock_page):
@@ -151,13 +154,25 @@ def test_a_figure_draws_a_trend_only_when_its_series_moves(expired_stock_page):
 
 def test_recent_activity_shows_six_rows_then_the_rest_on_request(expired_stock_page):
     page = expired_stock_page
+
+    # The page's own events, served under both periods. Which calendar day the server files
+    # them under depends on its clock's timezone (see the plan's follow-ups); this test is
+    # about the list, so it does not depend on that.
+    def both_periods(body):
+        items = body["audit_log"]["week"]["items"]
+        assert len(items) == 8, "one 'added' event per seeded line"
+        body["audit_log"]["day"] = {"total": 8, "items": items}
+        body["audit_log"]["week"] = {"total": 23, "items": items}
+
+    _serve(page, both_periods)
     _open(page)
 
     activity = page.get_by_role("region", name="Recent activity", exact=True)
     rows = activity.locator(".dash-activity__row")
-    expect(rows).to_have_count(8)  # one "added" event per seeded line
+    expect(rows).to_have_count(8)
     expect(activity.locator(".dash-activity__row:visible")).to_have_count(6)
     expect(activity.get_by_role("button", name="Today")).to_have_attribute("aria-pressed", "true")
+    expect(activity.locator("[data-audit-meta]")).to_have_text("8 entries today.")
 
     activity.get_by_role("button", name="Show 2 more").click()
     expect(activity.locator(".dash-activity__row:visible")).to_have_count(8)
@@ -165,7 +180,8 @@ def test_recent_activity_shows_six_rows_then_the_rest_on_request(expired_stock_p
 
     activity.get_by_role("button", name="This week").click()
     expect(activity.get_by_role("button", name="This week")).to_have_attribute("aria-pressed", "true")
-    expect(activity.locator("[data-audit-meta]")).to_contain_text("this week")
+    expect(activity.locator("[data-audit-meta]")).to_have_text("Latest 8 of 23 entries this week.")
+    expect(activity.locator(".dash-activity__row:visible")).to_have_count(6)
     assert_clean_page(page)
 
 

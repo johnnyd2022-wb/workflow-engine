@@ -121,16 +121,14 @@
         critical: 'Action required',
     };
 
-    /* The health score, its state and what is driving it. The summary has always carried
-       these; this card is the first place the dashboard shows them. */
+    /* The health score, its state and what is driving it, as one band across the page. The
+       summary has always carried these; this is the first place the dashboard shows them. */
     function renderHealth(root, health) {
         var card = byData(root, '[data-dashboard-health]');
-        var top = byData(root, '[data-dashboard-top]');
         if (!card) return;
         var state = health && HEALTH_STATES[health.state] ? health.state : null;
         var known = !!state && health.score != null;
         card.hidden = !known;
-        if (top) top.classList.toggle('dash-top--with-health', known);
         if (!known) return;
         card.dataset.healthLevel = state;
         setText(root, '[data-health-score]', Math.round(Number(health.score)));
