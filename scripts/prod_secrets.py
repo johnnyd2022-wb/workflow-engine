@@ -84,13 +84,18 @@ SECRETS = (
     Secret(f"{GROUP}/xero_client_id", "XERO_CLIENT_ID", None, "Client id of the PRODUCTION Xero app."),
     Secret(f"{GROUP}/xero_client_secret", "XERO_CLIENT_SECRET", None, "Client secret of the PRODUCTION Xero app."),
     Secret(
-        f"{GROUP}/GOOGLE_CLIENT_ID",
+        f"{GROUP}/GOOGLE_CLIENT_ID_PROD",
         "GOOGLE_CLIENT_ID",
         None,
-        "Google OAuth client for customer sign-in. One client serves dev, test and production; "
-        "https://biz-e.app/auth/google/callback must be among its authorised redirect URIs.",
+        "Production's own Google OAuth client for customer sign-in, with the authorised redirect URI "
+        "https://biz-e.app/auth/google/callback.",
     ),
-    Secret(f"{GROUP}/GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET", None, "Secret of that Google OAuth client."),
+    Secret(
+        f"{GROUP}/GOOGLE_CLIENT_SECRET_PROD",
+        "GOOGLE_CLIENT_SECRET",
+        None,
+        "Secret of the production Google OAuth client.",
+    ),
     Secret(
         f"{GROUP}/ADMIN_FLASK_SECRET_KEY_PROD",
         "ADMIN_FLASK_SECRET_KEY",

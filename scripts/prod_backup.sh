@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Nightly production database backup: dump, prove it restores, copy it to Google Drive.
+# Daily production database backup: full dump, restore it locally, copy it to Google Drive.
 #
-#   scripts/prod_backup.sh             dump, rehearse the restore, upload, tidy up
+#   scripts/prod_backup.sh             dump, restore, upload, tidy up
 #   scripts/prod_backup.sh --no-upload the same without the Google Drive copy
 #
 # It is self-contained on purpose (Docker and gam only, no KeePassXC, nothing else from the
@@ -11,12 +11,15 @@
 #   10 18 * * *  /home/johnny/biz-e_db_backups.sh >> /home/johnny/db-backups/biz-e_db_backups.log 2>&1
 #
 # What a run does, stopping at the first failure:
-#   1. pg_dump (custom format) to ~/db-backups/workflow-engine-prod/
-#   2. restores that dump into a scratch database beside production and checks it holds the
-#      same organisations, users and schema version; the scratch database is then dropped
+#   1. full pg_dump (custom format) to ~/db-backups/workflow-engine-prod/
+#   2. restores that dump into the database `workflow-engine-restored`, beside production in
+#      the same container, replacing the previous day's copy, and checks it holds the same
+#      organisations, users and schema version. That copy stays until the next run, so
+#      yesterday's data can be looked at without touching production:
+#        docker exec -it workflow-engine-prod-db psql -U workflow_rw -d workflow-engine-restored
 #   3. uploads the dump to the Google Drive folder biz-e_db_backups, as the existing
 #      Whistlebird backups are (gam, johnny@whistlebird.co.nz)
-#   4. deletes local dumps older than 30 days; Drive keeps every copy
+#   4. removes older local dumps: only the latest stays on this machine, Drive keeps them all
 #
 # The dump holds everything in production, including password hashes. It is as sensitive as
 # the database; the Drive folder inherits the Whistlebird folder's sharing.
@@ -25,9 +28,8 @@ set -euo pipefail
 CONTAINER=workflow-engine-prod-db
 DB_NAME=workflow-engine
 DB_USER=workflow_rw
-SCRATCH_DB=backup_rehearsal
+RESTORED_DB=workflow-engine-restored
 BACKUP_DIR="${PROD_DB_BACKUP_DIR:-$HOME/db-backups/workflow-engine-prod}"
-KEEP_DAYS=30
 GAM="${GAM:-$HOME/bin/gam/gam}"
 DRIVE_USER=johnny@whistlebird.co.nz
 DRIVE_FOLDER_ID=14xgWF8Aw46OiQH1zkdV0vnnZeuyINtL2 # Whistlebird/biz-e_db_backups
@@ -54,14 +56,13 @@ log "Dumping $DB_NAME"
 docker exec "$CONTAINER" pg_dump -U "$DB_USER" -Fc "$DB_NAME" >"$file" || fail "pg_dump"
 [ -s "$file" ] || fail "the dump is empty"
 
-log "Rehearsing the restore"
+log "Restoring into $RESTORED_DB"
 live="$(fingerprint "$DB_NAME")"
-trap 'docker exec "$CONTAINER" dropdb -U "$DB_USER" --if-exists "$SCRATCH_DB" >/dev/null 2>&1 || true' EXIT
-docker exec "$CONTAINER" dropdb -U "$DB_USER" --if-exists "$SCRATCH_DB"
-docker exec "$CONTAINER" createdb -U "$DB_USER" "$SCRATCH_DB"
-docker exec -i "$CONTAINER" pg_restore -U "$DB_USER" -d "$SCRATCH_DB" --no-owner --exit-on-error <"$file" \
+docker exec "$CONTAINER" dropdb -U "$DB_USER" --if-exists --force "$RESTORED_DB" 2>/dev/null
+docker exec "$CONTAINER" createdb -U "$DB_USER" "$RESTORED_DB"
+docker exec -i "$CONTAINER" pg_restore -U "$DB_USER" -d "$RESTORED_DB" --no-owner --exit-on-error <"$file" \
     || fail "the dump does not restore"
-restored="$(fingerprint "$SCRATCH_DB")"
+restored="$(fingerprint "$RESTORED_DB")"
 # Production keeps taking writes during the dump, so only the audit count may have moved on.
 [ "${restored% audit=*}" = "${live% audit=*}" ] || fail "restored copy differs: live [$live], restored [$restored]"
 log "Restore verified: $restored ($(du -h "$file" | cut -f1))"
@@ -74,5 +75,6 @@ else
     "$GAM" user "$DRIVE_USER" add drivefile localfile "$file" parentid "$DRIVE_FOLDER_ID" || fail "the Google Drive upload"
 fi
 
-find "$BACKUP_DIR" -name 'workflow-engine-prod-*.dump' -mtime +"$KEEP_DAYS" -delete
+# Only reached once this dump is restored and (unless skipped) uploaded.
+find "$BACKUP_DIR" -name 'workflow-engine-prod-*.dump' ! -newer "$file" ! -samefile "$file" -delete
 log "Done: $file"
