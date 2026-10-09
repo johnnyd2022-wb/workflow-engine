@@ -36,7 +36,9 @@ Status: `[x]` done, `[~]` started, `[ ]` to do. "Owner" is who has to act next.
 | [ ] | **First sign-in.** Sign in as `johnny@whistlebird.co.nz`, enrol 2FA, then change the password: it is still the replay's test password. | Johnny |
 | [ ] | **Connect Xero in production** and sync, then run `scripts/whistlebird_replay_correct_timestamps.py --sales-only` against production if the sync re-dates sale stock movements to today. | Johnny, then Claude |
 | [ ] | **Refresh the copy just before go-live** if more has been entered in test since 2026-10-07: `scripts/prod_seed_from_test.sh "Whistlebird Ltd" --disable-user … --replace`. After go-live production is the source of truth and this is never run again. | Claude, on request |
-| [ ] | **Backups on a schedule.** `scripts/prod_db.sh backup` works by hand and runs before every deploy; add a nightly timer and rehearse one restore. | Claude |
+| [x] | **Backups on a schedule.** `scripts/prod_backup.sh` runs nightly at 18:10 from cron (installed as `~/biz-e_db_backups.sh`): dumps production, restores the dump into a scratch database and checks it matches, uploads it to the Google Drive folder `biz-e_db_backups`, and keeps 30 days locally. Log: `~/db-backups/biz-e_db_backups.log`. Every run is a restore rehearsal. | done |
+| [~] | **Google sign-in in production.** Switched on in `prod.ini`; `run_prod.sh` passes the client from KeePassXC (`workflow-engine/GOOGLE_CLIENT_ID`, shared with test). Needs `https://biz-e.app/auth/google/callback` added to that client's authorised redirect URIs, then a deploy. | Johnny (redirect URI), then deploy |
+| [ ] | **Tell someone when a backup fails.** A failed run only writes to its log today. Also back up the admin documents volume. | Claude |
 | [ ] | **Deploy production from CI** rather than by hand: a manual `deploy_prod` job that pulls the `prod-<sha>` image `main` already builds. Today `run_prod.sh` builds from the checkout. | Claude |
 | [ ] | **Secrets to AWS Parameter Store** at go-live; `run_prod.sh` then reads from there instead of KeePassXC. | Johnny to provision, Claude to wire |
 

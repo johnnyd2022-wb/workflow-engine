@@ -28,7 +28,8 @@ cd "$repo_root"
 
 echo "== Secrets"
 eval "$(python3 scripts/prod_secrets.py export)"
-for name in POSTGRES_PASSWORD FLASK_SECRET_KEY BACKUP_CODE_ENCRYPTION_KEY XERO_TOKEN_ENCRYPTION_KEY; do
+for name in POSTGRES_PASSWORD FLASK_SECRET_KEY BACKUP_CODE_ENCRYPTION_KEY XERO_TOKEN_ENCRYPTION_KEY \
+    GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
     [ -n "${!name:-}" ] || { echo "Missing $name." >&2; exit 1; }
     export "${name?}"
 done
@@ -36,7 +37,8 @@ export XERO_CLIENT_ID="${XERO_CLIENT_ID:-}" XERO_CLIENT_SECRET="${XERO_CLIENT_SE
 [ -n "$XERO_CLIENT_ID" ] || echo "Note: no Xero credentials; Sales cannot connect to Xero until they are added."
 
 SECRET_ENV=(-e ENVIRONMENT=prod -e POSTGRES_PASSWORD -e FLASK_SECRET_KEY -e BACKUP_CODE_ENCRYPTION_KEY
-    -e XERO_TOKEN_ENCRYPTION_KEY -e XERO_CLIENT_ID -e XERO_CLIENT_SECRET)
+    -e XERO_TOKEN_ENCRYPTION_KEY -e XERO_CLIENT_ID -e XERO_CLIENT_SECRET
+    -e GOOGLE_CLIENT_ID -e GOOGLE_CLIENT_SECRET)
 
 echo "== Build"
 docker build --target production -f Dockerfile.multi -t "$IMAGE" .
