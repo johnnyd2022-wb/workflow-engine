@@ -327,7 +327,19 @@ def _update_inventory_summary(session: Session, event: EntityEvent) -> None:
         new_wasted = _parse_decimal(str(p.get("quantity_wasted") or "0"))
         summary["total_quantity_wasted"] = str(prev_wasted + new_wasted)
 
-    elif event.event_type in ("inventory_item.updated", "inventory_item.deleted"):
+    elif event.event_type == "inventory_item.updated":
+        summary = dict(existing)
+        # An edit or a consumption that moves the quantity is a point on the item's history,
+        # the same as an explicit adjustment; without it the history never grows past creation.
+        qty_change = (event.diff or {}).get("quantity")
+        if isinstance(qty_change, dict) and qty_change.get("after") is not None:
+            history = list(existing.get("quantity_history") or [])
+            history.append(
+                {"at": event.created_at.isoformat() if event.created_at else None, "qty": str(qty_change["after"])}
+            )
+            summary["quantity_history"] = history[-_QUANTITY_HISTORY_CAP:]
+
+    elif event.event_type == "inventory_item.deleted":
         summary = dict(existing)
 
     else:
