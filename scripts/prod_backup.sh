@@ -16,7 +16,7 @@
 #      the same container, replacing the previous day's copy, and checks it holds the same
 #      organisations, users and schema version. That copy stays until the next run, so
 #      yesterday's data can be looked at without touching production:
-#        docker exec -it workflow-engine-prod-db psql -U workflow_rw -d workflow-engine-restored
+#        biz-e-restored            (scripts/restored_db.sh)
 #   3. uploads the dump to the Google Drive folder biz-e_db_backups, as the existing
 #      Whistlebird backups are (gam, johnny@whistlebird.co.nz)
 #   4. removes older local dumps: only the latest stays on this machine, Drive keeps them all
@@ -65,6 +65,8 @@ docker exec -i "$CONTAINER" pg_restore -U "$DB_USER" -d "$RESTORED_DB" --no-owne
 restored="$(fingerprint "$RESTORED_DB")"
 # Production keeps taking writes during the dump, so only the audit count may have moved on.
 [ "${restored% audit=*}" = "${live% audit=*}" ] || fail "restored copy differs: live [$live], restored [$restored]"
+# Recorded on the database itself, for `biz-e-restored status`.
+sql postgres "comment on database \"$RESTORED_DB\" is 'Restored $(date '+%Y-%m-%d %H:%M %Z') from $(basename "$file")'" >/dev/null
 log "Restore verified: $restored ($(du -h "$file" | cut -f1))"
 
 if [ "${1:-}" = "--no-upload" ]; then
