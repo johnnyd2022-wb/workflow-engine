@@ -174,14 +174,18 @@ ci_image_current:
     - main
   allow_failure: true
 
-# Guard the agent-written data stores (AER metrics ledger + findings history). These are
-# append-only JSONL that unattended skills write; a malformed line should fail fast here
-# rather than silently corrupt a scorecard or suppress the wrong finding. Stdlib-only.
+# Guard the agent-written data stores. The findings history is append-only JSONL that
+# unattended skills write; a malformed line should fail fast here rather than suppress the
+# wrong finding. The AER metrics ledger and perf results live in the bize_dev metrics
+# database now (scripts/metrics_db.py): the check fails if it is reachable but its schema is
+# incomplete, and is a visible SKIPPED -- never a failure -- when the DB cannot be reached,
+# so a local outage cannot block a merge.
 data_stores:
   stage: test
   image: python:3.14-bookworm
   script:
-    - python3 scripts/skill_metrics.py --check
+    - pip install -q "psycopg2-binary>=2.9.10,<3"
+    - python3 scripts/metrics_db.py check
     - python3 scripts/finding_history.py --check
     # Routing decides which engine spends which quota, and enforces that graders stay
     # read-only. A table pointing at a deleted skill fails here, not mid-run at 3am.
@@ -320,6 +324,44 @@ mr_e2e:
   only:
     - merge_requests
   allow_failure: false
+
+# Performance baselines. perf_baseline runs the perf tests on main and records the results
+# (commit, pipeline, per-route metrics) to the bize_dev metrics DB; the rolling median of
+# those runs is the baseline. mr_perf runs the same tests on an MR and fails only when a
+# route issues more DB queries than main's baseline (deterministic; timings never gate --
+# see tests/e2e/test_perf_budgets.py). Both need the BIZE_METRICS_* CI/CD variables and a
+# runner that can reach the DB; without them they still run and just record nothing, and
+# mr_perf is advisory (allow_failure) until the baseline has enough history to trust.
+mr_perf:
+  extends: mr_e2e
+  script:
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_perf_budgets.py -v
+  only:
+    - merge_requests
+  allow_failure: true
+
+perf_baseline:
+  extends: mr_e2e
+  before_script:
+    - *install_uv
+    - uv sync --extra dev
+    - test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq
+    - test -n "${CI_PREBUILT:-}" || apt-get install -y -qq postgresql-client curl openssl ca-certificates
+    - chmod +x ci/*.sh
+    - ./ci/setup_database.sh
+    - |
+      for attempt in 1 2 3; do
+        uv run playwright install $(test -n "${CI_PREBUILT:-}" || echo --with-deps) chromium && break
+        if [ "$attempt" -eq 3 ]; then exit 1; fi
+        sleep "$((attempt * 15))"
+      done
+    - mkdir -p app/tls
+    - openssl req -x509 -newkey rsa:4096 -nodes -keyout app/tls/app_cert.key -out app/tls/app_cert.pem -days 1 -subj "/CN=localhost" 2>/dev/null
+  script:
+    - E2E_ALLOW_TEST_INPROCESS=1 ENVIRONMENT=test uv run pytest tests/e2e/test_perf_budgets.py -v
+  only:
+    - main
+  allow_failure: true
 
 # The exhaustive suite is the post-merge release gate. It runs before the build/deploy
 # stages on main; merge requests run selected regressions and browser smoke above.
