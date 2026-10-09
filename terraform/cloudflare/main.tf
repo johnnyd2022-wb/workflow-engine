@@ -4,6 +4,9 @@
 # in front of it, then creates the tunnel route and the DNS record, with the same settings
 # as every other site. The whistlebird.co.nz hostnames share the tunnel; their DNS records
 # and Access applications are managed outside this root.
+#
+# Applied by CI from main, once the plan posted on the merge request has been reviewed
+# (terraform/ci.py). Nothing here is applied by hand.
 module "tunnel" {
   source = "../modules/cloudflare-tunnel"
 
