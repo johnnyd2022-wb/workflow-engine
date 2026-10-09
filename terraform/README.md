@@ -151,3 +151,62 @@ with `./terraform/tf.py import` before applying.
 
 The API token needs Cloudflare Tunnel Write, DNS Write and **Access: Apps and Policies
 Write**. Origin addresses resolve from the cloudflared connector on this machine.
+
+## GitLab CI on the local runner
+
+Terraform changes targeting `main` get a `terraform_cloudflare_plan` job. Its
+GitLab MR report shows create/update/delete counts; download `plan.txt` from the
+job artifacts to review the full plan. Review artifacts expire after 14 days.
+Only same-project, detached MR pipelines are supported.
+
+After the final plan succeeds, Johnny must approve the MR and merge it. The
+protected `terraform_cloudflare_apply` runner then checks the merged MR, final
+successful pipeline and approval timestamp using GitLab's API. It makes a fresh
+plan against the shared PostgreSQL state and applies only if the configuration
+and planned changes match the reviewed MR plan. Direct pushes, expired/missing
+artifacts, superseded main commits, missing approvals and differing plans fail
+closed. Replan and approve a new MR if those checks fail. Other MRs do not trigger
+Terraform jobs unless they change the Terraform configuration or CI integration.
+
+Both jobs share a GitLab resource group, and the backend also takes PostgreSQL
+advisory locks. Avoid simultaneous manual applies while reviewing an MR.
+
+### Credentials and runner setup
+
+Run locally, with the existing runner manager and state database running:
+
+```bash
+./terraform/tf.py db-up
+./terraform/setup_runner.py
+# While the GitLab review token is being prepared:
+./terraform/setup_runner.py --plan-only
+```
+
+The setup script reads the existing Cloudflare token for both runners, as well
+as the account and zone IDs. It creates separate database credentials in
+KeePassXC: `workflow-engine/terraform-state-db-plan` (read-only state access)
+and `workflow-engine/terraform-state-db-apply` (state writes). Runner registration
+tokens are saved at `workflow-engine/terraform-runner-plan` and
+`workflow-engine/terraform-runner-apply`.
+
+Save a GitLab personal access token with `read_api` scope in the Password field
+of `workflow-engine/terraform-gitlab-ci-review`. Its owner must be able to read
+this project's MR approvals and developer-access job artifacts. The apply runner
+uses it only for GET requests. The configured approver is the GitLab user running
+the setup script. GitLab currently allows MRs with no required approvals; the
+apply job still requires that user's approval after the final plan completes.
+
+Secrets are injected into job environments from the runner manager's private
+`/etc/gitlab-runner/config.toml`, backed by the existing persistent host directory
+`/home/johnny/.config/gitlab-runner`. The file is mode 0600 and is outside Git.
+No Terraform credentials are GitLab CI variables or Docker image layers. Neither
+Terraform runner mounts the host Docker socket or KeePass database into jobs.
+The database is reachable as `state-db:5432` on the existing
+`workflow-engine-terraform_default` Docker network, without exposing its host
+port externally. The plan runner is tagged `terraform-plan`; the apply runner
+is tagged `terraform-apply` and accepts protected refs only.
+
+Rerun setup after rotating secrets, changing tenant IDs or replacing the runner
+configuration. Credentials are loaded at setup time, not fetched from KeePassXC
+on every job. Treat the local runner host and same-project MR authors as trusted:
+both jobs receive the existing Cloudflare token with write permissions.

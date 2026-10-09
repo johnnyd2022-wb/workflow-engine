@@ -1,0 +1,52 @@
+# Secrets are injected by two local runner definitions, refreshed from KeePassXC.
+# Neither runner mounts the Docker socket or the password database into job containers.
+.terraform_cloudflare:
+  image:
+    name: hashicorp/terraform:1.16.5
+    entrypoint: [""]
+  before_script:
+    - apk add --no-cache python3
+  variables:
+    GIT_DEPTH: "0"
+  resource_group: terraform-cloudflare
+
+terraform_cloudflare_plan:
+  extends: .terraform_cloudflare
+  stage: test
+  tags: [terraform-plan]
+  environment:
+    name: terraform/cloudflare-plan
+    action: prepare
+  script:
+    - python3 -m unittest discover -s terraform/tests -v
+    - python3 terraform/ci.py plan
+  artifacts:
+    access: developer
+    expire_in: 14 days
+    paths:
+      - terraform/cloudflare/.ci/plan.txt
+      - terraform/cloudflare/.ci/review.json
+    reports:
+      terraform: terraform/cloudflare/.ci/summary.json
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
+      changes: &terraform_cloudflare_changes
+        - terraform/cloudflare/**/*
+        - terraform/modules/**/*
+        - terraform/ci.py
+        - terraform/ci.yml
+        - terraform/tests/**/*
+        - .gitlab-ci.yml
+
+terraform_cloudflare_apply:
+  extends: .terraform_cloudflare
+  stage: deploy
+  tags: [terraform-apply]
+  interruptible: false
+  environment:
+    name: terraform/cloudflare
+  script:
+    - python3 terraform/ci.py apply
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes: *terraform_cloudflare_changes
