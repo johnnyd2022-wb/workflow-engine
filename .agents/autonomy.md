@@ -150,7 +150,7 @@ an unwatched loop — which is worse than the bug it hid.
 ## Measure yourself (the evaluation ledger)
 
 A report the human reads once is not the same as a record the *system* can learn from. Two
-append-only ledgers make skills measurable over time; writing to them is part of finishing
+append-only ledgers (database tables in `bize_dev`, not repo files) make skills measurable over time; writing to them is part of finishing
 a run, not an optional extra.
 
 - **Record the run.** When an orchestrating or scheduled skill finishes, append one row per
