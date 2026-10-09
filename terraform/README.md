@@ -155,13 +155,17 @@ Write**. Origin addresses resolve from the cloudflared connector on this machine
 ## GitLab CI on the local runner
 
 Terraform changes targeting `main` get a `terraform_cloudflare_plan` job. Its
-GitLab MR report shows create/update/delete counts; download `plan.txt` from the
-job artifacts to review the full plan. Review artifacts expire after 14 days.
+GitLab MR report shows create/update/delete counts. The full plan is also posted
+as a visible comment in the MR discussion, with a direct link to the blocking
+`terraform_cloudflare_review` job. Read the plan and use that job's play button
+to acknowledge your review. Only the configured approver can complete it. The
+pipeline stays blocked until review succeeds; new commits require a new review.
+`plan.txt` remains available in artifacts, which expire after 14 days.
 Only same-project, detached MR pipelines are supported.
 
-After the final plan succeeds, Johnny must approve the MR and merge it. The
+After the final plan and explicit review succeed, Johnny must approve the MR and merge it. The
 protected `terraform_cloudflare_apply` runner then checks the merged MR, final
-successful pipeline and approval timestamp using GitLab's API. It makes a fresh
+successful pipeline, review job identity and approval timestamp using GitLab's API. It makes a fresh
 plan against the shared PostgreSQL state and applies only if the configuration
 and planned changes match the reviewed MR plan. Direct pushes, expired/missing
 artifacts, superseded main commits, missing approvals and differing plans fail
@@ -178,7 +182,7 @@ Run locally, with the existing runner manager and state database running:
 ```bash
 ./terraform/tf.py db-up
 ./terraform/setup_runner.py
-# While the GitLab review token is being prepared:
+# To refresh only the plan/review runner:
 ./terraform/setup_runner.py --plan-only
 ```
 
@@ -189,10 +193,11 @@ and `workflow-engine/terraform-state-db-apply` (state writes). Runner registrati
 tokens are saved at `workflow-engine/terraform-runner-plan` and
 `workflow-engine/terraform-runner-apply`.
 
-Save a GitLab personal access token with `read_api` scope in the Password field
+Save a GitLab personal access token with `api` scope in the Password field
 of `workflow-engine/terraform-gitlab-ci-review`. Its owner must be able to read
-this project's MR approvals and developer-access job artifacts. The apply runner
-uses it only for GET requests. The configured approver is the GitLab user running
+this project's MR approvals and developer-access job artifacts. The plan runner uses it to publish MR plan comments; the review and apply jobs
+use it for GET requests. The runner environment retains the historical
+`TERRAFORM_GITLAB_READ_TOKEN` variable name. The configured approver is the GitLab user running
 the setup script. GitLab currently allows MRs with no required approvals; the
 apply job still requires that user's approval after the final plan completes.
 

@@ -115,5 +115,53 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(ci.redact("db-secret cf-secret"), "[REDACTED] [REDACTED]")
 
 
+class AcknowledgementTests(unittest.TestCase):
+    def setUp(self):
+        self.plan = {
+            "status": "success",
+            "commit": {"id": "abc"},
+            "pipeline": {"id": 1},
+            "finished_at": "2026-10-09T10:00:00Z",
+        }
+        self.review = {
+            "status": "success",
+            "commit": {"id": "abc"},
+            "pipeline": {"id": 1},
+            "user": {"id": 7},
+            "finished_at": "2026-10-09T10:01:00Z",
+        }
+
+    def test_matching_manual_review(self):
+        ci.verify_acknowledgement(self.plan, self.review, "7")
+
+    def test_wrong_actor_commit_pipeline_or_time(self):
+        for key, value in [
+            ("user", {"id": 8}),
+            ("user", None),
+            ("commit", {"id": "old"}),
+            ("pipeline", {"id": 2}),
+            ("finished_at", "2026-10-09T09:59:00Z"),
+            ("status", "manual"),
+        ]:
+            changed = self.review | {key: value}
+            with self.subTest(key=key), self.assertRaises(ci.GateError):
+                ci.verify_acknowledgement(self.plan, changed, "7")
+
+    def test_comment_full_plan_and_secret_redaction(self):
+        with patch.dict(os.environ, {"PGPASSWORD": "db-secret"}):
+            body = ci.plan_comment(
+                "Plan: 1 to add. db-secret ```danger",
+                {"create": 1, "update": 0, "delete": 0},
+                "abc",
+                "https://gitlab.com/plan",
+                "https://gitlab.com/review",
+            )
+        self.assertNotIn("db-secret", body)
+        self.assertIn("Plan: 1 to add.", body)
+        self.assertIn("````text", body)
+        self.assertIn("https://gitlab.com/review", body)
+        self.assertIn("pipeline stays blocked", body)
+
+
 if __name__ == "__main__":
     unittest.main()

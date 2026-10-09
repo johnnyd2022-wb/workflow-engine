@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -17,6 +18,7 @@ REPO = Path(__file__).resolve().parent.parent
 STACK = REPO / "terraform/cloudflare"
 ARTIFACTS = STACK / ".ci"
 PLAN_JOB = "terraform_cloudflare_plan"
+REVIEW_JOB = "terraform_cloudflare_review"
 
 
 class GateError(RuntimeError):
@@ -45,8 +47,13 @@ class GitLab:
         self.token = os.environ["TERRAFORM_GITLAB_READ_TOKEN"]
         self.opener = build_opener(ArtifactRedirect())
 
-    def fetch(self, path, *, raw=False):
-        req = Request(f"{self.base}/projects/{self.project}/{path}", headers={"PRIVATE-TOKEN": self.token})
+    def fetch(self, path, *, raw=False, method="GET", payload=None):
+        headers = {"PRIVATE-TOKEN": self.token}
+        data = None
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(payload).encode()
+        req = Request(f"{self.base}/projects/{self.project}/{path}", headers=headers, data=data, method=method)
         try:
             with self.opener.open(req, timeout=30) as response:
                 data = response.read()
@@ -156,6 +163,85 @@ def make_plan():
         raise
 
 
+def plan_comment(plan_text, counts, commit, job_url, review_url):
+    text = redact(plan_text).strip()
+    fence = "`" * max(3, max((len(match) + 1 for match in re.findall(r"`+", text)), default=3))
+    return (
+        f"### Terraform plan — review required\n\n"
+        f"**{counts['create']} to add, {counts['update']} to change, {counts['delete']} to destroy.**\n\n"
+        f"Commit: `{commit}` · [Plan job]({job_url})\n\n"
+        f"Read the plan below, then run [**Review Terraform plan**]({review_url}) using its ▶ button. "
+        "The pipeline stays blocked until that review step passes. "
+        "Approve the MR and merge once the pipeline is green; apply runs after merge.\n\n"
+        f"{fence}text\n{text}\n{fence}\n"
+    )
+
+
+def publish_plan(api, counts):
+    iid = os.environ["CI_MERGE_REQUEST_IID"]
+    mr = api.fetch(f"merge_requests/{iid}")
+    if mr["state"] != "opened" or mr["diff_refs"]["head_sha"] != os.environ["CI_COMMIT_SHA"]:
+        raise GateError("MR has changed or closed; refusing to publish a stale plan")
+    review_jobs = [
+        job for job in api.all(f"pipelines/{os.environ['CI_PIPELINE_ID']}/jobs") if job["name"] == REVIEW_JOB
+    ]
+    if len(review_jobs) != 1:
+        raise GateError("Cannot publish the plan without its blocking review job")
+    body = plan_comment(
+        (ARTIFACTS / "plan.txt").read_text(),
+        counts,
+        os.environ["CI_COMMIT_SHA"],
+        os.environ["CI_JOB_URL"],
+        review_jobs[0]["web_url"],
+    )
+    if len(body.encode()) > 900_000:
+        raise GateError("Plan is too large for an MR comment; reduce the change scope")
+    note = api.fetch(f"merge_requests/{iid}/notes", method="POST", payload={"body": body})
+    print(f"Published full Terraform plan in MR !{iid}; explicit review is required")
+    return {"note_id": note["id"], "note_digest": hashlib.sha256(body.encode()).hexdigest()}
+
+
+def verify_acknowledgement(plan_job, review_job, approver_id):
+    if (
+        review_job["status"] != "success"
+        or review_job["commit"]["id"] != plan_job["commit"]["id"]
+        or review_job["pipeline"]["id"] != plan_job["pipeline"]["id"]
+        or str((review_job.get("user") or {}).get("id")) != str(approver_id)
+        or datetime.fromisoformat(review_job["finished_at"].replace("Z", "+00:00"))
+        < datetime.fromisoformat(plan_job["finished_at"].replace("Z", "+00:00"))
+    ):
+        raise GateError("The configured approver must complete the review job for this final plan")
+
+
+def acknowledge_plan(api):
+    iid = os.environ["CI_MERGE_REQUEST_IID"]
+    mr = api.fetch(f"merge_requests/{iid}")
+    if mr["state"] != "opened" or mr["diff_refs"]["head_sha"] != os.environ["CI_COMMIT_SHA"]:
+        raise GateError("This MR plan has been superseded or the MR is closed")
+    job = api.fetch(f"jobs/{os.environ['CI_JOB_ID']}")
+    if str((job.get("user") or {}).get("id")) != os.environ["TERRAFORM_APPROVER_ID"]:
+        raise GateError("Only the configured approver may acknowledge the Terraform plan")
+    review = json.loads((ARTIFACTS / "review.json").read_text())
+    plans = [item for item in api.all(f"pipelines/{os.environ['CI_PIPELINE_ID']}/jobs") if item["name"] == PLAN_JOB]
+    if len(plans) != 1:
+        raise GateError("Review requires one final Terraform plan job")
+    plan = plans[0]
+    if (
+        plan["status"] != "success"
+        or plan["commit"]["id"] != os.environ["CI_COMMIT_SHA"]
+        or review.get("version") != 1
+        or review.get("job_id") != str(plan["id"])
+        or review.get("commit_sha") != os.environ["CI_COMMIT_SHA"]
+        or review.get("mr_iid") != iid
+        or review.get("config_digest") != config_digest()
+    ):
+        raise GateError("Review artifact does not match this successful final plan")
+    note = api.fetch(f"merge_requests/{iid}/notes/{review['note_id']}")
+    if hashlib.sha256(note["body"].encode()).hexdigest() != review["note_digest"]:
+        raise GateError("The published plan comment has changed; replan before review")
+    print(f"Terraform plan for MR !{iid} explicitly reviewed by {job['user']['username']}")
+
+
 def verify_review(mr, approvals, job, review, digest, approver_id):
     head = mr["diff_refs"]["head_sha"]
     if mr["state"] != "merged" or mr["target_branch"] != os.environ["CI_DEFAULT_BRANCH"]:
@@ -212,6 +298,10 @@ def reviewed_manifest(api):
     if len(matches) != 1:
         raise GateError("The final MR pipeline must contain one Terraform plan job")
     job = matches[0]
+    acknowledgements = [item for item in jobs if item["name"] == REVIEW_JOB]
+    if len(acknowledgements) != 1:
+        raise GateError("The final MR pipeline must contain the Terraform review job")
+    verify_acknowledgement(job, acknowledgements[0], os.environ["TERRAFORM_APPROVER_ID"])
     review = json.loads(api.fetch(f"jobs/{job['id']}/artifacts/terraform/cloudflare/.ci/review.json", raw=True))
     verify_review(mr, approvals, job, review, config_digest(), os.environ["TERRAFORM_APPROVER_ID"])
     print(f"Verified approved MR !{mr['iid']} and plan job {job['id']}")
@@ -226,8 +316,17 @@ def check_current_main(api):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("plan", "apply"))
+    parser.add_argument("command", choices=("plan", "review", "apply"))
     args = parser.parse_args()
+    if args.command == "review":
+        if (
+            os.environ.get("CI_PIPELINE_SOURCE") != "merge_request_event"
+            or os.environ.get("CI_MERGE_REQUEST_SOURCE_PROJECT_ID") != os.environ.get("CI_PROJECT_ID")
+            or os.environ.get("CI_MERGE_REQUEST_EVENT_TYPE") != "detached"
+        ):
+            raise GateError("Review runs only for same-project detached MR pipelines")
+        acknowledge_plan(GitLab())
+        return
     for key in ("PG_CONN_STR", "PGPASSWORD", "CLOUDFLARE_API_TOKEN", "TF_VAR_account_id", "TF_VAR_zone_id"):
         if not os.getenv(key):
             raise GateError(f"Runner credential missing: {key}; refresh it from KeePassXC")
@@ -255,6 +354,7 @@ def main():
                 "changes_fingerprint": fingerprint,
                 "counts": counts,
             }
+            review.update(publish_plan(GitLab(), counts))
             (ARTIFACTS / "review.json").write_text(json.dumps(review, sort_keys=True) + "\n")
         finally:
             # Raw plan JSON and binary plans can contain secrets. Publish neither.
