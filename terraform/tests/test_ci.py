@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -27,29 +28,13 @@ class ReviewTests(unittest.TestCase):
             "diff_refs": {"head_sha": "abc"},
         }
         self.job = {"id": 5, "status": "success", "commit": {"id": "abc"}, "finished_at": "2026-10-08T10:00:00Z"}
-        self.approvals = {
-            "approvals_left": 0,
-            "approved_by": [{"user": {"id": 7}, "approved_at": "2026-10-08T10:01:00Z"}],
-        }
         self.review = {"version": 2, "commit_sha": "abc", "job_id": "5", "mr_iid": "4", "config_digest": "digest"}
 
     def verify(self):
-        ci.verify_review(self.mr, self.approvals, self.job, self.review, "digest", "7")
+        ci.verify_review(self.mr, self.job, self.review, "digest")
 
-    def test_approved_final_plan(self):
+    def test_matching_final_plan(self):
         self.verify()
-
-    def test_missing_or_early_or_wrong_approval(self):
-        for approval in (
-            [],
-            [{"user": {"id": 7}}],
-            [{"user": {"id": 7}, "approved_at": "2026-10-08T09:59:00Z"}],
-            [{"user": {"id": 8}, "approved_at": "2026-10-08T10:01:00Z"}],
-        ):
-            with self.subTest(approval=approval):
-                self.approvals["approved_by"] = approval
-                with self.assertRaises(ci.GateError):
-                    self.verify()
 
     def test_unmerged_fork_failed_or_stale_job(self):
         changes = [
@@ -272,6 +257,66 @@ class PublishingTests(unittest.TestCase):
         self.assertEqual(self.api.fetch.call_count, 5)
         self.assertEqual(self.api.fetch.call_args.args, ("merge_requests/4/discussions/old",))
         self.assertEqual(self.api.fetch.call_args.kwargs["payload"], {"resolved": True})
+
+
+class NativeApprovalFlowTests(unittest.TestCase):
+    def setUp(self):
+        self.env = patch.dict(
+            os.environ,
+            {"CI_DEFAULT_BRANCH": "main", "CI_PROJECT_ID": "1", "CI_COMMIT_SHA": "merge", "TERRAFORM_APPROVER_ID": "7"},
+        )
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.digest = patch.object(ci, "config_digest", return_value="digest")
+        self.digest.start()
+        self.addCleanup(self.digest.stop)
+        self.review = {
+            "version": 2,
+            "commit_sha": "abc",
+            "job_id": "5",
+            "mr_iid": "4",
+            "config_digest": "digest",
+            "discussion_id": "thread",
+            "note_id": 8,
+            "note_digest": hashlib.sha256(b"full plan").hexdigest(),
+        }
+        self.note = {
+            "id": 8,
+            "body": "full plan",
+            "resolvable": True,
+            "resolved": True,
+            "resolved_by": {"id": 7},
+            "created_at": "2026-10-09T10:00:00Z",
+            "resolved_at": "2026-10-09T10:01:00Z",
+        }
+        responses = {
+            "repository/commits/merge/merge_requests": [
+                {"iid": 4, "state": "merged", "merge_commit_sha": "merge", "target_branch": "main"}
+            ],
+            "merge_requests/4": {
+                "iid": 4,
+                "state": "merged",
+                "source_project_id": 1,
+                "target_branch": "main",
+                "diff_refs": {"head_sha": "abc"},
+                "merged_at": "2026-10-09T10:02:00Z",
+                "head_pipeline": {"id": 6, "source": "merge_request_event", "sha": "abc", "status": "success"},
+            },
+            "jobs/5/artifacts/terraform/cloudflare/.ci/review.json": json.dumps(self.review).encode(),
+            "merge_requests/4/discussions/thread": {"id": "thread", "individual_note": False, "notes": [self.note]},
+        }
+        self.api = Mock()
+        self.api.fetch.side_effect = lambda path, **kwargs: responses[path]
+        self.api.all.return_value = [{"name": ci.PLAN_JOB, "id": 5, "status": "success", "commit": {"id": "abc"}}]
+
+    def test_resolved_thread_authorizes_without_mr_approve_click(self):
+        self.assertEqual(ci.reviewed_manifest(self.api), self.review)
+        self.assertFalse(any("/approvals" in call.args[0] for call in self.api.fetch.call_args_list))
+
+    def test_missing_thread_resolution_still_blocks_apply(self):
+        self.note["resolved"] = False
+        with self.assertRaises(ci.GateError):
+            ci.reviewed_manifest(self.api)
 
 
 if __name__ == "__main__":

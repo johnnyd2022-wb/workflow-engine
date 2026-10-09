@@ -166,15 +166,16 @@ Threads containing conversations stay open for their reviewers. `plan.txt` remai
 which expire after 14 days.
 Only same-project, detached MR pipelines are supported.
 
-After the final plan and explicit review succeed, Johnny must approve the MR and merge it. The
+Resolving the final plan thread is the approval signal; a separate MR Approve
+click is not required. After resolving it and once CI is green, merge the MR. The
 protected `terraform_cloudflare_apply` runner then checks the merged MR, final
-successful pipeline and approval timestamp using GitLab's API. It also verifies
+successful pipeline using GitLab's API. It also verifies
 that the exact plan thread is intact and was resolved by the configured approver
 before merge. Missing, edited, reopened or incorrectly resolved threads stop
 apply. It makes a fresh
 plan against the shared PostgreSQL state and applies only if the configuration
 and planned changes match the reviewed MR plan. Direct pushes, expired/missing
-artifacts, superseded main commits, missing approvals and differing plans fail
+artifacts, superseded main commits, missing plan reviews and differing plans fail
 closed. Replan and approve a new MR if those checks fail. Other MRs do not trigger
 Terraform jobs unless they change the Terraform configuration or CI integration.
 
@@ -204,8 +205,8 @@ of `workflow-engine/terraform-gitlab-ci-review`. Its owner must be able to read
 this project's MR approvals and developer-access job artifacts. The plan runner uses it to create plan threads and supersede older automated
 threads; apply uses it for GET requests. The runner environment retains the historical
 `TERRAFORM_GITLAB_READ_TOKEN` variable name. The configured approver is the GitLab user running
-the setup script. GitLab currently allows MRs with no required approvals; the
-apply job still requires that user's approval after the final plan completes.
+the setup script. Apply requires that user to resolve the unchanged final plan
+thread before merge.
 
 Secrets are injected into job environments from the runner manager's private
 `/etc/gitlab-runner/config.toml`, backed by the existing persistent host directory

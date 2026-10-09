@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish MR plans and apply only an approved, matching plan after merge."""
+"""Publish MR plans and apply only a reviewed, matching plan after merge."""
 
 import argparse
 import hashlib
@@ -177,7 +177,7 @@ def plan_comment(plan_text, counts, commit, job_url):
         f"Commit: `{commit}` · [Plan job]({job_url})\n\n"
         "Read the plan below, then **resolve this thread** to acknowledge your review. "
         "The MR stays blocked until this thread is resolved. "
-        "Approve the MR and merge once the pipeline is green; apply runs after merge.\n\n"
+        "Thread resolution is the plan approval. Merge once the pipeline is green; apply runs after merge.\n\n"
         f"{fence}text\n{text}\n{fence}\n"
     )
 
@@ -258,7 +258,7 @@ def verify_plan_thread(discussion, review, approver_id, merged_at):
         raise GateError("The final plan must be reviewed before the MR is merged")
 
 
-def verify_review(mr, approvals, job, review, digest, approver_id):
+def verify_review(mr, job, review, digest):
     head = mr["diff_refs"]["head_sha"]
     if mr["state"] != "merged" or mr["target_branch"] != os.environ["CI_DEFAULT_BRANCH"]:
         raise GateError("Apply requires a merged MR targeting the default branch")
@@ -277,15 +277,6 @@ def verify_review(mr, approvals, job, review, digest, approver_id):
         raise GateError(
             "Merged Terraform configuration differs from the reviewed configuration; replan/review required"
         )
-    completed = datetime.fromisoformat(job["finished_at"].replace("Z", "+00:00"))
-    approved = any(
-        str(item["user"]["id"]) == str(approver_id)
-        and item.get("approved_at")
-        and datetime.fromisoformat(item["approved_at"].replace("Z", "+00:00")) >= completed
-        for item in approvals.get("approved_by", [])
-    )
-    if not approved or approvals.get("approvals_left", 0) != 0:
-        raise GateError("The configured approver must approve after the successful final MR plan")
 
 
 def reviewed_manifest(api):
@@ -301,7 +292,6 @@ def reviewed_manifest(api):
     if len(candidates) != 1:
         raise GateError("Apply requires exactly one merged MR associated with this commit")
     mr = api.fetch(f"merge_requests/{candidates[0]['iid']}")
-    approvals = api.fetch(f"merge_requests/{mr['iid']}/approvals")
     pipeline = mr.get("head_pipeline") or {}
     if (
         pipeline.get("source") != "merge_request_event"
@@ -315,10 +305,10 @@ def reviewed_manifest(api):
         raise GateError("The final MR pipeline must contain one Terraform plan job")
     job = matches[0]
     review = json.loads(api.fetch(f"jobs/{job['id']}/artifacts/terraform/cloudflare/.ci/review.json", raw=True))
+    verify_review(mr, job, review, config_digest())
     discussion = api.fetch(f"merge_requests/{mr['iid']}/discussions/{review['discussion_id']}")
     verify_plan_thread(discussion, review, os.environ["TERRAFORM_APPROVER_ID"], mr.get("merged_at"))
-    verify_review(mr, approvals, job, review, config_digest(), os.environ["TERRAFORM_APPROVER_ID"])
-    print(f"Verified approved MR !{mr['iid']} and plan job {job['id']}")
+    print(f"Verified reviewed MR !{mr['iid']} and plan job {job['id']}")
     return review
 
 
