@@ -21,7 +21,7 @@ Inputs:
 - .semgrep/rules/performance.yml     via `semgrep --json` (static N+1 / unbounded-query rules)
 - app.url_map                        via scripts/e2e_coverage.py (routes + exclusions)
 - .agents/perf/budgets.json          what is measured, and against what
-- .agents/reports/perf/last-run.json what the last perf-test run actually observed
+- the `bize_dev` metrics DB   what the last perf-test run actually observed (metrics_db.latest_perf_run)
 
 Usage:
     python scripts/perf_triage.py                 # human summary + checklist
@@ -43,7 +43,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BUDGETS_FILE = REPO_ROOT / ".agents" / "perf" / "budgets.json"
-LAST_RUN_FILE = REPO_ROOT / ".agents" / "reports" / "perf" / "last-run.json"
 INDEX_FILE = REPO_ROOT / ".agents" / "reports" / "perf" / "priority-checklist.md"
 PERF_RULES = REPO_ROOT / ".semgrep" / "rules" / "performance.yml"
 
@@ -136,6 +135,18 @@ def route_surface() -> list[dict]:
     return [r for r in e2e_coverage.app_routes() if not e2e_coverage._excluded(r["rule"])]
 
 
+def load_last_run() -> dict | None:
+    """The most recent perf run from the metrics DB; None if there is none or the DB is down
+    (the triage then falls back to static findings only, as it did with no last-run.json)."""
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import metrics_db  # noqa: PLC0415
+
+    try:
+        return metrics_db.latest_perf_run()
+    except metrics_db.MetricsDBUnavailableError:
+        return None
+
+
 def load_json(path: Path) -> dict | None:
     if not path.exists():
         return None
@@ -150,14 +161,16 @@ def load_json(path: Path) -> dict | None:
 def build_triage() -> dict:
     static = static_findings()
     budgets = load_json(BUDGETS_FILE) or {}
-    last_run = load_json(LAST_RUN_FILE)
+    last_run = load_last_run()
     routes = route_surface()
 
     # measure.api entries are normally a bare route string (GET); a route that needs a
     # request body to be measured meaningfully uses the object form {route, method, body}
     # instead (see budgets.json's _doc and test_perf_budgets.py._api_entries) — pull the
     # route string out of either shape.
-    api_routes = {item if isinstance(item, str) else item["route"] for item in budgets.get("measure", {}).get("api", [])}
+    api_routes = {
+        item if isinstance(item, str) else item["route"] for item in budgets.get("measure", {}).get("api", [])
+    }
     measured = set(budgets.get("measure", {}).get("pages", [])) | api_routes
 
     area_score: dict[str, int] = {}
@@ -284,7 +297,7 @@ def render_index(data: dict) -> str:
         f"Generated {data['generated']} by `scripts/perf_triage.py --write-index`. Do not",
         "hand-edit; rerun the script after a page/flow changes or after a perf-test run.",
         "Budgets: `.agents/perf/budgets.json`; measurements: `tests/e2e/test_perf_budgets.py`;",
-        "raw last run: `.agents/reports/perf/last-run.json`. Owned by the **perf-guardrails** skill.",
+        "raw last run: `perf_runs` / `perf_results` in the `bize_dev` metrics DB. Owned by the **perf-guardrails** skill.",
         "",
         f"- static rules: **{data['static']['status']}** ({s['static_findings']} findings, "
         f"shared-frontend score {s['global_shared_frontend_score']})",
