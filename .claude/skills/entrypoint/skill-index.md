@@ -5,8 +5,8 @@ Cached, categorized roster of every registered skill in `.claude/skills/`. This 
 directory on every run (see SKILL.md, Step 0). Hand-edits are fine but will be preserved
 only if the skill still exists; rows for deleted skills get pruned, new skills get added.
 
-last_synced: 2026-08-07
-skill_count: 53
+last_synced: 2026-10-10
+skill_count: 54
 
 ## Wiring
 
@@ -68,6 +68,7 @@ mr-conflict-resolver
 new-feature
 observability
 outbound-sales
+page-design
 perf-guardrails
 preflight
 prod-sentinel
@@ -100,6 +101,7 @@ worktree-sweep
 | "Build/add a new feature, endpoint, page, capability" | `new-feature` |
 | "Review/audit/harden an existing feature", "is X solid", "check X before launch" | `review-feature` |
 | "This is broken", a bug report, stack trace, request_id, regression | `fix-bug` |
+| "Make this page cleaner / slick", "redesign <page>", "this page is cluttered", "UX pass on <page>" | `page-design` (research, plan, screenshot loop; also chained by `new-feature` / `review-feature` when a page is built or reshaped) |
 | A CVE/uv-audit finding, "bump this dependency" | `dependency-update` |
 | "Deploy this", "ship to prod/test", "roll this back" | `deploy-runner` (technical) → hands off to `release-manager` |
 | Already built + verified, needs the MR opened/pushed/watched | `merge-request` (front doors call this themselves) |
