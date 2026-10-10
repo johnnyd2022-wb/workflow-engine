@@ -50,6 +50,7 @@ rather than fixing them. The chain and verdicts are identical in every mode.
 3. **unit coverage check**: `pytest --cov=app/features/<slug> --cov-report=term-missing` to find uncovered branches; hand the gaps to **test-author** to write the missing tests against the flows in `.agents/test-map.md` (it also updates the map's status rows for this feature) rather than hand-rolling them here. Every uncovered branch in routes/service is a gap.
 4. **test-evaluator**: grades the tests test-author added (and any this review changed) — an audit that closes a coverage gap with a test that asserts nothing has hardened nothing. Verdict must be `valid`.
 5. **perf-guardrails** after e2e passes, when the feature has pages/API routes: run `scripts/perf_triage.py` for the priority checklist, measure the feature's routes against `.agents/perf/budgets.json` (adding them to the measure lists if absent), and remediate or hand off ceiling breaches.
+5b. **page-design** when the feature has a page and it fails that skill's bar (controls before content on the first screen, undesigned empty/phone/dark states, off the shared tokens): hand it the page; it researches, plans and loops on screenshots, and its tests go back through step 4.
 6. **observability** in instrument mode: add the event logging the feature is missing, especially `access_denied` warnings.
 7. **ci-gate verify** last, always: everything added above must be collected and enforced or it evaporates.
 
