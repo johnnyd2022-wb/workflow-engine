@@ -8,6 +8,9 @@ import pytest
 import requests
 import urllib3
 
+from app.core.db import db_session
+from tests.org_purge import purge_orgs_named
+
 # Disable SSL verification for local development with self-signed certificates
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -33,72 +36,20 @@ class TestLogin2FAFlow:
         self._cleanup_test_data()
 
     def _cleanup_test_data(self):
-        """Clean up test data created during tests"""
-        if not self.test_email or not self.test_org_name:
+        """Remove the org (and its user) that the signup created over HTTP.
+
+        The server process made it, so tests/conftest.py's in-process tracker never saw it. This
+        used to write a temp script and run it in a subprocess with `check=False`; it never
+        removed anything, and every run left one org per test in the test DB.
+        """
+        if not self.test_org_name:
             return
-
+        db = db_session()
         try:
-            # Use cleanup script to remove test data
-            import os
-            import subprocess
-            import sys
-
-            # Create a temporary cleanup script
-            cleanup_script = f"""
-from app.core.db import db_session
-from app.core.db.repositories.organisation_repo import OrganisationRepository
-from app.core.db.repositories.user_repo import UserRepository
-from app.core.db.models.audit_log import AuditLog
-
-db = db_session()
-try:
-    org_repo = OrganisationRepository(db)
-    user_repo = UserRepository(db)
-
-    # Find and delete test org
-    org = org_repo.get_org_by_name("{self.test_org_name}")
-    if org:
-        # Delete audit logs
-        audit_logs = db.query(AuditLog).filter(AuditLog.org_id == org.id).all()
-        for log in audit_logs:
-            db.delete(log)
-        db.commit()
-
-        # Delete users
-        users = user_repo.list_users_for_org(org.id, active_only=False)
-        for user in users:
-            db.delete(user)
-        db.commit()
-
-        # Delete org
-        db.delete(org)
-        db.commit()
-
-    # Also check for orphaned user
-    user = user_repo.get_user_by_email("{self.test_email}")
-    if user:
-        audit_logs = db.query(AuditLog).filter(AuditLog.user_id == user.id).all()
-        for log in audit_logs:
-            db.delete(log)
-        db.commit()
-        db.delete(user)
-        db.commit()
-finally:
-    db.close()
-"""
-            # Write and execute cleanup
-            cleanup_file = os.path.join(os.path.dirname(__file__), "tmp_cleanup_test.py")
-            with open(cleanup_file, "w") as f:
-                f.write(cleanup_script)
-            subprocess.run([sys.executable, cleanup_file], check=False, cwd=os.path.dirname(__file__))
-            # Remove temporary file
-            try:
-                os.remove(cleanup_file)
-            except Exception:
-                pass
-
-        except Exception as e:
-            print(f"Warning: Failed to cleanup test data: {e}")
+            purge_orgs_named(db, [self.test_org_name])
+        finally:
+            db.close()
+            db_session.remove()
 
     def _signup_user(self):
         """Helper to sign up a new user"""

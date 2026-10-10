@@ -8,6 +8,9 @@ import pytest
 import requests
 import urllib3
 
+from app.core.db import db_session
+from tests.org_purge import purge_orgs_named
+
 # Disable SSL verification for local development with self-signed certificates
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -25,12 +28,27 @@ class Test2FATOTP:
         """Create a fresh session for each test"""
         self.session = requests.Session()
         self.session.verify = False
+        self.org_names = []
         yield
         # Cleanup: logout if logged in
         try:
             self.session.post(f"{BASE_URL}/auth/logout")
         except Exception:
             pass
+        # The server created these orgs over HTTP, so tests/conftest.py's in-process tracker
+        # never saw them: remove them by name, or each run leaves one per signup in the test DB.
+        db = db_session()
+        try:
+            purge_orgs_named(db, self.org_names)
+        finally:
+            db.close()
+            db_session.remove()
+
+    def _new_org_name(self) -> str:
+        """An org name for a signup, remembered so teardown can remove the org it creates."""
+        name = f"TestOrg_{uuid4().hex[:8]}"
+        self.org_names.append(name)
+        return name
 
     def _generate_two_different_tokens(self, secret: str):
         """Helper to generate two different TOTP tokens without waiting
@@ -74,7 +92,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": f"test_{uuid4().hex[:8]}@test.com",
                 "password": "TestPass123!",
                 "password_confirm": "TestPass123!",
@@ -99,7 +117,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": f"test_{uuid4().hex[:8]}@test.com",
                 "password": "TestPass123!",
                 "password_confirm": "TestPass123!",
@@ -134,7 +152,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": f"test_{uuid4().hex[:8]}@test.com",
                 "password": "TestPass123!",
                 "password_confirm": "TestPass123!",
@@ -166,7 +184,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": f"test_{uuid4().hex[:8]}@test.com",
                 "password": "TestPass123!",
                 "password_confirm": "TestPass123!",
@@ -204,7 +222,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": email,
                 "password": password,
                 "password_confirm": password,
@@ -229,7 +247,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": email,
                 "password": password,
                 "password_confirm": password,
@@ -262,7 +280,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": email,
                 "password": password,
                 "password_confirm": password,
@@ -307,7 +325,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": email,
                 "password": password,
                 "password_confirm": password,
@@ -351,7 +369,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": email,
                 "password": password,
                 "password_confirm": password,
@@ -388,7 +406,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": f"test_{uuid4().hex[:8]}@test.com",
                 "password": "TestPass123!",
                 "password_confirm": "TestPass123!",
@@ -416,7 +434,7 @@ class Test2FATOTP:
         signup_response = self.session.post(
             f"{BASE_URL}/auth/signup",
             json={
-                "org_name": f"TestOrg_{uuid4().hex[:8]}",
+                "org_name": self._new_org_name(),
                 "email": f"test_{uuid4().hex[:8]}@test.com",
                 "password": "TestPass123!",
                 "password_confirm": "TestPass123!",
