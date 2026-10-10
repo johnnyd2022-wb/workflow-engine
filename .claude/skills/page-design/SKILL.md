@@ -1,6 +1,6 @@
 ---
 name: page-design
-description: "Designs or redesigns one page of the app until it looks and works extremely cleanly: researches how comparable products and the products with the best UX reputations solve the same problem, writes a plan, builds in the house style, then loops on real browser screenshots (scripts/ui_shots.py) until nothing is left to fix. Use this skill when the user says 'make this page cleaner', 'this page is cluttered', 'make it slick', 'redesign <page>', 'refresh the UI', 'polish this', 'UX pass on <page>', 'it should feel easier', or when new-feature or review-feature builds or reshapes a page. NOT for linting one template or script (html-review, js-review), NOT for functional browser coverage on its own (e2e-playwright), NOT for load time (perf-guardrails), NOT for marketing copy or the landing site (content-producer). Autonomous: ships one MR with the plan and before/after screenshots; the MR is the human gate."
+description: "Designs or redesigns one page of the app until it looks and works extremely cleanly: researches how comparable products and the products with the best UX reputations solve the same problem, writes a plan, builds THREE distinct styles in the house style for the user to choose from, loops on real browser screenshots (scripts/ui_shots.py) until nothing is left to fix, presents Style 1, 2 and 3 in a draft MR, then deletes the two not chosen. Use this skill when the user says 'make this page cleaner', 'this page is cluttered', 'make it slick', 'redesign <page>', 'refresh the UI', 'polish this', 'UX pass on <page>', 'it should feel easier', 'show me some options for <page>', or when new-feature or review-feature builds or reshapes a page. NOT for linting one template or script (html-review, js-review), NOT for functional browser coverage on its own (e2e-playwright), NOT for load time (perf-guardrails), NOT for marketing copy or the landing site (content-producer). Autonomous: ships one draft MR with the plan and screenshots of all three styles; the human picks one there, and the MR merges with only the winner in it."
 ---
 
 # Page Design
@@ -11,8 +11,12 @@ design judged from the template is a guess: the Inventory page's script ran once
 browser session, its search threw on every keystroke, and its trend column had never had
 data. All three were found by opening the page, none by reading it (!509).
 
-This skill makes looking mandatory and repeatable: research first, a written plan, then a
-screenshot loop that only ends when a pass finds nothing.
+This skill makes looking mandatory and repeatable: research first, a written plan, three
+styles to choose from, and a screenshot loop that only ends when a pass finds nothing.
+
+Three, because one design presented alone gets judged against nothing. The first dashboard
+concept (!512) was accepted with "not bad", then reshaped twice in review; put beside two
+real alternatives, the choice is made once, on what is in front of the reader.
 
 Read `.agents/autonomy.md`. Ships via MR; an unattended run surfaces its assumptions in
 the plan rather than stopping to ask.
@@ -59,7 +63,7 @@ test that fails on the old code.
 ### 2. Seed and shoot the page as it is
 
 ```bash
-env -u ENVIRONMENT uv run python scripts/ui_shots.py seed stock lineage
+env -u ENVIRONMENT uv run python scripts/ui_shots.py seed stock lineage compliance
 cp .claude/skills/page-design/scenarios.example.py ~/.cache/workflow-engine-ui-shots/scenarios.py
 env -u ENVIRONMENT uv run python scripts/ui_shots.py shoot ~/.cache/workflow-engine-ui-shots/00-before \
     --scenarios ~/.cache/workflow-engine-ui-shots/scenarios.py 2>&1 | grep '^ui-shots:'
@@ -67,7 +71,9 @@ env -u ENVIRONMENT uv run python scripts/ui_shots.py shoot ~/.cache/workflow-eng
 
 `seed` creates a throwaway org in the local test database: `stock` is thirty-odd lines
 with suppliers, batches, expiries and quantity history; `lineage` is two gin batches
-through three steps, sold on six invoices to four customers. Realistic data is the point.
+through three steps, sold on six invoices to four customers; `compliance` subscribes the
+org to Compliance on the NP3 programme (leave it off for a page that has nothing to do
+with compliance). Realistic data is the point.
 A page designed against three rows named "Test Item 0" is designed for a product nobody
 runs. If the page needs data neither seed has, add a seed to `scripts/ui_shots.py`.
 
@@ -98,6 +104,12 @@ not find; do not present your own judgment as a source.
 Research decides *structure* (what is on the page, in what order, what is hidden). The
 house style decides *appearance*. Never import another product's palette or typeface.
 
+The research must turn up **three different schools of answer**, not three examples of
+one. They become the three styles in step 5, so look for approaches that disagree: a
+stack of cards against a sized grid against a sentence of prose; a table against a board
+against a timeline. If everything you found does it the same way, search for the product
+that deliberately does not.
+
 ### 4. Write the plan
 
 `docs/<page>-redesign-plan.md`, in the shape of `docs/trace-and-recall-redesign-plan.md`:
@@ -105,14 +117,44 @@ house style decides *appearance*. Never import another product's palette or type
 - **What is wrong today**: observed in the screenshots, not assumed. (For a new page:
   **What the page must answer**.)
 - **What other products do**: the research table from step 3.
-- **Design**: section by section, in plain statements.
+- **Three directions to choose from**: a table with one column per style: the idea in a
+  line, which researched products it is taken from, what it is best at, and what it gives
+  up. Then what all three share. The dashboard's plan in !512 is the worked example:
+
+  | | Style 1: Stacked | Style 2: Board | Style 3: Briefing |
+  |---|---|---|---|
+  | Idea | Full-width cards in priority order | A grid sized for one wall screen | One sentence, then quiet sections |
+  | Taken from | Stripe, Shopify home | Geckoboard TV guidance, bento grids | Linear Pulse, Notion summary |
+  | Best at | A laptop at a desk | A TV or wide monitor | Starting the day in one read |
+  | Gives up | A scroll to reach the lists | Capped lists, hidden Workspaces | Boxes and trend lines |
 - **Not in this change**: APIs, calculations and exports left alone, and follow-ups.
 - **Checks**: tests to add and the widths and themes to shoot.
 
 The plan ships in the MR. If `docs/source-to-sale-plan.md` or `docs/ux-overhaul-plan.md`
 has an item this delivers, tick it in the same MR.
 
-### 5. Build in the house style
+### 5. Build three styles in the house style
+
+Build all three for real, on the real data, behind one switch:
+
+- The page root carries `data-<page>-style="1"`; the script reads `?style=1|2|3` (then a
+  remembered choice) and sets it. A three-button switch in the page header, marked
+  `CONCEPT ONLY` in a comment, changes it without a reload.
+- **One template and one script serve all three.** Style 1 is the base stylesheet; Styles
+  2 and 3 are blocks scoped to `[data-<page>-style="2"]` and `["3"]`, each under a
+  `CONCEPT ONLY` comment, so deleting a style is deleting a block. An element only one
+  style shows (a summary sentence, say) is in the template and hidden by the others.
+- The styles must differ in **structure**: what leads, what sits beside what, what is
+  capped or hidden, how much fits on one screen. Three paint jobs on one layout is one
+  style. Never build a favourite and two strawmen; each has to be one you would ship.
+- Anything the user has already asked for (a block's position, a figure that must be
+  there) is in all three.
+
+Skip the three styles only when the page's direction has already been chosen and the ask
+is a refinement of it ("move this above that", "bring back that figure"). Say in the MR
+that it is a refinement and why there is one version.
+
+Then, for every style:
 
 - Tokens from `app/core/frontend/css/design-system.css` (`--ui-accent`, `--ui-border`,
   `--ui-surface`, `--ui-text-muted`); layout from `app/core/frontend/css/workspace-overviews.css`
@@ -137,7 +179,10 @@ env -u ENVIRONMENT uv run python scripts/ui_shots.py shoot ~/.cache/workflow-eng
     --scenarios ~/.cache/workflow-engine-ui-shots/scenarios.py 2>&1 | grep '^ui-shots:'
 ```
 
-One numbered directory per pass (`01`, `02`, ...). Each pass:
+One numbered directory per pass (`01`, `02`, ...), every pass covering **all three styles**
+(name the files `style1-desktop.png`, `style2-wall.png`, ...). Shoot each style on a
+busy day and a quiet one, at laptop, phone and dark, and at `WALL` (1920 × 1080) for any
+page that may sit on a screen across the room. Each pass:
 
 1. Shoot every scenario. The command exits 1 if a scenario failed or the page logged a
    console error; that is a defect, fix it before judging pixels.
@@ -147,7 +192,8 @@ One numbered directory per pass (`01`, `02`, ...). Each pass:
    what disappears in dark.
 4. Fix them. Shoot again.
 
-**Stop only when a full pass produces an empty list.** Expect at least three passes; the
+**Stop only when a full pass produces an empty list for all three.** A style that is not
+finished is not an option, it is a way of steering the choice. Expect at least three passes; the
 Inventory page took six and Trace took three. A pass that finds nothing on the first try
 means the scenarios are too few, not that the page is done: add the states you skipped.
 
@@ -158,7 +204,11 @@ new code (a re-render on blur swallowed the click on "Clear filters").
 
 ### 7. Prove it works
 
-- Browser tests for what the page now does, following **e2e-playwright**. Include one per
+- Browser tests for what the page now does, following **e2e-playwright**. Tests of the
+  shared behaviour run against Style 1 (the default). Add a small group marked
+  `CONCEPT ONLY` that loads each style at phone, laptop and wall widths and checks what
+  no screenshot review should have to: no sideways scroll, nothing drawn over anything
+  else, the regions all present. They are deleted with the losing styles. Include one per
   bug fixed in step 1, run against the old file first to see it fail.
 - The suites bound to the page, plus the shared ones:
 
@@ -172,18 +222,38 @@ semgrep --config .semgrep/rules/ app/core/frontend/js/<script>.js --error -q
 - Hand changed or new tests to **test-evaluator**; hand the template and script to
   **html-review** and **js-review** if the diff is large.
 
-### 8. Ship and clean up
+### 8. Present the three, then ship the one
 
 ```bash
-env -u ENVIRONMENT uv run python scripts/ui_shots.py upload ~/.cache/workflow-engine-ui-shots/00-before/desktop.png ~/.cache/workflow-engine-ui-shots/<last>/desktop.png 2>&1 | grep '^ui-shots:'
+env -u ENVIRONMENT uv run python scripts/ui_shots.py upload ~/.cache/workflow-engine-ui-shots/<last>/style1-desktop.png ~/.cache/workflow-engine-ui-shots/<last>/style2-desktop.png ~/.cache/workflow-engine-ui-shots/<last>/style3-desktop.png 2>&1 | grep '^ui-shots:'
 env -u ENVIRONMENT uv run python scripts/ui_shots.py purge 2>&1 | grep '^ui-shots:'
 ```
 
-`upload` prints the markdown for each image. The MR description (via **merge-request**)
-carries: a before/after table, the other states, what changed, **Behaviour to be aware
-of** (anything a user will notice is different or gone), the research basis in three
-lines, and the tests. CI's relevant-test selection skips e2e, so say the browser tests
-were verified locally. Always `purge`: the seeded org lives in the shared test database.
+`upload` prints the markdown for each image. Open the MR (via **merge-request**) as a
+**draft**, titled so nobody merges it by accident, with a description that opens on the
+choice:
+
+- the comparison table from the plan (idea, taken from, best at, gives up);
+- **Style 1, Style 2 and Style 3 side by side** at laptop width, then at each other width
+  and state, the same shot of each in the same row;
+- how to try them (`?style=2`);
+- any decision that is the reader's and not a matter of taste (a new figure's definition,
+  something removed), stated once, plainly;
+- then what changed, **Behaviour to be aware of**, the research basis, and the tests.
+
+`relevant_tests` in CI runs the e2e files a diff touches, on a UTC clock; run anything
+time-sensitive locally with `TZ=UTC` as well before pushing. Always `purge`: the seeded org
+lives in the shared test database.
+
+**When the user picks**, in the same MR:
+
+1. Delete the switch, the two losing style blocks, any element only they used, the
+   script that reads `?style=`, and the `CONCEPT ONLY` tests. If the winner was Style 2 or
+   3, fold its block into the base rules so no `data-<page>-style` selector is left.
+2. `grep -rn "CONCEPT ONLY\|style-pick\|data-<page>-style" app tests` must come back empty.
+3. One more full screenshot pass on what remains, and the suites again.
+4. Update the plan (which style, and why the others lost, in a line each), the MR
+   description and title, and take it out of draft.
 
 ### 9. Record the run
 
@@ -200,6 +270,7 @@ python3 scripts/skill_metrics.py record --skill page-design --run-type interacti
 # PAGE DESIGN — <page> — <date>
 plan: docs/<page>-redesign-plan.md
 research: <n> comparable products, <n> craft references, <n> pattern sources
+directions: 3 (<name>, <name>, <name>); chosen: <which, or "awaiting the pick">
 passes: <n>   defects fixed: <n>   bugs fixed: <list>
 screenshots: ~/.cache/workflow-engine-ui-shots/<dirs>
 tests: <added> added, <changed> changed (why)
@@ -207,8 +278,9 @@ follow-ups: <what the plan deferred>
 verdict: patched | findings-open | error
 ```
 
-`patched`: the last pass was empty and the MR is open. `findings-open`: shipped, but the
-list names defects still present or states not shot. `error`: could not seed, boot or
+`patched`: the last pass was empty, one style is left and the MR is out of draft.
+`findings-open`: the three are presented and a pick is awaited, or the list names defects
+still present or states not shot. `error`: could not seed, boot or
 shoot; say which. There is no `clean`: a run that changed nothing did not need this skill.
 
 ## Handoffs
@@ -228,6 +300,9 @@ shoot; say which. There is no `clean`: a run that changed nothing did not need t
 
 - **Never call a page done without reading the screenshots of the final code.** A design
   judged from the diff is the failure this skill exists to prevent.
+- **Never merge with the style switch still in.** Three styles in production is three
+  pages to maintain; the MR stays a draft until two are deleted.
+- Three styles means three structures, all finished, all ones you would ship.
 - **Never stop the loop on a pass that still found something**, and never shrink the
   scenario list to make a pass come back empty.
 - Research is not optional and not decoration: no plan without all three kinds of source,
