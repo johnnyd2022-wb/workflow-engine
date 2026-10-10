@@ -71,6 +71,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Momo+Trust+Display&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='workspace-overviews.css') }}">
+  {# Production overview: global, like the rest, so an in-app visit to /core arrives styled. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='production-overview.css') }}">
 
   {# Page-level head customisation #}
   {% block head_extras %}{% endblock %}

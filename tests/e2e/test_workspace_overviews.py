@@ -192,7 +192,9 @@ def test_ac3_setup_and_pending_never_claim_healthy(browser, app_url, workspace_u
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_production_overview_reads_health_first_and_opens_a_batch(browser, app_url, workspace_user, width):
+def test_production_overview_reads_health_first_and_offers_each_batch_its_next_step(
+    browser, app_url, workspace_user, width
+):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core")
@@ -205,42 +207,50 @@ def test_production_overview_reads_health_first_and_opens_a_batch(browser, app_u
         assert len(widths) == 1, "the selector spans the column in equal segments"
 
         health = page.get_by_role("region", name="Production health", exact=True)
-        expect(health.get_by_role("group", name="At a glance")).to_be_visible()
         expect(health.get_by_role("group", name="Operational status").get_by_role("link")).to_have_count(5)
+        glance = page.get_by_role("region", name="At a glance", exact=True)
+        expect(glance.get_by_role("link")).to_have_count(6)
         manage = page.get_by_role("region", name="Production workspace actions", exact=True)
         expect(manage.get_by_role("link")).to_have_count(5)
         board = manage.get_by_role("link", name="View production board", exact=True)
         expect(board).to_have_attribute("href", "/core/executions/live")
         active = page.get_by_role("region", name="Active production", exact=True)
-        stack = [
-            health,
-            page.get_by_role("region", name="Get to work", exact=True),
-            manage,
-            active,
-        ]
-        boxes = [item.bounding_box() for item in stack]
-        assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
-        assert len({round(box["width"]) for box in boxes}) == 1, "every block spans the content column"
+        actions = page.get_by_role("region", name="Get to work", exact=True)
+        boxes = {
+            name: item.bounding_box()
+            for name, item in [("health", health), ("glance", glance), ("active", active), ("actions", actions)]
+        }
+        boxes["manage"] = manage.bounding_box()
+        if width >= 1440:
+            # With room the page is a board, as Home is: health beside the figures, then the
+            # work beside the actions, each pair level.
+            assert boxes["health"]["y"] == boxes["glance"]["y"]
+            assert round(boxes["health"]["height"]) == round(boxes["glance"]["height"])
+            assert boxes["active"]["y"] == boxes["actions"]["y"] > boxes["health"]["y"]
+            assert boxes["manage"]["y"] > boxes["actions"]["y"] and boxes["manage"]["x"] == boxes["actions"]["x"]
+            bottoms = [boxes[name]["y"] + boxes[name]["height"] for name in ("active", "manage")]
+            assert round(bottoms[0]) == round(bottoms[1]), "no card ends short of its neighbour"
+        else:
+            # Without it, one column in priority order: health, the work, then the rest.
+            order = ["health", "active", "glance", "actions", "manage"]
+            assert [boxes[name]["y"] for name in order] == sorted(boxes[name]["y"] for name in order)
+            assert len({round(box["width"]) for box in boxes.values()}) == 1, "every block spans the content column"
         links = [link.bounding_box() for link in manage.get_by_role("link").all()]
         assert links[0]["y"] == links[1]["y"] and links[2]["y"] == links[3]["y"] > links[0]["y"]
         assert len({round(link["width"]) for link in links[:4]}) == 1
-        assert links[4]["y"] > links[3]["y"] and links[4]["width"] > links[0]["width"] * 2
+        assert links[4]["y"] > links[3]["y"] and links[4]["width"] > links[0]["width"] * 1.5
         plain = manage.get_by_role("link").first.evaluate("link => getComputedStyle(link).backgroundColor")
         expect(board).to_have_css("background-color", plain)
 
-        batch = active.locator("details").first
-        record = batch.get_by_role("link", name="Record next step", exact=True)
-        expect(record).not_to_be_visible()
-        batch.locator("summary").click()
-        for label in ["Status", "Next step", "Progress", "Started"]:
-            expect(batch.get_by_text(label, exact=True)).to_be_visible()
-        expect(batch.get_by_role("link")).to_have_count(1)
+        # A batch says where it is and offers its next step without being opened first.
+        batch = active.locator("[data-execution-id]").first
+        expect(batch).to_contain_text("Gin distillation")
+        expect(batch.locator(".prod-progress")).to_be_visible()
+        record = batch.get_by_role("link", name=re.compile("^Record next step"))
+        expect(record).to_be_visible()
         assert "/core/flows/batches/start?id=" in record.get_attribute("href")
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "production-layout", width)
-        batch.locator("summary").click()
-        expect(record).not_to_be_visible()
-        batch.locator("summary").click()
         record.click()
         expect(page).to_have_url(re.compile(r"/core/flows/batches/start\?.*execution_id="))
     finally:

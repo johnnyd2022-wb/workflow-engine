@@ -34,68 +34,86 @@
           {# Health, next steps and workspace links belong to the overview only; the pages behind
              the tabs open straight onto their own content. #}
           {% if core2_focus_mode == '' %}
-          <div class="production-overview__start workspace-stack" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
+          <div class="prod-v2" data-production-root data-production-style="1">
+          {# CONCEPT ONLY: three directions to choose from (docs/production-redesign-plan.md). Once one
+             is picked, this switch and the other two styles are deleted. #}
+          <div class="prod-segments prod-style-switch" role="group" aria-label="Production style" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
+            <button type="button" data-production-style-pick="1" aria-pressed="true">Style 1</button>
+            <button type="button" data-production-style-pick="2" aria-pressed="false">Style 2</button>
+            <button type="button" data-production-style-pick="3" aria-pressed="false">Style 3</button>
+          </div>
+          <div class="production-overview__start" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
             <section class="workspace-card production-health" aria-labelledby="production-health-title">
               <h2 id="production-health-title">Production health</h2>
               <div id="core2-journey-bar" role="status" aria-live="polite"><p class="workspace-caption">Checking production health…</p></div>
-              {% if core2_focus_mode == '' %}
               <div class="production-health__details" data-core2-overview-only>
-                <div class="production-health__group" role="group" aria-labelledby="core2-overview-summary-title">
-                  <div class="workspace-subheading">
-                    <h3 id="core2-overview-summary-title">At a glance</h3>
-                  </div>
-                  <div class="core2-stats-hybrid core2-stats-hybrid--cards" role="group" aria-label="Production metrics">
-                    <div class="core2-stats-hybrid__cell">
-                      <div class="core2-stats-hybrid__label">Product workflows</div>
-                      <div class="core2-stats-hybrid__value" id="metric-total-processes">0</div>
-                    </div>
-                    <div class="core2-stats-hybrid__cell">
-                      <div class="core2-stats-hybrid__label">Active Batches</div>
-                      <div class="core2-stats-hybrid__value" id="metric-active-executions">0</div>
-                    </div>
-                    <div class="core2-stats-hybrid__cell">
-                      <div class="core2-stats-hybrid__label">Finished batches</div>
-                      <div class="core2-stats-hybrid__value" id="metric-completed">0</div>
-                    </div>
-                    <div class="core2-stats-hybrid__cell">
-                      <div class="core2-stats-hybrid__label">Stock lines</div>
-                      <div class="core2-stats-hybrid__value" id="metric-inventory">0</div>
-                    </div>
-                  </div>
-                </div>
                 <div class="production-health__group" role="group" aria-labelledby="core2-overview-attention-title">
                   <div class="workspace-subheading">
                     <h3 id="core2-overview-attention-title">Operational status</h3>
                     <a href="/core/notifications" class="core2-text-link">View all alerts</a>
                   </div>
-                  <div id="core2-overview-attention" class="core2-attention-grid" aria-live="polite">
+                  <div id="core2-overview-attention" class="prod-checks" aria-live="polite">
                     <p class="core2-active-batches-empty">Loading operational priorities...</p>
                   </div>
                 </div>
               </div>
-              {% endif %}
+            </section>
+            <section class="workspace-card prod-glance" aria-labelledby="core2-overview-summary-title">
+              <h2 id="core2-overview-summary-title">At a glance</h2>
+              <div class="prod-figures" role="group" aria-label="Production metrics">
+                <a class="prod-figure" href="/core/executions/live">
+                  <span class="prod-figure__label">Active batches</span>
+                  <strong class="prod-figure__value" id="metric-active-executions">0</strong>
+                  <span class="prod-figure__meta">in progress now</span>
+                </a>
+                <a class="prod-figure" href="/core/executions/live">
+                  <span class="prod-figure__label">Longest running</span>
+                  <strong class="prod-figure__value" data-production-oldest>–</strong>
+                  <span class="prod-figure__meta" data-production-oldest-name>no batches under way</span>
+                </a>
+                <a class="prod-figure" href="/core/executions/live">
+                  <span class="prod-figure__label">Finished this week</span>
+                  <strong class="prod-figure__value" data-production-finished-week>0</strong>
+                  <span class="prod-figure__meta"><span id="metric-completed">0</span> all time</span>
+                </a>
+                <a class="prod-figure" href="/core/processes">
+                  <span class="prod-figure__label">Product workflows</span>
+                  <strong class="prod-figure__value" id="metric-total-processes">0</strong>
+                  <span class="prod-figure__meta">ready to run</span>
+                </a>
+                <a class="prod-figure" href="/core/inventory/view">
+                  <span class="prod-figure__label">Stock lines</span>
+                  <strong class="prod-figure__value" id="metric-inventory">0</strong>
+                  <span class="prod-figure__meta">on hand</span>
+                </a>
+                <a class="prod-figure" href="/core/inventory/live">
+                  <span class="prod-figure__label">Stock movements</span>
+                  <strong class="prod-figure__value" data-production-movements>0</strong>
+                  <span class="prod-figure__meta">in the last 24 hours</span>
+                </a>
+              </div>
             </section>
             <section class="workspace-card production-actions" aria-labelledby="production-actions-title">
               <h2 id="production-actions-title">Get to work</h2>
               <p class="workspace-caption">Your next step, with everyday actions close by.</p>
               <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
             </section>
-            {% if core2_focus_mode == '' %}
             {% set production_board = {'label': 'View production board', 'href': '/core/executions/live'} if active_tab == 'overview' and can('production.view') else none %}
             {% with workspace_links_card = true, workspace_links_footer = production_board %}{% include 'shared/workspace_links.html' %}{% endwith %}
-            {% endif %}
           </div>
-          {% endif %}
 
-          {% if core2_focus_mode == '' %}
           <div id="core2-panel-overview" class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview" role="region" aria-label="Production overview">
             <section class="workspace-card production-active" aria-labelledby="core2-overview-batches-title">
-              <h2 id="core2-overview-batches-title">Active production</h2>
-              <p class="workspace-caption">Select a batch to see where it is up to.</p>
-              <div id="core2-overview-active-batches" class="workspace-disclosure-list" aria-live="polite">
+              <div class="workspace-card__header">
+                <h2 id="core2-overview-batches-title">Active production</h2>
+                <a class="workspace-link" href="/core/executions/live">Production board</a>
+              </div>
+              <p class="workspace-caption" data-production-active-caption>Batches under way, longest running first.</p>
+              <div id="core2-overview-active-batches" class="prod-batches" aria-live="polite">
                 <p class="core2-active-batches-empty">Loading active batches...</p>
               </div>
             </section>
+          </div>
           </div>
 
           <div id="core2-panel-inventory" class="core2-tab-panel" data-core2-tab-panel="inventory" role="region" aria-label="Inventory workspace" hidden>
@@ -2556,50 +2574,171 @@
       var attentionHost = document.getElementById('core2-overview-attention');
       if (attentionHost) {
         attentionHost.innerHTML = attention.map(function (item) {
-          return '<a class="core2-attention-item core2-attention-item--' + item.tone + '" href="' + item.href + '">' +
-            '<span class="core2-attention-item__count">' + escapeHtml(String(item.count)) + '</span>' +
-            '<span class="core2-attention-item__label">' + escapeHtml(item.label) + '</span>' +
-            '<span class="core2-attention-item__hint">' + escapeHtml(item.hint) + '</span></a>';
+          var clear = !Number(item.count);
+          return '<a class="prod-check prod-check--' + (clear ? 'clear' : item.tone) + '" href="' + item.href + '">' +
+            '<span class="prod-check__count">' + escapeHtml(String(item.count)) + '</span>' +
+            '<span class="prod-check__label">' + escapeHtml(item.label) + '</span>' +
+            '<span class="prod-check__hint">' + escapeHtml(clear ? 'Nothing to do.' : item.hint) + '</span></a>';
         }).join('');
       }
 
-      core2RenderActiveProduction((wf.active_executions || []).slice(0, 6));
+      var movement = inv.movement_24h || {};
+      [['[data-production-finished-week]', wf.completed_7d], ['[data-production-movements]', movement.events]].forEach(function (pair) {
+        var el = document.querySelector(pair[0]);
+        if (el) el.textContent = String(Number(pair[1] || 0));
+      });
+
+      core2ActiveProduction = wf.active_executions || [];
+      var oldest = core2ActiveProduction.map(core2BatchView).filter(function (batch) { return batch.hours >= 0; }).sort(function (x, y) { return y.hours - x.hours; })[0];
+      var oldestEl = document.querySelector('[data-production-oldest]');
+      var oldestName = document.querySelector('[data-production-oldest-name]');
+      if (oldestEl) oldestEl.textContent = oldest ? oldest.age.replace(/^Started /, '').replace(/ ago$/, '').replace('just now', 'under an hour') : '–';
+      if (oldestName) oldestName.textContent = oldest ? oldest.name : 'no batches under way';
+      core2RenderActiveProduction();
     }
 
-    // Active production: one disclosure per batch, with a single way on to its next step.
-    function core2RenderActiveProduction(executions) {
+    // Active production. Every batch says where it is, how far through, and how long it has
+    // been going, with the one way on to its next step in view.
+    var core2ActiveProduction = [];
+    var core2ActiveFilter = 'all';
+
+    function core2BatchView(execution) {
+      var step = execution.current_step || null;
+      var total = Number(execution.total_steps || 0);
+      var steps = execution.steps || [];
+      var done = steps.filter(function (s) { return s && s.status === 'completed'; }).length;
+      var started = execution.started_at ? new Date(execution.started_at) : null;
+      if (started && isNaN(started)) started = null;
+      var hours = started ? Math.max(0, (Date.now() - started.getTime()) / 3600000) : null;
+      var age = hours === null ? 'Not started' :
+        hours < 1 ? 'Started just now' :
+        hours < 24 ? 'Started ' + Math.round(hours) + (Math.round(hours) === 1 ? ' hour ago' : ' hours ago') :
+        'Started ' + Math.round(hours / 24) + (Math.round(hours / 24) === 1 ? ' day ago' : ' days ago');
+      var stage = done === 0 ? 'new' : (total && done >= total - 1 ? 'last' : 'mid');
+      return {
+        id: String(execution.id || ''),
+        name: execution.process_name || 'Untitled workflow',
+        step: step && step.name ? step.name : 'No step is ready to record',
+        position: total ? 'Step ' + (step ? step.step_number : Math.min(done + 1, total)) + ' of ' + total : '',
+        done: done,
+        total: total,
+        age: age,
+        hours: hours === null ? -1 : hours,
+        stage: stage,
+        stageLabel: stage === 'new' ? 'Not started' : stage === 'last' ? 'Last step' : 'In progress',
+        href: '/core/flows/batches/start?id=' + encodeURIComponent(String(execution.process_id || '')) + '&execution_id=' + encodeURIComponent(String(execution.id || '')),
+      };
+    }
+
+    function core2BatchProgress(batch) {
+      // A workflow with no steps has nothing to draw; say so instead of leaving a gap.
+      if (!batch.total) return '<span class="prod-progress prod-progress--none">No steps yet</span>';
+      var cells = '';
+      for (var i = 0; i < batch.total; i++) cells += '<span' + (i < batch.done ? ' class="is-done"' : '') + '></span>';
+      return '<span class="prod-progress" role="img" aria-label="' + escapeHtml(batch.total ? batch.done + ' of ' + batch.total + ' steps done' : 'No steps yet') + '">' + cells + '</span>';
+    }
+
+    function core2BatchAction(batch, canRecord) {
+      return canRecord ? '<a class="workspace-button prod-batch__action" href="' + escapeHtml(batch.href) + '">Record next step<span class="prod-visually-hidden"> for ' + escapeHtml(batch.name) + ', ' + escapeHtml(batch.step) + '</span></a>' : '';
+    }
+
+    function core2RenderActiveProduction() {
       var host = document.getElementById('core2-overview-active-batches');
       if (!host) return;
-      if (!executions.length) {
+      var root = document.querySelector('[data-production-root]');
+      var style = root ? root.dataset.productionStyle : '1';
+      var caption = document.querySelector('[data-production-active-caption]');
+      var batches = core2ActiveProduction.map(core2BatchView).sort(function (x, y) { return y.hours - x.hours; });
+      if (!batches.length) {
+        host.className = 'prod-batches';
+        if (caption) caption.hidden = true;
         host.innerHTML = '<p class="core2-active-batches-empty">No batches are active right now. Start a batch from a product workflow when work begins.</p>';
         return;
       }
-      // A live refresh re-renders the list; keep whatever the user had open.
-      var open = Array.prototype.map.call(host.querySelectorAll('details[open]'), function (el) { return el.dataset.executionId; });
+      if (caption) {
+        caption.hidden = false;
+        caption.textContent = batches.length + (batches.length === 1 ? ' batch' : ' batches') + ' under way, longest running first.';
+      }
       var actions = document.getElementById('core2-journey-actions');
       var canRecord = !!actions && actions.dataset.canRecord === 'true';
-      host.innerHTML = executions.map(function (execution) {
-        var id = String(execution.id || '');
-        var step = execution.current_step || null;
-        var total = Number(execution.total_steps || 0);
-        var done = (execution.steps || []).filter(function (s) { return s && s.status === 'completed'; }).length;
-        var started = execution.started_at ? new Date(execution.started_at) : null;
-        var facts = [
-          ['Status', execution.status === 'pending' ? 'Ready to record' : 'In progress'],
-          ['Next step', step && step.name ? step.name + (total ? ' (step ' + step.step_number + ' of ' + total + ')' : '') : 'No step is ready to record'],
-          ['Progress', total ? done + ' of ' + total + ' steps done' : 'No steps recorded yet'],
-          ['Started', started && !isNaN(started) ? started.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Not recorded'],
-        ];
-        var href = '/core/flows/batches/start?id=' + encodeURIComponent(String(execution.process_id || '')) + '&execution_id=' + encodeURIComponent(id);
-        return '<details class="workspace-disclosure" data-execution-id="' + escapeHtml(id) + '"' + (open.indexOf(id) !== -1 ? ' open' : '') + '>' +
-          '<summary class="workspace-disclosure__summary"><span class="workspace-disclosure__text"><span class="workspace-disclosure__title">' +
-          escapeHtml(execution.process_name || 'Untitled workflow') + '</span><span class="workspace-disclosure__meta">' +
-          escapeHtml(step && step.name ? step.name : 'Ready to start') + '</span></span><span class="workspace-disclosure__value">' +
-          escapeHtml(facts[0][1]) + '</span></summary><div class="workspace-disclosure__body"><dl class="workspace-facts">' +
-          facts.map(function (fact) { return '<div><dt>' + escapeHtml(fact[0]) + '</dt><dd>' + escapeHtml(fact[1]) + '</dd></div>'; }).join('') +
-          '</dl>' + (canRecord ? '<a class="workspace-button workspace-button--primary" href="' + escapeHtml(href) + '">Record next step</a>' : '') +
-          '</div></details>';
+
+      /* CONCEPT ONLY: Style 2, the line. Delete with the style if it is not chosen. */
+      if (style === '2') {
+        host.className = 'prod-batches prod-lanes';
+        host.innerHTML = [['new', 'Not started', 'Ready to begin'], ['mid', 'In progress', 'Part way through'], ['last', 'Last step', 'About to finish']].map(function (lane) {
+          var cards = batches.filter(function (batch) { return batch.stage === lane[0]; });
+          return '<section class="prod-lane" aria-label="' + lane[1] + '"><header class="prod-lane__head"><h3>' + lane[1] + '</h3><span class="prod-lane__count">' + cards.length + '</span><p>' + lane[2] + '</p></header>' +
+            (cards.length ? cards.map(function (batch) {
+              return '<article class="prod-card" data-execution-id="' + escapeHtml(batch.id) + '"><p class="prod-card__name">' + escapeHtml(batch.name) + '</p>' +
+                '<p class="prod-card__step">' + escapeHtml(batch.step) + '</p>' + core2BatchProgress(batch) +
+                '<p class="prod-card__meta">' + escapeHtml([batch.position, batch.age].filter(Boolean).join(' · ')) + '</p>' + core2BatchAction(batch, canRecord) + '</article>';
+            }).join('') : '<p class="prod-lane__empty">Nothing here.</p>') + '</section>';
+        }).join('');
+        return;
+      }
+
+      /* CONCEPT ONLY: Style 3, the worklist. Delete with the style if it is not chosen. */
+      if (style === '3') {
+        var counts = { all: batches.length, new: 0, mid: 0, last: 0 };
+        batches.forEach(function (batch) { counts[batch.stage] += 1; });
+        if (!counts[core2ActiveFilter]) core2ActiveFilter = 'all';
+        var shown = batches.filter(function (batch) { return core2ActiveFilter === 'all' || batch.stage === core2ActiveFilter; });
+        host.className = 'prod-batches prod-worklist';
+        host.innerHTML = '<div class="prod-segments prod-worklist__filter" role="group" aria-label="Show batches">' +
+          [['all', 'All'], ['new', 'Not started'], ['mid', 'In progress'], ['last', 'Last step']].filter(function (f) { return f[0] === 'all' || counts[f[0]]; }).map(function (f) {
+            return '<button type="button" data-production-filter="' + f[0] + '" aria-pressed="' + (core2ActiveFilter === f[0] ? 'true' : 'false') + '">' + f[1] + ' <span>' + counts[f[0]] + '</span></button>';
+          }).join('') + '</div>' +
+          '<table class="prod-table"><thead><tr><th scope="col">Batch</th><th scope="col">Next step</th><th scope="col">Progress</th><th scope="col">Started</th><th scope="col"><span class="prod-visually-hidden">Action</span></th></tr></thead><tbody>' +
+          shown.map(function (batch) {
+            return '<tr data-execution-id="' + escapeHtml(batch.id) + '"><th scope="row">' + escapeHtml(batch.name) + '</th><td data-label="Next step">' + escapeHtml(batch.step) + '</td>' +
+              '<td data-label="Progress">' + core2BatchProgress(batch) + '<span class="prod-table__position">' + escapeHtml(batch.position) + '</span></td>' +
+              '<td data-label="Started">' + escapeHtml(batch.age.replace(/^Started /, '')) + '</td><td class="prod-table__action">' + core2BatchAction(batch, canRecord) + '</td></tr>';
+          }).join('') + '</tbody></table>';
+        return;
+      }
+
+      // Style 1, the board: rows.
+      host.className = 'prod-batches prod-rows';
+      host.innerHTML = batches.map(function (batch) {
+        return '<article class="prod-row" data-execution-id="' + escapeHtml(batch.id) + '"><div class="prod-row__text"><p class="prod-row__name">' + escapeHtml(batch.name) + '</p>' +
+          '<p class="prod-row__step">' + escapeHtml(batch.step) + '</p></div>' +
+          '<div class="prod-row__state">' + core2BatchProgress(batch) + '<p class="prod-row__meta">' + escapeHtml([batch.position, batch.age].filter(Boolean).join(' · ')) + '</p></div>' +
+          core2BatchAction(batch, canRecord) + '</article>';
       }).join('');
+    }
+
+    /* CONCEPT ONLY: pick one of the three styles. Deleted with the two losing styles. */
+    function core2WireProductionStyle() {
+      var root = document.querySelector('[data-production-root]');
+      if (!root || root.dataset.productionWired === '1') return;
+      root.dataset.productionWired = '1';
+      var picked = new URLSearchParams(window.location.search).get('style');
+      if (!/^[123]$/.test(picked || '')) {
+        try { picked = window.localStorage.getItem('production.style'); } catch (e) { picked = null; }
+      }
+      function apply(style) {
+        root.dataset.productionStyle = /^[123]$/.test(style || '') ? style : '1';
+        root.querySelectorAll('[data-production-style-pick]').forEach(function (button) {
+          button.setAttribute('aria-pressed', button.dataset.productionStylePick === root.dataset.productionStyle ? 'true' : 'false');
+        });
+        core2RenderActiveProduction();
+      }
+      apply(picked);
+      root.addEventListener('click', function (event) {
+        var pick = event.target.closest('[data-production-style-pick]');
+        if (pick) {
+          apply(pick.dataset.productionStylePick);
+          try { window.localStorage.setItem('production.style', root.dataset.productionStyle); } catch (e) { /* private mode */ }
+          return;
+        }
+        var filter = event.target.closest('[data-production-filter]');
+        if (filter) {
+          core2ActiveFilter = filter.dataset.productionFilter;
+          core2RenderActiveProduction();
+          var again = root.querySelector('[data-production-filter="' + core2ActiveFilter + '"]');
+          if (again) again.focus();
+        }
+      });
     }
 
     function core2RenderWorkList(targetId, rows, emptyCopy) {
@@ -2627,6 +2766,7 @@
       window.__core2HubOverviewPending = true;
       window.__core2HubOverview = null;
       try {
+        core2WireProductionStyle();
         overview = await CoreAPI.getHubOverview();
         updateMetricsV2(overview.metrics || {});
         applyCore2OverviewInsights(overview);
@@ -2660,6 +2800,8 @@
           window.loadSystemFindingsBanner();
         }
       } catch (error) {
+        // Leaving the page mid-request is not a failure to report, and there is no page left to tell.
+        if (error && error.name === 'AbortError') return overview;
         console.error('Failed to load core overview:', error);
         const health = document.getElementById('core2-journey-bar');
         if (health) health.textContent = 'Production health could not be loaded. Refresh to try again.';

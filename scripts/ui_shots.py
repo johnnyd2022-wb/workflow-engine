@@ -53,7 +53,7 @@ REPO = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
 STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
-SEED_KINDS = ("stock", "lineage", "compliance")
+SEED_KINDS = ("stock", "lineage", "compliance", "production")
 
 
 def say(*parts) -> None:
@@ -365,6 +365,73 @@ def _seed_compliance(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_production(db, org_id, inv) -> None:
+    """A working week on the floor: three product workflows with seven batches under way, at
+    different steps and ages, one of them not yet started. For pages that show what is in
+    production right now."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.execution import Execution
+    from app.core.db.models.execution_step import ExecutionStep
+    from app.core.db.models.process import ProcessCategory
+    from app.core.db.repositories.execution_repo import ExecutionRepository
+    from app.core.db.repositories.process_repo import ProcessRepository
+
+    procs, execs = ProcessRepository(db), ExecutionRepository(db)
+    now = datetime.now(UTC)
+    gin = ["Macerate botanicals", "Distil", "Bottle and label"]
+    workflows = {
+        "Whistlebird Navy Strength Gin": gin,
+        "Whistlebird Pink Gin": gin[:2] + ["Infuse raspberry", "Bottle and label"],
+        "Limoncello": ["Infuse lemon peel", "Blend and sweeten", "Bottle and label"],
+    }
+    made = {}
+    for name, steps in workflows.items():
+        process = procs.create_process(org_id, name, category=ProcessCategory.MANUFACTURING, is_draft=False)
+        for number, step_name in enumerate(steps, start=1):
+            procs.add_step(
+                process_id=process.id,
+                org_id=org_id,
+                step_number=number,
+                position=number * 1000,
+                name=step_name,
+                inputs=[],
+                outputs=[{"name": f"{name}: {step_name.lower()}", "quantity": 100, "unit": "L"}],
+            )
+        made[name] = process
+    db.commit()
+
+    def start(name, done, hours):
+        execution = execs.create_execution(org_id, made[name].id)
+        rows = (
+            db.query(ExecutionStep)
+            .filter(ExecutionStep.execution_id == execution.id)
+            .order_by(ExecutionStep.step_number)
+            .all()
+        )
+        started = now - timedelta(hours=hours)
+        for index in range(done):
+            execs.complete_step(
+                rows[index].id,
+                org_id,
+                actual_inputs=[],
+                actual_outputs=[],
+                completed_at_override=started + timedelta(hours=(index + 1) * max(1, hours // (done + 1))),
+            )
+        if hours:
+            db.query(Execution).filter(Execution.id == execution.id).update({"started_at": started})
+        db.commit()
+
+    # (workflow, steps already done, hours since it started)
+    start("Whistlebird Navy Strength Gin", 2, 76)
+    start("Whistlebird Navy Strength Gin", 1, 27)
+    start("Whistlebird Navy Strength Gin", 0, 2)
+    start("Whistlebird Pink Gin", 3, 120)
+    start("Whistlebird Pink Gin", 1, 20)
+    start("Limoncello", 1, 190)
+    start("Limoncello", 0, 0)
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -396,7 +463,12 @@ def cmd_seed(args) -> int:
     )
     inv = InventoryRepository(db)
     for kind in args.kinds:
-        {"stock": _seed_stock, "lineage": _seed_lineage, "compliance": _seed_compliance}[kind](db, org.id, inv)
+        {
+            "stock": _seed_stock,
+            "lineage": _seed_lineage,
+            "compliance": _seed_compliance,
+            "production": _seed_production,
+        }[kind](db, org.id, inv)
         say(f"seeded {kind}")
     say(f"org {org.name!r}, sign-in {user.email}")
     return 0
