@@ -115,37 +115,52 @@
         });
     }
 
-    var HEALTH_STATES = {
-        healthy: 'Production healthy',
+    var COMPLIANCE_STATES = {
+        healthy: 'On track',
         degraded: 'Needs attention',
         critical: 'Action required',
+        unknown: 'No checks run yet',
     };
 
-    /* The health score, its state and what is driving it, as one band across the page. The
-       summary has always carried these; this is the first place the dashboard shows them. */
-    function renderHealth(root, health) {
-        var card = byData(root, '[data-dashboard-health]');
+    /* One compliance figure for the whole business and the parts it is the mean of. */
+    function renderCompliance(root, overall) {
+        var card = byData(root, '[data-dashboard-compliance]');
         if (!card) return;
-        var state = health && HEALTH_STATES[health.state] ? health.state : null;
-        var known = !!state && health.score != null;
-        card.hidden = !known;
-        if (!known) return;
-        card.dataset.healthLevel = state;
-        setText(root, '[data-health-score]', Math.round(Number(health.score)));
-        setText(root, '[data-health-state]', HEALTH_STATES[state]);
-        var list = byData(root, '[data-health-drivers]');
+        var parts = overall && Array.isArray(overall.components) ? overall.components : [];
+        card.hidden = !parts.length;
+        if (!parts.length) return;
+
+        var state = COMPLIANCE_STATES[overall.state] ? overall.state : 'unknown';
+        var score = Math.max(0, Math.min(100, Math.round(Number(overall.score) || 0)));
+        card.dataset.complianceLevel = state;
+        setText(root, '[data-compliance-score]', score);
+        setText(root, '[data-compliance-state]', COMPLIANCE_STATES[state]);
+        var arc = byData(root, '[data-compliance-arc]');
+        // As a style, not an attribute: the stylesheet's resting value would win over an attribute.
+        if (arc) arc.style.strokeDasharray = score + ' 100';
+        var ring = byData(root, '[data-compliance-ring]');
+        if (ring) ring.setAttribute('aria-label', 'Compliance score ' + score + ' out of 100, ' + COMPLIANCE_STATES[state].toLowerCase());
+
+        var list = byData(root, '[data-compliance-parts]');
         if (!list) return;
         list.replaceChildren();
-        var drivers = Array.isArray(health.top_drivers) ? health.top_drivers : [];
-        if (!drivers.length) {
-            list.appendChild(el('li', 'dash-health__clear', 'Nothing is pulling the score down.'));
-            return;
-        }
-        drivers.slice(0, 3).forEach(function (driver) {
+        parts.forEach(function (part) {
+            var partState = COMPLIANCE_STATES[part.state] ? part.state : 'unknown';
+            var partScore = Math.max(0, Math.min(100, Math.round(Number(part.score) || 0)));
             var li = el('li');
-            li.appendChild(el('span', '', driver.label || driver.key || 'Finding'));
-            var penalty = Number(driver.penalty || 0);
-            if (penalty) li.appendChild(el('strong', '', '−' + penalty));
+            var link = el('a', 'dash-part dash-part--' + partState);
+            link.href = typeof part.href === 'string' && part.href.charAt(0) === '/' && part.href.charAt(1) !== '/' ? part.href : '/core';
+            var head = el('span', 'dash-part__head');
+            head.appendChild(el('span', 'dash-part__label', part.label || 'Compliance'));
+            head.appendChild(el('strong', 'dash-part__score', String(partScore)));
+            link.appendChild(head);
+            var bar = el('span', 'dash-part__bar');
+            var fill = el('span');
+            fill.style.width = partScore + '%';
+            bar.appendChild(fill);
+            link.appendChild(bar);
+            link.appendChild(el('span', 'dash-part__detail', part.detail || ''));
+            li.appendChild(link);
             list.appendChild(li);
         });
     }
@@ -154,72 +169,19 @@
         return String(count) + ' ' + (count === 1 ? singular : (plural || singular + 's'));
     }
 
-    function dashboardMetric(number, label, tone) {
-        var metric = document.createElement('span');
-        metric.className = 'dash-compliant-health__metric dash-compliant-health__metric--' + tone;
-        var value = document.createElement('strong'); value.textContent = String(number);
-        metric.appendChild(value);
-        metric.appendChild(document.createTextNode(' ' + label));
-        return metric;
-    }
-
-    function dashboardReadinessBar(score, moduleName) {
-        var percent = Math.max(0, Math.min(100, Number(score) || 0));
-        var bar = document.createElement('div');
-        bar.className = 'dash-compliant-health__progress';
-        bar.setAttribute('role', 'progressbar');
-        bar.setAttribute('aria-label', String(moduleName || 'Compliance') + ' evidence readiness');
-        bar.setAttribute('aria-valuemin', '0');
-        bar.setAttribute('aria-valuemax', '100');
-        bar.setAttribute('aria-valuenow', String(percent));
-        var fill = document.createElement('span');
-        fill.style.width = percent + '%';
-        bar.appendChild(fill);
-        return bar;
-    }
-
-    function renderCompliantHealth(root, compliantWorkspace) {
-        var host = byData(root, '[data-dashboard-compliant-health]');
+    /* With one compliance module the tile opens it directly; with several, the workspace.
+       The module's score and evidence count are in the Compliance card, not repeated here. */
+    function linkCompliantTile(root, compliantWorkspace) {
         var card = byData(root, '[data-dashboard-compliant-card]');
         var cardLink = byData(root, '[data-dashboard-compliant-link]');
-        if (!host) return;
-        while (host.firstChild) host.removeChild(host.firstChild);
+        if (!card || !cardLink) return;
         var modules = Array.isArray((compliantWorkspace || {}).modules) ? compliantWorkspace.modules : [];
-        host.hidden = modules.length === 0;
-        if (card && cardLink) {
-            var onlyModule = modules.length === 1 ? modules[0] : null;
-            card.href = onlyModule && typeof onlyModule.href === 'string' && onlyModule.href.charAt(0) === '/'
-                ? onlyModule.href
-                : '/compliant';
-            card.setAttribute('aria-label', onlyModule ? String(onlyModule.action_label || 'Open module') : 'Open Compliance workspace');
-            cardLink.textContent = onlyModule ? String(onlyModule.action_label || 'Open module') + ' →' : 'Open Compliance →';
-        }
-        modules.slice(0, 2).forEach(function (module) {
-            var section = document.createElement('section'); section.className = 'dash-compliant-health__module';
-            var title = document.createElement('p'); title.className = 'dash-compliant-health__title';
-            title.textContent = String(module.module_name || 'Compliance') + ' compliance score: ' + String(module.score || 0) + '%';
-            section.appendChild(title);
-            section.appendChild(dashboardReadinessBar(module.score, module.module_name));
-            var milestone = module.milestone;
-            if (milestone && typeof milestone.label === 'string' && typeof milestone.overdue === 'boolean') {
-                var milestoneLine = document.createElement('p');
-                milestoneLine.className = 'dash-compliant-health__coverage';
-                if (milestone.overdue) milestoneLine.classList.add('dash-compliant-health__milestone--overdue');
-                milestoneLine.textContent = milestone.label + ': ' + (milestone.date || 'Date not set')
-                    + (milestone.overdue ? ' · overdue' : '')
-                    + (typeof milestone.detail === 'string' && milestone.detail ? ' · ' + milestone.detail : '');
-                section.appendChild(milestoneLine);
-            }
-            var coverage = document.createElement('p'); coverage.className = 'dash-compliant-health__coverage';
-            coverage.textContent = String(module.current_controls || 0) + ' / ' + String(module.total_controls || 0) + ' current evidence controls';
-            section.appendChild(coverage);
-            var metrics = document.createElement('div'); metrics.className = 'dash-compliant-health__metrics';
-            metrics.appendChild(dashboardMetric(module.evidence_ready || 0, 'evidence ready', 'ready'));
-            metrics.appendChild(dashboardMetric(module.needs_attention || 0, 'need attention', 'attention'));
-            metrics.appendChild(dashboardMetric(module.overdue || 0, 'overdue', 'overdue'));
-            section.appendChild(metrics);
-            host.appendChild(section);
-        });
+        var onlyModule = modules.length === 1 ? modules[0] : null;
+        card.href = onlyModule && typeof onlyModule.href === 'string' && onlyModule.href.charAt(0) === '/'
+            ? onlyModule.href
+            : '/compliant';
+        card.setAttribute('aria-label', onlyModule ? String(onlyModule.action_label || 'Open module') : 'Open Compliance workspace');
+        cardLink.textContent = onlyModule ? String(onlyModule.action_label || 'Open module') + ' →' : 'Open Compliance →';
     }
 
     function renderWorkspaceSummaries(root, operations, compliantWorkspace, tasks, sales) {
@@ -236,7 +198,7 @@
             '[data-dashboard-compliant-summary]',
             compliant.label || 'Compliance is not enabled for this organisation.'
         );
-        renderCompliantHealth(root, compliant);
+        linkCompliantTile(root, compliant);
 
         var safeTasks = tasks || {};
         var safeSales = sales || {};
@@ -443,6 +405,9 @@
 
         setText(root, '[data-kpi-operator-actions]', operatorActions.week_to_date || 0);
         setText(root, '[data-kpi-active-batches]', operations.active_executions || 0);
+        setText(root, '[data-kpi-open-action-items]', actionBoard.critical_actions_total || 0);
+        var openActions = byData(root, '[data-open-actions-figure]');
+        if (openActions) openActions.classList.toggle('dash-figure--attention', Number(actionBoard.critical_actions_total || 0) > 0);
         setText(root, '[data-kpi-tasks-week]', tasks.due_this_week_count || 0);
         setText(root, '[data-kpi-overdue]', tasks.overdue_count || 0);
         setText(root, '[data-kpi-throughput-vs-last-week]', formatPct(operations.completed_vs_last_week_pct));
@@ -454,6 +419,7 @@
         if (failedFigure) failedFigure.classList.toggle('dash-figure--alert', Number(operations.failed_or_cancelled_this_week || 0) > 0);
 
         renderSparkLine(root, 'operator_actions', insightSeries.operator_actions_week);
+        renderSparkLine(root, 'open_action_items', insightSeries.open_action_items);
         renderSparkLine(root, 'active_batches', insightSeries.active_batches_week);
         renderSparkLine(root, 'monthly_goal', insightSeries.revenue_goal_mtd);
         renderSparkLine(root, 'tasks_week', insightSeries.tasks_due_week);
@@ -461,7 +427,8 @@
 
         renderPlannedWork(root, data.planned_work);
         renderActionList(root, actionBoard);
-        renderHealth(root, data.compliance);
+        renderCompliance(root, data.compliance_overall);
+        renderBrief(root, data);
         renderWorkspaceSummaries(root, operations, compliantWorkspace, tasks, sales);
         wireAuditPeriodToggle(root, auditLog);
 
@@ -513,6 +480,49 @@
             .catch(function () { /* the strip is an invitation, not a requirement */ });
     }
 
+    /* Style 3 opens on one plain sentence: the page read aloud. Built from the same figures
+       the tiles show, in a fixed order, so it never says anything the page does not. */
+    function renderBrief(root, data) {
+        var node = byData(root, '[data-dashboard-brief]');
+        if (!node) return;
+        var parts = [];
+        var attention = Number((data.action_board || {}).critical_actions_total || 0);
+        parts.push(attention ? pluralize(attention, 'thing') + (attention === 1 ? ' needs' : ' need') + ' attention' : 'Nothing needs attention');
+        var overall = data.compliance_overall;
+        if (overall && Array.isArray(overall.components) && overall.components.length) {
+            parts.push('compliance is at ' + Math.round(Number(overall.score) || 0) +
+                (COMPLIANCE_STATES[overall.state] && overall.state !== 'unknown' ? ' (' + COMPLIANCE_STATES[overall.state].toLowerCase() + ')' : ''));
+        }
+        var active = Number((data.operations || {}).active_executions || 0);
+        parts.push(active ? pluralize(active, 'batch', 'batches') + (active === 1 ? ' is' : ' are') + ' in progress' : 'no batches are in progress');
+        var planned = data.planned_work ? Number(data.planned_work.total || 0) : null;
+        if (planned) parts.push(planned + (planned === 1 ? ' is' : ' are') + ' planned for today');
+        var text = parts.join(', ').replace(/, ([^,]*)$/, ' and $1');
+        node.textContent = text.charAt(0).toUpperCase() + text.slice(1) + '.';
+    }
+
+    /* CONCEPT ONLY: pick one of the three styles. Deleted with the two losing styles. */
+    var STYLE_KEY = 'dashboard.style';
+    function wireStyle(root) {
+        var picked = new URLSearchParams(window.location.search).get('style');
+        if (!/^[123]$/.test(picked || '')) {
+            try { picked = window.localStorage.getItem(STYLE_KEY); } catch (e) { picked = null; }
+        }
+        function apply(style) {
+            root.dataset.dashboardStyle = /^[123]$/.test(style || '') ? style : '1';
+            Array.prototype.forEach.call(root.querySelectorAll('[data-dashboard-style-pick]'), function (button) {
+                button.setAttribute('aria-pressed', button.dataset.dashboardStylePick === root.dataset.dashboardStyle ? 'true' : 'false');
+            });
+        }
+        apply(picked);
+        Array.prototype.forEach.call(root.querySelectorAll('[data-dashboard-style-pick]'), function (button) {
+            button.addEventListener('click', function () {
+                apply(button.dataset.dashboardStylePick);
+                try { window.localStorage.setItem(STYLE_KEY, root.dataset.dashboardStyle); } catch (e) { /* private mode */ }
+            });
+        });
+    }
+
     var pendingLoad = null;
 
     function abortPendingLoad() {
@@ -522,10 +532,11 @@
         }
     }
 
-    async function loadDashboard(root) {
+    async function loadDashboard(root, options) {
         var loading = byData(root, '[data-dashboard-loading]');
         var error = byData(root, '[data-dashboard-error]');
-        if (loading) loading.hidden = false;
+        // A background refresh must not flash "Loading" under a page that is already drawn.
+        if (loading) loading.hidden = !!(options && options.quiet);
         if (error) error.hidden = true;
 
         abortPendingLoad();
@@ -568,6 +579,7 @@
         root.dataset.dashboardLoading = '1';
         root.dataset.dashboardLoaded = '1';
         wireNotices(root);
+        wireStyle(root);
         loadDashboard(root);
     }
 
@@ -618,6 +630,17 @@
             },
         });
     }
+    // A wall screen nobody touches still has to stay current, and not every change that moves
+    // a figure is an event LiveSync carries (evidence falling due, a date rolling over).
+    var REFRESH_MS = 60000;
+    if (window.__dashboardTimer) clearInterval(window.__dashboardTimer);
+    window.__dashboardTimer = setInterval(function () {
+        var root = document.querySelector(ROOT_SELECTOR);
+        if (!root) { clearInterval(window.__dashboardTimer); window.__dashboardTimer = null; return; }
+        if (document.visibilityState === 'hidden' || root.dataset.dashboardLoading === '1') return;
+        loadDashboard(root, { quiet: true });
+    }, REFRESH_MS);
+
     if (window.LiveSync) {
         subscribeDashboardLive();
     } else {

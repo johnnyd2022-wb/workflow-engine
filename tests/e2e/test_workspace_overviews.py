@@ -304,12 +304,12 @@ def test_sales_overview_groups_figures_and_tools_in_cards(browser, app_url, work
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440])
-def test_dashboard_stacks_health_attention_and_the_week_in_one_column(browser, app_url, workspace_user, width):
+def test_dashboard_stacks_compliance_the_week_and_attention_in_one_column(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         page.goto("/core/dashboard")
         expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
-        names = ["Production health", "Needs attention", "Today's planned production", "This week"]
+        names = ["Compliance score", "This week", "Needs attention", "Today's planned production"]
         names += ["Workspaces", "Recent activity"]
         regions = {name: page.get_by_role("region", name=name, exact=True) for name in names}
         boxes = {name: region.bounding_box() for name, region in regions.items()}

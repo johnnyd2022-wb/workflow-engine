@@ -9,7 +9,7 @@ uses), signs in through the real login form, and runs screenshot scenarios you w
 Run from the checkout whose code you want to see, with ENVIRONMENT unset (local.ini, the
 test database on :8401):
 
-    env -u ENVIRONMENT uv run python scripts/ui_shots.py seed stock lineage
+    env -u ENVIRONMENT uv run python scripts/ui_shots.py seed stock lineage [compliance]
     env -u ENVIRONMENT uv run python scripts/ui_shots.py shoot OUT --scenarios FILE [NAME ...]
     env -u ENVIRONMENT uv run python scripts/ui_shots.py upload OUT/a.png OUT/b.png
     env -u ENVIRONMENT uv run python scripts/ui_shots.py purge
@@ -53,7 +53,7 @@ REPO = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
 STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
-SEED_KINDS = ("stock", "lineage")
+SEED_KINDS = ("stock", "lineage", "compliance")
 
 
 def say(*parts) -> None:
@@ -100,6 +100,7 @@ def theme(page, mode: str) -> None:
 DESKTOP = {"width": 1440, "height": 900}
 TABLET = {"width": 1024, "height": 800}
 PHONE = {"width": 390, "height": 844}
+WALL = {"width": 1920, "height": 1080}  # a TV on the wall
 
 
 # ── Seeding ─────────────────────────────────────────────────────────────────────────────
@@ -344,6 +345,26 @@ def _seed_lineage(db, org_id, inv) -> None:
         db.commit()
 
 
+def _seed_compliance(db, org_id, inv) -> None:
+    """Subscribe the org to Compliance and put it on the NP3 food control programme, so pages
+    that summarise compliance (the dashboard) have a module with a score to show."""
+    from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+    from app.features.compliant.models import ComplianceProfile
+
+    FeatureSubscriptionRepository(db).grant(org_id, "compliant")
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None:
+        profile = ComplianceProfile(org_id=org_id)
+        db.add(profile)
+    profile.enabled = True
+    profile.settings = {
+        **(profile.settings or {}),
+        "alcohol_product_types": ["spirits"],
+        "food_control_programme": "np3",
+    }
+    db.commit()
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -375,7 +396,7 @@ def cmd_seed(args) -> int:
     )
     inv = InventoryRepository(db)
     for kind in args.kinds:
-        {"stock": _seed_stock, "lineage": _seed_lineage}[kind](db, org.id, inv)
+        {"stock": _seed_stock, "lineage": _seed_lineage, "compliance": _seed_compliance}[kind](db, org.id, inv)
         say(f"seeded {kind}")
     say(f"org {org.name!r}, sign-in {user.email}")
     return 0

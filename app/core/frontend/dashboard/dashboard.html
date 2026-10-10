@@ -10,15 +10,26 @@
 
 
 {% block content %}
-  <div class="workflow-dashboard dashboard-v4" data-dashboard-root>
+  <div class="workflow-dashboard dashboard-v4" data-dashboard-root data-dashboard-style="1">
     <div class="dashboard-shell workspace-overview">
       <header class="workspace-header" aria-labelledby="dashboard-page-title">
         <div>
           <h1 class="page-title" id="dashboard-page-title">Dashboard</h1>
           <p data-dashboard-today>What needs you today, across production, compliance and sales.</p>
         </div>
-        <p class="dash-refresh">Updated <span data-dashboard-date>just now</span></p>
+        <div class="dash-header__side">
+          {# CONCEPT ONLY: three directions to choose from (docs/dashboard-redesign-plan.md). Once one is
+             picked, this switch and the other two styles are deleted. #}
+          <div class="dash-segments dash-style-switch" role="group" aria-label="Dashboard style">
+            <button type="button" data-dashboard-style-pick="1" aria-pressed="true">Style 1</button>
+            <button type="button" data-dashboard-style-pick="2" aria-pressed="false">Style 2</button>
+            <button type="button" data-dashboard-style-pick="3" aria-pressed="false">Style 3</button>
+          </div>
+          <p class="dash-refresh"><span class="dash-live" aria-hidden="true"></span><span>Live · updated <span data-dashboard-date>just now</span></span></p>
+        </div>
       </header>
+
+      <p class="dash-brief" data-dashboard-brief></p>
 
       <p class="dash-denied-notice" data-dashboard-denied role="status" hidden>You don't have access to that page with your role. Ask an admin if you need it.</p>
 
@@ -36,43 +47,34 @@
       </section>
       {% endif %}
 
-      {% if can('production.view', 'inventory.view') %}
-      <section class="workspace-card dash-health" data-dashboard-health hidden aria-labelledby="dashboard-health-title">
-        <div class="dash-health__score">
-          <h2 id="dashboard-health-title">Production health</h2>
-          <p><strong data-health-score>0</strong><span>/ 100</span></p>
+      <section class="workspace-card dash-compliance" data-dashboard-compliance hidden aria-labelledby="dashboard-compliance-title">
+        <div class="dash-compliance__score">
+          <div class="dash-ring" data-compliance-ring role="img" aria-label="Compliance score">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="dash-ring__track" cx="60" cy="60" r="52"></circle>
+              <circle class="dash-ring__value" data-compliance-arc cx="60" cy="60" r="52" pathLength="100"></circle>
+            </svg>
+            <strong data-compliance-score>0</strong>
+          </div>
+          <div>
+            <h2 id="dashboard-compliance-title">Compliance score</h2>
+            <p class="dash-compliance__state" data-compliance-state></p>
+            <p class="dash-compliance__note">Out of 100. The average of the checks alongside.</p>
+          </div>
         </div>
-        <p class="dash-health__state" data-health-state></p>
-        <ul class="dash-health__drivers" data-health-drivers></ul>
-        <a class="workspace-link" href="/core">Open Production <span aria-hidden="true">→</span></a>
-      </section>
-      {% endif %}
-
-      <section class="workspace-card" aria-labelledby="dashboard-attention-title">
-        <div class="workspace-card__header">
-          <h2 id="dashboard-attention-title">Needs attention</h2>
-          <a class="workspace-link" href="/core/notifications">Review findings</a>
-        </div>
-        <ul class="dash-attention" data-action-list>
-          <li class="dash-skeleton" aria-hidden="true"><span></span><span></span></li>
-          <li class="dash-skeleton" aria-hidden="true"><span></span><span></span></li>
-        </ul>
+        <ul class="dash-compliance__parts" data-compliance-parts></ul>
       </section>
 
-      {% if can('production.view') %}
-      <section class="workspace-card" aria-labelledby="dashboard-planned-work-title">
-        <div class="workspace-card__header">
-          <h2 id="dashboard-planned-work-title">Today's planned production</h2>
-          <a class="workspace-link" href="/core/planner/board" hx-boost="false">Review production board</a>
-        </div>
-        <p class="workspace-caption" data-planned-work-summary>Loading planned priorities...</p>
-        <ul class="dash-planned" data-planned-work-list></ul>
-      </section>
-      {% endif %}
-
-      <section class="workspace-card" aria-labelledby="dashboard-week-title">
+      {% set figures = 2 + (4 if can('production.view') else 0) + (2 if crm_enabled and can('sales.view') else 0) %}
+      <section class="workspace-card dash-week" aria-labelledby="dashboard-week-title">
         <h2 id="dashboard-week-title">This week</h2>
-        <div class="dash-figures">
+        <div class="dash-figures dash-figures--{{ figures }}">
+          <a class="dash-figure" href="/core/notifications" data-open-actions-figure>
+            <span class="dash-figure__label">Open action items</span>
+            <strong class="dash-figure__value" data-kpi-open-action-items>0</strong>
+            <span class="dash-figure__meta">need attention now</span>
+            <span class="dash-figure__spark" data-kpi-spark="open_action_items"></span>
+          </a>
           {% if can('production.view') %}
           <a class="dash-figure" href="/core">
             <span class="dash-figure__label">Active batches</span>
@@ -121,7 +123,29 @@
         </div>
       </section>
 
-      <section class="workspace-card" aria-labelledby="dashboard-workspaces-title">
+      <section class="workspace-card dash-attn" aria-labelledby="dashboard-attention-title">
+        <div class="workspace-card__header">
+          <h2 id="dashboard-attention-title">Needs attention</h2>
+          <a class="workspace-link" href="/core/notifications">Review findings</a>
+        </div>
+        <ul class="dash-attention" data-action-list>
+          <li class="dash-skeleton" aria-hidden="true"><span></span><span></span></li>
+          <li class="dash-skeleton" aria-hidden="true"><span></span><span></span></li>
+        </ul>
+      </section>
+
+      {% if can('production.view') %}
+      <section class="workspace-card dash-plan" aria-labelledby="dashboard-planned-work-title">
+        <div class="workspace-card__header">
+          <h2 id="dashboard-planned-work-title">Today's planned production</h2>
+          <a class="workspace-link" href="/core/planner/board" hx-boost="false">Review production board</a>
+        </div>
+        <p class="workspace-caption" data-planned-work-summary>Loading planned priorities...</p>
+        <ul class="dash-planned" data-planned-work-list></ul>
+      </section>
+      {% endif %}
+
+      <section class="workspace-card dash-ws" aria-labelledby="dashboard-workspaces-title">
         <h2 id="dashboard-workspaces-title">Workspaces</h2>
         <div class="dash-workspace-grid">
           {% if can('production.view', 'inventory.view') %}
@@ -138,7 +162,6 @@
             <span class="dash-workspace-card__eyebrow">Compliance</span>
             <h3>Prove compliance with evidence</h3>
             <p data-dashboard-compliant-summary>Loading evidence summary...</p>
-            <div class="dash-compliant-health" data-dashboard-compliant-health hidden aria-live="polite"></div>
             <span class="dash-workspace-card__link" data-dashboard-compliant-link>Open Compliance <span aria-hidden="true">→</span></span>
           </a>
           {% elif not compliant_subscribed %}
@@ -168,7 +191,7 @@
         </div>
       </section>
 
-      <section class="workspace-card" aria-labelledby="dashboard-activity-title">
+      <section class="workspace-card dash-act" aria-labelledby="dashboard-activity-title">
         <div class="workspace-card__header">
           <h2 id="dashboard-activity-title">Recent activity</h2>
           <div class="dash-activity__controls">

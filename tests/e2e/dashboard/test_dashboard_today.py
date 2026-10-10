@@ -1,5 +1,6 @@
-"""The dashboard leads with a health band and what needs attention, then one row of figures
-for the week, every block the full width of the column (docs/dashboard-redesign-plan.md)."""
+"""The dashboard is the whole business on one page: the compliance score and its parts, the
+week as a grid of figures, then what needs attention and the day's plan, every block the
+full width of the column (docs/dashboard-redesign-plan.md)."""
 
 import json
 import re
@@ -69,49 +70,119 @@ def test_an_attention_row_is_one_link_to_where_the_problem_is(expired_stock_page
     assert_clean_page(page)
 
 
-def test_production_health_shows_the_score_its_state_and_what_is_driving_it(expired_stock_page):
+OVERALL = {
+    "score": 80,
+    "state": "degraded",
+    "components": [
+        {
+            "key": "production",
+            "label": "Production checks",
+            "score": 82,
+            "state": "degraded",
+            "href": "/core",
+            "detail": "Expired materials −12, Output ready-date −6",
+        },
+        {
+            "key": "module:NP3",
+            "label": "NP3",
+            "score": 78,
+            "state": "healthy",
+            "href": "/compliant/nz-alcohol/food-safety",
+            "detail": "36 of 46 evidence controls current · Next verification: 18 Nov 2026",
+        },
+    ],
+}
+
+
+def test_the_compliance_score_shows_the_figure_its_state_and_the_parts_it_is_made_of(expired_stock_page):
     page = expired_stock_page
-
-    def degraded(body):
-        body["compliance"].update(
-            {
-                "score": 81.6,
-                "state": "degraded",
-                "top_drivers": [
-                    {"key": "expired_materials", "label": "Expired materials", "penalty": 12},
-                    {"key": "output_ready_date", "label": "Outputs past ready date", "penalty": 6},
-                ],
-            }
-        )
-
-    _serve(page, degraded)
+    _serve(page, lambda body: body.update({"compliance_overall": OVERALL}))
     _open(page)
 
-    health = page.get_by_role("region", name="Production health", exact=True)
-    expect(health.locator("[data-health-score]")).to_have_text("82")
-    expect(health.locator("[data-health-state]")).to_have_text("Needs attention")
-    expect(health.locator("[data-health-drivers] li")).to_have_text(
-        [re.compile(r"Expired materials\s*−12"), re.compile(r"Outputs past ready date\s*−6")]
+    card = page.get_by_role("region", name="Compliance score", exact=True)
+    expect(card.locator("[data-compliance-score]")).to_have_text("80")
+    expect(card.locator("[data-compliance-state]")).to_have_text("Needs attention")
+    expect(card.get_by_role("img", name="Compliance score 80 out of 100, needs attention")).to_be_visible()
+    # The ring is filled to the score.
+    assert card.locator("[data-compliance-arc]").evaluate("el => getComputedStyle(el).strokeDasharray") in (
+        "80, 100",
+        "80px, 100px",
     )
-    # Health is a band across the page above the attention list, the same width as it.
-    band, attention = (
-        health.bounding_box(),
-        page.get_by_role("region", name="Needs attention", exact=True).bounding_box(),
-    )
-    assert band["y"] + band["height"] <= attention["y"]
-    assert (round(band["x"]), round(band["width"])) == (round(attention["x"]), round(attention["width"]))
-    assert band["height"] < 110, "one line, not a card"
+
+    parts = card.locator("[data-compliance-parts] a")
+    expect(parts).to_have_count(2)
+    expect(parts.nth(0)).to_have_attribute("href", "/core")
+    expect(parts.nth(0)).to_contain_text("Production checks")
+    expect(parts.nth(0).locator(".dash-part__score")).to_have_text("82")
+    expect(parts.nth(0)).to_contain_text("Expired materials −12, Output ready-date −6")
+    expect(parts.nth(1)).to_have_attribute("href", "/compliant/nz-alcohol/food-safety")
+    expect(parts.nth(1)).to_contain_text("Next verification: 18 Nov 2026")
+    assert parts.nth(1).locator(".dash-part__bar span").evaluate("el => el.style.width") == "78%"
+
+    # First on the page, the full width of the column.
+    band, week = card.bounding_box(), page.get_by_role("region", name="This week", exact=True).bounding_box()
+    assert band["y"] + band["height"] <= week["y"]
+    assert (round(band["x"]), round(band["width"])) == (round(week["x"]), round(week["width"]))
     assert_clean_page(page)
 
 
-def test_an_org_with_no_health_state_yet_gets_no_health_card(expired_stock_page):
-    """A new org's score has state "unknown": show nothing rather than a number with no meaning."""
+def test_the_compliance_score_comes_from_the_summary_for_a_real_org(expired_stock_page):
+    """Unserved: the card shows what the API returned for this org, whatever that is."""
     page = expired_stock_page
-    _serve(page, lambda body: body["compliance"].update({"state": "unknown"}))
+    overall = page.request.get("/api/core/dashboard/summary?window_days=30").json()["compliance_overall"]
+    assert overall["components"][0]["label"] == "Production checks"
     _open(page)
 
-    expect(page.locator("[data-dashboard-health]")).to_be_hidden()
-    expect(page.get_by_role("region", name="Needs attention", exact=True)).to_be_visible()
+    card = page.get_by_role("region", name="Compliance score", exact=True)
+    expect(card.locator("[data-compliance-score]")).to_have_text(str(overall["score"]))
+    expect(card.locator("[data-compliance-parts] a")).to_have_count(len(overall["components"]))
+
+
+def test_an_org_whose_checks_have_not_run_is_told_so(expired_stock_page):
+    page = expired_stock_page
+
+    def unknown(body):
+        body["compliance_overall"]["state"] = "unknown"
+        for part in body["compliance_overall"]["components"]:
+            part["state"] = "unknown"
+
+    _serve(page, unknown)
+    _open(page)
+
+    card = page.get_by_role("region", name="Compliance score", exact=True)
+    expect(card.locator("[data-compliance-state]")).to_have_text("No checks run yet")
+
+
+def test_this_week_is_a_full_grid_of_bordered_figures_above_the_days_plan(expired_stock_page):
+    page = expired_stock_page
+
+    def actions(body):
+        body["action_board"]["critical_actions_total"] = 9
+
+    _serve(page, actions)
+    _open(page)
+
+    week = page.get_by_role("region", name="This week", exact=True)
+    figures = week.locator("a.dash-figure")
+    expect(figures).to_have_count(8)  # an admin with Sales enabled sees every figure
+
+    open_actions = week.get_by_role("link", name=re.compile("Open action items"))
+    expect(open_actions).to_have_attribute("href", "/core/notifications")
+    expect(open_actions.locator("[data-kpi-open-action-items]")).to_have_text("9")
+
+    boxes = [figure.bounding_box() for figure in figures.all()]
+    # Two full rows of four: no orphan tile, every tile the same size, each with its own border.
+    assert sorted({round(box["y"]) for box in boxes}) == sorted({round(boxes[0]["y"]), round(boxes[4]["y"])})
+    assert len({round(box["width"]) for box in boxes}) == 1
+    assert len({round(box["height"]) for box in boxes}) == 1
+    assert all(
+        width == "1px" for width in figures.evaluate_all("els => els.map(el => getComputedStyle(el).borderTopWidth)")
+    )
+
+    planned = page.get_by_role("region", name="Today's planned production", exact=True).bounding_box()
+    attention = page.get_by_role("region", name="Needs attention", exact=True).bounding_box()
+    bottom = week.bounding_box()["y"] + week.bounding_box()["height"]
+    assert bottom <= attention["y"] <= planned["y"]
 
 
 def test_a_quiet_day_says_so_instead_of_showing_an_empty_list(expired_stock_page):
@@ -119,7 +190,11 @@ def test_a_quiet_day_says_so_instead_of_showing_an_empty_list(expired_stock_page
 
     def quiet(body):
         body["action_board"] = {"critical_actions_total": 0, "items": []}
-        body["compliance"].update({"score": 100, "state": "healthy", "top_drivers": []})
+        body["compliance_overall"] = {
+            "score": 100,
+            "state": "healthy",
+            "components": [{**OVERALL["components"][0], "score": 100, "state": "healthy", "detail": "No findings"}],
+        }
 
     _serve(page, quiet)
     _open(page)
@@ -127,9 +202,9 @@ def test_a_quiet_day_says_so_instead_of_showing_an_empty_list(expired_stock_page
     attention = page.get_by_role("region", name="Needs attention", exact=True)
     expect(attention.get_by_role("link")).to_have_text(["Review findings"])
     expect(attention).to_contain_text("Nothing needs you right now")
-    health = page.get_by_role("region", name="Production health", exact=True)
-    expect(health.locator("[data-health-state]")).to_have_text("Production healthy")
-    expect(health).to_contain_text("Nothing is pulling the score down.")
+    card = page.get_by_role("region", name="Compliance score", exact=True)
+    expect(card.locator("[data-compliance-state]")).to_have_text("On track")
+    expect(card).to_contain_text("No findings")
 
 
 def test_a_figure_draws_a_trend_only_when_its_series_moves(expired_stock_page):
@@ -206,3 +281,87 @@ def test_more_than_one_active_batch_is_spelled_batches(expired_stock_page):
     _serve(page, lambda body: body["operations"].update({"active_executions": 3}))
     _open(page)
     expect(page.locator("[data-dashboard-core-summary]")).to_have_text("3 active batches in progress.")
+
+
+# ── CONCEPT ONLY: the three styles on offer. Delete with the two styles not chosen. ──
+
+
+def _serve_busy(page):
+    def busy(body):
+        body["compliance_overall"] = OVERALL
+        body["action_board"]["critical_actions_total"] = 10
+        body["operations"]["active_executions"] = 3
+
+    _serve(page, busy)
+
+
+@pytest.mark.parametrize("style", ["1", "2", "3"])
+@pytest.mark.parametrize("width", [390, 1440, 1920])
+def test_every_style_shows_the_whole_business_without_sideways_scrolling(expired_stock_page, style, width):
+    page = expired_stock_page
+    page.set_viewport_size({"width": width, "height": 1080 if width == 1920 else 900})
+    _serve_busy(page)
+    page.goto(f"/core/dashboard?style={style}")
+    expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+
+    expect(page.locator("[data-dashboard-root]")).to_have_attribute("data-dashboard-style", style)
+    expect(page.get_by_role("button", name=f"Style {style}")).to_have_attribute("aria-pressed", "true")
+    for name in ["Compliance score", "This week", "Needs attention", "Today's planned production"]:
+        expect(page.get_by_role("region", name=name, exact=True)).to_be_visible()
+    expect(page.locator("[data-compliance-score]")).to_have_text("80")
+    expect(page.locator("[data-kpi-open-action-items]")).to_have_text("10")
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "scrolls sideways"
+    # No figure's trend line is drawn over its number.
+    overlaps = page.evaluate(
+        """() => [...document.querySelectorAll('.dash-figure')].filter(tile => {
+            const value = tile.querySelector('.dash-figure__value').getBoundingClientRect();
+            const spark = tile.querySelector('.dash-figure__spark:not([hidden]) svg');
+            if (!spark) return false;
+            const s = spark.getBoundingClientRect();
+            if (!s.width) return false;
+            return !(s.left >= value.right - 1 || s.top >= value.bottom - 1 || s.bottom <= value.top + 1);
+        }).length"""
+    )
+    assert overlaps == 0
+    assert_clean_page(page)
+
+
+def test_the_board_fits_the_first_wall_screen_and_keeps_its_two_lists_level(expired_stock_page):
+    page = expired_stock_page
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    _serve_busy(page)
+    page.goto("/core/dashboard?style=2")
+    expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+    if page.locator("[data-dashboard-go-live-hide]").is_visible():
+        page.locator("[data-dashboard-go-live-hide]").click()
+
+    def box(name):
+        return page.get_by_role("region", name=name, exact=True).bounding_box()
+
+    compliance, week, attention, plan = (
+        box("Compliance score"),
+        box("This week"),
+        box("Needs attention"),
+        box("Today's planned production"),
+    )
+    # Two rows of two, each pair the same height, edges flush: no blank area beside a taller card.
+    assert round(compliance["y"]) == round(week["y"]) and round(compliance["height"]) == round(week["height"])
+    assert round(attention["y"]) == round(plan["y"]) and round(attention["height"]) == round(plan["height"])
+    assert round(compliance["x"]) == round(attention["x"])
+    assert round(week["x"] + week["width"]) == round(plan["x"] + plan["width"])
+    assert attention["y"] + attention["height"] <= 1080, "score, week, attention and plan fit one wall screen"
+
+
+def test_the_briefing_reads_the_page_out_in_one_sentence(expired_stock_page):
+    page = expired_stock_page
+    _serve_busy(page)
+    page.goto("/core/dashboard?style=3")
+    expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+
+    brief = page.locator("[data-dashboard-brief]")
+    expect(brief).to_be_visible()
+    expect(brief).to_have_text(
+        "10 things need attention, compliance is at 80 (needs attention) and 3 batches are in progress."
+    )
+    page.get_by_role("button", name="Style 1").click()
+    expect(brief).to_be_hidden()

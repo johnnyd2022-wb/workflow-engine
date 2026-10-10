@@ -608,3 +608,95 @@ def test_dashboard_carve_does_not_query_compliance_without_permission(monkeypatc
         result = dashboard_routes._dashboard_compliant_workspace_summary(uuid4(), ForbiddenSession())
     assert result["available"] is False
     assert result["modules"] == []
+
+
+# ── Overall compliance: the mean of every score the summary carries, state of the worst ──
+
+
+def _production(score, state, drivers=()):
+    return {"score": score, "state": state, "top_drivers": [{"label": label, "penalty": p} for label, p in drivers]}
+
+
+def _module(name, score, *, needs_attention=0, overdue=0, milestone=None):
+    return {
+        "module_name": name,
+        "href": "/compliant/nz-alcohol/food-safety",
+        "score": score,
+        "current_controls": 36,
+        "total_controls": 46,
+        "needs_attention": needs_attention,
+        "overdue": overdue,
+        "milestone": milestone,
+    }
+
+
+def test_overall_compliance_with_no_modules_is_the_production_score():
+    from app.features.dashboard.routes.dashboard_routes import _dashboard_overall_compliance
+
+    overall = _dashboard_overall_compliance(_production(69, "critical", [("Expired materials", 31)]), {"modules": []})
+
+    assert (overall["score"], overall["state"]) == (69, "critical")
+    assert overall["components"] == [
+        {
+            "key": "production",
+            "label": "Production checks",
+            "score": 69,
+            "state": "critical",
+            "href": "/core",
+            "detail": "Expired materials −31",
+        }
+    ]
+
+
+def test_overall_compliance_is_the_equal_mean_of_production_and_each_module():
+    from app.features.dashboard.routes.dashboard_routes import _dashboard_overall_compliance
+
+    overall = _dashboard_overall_compliance(
+        _production(90, "healthy"),
+        {"modules": [_module("NP3", 60, needs_attention=10), _module("Customs", 45, needs_attention=3)]},
+    )
+
+    assert overall["score"] == 65  # (90 + 60 + 45) / 3
+    assert [c["score"] for c in overall["components"]] == [90, 60, 45]
+    assert [c["label"] for c in overall["components"]] == ["Production checks", "NP3", "Customs"]
+    assert overall["components"][0]["detail"] == "No findings"
+
+
+@pytest.mark.parametrize(
+    "production_state,module,expected",
+    [
+        ("healthy", _module("NP3", 100), "healthy"),
+        ("healthy", _module("NP3", 80, needs_attention=4), "degraded"),
+        ("degraded", _module("NP3", 100), "degraded"),
+        ("healthy", _module("NP3", 80, needs_attention=4, overdue=1), "critical"),
+        ("critical", _module("NP3", 100), "critical"),
+        # A production state nobody has computed yet does not drag down, or stand in for, a module's.
+        ("unknown", _module("NP3", 100), "healthy"),
+    ],
+)
+def test_overall_compliance_state_is_the_worst_of_its_parts(production_state, module, expected):
+    from app.features.dashboard.routes.dashboard_routes import _dashboard_overall_compliance
+
+    overall = _dashboard_overall_compliance(_production(100, production_state), {"modules": [module]})
+    assert overall["state"] == expected
+
+
+def test_overall_compliance_is_unknown_when_nothing_has_a_state():
+    from app.features.dashboard.routes.dashboard_routes import _dashboard_overall_compliance
+
+    assert _dashboard_overall_compliance(_production(100, "unknown"), {"modules": []})["state"] == "unknown"
+    assert _dashboard_overall_compliance(_production(100, "unknown"), None)["state"] == "unknown"
+
+
+def test_a_module_part_keeps_its_evidence_count_and_next_verification_on_screen():
+    """Plan 2.2: the next verification is always on the dashboard."""
+    from app.features.dashboard.routes.dashboard_routes import _dashboard_overall_compliance
+
+    milestone = {"label": "Next verification", "date": "2026-11-18", "overdue": True}
+    part = _dashboard_overall_compliance(
+        _production(100, "healthy"),
+        {"modules": [_module("NP3", 78, needs_attention=10, overdue=2, milestone=milestone)]},
+    )["components"][1]
+
+    assert part["detail"] == "36 of 46 evidence controls current, 2 overdue · Next verification: 18 Nov 2026 (overdue)"
+    assert part["href"] == "/compliant/nz-alcohol/food-safety"

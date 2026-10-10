@@ -1,4 +1,4 @@
-# Dashboard: redesign plan (concept)
+# Dashboard: redesign plan (concept, three styles)
 
 The dashboard (`/core/dashboard`) is the first page after sign-in. It should answer, on one
 screen: what needs me today, and is the business healthy. This plan covers how the page
@@ -33,37 +33,69 @@ Observed on a seeded org at 1440 wide (screenshots in the MR):
 | Shopify admin Home, 2026 update (merchant community thread) | Merchants objected when stats were pushed behind suggestion cards. | Nothing promotional above the work. Setup is one line, not a card. |
 | Odoo manufacturing dashboards | Status tiles (in progress, done, late) that click through to the filtered list. | The week's figures are links, not static tiles. |
 | Katana (support docs) | No KPI home at all: Make opens on the schedule and tasks. | Planned production keeps its own block beside attention, not under the KPIs. |
+| Safefood 360 (help guide) | A site compliance dashlet: one percentage, defined, with red / orange / green bands. | One overall figure with a stated definition and a state in words. |
+| Drata and Vanta (help docs) | Readiness per framework as a percentage with a progress bar; neither documents a single blended number. | The parts are always shown beside the overall figure, each with its own bar. |
+| Geckoboard (TV dashboard guidance) | Clarity over quantity; see the whole dashboard at once; status indicators; size and position carry importance. | Style 2, and the wall-screen check on all three. |
+| Bento grids (design guides) | Tiles of different sizes; size signals priority; keep rows level. | Style 2's layout and its capped lists. |
+| Linear Pulse, Notion dashboard summary, Trackingplan digest | Prose first, charts under it. | Style 3's opening sentence, built from the same figures. |
+| Carbon tiles; KPI card anatomy | Tiles in a row share a height; label, value, comparison, small trend with no axes. | The This week grid. |
 | Stephen Few, *Information Dashboard Design* | A dashboard fits one screen and is read at a glance; it should grab attention only when needed. | The first screen holds attention, health and the week. Sparklines appear only when the series moves. |
 
 Not found: an official description of Stripe's or Mercury's current home layout, or any
 usability study on dashboards for small manufacturers. The table's first two rows rest on
 vendor support docs and a third-party breakdown.
 
-## Design
+## Three directions to choose from
 
-1. **Header.** "Dashboard", today's date underneath, and "Updated 8:34 pm" at the right.
-2. **Setup strip.** One line with the go-live button and "Hide". Only until go-live is set.
-3. **Production health.** One band across the page: the score out of 100, its state in
-   words, and the top drivers with what each costs. New on this page; the data was already
-   in the response.
-4. **Needs attention.** One row per item: severity dot, what it is, which workspace, the
-   count, a chevron. The whole row is the link. Empty state: "Nothing needs you right now."
-5. **Today's planned production.** Under attention. One line when there is nothing planned.
+The page is the first thing a user sees each day and may sit on a wall TV: the whole
+business on one page, and still easy. Three ways to do that, each taken from a different
+school. All three show the same data from the same script; they differ in layout and
+emphasis. Open `/core/dashboard?style=1`, `?style=2` or `?style=3`, or use the switch in the
+header. **Once one is picked, the switch and the other two styles are deleted.**
 
-Every block is the full width of the content column. The first version of this concept put
-health in a card beside attention; on a busy day the attention list and the plan grew past
-it and left a blank area under the card, so it became a band.
-6. **This week.** One row of figures replacing Business signals, Production flow and
-   Commercial pulse: active batches, started, completed (with change on last week), failed
-   or cancelled, operator actions; and for Sales roles, revenue this month and customer
-   tasks due. Each figure links to its page. A sparkline is drawn only when its series moves.
-7. **Workspaces.** Kept, smaller. Compliance keeps its evidence bars.
-8. **Recent activity.** Six compact rows, "Show more" for the rest, Today / This week as a
-   two-button switch.
+| | Style 1: Stacked | Style 2: Board | Style 3: Briefing |
+|---|---|---|---|
+| Idea | Full-width cards in priority order. Read top to bottom. | A grid where size carries priority and the whole business fits one wall screen. | One plain sentence, then quiet sections in a reading column. |
+| Taken from | Stripe's and Shopify's home pages: today's figures and what needs action first. | Geckoboard's TV guidance (clarity over quantity, see it all at once) and bento grids (size signals priority). | The digest pattern: Linear Pulse, Notion's dashboard summary, Trackingplan's daily digest. Prose first, detail under it. |
+| Best at | A laptop at a desk. Nothing is ever beside anything taller. | A TV, or a wide monitor glanced at through the day. | Starting the day: read one line and know where you stand. |
+| Gives up | Needs a scroll to reach the lists. | Lists are capped at four rows and three batches to keep cards level; Workspaces and most of Activity are a click away. Below 1280px it falls back to Style 1. | No trend lines or boxes; Workspaces is hidden. Least suited to a wall. |
+
+Common to all three:
+
+1. **Compliance score.** One figure out of 100 for the whole business, drawn as a ring,
+   with its state in words and the parts it is made of beside it, each with its own score,
+   bar and a line of detail (what is costing points; evidence count and next verification).
+2. **This week.** A full grid of bordered figures: open action items, active batches,
+   started, completed, failed or cancelled, operator actions, revenue this month, customer
+   tasks due. The count is always even (8, 6, 4 or 2 by role), so no row is left ragged.
+   Each links to its page. A trend line is drawn only when its series moves and the tile is
+   wide enough to hold it.
+3. **Needs attention**, then **Today's planned production.** This week sits above the plan.
+4. **Live.** The header says so, and the page refreshes itself every minute as well as on
+   every change LiveSync reports, so a screen nobody touches stays current.
+5. **Setup strip**, **Workspaces**, **Recent activity** as before.
+
+### The overall compliance score is new, and its definition is an assumption to confirm
+
+The summary response gains `compliance_overall`. It is the **mean, equally weighted, of
+every compliance score the summary already carried**: the production checks score, and
+each enabled compliance module's evidence score (NP3 today). Its state is the worst of its
+parts. An org with no compliance module gets the production score unchanged.
+
+No existing figure is recalculated. But averaging them is a product decision, and equal
+weighting is the simplest defensible choice, not the only one: an org at 69 on production
+checks and 9 on NP3 evidence shows 39. The parts are always on screen so the figure can be
+read back. Say if the weighting should differ, or if the overall figure should be the
+lowest part rather than the mean.
+
+The module's score, bar and evidence count used to be repeated in the Compliance workspace
+tile; they now live in the compliance card only. The next verification date (plan 2.2,
+"always on screen") moved with them.
 
 ## Not in this change
 
-- No change to `/api/core/dashboard/summary` or to any figure's calculation.
+- One addition to `/api/core/dashboard/summary`: `compliance_overall` (above). No existing field
+  or calculation changes.
 - Role gating is unchanged: planned production needs `production.view`, sales figures need
   `sales.view`.
 - Currency is still formatted as US dollars in the script; the org's currency is not in the
@@ -73,15 +105,17 @@ it and left a blank area under the card, so it became a band.
   so the two agree there; on a UTC machine (CI) the NZ morning is filed under yesterday.
   One line to fix (`datetime.now(_APP_TZ).date()`), but several existing tests build due
   dates from `date.today()` and would need the same change. Follow-up.
-- Removed from the page (still in the API): the "Open action items" tile, the revenue
-  baseline variance and month-on-month rows. They duplicated or qualified other figures.
-  Say so if any of them is missed.
+- Removed from the page (still in the API): the revenue baseline variance and
+  month-on-month rows. "Open action items" was removed in the first version and is back.
 
 ## Checks
 
 - `tests/e2e/test_workspace_overviews.py`: the dashboard layout test names the old blocks;
   update it to the new ones.
-- New e2e: attention row is a link to the item's page; health card shows the score and
-  state; a flat series draws no sparkline; activity shows six rows then expands; the setup
-  strip can be hidden and stays hidden.
-- Screenshots at 1440, 1024 and 390, light and dark, and after a boosted round trip.
+- Unit: `compliance_overall` is the equal mean, its state the worst part, and a module part
+  keeps its evidence count and next verification.
+- e2e: the compliance card shows the figure, state and parts; This week is a full grid of
+  equal bordered tiles above the plan; every style renders at 390, 1440 and 1920 with no
+  sideways scroll and no trend line over a number; the board fits one wall screen with its
+  two lists level; the briefing sentence matches the figures.
+- Screenshots of each style at 1440, 1920 (wall), 1024 and 390, dark, and on a quiet day.
