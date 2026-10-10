@@ -25,11 +25,15 @@
             <button type="button" data-dashboard-style-pick="2" aria-pressed="false">Style 2</button>
             <button type="button" data-dashboard-style-pick="3" aria-pressed="false">Style 3</button>
           </div>
+          {# CONCEPT ONLY: the main menu down the side (as now) or along the bottom, as on a phone. #}
+          <div class="dash-segments dash-nav-switch" role="group" aria-label="Menu position">
+            <button type="button" data-dashboard-nav-pick="side" aria-pressed="true">Menu at side</button>
+            <button type="button" data-dashboard-nav-pick="bottom" aria-pressed="false">Menu at bottom</button>
+          </div>
           <p class="dash-refresh"><span class="dash-live" aria-hidden="true"></span><span>Live · updated <span data-dashboard-date>just now</span></span></p>
         </div>
       </header>
 
-      <p class="dash-brief" data-dashboard-brief></p>
 
       <p class="dash-denied-notice" data-dashboard-denied role="status" hidden>You don't have access to that page with your role. Ask an admin if you need it.</p>
 
@@ -47,6 +51,7 @@
       </section>
       {% endif %}
 
+      <div class="dash-summary">
       <section class="workspace-card dash-compliance" data-dashboard-compliance hidden aria-labelledby="dashboard-compliance-title">
         <div class="dash-compliance__score">
           <div class="dash-ring" data-compliance-ring role="img" aria-label="Compliance score">
@@ -123,6 +128,9 @@
         </div>
       </section>
 
+      </div>
+
+      <div class="dash-main">
       <section class="workspace-card dash-attn" aria-labelledby="dashboard-attention-title">
         <div class="workspace-card__header">
           <h2 id="dashboard-attention-title">Needs attention</h2>
@@ -206,6 +214,7 @@
         <ul class="dash-activity" data-audit-list></ul>
         <button type="button" class="dash-activity__more" data-audit-more hidden></button>
       </section>
+      </div>
       </div>
 
       <div class="dash-footer-note" data-dashboard-loading>Loading dashboard summary...</div>

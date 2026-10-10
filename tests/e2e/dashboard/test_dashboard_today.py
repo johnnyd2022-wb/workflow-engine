@@ -352,16 +352,54 @@ def test_the_board_fits_the_first_wall_screen_and_keeps_its_two_lists_level(expi
     assert attention["y"] + attention["height"] <= 1080, "score, week, attention and plan fit one wall screen"
 
 
-def test_the_briefing_reads_the_page_out_in_one_sentence(expired_stock_page):
+def test_the_rail_keeps_the_summary_in_view_while_the_work_scrolls(expired_stock_page):
     page = expired_stock_page
+    page.set_viewport_size({"width": 1440, "height": 900})
     _serve_busy(page)
     page.goto("/core/dashboard?style=3")
     expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
 
-    brief = page.locator("[data-dashboard-brief]")
-    expect(brief).to_be_visible()
-    expect(brief).to_have_text(
-        "10 things need attention, compliance is at 80 (needs attention) and 3 batches are in progress."
-    )
-    page.get_by_role("button", name="Style 1").click()
-    expect(brief).to_be_hidden()
+    rail = page.locator(".dash-summary")
+    attention = page.get_by_role("region", name="Needs attention", exact=True)
+    # The score and the week share one panel down the left; the work is the column beside it.
+    expect(rail.get_by_role("region", name="Compliance score", exact=True)).to_be_visible()
+    expect(rail.get_by_role("region", name="This week", exact=True)).to_be_visible()
+    box, work = rail.bounding_box(), attention.bounding_box()
+    assert box["x"] + box["width"] <= work["x"] and work["width"] > box["width"] * 1.5
+
+    page.mouse.move(900, 500)
+    page.mouse.wheel(0, 600)
+    expect(attention).not_to_be_in_viewport()
+    expect(rail.locator("[data-compliance-score]")).to_be_in_viewport()
+    expect(rail.locator("[data-kpi-tasks-week]")).to_be_in_viewport()
+    stuck = rail.bounding_box()
+    header = page.locator(".main-header").bounding_box()
+    assert stuck["y"] >= header["y"] + header["height"], "the rail sticks below the top bar, not under it"
+    assert stuck["y"] + stuck["height"] <= 900
+
+
+def test_the_menu_can_sit_along_the_bottom_and_give_the_page_its_width(expired_stock_page):
+    page = expired_stock_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _serve_busy(page)
+    page.goto("/core/dashboard?style=1")
+    expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
+    week = page.get_by_role("region", name="This week", exact=True)
+    narrow = week.bounding_box()["width"]
+
+    page.get_by_role("button", name="Menu at bottom").click()
+    expect(page.locator("html")).to_have_attribute("data-dash-nav", "bottom")
+    # The shell animates the menu's size, so wait for it to finish moving.
+    page.wait_for_function("document.getElementById('sidebar').getBoundingClientRect().width >= innerWidth - 1")
+    menu = page.locator("#sidebar").bounding_box()
+    assert menu["y"] > 800 and round(menu["width"]) == 1440, menu
+    assert week.bounding_box()["width"] > narrow + 200
+    for name in ["Dashboard", "Production", "Sales", "Settings"]:
+        expect(page.locator("#sidebar").get_by_role("link", name=name, exact=True)).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+
+    # It is this page's experiment: leaving by the menu puts the menu back where it was.
+    page.locator("#sidebar").get_by_role("link", name="Production", exact=True).click()
+    expect(page).to_have_url(re.compile(r"/core/?$"))
+    expect(page.locator("html")).not_to_have_attribute("data-dash-nav", "bottom")
+    page.wait_for_function("document.getElementById('sidebar').getBoundingClientRect().width < 400")

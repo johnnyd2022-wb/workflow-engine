@@ -168,14 +168,17 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
 #page-content .dashboard-v4 .dash-error { color: var(--dash-alert); }
 
 /* ══ CONCEPT ONLY: three directions. Style 1 is everything above. Delete the two not chosen. ══ */
+#page-content .dashboard-v4 .dash-summary,
+#page-content .dashboard-v4 .dash-main { display: contents; }
 #page-content .dashboard-v4 .dash-header__side { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end; }
-#page-content .dashboard-v4 .dash-brief { display: none; }
 
 /* ── Style 2: the board. Size carries priority, and the whole business fits one wall screen. ── */
 @media (min-width: 1280px) {
   #page-content .dashboard-v4[data-dashboard-style="2"] .dashboard-shell { max-width: 1760px; }
   #page-content .dashboard-v4[data-dashboard-style="2"] .workspace-stack { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .workspace-stack > * { grid-column: 1 / -1; }
+  #page-content .dashboard-v4[data-dashboard-style="2"] .workspace-stack > *,
+  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-summary > *,
+  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-main > * { grid-column: 1 / -1; }
   #page-content .dashboard-v4[data-dashboard-style="2"] .dash-compliance { grid-column: span 4; display: flex; flex-direction: column; align-items: stretch; gap: 20px; }
   #page-content .dashboard-v4[data-dashboard-style="2"] .dash-ring { width: 136px; height: 136px; }
   #page-content .dashboard-v4[data-dashboard-style="2"] .dash-ring strong { font-size: 48px; letter-spacing: -1.5px; }
@@ -203,53 +206,44 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
   #page-content .dashboard-v4[data-dashboard-style="2"] .dash-activity__more { display: none; }
 }
 
-/* ── Style 3: the briefing. One sentence, then quiet sections in a reading column. ── */
-#page-content .dashboard-v4[data-dashboard-style="3"] .dashboard-shell { max-width: 880px; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-brief { display: block; margin: 0 0 36px; font-size: 26px; line-height: 1.4; font-weight: 500; letter-spacing: -.3px; color: var(--ui-text, #172033); }
-#page-content .dashboard-v4[data-dashboard-style="3"] .workspace-stack { gap: 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .workspace-card { padding: 28px 0; border: 0; border-top: 1px solid var(--ui-border, #e2e8f0); border-radius: 0; background: none; box-shadow: none; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-setup { margin-bottom: 28px; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance { grid-template-columns: minmax(0, 1fr); gap: 18px; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-ring { width: 64px; height: 64px; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-ring circle { stroke-width: 12; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-ring strong { font-size: 20px; letter-spacing: -.4px; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance__note { display: none; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance__score > div:last-child { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance__state { margin: 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance__parts { grid-template-columns: minmax(0, 1fr); gap: 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-part { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 40px; align-items: center; gap: 4px 20px; padding: 10px 0; border: 0; border-radius: 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-part__head { display: contents; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-part__label { grid-column: 1; grid-row: 1; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-part__bar { grid-column: 2; grid-row: 1; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-part__score { grid-column: 3; grid-row: 1; text-align: right; font-size: 16px; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-part__detail { grid-column: 1 / -1; grid-row: 2; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures,
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures--6 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures--6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure { grid-template-areas: "label" "value" "meta"; grid-template-columns: minmax(0, 1fr); padding: 0 20px; border: 0; border-left: 1px solid var(--ui-border, #e2e8f0); border-radius: 0; background: none; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure:nth-child(4n+1) { padding-left: 0; border-left: 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures--6 .dash-figure:nth-child(4n+1) { padding-left: 20px; border-left: 1px solid var(--ui-border, #e2e8f0); }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures--6 .dash-figure:nth-child(3n+1) { padding-left: 0; border-left: 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure__spark { display: none; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-attention { margin: 12px 0 -12px; border-top: 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-attention__row { padding: 14px 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-attention__item:last-child .dash-attention__row { border-radius: 0; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-ws { display: none; }
-#page-content .dashboard-v4[data-dashboard-style="3"] .dash-footer-note { max-width: 880px; }
+/* ── Style 3: the rail. The summary stays put down the left while the work scrolls beside it. ── */
+/* The shell gives #page-content overflow-x: hidden, which makes it a scroll container that never
+   scrolls and so stops anything inside it sticking. The window is what scrolls; .main-content
+   already clips sideways overflow. */
+#page-content.page-content:has(.dashboard-v4[data-dashboard-style="3"]) { overflow: visible !important; }
+@media (min-width: 1100px) {
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dashboard-shell { max-width: 1760px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .workspace-stack { display: grid; grid-template-columns: 372px minmax(0, 1fr); gap: 24px; align-items: start; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .workspace-stack > .dash-setup { grid-column: 1 / -1; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-summary { display: flex; flex-direction: column; position: sticky; top: 16px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); box-shadow: 0 2px 5px rgb(15 23 42 / 3%); }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-summary > .workspace-card { padding: 16px 18px; border: 0; border-radius: 0; background: none; box-shadow: none; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-summary > .workspace-card + .workspace-card { border-top: 1px solid var(--ui-border, #e2e8f0); }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-ring { width: 84px; height: 84px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-ring strong { font-size: 28px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance__note { display: none; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance__parts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-part { gap: 5px; padding: 8px 0 0; border: 0; border-radius: 0; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-part__score { font-size: 16px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-part__detail { font-size: 12px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures,
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures--6 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "value" "meta"; gap: 0; padding: 7px 12px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure__label { font-size: 12px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure__value { font-size: 20px; line-height: 1.2; letter-spacing: -.3px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure__meta { font-size: 12px; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure__spark { display: none; }
+  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+}
 
 @media (max-width: 1023px) {
   #page-content .dashboard-v4 .dash-compliance { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   #page-content .dashboard-v4 .dash-workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 767px) {
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-brief { font-size: 21px; margin-bottom: 24px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures,
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures--6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure,
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures--6 .dash-figure { padding: 0 14px; border-left: 1px solid var(--ui-border, #e2e8f0); }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure:nth-child(2n+1),
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures--6 .dash-figure:nth-child(2n+1) { padding-left: 0; border-left: 0; }
   #page-content .dashboard-v4 .dash-style-switch { order: 2; }
+  /* The menu is already along the bottom on a phone. */
+  #page-content .dashboard-v4 .dash-nav-switch { display: none; }
   #page-content .dashboard-v4 .dash-attention { margin: 14px -16px -16px; }
   #page-content .dashboard-v4 .dash-attention__row { padding: 14px 16px; gap: 12px; }
   #page-content .dashboard-v4 .dash-figures,
@@ -266,4 +260,27 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
 @media (prefers-reduced-motion: reduce) {
   #page-content .dashboard-v4 .dash-live { animation: none; }
   #page-content .dashboard-v4 * { transition: none !important; }
+}
+
+/* ══ CONCEPT ONLY: the main menu along the bottom at laptop and desktop widths, as it already is
+   on a phone (styles2.css, max-width 767px). Delete with the switch if it is not adopted. ══ */
+@media (min-width: 768px) {
+  html[data-dash-nav="bottom"] .app-layout,
+  html[data-dash-nav="bottom"] .app-layout:has(> .sidebar.collapsed) { background: none; }
+  html[data-dash-nav="bottom"] .sidebar,
+  html[data-dash-nav="bottom"] .sidebar.collapsed { left: 0; right: 0; top: auto; bottom: 0; width: 100%; height: auto; min-height: 66px; flex-direction: row; justify-content: center; padding: 0 16px; border-right: none; border-top: 1px solid var(--sidebar-border); }
+  html[data-dash-nav="bottom"] .sidebar-header,
+  html[data-dash-nav="bottom"] .sidebar-footer,
+  html[data-dash-nav="bottom"] .sidebar-toggle-btn,
+  html[data-dash-nav="bottom"] .sidebar .nav-label,
+  html[data-dash-nav="bottom"] .sidebar .nav-link-arrow { display: none; }
+  html[data-dash-nav="bottom"] .sidebar-nav { flex: 0 1 640px; display: flex; flex-direction: row; align-items: center; justify-content: center; margin: 0; padding: 6px 0; }
+  html[data-dash-nav="bottom"] .sidebar .nav-list { flex: 1; flex-direction: row; justify-content: space-around; gap: 8px; margin: 0; padding: 0; }
+  html[data-dash-nav="bottom"] .sidebar .nav-item { flex: 1; }
+  html[data-dash-nav="bottom"] .sidebar .nav-link { flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 48px; padding: 6px 4px; border-radius: 12px; }
+  html[data-dash-nav="bottom"] .sidebar .nav-link-text { display: block; font-size: 12px; font-weight: 600; line-height: 1.05; }
+  html[data-dash-nav="bottom"] .sidebar .nav-link-icon-wrapper { margin-bottom: -2px; padding: 4px; }
+  html[data-dash-nav="bottom"] .sidebar .nav-link-icon { display: block; width: 22px; height: 22px; }
+  html[data-dash-nav="bottom"] .main-content { margin-left: 0; width: 100%; padding-bottom: 66px; }
+  html[data-dash-nav="bottom"] #page-content .dashboard-v4 .dashboard-shell { max-width: 1760px; }
 }

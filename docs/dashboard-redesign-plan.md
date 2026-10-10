@@ -48,17 +48,34 @@ vendor support docs and a third-party breakdown.
 ## Three directions to choose from
 
 The page is the first thing a user sees each day and may sit on a wall TV: the whole
-business on one page, and still easy. Three ways to do that, each taken from a different
-school. All three show the same data from the same script; they differ in layout and
-emphasis. Open `/core/dashboard?style=1`, `?style=2` or `?style=3`, or use the switch in the
-header. **Once one is picked, the switch and the other two styles are deleted.**
+business on one page, and still easy. Three ways to do that. All three show the same data
+from the same script; they differ in layout and emphasis. Open `/core/dashboard?style=1`,
+`?style=2` or `?style=3`, or use the switch in the header. **Once one is picked, the switch
+and the other two styles are deleted.**
 
-| | Style 1: Stacked | Style 2: Board | Style 3: Briefing |
+| | Style 1: Stacked | Style 2: Board | Style 3: Rail |
 |---|---|---|---|
-| Idea | Full-width cards in priority order. Read top to bottom. | A grid where size carries priority and the whole business fits one wall screen. | One plain sentence, then quiet sections in a reading column. |
-| Taken from | Stripe's and Shopify's home pages: today's figures and what needs action first. | Geckoboard's TV guidance (clarity over quantity, see it all at once) and bento grids (size signals priority). | The digest pattern: Linear Pulse, Notion's dashboard summary, Trackingplan's daily digest. Prose first, detail under it. |
-| Best at | A laptop at a desk. Nothing is ever beside anything taller. | A TV, or a wide monitor glanced at through the day. | Starting the day: read one line and know where you stand. |
-| Gives up | Needs a scroll to reach the lists. | Lists are capped at four rows and three batches to keep cards level; Workspaces and most of Activity are a click away. Below 1280px it falls back to Style 1. | No trend lines or boxes; Workspaces is hidden. Least suited to a wall. |
+| Idea | Full-width cards in priority order. Read top to bottom. | A grid where size carries priority and the whole business fits one screen. | The summary (score and the week) is one panel down the left that stays in view; the work scrolls beside it. |
+| Taken from | Stripe's and Shopify's home pages: today's figures and what needs action first. | Geckoboard's TV guidance (clarity over quantity, see it all at once) and bento grids (size signals priority). | Summary rails beside a work column: Linear's properties panel, Mercury's account rail, monitoring tools' status sidebars. |
+| Best at | A laptop at a desk. Nothing is ever beside anything taller. | A TV, or a wide monitor glanced at through the day. | Working down a long attention list or plan without losing sight of the numbers. |
+| Gives up | Needs a scroll to reach the lists. | Lists are capped at four rows and three batches to keep cards level; Workspaces and most of Activity are a click away. Below 1280px it falls back to Style 1. | Figures are small and have no trend lines; the rail takes 372px. Below 1100px it falls back to Style 1. |
+
+A first third style, "Briefing" (one plain sentence, then borderless sections in a reading
+column, after Linear Pulse and Notion's dashboard summary), was shown in round one and
+dropped: it gave up the boxes and width the other two use well.
+
+### The menu along the bottom (round two)
+
+The side menu takes 260px. On a phone it is already a bar along the bottom. A second
+concept switch, `?nav=bottom` or "Menu at bottom" in the header, does the same at laptop
+and desktop widths **on this page only**, to see what each style does with the width:
+Style 1's tiles and compliance parts breathe; Style 2 fits score, week, attention and plan
+on a 1080p screen with room to spare; Style 3's work column gains the most.
+
+This is a look at the dashboard, not a proposal to move the menu everywhere. Doing that is
+a shell change touching every page (the collapsed state, the logout control that lives in
+the menu's footer, the bee menu) and would be its own piece of work. The switch clears
+itself when the dashboard is left.
 
 Common to all three:
 
@@ -117,5 +134,6 @@ tile; they now live in the compliance card only. The next verification date (pla
 - e2e: the compliance card shows the figure, state and parts; This week is a full grid of
   equal bordered tiles above the plan; every style renders at 390, 1440 and 1920 with no
   sideways scroll and no trend line over a number; the board fits one wall screen with its
-  two lists level; the briefing sentence matches the figures.
+  two lists level; the rail stays in view, below the top bar, while the work scrolls; the
+  menu can sit along the bottom and goes back when the dashboard is left.
 - Screenshots of each style at 1440, 1920 (wall), 1024 and 390, dark, and on a quiet day.
