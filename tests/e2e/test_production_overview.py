@@ -142,7 +142,26 @@ def test_leaving_mid_load_is_not_reported_as_a_failure(production_page):
     assert not [text for text in errors if "Failed to load core overview" in text], errors
 
 
-# ── CONCEPT ONLY: the three styles on offer. Delete with the two styles not chosen. ──
+def test_recording_production_is_the_main_action_and_is_drawn_as_one(production_page):
+    page = production_page
+    _serve(page, BATCHES)
+    _open(page)
+
+    work = page.get_by_role("region", name="Get to work", exact=True)
+    main = work.get_by_role("link", name="Record production step")
+    expect(main).to_have_attribute("href", "/core/processes")
+    solid = main.evaluate("el => getComputedStyle(el).backgroundColor")
+    for name in ["Trace and recall"]:
+        other = work.get_by_role("link", name=name)
+        expect(other).to_be_visible()
+        assert other.evaluate("el => getComputedStyle(el).backgroundColor") != solid, "only the main action is filled"
+    assert solid not in ("rgba(0, 0, 0, 0)", "rgb(255, 255, 255)")
+    work.get_by_role("button", name="Add to inventory, choose how").click()
+    expect(work.get_by_role("menuitem", name="Manual entry", exact=True)).to_be_visible()
+    page.keyboard.press("Escape")
+
+
+# ── CONCEPT ONLY: three boards that differ in where "Get to work" sits. Delete with the two not chosen. ──
 
 
 @pytest.mark.parametrize("style", ["1", "2", "3"])
@@ -158,40 +177,63 @@ def test_every_style_shows_health_the_work_and_the_actions_without_sideways_scro
     for name in ["Production health", "Active production", "At a glance", "Get to work"]:
         expect(page.get_by_role("region", name=name, exact=True)).to_be_visible()
     expect(active.locator("[data-execution-id]")).to_have_count(4)
-    expect(active.get_by_role("link", name=re.compile("^Record next step"))).to_have_count(4)
+    work = page.get_by_role("region", name="Get to work", exact=True)
+    main = work.get_by_role("link", name="Record production step")
+    expect(main).to_be_in_viewport()
+    # Nothing in the actions is drawn over anything else in them.
+    boxes = [main.bounding_box(), work.get_by_role("link", name="Trace and recall").bounding_box()]
+    boxes.append(work.get_by_role("button", name="Add to inventory, choose how").bounding_box())
+    for index, one in enumerate(boxes):
+        for other in boxes[index + 1 :]:
+            apart = (
+                one["x"] + one["width"] <= other["x"] + 1
+                or other["x"] + other["width"] <= one["x"] + 1
+                or one["y"] + one["height"] <= other["y"] + 1
+                or other["y"] + other["height"] <= one["y"] + 1
+            )
+            assert apart, (one, other)
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "scrolls sideways"
     assert_clean_page(page)
 
 
-def test_the_line_sorts_batches_into_lanes_by_how_far_along_they_are(production_page):
+def test_each_style_puts_the_actions_somewhere_different(production_page):
     page = production_page
     _serve(page, BATCHES)
-    active = _open(page, "2")
 
-    lanes = {
-        name: active.get_by_role("region", name=name, exact=True)
-        for name in ["Not started", "In progress", "Last step"]
-    }
-    expect(lanes["Not started"].locator("[data-execution-id]")).to_have_count(1)
-    expect(lanes["Not started"]).to_contain_text("Macerate botanicals")
-    expect(lanes["In progress"].locator("[data-execution-id]")).to_have_count(2)
-    expect(lanes["Last step"].locator("[data-execution-id]")).to_have_count(1)
-    expect(lanes["Last step"]).to_contain_text("Pink Gin")
-    boxes = [lane.bounding_box() for lane in lanes.values()]
-    assert len({box["y"] for box in boxes}) == 1 and boxes[0]["x"] < boxes[1]["x"] < boxes[2]["x"]
+    def places(style):
+        _open(page, style)
+        box = lambda name: page.get_by_role("region", name=name, exact=True).bounding_box()  # noqa: E731
+        return box("Get to work"), box("Production health"), box("Active production"), page.locator("h1").bounding_box()
+
+    work, health, active, title = places("1")
+    # 1: in the page header, on the title's line, right of it.
+    assert work["y"] < title["y"] + title["height"] + 30 and work["x"] > title["x"] + title["width"]
+    assert health["y"] > work["y"] + work["height"]
+
+    work, health, active, _title = places("2")
+    # 2: a bar the full width of the board, above health.
+    assert work["y"] + work["height"] <= health["y"] and work["width"] > health["width"] * 1.8
+
+    work, health, active, _title = places("3")
+    # 3: a column beside the batches, both above health.
+    assert work["y"] == active["y"] and work["x"] >= active["x"] + active["width"]
+    assert health["y"] >= active["y"] + active["height"]
 
 
-def test_the_worklist_filters_by_stage_and_keeps_the_action_on_every_row(production_page):
+def test_the_header_actions_follow_the_page_through_tabs_and_in_app_visits(production_page):
     page = production_page
     _serve(page, BATCHES)
-    active = _open(page, "3")
+    _open(page, "1")
+    slot = page.locator("[data-production-actions-slot]")
+    expect(slot.get_by_role("link", name="Record production step")).to_be_visible()
 
-    expect(active.get_by_role("columnheader", name="Next step")).to_be_visible()
-    expect(active.locator("tbody tr")).to_have_count(4)
-    active.get_by_role("button", name=re.compile("^In progress")).click()
-    expect(active.get_by_role("button", name=re.compile("^In progress"))).to_have_attribute("aria-pressed", "true")
-    expect(active.get_by_role("button", name=re.compile("^In progress"))).to_be_focused()
-    expect(active.locator("tbody tr")).to_have_count(2)
-    expect(active.locator("tbody tr").get_by_role("link", name=re.compile("^Record next step"))).to_have_count(2)
-    active.get_by_role("button", name=re.compile("^All")).click()
-    expect(active.locator("tbody tr")).to_have_count(4)
+    page.locator("#sidebar").get_by_role("link", name="Home", exact=True).click()
+    page.wait_for_url("**/core/dashboard")
+    page.locator("#sidebar").get_by_role("link", name="Production", exact=True).click()
+    page.wait_for_url(re.compile(r"/core/?$"))
+    expect(
+        page.locator("[data-production-actions-slot]").get_by_role("link", name="Record production step")
+    ).to_have_count(1)
+    expect(
+        page.locator("[data-production-actions-slot]").get_by_role("link", name="Record production step")
+    ).to_be_visible()

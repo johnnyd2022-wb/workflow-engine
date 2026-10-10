@@ -1,4 +1,4 @@
-# Production overview: redesign plan (concept, three styles)
+# Production overview: redesign plan (concept, three boards)
 
 The Production overview (`/core`) is where someone running the floor lands. It should answer,
 on one screen: **what is under way right now, is anything wrong, and what do I do next.**
@@ -34,7 +34,7 @@ Observed in screenshots of a seeded org with four workflows and seven batches un
 |---|---|---|
 | Katana, Make screen (support docs) | One schedule of manufacturing orders: status (Not started, Work in progress, Done), ingredient availability, deadline; the status is changed from the row. | The work is the page, and each row carries its own action. Style 3 is this. |
 | Breww, production dashboard (docs) | A picture of every vessel: what is in it and how full, at a glance; the batch list is one click away. | Show where each batch is, not just that it exists: the step and a progress bar on every batch. |
-| Odoo 17 Shop Floor and work orders (third-party guides) | Work orders as cards with Start, Pause and Done on the card; kanban grouped by status or work centre. | Cards in lanes by stage, action on the card. Style 2 is this. |
+| Odoo 17 Shop Floor and work orders (third-party guides) | Work orders as cards with Start, Pause and Done on the card; kanban grouped by status or work centre. | The action on the batch itself. (Lanes by stage were tried in round one and dropped.) |
 | MRPeasy (docs, demo video) | A dashboard of key figures, separate from the schedule and from "My production plan" for workers. | Figures support the work; they do not lead it. At a glance sits beside or below. |
 | Tulip (vendor blog) | Floor dashboards should show less: "it is easy to become overwhelmed"; start from the whiteboard. | Six figures, not eight, and a clear check goes quiet. |
 | Linear (docs, changelog) | The same items as a list or a board; lists are denser and ordered, boards group by status. | Styles 2 and 3 are the board and the list of the same batches. |
@@ -44,36 +44,56 @@ Observed in screenshots of a seeded org with four workflows and seven batches un
 Not found: the exact columns of Katana's schedule, Odoo's kanban card states, or any study of
 how small producers read a production screen. The Odoo detail rests on third-party guides.
 
-## Three directions to choose from
+## Round one: the board was chosen
 
-Open `/core?style=1`, `?style=2` or `?style=3`, or use the switch on the page. All three show
-the same data from the same request. **Once one is picked, the switch and the other two are
+Three layouts were shown first (!515, round one): a board that matches Home, the batches in
+lanes by stage, and a worklist table. **The board was chosen.** The lanes and the worklist
+are deleted. The note back was that the main actions ("Get to work") sat off to the side and
+did not read as the page's calls to action.
+
+## Round two: three boards that differ in where the actions sit
+
+Open `/core?style=1`, `?style=2` or `?style=3`, or use the switch on the page. All three are
+the same board with the same data. **Once one is picked, the switch and the other two are
 deleted.**
 
-| | Style 1: Board | Style 2: Line | Style 3: Worklist |
+| | Style 1: In the header | Style 2: An action bar | Style 3: Beside the work |
 |---|---|---|---|
-| Idea | Home's board. Health beside the figures, then the batches beside the actions. | The batches are the page, as cards in three lanes by how far along they are. | One table of what is under way, the next step at the end of every row. |
-| Taken from | Home (!512), Breww's dashboard, MRPeasy | Odoo's work-order kanban, Linear's board | Katana's Make schedule, Shopify's index table, Linear's list |
-| Best at | Feeling like the same product as Home; health and figures on the first screen. | Seeing what is about to finish and what has not started. | Working down the list; the most batches per screen. |
-| Gives up | The batches start half way down the first screen. | Height: seven batches take about 700px; the figures drop below. | The figures and links drop below the table; least like Home. |
+| Idea | The actions are buttons on the title's line, main one solid and furthest right. | A bar across the top of the board: three large tiles, each saying what it is for. | The batches fill the first screen with a column of actions beside them; health and figures follow. |
+| Taken from | The page-header primary action in Shopify's admin and Polaris, Stripe, Linear | Quick-action rows on Mercury's and Xero's home pages; Katana's Make screen actions | Odoo's and Katana's work-first screens; Home's two-column second row |
+| Best at | Being where people look for a page's main button; costs no height, so health and figures stay on the first screen. | Being impossible to miss, and explaining each action to someone new. | Putting the work and its actions together; least scrolling to reach a batch. |
+| Gives up | No room for a description of each action. | About 200px of height before health and the figures. | Health and the figures move below the fold. |
+
+The "Taken from" row for round two is from my knowledge of those products. The searches to
+source it (Polaris's page-header primary action, quick-action rows) were not run: the session's
+usage limit was reached first. Treat that row as unverified until they are.
 
 Shared by all three:
 
-1. **Every batch shows its next step, a progress bar with "Step 2 of 3", and how long ago it
+1. **One main action, and it looks like one.** "Record production step" is a solid button;
+   "Add to inventory" and "Trace and recall" are outlined beside it. Before, the main action
+   was a pale full-width block and, once setup was done, it was "Trace and recall".
+2. **Every batch shows its next step, a progress bar with "Step 2 of 3", and how long ago it
    started**, longest running first. All of them, not the first six.
-2. **"Record next step" is on the batch**, in view. Its accessible name includes the product
+3. **"Record next step" is on the batch**, in view. Its accessible name includes the product
    and the step, so two batches of one product can be told apart.
-3. **Production health** keeps its state in words, its bar and "View health details". The four
+4. **Production health** keeps its state in words, its bar and "View health details". The four
    standing checks (expired, expiring, low stock, missing trace link) sit with it; a check at
    zero is greyed and says "Nothing to do".
-4. **At a glance** is six bordered figures, each a link: active batches, longest running,
+5. **At a glance** is six bordered figures, each a link: active batches, longest running,
    finished this week, product workflows, stock lines, stock movements in 24 hours.
-5. **Get to work** and **Manage production** keep their contents.
-6. With less than about 1100px of room, every style is one stacked column: health, the
-   batches, figures, actions, links. Each keeps its own way of showing the batches.
+6. With less than about 1100px of room, every style is one stacked column with the actions
+   first, so the main one is on a phone's first screen.
 
 The page keeps the section's reading width (1280px) on a wide screen, unlike Home's 1760px,
 so the tab strip does not jump when moving between Overview, Planner, Workflows and Inventory.
+
+### The main action changed, and that is a product call
+
+Once an org has stock, a workflow and a batch, the main action in "Get to work" used to be
+"Trace and recall". It is now **"Record production step"**, with "Trace and recall" beside
+it. Recording is the everyday job on this page; tracing is the occasional one. During setup
+the main action is unchanged (add inventory, then create a workflow, then record a step).
 
 ## Not in this change
 
@@ -83,10 +103,8 @@ so the tab strip does not jump when moving between Overview, Planner, Workflows 
   than 20 under way would need the cap raised or a link to the rest. Follow-up.
 - The batches have no batch number in this response, so two batches of one product are told
   apart by step and age. Adding a number is an API change. Follow-up.
-- "Get to work" still makes "Trace and recall" the main action once setup is done. Whether
-  that should be "Start a batch" is a product call, not a layout one.
-- Lanes are by stage, not by step name: the response has the name of the current step only,
-  not of every step in a workflow.
+- In Style 1 the "Get to work" card is moved into the page header by the style switch's
+  script. Once a style is chosen it is written where it belongs and that script goes.
 - In the stacked layout the batches are shown second but come later in the page's source, so
   keyboard order differs from visual order. To be fixed in the markup once a style is chosen.
 - Reaching Production by an in-app link leaves the tab strip 32px lower than a full load does.
@@ -98,8 +116,10 @@ so the tab strip does not jump when moving between Overview, Planner, Workflows 
   click-to-open batch; it now checks the board at 1440, the stacked order at 390 and 1024, and
   the action on the batch.
 - `tests/e2e/test_production_overview.py` (new): batches in age order with step, progress and
-  age; the quiet-floor state and the greyed clear check; leaving mid-load logs no failure; and,
-  concept-only, every style at 390, 1024, 1440 and 1920 with no sideways scroll, the lanes, and
-  the worklist's filter.
+  age; the quiet-floor state and the greyed clear check; leaving mid-load logs no failure;
+  recording production is the main action and the only filled one; and, concept-only, every
+  style at 390, 1024, 1440 and 1920 with the main action on the first screen, no action drawn
+  over another and no sideways scroll; each style putting the actions where it says; and the
+  header actions surviving an in-app visit.
 - Screenshots of each style at 1440 (sidebar open and as the rail), 1920, 1280, 1024 and 390,
   and dark.

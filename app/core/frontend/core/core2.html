@@ -27,6 +27,8 @@
             {% elif core2_focus_mode == 'active_batches_live' %}
             <div class="workspace-header__actions"><a class="workspace-button" href="/core/processes">Back to workflows</a></div>
             {% else %}
+            {# CONCEPT ONLY: Style 1 shows "Get to work" here, in the page header. #}
+            <div class="prod-header-actions" data-production-actions-slot data-core2-overview-only></div>
             <a id="core2-overview-return" class="workspace-button" href="/core" hidden>Back to overview</a>
             {% endif %}
           </header>
@@ -1154,18 +1156,26 @@
       } else if (stage === 3) {
         primary = { label: 'Record production step', href: '/core/processes', icon: 'execution' };
       } else {
-        primary = { label: 'Trace and recall', href: '/core/sourcemap', icon: 'trace' };
+        // Set up and running: the everyday job on this page is recording production.
+        primary = { label: 'Record production step', href: '/core/processes', icon: 'execution' };
       }
 
       var addInv = { kind: 'addInventory' };
       var recordExec = { label: 'Record production step', href: '/core/processes' };
+      var trace = { label: 'Trace and recall', href: '/core/sourcemap' };
+      var hints = {
+        'Add to inventory': 'Receive stock by hand, CSV or barcode.',
+        'Create product workflow': 'Set out the steps a product goes through.',
+        'Record production step': 'Start a batch or record its next step.',
+        'Trace and recall': 'Follow a batch back to its inputs and on to customers.',
+      };
       var secondaries = [];
       if (stage === 2) {
         secondaries.push(addInv, recordExec);
       } else if (stage === 3) {
         secondaries.push(addInv, recordExec, { label: 'Create product workflow', href: '/core/flows/create' });
       } else if (stage === 4) {
-        secondaries.push(addInv, recordExec);
+        secondaries.push(addInv, trace);
       }
 
       const permissions = actionsWrap ? actionsWrap.dataset : {};
@@ -1251,6 +1261,7 @@
         const trigger = document.createElement('button');
         trigger.type = 'button';
         trigger.className = 'core2-journey-primary core2-journey-addinv-trigger';
+        trigger.dataset.hint = hints[primary.label] || '';
         trigger.setAttribute('aria-expanded', 'false');
         trigger.setAttribute('aria-haspopup', 'true');
         trigger.setAttribute('aria-label', 'Add to inventory, choose how');
@@ -1272,6 +1283,7 @@
         const primaryA = document.createElement('a');
         primaryA.className = 'core2-journey-primary';
         primaryA.href = primary.href;
+        primaryA.dataset.hint = hints[primary.label] || '';
         const circle = document.createElement('span');
         circle.className = 'core2-journey-primary__circle';
         circle.setAttribute('aria-hidden', 'true');
@@ -1305,6 +1317,7 @@
             trigger.type = 'button';
             trigger.className = 'core2-journey-addinv-trigger';
             trigger.textContent = 'Add to inventory';
+            trigger.dataset.hint = hints['Add to inventory'];
             trigger.setAttribute('aria-expanded', 'false');
             trigger.setAttribute('aria-haspopup', 'true');
             trigger.setAttribute('aria-label', 'Add to inventory, choose how');
@@ -1318,6 +1331,7 @@
             a.href = item.href;
             a.className = 'core2-journey-secondary__link';
             a.textContent = item.label;
+            a.dataset.hint = hints[item.label] || '';
             sec.appendChild(a);
           }
         });
@@ -2600,7 +2614,6 @@
     // Active production. Every batch says where it is, how far through, and how long it has
     // been going, with the one way on to its next step in view.
     var core2ActiveProduction = [];
-    var core2ActiveFilter = 'all';
 
     function core2BatchView(execution) {
       var step = execution.current_step || null;
@@ -2645,8 +2658,6 @@
     function core2RenderActiveProduction() {
       var host = document.getElementById('core2-overview-active-batches');
       if (!host) return;
-      var root = document.querySelector('[data-production-root]');
-      var style = root ? root.dataset.productionStyle : '1';
       var caption = document.querySelector('[data-production-active-caption]');
       var batches = core2ActiveProduction.map(core2BatchView).sort(function (x, y) { return y.hours - x.hours; });
       if (!batches.length) {
@@ -2662,42 +2673,6 @@
       var actions = document.getElementById('core2-journey-actions');
       var canRecord = !!actions && actions.dataset.canRecord === 'true';
 
-      /* CONCEPT ONLY: Style 2, the line. Delete with the style if it is not chosen. */
-      if (style === '2') {
-        host.className = 'prod-batches prod-lanes';
-        host.innerHTML = [['new', 'Not started', 'Ready to begin'], ['mid', 'In progress', 'Part way through'], ['last', 'Last step', 'About to finish']].map(function (lane) {
-          var cards = batches.filter(function (batch) { return batch.stage === lane[0]; });
-          return '<section class="prod-lane" aria-label="' + lane[1] + '"><header class="prod-lane__head"><h3>' + lane[1] + '</h3><span class="prod-lane__count">' + cards.length + '</span><p>' + lane[2] + '</p></header>' +
-            (cards.length ? cards.map(function (batch) {
-              return '<article class="prod-card" data-execution-id="' + escapeHtml(batch.id) + '"><p class="prod-card__name">' + escapeHtml(batch.name) + '</p>' +
-                '<p class="prod-card__step">' + escapeHtml(batch.step) + '</p>' + core2BatchProgress(batch) +
-                '<p class="prod-card__meta">' + escapeHtml([batch.position, batch.age].filter(Boolean).join(' · ')) + '</p>' + core2BatchAction(batch, canRecord) + '</article>';
-            }).join('') : '<p class="prod-lane__empty">Nothing here.</p>') + '</section>';
-        }).join('');
-        return;
-      }
-
-      /* CONCEPT ONLY: Style 3, the worklist. Delete with the style if it is not chosen. */
-      if (style === '3') {
-        var counts = { all: batches.length, new: 0, mid: 0, last: 0 };
-        batches.forEach(function (batch) { counts[batch.stage] += 1; });
-        if (!counts[core2ActiveFilter]) core2ActiveFilter = 'all';
-        var shown = batches.filter(function (batch) { return core2ActiveFilter === 'all' || batch.stage === core2ActiveFilter; });
-        host.className = 'prod-batches prod-worklist';
-        host.innerHTML = '<div class="prod-segments prod-worklist__filter" role="group" aria-label="Show batches">' +
-          [['all', 'All'], ['new', 'Not started'], ['mid', 'In progress'], ['last', 'Last step']].filter(function (f) { return f[0] === 'all' || counts[f[0]]; }).map(function (f) {
-            return '<button type="button" data-production-filter="' + f[0] + '" aria-pressed="' + (core2ActiveFilter === f[0] ? 'true' : 'false') + '">' + f[1] + ' <span>' + counts[f[0]] + '</span></button>';
-          }).join('') + '</div>' +
-          '<table class="prod-table"><thead><tr><th scope="col">Batch</th><th scope="col">Next step</th><th scope="col">Progress</th><th scope="col">Started</th><th scope="col"><span class="prod-visually-hidden">Action</span></th></tr></thead><tbody>' +
-          shown.map(function (batch) {
-            return '<tr data-execution-id="' + escapeHtml(batch.id) + '"><th scope="row">' + escapeHtml(batch.name) + '</th><td data-label="Next step">' + escapeHtml(batch.step) + '</td>' +
-              '<td data-label="Progress">' + core2BatchProgress(batch) + '<span class="prod-table__position">' + escapeHtml(batch.position) + '</span></td>' +
-              '<td data-label="Started">' + escapeHtml(batch.age.replace(/^Started /, '')) + '</td><td class="prod-table__action">' + core2BatchAction(batch, canRecord) + '</td></tr>';
-          }).join('') + '</tbody></table>';
-        return;
-      }
-
-      // Style 1, the board: rows.
       host.className = 'prod-batches prod-rows';
       host.innerHTML = batches.map(function (batch) {
         return '<article class="prod-row" data-execution-id="' + escapeHtml(batch.id) + '"><div class="prod-row__text"><p class="prod-row__name">' + escapeHtml(batch.name) + '</p>' +
@@ -2707,37 +2682,38 @@
       }).join('');
     }
 
-    /* CONCEPT ONLY: pick one of the three styles. Deleted with the two losing styles. */
+    /* CONCEPT ONLY: pick one of the three styles. They differ in where "Get to work" sits, and
+       Style 1 puts it in the page header, so the card is moved there and back. Once a style is
+       chosen the card is written where it belongs and this is deleted. */
     function core2WireProductionStyle() {
       var root = document.querySelector('[data-production-root]');
       if (!root || root.dataset.productionWired === '1') return;
       root.dataset.productionWired = '1';
+      var actions = document.querySelector('.production-actions');
+      var home = actions ? actions.parentNode : null;
+      var after = actions ? actions.nextSibling : null;
+      var slot = document.querySelector('[data-production-actions-slot]');
       var picked = new URLSearchParams(window.location.search).get('style');
       if (!/^[123]$/.test(picked || '')) {
         try { picked = window.localStorage.getItem('production.style'); } catch (e) { picked = null; }
       }
       function apply(style) {
         root.dataset.productionStyle = /^[123]$/.test(style || '') ? style : '1';
+        root.closest('.production-overview').dataset.productionStyle = root.dataset.productionStyle;
         root.querySelectorAll('[data-production-style-pick]').forEach(function (button) {
           button.setAttribute('aria-pressed', button.dataset.productionStylePick === root.dataset.productionStyle ? 'true' : 'false');
         });
-        core2RenderActiveProduction();
+        if (actions && slot && home) {
+          if (root.dataset.productionStyle === '1') slot.appendChild(actions);
+          else home.insertBefore(actions, after && after.parentNode === home ? after : null);
+        }
       }
       apply(picked);
       root.addEventListener('click', function (event) {
         var pick = event.target.closest('[data-production-style-pick]');
-        if (pick) {
-          apply(pick.dataset.productionStylePick);
-          try { window.localStorage.setItem('production.style', root.dataset.productionStyle); } catch (e) { /* private mode */ }
-          return;
-        }
-        var filter = event.target.closest('[data-production-filter]');
-        if (filter) {
-          core2ActiveFilter = filter.dataset.productionFilter;
-          core2RenderActiveProduction();
-          var again = root.querySelector('[data-production-filter="' + core2ActiveFilter + '"]');
-          if (again) again.focus();
-        }
+        if (!pick) return;
+        apply(pick.dataset.productionStylePick);
+        try { window.localStorage.setItem('production.style', root.dataset.productionStyle); } catch (e) { /* private mode */ }
       });
     }
 

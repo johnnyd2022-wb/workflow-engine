@@ -221,22 +221,29 @@ def test_production_overview_reads_health_first_and_offers_each_batch_its_next_s
             for name, item in [("health", health), ("glance", glance), ("active", active), ("actions", actions)]
         }
         boxes["manage"] = manage.bounding_box()
+        # The actions sit in the page header, above everything else.
+        assert boxes["actions"]["y"] < boxes["health"]["y"]
         if width >= 1440:
-            # With room the page is a board, as Home is: health beside the figures, then the
-            # work beside the actions, each pair level.
+            # With room the page is a board, as Home is: health beside the figures, level with
+            # each other, then the batches and the links the full width beneath.
             assert boxes["health"]["y"] == boxes["glance"]["y"]
             assert round(boxes["health"]["height"]) == round(boxes["glance"]["height"])
-            assert boxes["active"]["y"] == boxes["actions"]["y"] > boxes["health"]["y"]
-            assert boxes["manage"]["y"] > boxes["actions"]["y"] and boxes["manage"]["x"] == boxes["actions"]["x"]
-            bottoms = [boxes[name]["y"] + boxes[name]["height"] for name in ("active", "manage")]
-            assert round(bottoms[0]) == round(bottoms[1]), "no card ends short of its neighbour"
+            assert boxes["active"]["y"] > boxes["health"]["y"] + boxes["health"]["height"]
+            assert boxes["manage"]["y"] > boxes["active"]["y"] + boxes["active"]["height"]
+            assert round(boxes["active"]["width"]) == round(boxes["manage"]["width"])
+            assert round(boxes["active"]["width"]) == round(
+                boxes["glance"]["x"] + boxes["glance"]["width"] - boxes["health"]["x"]
+            )
         else:
             # Without it, one column in priority order: health, the work, then the rest.
-            order = ["health", "active", "glance", "actions", "manage"]
+            order = ["health", "active", "glance", "manage"]
             assert [boxes[name]["y"] for name in order] == sorted(boxes[name]["y"] for name in order)
-            assert len({round(box["width"]) for box in boxes.values()}) == 1, "every block spans the content column"
+            assert len({round(boxes[name]["width"]) for name in order}) == 1, "every block spans the content column"
         links = [link.bounding_box() for link in manage.get_by_role("link").all()]
-        assert links[0]["y"] == links[1]["y"] and links[2]["y"] == links[3]["y"] > links[0]["y"]
+        if width >= 1440:
+            assert len({link["y"] for link in links[:4]}) == 1, "the four links share one row on the board"
+        else:
+            assert links[0]["y"] == links[1]["y"] and links[2]["y"] == links[3]["y"] > links[0]["y"]
         assert len({round(link["width"]) for link in links[:4]}) == 1
         assert links[4]["y"] > links[3]["y"] and links[4]["width"] > links[0]["width"] * 1.5
         plain = manage.get_by_role("link").first.evaluate("link => getComputedStyle(link).backgroundColor")
