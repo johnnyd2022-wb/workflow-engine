@@ -20,6 +20,9 @@ Engines below are what `.agents/model-routing.json` assigns; `agent_launch.py pl
 2. scaffold + build       (SONNET 5, xhigh)      -> blueprint + unit tests passing
 2b. build-review          (CODEX sol, advisory)  -> Breaker on the diff
 3. migration-safety       (SONNET 5, xhigh)      -> only if spec says data model changes
+3b. page-design           (inline)               -> only if the spec adds or reshapes a page:
+                                                    research, plan, screenshot loop, before
+                                                    e2e so tests meet the final page
 4. security-audit         (SONNET 5)  \  parallel after build is green
    e2e-playwright         (SONNET 5)  /
 4b. security-tenant-audit (CODEX sol)            -> the classes scanners miss
