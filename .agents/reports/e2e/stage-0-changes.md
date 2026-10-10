@@ -246,6 +246,14 @@ when chromium/cert/DB is absent.
   hundreds of rows. Not from E2E, whose teardown is verified to leave zero. It means unit
   fixtures elsewhere aren't cleaning up. Flagged for a `suite-warden` / `test-fixtures`
   pass; out of scope here.
+  **Fixed 2026-10-11 by findings-sweep (finding 4ff460ee):** `tests/org_purge.py` records every
+  organisation a pytest process inserts and `tests/conftest.py` purges the survivors at session
+  end (a full run inserted 1,910 and left 0; before, about 44 survived each in-process run,
+  18 of them from `test_compliant_tools.py`). The two live-server 2FA files signed up orgs
+  over HTTP, which an in-process tracker cannot see, and left 25 per run between them; they
+  now purge their own by name. Pinned by `tests/test_org_purge.py`. **Not done:** rows already
+  in a shared test DB stay until someone purges them once, e.g. `purge_orgs_named` over the
+  generated "Test Org N-…" / "TestOrg_…" names. (verified 2026-10-11 by findings-sweep)
 - **Stages 1–6 not started.** Next is Stage 1 (auth/2FA flows). Stale point-in-time note
   — superseded the same day by `.agents/specs/playwright-e2e.md` (Stage 1 "mostly done",
   Stage 5 "done"), and long since superseded further: current repo has 43 e2e test files
