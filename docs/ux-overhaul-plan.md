@@ -9,7 +9,7 @@
 1. **Pages load fully on in-app navigation.** htmx boost must give the same page as a full load, with no refresh needed.
 2. **Fix placement** of icons, buttons and sections. Some are poorly placed at a glance.
 3. **One consistent UI style** across every screen.
-4. **Five main tabs only:** Dashboard, Production, Compliance, Sales, Settings. Everything else lives inside one of them. Planner and contract orders belong inside Production.
+4. **Five main tabs only:** Home (called Dashboard until !512), Production, Compliance, Sales, Settings. Everything else lives inside one of them. Planner and contract orders belong inside Production.
 
 ## What the audit found
 

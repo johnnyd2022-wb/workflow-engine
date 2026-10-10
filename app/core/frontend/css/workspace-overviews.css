@@ -241,46 +241,7 @@ html[data-spa-theme="dark"] #page-content .compliance-overview .compliant-framew
 html[data-spa-theme="dark"] #page-content .compliance-overview .compliant-framework-summary__metrics { border-color: var(--ui-border); }
 
 /* Dashboard: the same cards and tiles, around the dashboard's own lists and figures. */
-#page-content .dashboard-overview { padding-bottom: 40px; --dash-text: var(--ui-text, #172033); --dash-text-soft: var(--ui-text-muted, #64748b); --dash-accent: var(--ui-accent-strong, #115e59); --dash-accent-2: var(--ui-accent-strong, #115e59); }
-#page-content .dashboard-overview .dash-refresh { margin: 0; font-size: 13px; color: var(--ui-text-muted, #64748b); white-space: nowrap; }
-#page-content .dashboard-overview .dash-denied-notice { margin-bottom: 24px; }
-#page-content .dashboard-go-live { border-color: var(--ui-accent, #0d9488); }
-#page-content .dashboard-go-live .workspace-button { margin-top: 18px; }
-#page-content .dashboard-go-live[hidden] { display: none; }
-#page-content .dashboard-overview .dash-list,
-#page-content .dashboard-overview .dash-stat-rows { margin-top: 18px; gap: 10px; }
-#page-content .dashboard-overview .workspace-caption + .dash-list:empty { display: none; }
-#page-content .dashboard-overview .dash-list-item,
-#page-content .dashboard-overview .dash-stat-row { padding: 12px 16px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 8px; background: var(--ui-surface-subtle, #f8fafc); }
-#page-content .dashboard-overview .dash-stat-row[hidden],
-#page-content .dashboard-overview .dash-kpi-card[hidden] { display: none; }
-#page-content .dashboard-overview .dash-stat-row span { font-size: 14px; }
-#page-content .dashboard-overview .dash-empty { padding: 14px 16px; border: 1px dashed var(--ui-border, #e2e8f0); border-radius: 8px; font-size: 14px; }
-#page-content .dashboard-overview .dash-caption { margin: 14px 0 0; font-size: 13px; color: var(--ui-text-muted, #64748b); }
-#page-content .dashboard-overview .dash-workspace-grid,
-#page-content .dashboard-overview .dash-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-#page-content .dashboard-overview .dash-workspace-card,
-#page-content .dashboard-overview .dash-kpi-card { padding: 20px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 8px; background: var(--ui-surface-subtle, #f8fafc); box-shadow: none; backdrop-filter: none; }
-#page-content .dashboard-overview .dash-workspace-card { min-height: 0; transform: none; }
-#page-content .dashboard-overview a.dash-workspace-card:hover,
-#page-content .dashboard-overview a.dash-workspace-card:focus-visible { border-color: var(--ui-accent, #0d9488); box-shadow: none; transform: none; }
-#page-content .dashboard-overview a.dash-workspace-card:focus-visible { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: 2px; }
-#page-content .dashboard-overview .dash-workspace-card__eyebrow { text-transform: uppercase; }
-#page-content .dashboard-overview .dash-workspace-card h3 { font-size: 16px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ui-text, #172033); }
-#page-content .dashboard-overview .dash-workspace-card p { font-size: 14px; }
-#page-content .dashboard-overview .dash-workspace-card__link { font-size: 14px; font-weight: 600; }
-#page-content .dashboard-overview .dash-kpi-label { text-transform: none; letter-spacing: 0; font-size: 13px; min-height: 0; }
-#page-content .dashboard-overview .dash-kpi-value { font-size: 26px; font-weight: 700; margin-top: 6px; color: var(--ui-text, #172033); }
-#page-content .dashboard-overview .dash-kpi-link { font-weight: 600; }
-#page-content .dashboard-overview .dash-audit-details { margin-top: 18px; padding: 0; border: 0; background: none; }
-@media (max-width: 1023px) {
-  #page-content .dashboard-overview .dash-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 @media (max-width: 767px) {
-  #page-content .dashboard-overview .dash-workspace-grid { grid-template-columns: 1fr; gap: 12px; }
-  #page-content .dashboard-overview .dash-kpi-grid { gap: 12px; }
-  #page-content .dashboard-overview .dash-workspace-card,
-  #page-content .dashboard-overview .dash-kpi-card { padding: 16px; }
   #page-content .workspace-columns { gap: 20px; }
 }
 

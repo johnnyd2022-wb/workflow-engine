@@ -61,116 +61,127 @@
         if (!raw) return 'Unknown time';
         var d = new Date(raw);
         if (Number.isNaN(d.getTime())) return raw;
-        return d.toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-        });
+        var time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        var now = new Date();
+        if (d.toDateString() === now.toDateString()) return time;
+        return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ', ' + time;
     }
+
+    function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text != null) node.textContent = text;
+        return node;
+    }
+
+    var SEVERITY_ORDER = { critical: 0, high: 1, warning: 2, medium: 2, low: 3, informational: 4 };
 
     function renderActionList(root, actionBoard) {
         var list = byData(root, '[data-action-list]');
         if (!list) return;
 
-        var rows = (actionBoard && Array.isArray(actionBoard.items)) ? actionBoard.items : [];
+        var rows = (actionBoard && Array.isArray(actionBoard.items)) ? actionBoard.items.slice() : [];
+        list.replaceChildren();
         if (rows.length === 0) {
-            list.innerHTML = '<li class="dash-empty">Nothing needs attention right now.</li>';
+            var empty = el('li', 'dash-empty');
+            empty.appendChild(el('strong', '', 'Nothing needs you right now'));
+            empty.appendChild(el('span', '', 'Findings, overdue work and expiring stock will show here.'));
+            list.appendChild(empty);
             return;
         }
 
-        list.innerHTML = rows.map(function (item) {
-            var href = item.href || '/core/notifications';
-            var label = item.label || 'Action item';
-            var count = Number(item.count || 0);
-            var sev = severityLabel(item.severity);
-            var sevLower = String(item.severity || '').toLowerCase();
-            var priorityText = sevLower === 'informational' ? (sev + ' only') : (sev + ' priority');
-            var workspace = item.workspace || 'Workspace';
-            return (
-                '<li class="dash-list-item">' +
-                '<div class="dash-action-row">' +
-                '<div class="dash-action-main">' +
-                '<p class="dash-action-title"><span class="dash-action-workspace">' + escapeHtml(workspace) + '</span>' + escapeHtml(label) + '</p>' +
-                '<p class="dash-action-meta">' + escapeHtml(priorityText) + ' · <a class="dash-action-link" href="' + escapeHtml(href) + '">Open</a></p>' +
-                '</div>' +
-                '<div class="dash-action-count">' + escapeHtml(String(count)) + '</div>' +
-                '</div>' +
-                '</li>'
-            );
-        }).join('');
+        function rank(item) {
+            var value = SEVERITY_ORDER[String(item.severity || '').toLowerCase()];
+            return value == null ? 3 : value;
+        }
+        rows.sort(function (a, b) { return rank(a) - rank(b); });
+
+        rows.forEach(function (item) {
+            var severity = String(item.severity || '').toLowerCase();
+            var href = typeof item.href === 'string' && item.href.charAt(0) === '/' ? item.href : '/core/notifications';
+            var li = el('li', 'dash-attention__item');
+            var link = el('a', 'dash-attention__row dash-attention__row--' + (severity || 'action'));
+            link.href = href;
+            link.appendChild(el('span', 'dash-attention__dot'));
+            var main = el('span', 'dash-attention__main');
+            main.appendChild(el('span', 'dash-attention__title', item.label || 'Action item'));
+            var priority = severity === 'informational' ? 'For information' : severityLabel(item.severity) + ' priority';
+            main.appendChild(el('span', 'dash-attention__meta', (item.workspace || 'Workspace') + ' · ' + priority));
+            link.appendChild(main);
+            link.appendChild(el('span', 'dash-attention__count', String(Number(item.count || 0))));
+            link.appendChild(el('span', 'dash-attention__go', '›'));
+            li.appendChild(link);
+            list.appendChild(li);
+        });
+    }
+
+    var COMPLIANCE_STATES = {
+        healthy: 'On track',
+        degraded: 'Needs attention',
+        critical: 'Action required',
+        unknown: 'No checks run yet',
+    };
+
+    /* One compliance figure for the whole business and the parts it is the mean of. */
+    function renderCompliance(root, overall) {
+        var card = byData(root, '[data-dashboard-compliance]');
+        if (!card) return;
+        var parts = overall && Array.isArray(overall.components) ? overall.components : [];
+        card.hidden = !parts.length;
+        if (!parts.length) return;
+
+        var state = COMPLIANCE_STATES[overall.state] ? overall.state : 'unknown';
+        var score = Math.max(0, Math.min(100, Math.round(Number(overall.score) || 0)));
+        card.dataset.complianceLevel = state;
+        setText(root, '[data-compliance-score]', score);
+        setText(root, '[data-compliance-state]', COMPLIANCE_STATES[state]);
+        var arc = byData(root, '[data-compliance-arc]');
+        // As a style, not an attribute: the stylesheet's resting value would win over an attribute.
+        if (arc) arc.style.strokeDasharray = score + ' 100';
+        var ring = byData(root, '[data-compliance-ring]');
+        if (ring) ring.setAttribute('aria-label', 'Compliance score ' + score + ' out of 100, ' + COMPLIANCE_STATES[state].toLowerCase());
+
+        var list = byData(root, '[data-compliance-parts]');
+        if (!list) return;
+        list.replaceChildren();
+        parts.forEach(function (part) {
+            var partState = COMPLIANCE_STATES[part.state] ? part.state : 'unknown';
+            var partScore = Math.max(0, Math.min(100, Math.round(Number(part.score) || 0)));
+            var li = el('li');
+            var link = el('a', 'dash-part dash-part--' + partState);
+            link.href = typeof part.href === 'string' && part.href.charAt(0) === '/' && part.href.charAt(1) !== '/' ? part.href : '/core';
+            var head = el('span', 'dash-part__head');
+            head.appendChild(el('span', 'dash-part__label', part.label || 'Compliance'));
+            head.appendChild(el('strong', 'dash-part__score', String(partScore)));
+            link.appendChild(head);
+            var bar = el('span', 'dash-part__bar');
+            var fill = el('span');
+            fill.style.width = partScore + '%';
+            bar.appendChild(fill);
+            link.appendChild(bar);
+            link.appendChild(el('span', 'dash-part__detail', part.detail || ''));
+            li.appendChild(link);
+            list.appendChild(li);
+        });
     }
 
     function pluralize(count, singular, plural) {
         return String(count) + ' ' + (count === 1 ? singular : (plural || singular + 's'));
     }
 
-    function dashboardMetric(number, label, tone) {
-        var metric = document.createElement('span');
-        metric.className = 'dash-compliant-health__metric dash-compliant-health__metric--' + tone;
-        var value = document.createElement('strong'); value.textContent = String(number);
-        metric.appendChild(value);
-        metric.appendChild(document.createTextNode(' ' + label));
-        return metric;
-    }
-
-    function dashboardReadinessBar(score, moduleName) {
-        var percent = Math.max(0, Math.min(100, Number(score) || 0));
-        var bar = document.createElement('div');
-        bar.className = 'dash-compliant-health__progress';
-        bar.setAttribute('role', 'progressbar');
-        bar.setAttribute('aria-label', String(moduleName || 'Compliance') + ' evidence readiness');
-        bar.setAttribute('aria-valuemin', '0');
-        bar.setAttribute('aria-valuemax', '100');
-        bar.setAttribute('aria-valuenow', String(percent));
-        var fill = document.createElement('span');
-        fill.style.width = percent + '%';
-        bar.appendChild(fill);
-        return bar;
-    }
-
-    function renderCompliantHealth(root, compliantWorkspace) {
-        var host = byData(root, '[data-dashboard-compliant-health]');
+    /* With one compliance module the tile opens it directly; with several, the workspace.
+       The module's score and evidence count are in the Compliance card, not repeated here. */
+    function linkCompliantTile(root, compliantWorkspace) {
         var card = byData(root, '[data-dashboard-compliant-card]');
         var cardLink = byData(root, '[data-dashboard-compliant-link]');
-        if (!host) return;
-        while (host.firstChild) host.removeChild(host.firstChild);
+        if (!card || !cardLink) return;
         var modules = Array.isArray((compliantWorkspace || {}).modules) ? compliantWorkspace.modules : [];
-        host.hidden = modules.length === 0;
-        if (card && cardLink) {
-            var onlyModule = modules.length === 1 ? modules[0] : null;
-            card.href = onlyModule && typeof onlyModule.href === 'string' && onlyModule.href.charAt(0) === '/'
-                ? onlyModule.href
-                : '/compliant';
-            card.setAttribute('aria-label', onlyModule ? String(onlyModule.action_label || 'Open module') : 'Open Compliance workspace');
-            cardLink.textContent = onlyModule ? String(onlyModule.action_label || 'Open module') + ' →' : 'Open Compliance →';
-        }
-        modules.slice(0, 2).forEach(function (module) {
-            var section = document.createElement('section'); section.className = 'dash-compliant-health__module';
-            var title = document.createElement('p'); title.className = 'dash-compliant-health__title';
-            title.textContent = String(module.module_name || 'Compliance') + ' compliance score: ' + String(module.score || 0) + '%';
-            section.appendChild(title);
-            section.appendChild(dashboardReadinessBar(module.score, module.module_name));
-            var milestone = module.milestone;
-            if (milestone && typeof milestone.label === 'string' && typeof milestone.overdue === 'boolean') {
-                var milestoneLine = document.createElement('p');
-                milestoneLine.className = 'dash-compliant-health__coverage';
-                if (milestone.overdue) milestoneLine.classList.add('dash-compliant-health__milestone--overdue');
-                milestoneLine.textContent = milestone.label + ': ' + (milestone.date || 'Date not set')
-                    + (milestone.overdue ? ' · overdue' : '')
-                    + (typeof milestone.detail === 'string' && milestone.detail ? ' · ' + milestone.detail : '');
-                section.appendChild(milestoneLine);
-            }
-            var coverage = document.createElement('p'); coverage.className = 'dash-compliant-health__coverage';
-            coverage.textContent = String(module.current_controls || 0) + ' / ' + String(module.total_controls || 0) + ' current evidence controls';
-            section.appendChild(coverage);
-            var metrics = document.createElement('div'); metrics.className = 'dash-compliant-health__metrics';
-            metrics.appendChild(dashboardMetric(module.evidence_ready || 0, 'evidence ready', 'ready'));
-            metrics.appendChild(dashboardMetric(module.needs_attention || 0, 'need attention', 'attention'));
-            metrics.appendChild(dashboardMetric(module.overdue || 0, 'overdue', 'overdue'));
-            section.appendChild(metrics);
-            host.appendChild(section);
-        });
+        var onlyModule = modules.length === 1 ? modules[0] : null;
+        card.href = onlyModule && typeof onlyModule.href === 'string' && onlyModule.href.charAt(0) === '/'
+            ? onlyModule.href
+            : '/compliant';
+        card.setAttribute('aria-label', onlyModule ? String(onlyModule.action_label || 'Open module') : 'Open Compliance workspace');
+        cardLink.textContent = onlyModule ? String(onlyModule.action_label || 'Open module') + ' →' : 'Open Compliance →';
     }
 
     function renderWorkspaceSummaries(root, operations, compliantWorkspace, tasks, sales) {
@@ -178,7 +189,7 @@
         setText(
             root,
             '[data-dashboard-core-summary]',
-            activeBatches ? pluralize(activeBatches, 'active batch') + ' in progress.' : 'No active batches right now.'
+            activeBatches ? pluralize(activeBatches, 'active batch', 'active batches') + ' in progress.' : 'No active batches right now.'
         );
 
         var compliant = compliantWorkspace || {};
@@ -187,7 +198,7 @@
             '[data-dashboard-compliant-summary]',
             compliant.label || 'Compliance is not enabled for this organisation.'
         );
-        renderCompliantHealth(root, compliant);
+        linkCompliantTile(root, compliant);
 
         var safeTasks = tasks || {};
         var safeSales = sales || {};
@@ -203,54 +214,56 @@
         }
     }
 
+    var AUDIT_VISIBLE = 6;
+
     function renderAuditList(root, auditLog, selectedPeriod) {
         var list = byData(root, '[data-audit-list]');
         var meta = byData(root, '[data-audit-meta]');
-        var summary = byData(root, '.dash-audit-summary');
+        var more = byData(root, '[data-audit-more]');
         if (!list) return;
 
         var key = selectedPeriod === 'week' ? 'week' : 'day';
         var bucket = (auditLog && auditLog[key]) ? auditLog[key] : { total: 0, items: [] };
         var rows = Array.isArray(bucket.items) ? bucket.items : [];
-        var limit = Number((auditLog && auditLog.limit) || 10);
         var total = Number(bucket.total || 0);
         var periodLabel = key === 'week' ? 'this week' : 'today';
 
         if (meta) {
-            if (total <= limit) {
-                meta.textContent = 'Showing all ' + String(total) + ' entries ' + periodLabel + '.';
-            } else {
-                meta.textContent = 'Showing top ' + String(limit) + ' of ' + String(total) + ' entries ' + periodLabel + '.';
-            }
-        }
-        if (summary) {
-            summary.textContent = key === 'week' ? 'Events for this week' : 'Events for today';
+            meta.textContent = total === 0
+                ? 'Nothing recorded ' + periodLabel + '.'
+                : String(total) + (total === 1 ? ' entry ' : ' entries ') + periodLabel +
+                    (total > rows.length ? ', latest first.' : '.');
         }
 
-        if (rows.length === 0) {
-            list.innerHTML = '<li class="dash-empty">No changes recorded for this window.</li>';
-            return;
-        }
-
-        list.innerHTML = rows.map(function (row) {
-            var summaryText = row.summary || row.event_type || 'Activity';
-            var actor = row.actor || 'System';
-            var at = formatDateTime(row.at);
+        list.replaceChildren();
+        rows.forEach(function (row, index) {
+            var li = el('li', 'dash-activity__row');
+            li.hidden = index >= AUDIT_VISIBLE;
+            var body = el('div', 'dash-activity__body');
+            body.appendChild(el('span', 'dash-activity__text', row.summary || row.event_type || 'Activity'));
             var details = Array.isArray(row.details) ? row.details : [];
-            var detailMarkup = details.length
-                ? '<details class="dash-audit-sales-details"><summary>View ' + String(details.length) + ' sale update' +
-                    (details.length === 1 ? '' : 's') + '</summary><ul>' + details.map(function (detail) {
-                        return '<li>' + escapeHtml(detail) + '</li>';
-                    }).join('') + '</ul></details>'
-                : '';
-            return (
-                '<li class="dash-list-item">' +
-                '<p class="dash-audit-title">' + escapeHtml(summaryText) + '</p>' +
-                detailMarkup +
-                '<p class="dash-audit-meta-line">' + escapeHtml(actor) + ' · ' + escapeHtml(at) + '</p>' +
-                '</li>'
-            );
-        }).join('');
+            if (details.length) {
+                var disclosure = el('details', 'dash-activity__details');
+                disclosure.appendChild(el('summary', '', 'View ' + details.length + ' sale update' + (details.length === 1 ? '' : 's')));
+                var inner = el('ul');
+                details.forEach(function (detail) { inner.appendChild(el('li', '', detail)); });
+                disclosure.appendChild(inner);
+                body.appendChild(disclosure);
+            }
+            li.appendChild(body);
+            li.appendChild(el('span', 'dash-activity__meta', (row.actor || 'System') + ' · ' + formatDateTime(row.at)));
+            list.appendChild(li);
+        });
+
+        if (more) {
+            var extra = rows.length - AUDIT_VISIBLE;
+            more.hidden = extra <= 0;
+            more.textContent = 'Show ' + extra + ' more';
+            more.onclick = function () {
+                Array.prototype.forEach.call(list.children, function (li) { li.hidden = false; });
+                more.hidden = true;
+            };
+        }
     }
 
     function safeTrendSeries(series) {
@@ -294,9 +307,14 @@
 
         var safeSeries = safeTrendSeries(series);
         var points = safeSeries.points;
+        // A flat line says nothing and reads as a rule under the number; draw only what moves.
+        var values = points.map(function (pt) { return Number(pt.value || 0); });
+        var moves = values.length > 1 && Math.max.apply(Math, values) !== Math.min.apply(Math, values);
+        host.hidden = !moves;
+        if (!moves) { host.replaceChildren(); return; }
 
-        var width = 250;
-        var height = 44;
+        var width = 160;
+        var height = 32;
         var padX = 4;
         var padY = 4;
         var chartW = width - (padX * 2);
@@ -320,31 +338,23 @@
     }
 
     function wireAuditPeriodToggle(root, auditLog) {
-        var toggle = byData(root, '[data-audit-week-toggle]');
-        var track = byData(root, '[data-audit-week-toggle-track]');
-        var period = 'day';
-        if (!toggle) {
-            renderAuditList(root, auditLog, period);
-            return;
-        }
-
-        function applyState() {
-            var isWeek = period === 'week';
-            toggle.setAttribute('aria-checked', isWeek ? 'true' : 'false');
-            if (track) {
-                track.classList.toggle('spa-advanced-toggle__track--on', isWeek);
-            }
-            renderAuditList(root, auditLog, period);
-        }
-
-        if (!toggle.dataset.boundDashboardAudit) {
-            toggle.addEventListener('click', function () {
-                period = period === 'week' ? 'day' : 'week';
-                applyState();
+        var buttons = root.querySelectorAll('[data-audit-period]');
+        var current = root.dataset.auditPeriod === 'week' ? 'week' : 'day';
+        function apply() {
+            root.dataset.auditPeriod = current;
+            Array.prototype.forEach.call(buttons, function (button) {
+                button.setAttribute('aria-pressed', button.dataset.auditPeriod === current ? 'true' : 'false');
             });
-            toggle.dataset.boundDashboardAudit = '1';
+            renderAuditList(root, auditLog, current);
         }
-        applyState();
+        Array.prototype.forEach.call(buttons, function (button) {
+            // Reassigned on every summary refresh so the handler always closes over fresh data.
+            button.onclick = function () {
+                current = button.dataset.auditPeriod === 'week' ? 'week' : 'day';
+                apply();
+            };
+        });
+        apply();
     }
 
     function renderPlannedWork(root, work) {
@@ -389,24 +399,24 @@
         var auditLog = data.audit_log || {};
         var insightSeries = data.insight_series || {};
 
-        setText(root, '[data-dashboard-date]', new Date().toLocaleString('en-US', {
-            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-        }));
+        var now = new Date();
+        setText(root, '[data-dashboard-date]', now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }));
+        setText(root, '[data-dashboard-today]', now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }));
 
         setText(root, '[data-kpi-operator-actions]', operatorActions.week_to_date || 0);
-        setText(root, '[data-kpi-open-action-items]', actionBoard.critical_actions_total || 0);
         setText(root, '[data-kpi-active-batches]', operations.active_executions || 0);
-        setText(root, '[data-kpi-revenue-goal]', sales.baseline_target_mtd == null
-            ? 'Set target'
-            : formatGoalPct(sales.baseline_attainment_pct));
-        var revenueGoalCard = byData(root, '[data-kpi-revenue-goal-card]');
-        var revenueGoalSpark = revenueGoalCard && revenueGoalCard.querySelector('[data-kpi-spark="monthly_goal"]');
-        if (revenueGoalSpark) revenueGoalSpark.hidden = sales.baseline_target_mtd == null;
+        setText(root, '[data-kpi-open-action-items]', actionBoard.critical_actions_total || 0);
+        var openActions = byData(root, '[data-open-actions-figure]');
+        if (openActions) openActions.classList.toggle('dash-figure--attention', Number(actionBoard.critical_actions_total || 0) > 0);
         setText(root, '[data-kpi-tasks-week]', tasks.due_this_week_count || 0);
         setText(root, '[data-kpi-overdue]', tasks.overdue_count || 0);
         setText(root, '[data-kpi-throughput-vs-last-week]', formatPct(operations.completed_vs_last_week_pct));
         var throughputCard = byData(root, '[data-kpi-throughput-card]');
+        var throughputFallback = byData(root, '[data-kpi-throughput-fallback]');
         if (throughputCard) throughputCard.hidden = operations.completed_vs_last_week_pct == null;
+        if (throughputFallback) throughputFallback.hidden = operations.completed_vs_last_week_pct != null;
+        var failedFigure = byData(root, '[data-ops-failed-figure]');
+        if (failedFigure) failedFigure.classList.toggle('dash-figure--alert', Number(operations.failed_or_cancelled_this_week || 0) > 0);
 
         renderSparkLine(root, 'operator_actions', insightSeries.operator_actions_week);
         renderSparkLine(root, 'open_action_items', insightSeries.open_action_items);
@@ -417,35 +427,56 @@
 
         renderPlannedWork(root, data.planned_work);
         renderActionList(root, actionBoard);
+        renderCompliance(root, data.compliance_overall);
         renderWorkspaceSummaries(root, operations, compliantWorkspace, tasks, sales);
         wireAuditPeriodToggle(root, auditLog);
 
-        setText(root, '[data-ops-active]', operations.active_executions || 0);
         setText(root, '[data-ops-started-week]', operations.started_this_week || 0);
         setText(root, '[data-ops-completed-week]', operations.completed_this_week || 0);
         setText(root, '[data-ops-failed-week]', operations.failed_or_cancelled_this_week || 0);
 
         setText(root, '[data-sales-revenue-mtd]', formatCurrency(sales.current_month_revenue));
-        setText(root, '[data-sales-baseline-target]', sales.baseline_target_mtd == null ? 'Not set' : formatCurrency(sales.baseline_target_mtd));
-        var baselineVarianceRow = byData(root, '[data-sales-baseline-variance-row]');
-        if (baselineVarianceRow) baselineVarianceRow.hidden = sales.baseline_variance_mtd == null;
-        if (sales.baseline_variance_mtd != null) {
-            setText(root, '[data-sales-baseline-variance]', formatCurrencyVariance(sales.baseline_variance_mtd));
+        if (sales.enabled === false) {
+            setText(root, '[data-sales-caption]', 'Sales is turned off');
+        } else if (sales.baseline_target_mtd == null) {
+            setText(root, '[data-sales-caption]', 'Set a target to track it');
+        } else {
+            setText(root, '[data-sales-caption]', formatGoalPct(sales.baseline_attainment_pct) + ' of ' +
+                formatCurrency(sales.baseline_target_mtd) + ' target');
         }
-        var salesMomRow = byData(root, '[data-sales-mom-row]');
-        if (salesMomRow) salesMomRow.hidden = sales.revenue_vs_last_month_pct == null;
-        if (sales.revenue_vs_last_month_pct != null) {
-            setText(root, '[data-sales-mom]', formatPct(sales.revenue_vs_last_month_pct));
+    }
+
+    /* The access-denied notice and the go-live strip. Both were inline scripts in the template. */
+    var GO_LIVE_HIDDEN_KEY = 'dashboard.goLiveHidden';
+
+    function wireNotices(root) {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get('denied') === '1') {
+            var denied = byData(root, '[data-dashboard-denied]');
+            if (denied) denied.hidden = false;
+            params.delete('denied');
+            var rest = params.toString();
+            window.history.replaceState(window.history.state, '', window.location.pathname + (rest ? '?' + rest : ''));
         }
 
-        if (sales.enabled === false) {
-            setText(root, '[data-sales-caption]', 'Sales is disabled for this tenant.');
-        } else if (sales.baseline_target_mtd == null) {
-            setText(root, '[data-sales-caption]', 'Define a baseline in Sales configuration to track attainment.');
-        } else {
-            var attainment = sales.baseline_attainment_pct == null ? 'n/a' : String(sales.baseline_attainment_pct) + '%';
-            setText(root, '[data-sales-caption]', 'Baseline attainment: ' + attainment + '.');
+        var strip = byData(root, '[data-dashboard-go-live]');
+        if (!strip) return;
+        var dismissed = false;
+        try { dismissed = window.localStorage.getItem(GO_LIVE_HIDDEN_KEY) === '1'; } catch (e) { /* private mode */ }
+        if (dismissed) return;
+        var hide = byData(root, '[data-dashboard-go-live-hide]');
+        if (hide) {
+            hide.addEventListener('click', function () {
+                strip.hidden = true;
+                try { window.localStorage.setItem(GO_LIVE_HIDDEN_KEY, '1'); } catch (e) { /* private mode */ }
+            });
         }
+        fetch('/api/core/go-live', { credentials: 'include', headers: { Accept: 'application/json' } })
+            .then(function (response) { return response.ok ? response.json() : null; })
+            .then(function (state) {
+                if (state && !state.go_live_date && strip.isConnected) strip.hidden = false;
+            })
+            .catch(function () { /* the strip is an invitation, not a requirement */ });
     }
 
     var pendingLoad = null;
@@ -457,10 +488,11 @@
         }
     }
 
-    async function loadDashboard(root) {
+    async function loadDashboard(root, options) {
         var loading = byData(root, '[data-dashboard-loading]');
         var error = byData(root, '[data-dashboard-error]');
-        if (loading) loading.hidden = false;
+        // A background refresh must not flash "Loading" under a page that is already drawn.
+        if (loading) loading.hidden = !!(options && options.quiet);
         if (error) error.hidden = true;
 
         abortPendingLoad();
@@ -502,6 +534,7 @@
         if (root.dataset.dashboardLoading === '1' || root.dataset.dashboardLoaded === '1') return;
         root.dataset.dashboardLoading = '1';
         root.dataset.dashboardLoaded = '1';
+        wireNotices(root);
         loadDashboard(root);
     }
 
@@ -511,14 +544,21 @@
         initDashboardPage();
     }
 
-    document.body.addEventListener('htmx:afterSettle', function () {
-        if (document.querySelector(ROOT_SELECTOR)) initDashboardPage();
-    });
-
-    // Cancel an in-flight summary fetch the moment the page starts to go away, so it
-    // doesn't surface as a "Failed to fetch" error against a detached root.
-    document.body.addEventListener('htmx:beforeSwap', abortPendingLoad);
-    window.addEventListener('pagehide', abortPendingLoad);
+    // This file sits inside #page-content, so it runs again on every boosted visit. The page
+    // root is new each time; the document is not, so its listeners are bound once and reach
+    // whichever run is current through window.
+    window.__dashboardInit = initDashboardPage;
+    window.__dashboardAbort = abortPendingLoad;
+    if (!window.__dashboardShellBound) {
+        window.__dashboardShellBound = true;
+        document.body.addEventListener('htmx:afterSettle', function () {
+            if (document.querySelector(ROOT_SELECTOR)) window.__dashboardInit();
+        });
+        // Cancel an in-flight summary fetch the moment the page starts to go away, so it
+        // doesn't surface as a "Failed to fetch" error against a detached root.
+        document.body.addEventListener('htmx:beforeSwap', function () { window.__dashboardAbort(); });
+        window.addEventListener('pagehide', function () { window.__dashboardAbort(); });
+    }
 
     // Live: the summary aggregates batches, tasks and events -- refresh it when a
     // colleague changes any of those, debounced so a burst is one reload. live-sync.js
@@ -545,6 +585,17 @@
             },
         });
     }
+    // A wall screen nobody touches still has to stay current, and not every change that moves
+    // a figure is an event LiveSync carries (evidence falling due, a date rolling over).
+    var REFRESH_MS = 60000;
+    if (window.__dashboardTimer) clearInterval(window.__dashboardTimer);
+    window.__dashboardTimer = setInterval(function () {
+        var root = document.querySelector(ROOT_SELECTOR);
+        if (!root) { clearInterval(window.__dashboardTimer); window.__dashboardTimer = null; return; }
+        if (document.visibilityState === 'hidden' || root.dataset.dashboardLoading === '1') return;
+        loadDashboard(root, { quiet: true });
+    }, REFRESH_MS);
+
     if (window.LiveSync) {
         subscribeDashboardLive();
     } else {

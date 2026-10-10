@@ -11,7 +11,7 @@ from app.core.db.repositories.feature_subscription_repo import FeatureSubscripti
 from app.core.db.repositories.user_repo import UserRepository
 from app.core.security.auth_service import AuthService
 from app.ui.navigation import resolve
-from app.ui.page_registry import PAGES, SECTION_TABS
+from app.ui.page_registry import PAGES, SECTION_LABELS, SECTION_TABS
 from tests.factories import DEFAULT_TEST_PASSWORD, OrganisationFactory
 from tests.test_compliant_routes import flask_app  # noqa: F401 -- fixture re-export
 
@@ -83,7 +83,7 @@ def test_admin_sees_exactly_five_main_tabs_and_the_production_sub_nav(db, flask_
     org, client = _client(flask_app, db, UserRole.ADMIN)
     try:
         html = client.get("/core/planner").get_data(as_text=True)
-        assert _sidebar_labels(html) == ["Dashboard", "Production", "Compliance", "Sales", "Settings"]
+        assert _sidebar_labels(html) == ["Home", "Production", "Compliance", "Sales", "Settings"]
         assert 'href="/core/planner"' in html  # a sub-nav tab, not a sidebar item
         assert re.search(r'class="nav-link active"[^>]*>\s*<div[^>]*>.*?Production', html, re.S) or "active" in html
         tabs = _tabs(html)
@@ -186,7 +186,7 @@ def test_registered_child_pages_list_their_tab_and_parents():
         ("Add to inventory", "/core/inventory/add"),
         ("Add inventory manually", None),
     ]
-    assert _trail("/core/go-live") == [("Dashboard", "/core/dashboard"), ("Go live", None)]
+    assert _trail("/core/go-live") == [("Home", "/core/dashboard"), ("Go live", None)]
     assert _trail("/core/people") == [("Settings", "/core/settings"), ("People and roles", None)]
 
 
@@ -219,7 +219,7 @@ def test_every_registered_page_is_reachable_up_the_trail_to_its_section():
         for crumb in crumbs[:-1]:
             assert crumb["href"], f"{page.path}: {crumb}"
         if crumbs:
-            assert crumbs[0]["label"].lower().startswith(page.section[:4]), page.path
+            assert crumbs[0]["label"] == SECTION_LABELS[page.section], page.path
 
 
 def test_rendered_pages_tell_the_back_arrow_where_up_is(db, flask_app):  # noqa: F811

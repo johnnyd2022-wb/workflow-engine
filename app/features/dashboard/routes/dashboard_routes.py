@@ -609,6 +609,71 @@ def _dashboard_module_milestone(value: Any) -> dict[str, Any] | None:
     return milestone
 
 
+def _dashboard_plain_date(raw: Any) -> str:
+    """'2026-11-18' as '18 Nov 2026'; anything that is not an ISO date is passed through."""
+    try:
+        day = date.fromisoformat(str(raw)[:10])
+    except ValueError:
+        return str(raw) if raw else "date not set"
+    return f"{day.day} {day.strftime('%b %Y')}"
+
+
+_COMPLIANCE_STATE_RANK = {"healthy": 0, "degraded": 1, "critical": 2}
+
+
+def _dashboard_overall_compliance(compliance: dict[str, Any], compliant_workspace: dict[str, Any]) -> dict[str, Any]:
+    """One compliance figure for the whole business, with the parts it is made of.
+
+    The mean, equally weighted, of every compliance score this summary already carries: the
+    production checks score and each enabled compliance module's evidence score. The state
+    is the worst of its parts. The parts are returned so the page can show its working; a
+    single number nobody can read back is not something to put in front of an auditor.
+    """
+    components: list[dict[str, Any]] = []
+    production_state = str(compliance.get("state") or "unknown")
+    drivers = compliance.get("top_drivers") or []
+    components.append(
+        {
+            "key": "production",
+            "label": "Production checks",
+            "score": int(compliance.get("score") or 0),
+            "state": production_state,
+            "href": "/core",
+            "detail": ", ".join(f"{d['label']} −{d['penalty']}" for d in drivers) or "No findings",
+        }
+    )
+    for module in (compliant_workspace or {}).get("modules") or []:
+        overdue = int(module.get("overdue") or 0)
+        needs_attention = int(module.get("needs_attention") or 0)
+        detail = f"{module.get('current_controls', 0)} of {module.get('total_controls', 0)} evidence controls current"
+        if overdue:
+            detail += f", {overdue} overdue"
+        milestone = module.get("milestone")
+        if isinstance(milestone, dict) and milestone.get("label"):
+            # Plan 2.2: the next verification stays on the dashboard wherever the module is shown.
+            detail += f" · {milestone['label']}: {_dashboard_plain_date(milestone.get('date'))}"
+            if milestone.get("overdue"):
+                detail += " (overdue)"
+        components.append(
+            {
+                "key": f"module:{module.get('module_name')}",
+                "label": str(module.get("module_name") or "Compliance"),
+                "score": int(module.get("score") or 0),
+                "state": "critical" if overdue else "degraded" if needs_attention else "healthy",
+                "href": str(module.get("href") or "/compliant"),
+                "detail": detail,
+            }
+        )
+
+    known = [c["state"] for c in components if c["state"] in _COMPLIANCE_STATE_RANK]
+    state = max(known, key=_COMPLIANCE_STATE_RANK.__getitem__) if known else "unknown"
+    return {
+        "score": round(sum(c["score"] for c in components) / len(components)),
+        "state": state,
+        "components": components,
+    }
+
+
 def _dashboard_module_workspace_summaries(check_results: list[Any], workspace: str) -> list[dict[str, Any]]:
     """Project module-owned Dashboard summaries without knowing module check IDs."""
     summaries = []
@@ -1041,6 +1106,7 @@ def get_dashboard_summary():
                 "window_days": window_days,
                 "tasks": tasks_summary,
                 "compliance": compliance,
+                "compliance_overall": _dashboard_overall_compliance(compliance, compliant_workspace),
                 "compliant_workspace": compliant_workspace,
                 "action_board": action_board,
                 "operator_actions": {"week_to_date": operator_actions_this_week},

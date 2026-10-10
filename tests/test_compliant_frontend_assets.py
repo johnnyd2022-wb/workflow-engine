@@ -163,18 +163,20 @@ def test_dashboard_projects_module_owned_compliance_health():
     dashboard = (_REPO_ROOT / "app" / "core" / "frontend" / "dashboard" / "dashboard.html").read_text(encoding="utf-8")
     script = (_REPO_ROOT / "app" / "core" / "frontend" / "js" / "dashboard.js").read_text(encoding="utf-8")
 
-    assert "data-dashboard-compliant-health" in dashboard
+    # A module's score, bar and evidence count are drawn in the Compliance card from the generic
+    # `compliance_overall.components` list; the Workspaces tile only links to the module.
+    assert "data-dashboard-compliance" in dashboard
+    assert "data-compliance-parts" in dashboard
     assert "data-dashboard-compliant-card" in dashboard
     assert "data-dashboard-cases" not in dashboard
-    assert "renderCompliantHealth" in script
-    assert "dashboardReadinessBar" in script
-    assert "dash-compliant-health__progress" in script
+    assert "renderCompliance" in script
+    assert "dash-part__bar" in script
     assert "data-dashboard-compliant-link" in script
     assert "operational_cases" not in script
     assert "compliant.nz_alcohol" not in script
 
     stylesheet = (_REPO_ROOT / "app" / "core" / "frontend" / "css" / "dashboard_spa.css").read_text(encoding="utf-8")
-    assert ".dash-compliant-health__progress" in stylesheet
+    assert ".dash-part__bar" in stylesheet
 
 
 def test_np3_health_uses_attention_as_one_actionable_total():
