@@ -20,6 +20,11 @@ from app.core.db import db_session
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.user import User
 from tests.factories import OrganisationFactory, UserFactory
+from tests.org_purge import created_org_ids, purge_orgs, track_created_orgs
+
+# Record every Organisation this run inserts, so the session-end backstop below can remove
+# the ones a test's own teardown left behind (see tests/org_purge.py).
+track_created_orgs()
 
 # In-process tests need no deployment secret or KeePassXC database. All app
 # instances in this pytest process share one private, ephemeral signing key.
@@ -85,6 +90,24 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     for item in items:
         if item.get_closest_marker("live_server"):
             item.add_marker(skip)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _purge_orgs_created_by_this_run():
+    """Backstop for finding 4ff460ee: leave no organisation of this run in the shared test DB.
+
+    Most test files hand-roll their own teardown and many did not finish the job, so the DB
+    collected thousands of "Test Org N-…" rows. Session scope, not per test: a module- or
+    class-scoped org is still in use by later tests. A failed purge raises here (an ERROR at
+    session teardown) rather than being swallowed.
+    """
+    yield
+    session = db_session()
+    try:
+        purge_orgs(session, created_org_ids())
+    finally:
+        session.close()
+        db_session.remove()
 
 
 @pytest.fixture
