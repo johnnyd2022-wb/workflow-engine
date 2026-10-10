@@ -1,6 +1,6 @@
-# Dashboard: redesign plan (concept, three styles)
+# Home (the dashboard): redesign plan
 
-The dashboard (`/core/dashboard`) is the first page after sign-in. It should answer, on one
+Home (`/core/dashboard`, called Dashboard until this change) is the first page after sign-in. It should answer, on one
 screen: what needs me today, and is the business healthy. This plan covers how the page
 shows that. The summary API (`/api/core/dashboard/summary`) is unchanged.
 
@@ -35,9 +35,9 @@ Observed on a seeded org at 1440 wide (screenshots in the MR):
 | Katana (support docs) | No KPI home at all: Make opens on the schedule and tasks. | Planned production keeps its own block beside attention, not under the KPIs. |
 | Safefood 360 (help guide) | A site compliance dashlet: one percentage, defined, with red / orange / green bands. | One overall figure with a stated definition and a state in words. |
 | Drata and Vanta (help docs) | Readiness per framework as a percentage with a progress bar; neither documents a single blended number. | The parts are always shown beside the overall figure, each with its own bar. |
-| Geckoboard (TV dashboard guidance) | Clarity over quantity; see the whole dashboard at once; status indicators; size and position carry importance. | Style 2, and the wall-screen check on all three. |
-| Bento grids (design guides) | Tiles of different sizes; size signals priority; keep rows level. | Style 2's layout and its capped lists. |
-| Linear Pulse, Notion dashboard summary, Trackingplan digest | Prose first, charts under it. | Style 3's opening sentence, built from the same figures. |
+| Geckoboard (TV dashboard guidance) | Clarity over quantity; see the whole dashboard at once; status indicators; size and position carry importance. | The board, and the wall-screen check. |
+| Bento grids (design guides) | Tiles of different sizes; size signals priority; keep rows level. | The board's layout and its capped lists. |
+| Linear Pulse, Notion dashboard summary, Trackingplan digest | Prose first, charts under it. | Tried as a "briefing" style and dropped: it gave up the boxes and width the board uses well. |
 | Carbon tiles; KPI card anatomy | Tiles in a row share a height; label, value, comparison, small trend with no axes. | The This week grid. |
 | Stephen Few, *Information Dashboard Design* | A dashboard fits one screen and is read at a glance; it should grab attention only when needed. | The first screen holds attention, health and the week. Sparklines appear only when the series moves. |
 
@@ -45,39 +45,34 @@ Not found: an official description of Stripe's or Mercury's current home layout,
 usability study on dashboards for small manufacturers. The table's first two rows rest on
 vendor support docs and a third-party breakdown.
 
-## Three directions to choose from
+## Design: a board
 
 The page is the first thing a user sees each day and may sit on a wall TV: the whole
-business on one page, and still easy. Three ways to do that. All three show the same data
-from the same script; they differ in layout and emphasis. Open `/core/dashboard?style=1`,
-`?style=2` or `?style=3`, or use the switch in the header. **Once one is picked, the switch
-and the other two styles are deleted.**
+business on one page, and still easy.
 
-| | Style 1: Stacked | Style 2: Board | Style 3: Rail |
-|---|---|---|---|
-| Idea | Full-width cards in priority order. Read top to bottom. | A grid where size carries priority and the whole business fits one screen. | The summary (score and the week) is one panel down the left that stays in view; the work scrolls beside it. |
-| Taken from | Stripe's and Shopify's home pages: today's figures and what needs action first. | Geckoboard's TV guidance (clarity over quantity, see it all at once) and bento grids (size signals priority). | Summary rails beside a work column: Linear's properties panel, Mercury's account rail, monitoring tools' status sidebars. |
-| Best at | A laptop at a desk. Nothing is ever beside anything taller. | A TV, or a wide monitor glanced at through the day. | Working down a long attention list or plan without losing sight of the numbers. |
-| Gives up | Needs a scroll to reach the lists. | Lists are capped at four rows and three batches to keep cards level; Workspaces and most of Activity are a click away. Below 1280px it falls back to Style 1. | Figures are small and have no trend lines; the rail takes 372px. Below 1100px it falls back to Style 1. |
+Three layouts were built and shown side by side (!512): a stacked column, a board, and a
+rail with the summary pinned down the left. A "briefing" style and a menu along the bottom
+of the screen were also tried. **The board was chosen, with the menu staying down the left.**
+The others were deleted with the switch that chose between them.
 
-A first third style, "Briefing" (one plain sentence, then borderless sections in a reading
-column, after Linear Pulse and Notion's dashboard summary), was shown in round one and
-dropped: it gave up the boxes and width the other two use well.
+**With room (about 1100px for the page itself), the page is a board**: a grid where size
+carries priority. The compliance score and This week share the top row; Needs attention and
+Today's planned production share the second, level with each other; Recent activity runs
+underneath. On a 1080p wall screen the first two rows fit without scrolling. To keep the
+cards level, the board caps Needs attention at four rows, the plan at three batches and
+Recent activity at three lines; each has its link to the full list. The Workspaces block is
+left out of the board, since it repeats the menu.
 
-### The menu along the bottom (round two)
+**With less room, the page is one stacked column** in the same order, full lists and the
+Workspaces block included. This is what a phone, a tablet and a 1280px laptop with the menu
+open get. The switch is by the room the page has (a container query), not the window, so
+collapsing the menu on a small laptop is what turns the column into the board.
 
-The side menu takes 260px. On a phone it is already a bar along the bottom. A second
-concept switch, `?nav=bottom` or "Menu at bottom" in the header, does the same at laptop
-and desktop widths **on this page only**, to see what each style does with the width:
-Style 1's tiles and compliance parts breathe; Style 2 fits score, week, attention and plan
-on a 1080p screen with room to spare; Style 3's work column gains the most.
+Taken from: Geckoboard's guidance for wall screens (clarity over quantity, see it all at
+once), bento grids (size signals priority), and Stripe's and Shopify's home pages (today's
+figures and what needs action first).
 
-This is a look at the dashboard, not a proposal to move the menu everywhere. Doing that is
-a shell change touching every page (the collapsed state, the logout control that lives in
-the menu's footer, the bee menu) and would be its own piece of work. The switch clears
-itself when the dashboard is left.
-
-Common to all three:
+What the page shows:
 
 1. **Compliance score.** One figure out of 100 for the whole business, drawn as a ring,
    with its state in words and the parts it is made of beside it, each with its own score,
@@ -90,7 +85,47 @@ Common to all three:
 3. **Needs attention**, then **Today's planned production.** This week sits above the plan.
 4. **Live.** The header says so, and the page refreshes itself every minute as well as on
    every change LiveSync reports, so a screen nobody touches stays current.
-5. **Setup strip**, **Workspaces**, **Recent activity** as before.
+5. **Setup strip** and **Recent activity** as before.
+
+## The tab is called Home
+
+The first tab, the page heading and the first breadcrumb now say **Home**. The address
+(`/core/dashboard`) and the API are unchanged. Production and Compliance keep their names.
+
+| Looked at | What they call it | What it changed here |
+|---|---|---|
+| Stripe, Vanta, Xero | The landing page with figures is "Home" | Home, not Dashboard: shorter on the phone bar and the name people already know |
+| Katana (Sell, Make, Buy, Stock), MRPeasy, Cin7 Core, Breww | Short plain words; the making area is "Production" or "Make" | Production stays |
+| Drata; Nielsen Norman Group on branded terms in menus; HubSpot (sells "Marketing Hub", menu says "Marketing") | The plain word in the menu, the product name on the pricing page | Compliance stays as the tab; "Core" and "Compliant" stay as plan names, not tab names |
+
+Not found: the menus of Ekos, DISTILLx5 or CraftedERP, or any study of how small producers
+read these words.
+
+## The sidebar collapses to a rail
+
+The menu is the shell's, so this applies to every signed-in page, not only Home.
+
+The menu stays down the left: that is the convention for this kind of product, and
+Material and SAP Fiori both treat a bottom bar as a phone pattern. The width it takes
+(260px) comes back by collapsing it to an 80px rail.
+
+- **A rail with names, not bare icons.** Each tab keeps its label under its icon, as on the
+  phone's bottom bar (Material's navigation rail). The old collapsed state hid the labels,
+  the logo and the logout button.
+- **Nothing reflows when it moves.** Each icon keeps its place and lifts 8px; the wide label
+  fades out, the width glides (240ms), the small label fades in. The page beside the menu
+  and any bar pinned along its edge move with it, because one length (`--sidebar-w` in
+  `styles2.css`) drives all of them. Five pages each hard-coded the two widths for a pinned
+  bar; they now read that length, and Inventory's edit panel, which ignored the collapsed
+  state, is fixed by the same change.
+- **It is remembered**, per browser, and applied before the first paint so a collapsed menu
+  never flashes open on a full load. Until then, the script that set the page's margin by
+  hand forgot the choice on every load.
+- **A narrow laptop or tablet (768 to 1099px) starts as the rail** until the user chooses
+  otherwise. The phone keeps its bottom bar whatever was chosen elsewhere.
+- **The control** is a quiet button in the menu's corner, named for what it will do
+  ("Collapse menu" / "Expand menu") with `aria-expanded`, in place of a bright blue circle
+  floating over the logo. With reduced motion set, the change is instant.
 
 ### The overall compliance score is new, and its definition is an assumption to confirm
 
@@ -117,6 +152,11 @@ tile; they now live in the compliance card only. The next verification date (pla
   `sales.view`.
 - Currency is still formatted as US dollars in the script; the org's currency is not in the
   response. Follow-up.
+- The top bar's contents are centred in a 1400px column, so on a 1920px screen the bell and
+  the account menu sit inside the page's right edge. It predates this change and is on every
+  page. Follow-up.
+- Other pages still say "dashboard" in places (the landing page's button, some help text).
+  Home is named in the menu, the page and the breadcrumb; the rest is a follow-up.
 - The summary route takes "today" from the server clock's date (`date.today()`) and then
   treats it as a New Zealand date. The production image sets its clock to Pacific/Auckland,
   so the two agree there; on a UTC machine (CI) the NZ morning is filed under yesterday.
@@ -131,9 +171,13 @@ tile; they now live in the compliance card only. The next verification date (pla
   update it to the new ones.
 - Unit: `compliance_overall` is the equal mean, its state the worst part, and a module part
   keeps its evidence count and next verification.
-- e2e: the compliance card shows the figure, state and parts; This week is a full grid of
-  equal bordered tiles above the plan; every style renders at 390, 1440 and 1920 with no
-  sideways scroll and no trend line over a number; the board fits one wall screen with its
-  two lists level; the rail stays in view, below the top bar, while the work scrolls; the
-  menu can sit along the bottom and goes back when the dashboard is left.
-- Screenshots of each style at 1440, 1920 (wall), 1024 and 390, dark, and on a quiet day.
+- e2e, the page: the compliance card shows the figure, state and parts; This week is a full
+  grid of equal bordered tiles above the plan; the page renders at 390, 1024, 1440 and 1920
+  with no sideways scroll and no trend line over a number; the board fits one wall screen
+  with its two lists level, three lines of activity and no Workspaces block.
+- e2e, the sidebar (`tests/e2e/test_sidebar_rail.py`): the rail keeps every tab's name inside
+  its width and gives the page the 180px; icons do not move sideways; the choice survives an
+  in-app visit and a reload, and is in place before the page's scripts run; a pinned bar
+  moves with the sidebar; a narrow laptop starts as the rail; the phone keeps its bottom bar.
+- Screenshots at 1280, 1440, 1920 (wall), 1024 and 390, each with the sidebar open and as
+  the rail, and dark.

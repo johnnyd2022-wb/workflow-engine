@@ -1,19 +1,51 @@
 // This file is re-evaluated after an HTMX boosted navigation. Keep its state
 // private so a second evaluation cannot redeclare a top-level lexical binding.
 (() => {
-// Shared sidebar toggle function for V2 Modern design
+// Collapse the sidebar to a rail and back (laptop and desktop). The stylesheet does the moving
+// (styles2.css, --sidebar-w); this fades the labels out first so nothing is seen to reflow,
+// remembers the choice, and keeps the button's name in step with what it will do.
+const COLLAPSED_KEY = 'sidebarCollapsed';
+const FADE_MS = 90;
+const SLIDE_MS = 280; // the 240ms glide in styles2.css, plus a margin so it is never cut short
+let _sidebarTimers = [];
+
+function syncSidebarToggle(sidebar, collapsed) {
+  const button = sidebar.querySelector('[data-sidebar-toggle]');
+  if (!button) return;
+  const label = collapsed ? 'Expand menu' : 'Collapse menu';
+  button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
+}
+
 window.toggleSidebar = function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
-  const mainContent = document.querySelector('.main-content');
-  sidebar.classList.toggle('collapsed');
-  
-  // Adjust main content margin based on sidebar state
-  if (sidebar.classList.contains('collapsed')) {
-    mainContent.style.marginLeft = '72px';
-  } else {
-    mainContent.style.marginLeft = '260px';
+  if (!sidebar) return;
+  // Mid-move the class lags the choice, so a second press reverses the choice, not the class.
+  const target = sidebar.getAttribute('data-sidebar-target');
+  const collapse = !(target ? target === 'collapsed' : sidebar.classList.contains('collapsed'));
+  sidebar.setAttribute('data-sidebar-target', collapse ? 'collapsed' : 'open');
+  try { window.localStorage.setItem(COLLAPSED_KEY, String(collapse)); } catch (_) { /* private mode */ }
+  syncSidebarToggle(sidebar, collapse);
+
+  _sidebarTimers.forEach(clearTimeout);
+  _sidebarTimers = [];
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    sidebar.classList.remove('sidebar--switching');
+    sidebar.classList.toggle('collapsed', collapse);
+    return;
   }
-}
+  sidebar.classList.add('sidebar--switching');
+  _sidebarTimers.push(setTimeout(() => {
+    sidebar.classList.toggle('collapsed', collapse);
+    _sidebarTimers.push(setTimeout(() => sidebar.classList.remove('sidebar--switching'), SLIDE_MS));
+  }, FADE_MS));
+};
+
+(function initSidebarToggle() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) syncSidebarToggle(sidebar, sidebar.classList.contains('collapsed'));
+})();
 
 function normalizePathname(pathname) {
   const p = (pathname || '').trim();

@@ -303,7 +303,9 @@ def test_sales_overview_groups_figures_and_tools_in_cards(browser, app_url, work
         context.close()
 
 
-@pytest.mark.parametrize("width", [390, 1024, 1440])
+# Phone and narrow-laptop widths. With more room the page is a board, covered by
+# tests/e2e/dashboard/test_dashboard_today.py.
+@pytest.mark.parametrize("width", [390, 1024])
 def test_dashboard_stacks_compliance_the_week_and_attention_in_one_column(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:

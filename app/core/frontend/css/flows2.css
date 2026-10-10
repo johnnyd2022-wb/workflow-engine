@@ -367,10 +367,7 @@
     }
     @media (min-width: 768px) {
       .flows2-page .spa-fixed-action-bar {
-        left: 260px;
-      }
-      .app-layout:has(#sidebar.collapsed) .flows2-page .spa-fixed-action-bar {
-        left: 72px;
+        left: var(--sidebar-w, 260px);
       }
     }
     @media (max-width: 767px) {

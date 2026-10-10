@@ -24,7 +24,7 @@ class Page:
 
 
 PAGES: tuple[Page, ...] = (
-    Page("/core/dashboard", "dashboard", None, "Dashboard", None, None),
+    Page("/core/dashboard", "dashboard", None, "Home", None, None),
     Page("/core/go-live", "dashboard", None, "Go live", None, None),
     Page("/core", "production", "overview", "Production overview", None, None),
     Page("/core/cases", "production", "overview", "Cases", None, None),
@@ -142,7 +142,7 @@ class Tab:
 
 
 SECTION_LABELS = {
-    "dashboard": "Dashboard",
+    "dashboard": "Home",
     "production": "Production",
     "compliance": "Compliance",
     "sales": "Sales",

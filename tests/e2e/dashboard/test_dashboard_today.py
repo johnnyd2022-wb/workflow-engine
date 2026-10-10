@@ -38,7 +38,13 @@ def expired_stock_page(browser, app_url, fresh_user, db):
         context.close()
 
 
-def _open(page):
+# Below about 1100px of room the page is one stacked column; with more it is the board.
+STACKED = {"width": 1024, "height": 900}
+
+
+def _open(page, viewport=None):
+    if viewport:
+        page.set_viewport_size(viewport)
     page.goto("/core/dashboard")
     expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
 
@@ -97,7 +103,7 @@ OVERALL = {
 def test_the_compliance_score_shows_the_figure_its_state_and_the_parts_it_is_made_of(expired_stock_page):
     page = expired_stock_page
     _serve(page, lambda body: body.update({"compliance_overall": OVERALL}))
-    _open(page)
+    _open(page, STACKED)
 
     card = page.get_by_role("region", name="Compliance score", exact=True)
     expect(card.locator("[data-compliance-score]")).to_have_text("80")
@@ -119,7 +125,7 @@ def test_the_compliance_score_shows_the_figure_its_state_and_the_parts_it_is_mad
     expect(parts.nth(1)).to_contain_text("Next verification: 18 Nov 2026")
     assert parts.nth(1).locator(".dash-part__bar span").evaluate("el => el.style.width") == "78%"
 
-    # First on the page, the full width of the column.
+    # Stacked: first on the page, the full width of the column.
     band, week = card.bounding_box(), page.get_by_role("region", name="This week", exact=True).bounding_box()
     assert band["y"] + band["height"] <= week["y"]
     assert (round(band["x"]), round(band["width"])) == (round(week["x"]), round(week["width"]))
@@ -240,7 +246,7 @@ def test_recent_activity_shows_six_rows_then_the_rest_on_request(expired_stock_p
         body["audit_log"]["week"] = {"total": 23, "items": items}
 
     _serve(page, both_periods)
-    _open(page)
+    _open(page, STACKED)
 
     activity = page.get_by_role("region", name="Recent activity", exact=True)
     rows = activity.locator(".dash-activity__row")
@@ -255,7 +261,7 @@ def test_recent_activity_shows_six_rows_then_the_rest_on_request(expired_stock_p
 
     activity.get_by_role("button", name="This week").click()
     expect(activity.get_by_role("button", name="This week")).to_have_attribute("aria-pressed", "true")
-    expect(activity.locator("[data-audit-meta]")).to_have_text("Latest 8 of 23 entries this week.")
+    expect(activity.locator("[data-audit-meta]")).to_have_text("23 entries this week, latest first.")
     expect(activity.locator(".dash-activity__row:visible")).to_have_count(6)
     assert_clean_page(page)
 
@@ -283,7 +289,7 @@ def test_more_than_one_active_batch_is_spelled_batches(expired_stock_page):
     expect(page.locator("[data-dashboard-core-summary]")).to_have_text("3 active batches in progress.")
 
 
-# ── CONCEPT ONLY: the three styles on offer. Delete with the two styles not chosen. ──
+# ── The layout: one stacked column, and a board on wide screens. ──
 
 
 def _serve_busy(page):
@@ -291,21 +297,22 @@ def _serve_busy(page):
         body["compliance_overall"] = OVERALL
         body["action_board"]["critical_actions_total"] = 10
         body["operations"]["active_executions"] = 3
+        # Which calendar day the server files an event under depends on its clock's timezone
+        # (see the plan's follow-ups), so today's list is served from the week's.
+        items = body["audit_log"]["week"]["items"]
+        body["audit_log"]["day"] = {"total": len(items), "items": items}
 
     _serve(page, busy)
 
 
-@pytest.mark.parametrize("style", ["1", "2", "3"])
-@pytest.mark.parametrize("width", [390, 1440, 1920])
-def test_every_style_shows_the_whole_business_without_sideways_scrolling(expired_stock_page, style, width):
+@pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
+def test_every_width_shows_the_whole_business_without_sideways_scrolling(expired_stock_page, width):
     page = expired_stock_page
     page.set_viewport_size({"width": width, "height": 1080 if width == 1920 else 900})
     _serve_busy(page)
-    page.goto(f"/core/dashboard?style={style}")
+    page.goto("/core/dashboard")
     expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
 
-    expect(page.locator("[data-dashboard-root]")).to_have_attribute("data-dashboard-style", style)
-    expect(page.get_by_role("button", name=f"Style {style}")).to_have_attribute("aria-pressed", "true")
     for name in ["Compliance score", "This week", "Needs attention", "Today's planned production"]:
         expect(page.get_by_role("region", name=name, exact=True)).to_be_visible()
     expect(page.locator("[data-compliance-score]")).to_have_text("80")
@@ -330,7 +337,7 @@ def test_the_board_fits_the_first_wall_screen_and_keeps_its_two_lists_level(expi
     page = expired_stock_page
     page.set_viewport_size({"width": 1920, "height": 1080})
     _serve_busy(page)
-    page.goto("/core/dashboard?style=2")
+    page.goto("/core/dashboard")
     expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
     if page.locator("[data-dashboard-go-live-hide]").is_visible():
         page.locator("[data-dashboard-go-live-hide]").click()
@@ -350,56 +357,9 @@ def test_the_board_fits_the_first_wall_screen_and_keeps_its_two_lists_level(expi
     assert round(compliance["x"]) == round(attention["x"])
     assert round(week["x"] + week["width"]) == round(plan["x"] + plan["width"])
     assert attention["y"] + attention["height"] <= 1080, "score, week, attention and plan fit one wall screen"
-
-
-def test_the_rail_keeps_the_summary_in_view_while_the_work_scrolls(expired_stock_page):
-    page = expired_stock_page
-    page.set_viewport_size({"width": 1440, "height": 900})
-    _serve_busy(page)
-    page.goto("/core/dashboard?style=3")
-    expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
-
-    rail = page.locator(".dash-summary")
-    attention = page.get_by_role("region", name="Needs attention", exact=True)
-    # The score and the week share one panel down the left; the work is the column beside it.
-    expect(rail.get_by_role("region", name="Compliance score", exact=True)).to_be_visible()
-    expect(rail.get_by_role("region", name="This week", exact=True)).to_be_visible()
-    box, work = rail.bounding_box(), attention.bounding_box()
-    assert box["x"] + box["width"] <= work["x"] and work["width"] > box["width"] * 1.5
-
-    page.mouse.move(900, 500)
-    page.mouse.wheel(0, 600)
-    expect(attention).not_to_be_in_viewport()
-    expect(rail.locator("[data-compliance-score]")).to_be_in_viewport()
-    expect(rail.locator("[data-kpi-tasks-week]")).to_be_in_viewport()
-    stuck = rail.bounding_box()
-    header = page.locator(".main-header").bounding_box()
-    assert stuck["y"] >= header["y"] + header["height"], "the rail sticks below the top bar, not under it"
-    assert stuck["y"] + stuck["height"] <= 900
-
-
-def test_the_menu_can_sit_along_the_bottom_and_give_the_page_its_width(expired_stock_page):
-    page = expired_stock_page
-    page.set_viewport_size({"width": 1440, "height": 900})
-    _serve_busy(page)
-    page.goto("/core/dashboard?style=1")
-    expect(page.locator(".dash-footer-note[data-dashboard-loading]")).to_be_hidden()
-    week = page.get_by_role("region", name="This week", exact=True)
-    narrow = week.bounding_box()["width"]
-
-    page.get_by_role("button", name="Menu at bottom").click()
-    expect(page.locator("html")).to_have_attribute("data-dash-nav", "bottom")
-    # The shell animates the menu's size, so wait for it to finish moving.
-    page.wait_for_function("document.getElementById('sidebar').getBoundingClientRect().width >= innerWidth - 1")
-    menu = page.locator("#sidebar").bounding_box()
-    assert menu["y"] > 800 and round(menu["width"]) == 1440, menu
-    assert week.bounding_box()["width"] > narrow + 200
-    for name in ["Dashboard", "Production", "Sales", "Settings"]:
-        expect(page.locator("#sidebar").get_by_role("link", name=name, exact=True)).to_be_visible()
-    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
-
-    # It is this page's experiment: leaving by the menu puts the menu back where it was.
-    page.locator("#sidebar").get_by_role("link", name="Production", exact=True).click()
-    expect(page).to_have_url(re.compile(r"/core/?$"))
-    expect(page.locator("html")).not_to_have_attribute("data-dash-nav", "bottom")
-    page.wait_for_function("document.getElementById('sidebar').getBoundingClientRect().width < 400")
+    # The board is a summary: three lines of activity with the rest one click away, and no
+    # second copy of the menu.
+    activity = page.get_by_role("region", name="Recent activity", exact=True)
+    expect(activity.locator(".dash-activity__row:visible")).to_have_count(3)
+    expect(activity.get_by_role("link", name="All activity")).to_be_visible()
+    expect(page.get_by_role("region", name="Workspaces", exact=True)).to_be_hidden()

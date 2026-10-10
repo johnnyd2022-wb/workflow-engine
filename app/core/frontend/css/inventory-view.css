@@ -433,9 +433,9 @@ body.inv-edit-open .inv-edit-backdrop { opacity: 1; pointer-events: auto; }
 }
 body.inv-edit-open .inv-edit-panel { transform: translateY(0); }
 
-/* Desktop: align panel left edge with page-content (sidebar width = 260px) */
+/* Desktop: align panel left edge with page-content, whatever width the sidebar is */
 @media (min-width: 768px) {
-  .inv-edit-panel { left: 260px; }
+  .inv-edit-panel { left: var(--sidebar-w, 260px); }
 }
 
 /* Mobile: compact form — smaller inputs and font to fit the screen cleanly */

@@ -174,4 +174,4 @@ def test_back_arrow_goes_up_one_level_on_every_kind_of_page(logged_in_page):
     page.goto("/core/go-live")
     _settle(page)
     assert arrow.get_attribute("href") == "/core/dashboard"
-    assert page.locator(".breadcrumbs li").all_inner_texts() == ["Dashboard", "Go live"]
+    assert page.locator(".breadcrumbs li").all_inner_texts() == ["Home", "Go live"]

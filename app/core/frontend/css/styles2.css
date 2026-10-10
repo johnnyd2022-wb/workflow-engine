@@ -138,15 +138,31 @@
      LAYOUT
      ============================================ */
   
+  @property --sidebar-w {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 260px;
+  }
+
   .app-layout {
     display: flex;
     min-height: 100vh;
+    /* One width drives the sidebar, the page beside it and any bar pinned along its edge, so
+       they move as one when it collapses to a rail. Registered as a length (see @property
+       below) so it can be animated; where that is unsupported the change is simply instant. */
+    --sidebar-w: 260px;
     /* Continue the fixed sidebar's dark surface below one viewport on long pages. */
-    background: linear-gradient(to right, var(--sidebar-bg-to) 260px, transparent 260px);
+    background: linear-gradient(to right, var(--sidebar-bg-to) var(--sidebar-w), transparent var(--sidebar-w));
   }
 
   .app-layout:has(> .sidebar.collapsed) {
-    background: linear-gradient(to right, var(--sidebar-bg-to) 72px, transparent 72px);
+    --sidebar-w: 80px;
+  }
+
+  /* Only a press of the control animates it: not a page load, and not a window resized across
+     the phone breakpoint. */
+  .app-layout:has(> .sidebar--switching) {
+    transition: --sidebar-w 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
   }
   
   .main-content {
@@ -154,8 +170,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    margin-left: 260px;
-    transition: margin-left var(--transition-normal);
+    margin-left: var(--sidebar-w, 260px);
   }
   
   .page-content {
@@ -185,12 +200,11 @@
     left: 0;
     top: 0;
     height: 100vh;
-    width: 260px;
+    width: var(--sidebar-w, 260px);
     background: linear-gradient(to bottom, var(--sidebar-bg-from), var(--sidebar-bg-to));
     border-right: 1px solid var(--sidebar-border);
     display: flex;
     flex-direction: column;
-    transition: width var(--transition-normal);
     z-index: 100;
     overflow-y: auto;
     overflow-x: hidden;
@@ -201,14 +215,6 @@
   
   .sidebar::-webkit-scrollbar {
     display: none; /* Chrome, Safari, Opera */
-  }
-  
-  .sidebar.collapsed {
-    width: 72px;
-  }
-  
-  .sidebar.collapsed .sidebar-footer {
-    display: none;
   }
   
   .sidebar-header {
@@ -273,10 +279,6 @@
     line-height: 1.4;
   }
   
-  .sidebar.collapsed .sidebar-logo-text {
-    display: none;
-  }
-  
   /* Navigation */
   .sidebar-nav {
     padding: 24px 12px;
@@ -291,10 +293,6 @@
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: var(--sidebar-label);
-  }
-  
-  .sidebar.collapsed .nav-label {
-    display: none;
   }
   
   .nav-list {
@@ -366,10 +364,6 @@
     letter-spacing: 0.01em;
   }
   
-  .sidebar.collapsed .nav-link-text {
-    display: none;
-  }
-  
   .nav-link-arrow {
     width: 16px;
     height: 16px;
@@ -389,10 +383,6 @@
     color: #081716;
   }
   
-  .sidebar.collapsed .nav-link-arrow {
-    display: none;
-  }
-  
   /* Sidebar Footer */
   .sidebar-footer {
     padding: 16px 20px;
@@ -401,55 +391,61 @@
     margin-top: auto;
   }
   
-  /* Keep the collapse control inside the sidebar, clear of the page content. */
+  .sidebar-logout {
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px 14px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-inverse);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+
+  .sidebar-logout:hover {
+    background: rgba(255, 255, 255, 0.085);
+  }
+
+  /* The collapse control: a quiet button in the sidebar's own corner. */
   .sidebar-toggle-btn {
     position: absolute;
     top: 20px;
     right: 12px;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: var(--primary);
-    border: 3px solid var(--bg-primary);
-    color: white;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--sidebar-text);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 200;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(0, 100, 255, 0.1);
-    transition: all var(--transition-fast);
+    z-index: 1;
+    transition: background 150ms ease, color 150ms ease;
   }
-  
+
   .sidebar-toggle-btn:hover {
-    background: var(--primary-dark);
-    border-color: var(--bg-primary);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5), 0 0 0 6px rgba(0, 100, 255, 0.15);
-    transform: scale(1.1);
+    background: hsl(220, 20%, 15%);
+    color: var(--sidebar-text-hover);
   }
-  
-  .sidebar-toggle-btn:active {
-    transform: scale(0.95);
+
+  .sidebar-toggle-btn:focus-visible,
+  .sidebar .nav-link:focus-visible,
+  .sidebar-logout:focus-visible {
+    outline: 2px solid #2BC4A2;
+    outline-offset: 2px;
   }
-  
+
   .sidebar-toggle-btn svg {
-    width: 20px;
-    height: 20px;
-    stroke-width: 2.5;
-  }
-  
-  .sidebar.collapsed .sidebar-toggle-btn {
-    right: 16px;
+    width: 18px;
+    height: 18px;
   }
 
-  .sidebar.collapsed .sidebar-header {
-    display: none;
-  }
-
-  .sidebar.collapsed .sidebar-nav {
-    padding-top: 72px;
-  }
-  
   .sidebar-user {
     display: flex;
     align-items: center;
@@ -659,6 +655,126 @@
     }
   }
   
+  /* Left sidebar (laptop + desktop): collapsing to a rail.
+     Nothing reflows when it collapses. Each icon keeps its place (x = 20px in both states) and
+     only lifts 8px; the wide label fades out, the width glides, and a small label fades in
+     under the icon. sidebar-v2.js adds .sidebar--switching for the length of the move. */
+  @media (min-width: 768px) {
+    .sidebar-header {
+      position: relative;
+      box-sizing: border-box;
+      height: 102px;
+      overflow: hidden;
+    }
+    .sidebar-logo-title,
+    .sidebar-logo-text,
+    .sidebar .nav-label,
+    .sidebar .nav-link-text,
+    .sidebar .nav-link-arrow,
+    .sidebar-logout {
+      transition: opacity 160ms ease;
+    }
+    .sidebar .nav-label {
+      white-space: nowrap;
+    }
+    .sidebar .nav-link {
+      position: relative;
+      box-sizing: border-box;
+      min-height: 64px;
+      padding-left: 8px;
+    }
+    .sidebar .nav-link-icon-wrapper {
+      display: flex;
+      transition: background 150ms ease;
+    }
+
+    .sidebar.collapsed .sidebar-logo-title,
+    .sidebar.collapsed .sidebar-logo-text,
+    .sidebar.collapsed .nav-label {
+      opacity: 0;
+    }
+    .sidebar.collapsed .sidebar-logo {
+      white-space: nowrap;
+    }
+    /* The brand dot slides to the middle of the rail and the control drops in beneath it. */
+    .sidebar.collapsed .sidebar-logo-dot {
+      transform: translateX(15px);
+    }
+    .sidebar.collapsed .sidebar-toggle-btn {
+      top: 54px;
+      right: 24px;
+    }
+    .sidebar.collapsed .sidebar-nav {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    .sidebar.collapsed .nav-link {
+      padding-left: 12px;
+    }
+    .sidebar.collapsed .nav-link-icon-wrapper {
+      transform: translateY(-8px);
+    }
+    .sidebar.collapsed .nav-link-text {
+      position: absolute;
+      left: 12px;
+      bottom: 9px;
+      width: 40px;
+      flex: none;
+      display: flex;
+      justify-content: center;
+      font-size: 10px;
+      letter-spacing: 0;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .sidebar.collapsed .nav-link-arrow {
+      display: none;
+    }
+    .sidebar.collapsed .sidebar-footer {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    .sidebar.collapsed .sidebar-logout {
+      padding-left: 0;
+      padding-right: 0;
+      font-size: 11px;
+    }
+
+    /* The move itself, for as long as sidebar-v2.js holds .sidebar--switching. */
+    .sidebar.sidebar--switching .sidebar-nav,
+    .sidebar.sidebar--switching .sidebar-footer {
+      transition: padding 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+    .sidebar.sidebar--switching .nav-link {
+      transition: color 150ms ease, background 150ms ease, padding 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+    .sidebar.sidebar--switching .nav-link-icon-wrapper,
+    .sidebar.sidebar--switching .sidebar-logo-dot {
+      transition: transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1), background 150ms ease;
+    }
+    .sidebar.sidebar--switching .sidebar-toggle-btn {
+      transition: top 240ms cubic-bezier(0.2, 0.7, 0.2, 1), right 240ms cubic-bezier(0.2, 0.7, 0.2, 1), background 150ms ease, color 150ms ease;
+    }
+    .sidebar.sidebar--switching .sidebar-logo-title,
+    .sidebar.sidebar--switching .sidebar-logo-text,
+    .sidebar.sidebar--switching .nav-label,
+    .sidebar.sidebar--switching .nav-link-text,
+    .sidebar.sidebar--switching .nav-link-arrow,
+    .sidebar.sidebar--switching .sidebar-logout {
+      opacity: 0;
+      transition-duration: 90ms;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-layout,
+    .sidebar,
+    .sidebar *,
+    .sidebar-toggle-btn {
+      transition: none !important;
+    }
+  }
+
   /* ============================================
      HEADER - V2 Modern
      ============================================ */

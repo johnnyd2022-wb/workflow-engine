@@ -167,73 +167,41 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
 #page-content .dashboard-v4 .dash-footer-note { max-width: 1280px; margin: 16px auto 0; padding: 0 24px; min-height: 20px; font-size: 13px; color: var(--ui-text-muted, #64748b); }
 #page-content .dashboard-v4 .dash-error { color: var(--dash-alert); }
 
-/* ══ CONCEPT ONLY: three directions. Style 1 is everything above. Delete the two not chosen. ══ */
-#page-content .dashboard-v4 .dash-summary,
-#page-content .dashboard-v4 .dash-main { display: contents; }
 #page-content .dashboard-v4 .dash-header__side { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end; }
 
-/* ── Style 2: the board. Size carries priority, and the whole business fits one wall screen. ── */
-@media (min-width: 1280px) {
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dashboard-shell { max-width: 1760px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .workspace-stack { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .workspace-stack > *,
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-summary > *,
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-main > * { grid-column: 1 / -1; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-compliance { grid-column: span 4; display: flex; flex-direction: column; align-items: stretch; gap: 20px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-ring { width: 136px; height: 136px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-ring strong { font-size: 48px; letter-spacing: -1.5px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-compliance__score h2 { font-size: 19px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-compliance__note { display: none; }
+/* ── With room, a board. Size carries priority, and the whole business fits one wall screen.
+   It goes by the room the page has, not the window: a 1280px laptop gets the board with the
+   sidebar collapsed and the single stacked column above with it open. ── */
+#page-content .dashboard-v4 { container: dash / inline-size; }
+@container dash (min-width: 1100px) {
+  #page-content .dashboard-v4 .dashboard-shell { max-width: 1760px; }
+  #page-content .dashboard-v4 .workspace-stack { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+  #page-content .dashboard-v4 .workspace-stack > * { grid-column: 1 / -1; }
+  #page-content .dashboard-v4 .dash-compliance { grid-column: span 4; display: flex; flex-direction: column; align-items: stretch; gap: 20px; }
+  #page-content .dashboard-v4 .dash-ring { width: 136px; height: 136px; }
+  #page-content .dashboard-v4 .dash-ring strong { font-size: 48px; letter-spacing: -1.5px; }
+  #page-content .dashboard-v4 .dash-compliance__score h2 { font-size: 19px; }
+  #page-content .dashboard-v4 .dash-compliance__note { display: none; }
   /* The parts take up whatever height the row has, so the tile never has a blank band. */
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-compliance__parts { flex: 1 1 auto; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: 10px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-part { align-content: center; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-week { grid-column: span 8; display: flex; flex-direction: column; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-figures { flex: 1 1 auto; grid-auto-rows: 1fr; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-figure { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; grid-template-areas: "label" "value" "meta" "spark"; align-items: start; gap: 4px; padding: 18px 20px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-figure__value { font-size: 38px; letter-spacing: -1px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-figure__label { font-size: 14px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-figure__spark { display: block; align-self: end; justify-self: start; width: 100%; max-width: 140px; padding: 6px 0 0; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-kpi-trend-svg { max-width: 140px; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-attn { grid-column: span 7; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-plan { grid-column: span 5; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .workspace-stack:not(:has(.dash-plan)) .dash-attn { grid-column: 1 / -1; }
+  #page-content .dashboard-v4 .dash-compliance__parts { flex: 1 1 auto; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: 10px; }
+  #page-content .dashboard-v4 .dash-part { align-content: center; }
+  #page-content .dashboard-v4 .dash-week { grid-column: span 8; display: flex; flex-direction: column; }
+  #page-content .dashboard-v4 .dash-figures { flex: 1 1 auto; grid-auto-rows: 1fr; }
+  #page-content .dashboard-v4 .dash-figure { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; grid-template-areas: "label" "value" "meta" "spark"; align-items: start; gap: 4px; padding: 18px 20px; }
+  #page-content .dashboard-v4 .dash-figure__value { font-size: 38px; letter-spacing: -1px; }
+  #page-content .dashboard-v4 .dash-figure__label { font-size: 14px; }
+  #page-content .dashboard-v4 .dash-figure__spark { display: block; align-self: end; justify-self: start; width: 100%; max-width: 140px; padding: 6px 0 0; }
+  #page-content .dashboard-v4 .dash-kpi-trend-svg { max-width: 140px; }
+  #page-content .dashboard-v4 .dash-attn { grid-column: span 7; }
+  #page-content .dashboard-v4 .dash-plan { grid-column: span 5; }
+  #page-content .dashboard-v4 .workspace-stack:not(:has(.dash-plan)) .dash-attn { grid-column: 1 / -1; }
   /* Lists are capped so the two cards stay level; the rest is one click away. */
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-attention__item:nth-child(n+5),
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-planned li:nth-child(n+4) { display: none; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-plan .workspace-caption:has(+ .dash-planned:not(:empty)) { display: none; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-ws { display: none; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-activity__row:nth-child(n+4) { display: none; }
-  #page-content .dashboard-v4[data-dashboard-style="2"] .dash-activity__more { display: none; }
-}
-
-/* ── Style 3: the rail. The summary stays put down the left while the work scrolls beside it. ── */
-/* The shell gives #page-content overflow-x: hidden, which makes it a scroll container that never
-   scrolls and so stops anything inside it sticking. The window is what scrolls; .main-content
-   already clips sideways overflow. */
-#page-content.page-content:has(.dashboard-v4[data-dashboard-style="3"]) { overflow: visible !important; }
-@media (min-width: 1100px) {
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dashboard-shell { max-width: 1760px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .workspace-stack { display: grid; grid-template-columns: 372px minmax(0, 1fr); gap: 24px; align-items: start; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .workspace-stack > .dash-setup { grid-column: 1 / -1; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-summary { display: flex; flex-direction: column; position: sticky; top: 16px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); box-shadow: 0 2px 5px rgb(15 23 42 / 3%); }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-summary > .workspace-card { padding: 16px 18px; border: 0; border-radius: 0; background: none; box-shadow: none; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-summary > .workspace-card + .workspace-card { border-top: 1px solid var(--ui-border, #e2e8f0); }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-ring { width: 84px; height: 84px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-ring strong { font-size: 28px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance__note { display: none; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-compliance__parts { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-part { gap: 5px; padding: 8px 0 0; border: 0; border-radius: 0; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-part__score { font-size: 16px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-part__detail { font-size: 12px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures,
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figures--6 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure { grid-template-columns: minmax(0, 1fr); grid-template-areas: "label" "value" "meta"; gap: 0; padding: 7px 12px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure__label { font-size: 12px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure__value { font-size: 20px; line-height: 1.2; letter-spacing: -.3px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure__meta { font-size: 12px; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-figure__spark { display: none; }
-  #page-content .dashboard-v4[data-dashboard-style="3"] .dash-main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+  #page-content .dashboard-v4 .dash-attention__item:nth-child(n+5),
+  #page-content .dashboard-v4 .dash-planned li:nth-child(n+4) { display: none; }
+  #page-content .dashboard-v4 .dash-plan .workspace-caption:has(+ .dash-planned:not(:empty)) { display: none; }
+  #page-content .dashboard-v4 .dash-ws { display: none; }
+  #page-content .dashboard-v4 .dash-activity__row:nth-child(n+4) { display: none; }
+  #page-content .dashboard-v4 .dash-activity__more { display: none; }
 }
 
 @media (max-width: 1023px) {
@@ -241,9 +209,6 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
   #page-content .dashboard-v4 .dash-workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 767px) {
-  #page-content .dashboard-v4 .dash-style-switch { order: 2; }
-  /* The menu is already along the bottom on a phone. */
-  #page-content .dashboard-v4 .dash-nav-switch { display: none; }
   #page-content .dashboard-v4 .dash-attention { margin: 14px -16px -16px; }
   #page-content .dashboard-v4 .dash-attention__row { padding: 14px 16px; gap: 12px; }
   #page-content .dashboard-v4 .dash-figures,
@@ -260,27 +225,4 @@ html[data-spa-theme="dark"] #page-content .dashboard-v4 {
 @media (prefers-reduced-motion: reduce) {
   #page-content .dashboard-v4 .dash-live { animation: none; }
   #page-content .dashboard-v4 * { transition: none !important; }
-}
-
-/* ══ CONCEPT ONLY: the main menu along the bottom at laptop and desktop widths, as it already is
-   on a phone (styles2.css, max-width 767px). Delete with the switch if it is not adopted. ══ */
-@media (min-width: 768px) {
-  html[data-dash-nav="bottom"] .app-layout,
-  html[data-dash-nav="bottom"] .app-layout:has(> .sidebar.collapsed) { background: none; }
-  html[data-dash-nav="bottom"] .sidebar,
-  html[data-dash-nav="bottom"] .sidebar.collapsed { left: 0; right: 0; top: auto; bottom: 0; width: 100%; height: auto; min-height: 66px; flex-direction: row; justify-content: center; padding: 0 16px; border-right: none; border-top: 1px solid var(--sidebar-border); }
-  html[data-dash-nav="bottom"] .sidebar-header,
-  html[data-dash-nav="bottom"] .sidebar-footer,
-  html[data-dash-nav="bottom"] .sidebar-toggle-btn,
-  html[data-dash-nav="bottom"] .sidebar .nav-label,
-  html[data-dash-nav="bottom"] .sidebar .nav-link-arrow { display: none; }
-  html[data-dash-nav="bottom"] .sidebar-nav { flex: 0 1 640px; display: flex; flex-direction: row; align-items: center; justify-content: center; margin: 0; padding: 6px 0; }
-  html[data-dash-nav="bottom"] .sidebar .nav-list { flex: 1; flex-direction: row; justify-content: space-around; gap: 8px; margin: 0; padding: 0; }
-  html[data-dash-nav="bottom"] .sidebar .nav-item { flex: 1; }
-  html[data-dash-nav="bottom"] .sidebar .nav-link { flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 48px; padding: 6px 4px; border-radius: 12px; }
-  html[data-dash-nav="bottom"] .sidebar .nav-link-text { display: block; font-size: 12px; font-weight: 600; line-height: 1.05; }
-  html[data-dash-nav="bottom"] .sidebar .nav-link-icon-wrapper { margin-bottom: -2px; padding: 4px; }
-  html[data-dash-nav="bottom"] .sidebar .nav-link-icon { display: block; width: 22px; height: 22px; }
-  html[data-dash-nav="bottom"] .main-content { margin-left: 0; width: 100%; padding-bottom: 66px; }
-  html[data-dash-nav="bottom"] #page-content .dashboard-v4 .dashboard-shell { max-width: 1760px; }
 }

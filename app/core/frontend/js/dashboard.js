@@ -231,8 +231,8 @@
         if (meta) {
             meta.textContent = total === 0
                 ? 'Nothing recorded ' + periodLabel + '.'
-                : (total > rows.length ? 'Latest ' + rows.length + ' of ' + total : String(total)) +
-                    (total === 1 ? ' entry ' : ' entries ') + periodLabel + '.';
+                : String(total) + (total === 1 ? ' entry ' : ' entries ') + periodLabel +
+                    (total > rows.length ? ', latest first.' : '.');
         }
 
         list.replaceChildren();
@@ -479,83 +479,6 @@
             .catch(function () { /* the strip is an invitation, not a requirement */ });
     }
 
-    /* Style 3's summary rail stays in view while the work beside it scrolls. `top` is where it
-       sticks: just under the top bar when the rail fits the window, and higher (negative) when it
-       does not, so its last row is reachable instead of being cut off. CSS cannot express the
-       second case, since it needs the rail's own height. */
-    function positionRail(root) {
-        var rail = root.querySelector('.dash-summary');
-        if (!rail) return;
-        if (root.dataset.dashboardStyle !== '3' || getComputedStyle(rail).position !== 'sticky') {
-            rail.style.top = '';
-            return;
-        }
-        var header = document.querySelector('.main-header');
-        var under = (header ? header.offsetHeight : 0) + 16;
-        var bar = document.querySelector('.sidebar');
-        var barAtBottom = bar && bar.getBoundingClientRect().top > window.innerHeight / 2;
-        var room = window.innerHeight - (barAtBottom ? bar.offsetHeight : 0) - 16;
-        rail.style.top = Math.min(under, room - rail.offsetHeight) + 'px';
-    }
-
-    /* CONCEPT ONLY: pick one of the three styles. Deleted with the two losing styles. */
-    var STYLE_KEY = 'dashboard.style';
-    function wireStyle(root) {
-        var picked = new URLSearchParams(window.location.search).get('style');
-        if (!/^[123]$/.test(picked || '')) {
-            try { picked = window.localStorage.getItem(STYLE_KEY); } catch (e) { picked = null; }
-        }
-        function apply(style) {
-            root.dataset.dashboardStyle = /^[123]$/.test(style || '') ? style : '1';
-            Array.prototype.forEach.call(root.querySelectorAll('[data-dashboard-style-pick]'), function (button) {
-                button.setAttribute('aria-pressed', button.dataset.dashboardStylePick === root.dataset.dashboardStyle ? 'true' : 'false');
-            });
-        }
-        apply(picked);
-        Array.prototype.forEach.call(root.querySelectorAll('[data-dashboard-style-pick]'), function (button) {
-            button.addEventListener('click', function () {
-                apply(button.dataset.dashboardStylePick);
-                positionRail(root);
-                try { window.localStorage.setItem(STYLE_KEY, root.dataset.dashboardStyle); } catch (e) { /* private mode */ }
-            });
-        });
-    }
-
-    /* CONCEPT ONLY: the main menu along the bottom at every width, as it already is on a phone,
-       to give the page the width the side menu takes. Set on <html> because the menu lives in
-       the shell, and cleared when the dashboard is left so no other page is affected. */
-    var NAV_KEY = 'dashboard.nav';
-    function wireNav(root) {
-        var picked = new URLSearchParams(window.location.search).get('nav');
-        if (picked !== 'side' && picked !== 'bottom') {
-            try { picked = window.localStorage.getItem(NAV_KEY); } catch (e) { picked = null; }
-        }
-        function apply(nav) {
-            var bottom = nav === 'bottom';
-            if (bottom) document.documentElement.setAttribute('data-dash-nav', 'bottom');
-            else document.documentElement.removeAttribute('data-dash-nav');
-            Array.prototype.forEach.call(root.querySelectorAll('[data-dashboard-nav-pick]'), function (button) {
-                button.setAttribute('aria-pressed', (button.dataset.dashboardNavPick === 'bottom') === bottom ? 'true' : 'false');
-            });
-        }
-        apply(picked);
-        Array.prototype.forEach.call(root.querySelectorAll('[data-dashboard-nav-pick]'), function (button) {
-            button.addEventListener('click', function () {
-                apply(button.dataset.dashboardNavPick);
-                positionRail(root);
-                try { window.localStorage.setItem(NAV_KEY, button.dataset.dashboardNavPick); } catch (e) { /* private mode */ }
-            });
-        });
-    }
-
-    if (!window.__dashboardResizeBound) {
-        window.__dashboardResizeBound = true;
-        window.addEventListener('resize', function () {
-            var root = document.querySelector(ROOT_SELECTOR);
-            if (root) positionRail(root);
-        });
-    }
-
     var pendingLoad = null;
 
     function abortPendingLoad() {
@@ -583,7 +506,6 @@
             var data = await window.CoreAPI.getDashboardSummary(30, { signal: controller.signal });
             if (!root.isConnected) return;
             renderDashboard(root, data || {});
-            positionRail(root);
             if (loading) loading.hidden = true;
         } catch (err) {
             // The request was aborted because the page navigated away (hx-boost swaps
@@ -613,8 +535,6 @@
         root.dataset.dashboardLoading = '1';
         root.dataset.dashboardLoaded = '1';
         wireNotices(root);
-        wireStyle(root);
-        wireNav(root);
         loadDashboard(root);
     }
 
@@ -633,7 +553,6 @@
         window.__dashboardShellBound = true;
         document.body.addEventListener('htmx:afterSettle', function () {
             if (document.querySelector(ROOT_SELECTOR)) window.__dashboardInit();
-            else document.documentElement.removeAttribute('data-dash-nav');
         });
         // Cancel an in-flight summary fetch the moment the page starts to go away, so it
         // doesn't surface as a "Failed to fetch" error against a detached root.

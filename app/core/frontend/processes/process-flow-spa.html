@@ -278,10 +278,7 @@
     }
     @media (min-width: 768px) {
       .process-flow-spa .spa-fixed-action-bar {
-        left: 260px;
-      }
-      .app-layout:has(#sidebar.collapsed) .process-flow-spa .spa-fixed-action-bar {
-        left: 72px;
+        left: var(--sidebar-w, 260px);
       }
     }
     @media (max-width: 767px) {
