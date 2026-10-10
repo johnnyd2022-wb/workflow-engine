@@ -1,0 +1,111 @@
+/* A quiet compliance workspace. Shared tokens keep all concepts beside Home and Production. */
+#page-content .compliance-design { max-width: 1560px; margin-inline: auto; padding-bottom: 40px; }
+#page-content .compliance-design [hidden] { display: none !important; }
+#page-content .compliance-design .workspace-header { gap: 20px; }
+#page-content .compliance-design .compliance-kicker { margin: 0 0 6px; font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--ui-accent-strong); }
+#page-content .compliance-design .workspace-card { padding: 24px; }
+#page-content .compliance-design p { line-height: 1.55; }
+#page-content .compliance-design h3 { color: var(--ui-text); font-size: 18px; font-weight: 600; line-height: 1.45; margin: 16px 0 8px; }
+#page-content .compliance-design .workspace-caption { color: var(--ui-text-muted); font-size: 14px; }
+#page-content .compliance-design .compliance-count { color: var(--ui-text-muted); font-size: 13px; }
+#page-content .compliance-design .compliance-next .workspace-button { margin-top: 12px; }
+#page-content .compliance-design .compliance-action-value { color: var(--ui-accent-strong); font-size: 13px; margin: 6px 0 0; }
+#page-content .compliance-design .compliance-readiness { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 20px 0; }
+#page-content .compliance-design .compliance-proof { display: flex; align-items: center; gap: 18px; }
+#page-content .compliance-design .compliance-proof strong { font-size: 48px; line-height: 1.1; font-weight: 600; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; color: var(--ui-accent-strong); }
+#page-content .compliance-design .compliance-proof span { color: var(--ui-text-muted); font-size: 14px; max-width: 160px; line-height: 1.45; }
+#page-content .compliance-design .compliance-readiness-label { color: var(--ui-text); font-size: 16px; font-weight: 500; margin: 0; }
+#page-content .compliance-design .compliance-figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
+#page-content .compliance-design .compliance-figures > div { border: 1px solid var(--ui-border); border-radius: 8px; padding: 14px 16px; background: var(--ui-surface-subtle); }
+#page-content .compliance-design .compliance-figures dt { font-size: 12px; color: var(--ui-text-muted); }
+#page-content .compliance-design .compliance-figures dd { font-size: 24px; font-weight: 600; margin: 8px 0 0; color: var(--ui-text); font-variant-numeric: tabular-nums; }
+#page-content .compliance-design .compliance-disclaimer { font-size: 12px; margin: 16px 0 0; }
+#page-content .compliance-design .compliant-frameworks { margin-top: 20px; }
+#page-content .compliance-design .compliance-framework { background: var(--ui-surface); padding: 18px; min-width: 0; }
+#page-content .compliance-design .compliance-framework-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; cursor: pointer; list-style: none; }
+#page-content .compliance-design .compliance-framework-heading::-webkit-details-marker { display: none; }
+#page-content .compliance-design .compliance-framework-heading:focus-visible,
+#page-content .compliance-design .compliance-more > summary:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 5px; border-radius: 4px; }
+#page-content .compliance-design .compliance-framework-title h3 { margin: 0 0 5px; font-size: 16px; }
+#page-content .compliance-design .compliance-framework-coverage { font-size: 13px; color: var(--ui-text-muted); line-height: 1.45; }
+#page-content .compliance-design .compliance-state { display: inline-flex; padding: 4px 9px; border: 1px solid var(--ui-border); border-radius: 6px; color: var(--ui-text-muted); background: var(--ui-surface-subtle); font-size: 12px; white-space: nowrap; }
+#page-content .compliance-design .compliance-framework-body { margin-top: 20px; }
+#page-content .compliance-design .compliance-coverage { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 12px; color: var(--ui-text-muted); }
+#page-content .compliance-design .compliance-coverage strong { color: var(--ui-accent-strong); font-weight: 600; }
+#page-content .compliance-design progress { grid-column: 1 / -1; appearance: none; width: 100%; height: 5px; border: 0; border-radius: 8px; overflow: hidden; background: var(--ui-border); }
+#page-content .compliance-design progress::-webkit-progress-bar { background: var(--ui-border); }
+#page-content .compliance-design progress::-webkit-progress-value { background: var(--ui-accent); }
+#page-content .compliance-design progress::-moz-progress-bar { background: var(--ui-accent); }
+#page-content .compliance-design .compliance-framework-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+#page-content .compliance-design .compliance-metric { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--ui-text-muted); font-size: 12px; text-decoration: none; padding-block: 4px; }
+#page-content .compliance-design .compliance-metric strong { color: var(--ui-text); font-size: 20px; font-weight: 600; }
+#page-content .compliance-design a.compliance-metric:hover span { text-decoration: underline; }
+#page-content .compliance-design a.compliance-metric:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 3px; }
+#page-content .compliance-design .compliance-framework-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 12px; }
+#page-content .compliance-design .compliance-more { margin-top: 20px; border-top: 1px solid var(--ui-border); padding-top: 12px; }
+#page-content .compliance-design .compliance-more > summary { cursor: pointer; font-size: 13px; color: var(--ui-text-muted); min-height: 32px; align-content: center; }
+#page-content .compliance-design .compliance-more ol { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 16px; }
+#page-content .compliance-design .compliance-more li { border-top: 1px solid var(--ui-border); padding-top: 16px; }
+#page-content .compliance-design .compliance-more li p { margin: 6px 0; }
+#page-content .compliance-design .compliance-setup { padding: 20px 0 0; }
+#page-content .compliance-design .compliance-setup h3 { margin-top: 0; }
+#page-content .compliance-design .compliance-error { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; border-color: var(--ui-accent); }
+#page-content .compliance-design .compliance-error p { margin-bottom: 0; }
+/* CONCEPT ONLY: chooser. All concepts share data and behaviour. */
+#page-content .compliance-style-pick { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+#page-content .compliance-style-pick > span { font-size: 11px; color: var(--ui-text-muted); margin-right: 6px; }
+#page-content .compliance-style-pick button { min-height: 36px; padding: 7px 10px; border: 1px solid var(--ui-border); border-radius: 7px; background: var(--ui-surface); color: var(--ui-text-muted); font: inherit; font-size: 12px; cursor: pointer; }
+#page-content .compliance-style-pick button[aria-pressed="true"] { color: var(--ui-accent-strong); border-color: var(--ui-accent); background: var(--ui-accent-soft); }
+#page-content .compliance-style-pick button:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 2px; }
+/* CONCEPT ONLY: Style 1 Focus uses a reading column and places readiness above the next action. */
+#page-content .compliance-design[data-compliance-style="1"] { max-width: 1120px; }
+/* CONCEPT ONLY: Style 2 Board matches the hierarchy and paired cards in Home !512 style 2. */
+@media (min-width: 1280px) {
+  #page-content .compliance-design[data-compliance-style="2"] .compliance-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: stretch; }
+  #page-content .compliance-design[data-compliance-style="2"] .compliance-next { order: 0; }
+  #page-content .compliance-design[data-compliance-style="2"] .compliance-obligations,
+  #page-content .compliance-design[data-compliance-style="2"] .workspace-links { grid-column: 1 / -1; }
+  #page-content .compliance-design[data-compliance-style="2"] .compliance-readiness { align-items: flex-start; flex-direction: column; gap: 12px; }
+  #page-content .compliance-design[data-compliance-style="2"] .compliance-proof strong { font-size: 56px; }
+  #page-content .compliance-design[data-compliance-style="2"] .workspace-action-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+/* CONCEPT ONLY: Style 3 Register turns frameworks into compact disclosure rows. */
+#page-content .compliance-design[data-compliance-style="3"] .compliance-next { order: 0; }
+#page-content .compliance-design[data-compliance-style="3"] .compliant-frameworks { grid-template-columns: 1fr; gap: 0; }
+#page-content .compliance-design[data-compliance-style="3"] .compliance-framework { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 24px; padding: 20px 0; border: 0; border-top: 1px solid var(--ui-border); border-radius: 0; }
+#page-content .compliance-design[data-compliance-style="3"] .compliance-framework-heading { flex-direction: row; align-items: center; justify-content: space-between; }
+#page-content .compliance-design[data-compliance-style="3"] .compliance-framework-heading::after { content: '+'; color: var(--ui-text-muted); font-size: 20px; }
+#page-content .compliance-design[data-compliance-style="3"] .compliance-framework-detail[open] .compliance-framework-heading::after { content: '−'; }
+#page-content .compliance-design[data-compliance-style="3"] .compliance-framework-title { flex: 1; }
+#page-content .compliance-design[data-compliance-style="3"] .compliance-framework-link { margin: 0; }
+#page-content .compliance-design[data-compliance-style="3"] .compliance-framework-body { max-width: 720px; }
+@media (min-width: 1100px) {
+  #page-content .compliance-design[data-compliance-style="3"] .compliance-status { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px 32px; align-items: center; }
+  #page-content .compliance-design[data-compliance-style="3"] .compliance-status h2 { grid-column: 1 / -1; }
+  #page-content .compliance-design[data-compliance-style="3"] .compliance-readiness { flex-direction: column; align-items: flex-start; margin: 12px 0 0; gap: 8px; }
+  #page-content .compliance-design[data-compliance-style="3"] .compliance-disclaimer { grid-column: 1 / -1; }
+  #page-content .compliance-design[data-compliance-style="3"] .compliance-figures > div { background: none; }
+}
+@media (max-width: 767px) {
+  #page-content .compliance-design { padding-inline: 16px; padding-bottom: 32px; }
+  #page-content .compliance-design .workspace-card { padding: 20px; }
+  #page-content .compliance-design .compliance-readiness { align-items: flex-start; flex-direction: column; gap: 12px; }
+  #page-content .compliance-design .compliance-figures { gap: 8px; }
+  #page-content .compliance-design .compliance-figures > div { padding: 12px 8px; }
+  #page-content .compliance-design .compliance-figures dt { font-size: 11px; }
+  #page-content .compliance-design .compliance-figures dd { font-size: 22px; }
+  #page-content .compliance-design .compliant-frameworks { grid-template-columns: 1fr; }
+  #page-content .compliance-design .compliance-error { flex-direction: column; align-items: flex-start; }
+  #page-content .compliance-design[data-compliance-style="3"] .compliance-framework { grid-template-columns: 1fr; gap: 12px; }
+  #page-content .compliance-design[data-compliance-style="3"] .compliance-framework-heading { flex-wrap: wrap; gap: 10px; }
+  #page-content .compliance-design[data-compliance-style="3"] .compliance-framework-title { flex-basis: calc(100% - 40px); }
+}
+
+#page-content .compliance-design .compliance-data { margin-top: 12px; font-size: 12px; color: var(--ui-text-muted); }
+#page-content .compliance-design .compliance-data > summary { cursor: pointer; min-height: 32px; align-content: center; }
+#page-content .compliance-design .compliance-data dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; margin: 12px 0 0; }
+#page-content .compliance-design .compliance-data dd { margin: 0; font-variant-numeric: tabular-nums; }
+@media (min-width: 1280px) {
+  /* Expanding the work queue should not turn readiness into an empty, page-high card. */
+  #page-content .compliance-design[data-compliance-style="2"] .compliance-layout:has(.compliance-more[open]) { align-items: start; }
+}
