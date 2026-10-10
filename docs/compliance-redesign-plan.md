@@ -2,7 +2,9 @@
 
 Scope: `/compliant/nz-alcohol`, the page reached by the Compliance navigation item.
 Purpose: tell an operator what evidence is current, what needs review, and where to act next.
-Branch: `feat/compliance-design`, based on fresh main `311458a4`.
+Branch: `feat/compliance-design`, initially based on fresh main `311458a4`, then rebased
+onto `dbf2f6f3` after Home/sidebar !512 merged. All three concepts retain the shared
+expanded sidebar, labelled rail and phone navigation from that merge.
 The industry index and the NP, Customs, licensing and registration workspaces remain separate.
 Three concepts await the founder's pick in a draft MR; this is not a production rollout.
 
