@@ -3,7 +3,7 @@
 Scope: `/compliant/nz-alcohol`, the page reached by the Compliance navigation item.
 Purpose: tell an operator what evidence is current, what needs review, and where to act next.
 Branch: `feat/compliance-design`, initially based on fresh main `311458a4`, then rebased
-onto `dbf2f6f3` after Home/sidebar !512 merged. All three concepts retain the shared
+onto `dbf2f6f3` after Home/sidebar !512 merged, and then `ba166c7b` after Production !515. All three concepts retain the shared
 expanded sidebar, labelled rail and phone navigation from that merge.
 The industry index and the NP, Customs, licensing and registration workspaces remain separate.
 Three concepts await the founder's pick in a draft MR; this is not a production rollout.
@@ -38,23 +38,48 @@ not a claim that another product prescribes this exact Compliance page.
 | [FoodDocs features](https://www.fooddocs.com/food-safety-solutions) | At-a-glance food-safety status across locations, with monitoring tasks and document storage | Give the board an immediate readiness answer and clear status words; do not invent a legal compliance rating |
 | [SafetyCulture actions](https://help.safetyculture.com/en-US/005384/) | Corrective actions sit beside the investigation and link to existing work | Put the returned action title, reason and destination together, rather than an isolated number |
 | [Linear display options](https://linear.app/docs/display-options) | Lists and boards share data; grouping and ordering determine what leads | Register concept uses compact summaries with full details one click away; all concepts share one script |
-| [Notion layouts](https://www.notion.com/help/layouts) | Important properties stay in the heading, others in a details panel | Focus concept reads as a briefing; the register discloses evidence metrics without losing them |
+| [Notion layouts](https://www.notion.com/help/layouts) | Important properties stay in the heading, others in a details panel | Action desk keeps important evidence beside the work queue; the register discloses evidence metrics without losing them |
 | [Carbon dashboards](https://www.carbondesignsystem.com/building-blocks/data-visualization/dashboards) | Most important information first; fewer metrics and deliberate white space | One primary next step, quiet secondary actions, three essential evidence counts without repeating the current count |
-| [Home !512](https://gitlab.com/whistlebird/workflow-engine/-/merge_requests/512) | Style 2 is a sized board, equal bordered metrics, paired regions | Compliance style 2 uses the same hierarchy, spacing and card language without copying Home's score calculation or shell experiment |
+| [Production !515](https://gitlab.com/whistlebird/workflow-engine/-/merge_requests/515) | Selected board, title above underlined tabs, solid primary at right, full-width work rows | Style 1 follows this hierarchy and spacing; all three use the settled shared section head |
 
 Research limits: the SafetyCulture article was searchable but a subsequent fetch failed.
 We use its published action description, not an unseen dashboard. None of these sources
 establishes how NZ regulatory compliance should be scored. Linear and Notion are craft
 references, not food-safety compliance products. No regulatory interpretation is introduced.
 
-## Three directions to choose from
+## Round two: match the settled Production approach (!515)
 
-| | Style 1: Focus | Style 2: Board | Style 3: Register |
+Read !515's final MR and its four-round plan. The board was chosen first; then the
+header actions; then the title-first shared section head, underlined green tabs and
+one solid action at the right. The shared section head already shipped on main.
+Rebasing the first Compliance draft exposed a duplicate title: our concept header
+still said Compliance beneath the new section title. Remove that header and subtitle,
+use the shared h1, align every concept to the section's 1280px width, and put the
+first returned actionable suggestion into the section action slot. Its explanation
+and remaining suggestions stay in Next action. Premises stays as an outlined
+secondary action. Error/loading states hide the dynamic primary rather than imply
+that stale evidence has loaded. Managers with no applicable frameworks get Set up
+Compliance; other readers retain explicit admin guidance.
+
+Research refreshed 11 October 2026: FoodDocs monitoring/status documentation,
+MaintainX reporting guidance and SafetyCulture's published actions description;
+Linear display options and Notion layouts; Carbon tabs guidance. Sources describe
+status paired with actionable work, alternate layouts over the same data, disclosure
+of secondary properties, and tabs immediately above content. These inform the
+structure; !515's reviewed choices determine appearance. The SafetyCulture fetch
+still failed, so no unseen interface detail is claimed. No task dates or custom
+regulatory status can be invented from this overview response.
+
+| | Style 1: Board | Style 2: Action desk | Style 3: Register |
 |---|---|---|---|
-| Idea | A reading column, evidence then next action | Readiness and next steps beside each other, obligations across the board | A compact readiness band, framework rows with evidence detail on demand |
-| Taken from | MaintainX action queue, Notion property hierarchy | FoodDocs overview, Carbon hierarchy, Home !512 style 2 | Linear grouped lists, Notion disclosure |
-| Best at | One operator deciding what to do next | A wide screen and consistency with the chosen Home direction | An experienced operator comparing obligations and opening one |
-| Gives up | More vertical scrolling | Stacks at tablet/phone widths; no promise to fit arbitrary data on one wall screen | Extra click to see each framework's full metric breakdown |
+| Idea | Readiness beside next-action context; full-width framework rows and links | Compact readiness band, action queue at left, evidence cards at right | Compact readiness band, short action context and framework disclosures |
+| Taken from | Settled Production !515 board and direct row actions | MaintainX action work, FoodDocs monitoring and Notion important properties | Linear lists, Notion disclosure |
+| Best at | Familiarity across Home, Production and Compliance | Completing setup/review while consulting framework evidence | Comparing obligation summaries and inspecting one framework |
+| Gives up | Board needs a wide screen and stacks when narrower | Expanded queue takes more vertical room; cards stack on phones | One extra interaction for each detailed evidence breakdown |
+
+Style 1 is now the closest match to Production. Style 2 is deliberately a content
+experiment, not the previous Board concept under a different number. All share
+identical data, status wording, permissions, destinations and one script.
 
 All three retain every applicable framework, all returned priority actions, evidence
 coverage, current/review/overdue counts and workspace management links. They use the
@@ -69,7 +94,7 @@ explains that evidence coverage is not a legal compliance score. A textual statu
 always present; colour alone carries no meaning. Live-data gaps and source counts stay
 accessible in a Data coverage disclosure, preserving the old overview signal.
 
-Next actions: use `priority_actions` exactly as returned; do not generate new obligations
+Next actions: put the primary button in the shared tab row, keeping its context in the card. Use `priority_actions` exactly as returned; do not generate new obligations
 or reorder the server's queue. The first action is the primary button; later ones expand
 under “More next steps”. Food-programme actions open its register, Customs actions open
 the existing exact control, and product mapping opens Configuration for managers.
@@ -102,8 +127,9 @@ not finish a new source-to-sale capability, so no additional roadmap box is tick
 Regression tests first against unchanged main: setup counts cannot disappear, Customs
 cannot be called NP3, and NP2 must link as NP2. Browser checks cover all styles at 390,
 1024, 1440 and 1920, dark theme, expansion, primary destination, quiet/setup/error/retry,
-choice persistence and boosted return. Retain the existing overview layout contract for
-Style 1's full-width readiness, obligations and management cards. No weakening of tests.
+choice persistence and boosted return. Style 1 deliberately changes readiness from a full-width card to a 5/7 pair on a wide
+content container, while obligations and management remain full-width. Tests assert
+the new alignment, single shared title, action placement and unchanged destinations. No weakening of tests.
 
 Shoot every style on laptop, phone and dark and the board at 1920. Inspect every image,
 record defects each pass and repeat until no defects remain. Use an isolated screenshot
