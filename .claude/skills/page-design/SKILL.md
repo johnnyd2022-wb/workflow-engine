@@ -73,7 +73,9 @@ env -u ENVIRONMENT uv run python scripts/ui_shots.py shoot ~/.cache/workflow-eng
 with suppliers, batches, expiries and quantity history; `lineage` is two gin batches
 through three steps, sold on six invoices to four customers; `compliance` subscribes the
 org to Compliance on the NP3 programme (leave it off for a page that has nothing to do
-with compliance). Realistic data is the point.
+with compliance); `production` adds three workflows with seven batches under way at
+different steps and ages, for a page about what is being made right now. Realistic data is
+the point.
 A page designed against three rows named "Test Item 0" is designed for a product nobody
 runs. If the page needs data neither seed has, add a seed to `scripts/ui_shots.py`.
 

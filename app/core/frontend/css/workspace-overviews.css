@@ -211,6 +211,7 @@ html[data-spa-theme="dark"] #page-content [data-health-state="critical"] .produc
 
 html[data-spa-theme="dark"] #page-content .workspace-overview,
 html[data-spa-theme="dark"] #page-content .workspace-links,
+html[data-spa-theme="dark"] #page-content .section-head,
 html[data-spa-theme="dark"] #page-content .section-tabs {
   --ui-surface: #17232f;
   --ui-surface-subtle: #101a25;

@@ -71,6 +71,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Momo+Trust+Display&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='workspace-overviews.css') }}">
+  {# Production overview: global, like the rest, so an in-app visit to /core arrives styled. #}
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='production-overview.css') }}">
 
   {# Page-level head customisation #}
   {% block head_extras %}{% endblock %}
@@ -295,7 +297,7 @@
            swapped-in scripts in order. See docs/ux-overhaul-plan.md (1.3). #}
         {% set boosted = request.headers.get('HX-Boosted') == 'true' %}
         {% if boosted %}<div hidden data-page-assets>{{ self.head_extras() }}</div>{% endif %}
-        {% block section_tabs %}{% include 'shared/section_tabs.html' %}{% endblock %}
+        {% block section_tabs %}{% set section_actions %}{% block section_actions %}{% endblock %}{% endset %}{% include 'shared/section_tabs.html' %}{% endblock %}
         {% block breadcrumbs %}{% include 'shared/breadcrumbs.html' %}{% endblock %}
         {% block content %}{% endblock %}
         {% block workspace_links %}{% include 'shared/workspace_links.html' %}{% endblock %}

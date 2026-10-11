@@ -3,11 +3,21 @@
    everywhere. A page that should not show it (a focused, full-screen flow) overrides the
    `section_tabs` block in base_spa.html with nothing. #}
 {% if section_tabs %}
-<nav class="section-tabs" aria-label="{{ section_label }} sections">
-  <div class="flow-mode-segmented ui-tabs" role="tablist" aria-label="{{ section_label }} pages">
-    {% for tab in section_tabs %}
-    <a href="{{ tab.href }}" role="tab" data-section-tab="{{ tab.key }}"{% if tab.food_safety %} data-food-safety-tab{% endif %}{% if tab.hidden %} hidden{% endif %} aria-selected="{{ 'true' if tab.active else 'false' }}" class="flow-mode-segment{% if tab.active %} flow-mode-segment--active{% endif %}">{{ tab.label }}</a>
-    {% endfor %}
+{# The section's head: its name, then its tabs with a divider under them, directly above the page.
+   `section_head_is_page_title` (set by a page with no title of its own, such as the Production
+   overview) makes the name the page's h1; elsewhere the page keeps its own h1 beneath.
+   `section_actions` is a page's main buttons, placed on the tab row at the right. #}
+<div class="section-head">
+  {% if section_head_is_page_title %}<h1 class="section-head__title page-title" id="section-head-title">{{ section_label }}</h1>{% else %}<p class="section-head__title page-title">{{ section_label }}</p>{% endif %}
+  <div class="section-head__row">
+    <nav class="section-tabs" aria-label="{{ section_label }} sections">
+      <div class="flow-mode-segmented ui-tabs" role="tablist" aria-label="{{ section_label }} pages">
+        {% for tab in section_tabs %}
+        <a href="{{ tab.href }}" role="tab" data-section-tab="{{ tab.key }}"{% if tab.food_safety %} data-food-safety-tab{% endif %}{% if tab.hidden %} hidden{% endif %} aria-selected="{{ 'true' if tab.active else 'false' }}" class="flow-mode-segment{% if tab.active %} flow-mode-segment--active{% endif %}">{{ tab.label }}</a>
+        {% endfor %}
+      </div>
+    </nav>
+    {% if section_actions %}<div class="section-head__actions">{{ section_actions }}</div>{% endif %}
   </div>
-</nav>
+</div>
 {% endif %}
