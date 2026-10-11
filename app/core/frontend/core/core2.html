@@ -27,8 +27,6 @@
             {% elif core2_focus_mode == 'active_batches_live' %}
             <div class="workspace-header__actions"><a class="workspace-button" href="/core/processes">Back to workflows</a></div>
             {% else %}
-            {# CONCEPT ONLY: Style 1 shows "Get to work" here, in the page header. #}
-            <div class="prod-header-actions" data-production-actions-slot data-core2-overview-only></div>
             <a id="core2-overview-return" class="workspace-button" href="/core" hidden>Back to overview</a>
             {% endif %}
           </header>
@@ -36,18 +34,20 @@
           {# Health, next steps and workspace links belong to the overview only; the pages behind
              the tabs open straight onto their own content. #}
           {% if core2_focus_mode == '' %}
-          {# CONCEPT ONLY: Styles 2 and 3 show "Get to work" in this row instead of the header. #}
+          {# CONCEPT ONLY (docs/production-redesign-plan.md, round four): the title, then this row with
+             the section tabs in it, then the board. The mock-up switch decides how the tabs are drawn
+             and aligned and whether "Get to work" sits on this row or the next. #}
+          <div class="prod-tabrow" data-production-tabrow>
+            <div class="prod-header-actions prod-tabrow__actions" data-production-actions-inline data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}></div>
+          </div>
           <div class="prod-header-actions prod-cta-row" data-production-actions-row data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}></div>
-          <div class="prod-v2" data-production-root data-production-style="1">
-          {# CONCEPT ONLY: three directions to choose from (docs/production-redesign-plan.md). Once one
-             is picked, this switch and the other two styles are deleted. #}
-          <div class="prod-segments prod-style-switch" role="group" aria-label="Production style" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
-            <button type="button" data-production-style-pick="1" aria-pressed="true">Style 1</button>
-            <button type="button" data-production-style-pick="2" aria-pressed="false">Style 2</button>
-            <button type="button" data-production-style-pick="3" aria-pressed="false">Style 3</button>
-            <span class="prod-segments__gap" aria-hidden="true"></span>
-            <button type="button" data-production-cta-pick="left" aria-pressed="true">Buttons left</button>
-            <button type="button" data-production-cta-pick="center" aria-pressed="false">Buttons centre</button>
+          <div class="prod-v2" data-production-root>
+          <div class="prod-segments prod-style-switch" role="group" aria-label="Mock-up" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
+            <button type="button" data-production-mock-pick="a" aria-pressed="true" title="Underlined tabs at the left, buttons on the same row">A</button>
+            <button type="button" data-production-mock-pick="b" aria-pressed="false" title="Underlined tabs at the left, buttons beneath">B</button>
+            <button type="button" data-production-mock-pick="c" aria-pressed="false" title="Underlined tabs centred, buttons beneath">C</button>
+            <button type="button" data-production-mock-pick="d" aria-pressed="false" title="Today's selector at the left, buttons on the same row">D</button>
+            <button type="button" data-production-mock-pick="e" aria-pressed="false" title="Today's selector centred, buttons beneath">E</button>
           </div>
           <div class="production-overview__start" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
             <section class="workspace-card production-health" aria-labelledby="production-health-title">
@@ -2677,57 +2677,51 @@
       }).join('');
     }
 
-    /* CONCEPT ONLY: pick one of the three styles. They differ in where the title, the section
-       tabs and "Get to work" sit, so the card (and for Style 2 the tabs) are moved to suit:
-         1: tabs, then the title with the actions on its line, at the right;
-         2: the title, then the tabs, then the actions in a row;
-         3: tabs, then the title, then the actions in a row.
-       ?cta=left|center aligns that row. Once a style is chosen the markup is written that way
-       and this is deleted. */
+    /* CONCEPT ONLY: the round-four mock-ups. All have the title, then the section tabs, then the
+       board. They differ in how the tabs are drawn (underlined on a divider, or today's filled
+       selector), whether the tabs sit left or centred, and whether "Get to work" shares the tab
+       row (right) or takes the row beneath (left). ?mock=a..e picks one. Once one is chosen the
+       markup is written that way and this is deleted. */
+    var CORE2_PRODUCTION_MOCKS = {
+      a: { tabs: 'line', align: 'left', cta: 'inline' },
+      b: { tabs: 'line', align: 'left', cta: 'below' },
+      c: { tabs: 'line', align: 'center', cta: 'below' },
+      d: { tabs: 'pill', align: 'left', cta: 'inline' },
+      e: { tabs: 'pill', align: 'center', cta: 'below' },
+    };
     function core2WireProductionStyle() {
       var root = document.querySelector('[data-production-root]');
       if (!root || root.dataset.productionWired === '1') return;
       root.dataset.productionWired = '1';
       var page = root.closest('.production-overview');
-      var header = page.querySelector('.workspace-header');
       var actions = document.querySelector('.production-actions');
-      var headerSlot = document.querySelector('[data-production-actions-slot]');
+      var inlineSlot = document.querySelector('[data-production-actions-inline]');
       var rowSlot = document.querySelector('[data-production-actions-row]');
+      var tabRow = document.querySelector('[data-production-tabrow]');
       var tabs = document.querySelector('#page-content nav.section-tabs');
-      var params = new URLSearchParams(window.location.search);
-      function stored(key, pattern, fallback) {
-        var value = params.get(key === 'production.style' ? 'style' : 'cta');
-        if (!pattern.test(value || '')) {
-          try { value = window.localStorage.getItem(key); } catch (e) { value = null; }
-        }
-        return pattern.test(value || '') ? value : fallback;
+      if (tabs && tabRow) tabRow.prepend(tabs);
+      var picked = new URLSearchParams(window.location.search).get('mock');
+      if (!CORE2_PRODUCTION_MOCKS[picked]) {
+        try { picked = window.localStorage.getItem('production.mock'); } catch (e) { picked = null; }
       }
-      function apply(style, cta) {
-        page.dataset.productionStyle = root.dataset.productionStyle = style;
-        page.dataset.productionCta = cta;
-        root.querySelectorAll('[data-production-style-pick]').forEach(function (button) {
-          button.setAttribute('aria-pressed', button.dataset.productionStylePick === style ? 'true' : 'false');
+      function apply(name) {
+        var mock = CORE2_PRODUCTION_MOCKS[name] ? name : 'a';
+        var spec = CORE2_PRODUCTION_MOCKS[mock];
+        page.dataset.productionMock = mock;
+        page.dataset.productionTabs = spec.tabs;
+        page.dataset.productionAlign = spec.align;
+        page.dataset.productionCta = spec.cta;
+        root.querySelectorAll('[data-production-mock-pick]').forEach(function (button) {
+          button.setAttribute('aria-pressed', button.dataset.productionMockPick === mock ? 'true' : 'false');
         });
-        root.querySelectorAll('[data-production-cta-pick]').forEach(function (button) {
-          button.setAttribute('aria-pressed', button.dataset.productionCtaPick === cta ? 'true' : 'false');
-          button.hidden = style === '1';
-        });
-        if (actions && headerSlot && rowSlot) (style === '1' ? headerSlot : rowSlot).appendChild(actions);
-        if (tabs && header) {
-          if (style === '2') header.after(tabs);
-          else page.before(tabs);
-        }
+        if (actions && inlineSlot && rowSlot) (spec.cta === 'inline' ? inlineSlot : rowSlot).appendChild(actions);
       }
-      apply(stored('production.style', /^[123]$/, '1'), stored('production.cta', /^(left|center)$/, 'left'));
+      apply(picked);
       root.addEventListener('click', function (event) {
-        var style = event.target.closest('[data-production-style-pick]');
-        var cta = event.target.closest('[data-production-cta-pick]');
-        if (!style && !cta) return;
-        apply(style ? style.dataset.productionStylePick : root.dataset.productionStyle, cta ? cta.dataset.productionCtaPick : page.dataset.productionCta);
-        try {
-          window.localStorage.setItem('production.style', root.dataset.productionStyle);
-          window.localStorage.setItem('production.cta', page.dataset.productionCta);
-        } catch (e) { /* private mode */ }
+        var pick = event.target.closest('[data-production-mock-pick]');
+        if (!pick) return;
+        apply(pick.dataset.productionMockPick);
+        try { window.localStorage.setItem('production.mock', page.dataset.productionMock); } catch (e) { /* private mode */ }
       });
     }
 

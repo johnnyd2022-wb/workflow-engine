@@ -161,32 +161,46 @@ def test_recording_production_is_the_main_action_and_is_drawn_as_one(production_
     page.keyboard.press("Escape")
 
 
-# ── CONCEPT ONLY: three places for the title, the tabs and the actions. Delete with the two not chosen. ──
+# ── CONCEPT ONLY: round-four mock-ups A to E. Delete with the ones not chosen. ──
 
-VARIANTS = [("1", "left"), ("2", "left"), ("2", "center"), ("3", "left"), ("3", "center")]
+MOCKS = {
+    "a": ("line", "left", "inline"),
+    "b": ("line", "left", "below"),
+    "c": ("line", "center", "below"),
+    "d": ("pill", "left", "inline"),
+    "e": ("pill", "center", "below"),
+}
 
 
-def _open_variant(page, style, cta):
-    page.goto(f"/core?style={style}&cta={cta}")
+def _open_mock(page, mock):
+    page.goto(f"/core?mock={mock}")
     expect(page.locator(".production-health__state")).to_be_visible()
     return page.get_by_role("region", name="Get to work", exact=True)
 
 
-@pytest.mark.parametrize("style,cta", VARIANTS)
+@pytest.mark.parametrize("mock", list(MOCKS))
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_every_variant_keeps_the_actions_on_the_first_screen_and_apart(production_page, style, cta, width):
+def test_every_mock_up_has_title_then_tabs_then_the_board_with_the_actions_in_reach(production_page, mock, width):
     page = production_page
     page.set_viewport_size({"width": width, "height": 1080 if width == 1920 else 900})
     _serve(page, BATCHES)
-    work = _open_variant(page, style, cta)
+    work = _open_mock(page, mock)
 
-    expect(page.locator("[data-production-root]")).to_have_attribute("data-production-style", style)
-    for name in ["Production health", "Active production", "At a glance"]:
-        expect(page.get_by_role("region", name=name, exact=True)).to_be_visible()
+    title = page.get_by_role("heading", name="Production", exact=True, level=1)
+    expect(title).to_be_visible()
+    expect(page.locator("#core2-hub-caption")).to_be_hidden()
+    tabs = page.get_by_role("navigation", name="Production sections", exact=True)
+    expect(tabs).to_have_count(1)
+    expect(tabs.get_by_role("tab")).to_have_count(4)
+    health = page.get_by_role("region", name="Production health", exact=True)
+    tops = [title.bounding_box()["y"], tabs.bounding_box()["y"], health.bounding_box()["y"]]
+    assert tops == sorted(tops), "title, then tabs, then the board"
+
     main = work.get_by_role("link", name="Record production step")
     expect(main).to_be_in_viewport()
     boxes = [main.bounding_box(), work.get_by_role("link", name="Trace and recall").bounding_box()]
     boxes.append(work.get_by_role("button", name="Add to inventory, choose how").bounding_box())
+    boxes += [tab.bounding_box() for tab in tabs.get_by_role("tab").all()]
     for index, one in enumerate(boxes):
         for other in boxes[index + 1 :]:
             apart = (
@@ -200,57 +214,66 @@ def test_every_variant_keeps_the_actions_on_the_first_screen_and_apart(productio
     assert_clean_page(page)
 
 
-def test_each_style_orders_the_title_the_tabs_and_the_actions_as_it_says(production_page):
+@pytest.mark.parametrize("mock", list(MOCKS))
+def test_each_mock_up_draws_and_places_the_tabs_and_buttons_as_it_says(production_page, mock):
     page = production_page
     _serve(page, BATCHES)
+    work = _open_mock(page, mock)
+    style, align, cta = MOCKS[mock]
 
-    def tops(style, cta="left"):
-        work = _open_variant(page, style, cta)
-        main = work.get_by_role("link", name="Record production step").bounding_box()
-        return page.locator("h1").bounding_box(), page.get_by_role("tab").first.bounding_box(), main
+    row = page.locator("[data-production-tabrow]")
+    tabs = page.get_by_role("tab")
+    current = page.get_by_role("tab", name="Overview", exact=True)
+    other = page.get_by_role("tab", name="Planner", exact=True)
+    expect(current).to_have_attribute("aria-selected", "true")
+    fill = current.evaluate("el => getComputedStyle(el).backgroundColor")
+    bar = current.evaluate("el => getComputedStyle(el).borderBottomColor")
+    if style == "line":
+        # Marked twice, neither of them a fill: a bar under it and a heavier label.
+        assert fill == "rgba(0, 0, 0, 0)" and bar != other.evaluate("el => getComputedStyle(el).borderBottomColor")
+        assert int(current.evaluate("el => getComputedStyle(el).fontWeight")) > int(
+            other.evaluate("el => getComputedStyle(el).fontWeight")
+        )
+        assert row.evaluate("el => getComputedStyle(el).borderBottomWidth") == "1px", "a divider under the tabs"
+        bottom = current.bounding_box()["y"] + current.bounding_box()["height"]
+        edge = row.bounding_box()["y"] + row.bounding_box()["height"]
+        assert abs(bottom - edge) <= 1, "the current tab's bar sits on the divider"
+    else:
+        assert (
+            fill != "rgba(0, 0, 0, 0)"
+            and other.evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
+        )
 
-    title, tabs, main = tops("1")
-    # 1: tabs, then the title with the actions on its line at the right.
-    assert tabs["y"] < title["y"] and main["x"] > title["x"] + title["width"]
-    assert abs((main["y"] + main["height"] / 2) - (title["y"] + title["height"])) < 40
+    box = row.bounding_box()
+    first, last = tabs.first.bounding_box(), tabs.last.bounding_box()
+    left, right = first["x"] - box["x"], box["x"] + box["width"] - (last["x"] + last["width"])
+    if align == "left":
+        assert left < 8 and right > 200
+    else:
+        assert abs(left - right) < 12 and left > 150
 
-    title, tabs, main = tops("2")
-    # 2: the title, then the tabs, then the actions, starting at the page's left edge.
-    assert title["y"] < tabs["y"] < main["y"] and abs(main["x"] - title["x"]) < 2
+    main = work.get_by_role("link", name="Record production step").bounding_box()
+    if cta == "inline":
+        # On the tab row, at its right edge.
+        assert box["y"] <= main["y"] and main["y"] + main["height"] <= box["y"] + box["height"]
+        assert abs(box["x"] + box["width"] - (main["x"] + main["width"])) < 2
+    else:
+        # On the row beneath, starting at the page's left edge.
+        assert main["y"] >= box["y"] + box["height"] and abs(main["x"] - box["x"]) < 2
 
-    title, tabs, main = tops("3")
-    # 3: tabs, then the title, then the actions.
-    assert tabs["y"] < title["y"] < main["y"] and abs(main["x"] - title["x"]) < 2
 
-
-@pytest.mark.parametrize("style", ["2", "3"])
-def test_the_action_row_can_be_centred(production_page, style):
+def test_the_tabs_still_take_you_places_and_the_arrangement_survives_the_trip(production_page):
     page = production_page
     _serve(page, BATCHES)
-    work = _open_variant(page, style, "center")
-    row = page.locator("[data-production-actions-row]").bounding_box()
-    first = work.get_by_role("link", name="Record production step").bounding_box()
-    last = work.get_by_role("link", name="Trace and recall").bounding_box()
-    left, right = first["x"] - row["x"], row["x"] + row["width"] - (last["x"] + last["width"])
-    assert left > 100 and abs(left - right) < 2, (left, right)
-    expect(page.get_by_role("button", name="Buttons centre")).to_have_attribute("aria-pressed", "true")
+    _open_mock(page, "a")
+    page.get_by_role("button", name="A", exact=True).click()  # remembered, as the switch does
 
-
-def test_the_arrangement_survives_tabs_and_in_app_visits(production_page):
-    page = production_page
-    _serve(page, BATCHES)
-    _open_variant(page, "2", "left")
-    page.get_by_role("button", name="Style 2").click()  # remembered, as the switch does
-
-    page.locator("#sidebar").get_by_role("link", name="Home", exact=True).click()
-    page.wait_for_url("**/core/dashboard")
+    page.get_by_role("tab", name="Workflows", exact=True).click()
+    page.wait_for_url(re.compile(r"/core/processes"))
     page.locator("#sidebar").get_by_role("link", name="Production", exact=True).click()
     page.wait_for_url(re.compile(r"/core/?$"))
     expect(page.locator(".production-health__state")).to_be_visible()
-    expect(page.get_by_role("navigation", name="Production sections", exact=True)).to_have_count(1)
-    title, tabs = page.locator("h1").bounding_box(), page.get_by_role("tab").first.bounding_box()
-    assert title["y"] < tabs["y"]
-    expect(
-        page.locator("[data-production-actions-row]").get_by_role("link", name="Record production step")
-    ).to_be_visible()
-    page.evaluate("['production.style', 'production.cta'].forEach(k => localStorage.removeItem(k))")
+    row = page.locator("[data-production-tabrow]")
+    expect(row.get_by_role("navigation", name="Production sections", exact=True)).to_have_count(1)
+    expect(row.get_by_role("link", name="Record production step")).to_be_visible()
+    page.evaluate("localStorage.removeItem('production.mock')")

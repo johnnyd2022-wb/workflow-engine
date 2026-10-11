@@ -59,18 +59,60 @@ version was the only one that worked.** The other two are deleted.
 
 ## Round three: the title, the tabs and the action buttons
 
-Open `/core?style=1`, `?style=2` or `?style=3`, with `&cta=left` or `&cta=center` for Styles 2
-and 3, or use the switches on the page. Everything below the buttons is the same board in all
-of them. **Once one is picked, the switches and the others are deleted.**
+Three orders were shown: tabs then title with the buttons on its line; title, tabs, buttons;
+and tabs, title, buttons, the last two with the buttons left or centred. None was picked
+outright. Two questions came out of it, and both were researched before round four.
 
-| | Style 1 (round two's pick) | Style 2 | Style 3 |
+**Does the page need its title?** Mostly yes. Shopify's page guidance says to always give a
+page a title; the W3C's pattern for making a page's purpose clear asks for a clear heading at
+the top of each page, and a 2014 W3C list thread argues against hiding it for sighted users.
+Only Microsoft's Fluent 2 goes the other way, and its advice is to leave the space empty *or
+use a different title* when the title merely repeats where you are. So: keep the title, drop
+the sentence under it, which carried nothing.
+
+**Are tabs the right tool, and are ours drawn right?** Tabs suit a small flat set of sibling
+pages (Carbon: no more than six; Appian: fewer than seven), and Carbon pairs a side menu with
+"tabs within the page" for what sits beneath it. But:
+
+| Finding | Source | What it changes |
+|---|---|---|
+| Put tabs directly above their content; avoid anything between a tab and its panel. | Nielsen Norman Group, "Tabs, Used Right" | Title first, then tabs, then the board. |
+| Primary tabs go under the bar that holds the title. | Material 3, via SAP Fiori's usage page | The same order. |
+| A filled, equal-width, boxed bar is a segmented control, used to switch views of the same content; use tabs to switch the main view. | Apple HIG; Keystone; designsystems.surf | Underlined tabs for the section, keeping the filled look for switches inside cards. |
+| Navigation tabs and in-page tabs should look different. | Nielsen Norman Group | The same. |
+| Mark the current tab at least twice. | Nielsen Norman Group | A bar under it and a darker, heavier label. |
+| Title, with the page's actions on the same line at the right. | An Atlassian designer, on the developer forum (informal) | Buttons at the right of a row, main one furthest right. |
+
+Not found: how Katana, Linear or Stripe lay this out, or any current guidance on full-width
+tabs on a wide desktop.
+
+## Round four: five mock-ups
+
+Open `/core?mock=a` to `?mock=e`, or use the A to E switch on the page. All have the title
+alone at the top (no sentence under it), starting where Home's title starts, then the tabs,
+then the same board. **Once one is picked, the switch and the others are deleted.**
+
+| | Tabs drawn as | Tabs sit | Buttons |
 |---|---|---|---|
-| Top to bottom | Tabs; then the title with the buttons on its line, at the right | The title; then the tabs; then the buttons in a row | Tabs; then the title; then the buttons in a row |
-| Buttons | Right, main one furthest right | Left or centred, main one first | Left or centred, main one first |
-| Best at | Costs no height; the convention for a page's main button | The page says what it is before offering its sections; the buttons sit right under the tabs | Leaves the tabs where they are on every other Production page; the buttons belong to the title |
-| Gives up | The buttons are far from the title on a wide screen | The title moves above the tabs here but not on Planner, Workflows or Inventory unless those change too; 60px more height | 60px more height |
+| A | Underlined, on a divider line | Left | On the tab row, at the right |
+| B | Underlined, on a divider line | Left | On the row beneath, at the left |
+| C | Underlined, on a divider line | Centred | On the row beneath, at the left |
+| D | Today's filled selector | Left | On the tab row, at the right |
+| E | Today's filled selector | Centred | On the row beneath, at the left |
 
-On a phone the buttons are full width in every style, so left and centred look the same there.
+A and D put the board about 60px higher than B, C and E. Where the tab row has no room for
+both (under about 1100px for the page, which includes a 1280px laptop with the sidebar open),
+A and D put the buttons beneath, main one first, and the divider stays under the tabs.
+
+To know before choosing:
+
+- **This is the Overview only.** Planner, Workflows and Inventory still have the old strip
+  above their own titles, so in the mock-ups the tabs move when you change tab. Whichever is
+  chosen has to be applied to the shared tab strip and those three pages, and Compliance and
+  Sales use the same strip.
+- **The title becomes the section's name.** With the title above the tabs, "Production" should
+  stay put on all four tabs and the tab should say which page it is; today Workflows shows a
+  "Workflows" title under a "Workflows" tab.
 
 Shared by all of them:
 
@@ -101,17 +143,15 @@ the main action is unchanged (add inventory, then create a workflow, then record
 
 ## Not in this change
 
-- No change to `/api/core/hub/overview` or any calculation. "Longest running" and the lanes are
+- No change to `/api/core/hub/overview` or any calculation. "Longest running" is
   worked out in the page from the batches the response already carries.
 - That response carries at most 20 batches. The page says how many it shows; an org with more
   than 20 under way would need the cap raised or a link to the rest. Follow-up.
 - The batches have no batch number in this response, so two batches of one product are told
   apart by step and age. Adding a number is an API change. Follow-up.
-- The style switch's script moves the "Get to work" card (and, for Style 2, the tab strip) to
-  where each style wants it. Once a style is chosen the markup is written that way and the
-  script goes.
-- Style 2 changes the order of title and tabs on the overview only. If it is chosen, the same
-  order should be applied to Planner, Workflows and Inventory, which is a shell change.
+- The mock-up switch's script moves the tab strip under the title and the "Get to work" card
+  onto the tab row or the row beneath. Once one is chosen the markup is written that way, the
+  shared tab strip is restyled in `section-tabs.css`, and the script goes.
 - In the stacked layout the batches are shown second but come later in the page's source, so
   keyboard order differs from visual order. To be fixed in the markup once a style is chosen.
 - Reaching Production by an in-app link leaves the tab strip 32px lower than a full load does.
@@ -125,8 +165,9 @@ the main action is unchanged (add inventory, then create a workflow, then record
 - `tests/e2e/test_production_overview.py` (new): batches in age order with step, progress and
   age; the quiet-floor state and the greyed clear check; leaving mid-load logs no failure;
   recording production is the main action and the only filled one; and, concept-only, every
-  variant at 390, 1024, 1440 and 1920 with the main action on the first screen, no button
-  drawn over another and no sideways scroll; each style ordering title, tabs and buttons as it
-  says; the row centring; and the arrangement surviving an in-app visit.
-- Screenshots of each style at 1440 (sidebar open and as the rail), 1920, 1280, 1024 and 390,
-  and dark.
+  mock-up at 390, 1024, 1440 and 1920 with title then tabs then board, the main action on the
+  first screen, nothing drawn over anything else and no sideways scroll; each mock-up drawing
+  and placing its tabs and buttons as the table says, including the current tab's bar sitting
+  on the divider; and the tabs still navigating, with the arrangement surviving the trip.
+- Screenshots of A to E at 1440 (sidebar open and as the rail), 1920, 1280, 1024 and 390, and
+  dark.

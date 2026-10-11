@@ -199,12 +199,13 @@ def test_production_overview_reads_health_first_and_offers_each_batch_its_next_s
     try:
         page.goto("/core")
         tabs = page.get_by_role("navigation", name="Production sections", exact=True).get_by_role("tab")
-        fills = tabs.evaluate_all("tabs => tabs.map(tab => getComputedStyle(tab).backgroundColor)")
-        assert fills[0] != "rgba(0, 0, 0, 0)" and set(fills[1:]) == {"rgba(0, 0, 0, 0)"}, (
-            "only the current page is filled"
-        )
-        widths = {round(tab.bounding_box()["width"]) for tab in tabs.all()}
-        assert len(widths) == 1, "the selector spans the column in equal segments"
+        # The section tabs sit under the title, and only the current page is marked.
+        expect(tabs).to_have_count(4)
+        expect(tabs.first).to_have_attribute("aria-selected", "true")
+        weights = tabs.evaluate_all("tabs => tabs.map(tab => Number(getComputedStyle(tab).fontWeight))")
+        assert weights[0] > max(weights[1:]), "only the current page is emphasised"
+        title = page.get_by_role("heading", name="Production", exact=True, level=1).bounding_box()
+        assert title["y"] < tabs.first.bounding_box()["y"]
 
         health = page.get_by_role("region", name="Production health", exact=True)
         expect(health.get_by_role("group", name="Operational status").get_by_role("link")).to_have_count(5)
