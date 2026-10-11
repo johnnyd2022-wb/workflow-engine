@@ -4,7 +4,14 @@ function crmOverview() {
   const SYSTEM_WIDGET_PREFS_KEY = 'crm_overview_system_widget_prefs_v1';
 
   return {
+    // CONCEPT ONLY — query and remembered layout go away after the pick.
+    salesStyle: '1',
+    hasSavedLayout: false,
     loading: true,
+    loadError: false,
+    loadErrorStatus: null,
+    chartResizeObserver: null,
+    chartThemeObserver: null,
     error: null,
     overview: {},
     operators: [],
@@ -66,7 +73,52 @@ function crmOverview() {
     },
     expandedProductName: null,
 
+    // CONCEPT ONLY: a saved custom order wins over each concept's suggested order.
+    get displayedWidgets() {
+      if (this.hasSavedLayout || this.salesStyle === '1') return this.widgetLayout;
+      const order = this.salesStyle === '2'
+        ? ['sales_trend', 'top_products', 'top_customers', 'task_board']
+        : ['task_board', 'sales_trend', 'top_products', 'top_customers'];
+      return this.widgetLayout.slice().sort((a, b) => {
+        const rank = widget => widget.kind === 'custom' ? order.length : order.indexOf(widget.type);
+        return rank(a) - rank(b);
+      });
+    },
+
+    setSalesStyle(style) {
+      if (!['1', '2', '3'].includes(style)) return;
+      this.salesStyle = style;
+      try { sessionStorage.setItem('sales-design-style', style); } catch (_) {}
+      this.$nextTick(() => { this.drawSalesChart(); this.drawAllCustomCharts(); });
+    },
+
     async init() {
+      this.loading = true;
+      this.loadError = false;
+      this.error = null;
+      const queryStyle = new URLSearchParams(window.location.search).get('style');
+      let rememberedStyle;
+      try { rememberedStyle = sessionStorage.getItem('sales-design-style'); } catch (_) {}
+      this.setSalesStyle(['1', '2', '3'].includes(queryStyle) ? queryStyle : (rememberedStyle || '1'));
+      if (!this.chartResizeObserver) {
+        const widths = new WeakMap();
+        this.chartResizeObserver = new ResizeObserver(entries => {
+          const changed = entries.some(entry => {
+            const width = Math.round(entry.contentRect.width);
+            if (widths.get(entry.target) === width) return false;
+            widths.set(entry.target, width);
+            return true;
+          });
+          if (!changed) return;
+          this.drawSalesChart();
+          this.drawAllCustomCharts();
+        });
+        this.chartResizeObserver.observe(this.$root);
+        this.chartThemeObserver = new MutationObserver(() => {
+          this.drawSalesChart(); this.drawAllCustomCharts();
+        });
+        this.chartThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-spa-theme'] });
+      }
       try {
         const [overview, monthly, users, traceCfg] = await Promise.all([
           CRMAPI.getOverview(),
@@ -85,12 +137,20 @@ function crmOverview() {
         await this.refreshCustomWidgets();
       } catch (e) {
         this.error = e.message || 'Failed to load Sales overview.';
+        this.loadError = true;
+        this.loadErrorStatus = e.status;
       } finally {
         this.loading = false;
         await this.$nextTick();
         this.drawSalesChart();
         this.drawAllCustomCharts();
       }
+    },
+
+    destroy() {
+      this.endWidgetResize();
+      this.chartResizeObserver?.disconnect();
+      this.chartThemeObserver?.disconnect();
     },
 
     setDefaultDateRange() {
@@ -311,13 +371,18 @@ function crmOverview() {
         defaults.forEach((d) => {
           if (!next.some((x) => x.id === d.id)) next.push(d);
         });
+        this.hasSavedLayout = next.some((widget, index) => {
+          const original = defaults[index];
+          return !original || widget.id !== original.id || widget.size !== original.size || widget.locked !== original.locked;
+        });
         this.widgetLayout = next;
       } catch (_) {
         this.widgetLayout = defaults;
       }
     },
 
-    persistWidgetLayout() {
+    persistWidgetLayout(customized = true) {
+      if (customized) this.hasSavedLayout = true;
       try { localStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(this.widgetLayout)); } catch (_) {}
     },
 
@@ -593,12 +658,12 @@ function crmOverview() {
           w.rows = [];
         }
       }));
-      this.persistWidgetLayout();
+      this.persistWidgetLayout(false);
       this.$nextTick(() => this.drawAllCustomCharts());
     },
 
     drawSalesChart() {
-      const canvas = document.getElementById('crmOverviewSalesChart');
+      const canvas = this.$root.querySelector('#crmOverviewSalesChart');
       if (!canvas || !this.chartData.length) return;
       const mode = this.chartMode === 'line' ? 'line' : 'bar';
       this.drawSeriesChart(
@@ -614,7 +679,7 @@ function crmOverview() {
 
     drawCustomChart(widget) {
       if (!widget || widget.viewMode !== 'graph' || !widget.rows?.length) return;
-      const canvas = document.getElementById(`customWidgetChart-${widget.id}`);
+      const canvas = this.$root.querySelector(`#${CSS.escape(`customWidgetChart-${widget.id}`)}`);
       if (!canvas) return;
       this.drawSeriesChart(
         canvas,
@@ -674,7 +739,10 @@ function crmOverview() {
     drawSeriesChart(canvas, rows, opts = {}) {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.parentElement.getBoundingClientRect();
-      const W = rect.width || 600;
+      if (!this.$root.isConnected) return;
+      this.chartResizeObserver?.observe(canvas.parentElement);
+      if (!rect.width) return;
+      const W = rect.width;
       const H = Number(canvas.style.height?.replace('px', '') || 220);
       canvas.width = W * dpr;
       canvas.height = H * dpr;
@@ -685,10 +753,11 @@ function crmOverview() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
 
-      const textColor = '#6b7280';
-      const gridColor = 'rgba(107,114,128,0.18)';
-      const accent = '#2DD4BF';
-      const accentLine = '#14B8A6';
+      const tokens = getComputedStyle(canvas);
+      const textColor = tokens.getPropertyValue('--ui-text-muted').trim() || '#6b7280';
+      const gridColor = tokens.getPropertyValue('--ui-border').trim() || '#dce4e9';
+      const accent = tokens.getPropertyValue('--ui-accent').trim() || '#0f766e';
+      const accentLine = accent;
       const pad = { top: 16, right: 16, bottom: 38, left: 58 };
       const chartW = W - pad.left - pad.right;
       const chartH = H - pad.top - pad.bottom;
@@ -747,8 +816,8 @@ function crmOverview() {
         ctx.textAlign = 'center';
         ctx.font = '10px -apple-system, system-ui, sans-serif';
         this.drawWrappedXAxisLabel(ctx, String(row.xLabel || ''), x + barW / 2, pad.top + chartH + 14, Math.max(56, barW + gap - 2), 10, 3);
-        if (opts.showValueLabels) {
-          ctx.fillStyle = '#0f172a';
+        if (opts.showValueLabels && barW >= 75) {
+          ctx.fillStyle = tokens.getPropertyValue('--ui-text').trim() || textColor;
           ctx.font = '10px -apple-system, system-ui, sans-serif';
           ctx.fillText(this.formatCurrency2(row.yValue || 0), x + barW / 2, Math.max(pad.top + 10, y - 6));
         }

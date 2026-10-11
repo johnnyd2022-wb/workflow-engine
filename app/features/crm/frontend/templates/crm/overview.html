@@ -1,21 +1,39 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Sales{% endblock %}
 {% block body_class %}crm-page{% endblock %}
-{% block head_extras %}{% endblock %}
+{% block head_extras %}
+<link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='sales-overview.css') }}">
+{% endblock %}
+{% block section_actions %}
+<div class="sales-header-actions">
+<button type="button" class="workspace-button" x-data @click="$dispatch('sales-add-widget')">Add widget</button>
+<a href="/crm/tasks" class="workspace-button workspace-button--primary sales-primary">Open tasks</a>
+</div>
+{% endblock %}
 
 {# The section head above is this page's title. #}
 {% set section_head_is_page_title = true %}
 {% block content %}
-<div class="max-content crm-root workspace-overview sales-overview" x-data="crmOverview()" x-init="init()">
-  <header class="workspace-header workspace-header--actions">
-    <button type="button" class="workspace-button" @click="openWidgetModal()">Add widget</button>
-  </header>
-
-  <div x-show="error" class="crm-error-banner" x-cloak>
-    <span x-text="error"></span>
-    <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
+<div class="max-content crm-root workspace-overview sales-overview" data-sales-style="1" :data-sales-style="salesStyle" x-data="crmOverview()" @sales-add-widget.window="openWidgetModal()">
+  {# CONCEPT ONLY — removed with the two layouts not chosen. #}
+  <div class="sales-concepts" role="group" aria-label="Sales design concepts">
+    <span>Preview layout</span>
+    <template x-for="concept in [{id:'1',name:'1 · Board'}, {id:'2',name:'2 · Revenue review'}, {id:'3',name:'3 · Sales desk'}]" :key="concept.id">
+      <button type="button" class="workspace-button" :aria-pressed="salesStyle === concept.id" @click="setSalesStyle(concept.id)" x-text="concept.name"></button>
+    </template>
   </div>
 
+  <div x-show="error" class="crm-error-banner" role="alert" x-cloak>
+    <span x-text="error"></span>
+    <button type="button" x-show="!loadError" aria-label="Dismiss error" @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
+  </div>
+
+  <section x-show="loadError" x-cloak class="workspace-card sales-load-error" aria-label="Sales unavailable">
+    <h2>Sales could not load</h2>
+    <p x-text="loadErrorStatus === 403 ? 'Ask your administrator for access to Sales.' : (loadErrorStatus === 401 ? 'Sign in again to view Sales.' : 'Your figures are unavailable. Try loading them again.')"></p>
+    <a href="/" class="workspace-button" x-show="loadErrorStatus === 401">Sign in</a>
+    <button type="button" class="workspace-button" @click="init()" x-show="loadErrorStatus !== 401 && loadErrorStatus !== 403">Retry</button>
+  </section>
   <template x-if="loading">
     <div>
       <div class="crm-kpi-grid">
@@ -25,7 +43,7 @@
     </div>
   </template>
 
-  <div class="workspace-stack" x-show="!loading" x-cloak>
+  <div class="workspace-stack sales-content" :class="showGridGuide ? 'sales-layout-guide' : ''" x-show="!loading && !loadError" x-cloak>
     <section class="workspace-card sales-glance" aria-labelledby="sales-glance-title">
     <h2 id="sales-glance-title">At a glance</h2>
     <div class="crm-kpi-grid">
@@ -48,9 +66,9 @@
     </section>
 
     <div class="crm-widget-grid" :class="showGridGuide ? 'crm-widget-grid--guide' : ''">
-      <template x-for="widget in widgetLayout" :key="widget.id">
+      <template x-for="widget in displayedWidgets" :key="widget.id">
         <section
-          class="crm-card crm-widget-card"
+          class="crm-card crm-widget-card" :data-widget-type="widget.type" :data-widget-locked="widget.locked"
           :class="widget.size === 'full' ? 'crm-widget-card--full' : 'crm-widget-card--half'"
           :draggable="!widget.locked"
           @dragstart="startWidgetDrag(widget.id)"
@@ -85,7 +103,7 @@
                     Date Range: <span x-text="dateRangeLabel"></span>
                   </button>
                 </div>
-                <canvas id="crmOverviewSalesChart" style="width:100%; height:220px; display:block;" x-show="chartData.length > 0"></canvas>
+                <canvas role="img" aria-label="Sales revenue by month for the selected date range" id="crmOverviewSalesChart" style="width:100%; height:220px; display:block;" x-show="chartData.length > 0"></canvas>
                 <div x-show="chartData.length === 0" style="font-size:.82rem; color:var(--text-secondary,#6b7280);">No sales data available for this range.</div>
               </div>
             </template>
@@ -93,7 +111,7 @@
             <template x-if="widget.kind === 'system' && widget.type === 'task_board'">
               <div>
                 <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
-                  <select class="crm-form-select" x-model="boardOperatorFilter" style="max-width:220px;">
+                  <select class="crm-form-select" id="sales-operator-filter" aria-label="Filter tasks by operator" x-model="boardOperatorFilter" style="max-width:220px;">
                     <option value="">All operators</option>
                     <template x-for="u in operators" :key="`board-op-${u.id}`">
                       <option :value="u.id" x-text="u.display_name || u.email"></option>
@@ -128,8 +146,8 @@
                       <div style="font-size:.74rem; font-weight:800; text-transform:uppercase; margin-bottom:8px;" x-text="column.title"></div>
                       <template x-if="tasksFor(column.status).length === 0"><div style="font-size:.78rem; color:var(--text-secondary,#6b7280); padding:12px 0;">No tasks</div></template>
                       <template x-for="task in tasksFor(column.status).slice(0, 5)" :key="task.id">
-                        <div style="background:var(--surface-card,#fff); border:1px solid var(--border-default,#e5e7eb); border-radius:8px; padding:9px; margin-bottom:8px; cursor:pointer;"
-                          draggable="true"
+                        <div class="sales-task" role="button" tabindex="0" :aria-expanded="expandedTaskId === task.id" :aria-label="task.title"
+                          @keydown.enter.prevent="toggleTask(task)" @keydown.space.prevent="toggleTask(task)" draggable="true"
                           @dragstart="onTaskDragStart(task)"
                           @dragend="onTaskDragEnd()"
                           @click="toggleTask(task)"
@@ -144,7 +162,7 @@
                           </div>
                           <div style="font-size:.72rem; color:var(--text-secondary,#6b7280); margin-top:6px; white-space:pre-wrap;" x-text="task.description || 'No description'"></div>
                           <div x-show="expandedTaskId === task.id" x-cloak style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border-default,#e5e7eb);">
-                            <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" style="margin-top:8px;" @click.stop="openTaskInTasksPage(task)">Open in Tasks</button>
+                            <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" style="margin-top:8px;" @keydown.stop @click.stop="openTaskInTasksPage(task)">Open in Tasks</button>
                           </div>
                         </div>
                       </template>
