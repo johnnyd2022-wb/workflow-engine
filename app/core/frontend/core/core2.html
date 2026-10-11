@@ -36,6 +36,8 @@
           {# Health, next steps and workspace links belong to the overview only; the pages behind
              the tabs open straight onto their own content. #}
           {% if core2_focus_mode == '' %}
+          {# CONCEPT ONLY: Styles 2 and 3 show "Get to work" in this row instead of the header. #}
+          <div class="prod-header-actions prod-cta-row" data-production-actions-row data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}></div>
           <div class="prod-v2" data-production-root data-production-style="1">
           {# CONCEPT ONLY: three directions to choose from (docs/production-redesign-plan.md). Once one
              is picked, this switch and the other two styles are deleted. #}
@@ -43,6 +45,9 @@
             <button type="button" data-production-style-pick="1" aria-pressed="true">Style 1</button>
             <button type="button" data-production-style-pick="2" aria-pressed="false">Style 2</button>
             <button type="button" data-production-style-pick="3" aria-pressed="false">Style 3</button>
+            <span class="prod-segments__gap" aria-hidden="true"></span>
+            <button type="button" data-production-cta-pick="left" aria-pressed="true">Buttons left</button>
+            <button type="button" data-production-cta-pick="center" aria-pressed="false">Buttons centre</button>
           </div>
           <div class="production-overview__start" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
             <section class="workspace-card production-health" aria-labelledby="production-health-title">
@@ -1163,12 +1168,6 @@
       var addInv = { kind: 'addInventory' };
       var recordExec = { label: 'Record production step', href: '/core/processes' };
       var trace = { label: 'Trace and recall', href: '/core/sourcemap' };
-      var hints = {
-        'Add to inventory': 'Receive stock by hand, CSV or barcode.',
-        'Create product workflow': 'Set out the steps a product goes through.',
-        'Record production step': 'Start a batch or record its next step.',
-        'Trace and recall': 'Follow a batch back to its inputs and on to customers.',
-      };
       var secondaries = [];
       if (stage === 2) {
         secondaries.push(addInv, recordExec);
@@ -1261,7 +1260,6 @@
         const trigger = document.createElement('button');
         trigger.type = 'button';
         trigger.className = 'core2-journey-primary core2-journey-addinv-trigger';
-        trigger.dataset.hint = hints[primary.label] || '';
         trigger.setAttribute('aria-expanded', 'false');
         trigger.setAttribute('aria-haspopup', 'true');
         trigger.setAttribute('aria-label', 'Add to inventory, choose how');
@@ -1283,7 +1281,6 @@
         const primaryA = document.createElement('a');
         primaryA.className = 'core2-journey-primary';
         primaryA.href = primary.href;
-        primaryA.dataset.hint = hints[primary.label] || '';
         const circle = document.createElement('span');
         circle.className = 'core2-journey-primary__circle';
         circle.setAttribute('aria-hidden', 'true');
@@ -1317,7 +1314,6 @@
             trigger.type = 'button';
             trigger.className = 'core2-journey-addinv-trigger';
             trigger.textContent = 'Add to inventory';
-            trigger.dataset.hint = hints['Add to inventory'];
             trigger.setAttribute('aria-expanded', 'false');
             trigger.setAttribute('aria-haspopup', 'true');
             trigger.setAttribute('aria-label', 'Add to inventory, choose how');
@@ -1331,7 +1327,6 @@
             a.href = item.href;
             a.className = 'core2-journey-secondary__link';
             a.textContent = item.label;
-            a.dataset.hint = hints[item.label] || '';
             sec.appendChild(a);
           }
         });
@@ -2682,38 +2677,57 @@
       }).join('');
     }
 
-    /* CONCEPT ONLY: pick one of the three styles. They differ in where "Get to work" sits, and
-       Style 1 puts it in the page header, so the card is moved there and back. Once a style is
-       chosen the card is written where it belongs and this is deleted. */
+    /* CONCEPT ONLY: pick one of the three styles. They differ in where the title, the section
+       tabs and "Get to work" sit, so the card (and for Style 2 the tabs) are moved to suit:
+         1: tabs, then the title with the actions on its line, at the right;
+         2: the title, then the tabs, then the actions in a row;
+         3: tabs, then the title, then the actions in a row.
+       ?cta=left|center aligns that row. Once a style is chosen the markup is written that way
+       and this is deleted. */
     function core2WireProductionStyle() {
       var root = document.querySelector('[data-production-root]');
       if (!root || root.dataset.productionWired === '1') return;
       root.dataset.productionWired = '1';
+      var page = root.closest('.production-overview');
+      var header = page.querySelector('.workspace-header');
       var actions = document.querySelector('.production-actions');
-      var home = actions ? actions.parentNode : null;
-      var after = actions ? actions.nextSibling : null;
-      var slot = document.querySelector('[data-production-actions-slot]');
-      var picked = new URLSearchParams(window.location.search).get('style');
-      if (!/^[123]$/.test(picked || '')) {
-        try { picked = window.localStorage.getItem('production.style'); } catch (e) { picked = null; }
+      var headerSlot = document.querySelector('[data-production-actions-slot]');
+      var rowSlot = document.querySelector('[data-production-actions-row]');
+      var tabs = document.querySelector('#page-content nav.section-tabs');
+      var params = new URLSearchParams(window.location.search);
+      function stored(key, pattern, fallback) {
+        var value = params.get(key === 'production.style' ? 'style' : 'cta');
+        if (!pattern.test(value || '')) {
+          try { value = window.localStorage.getItem(key); } catch (e) { value = null; }
+        }
+        return pattern.test(value || '') ? value : fallback;
       }
-      function apply(style) {
-        root.dataset.productionStyle = /^[123]$/.test(style || '') ? style : '1';
-        root.closest('.production-overview').dataset.productionStyle = root.dataset.productionStyle;
+      function apply(style, cta) {
+        page.dataset.productionStyle = root.dataset.productionStyle = style;
+        page.dataset.productionCta = cta;
         root.querySelectorAll('[data-production-style-pick]').forEach(function (button) {
-          button.setAttribute('aria-pressed', button.dataset.productionStylePick === root.dataset.productionStyle ? 'true' : 'false');
+          button.setAttribute('aria-pressed', button.dataset.productionStylePick === style ? 'true' : 'false');
         });
-        if (actions && slot && home) {
-          if (root.dataset.productionStyle === '1') slot.appendChild(actions);
-          else home.insertBefore(actions, after && after.parentNode === home ? after : null);
+        root.querySelectorAll('[data-production-cta-pick]').forEach(function (button) {
+          button.setAttribute('aria-pressed', button.dataset.productionCtaPick === cta ? 'true' : 'false');
+          button.hidden = style === '1';
+        });
+        if (actions && headerSlot && rowSlot) (style === '1' ? headerSlot : rowSlot).appendChild(actions);
+        if (tabs && header) {
+          if (style === '2') header.after(tabs);
+          else page.before(tabs);
         }
       }
-      apply(picked);
+      apply(stored('production.style', /^[123]$/, '1'), stored('production.cta', /^(left|center)$/, 'left'));
       root.addEventListener('click', function (event) {
-        var pick = event.target.closest('[data-production-style-pick]');
-        if (!pick) return;
-        apply(pick.dataset.productionStylePick);
-        try { window.localStorage.setItem('production.style', root.dataset.productionStyle); } catch (e) { /* private mode */ }
+        var style = event.target.closest('[data-production-style-pick]');
+        var cta = event.target.closest('[data-production-cta-pick]');
+        if (!style && !cta) return;
+        apply(style ? style.dataset.productionStylePick : root.dataset.productionStyle, cta ? cta.dataset.productionCtaPick : page.dataset.productionCta);
+        try {
+          window.localStorage.setItem('production.style', root.dataset.productionStyle);
+          window.localStorage.setItem('production.cta', page.dataset.productionCta);
+        } catch (e) { /* private mode */ }
       });
     }
 

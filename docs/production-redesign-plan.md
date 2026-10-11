@@ -1,4 +1,4 @@
-# Production overview: redesign plan (concept, three boards)
+# Production overview: redesign plan (concept)
 
 The Production overview (`/core`) is where someone running the floor lands. It should answer,
 on one screen: **what is under way right now, is anything wrong, and what do I do next.**
@@ -51,24 +51,28 @@ lanes by stage, and a worklist table. **The board was chosen.** The lanes and th
 are deleted. The note back was that the main actions ("Get to work") sat off to the side and
 did not read as the page's calls to action.
 
-## Round two: three boards that differ in where the actions sit
+## Round two: where the actions sit
 
-Open `/core?style=1`, `?style=2` or `?style=3`, or use the switch on the page. All three are
-the same board with the same data. **Once one is picked, the switch and the other two are
-deleted.**
+Three boards were shown that differed only in where "Get to work" sits: in the page header,
+as a bar of large tiles above the board, and in a column beside the batches. **The header
+version was the only one that worked.** The other two are deleted.
 
-| | Style 1: In the header | Style 2: An action bar | Style 3: Beside the work |
+## Round three: the title, the tabs and the action buttons
+
+Open `/core?style=1`, `?style=2` or `?style=3`, with `&cta=left` or `&cta=center` for Styles 2
+and 3, or use the switches on the page. Everything below the buttons is the same board in all
+of them. **Once one is picked, the switches and the others are deleted.**
+
+| | Style 1 (round two's pick) | Style 2 | Style 3 |
 |---|---|---|---|
-| Idea | The actions are buttons on the title's line, main one solid and furthest right. | A bar across the top of the board: three large tiles, each saying what it is for. | The batches fill the first screen with a column of actions beside them; health and figures follow. |
-| Taken from | The page-header primary action in Shopify's admin and Polaris, Stripe, Linear | Quick-action rows on Mercury's and Xero's home pages; Katana's Make screen actions | Odoo's and Katana's work-first screens; Home's two-column second row |
-| Best at | Being where people look for a page's main button; costs no height, so health and figures stay on the first screen. | Being impossible to miss, and explaining each action to someone new. | Putting the work and its actions together; least scrolling to reach a batch. |
-| Gives up | No room for a description of each action. | About 200px of height before health and the figures. | Health and the figures move below the fold. |
+| Top to bottom | Tabs; then the title with the buttons on its line, at the right | The title; then the tabs; then the buttons in a row | Tabs; then the title; then the buttons in a row |
+| Buttons | Right, main one furthest right | Left or centred, main one first | Left or centred, main one first |
+| Best at | Costs no height; the convention for a page's main button | The page says what it is before offering its sections; the buttons sit right under the tabs | Leaves the tabs where they are on every other Production page; the buttons belong to the title |
+| Gives up | The buttons are far from the title on a wide screen | The title moves above the tabs here but not on Planner, Workflows or Inventory unless those change too; 60px more height | 60px more height |
 
-The "Taken from" row for round two is from my knowledge of those products. The searches to
-source it (Polaris's page-header primary action, quick-action rows) were not run: the session's
-usage limit was reached first. Treat that row as unverified until they are.
+On a phone the buttons are full width in every style, so left and centred look the same there.
 
-Shared by all three:
+Shared by all of them:
 
 1. **One main action, and it looks like one.** "Record production step" is a solid button;
    "Add to inventory" and "Trace and recall" are outlined beside it. Before, the main action
@@ -82,8 +86,8 @@ Shared by all three:
    zero is greyed and says "Nothing to do".
 5. **At a glance** is six bordered figures, each a link: active batches, longest running,
    finished this week, product workflows, stock lines, stock movements in 24 hours.
-6. With less than about 1100px of room, every style is one stacked column with the actions
-   first, so the main one is on a phone's first screen.
+6. With room, health sits beside the figures, then the batches run the full width, then the
+   links in a row. With less than about 1100px, it is one stacked column.
 
 The page keeps the section's reading width (1280px) on a wide screen, unlike Home's 1760px,
 so the tab strip does not jump when moving between Overview, Planner, Workflows and Inventory.
@@ -103,8 +107,11 @@ the main action is unchanged (add inventory, then create a workflow, then record
   than 20 under way would need the cap raised or a link to the rest. Follow-up.
 - The batches have no batch number in this response, so two batches of one product are told
   apart by step and age. Adding a number is an API change. Follow-up.
-- In Style 1 the "Get to work" card is moved into the page header by the style switch's
-  script. Once a style is chosen it is written where it belongs and that script goes.
+- The style switch's script moves the "Get to work" card (and, for Style 2, the tab strip) to
+  where each style wants it. Once a style is chosen the markup is written that way and the
+  script goes.
+- Style 2 changes the order of title and tabs on the overview only. If it is chosen, the same
+  order should be applied to Planner, Workflows and Inventory, which is a shell change.
 - In the stacked layout the batches are shown second but come later in the page's source, so
   keyboard order differs from visual order. To be fixed in the markup once a style is chosen.
 - Reaching Production by an in-app link leaves the tab strip 32px lower than a full load does.
@@ -118,8 +125,8 @@ the main action is unchanged (add inventory, then create a workflow, then record
 - `tests/e2e/test_production_overview.py` (new): batches in age order with step, progress and
   age; the quiet-floor state and the greyed clear check; leaving mid-load logs no failure;
   recording production is the main action and the only filled one; and, concept-only, every
-  style at 390, 1024, 1440 and 1920 with the main action on the first screen, no action drawn
-  over another and no sideways scroll; each style putting the actions where it says; and the
-  header actions surviving an in-app visit.
+  variant at 390, 1024, 1440 and 1920 with the main action on the first screen, no button
+  drawn over another and no sideways scroll; each style ordering title, tabs and buttons as it
+  says; the row centring; and the arrangement surviving an in-app visit.
 - Screenshots of each style at 1440 (sidebar open and as the rail), 1920, 1280, 1024 and 390,
   and dark.

@@ -83,12 +83,12 @@ html[data-spa-theme="dark"] #page-content.page-content .production-actions .core
 html[data-spa-theme="dark"] #page-content.page-content .production-actions .core2-journey-primary .core2-journey-primary__label,
 html[data-spa-theme="dark"] #page-content.page-content .production-actions .core2-journey-primary .core2-journey-primary__circle { color: #042f2e; }
 html[data-spa-theme="dark"] #page-content.page-content .production-actions .core2-journey-primary .core2-journey-primary__circle svg { stroke: #042f2e; }
-#page-content .production-actions [data-hint]::after { content: none; }
-
-/* ══ CONCEPT ONLY: three boards that differ in where "Get to work" sits. Delete the two not
-   chosen (and the switch, the header slot and the script that moves the card), then drop the
+/* ══ CONCEPT ONLY: three places for the title, the tabs and "Get to work". Delete the two not
+   chosen (and the switch, the spare slot and the script that moves things), then drop the
    [data-production-style] from the survivor's selectors. ══ */
 #page-content .prod-style-switch { order: 0; justify-self: end; margin-bottom: -8px; }
+#page-content .prod-segments__gap { width: 10px; }
+#page-content .prod-segments button[hidden] { display: none; }
 
 /* ── Style 1: actions in the page header, where the page's main button conventionally is. ── */
 #page-content .prod-header-actions { flex: 0 0 auto; min-width: 0; align-self: center; }
@@ -109,56 +109,33 @@ html[data-spa-theme="dark"] #page-content.page-content .production-actions .core
 #page-content .prod-header-actions .core2-journey-primary__circle,
 #page-content .prod-header-actions .core2-journey-primary__circle svg { width: 18px; height: 18px; min-width: 18px; }
 
-/* ── Style 2: an action bar across the top of the board, each action saying what it is for. ── */
-#page-content .prod-v2[data-production-style="2"] .production-actions { order: 0; }
-#page-content .prod-v2[data-production-style="2"] .production-actions .core2-journey { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
-#page-content .prod-v2[data-production-style="2"] .production-actions .core2-journey-secondary { display: contents; }
-#page-content .prod-v2:is([data-production-style="2"], [data-production-style="3"]) .production-actions [data-hint]::after { content: attr(data-hint); display: block; font-size: 13px; line-height: 1.35; font-weight: 400; color: var(--ui-text-muted, #64748b); }
-#page-content .prod-v2:is([data-production-style="2"], [data-production-style="3"]) .production-actions .core2-journey-primary[data-hint]::after { grid-area: hint; color: inherit; opacity: .88; }
-#page-content .prod-v2:is([data-production-style="2"], [data-production-style="3"]) .production-actions .core2-journey-primary { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "icon label" "icon hint"; align-items: center; justify-items: start; gap: 2px 14px; min-height: 76px; padding: 14px 18px; text-align: left; }
-#page-content .prod-v2:is([data-production-style="2"], [data-production-style="3"]) .production-actions .core2-journey-primary__circle { grid-area: icon; }
-#page-content .prod-v2:is([data-production-style="2"], [data-production-style="3"]) .production-actions .core2-journey-primary__label { grid-area: label; font-size: 15px; }
-#page-content .prod-v2:is([data-production-style="2"], [data-production-style="3"]) .production-actions .core2-journey-secondary__link,
-#page-content .prod-v2:is([data-production-style="2"], [data-production-style="3"]) .production-actions .core2-journey-addinv-trigger { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-height: 76px; height: 100%; padding: 14px 18px; font-size: 15px; text-align: left; }
-
-/* ── Style 3: the work first. Batches and their actions fill the first screen; health and the
-   figures follow. ── */
-/* Stacked, the actions lead so the main one is on the first screen of a phone. */
-#page-content .prod-v2[data-production-style="3"] .production-actions { order: 1; }
-#page-content .prod-v2[data-production-style="3"] .production-active { order: 2; }
-#page-content .prod-v2[data-production-style="3"] .production-health { order: 3; }
-#page-content .prod-v2[data-production-style="3"] .prod-glance { order: 4; }
-#page-content .prod-v2[data-production-style="3"] .production-actions .core2-journey-secondary { grid-template-columns: minmax(0, 1fr); }
-#page-content .prod-v2[data-production-style="3"] .production-actions .core2-journey-secondary__link,
-#page-content .prod-v2[data-production-style="3"] .production-actions .core2-journey-addinv-trigger { min-height: 64px; padding-top: 10px; padding-bottom: 10px; }
+/* ── Styles 2 and 3: the actions in a row of their own, main one first. Style 2 has the title
+   above the tabs and the row under the tabs; Style 3 has the row under the title. ── */
+#page-content .prod-cta-row { margin: 0 0 24px; }
+#page-content .prod-cta-row .core2-journey { justify-content: flex-start; }
+#page-content .production-overview[data-production-cta="center"] .prod-cta-row .core2-journey { justify-content: center; }
+#page-content .prod-cta-row .core2-journey-primary,
+#page-content .prod-cta-row .core2-journey-primary-bundle { order: 0; }
+#page-content .production-overview[data-production-style="2"] .workspace-header { margin-bottom: 16px; }
+#page-content .production-overview[data-production-style="2"] > .section-tabs { max-width: none; margin: 0 0 20px; padding: 0; }
+#page-content .production-overview[data-production-style="3"] .workspace-header { margin-bottom: 16px; }
 
 @container prod (min-width: 1100px) {
   #page-content .prod-v2 { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; }
   #page-content .prod-v2 > *,
   #page-content .prod-v2 .workspace-card { grid-column: 1 / -1; }
-  #page-content .prod-v2 .production-health { grid-column: span 5; }
-  #page-content .prod-v2 .prod-glance { grid-column: span 7; display: flex; flex-direction: column; }
+  #page-content .prod-v2 .production-health { grid-column: span 5; order: 1; }
+  #page-content .prod-v2 .prod-glance { grid-column: span 7; display: flex; flex-direction: column; order: 1; }
   #page-content .prod-v2 .prod-figures { flex: 1 1 auto; grid-auto-rows: 1fr; }
   #page-content .prod-v2 .prod-figure { align-content: center; }
   #page-content .prod-v2 .prod-figure__value { font-size: 34px; }
   #page-content .prod-v2 .prod-checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
-  /* Styles 1 and 2: health beside the figures, then the batches the full width, then the links
-     in a row. Style 2 has the action bar above all of it. */
-  #page-content .prod-v2:is([data-production-style="1"], [data-production-style="2"]) .production-health,
-  #page-content .prod-v2:is([data-production-style="1"], [data-production-style="2"]) .prod-glance { order: 1; }
-  #page-content .prod-v2:is([data-production-style="1"], [data-production-style="2"]) .workspace-links .workspace-action-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-
-  /* Style 3: the batches beside a column of actions and links, then health beside the figures. */
-  #page-content .prod-v2[data-production-style="3"] { grid-template-rows: auto auto 1fr auto; }
-  #page-content .prod-v2[data-production-style="3"] .production-active { grid-column: 1 / span 8; grid-row: 2 / span 2; }
-  #page-content .prod-v2[data-production-style="3"] .production-actions { grid-column: 9 / -1; grid-row: 2; }
-  #page-content .prod-v2[data-production-style="3"] .workspace-links { grid-column: 9 / -1; grid-row: 3; }
-  #page-content .prod-v2[data-production-style="3"] .production-health { grid-row: 4; }
-  #page-content .prod-v2[data-production-style="3"] .prod-glance { grid-row: 4; }
+  /* Health beside the figures, then the batches the full width, then the links in a row. */
+  #page-content .prod-v2 .workspace-links .workspace-action-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (max-width: 767px) {
+  #page-content .prod-style-switch { display: flex; flex-wrap: wrap; justify-self: stretch; justify-content: center; }
   #page-content .prod-checks { grid-template-columns: minmax(0, 1fr); }
   #page-content .prod-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   #page-content .prod-figure { padding: 12px 14px; }
@@ -175,7 +152,6 @@ html[data-spa-theme="dark"] #page-content.page-content .production-actions .core
   #page-content .prod-header-actions .core2-journey-secondary > * { flex: 1 1 0; }
   #page-content .prod-header-actions .core2-journey-secondary__link,
   #page-content .prod-header-actions .core2-journey-addinv-trigger { width: 100%; box-sizing: border-box; justify-content: center; }
-  #page-content .prod-v2[data-production-style="2"] .production-actions .core2-journey { grid-template-columns: minmax(0, 1fr); }
 }
 @media (min-width: 768px) and (max-width: 1099px) {
   #page-content .prod-checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
