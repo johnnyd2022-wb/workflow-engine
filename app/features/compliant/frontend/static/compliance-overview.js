@@ -3,6 +3,7 @@
   'use strict';
   window.bize.onPage('[data-compliance-style]', function (root) {
     var canManage = root.dataset.canManage === '1';
+    var primary = root.closest('#page-content').querySelector('[data-compliance-primary]');
     var error = root.querySelector('[data-compliant-error]');
     var retry = root.querySelector('[data-retry]');
     var controller = new AbortController();
@@ -61,7 +62,7 @@
         var href = destination(framework);
         var card = el('article', null, 'compliance-framework workspace-tile');
         var disclosure = el('details', null, 'compliance-framework-detail');
-        // CONCEPT ONLY: Register starts collapsed; Focus and Board keep evidence in view.
+        // CONCEPT ONLY: Register starts collapsed; Board and Action desk keep evidence in view.
         disclosure.open = root.dataset.complianceStyle !== '3';
         var heading = el('summary', null, 'compliance-framework-heading');
         var title = el('div', null, 'compliance-framework-title');
@@ -106,7 +107,14 @@
       set('[data-action-count]', actions.length ? actions.length + ' suggested' : '');
       root.querySelector('[data-more-actions]').hidden = actions.length < 2;
       set('[data-more-count]', actions.length > 1 ? '(' + (actions.length - 1) + ')' : '');
+      primary.hidden = true;
+      primary.removeAttribute('href');
       if (!actions.length) {
+        if (!hasFrameworks && canManage) {
+          primary.textContent = 'Set up Compliance';
+          primary.href = '/compliant/nz-alcohol/configuration';
+          primary.hidden = false;
+        }
         first.appendChild(el('h3', hasFrameworks ? 'No next steps suggested' : 'Start with your operation'));
         first.appendChild(el('p', hasFrameworks ? 'Review your obligations below. Evidence status and dates still need your regular review.' : 'Select the frameworks that apply to see your next steps.', 'workspace-caption'));
         return;
@@ -118,7 +126,11 @@
         else item.appendChild(el('h3', action.title));
         item.appendChild(el('p', action.description, 'workspace-caption'));
         if (action.value) item.appendChild(el('p', action.value, 'compliance-action-value'));
-        if (!index && href) item.appendChild(link(action.kind === 'product' ? 'Map products' : action.kind === 'profile' ? 'Set up Compliance' : 'Review evidence', href, 'workspace-button workspace-button--primary'));
+        if (!index && href) {
+          primary.textContent = action.kind === 'product' ? 'Map products' : action.kind === 'profile' ? 'Set up Compliance' : 'Review evidence';
+          primary.href = href;
+          primary.hidden = false;
+        }
         if (!href) item.appendChild(el('p', 'Ask your organisation admin to review this setup.', 'workspace-caption'));
         if (index) later.appendChild(item);
       });
@@ -167,6 +179,8 @@
       var status = 0;
       root.setAttribute('aria-busy', 'true');
       error.hidden = true;
+      primary.hidden = true;
+      primary.removeAttribute('href');
       try {
         var response = await fetch('/api/compliant/overview', { signal: controller.signal });
         status = response.status;
@@ -197,6 +211,7 @@
       if (!/^[123]$/.test(style || '')) style = '1';
       root.dataset.complianceStyle = style;
       root.querySelectorAll('[data-style-pick]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.stylePick === style)); });
+      root.querySelector('[data-more-actions]').open = style === '2';
       root.querySelectorAll('.compliance-framework-detail').forEach(function (detail) { detail.open = style !== '3'; });
       try { sessionStorage.setItem('compliance-design-style', style); } catch (_err) { /* Preferences are optional. */ }
       if (updateUrl) {

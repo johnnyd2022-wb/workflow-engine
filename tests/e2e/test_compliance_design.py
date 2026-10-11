@@ -67,8 +67,16 @@ def test_concepts_keep_evidence_and_actions_reachable(compliance_page, style, wi
     expect(obligations.get_by_role("article")).to_have_count(2)
     expect(page.get_by_role("link", name="Open NP2", exact=True)).to_be_visible()
     expect(page.get_by_role("link", name="Open Customs", exact=True)).to_be_visible()
+    expect(page.get_by_role("heading", level=1)).to_have_count(1)
+    expect(page.get_by_role("heading", level=1)).to_have_text("Compliance")
+    title = page.get_by_role("heading", level=1).bounding_box()
+    tabs = page.get_by_role("navigation", name="Compliance sections").bounding_box()
+    content = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
+    assert title["y"] + title["height"] < tabs["y"] < content["y"]
+    assert abs(title["x"] - content["x"]) <= 1, "page and section title must share their left edge"
+    expect(page.locator('.section-head__actions [data-compliance-primary]')).to_have_text("Map products")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
-    if style == 2 and width >= 1280:
+    if style == 1 and width >= 1440:
         readiness = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
         actions = page.get_by_role("region", name="Next action", exact=True).bounding_box()
         assert readiness["y"] == actions["y"]
@@ -93,7 +101,7 @@ def test_all_returned_actions_expand_and_primary_opens_mapping(compliance_page):
     _open(page)
     actions = page.get_by_role("region", name="Next action", exact=True)
     expect(actions.get_by_role("heading", level=3)).to_have_text(overview["priority_actions"][0]["title"])
-    expect(actions.get_by_role("link", name="Map products", exact=True)).to_have_attribute(
+    expect(page.get_by_role("link", name="Map products", exact=True)).to_have_attribute(
         "href", "/compliant/nz-alcohol/configuration"
     )
     page.locator("[data-more-actions] > summary").click()
@@ -102,7 +110,7 @@ def test_all_returned_actions_expand_and_primary_opens_mapping(compliance_page):
         expect(actions.get_by_role("link", name=action["title"], exact=True)).to_be_visible()
     page.locator("[data-more-actions] > summary").click()
     expect(page.locator("[data-priority-actions]")).not_to_be_visible()
-    actions.get_by_role("link", name="Map products", exact=True).click()
+    page.get_by_role("link", name="Map products", exact=True).click()
     expect(page).to_have_url(re.compile("/configuration$"))
 
 
@@ -110,8 +118,8 @@ def test_concept_switch_remembers_choice_and_survives_boosted_return(compliance_
     page = compliance_page
     _open(page)
     page.evaluate('window.complianceRoundTrip = "same window"')
-    page.get_by_role("button", name="2 · Board", exact=True).click()
-    expect(page.get_by_role("button", name="2 · Board", exact=True)).to_have_attribute("aria-pressed", "true")
+    page.get_by_role("button", name="2 · Action desk", exact=True).click()
+    expect(page.get_by_role("button", name="2 · Action desk", exact=True)).to_have_attribute("aria-pressed", "true")
     expect(page).to_have_url(re.compile(r"\?style=2$"))
     from tests.e2e.test_boosted_navigation import _BOOSTED_CLICK_JS
 
@@ -120,7 +128,7 @@ def test_concept_switch_remembers_choice_and_survives_boosted_return(compliance_
     page.evaluate(_BOOSTED_CLICK_JS, "/compliant/nz-alcohol")
     page.wait_for_function("window.__boostSettled === true")
     expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
-    expect(page.get_by_role("button", name="2 · Board", exact=True)).to_have_attribute("aria-pressed", "true")
+    expect(page.get_by_role("button", name="2 · Action desk", exact=True)).to_have_attribute("aria-pressed", "true")
     expect(page.get_by_role("article")).to_have_count(2)
     assert page.evaluate("window.complianceRoundTrip") == "same window", (
         "must exercise boosted swaps, not full navigation"
@@ -235,3 +243,31 @@ def test_data_coverage_keeps_live_gaps_and_sources_accessible(compliance_page):
     page.get_by_text("Data coverage · 3 live-data gaps", exact=True).click()
     expect(page.locator("[data-data-facts]")).to_contain_text("Manual evidence records7")
     expect(page.locator("[data-data-scope]")).to_have_text(response["data_coverage"]["scope"])
+
+
+def test_primary_action_matches_production_row_and_hides_during_reload(compliance_page):
+    page = compliance_page
+    _open(page)
+    primary = page.locator("[data-compliance-primary]")
+    secondary = page.locator(".compliance-header-actions").get_by_role("link", name="Premises", exact=True)
+    expect(primary).to_have_attribute("href", "/compliant/nz-alcohol/configuration")
+    expect(page.locator(".workspace-button--primary:visible")).to_have_count(1)
+    p = primary.bounding_box()
+    s = secondary.bounding_box()
+    tabs = page.get_by_role("navigation", name="Compliance sections").bounding_box()
+    assert p["x"] > s["x"] and abs(p["y"] - s["y"]) < 1
+    assert p["y"] < tabs["y"] + tabs["height"]
+    assert primary.evaluate("el => getComputedStyle(el).backgroundColor") != secondary.evaluate(
+        "el => getComputedStyle(el).backgroundColor"
+    )
+    page.set_viewport_size({"width": 390, "height": 844})
+    p, s = primary.bounding_box(), secondary.bounding_box()
+    assert p["y"] < s["y"], "primary action comes first when the tab row wraps"
+    page.route("**/api/compliant/overview", lambda route: route.fulfill(status=503, json={"error": "Unavailable"}))
+    _open(page)
+    expect(primary).not_to_be_visible()
+    expect(primary).not_to_have_attribute("href", "/compliant/nz-alcohol/configuration")
+    page.unroute("**/api/compliant/overview")
+    page.get_by_role("button", name="Try again", exact=True).click()
+    expect(primary).to_be_visible()
+    expect(primary).to_have_text("Map products")

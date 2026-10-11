@@ -1,22 +1,28 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Compliance — NZ Alcohol{% endblock %}
 {% block body_class %}compliant-page{% endblock %}
-{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/compliance-overview.css">{% endblock %}
+{% set section_head_is_page_title = true %}
+{% block section_actions %}
+<div class="compliance-header-actions">
+  <a class="workspace-button" href="/compliant/nz-alcohol/premises" hx-boost="false">Premises</a>
+  <a class="workspace-button workspace-button--primary" data-compliance-primary hx-boost="false" hidden></a>
+</div>
+{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="/compliant/static/compliance-overview.css">
 <main class="compliant-shell workspace-overview compliance-overview compliance-design"
       data-compliant-root data-compliant-surface="overview" data-compliance-style="1"
       data-can-manage="{{ '1' if can('compliance.manage') else '0' }}" aria-busy="true">
-  <header class="workspace-header">
-    <div><p class="compliance-kicker">NZ Alcohol</p><h1>Compliance</h1><p>Your evidence, and the next thing to do.</p></div>
+  <div class="compliance-preview">
     {# CONCEPT ONLY: remove this switch and the losing layouts after the founder's pick. #}
     <div class="compliance-style-pick" role="group" aria-label="Design concepts">
       <span>Preview</span>
-      <button type="button" data-style-pick="1" aria-pressed="true">1 · Focus</button>
-      <button type="button" data-style-pick="2" aria-pressed="false">2 · Board</button>
+      <button type="button" data-style-pick="1" aria-pressed="true">1 · Board</button>
+      <button type="button" data-style-pick="2" aria-pressed="false">2 · Action desk</button>
       <button type="button" data-style-pick="3" aria-pressed="false">3 · Register</button>
     </div>
-  </header>
+  </div>
   <div class="compliance-error workspace-card" data-compliant-error role="alert" hidden>
     <div><strong data-error-title>Readiness could not load</strong><p data-error-message></p></div>
     <button class="workspace-button" type="button" data-retry>Try again</button>
