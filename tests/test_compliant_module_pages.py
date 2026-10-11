@@ -33,7 +33,21 @@ def test_nz_alcohol_module_has_a_dedicated_page():
     ).read_text(encoding="utf-8")
     routes = (ROOT / "app" / "features" / "compliant" / "routes" / "page_routes.py").read_text(encoding="utf-8")
     assert 'route("/compliant/nz-alcohol"' in routes
-    assert "<h1>Compliance</h1>" in dashboard
+    # !515 moved the section title into the shared head; the overview opts in
+    # rather than rendering a duplicate title below its tabs. Browser coverage in
+    # test_compliance_design also checks the actual page has one Compliance h1.
+    assert "{% set section_head_is_page_title = true %}" in dashboard
+    assert "<h1" not in dashboard
+    from jinja2 import Environment, FileSystemLoader
+
+    shared = Environment(loader=FileSystemLoader(ROOT / "app" / "ui" / "templates" / "shared"))
+    rendered = shared.get_template("section_tabs.html").render(
+        section_head_is_page_title=True,
+        section_label="Compliance",
+        section_tabs=[SimpleNamespace(href="/compliant/nz-alcohol", key="overview", label="Overview", active=True)],
+    )
+    assert rendered.count("<h1 ") == 1
+    assert '>Compliance</h1>' in rendered
     assert 'data-compliant-surface="overview"' in dashboard
     assert "Food safety programme" in configuration
     assert "Liquor licence" in configuration

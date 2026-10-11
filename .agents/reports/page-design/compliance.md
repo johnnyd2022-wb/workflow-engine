@@ -120,3 +120,11 @@ verdict: findings-open — only the founder's concept choice and losing-style cl
 Repository-wide semgrep auto scan reported existing findings outside this change.
 The auto scan against origin/main returned zero new findings (exit 0); its HTML
 parser reported partial parsing of Jinja delimiters. Local JS rules had zero findings.
+
+CI follow-up: first !515 head pipeline `2935521660` had 255 relevant tests pass,
+but a static module-page test still required a literal `<h1>` inside dashboard.html.
+Updated that documented title contract to require shared-head opt-in and no local
+duplicate, render the actual shared section head and assert one Compliance h1.
+The existing 12 concept browser cases independently assert the full page title.
+All 21 module-page tests passed locally. No application edit; final visual pass
+remains valid. Independent evaluation and final CI recorded in the MR.

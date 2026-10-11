@@ -41,3 +41,15 @@ Updated the isolated snapshot with final CSS and this test file. Independent res
 - Restored exact final CSS: wide-screen case **1 passed in 5.31s**, `/tmp/compliance-515-evaluator-shared-restored.log`.
 
 Final CSS and shared test snapshot hashes match the worktree after restoration. No shared app/test mutations. This follow-up exercises the final CSS at three widths, supplementing the earlier 16-case run; it does not extend the stated cross-browser or screenshot-aesthetic coverage.
+
+## Static module-title test update — independent follow-up
+
+Scope added: `test_nz_alcohol_module_has_a_dedicated_page` in `tests/test_compliant_module_pages.py`. **Verdict: valid.** Requiring a literal local `<h1>Compliance</h1>` was obsolete after the shared-title adoption. The replacement checks the actual overview's shared-header opt-in, rejects a local duplicate h1, and renders the real shared section template to assert exactly one Compliance h1. The existing route, overview-surface and configuration-label assertions remain. This is an explicit relocation contract supported separately by twelve actual-page browser cases, not an assertion deletion to conceal a missing heading. The isolated shared-template render certifies that partial's opt-in behavior; it does not replace full-page integration coverage.
+
+Independent isolated-copy results:
+
+- Exact updated unit case: **1 passed in 0.09s**, `/tmp/compliance-515-evaluator-title-green.log`.
+- Mutated only isolated dashboard opt-in from `true` to `false`: **1 failed in 0.10s** as expected, `/tmp/compliance-515-evaluator-title-mutant.log`.
+- Restored exact dashboard: **1 passed**, `/tmp/compliance-515-evaluator-title-restored.log`.
+
+Dashboard and unit test hashes match the current worktree after restoration. No shared application or test edits made by the reviewer; only this report was appended.
