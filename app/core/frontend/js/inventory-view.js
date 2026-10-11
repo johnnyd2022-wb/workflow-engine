@@ -903,6 +903,8 @@
       }
     }).catch(function (error) {
       if (seq !== loadSeq || !root.isConnected) return;
+      // Leaving the page mid-request is not a failure to report.
+      if (error && error.name === 'AbortError') return;
       if (window.console) console.error('[inventory] load failed', error);
       if (!items.length) showLoadError();
     });

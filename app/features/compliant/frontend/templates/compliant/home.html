@@ -2,11 +2,10 @@
 {% block title %}Compliance{% endblock %}
 {% block body_class %}compliant-page{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{# The section head above is this page's title. #}
+{% set section_head_is_page_title = true %}
 {% block content %}
 <main class="compliant-shell compliant-home workspace-overview compliance-overview">
-  <header class="workspace-header">
-    <div><h1>Compliance</h1><p>Choose a workspace to review your obligations and evidence.</p></div>
-  </header>
 
   <section class="module-grid" aria-label="NZ Alcohol workspaces">
     <a class="module-card ui-card" href="/compliant/nz-alcohol">

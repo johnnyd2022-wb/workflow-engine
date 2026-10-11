@@ -236,8 +236,8 @@ def test_production_overview_reads_health_first_and_offers_each_batch_its_next_s
                 boxes["glance"]["x"] + boxes["glance"]["width"] - boxes["health"]["x"]
             )
         else:
-            # Without it, one column in priority order: health, the work, then the rest.
-            order = ["health", "active", "glance", "manage"]
+            # Without it, one column in the page's source order, so what is seen is what is tabbed.
+            order = ["health", "glance", "active", "manage"]
             assert [boxes[name]["y"] for name in order] == sorted(boxes[name]["y"] for name in order)
             assert len({round(boxes[name]["width"]) for name in order}) == 1, "every block spans the content column"
         links = [link.bounding_box() for link in manage.get_by_role("link").all()]

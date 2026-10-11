@@ -161,48 +161,39 @@ def test_recording_production_is_the_main_action_and_is_drawn_as_one(production_
     page.keyboard.press("Escape")
 
 
-# ── CONCEPT ONLY: round-four mock-ups A to E. Delete with the ones not chosen. ──
-
-MOCKS = {
-    "a": ("line", "left", "inline"),
-    "b": ("line", "left", "below"),
-    "c": ("line", "center", "below"),
-    "d": ("pill", "left", "inline"),
-    "e": ("pill", "center", "below"),
-}
+# ── The section head: the title, the tabs on a divider, and the main buttons on the tab row. ──
 
 
-def _open_mock(page, mock):
-    page.goto(f"/core?mock={mock}")
-    expect(page.locator(".production-health__state")).to_be_visible()
-    return page.get_by_role("region", name="Get to work", exact=True)
+def _head(page):
+    title = page.get_by_role("heading", name="Production", exact=True, level=1)
+    tabs = page.get_by_role("navigation", name="Production sections", exact=True)
+    return title, tabs, page.locator(".section-head__row")
 
 
-@pytest.mark.parametrize("mock", list(MOCKS))
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_every_mock_up_has_title_then_tabs_then_the_board_with_the_actions_in_reach(production_page, mock, width):
+def test_the_page_opens_with_its_title_then_the_tabs_then_the_board(production_page, width):
     page = production_page
     page.set_viewport_size({"width": width, "height": 1080 if width == 1920 else 900})
     _serve(page, BATCHES)
-    work = _open_mock(page, mock)
+    _open(page)
+    title, tabs, row = _head(page)
 
-    title = page.get_by_role("heading", name="Production", exact=True, level=1)
     expect(title).to_be_visible()
+    expect(page.locator("#page-content h1:visible")).to_have_count(1)
     expect(page.locator("#core2-hub-caption")).to_be_hidden()
-    tabs = page.get_by_role("navigation", name="Production sections", exact=True)
-    expect(tabs).to_have_count(1)
     expect(tabs.get_by_role("tab")).to_have_count(4)
     health = page.get_by_role("region", name="Production health", exact=True)
     tops = [title.bounding_box()["y"], tabs.bounding_box()["y"], health.bounding_box()["y"]]
-    assert tops == sorted(tops), "title, then tabs, then the board"
+    assert tops == sorted(tops)
 
+    work = page.get_by_role("region", name="Get to work", exact=True)
     main = work.get_by_role("link", name="Record production step")
     expect(main).to_be_in_viewport()
     boxes = [main.bounding_box(), work.get_by_role("link", name="Trace and recall").bounding_box()]
     boxes.append(work.get_by_role("button", name="Add to inventory, choose how").bounding_box())
-    boxes += [tab.bounding_box() for tab in tabs.get_by_role("tab").all()]
-    for index, one in enumerate(boxes):
-        for other in boxes[index + 1 :]:
+    tab_boxes = [tab.bounding_box() for tab in tabs.get_by_role("tab").all()]
+    for index, one in enumerate(boxes + tab_boxes):
+        for other in (boxes + tab_boxes)[index + 1 :]:
             apart = (
                 one["x"] + one["width"] <= other["x"] + 1
                 or other["x"] + other["width"] <= one["x"] + 1
@@ -210,70 +201,72 @@ def test_every_mock_up_has_title_then_tabs_then_the_board_with_the_actions_in_re
                 or other["y"] + other["height"] <= one["y"] + 1
             )
             assert apart, (one, other)
+
+    line = row.bounding_box()
+    if width >= 1440:
+        # Room for both: the buttons share the tab row, the main one at its right edge.
+        assert line["y"] <= boxes[0]["y"] and boxes[0]["y"] + boxes[0]["height"] <= line["y"] + line["height"]
+        assert abs(line["x"] + line["width"] - (boxes[0]["x"] + boxes[0]["width"])) < 2
+    else:
+        # No room: the buttons take the row beneath, the main one first.
+        tabs_bottom = tabs.bounding_box()["y"] + tabs.bounding_box()["height"]
+        assert boxes[0]["y"] >= tabs_bottom and abs(boxes[0]["x"] - line["x"]) < 2
+        assert boxes[0]["y"] <= min(box["y"] for box in boxes[1:])
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "scrolls sideways"
     assert_clean_page(page)
 
 
-@pytest.mark.parametrize("mock", list(MOCKS))
-def test_each_mock_up_draws_and_places_the_tabs_and_buttons_as_it_says(production_page, mock):
+def test_the_current_tab_is_marked_by_colour_weight_and_a_bar_the_width_of_the_tab(production_page):
     page = production_page
     _serve(page, BATCHES)
-    work = _open_mock(page, mock)
-    style, align, cta = MOCKS[mock]
+    _open(page)
+    _title, tabs, row = _head(page)
+    current = tabs.get_by_role("tab", name="Overview", exact=True)
+    other = tabs.get_by_role("tab", name="Planner", exact=True)
 
-    row = page.locator("[data-production-tabrow]")
-    tabs = page.get_by_role("tab")
-    current = page.get_by_role("tab", name="Overview", exact=True)
-    other = page.get_by_role("tab", name="Planner", exact=True)
+    def style(tab, prop):
+        return tab.evaluate("(el, prop) => getComputedStyle(el)[prop]", prop)
+
     expect(current).to_have_attribute("aria-selected", "true")
-    fill = current.evaluate("el => getComputedStyle(el).backgroundColor")
-    bar = current.evaluate("el => getComputedStyle(el).borderBottomColor")
-    if style == "line":
-        # Marked twice, neither of them a fill: a bar under it and a heavier label.
-        assert fill == "rgba(0, 0, 0, 0)" and bar != other.evaluate("el => getComputedStyle(el).borderBottomColor")
-        assert int(current.evaluate("el => getComputedStyle(el).fontWeight")) > int(
-            other.evaluate("el => getComputedStyle(el).fontWeight")
-        )
-        assert row.evaluate("el => getComputedStyle(el).borderBottomWidth") == "1px", "a divider under the tabs"
-        bottom = current.bounding_box()["y"] + current.bounding_box()["height"]
-        edge = row.bounding_box()["y"] + row.bounding_box()["height"]
-        assert abs(bottom - edge) <= 1, "the current tab's bar sits on the divider"
-    else:
-        assert (
-            fill != "rgba(0, 0, 0, 0)"
-            and other.evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
-        )
-
-    box = row.bounding_box()
-    first, last = tabs.first.bounding_box(), tabs.last.bounding_box()
-    left, right = first["x"] - box["x"], box["x"] + box["width"] - (last["x"] + last["width"])
-    if align == "left":
-        assert left < 8 and right > 200
-    else:
-        assert abs(left - right) < 12 and left > 150
-
-    main = work.get_by_role("link", name="Record production step").bounding_box()
-    if cta == "inline":
-        # On the tab row, at its right edge.
-        assert box["y"] <= main["y"] and main["y"] + main["height"] <= box["y"] + box["height"]
-        assert abs(box["x"] + box["width"] - (main["x"] + main["width"])) < 2
-    else:
-        # On the row beneath, starting at the page's left edge.
-        assert main["y"] >= box["y"] + box["height"] and abs(main["x"] - box["x"]) < 2
+    assert style(current, "backgroundColor") == "rgba(0, 0, 0, 0)", "a tab, not a filled switch"
+    assert style(current, "color") != style(other, "color")
+    assert int(style(current, "fontWeight")) > int(style(other, "fontWeight"))
+    assert style(current, "borderBottomColor") != style(other, "borderBottomColor")
+    assert style(current, "borderBottomWidth") == "3px"
+    # The bar is the tab's own bottom edge, sitting on the divider.
+    assert row.evaluate("el => getComputedStyle(el).borderBottomWidth") == "1px"
+    box, line = current.bounding_box(), row.bounding_box()
+    assert abs(box["y"] + box["height"] - (line["y"] + line["height"])) <= 1
+    # Tabs touch, so each bar runs to the middle of the gap before the next label.
+    boxes = [tab.bounding_box() for tab in tabs.get_by_role("tab").all()]
+    for left, right in zip(boxes, boxes[1:], strict=False):
+        assert abs(left["x"] + left["width"] - right["x"]) < 0.5
+    assert abs(boxes[0]["x"] - line["x"]) < 0.5, "the first tab starts at the page's left edge"
 
 
-def test_the_tabs_still_take_you_places_and_the_arrangement_survives_the_trip(production_page):
+def test_other_production_pages_show_the_section_then_the_tabs_then_their_own_title(production_page):
     page = production_page
     _serve(page, BATCHES)
-    _open_mock(page, "a")
-    page.get_by_role("button", name="A", exact=True).click()  # remembered, as the switch does
+    _open(page)
+    tabs_at = page.get_by_role("tab", name="Overview", exact=True).bounding_box()
 
     page.get_by_role("tab", name="Workflows", exact=True).click()
     page.wait_for_url(re.compile(r"/core/processes"))
-    page.locator("#sidebar").get_by_role("link", name="Production", exact=True).click()
+    own = page.get_by_role("heading", name="Workflows", exact=True, level=1)
+    expect(own).to_be_visible()
+    expect(page.locator("#page-content h1:visible")).to_have_count(1)
+    name = page.locator(".section-head__title")
+    expect(name).to_have_text("Production")
+    current = page.get_by_role("tab", name="Workflows", exact=True)
+    expect(current).to_have_attribute("aria-selected", "true")
+    here = page.get_by_role("tab", name="Overview", exact=True).bounding_box()
+    # The tabs do not move when the page changes.
+    assert abs(here["x"] - tabs_at["x"]) < 1 and abs(here["y"] - tabs_at["y"]) < 1
+    assert name.bounding_box()["y"] < here["y"] < own.bounding_box()["y"]
+    expect(page.locator(".section-head__actions")).to_have_count(0)
+
+    page.get_by_role("tab", name="Overview", exact=True).click()
     page.wait_for_url(re.compile(r"/core/?$"))
     expect(page.locator(".production-health__state")).to_be_visible()
-    row = page.locator("[data-production-tabrow]")
-    expect(row.get_by_role("navigation", name="Production sections", exact=True)).to_have_count(1)
-    expect(row.get_by_role("link", name="Record production step")).to_be_visible()
-    page.evaluate("localStorage.removeItem('production.mock')")
+    expect(page.locator("#page-content h1:visible")).to_have_text("Production")
+    expect(page.locator(".section-head__actions").get_by_role("link", name="Record production step")).to_be_visible()

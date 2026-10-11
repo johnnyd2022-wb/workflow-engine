@@ -11,13 +11,28 @@
   {% if not core2_focus %}{{ super() }}{% endif %}
 {% endblock %}
 
-{# The overview places its own workspace links, under Get to work. #}
+{# On the overview the section head is the page's title, and "Get to work" is its main buttons,
+   on the tab row. The pages behind the tabs keep their own header. #}
+{% set section_head_is_page_title = (not core2_focus) and request.path.rstrip('/') == '/core' %}
+{% block section_actions %}
+  {% if not core2_focus %}
+  <div class="prod-header-actions" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
+    <section class="workspace-card production-actions" aria-labelledby="production-actions-title">
+      <h2 id="production-actions-title">Get to work</h2>
+      <p class="workspace-caption">Your next step, with everyday actions close by.</p>
+      <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
+    </section>
+  </div>
+  {% endif %}
+{% endblock %}
+
+{# The overview places its own workspace links, at the foot of the board. #}
 {% block workspace_links %}{% if core2_focus %}{{ super() }}{% endif %}{% endblock %}
 
 {% block content %}
         {% set core2_focus_mode = core2_focus if core2_focus is defined else '' %}
         <div class="max-content workspace-overview workspace-page production-overview{% if core2_focus_mode %} production-overview--focus{% endif %}">
-          <header class="workspace-header" aria-labelledby="core2-hub-title">
+          <header class="workspace-header" aria-labelledby="core2-hub-title"{% if not core2_focus_mode %} data-core2-own-header{% if section_head_is_page_title %} hidden{% endif %}{% endif %}>
             <div>
               <h1 id="core2-hub-title" class="page-title">{% if core2_focus_mode == 'inventory_live' %}Live inventory{% elif core2_focus_mode == 'active_batches_live' %}Batches{% else %}Production{% endif %}</h1>
               <p id="core2-hub-caption">{% if core2_focus_mode == 'inventory_live' %}Stock on hand, what has moved, and what each process holds.{% elif core2_focus_mode == 'active_batches_live' %}Every batch in production, by the step it is at.{% else %}Keep production moving, from stock to finished batches.{% endif %}</p>
@@ -34,21 +49,7 @@
           {# Health, next steps and workspace links belong to the overview only; the pages behind
              the tabs open straight onto their own content. #}
           {% if core2_focus_mode == '' %}
-          {# CONCEPT ONLY (docs/production-redesign-plan.md, round four): the title, then this row with
-             the section tabs in it, then the board. The mock-up switch decides how the tabs are drawn
-             and aligned and whether "Get to work" sits on this row or the next. #}
-          <div class="prod-tabrow" data-production-tabrow>
-            <div class="prod-header-actions prod-tabrow__actions" data-production-actions-inline data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}></div>
-          </div>
-          <div class="prod-header-actions prod-cta-row" data-production-actions-row data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}></div>
           <div class="prod-v2" data-production-root>
-          <div class="prod-segments prod-style-switch" role="group" aria-label="Mock-up" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
-            <button type="button" data-production-mock-pick="a" aria-pressed="true" title="Underlined tabs at the left, buttons on the same row">A</button>
-            <button type="button" data-production-mock-pick="b" aria-pressed="false" title="Underlined tabs at the left, buttons beneath">B</button>
-            <button type="button" data-production-mock-pick="c" aria-pressed="false" title="Underlined tabs centred, buttons beneath">C</button>
-            <button type="button" data-production-mock-pick="d" aria-pressed="false" title="Today's selector at the left, buttons on the same row">D</button>
-            <button type="button" data-production-mock-pick="e" aria-pressed="false" title="Today's selector centred, buttons beneath">E</button>
-          </div>
           <div class="production-overview__start" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
             <section class="workspace-card production-health" aria-labelledby="production-health-title">
               <h2 id="production-health-title">Production health</h2>
@@ -100,13 +101,6 @@
                 </a>
               </div>
             </section>
-            <section class="workspace-card production-actions" aria-labelledby="production-actions-title">
-              <h2 id="production-actions-title">Get to work</h2>
-              <p class="workspace-caption">Your next step, with everyday actions close by.</p>
-              <div id="core2-journey-actions" data-can-adjust="{{ 'true' if can('inventory.adjust') else 'false' }}" data-can-record="{{ 'true' if can('production.record') else 'false' }}" data-can-design="{{ 'true' if can('production.design') else 'false' }}" data-can-trace="{{ 'true' if can('inventory.view') else 'false' }}"></div>
-            </section>
-            {% set production_board = {'label': 'View production board', 'href': '/core/executions/live'} if active_tab == 'overview' and can('production.view') else none %}
-            {% with workspace_links_card = true, workspace_links_footer = production_board %}{% include 'shared/workspace_links.html' %}{% endwith %}
           </div>
 
           <div id="core2-panel-overview" class="core2-tab-panel core2-tab-panel--active" data-core2-tab-panel="overview" role="region" aria-label="Production overview">
@@ -120,6 +114,11 @@
                 <p class="core2-active-batches-empty">Loading active batches...</p>
               </div>
             </section>
+          </div>
+          {# After the batches in the source, as on screen. #}
+          <div class="production-overview__end" data-core2-overview-only{% if request.path == '/core/tasks' %} hidden{% endif %}>
+            {% set production_board = {'label': 'View production board', 'href': '/core/executions/live'} if active_tab == 'overview' and can('production.view') else none %}
+            {% with workspace_links_card = true, workspace_links_footer = production_board %}{% include 'shared/workspace_links.html' %}{% endwith %}
           </div>
           </div>
 
@@ -642,6 +641,14 @@
       const caption = document.getElementById('core2-hub-caption');
       if (caption) caption.textContent = { overview: 'Keep production moving, from stock to finished batches.', inventory: 'Stock on hand and what needs attention.', workflows: 'Product workflows and the batches running on them.', tasks: 'Plan operational work alongside Sales follow-ups.' }[safeTab];
       document.querySelectorAll('[data-core2-overview-only]').forEach(function (el) { el.hidden = safeTab !== 'overview'; });
+      // The overview's title is the section head. The other tabs show this page's own header, and
+      // the section's name then stops being announced as the page's heading.
+      document.querySelectorAll('[data-core2-own-header]').forEach(function (el) { el.hidden = safeTab === 'overview'; });
+      const sectionTitle = document.getElementById('section-head-title');
+      if (sectionTitle) {
+        if (safeTab === 'overview') sectionTitle.removeAttribute('role');
+        else sectionTitle.setAttribute('role', 'presentation');
+      }
 
       // Defensive cleanup: prevent stale overlays from intercepting clicks after SPA/tab transitions.
       closeCore2HealthSheet();
@@ -2677,54 +2684,6 @@
       }).join('');
     }
 
-    /* CONCEPT ONLY: the round-four mock-ups. All have the title, then the section tabs, then the
-       board. They differ in how the tabs are drawn (underlined on a divider, or today's filled
-       selector), whether the tabs sit left or centred, and whether "Get to work" shares the tab
-       row (right) or takes the row beneath (left). ?mock=a..e picks one. Once one is chosen the
-       markup is written that way and this is deleted. */
-    var CORE2_PRODUCTION_MOCKS = {
-      a: { tabs: 'line', align: 'left', cta: 'inline' },
-      b: { tabs: 'line', align: 'left', cta: 'below' },
-      c: { tabs: 'line', align: 'center', cta: 'below' },
-      d: { tabs: 'pill', align: 'left', cta: 'inline' },
-      e: { tabs: 'pill', align: 'center', cta: 'below' },
-    };
-    function core2WireProductionStyle() {
-      var root = document.querySelector('[data-production-root]');
-      if (!root || root.dataset.productionWired === '1') return;
-      root.dataset.productionWired = '1';
-      var page = root.closest('.production-overview');
-      var actions = document.querySelector('.production-actions');
-      var inlineSlot = document.querySelector('[data-production-actions-inline]');
-      var rowSlot = document.querySelector('[data-production-actions-row]');
-      var tabRow = document.querySelector('[data-production-tabrow]');
-      var tabs = document.querySelector('#page-content nav.section-tabs');
-      if (tabs && tabRow) tabRow.prepend(tabs);
-      var picked = new URLSearchParams(window.location.search).get('mock');
-      if (!CORE2_PRODUCTION_MOCKS[picked]) {
-        try { picked = window.localStorage.getItem('production.mock'); } catch (e) { picked = null; }
-      }
-      function apply(name) {
-        var mock = CORE2_PRODUCTION_MOCKS[name] ? name : 'a';
-        var spec = CORE2_PRODUCTION_MOCKS[mock];
-        page.dataset.productionMock = mock;
-        page.dataset.productionTabs = spec.tabs;
-        page.dataset.productionAlign = spec.align;
-        page.dataset.productionCta = spec.cta;
-        root.querySelectorAll('[data-production-mock-pick]').forEach(function (button) {
-          button.setAttribute('aria-pressed', button.dataset.productionMockPick === mock ? 'true' : 'false');
-        });
-        if (actions && inlineSlot && rowSlot) (spec.cta === 'inline' ? inlineSlot : rowSlot).appendChild(actions);
-      }
-      apply(picked);
-      root.addEventListener('click', function (event) {
-        var pick = event.target.closest('[data-production-mock-pick]');
-        if (!pick) return;
-        apply(pick.dataset.productionMockPick);
-        try { window.localStorage.setItem('production.mock', page.dataset.productionMock); } catch (e) { /* private mode */ }
-      });
-    }
-
     function core2RenderWorkList(targetId, rows, emptyCopy) {
       var host = document.getElementById(targetId);
       if (!host) return;
@@ -2750,7 +2709,6 @@
       window.__core2HubOverviewPending = true;
       window.__core2HubOverview = null;
       try {
-        core2WireProductionStyle();
         overview = await CoreAPI.getHubOverview();
         updateMetricsV2(overview.metrics || {});
         applyCore2OverviewInsights(overview);

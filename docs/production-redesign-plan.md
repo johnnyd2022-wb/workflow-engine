@@ -1,4 +1,4 @@
-# Production overview: redesign plan (concept)
+# Production overview: redesign plan
 
 The Production overview (`/core`) is where someone running the floor lands. It should answer,
 on one screen: **what is under way right now, is anything wrong, and what do I do next.**
@@ -86,35 +86,42 @@ pages (Carbon: no more than six; Appian: fewer than seven), and Carbon pairs a s
 Not found: how Katana, Linear or Stripe lay this out, or any current guidance on full-width
 tabs on a wide desktop.
 
-## Round four: five mock-ups
+## Round four: five mock-ups, and the choice
 
-Open `/core?mock=a` to `?mock=e`, or use the A to E switch on the page. All have the title
-alone at the top (no sentence under it), starting where Home's title starts, then the tabs,
-then the same board. **Once one is picked, the switch and the others are deleted.**
+Five were shown with the title alone on top and the tabs beneath: tabs underlined on a divider
+or as the old filled selector, left or centred, with the buttons on the tab row or the row
+beneath. **A was chosen: underlined tabs at the left, buttons on the same row at the right**,
+with two changes asked for: the current tab's label is green as well, and its bar runs the
+whole width of the tab. The other four and the switch are deleted.
 
-| | Tabs drawn as | Tabs sit | Buttons |
-|---|---|---|---|
-| A | Underlined, on a divider line | Left | On the tab row, at the right |
-| B | Underlined, on a divider line | Left | On the row beneath, at the left |
-| C | Underlined, on a divider line | Centred | On the row beneath, at the left |
-| D | Today's filled selector | Left | On the tab row, at the right |
-| E | Today's filled selector | Centred | On the row beneath, at the left |
+## The design
 
-A and D put the board about 60px higher than B, C and E. Where the tab row has no room for
-both (under about 1100px for the page, which includes a 1280px laptop with the sidebar open),
-A and D put the buttons beneath, main one first, and the divider stays under the tabs.
+### A section head, shared by every page under a main tab
 
-To know before choosing:
+`app/ui/templates/shared/section_tabs.html` and `section-tabs.css`. It replaces the filled
+tab strip on every page that had one, in Production, Compliance and Sales.
 
-- **This is the Overview only.** Planner, Workflows and Inventory still have the old strip
-  above their own titles, so in the mock-ups the tabs move when you change tab. Whichever is
-  chosen has to be applied to the shared tab strip and those three pages, and Compliance and
-  Sales use the same strip.
-- **The title becomes the section's name.** With the title above the tabs, "Production" should
-  stay put on all four tabs and the tab should say which page it is; today Workflows shows a
-  "Workflows" title under a "Workflows" tab.
+1. **The section's name**, alone, starting where Home's title starts. No sentence under it.
+2. **The tabs, on a divider line, directly above the page.** The current tab is marked three
+   ways: green text, a heavier label, and a bar on the divider. Tabs touch each other, so the
+   bar runs the tab's whole width and ends half way to the next label; the first tab starts
+   at the page's left edge.
+3. **A slot for a page's main buttons** on the tab row, at the right, main one furthest right
+   (`{% block section_actions %}`). Without room for both (under about 1100px for the page,
+   which includes a 1280px laptop with the sidebar open), the buttons take the row beneath,
+   main one first, and the divider stays under the tabs.
 
-Shared by all of them:
+On the Production overview, the Compliance home and the Sales overview, the section's name is
+the page's title (its `h1`) and those pages' own titles and subtitles are gone. Every other
+page keeps its own title beneath the tabs, and the section's name above is plain text, so each
+page still has exactly one main heading.
+
+**Known and deliberate for now:** Planner, Workflows and Inventory show "Production", the tabs,
+and then their own title, which repeats the tab's word ("Workflows" under a "Workflows" tab).
+Removing those titles and moving each page's buttons into the head is the next step for each
+page as it is redesigned; doing it here would have touched every Production page's layout.
+
+### The Production overview
 
 1. **One main action, and it looks like one.** "Record production step" is a solid button;
    "Add to inventory" and "Trace and recall" are outlined beside it. Before, the main action
@@ -129,7 +136,8 @@ Shared by all of them:
 5. **At a glance** is six bordered figures, each a link: active batches, longest running,
    finished this week, product workflows, stock lines, stock movements in 24 hours.
 6. With room, health sits beside the figures, then the batches run the full width, then the
-   links in a row. With less than about 1100px, it is one stacked column.
+   links in a row. With less than about 1100px, it is one stacked column in the same order.
+   The page's source is in that order too, so keyboard order matches what is seen.
 
 The page keeps the section's reading width (1280px) on a wide screen, unlike Home's 1760px,
 so the tab strip does not jump when moving between Overview, Planner, Workflows and Inventory.
@@ -149,13 +157,17 @@ the main action is unchanged (add inventory, then create a workflow, then record
   than 20 under way would need the cap raised or a link to the rest. Follow-up.
 - The batches have no batch number in this response, so two batches of one product are told
   apart by step and age. Adding a number is an API change. Follow-up.
-- The mock-up switch's script moves the tab strip under the title and the "Get to work" card
-  onto the tab row or the row beneath. Once one is chosen the markup is written that way, the
-  shared tab strip is restyled in `section-tabs.css`, and the script goes.
-- In the stacked layout the batches are shown second but come later in the page's source, so
-  keyboard order differs from visual order. To be fixed in the markup once a style is chosen.
-- Reaching Production by an in-app link leaves the tab strip 32px lower than a full load does.
-  It predates this change (it is in the screenshots of the unchanged page). Follow-up.
+- Planner, Workflows, Inventory and the pages beneath them keep their own titles and header
+  buttons for now (see above). Compliance's and Sales' other tabs likewise.
+- Some page logs "AbortError: Request cancelled by navigation" to the console when it is left
+  mid-load. Production overview and Inventory no longer do; the source of the remaining one
+  was not traced. Follow-up.
+- **Root cause found for "the page sits 32px lower after an in-app click".** `base_spa.html`
+  boosts with `hx-target="#page-content"` and `hx-select="#page-content"` and the default
+  swap, so the selected `<main id="page-content">` is inserted *inside* the existing one: two
+  elements with that id, and the top padding applied twice. The section head is made immune
+  to it here. Fixing it properly (selecting the children, or swapping the element itself) is
+  a shell change that every page's boosted render depends on, so it is its own piece of work.
 
 ## Checks
 
@@ -164,10 +176,11 @@ the main action is unchanged (add inventory, then create a workflow, then record
   the action on the batch.
 - `tests/e2e/test_production_overview.py` (new): batches in age order with step, progress and
   age; the quiet-floor state and the greyed clear check; leaving mid-load logs no failure;
-  recording production is the main action and the only filled one; and, concept-only, every
-  mock-up at 390, 1024, 1440 and 1920 with title then tabs then board, the main action on the
-  first screen, nothing drawn over anything else and no sideways scroll; each mock-up drawing
-  and placing its tabs and buttons as the table says, including the current tab's bar sitting
-  on the divider; and the tabs still navigating, with the arrangement surviving the trip.
-- Screenshots of A to E at 1440 (sidebar open and as the rail), 1920, 1280, 1024 and 390, and
-  dark.
+  recording production is the main action and the only filled one; the page opening with its
+  title, then the tabs, then the board at 390, 1024, 1440 and 1920, with the buttons on the tab
+  row when there is room and beneath when there is not, nothing overlapping and no sideways
+  scroll; the current tab marked by colour, weight and a bar the tab's whole width sitting on
+  the divider, with tabs touching; and another Production page showing the section, the tabs in
+  the same place, and its own title, with one main heading.
+- Screenshots of the overview at 1440 (sidebar open and as the rail), 1920, 1280, 1024 and 390
+  and dark, and of Planner, Workflows, Inventory, Batches, Tasks, Compliance and Sales.

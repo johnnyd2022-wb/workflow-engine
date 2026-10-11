@@ -3,10 +3,11 @@
 {% block body_class %}crm-page{% endblock %}
 {% block head_extras %}{% endblock %}
 
+{# The section head above is this page's title. #}
+{% set section_head_is_page_title = true %}
 {% block content %}
 <div class="max-content crm-root workspace-overview sales-overview" x-data="crmOverview()" x-init="init()">
-  <header class="workspace-header">
-    <div><h1>Sales</h1><p>Sales performance and customer insights.</p></div>
+  <header class="workspace-header workspace-header--actions">
     <button type="button" class="workspace-button" @click="openWidgetModal()">Add widget</button>
   </header>
 
