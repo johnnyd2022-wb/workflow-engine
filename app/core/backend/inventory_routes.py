@@ -143,6 +143,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
         except ValueError:
             return jsonify({"error": "Invalid limit or cursor parameter"}), 400
 
+        compact = request.args.get("view") == "compact"
         repo = InventoryRepository(db_session)
         items = repo.list_inventory_items(
             org_id=org_id,
@@ -150,6 +151,9 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
             process_id=process_id,
             limit=(page_limit + 1 if page_limit is not None else None),
             cursor=cursor,
+            # The enriched list hides sold-out lines. On a page, hide them in the query so
+            # the page is full and has_more is honest; the compact view never hid them.
+            non_empty_only=page_limit is not None and not compact,
         )
         has_more = page_limit is not None and len(items) > page_limit
         if has_more:
@@ -160,7 +164,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
         # producing-step hydration, ready-date lookups, audit history). The sourcemap browse
         # grid groups the whole list by name / batch / supplier and needs none of that; the
         # full representation is ~20x larger.
-        if request.args.get("view") == "compact":
+        if compact:
             return jsonify(
                 {
                     "inventory_items": [
@@ -592,9 +596,9 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
 
         body = {"inventory_items": result}
         if page_limit is not None:
-            # next_cursor points at the last FETCHED row (pre zero-quantity filtering) so the
-            # next page's keyset scan continues from the right place regardless of how many
-            # rows the display filter dropped.
+            # Sold-out lines were already excluded by the query, so the page is full whenever
+            # has_more is true and next_cursor is the last row it returned. The loop's own
+            # zero filter above only still matters for the unpaginated list.
             body["has_more"] = has_more
             body["next_cursor"] = next_cursor
         return jsonify(body), 200
