@@ -366,15 +366,20 @@ def test_settings_groups_account_security_and_organisation_in_cards(browser, app
         people = page.get_by_role("region", name="People and roles", exact=True)
         expect(sites.get_by_role("link", name="View sites", exact=True)).to_have_attribute("href", "/core/sites")
         expect(people.get_by_role("link", name="Manage people", exact=True)).to_have_attribute("href", "/core/people")
-        side_by_side = sites.bounding_box()["y"] == people.bounding_box()["y"]
-        assert side_by_side == (width >= 1024)
+        assert sites.bounding_box()["y"] < people.bounding_box()["y"]
         headings = page.locator(".settings-overview .workspace-card h2").all_inner_texts()
         expected = ["Account information", "Manage sites", "People and roles", "Security"]
         expected += ["Two-factor authentication", "Session settings"]
         assert [heading for heading in headings if heading in expected] == expected
         assert headings[-2:] == ["Notification preferences", "Appearance"]
-        lefts = {round(card.bounding_box()["x"]) for card in page.locator(".settings-overview .workspace-card").all()}
-        assert len(lefts) == (2 if side_by_side else 1)
+        account = page.locator('[data-settings-group="account"]').bounding_box()
+        organisation = page.locator('[data-settings-group="organisation"]').bounding_box()
+        if width >= 1280:
+            assert abs(account["y"] - organisation["y"]) < 2
+            assert account["x"] + account["width"] <= organisation["x"]
+        else:
+            assert organisation["y"] > account["y"]
+            assert abs(account["x"] - organisation["x"]) < 2
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "settings-layout", width)
         page.evaluate("localStorage.setItem('spa-theme', 'dark')")

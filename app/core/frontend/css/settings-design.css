@@ -1,0 +1,70 @@
+/* Style 1: the shared Production Board, adapted to settings forms. */
+#page-content .settings-overview { max-width: 1280px; }
+#page-content .settings-overview .workspace-header { margin-bottom: 24px; }
+#page-content .settings-overview .page-title { font-size: 28px; }
+.settings-concepts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 24px; }
+.settings-concepts > span { color: var(--ui-text-muted); font-size: .8rem; margin-right: 4px; }
+.settings-concepts .workspace-button { padding: 7px 12px; font-size: .8rem; min-height: 36px; }
+#page-content .settings-concepts [aria-pressed="true"] { border-color: var(--ui-accent); color: var(--ui-accent); background: var(--ui-surface-subtle); }
+.settings-nav { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--ui-border); margin-bottom: 24px; }
+#page-content .settings-nav a { padding: 12px 16px; color: var(--ui-text-muted); font-size: .875rem; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; }
+#page-content .settings-nav a[aria-current] { color: var(--ui-accent); border-color: var(--ui-accent); }
+.settings-groups { display: grid; grid-template-columns: 5fr 7fr; gap: 24px; align-items: start; }
+.settings-group { min-width: 0; scroll-margin-top: 24px; }
+.settings-group[hidden], .settings-overview [hidden] { display: none !important; }
+.settings-group > summary { display: none; }
+.settings-group-heading { display: flex; flex-direction: column; gap: 4px; list-style: none; padding: 0 0 16px; color: var(--ui-text); font-weight: 600; pointer-events: none; }
+.settings-group > summary::-webkit-details-marker { display: none; }
+.settings-group > summary small, .settings-group-heading small { font-size: .8rem; font-weight: 400; color: var(--ui-text-muted); }
+.settings-group-content { display: grid; gap: 24px; }
+#settings-security, #settings-preferences { grid-column: 1 / -1; }
+#settings-security .settings-group-content, #settings-preferences .settings-group-content { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+#page-content .settings-overview .settings-card { margin: 0; padding: 24px; min-width: 0; }
+#page-content .settings-overview .card-header { padding: 0 0 16px !important; border: 0; }
+#page-content .settings-overview .card-content { padding: 0 !important; }
+#page-content .settings-overview .settings-section-list > .form-group { padding: 0 0 16px; border: 0; }
+#page-content .settings-overview .form-label { color: var(--ui-text); }
+#page-content .settings-overview .workspace-button--primary { background: var(--ui-accent); border-color: var(--ui-accent); color: white; }
+html[data-spa-theme="dark"] #page-content.page-content .settings-overview .workspace-button--primary,
+html[data-spa-theme="dark"] #page-content.page-content .settings-overview .workspace-button--primary:hover { background: var(--ui-accent); border-color: var(--ui-accent); color: #042f2e; }
+#page-content #session-timeout-input { width: 100px !important; }
+#page-content #session-timeout-unit { width: 120px !important; }
+.settings-overview .switch input:checked + .switch-slider { background: var(--ui-accent); }
+.settings-overview .switch input:focus-visible + .switch-slider { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.settings-overview .switch input:disabled + .switch-slider { cursor: not-allowed; opacity: .5; }
+.settings-overview .settings-2fa-actions { align-items: flex-start; }
+.settings-load-status { color: var(--ui-text-muted); margin-bottom: 16px; }
+/* CONCEPT ONLY — Style 2: a settings desk, one category at a time. */
+.settings-overview[data-settings-style="2"] .settings-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 32px; align-items: start; }
+.settings-overview[data-settings-style="2"] .settings-nav { flex-direction: column; border: 0; gap: 4px; }
+#page-content .settings-overview[data-settings-style="2"] .settings-nav a { border: 0; border-radius: 8px; }
+#page-content .settings-overview[data-settings-style="2"] .settings-nav a[aria-current] { background: var(--ui-surface-subtle); box-shadow: inset 3px 0 var(--ui-accent); }
+.settings-overview[data-settings-style="2"] .settings-groups { display: block; }
+.settings-overview[data-settings-style="2"] .settings-group-content { grid-template-columns: minmax(0, 1fr) !important; }
+.settings-overview[data-settings-style="2"] .settings-card { max-width: 800px; }
+/* CONCEPT ONLY — Style 3: a compact register of expandable categories. */
+.settings-overview[data-settings-style="3"] .settings-nav { display: none; }
+.settings-overview[data-settings-style="3"] .settings-groups { display: flex; flex-direction: column; gap: 12px; }
+.settings-overview[data-settings-style="3"] .settings-group { width: 100%; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface); }
+.settings-overview[data-settings-style="3"] .settings-group-heading { display: none; }
+.settings-overview[data-settings-style="3"] .settings-group > summary { display: flex; flex-direction: column; gap: 4px; font-weight: 600; cursor: pointer; pointer-events: auto; padding: 20px 24px; position: relative; padding-right: 55px; }
+.settings-overview[data-settings-style="3"] .settings-group > summary::after { content: '+'; position: absolute; right: 24px; top: 22px; color: var(--ui-accent); }
+.settings-overview[data-settings-style="3"] .settings-group[open] > summary::after { content: '−'; }
+.settings-overview[data-settings-style="3"] .settings-group-content { padding: 0 24px 24px; }
+#page-content .settings-overview[data-settings-style="3"] .settings-card { border: 0; border-radius: 0; box-shadow: none; padding: 16px 0 0; border-top: 1px solid var(--ui-border); }
+.settings-overview[data-settings-style="3"] #settings-account .settings-section-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.settings-overview[data-settings-style="3"] #settings-account .settings-section-list > :first-child { grid-column: 1 / -1; }
+@media (max-width: 1100px) {
+  .settings-groups { grid-template-columns: minmax(0, 1fr); }
+  #settings-security .settings-group-content, #settings-preferences .settings-group-content { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .settings-overview[data-settings-style="2"] .settings-layout { display: block; }
+  .settings-overview[data-settings-style="2"] .settings-nav { flex-direction: row; }
+  #page-content .settings-nav a { padding: 10px 8px; font-size: .8rem; }
+  #page-content .settings-overview .settings-card { padding: 18px; }
+  .settings-overview[data-settings-style="3"] #settings-account .settings-section-list { display: block; }
+  .settings-overview[data-settings-style="3"] .settings-group-content { padding: 0 18px 18px; }
+  .settings-overview[data-settings-style="3"] .settings-group > summary { padding-left: 18px; }
+  .settings-concepts .workspace-button { font-size: .72rem; padding: 6px 8px; }
+}
