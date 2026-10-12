@@ -5,11 +5,13 @@ AC20-AC25 (.agents/specs/inventory.md). The client's csv-validate result is advi
 the unhappy paths here attack that boundary directly rather than just checking shapes.
 """
 
+import re
 import uuid
 
 import pytest
+from playwright.sync_api import expect
 
-from tests.e2e.conftest import csrf_headers
+from tests.e2e.conftest import assert_clean_page, csrf_headers
 
 pytestmark = pytest.mark.e2e
 
@@ -243,3 +245,91 @@ def test_csv_commit_skips_duplicate_batch_but_commits_the_rest(logged_in_page):
     matching = [i for i in listing if i["name"] == dup_name]
     assert len(matching) == 1, f"expected exactly one row for the colliding name, found {len(matching)}"
     assert matching[0]["quantity"] == "1", "the collided row's quantity changed even though its CSV row was skipped"
+
+
+def _offer_csv(page, csv_text: str, via: str = "input") -> None:
+    """Hand a CSV to the page by one of its three entry points: the file input itself, the
+    Browse button (which opens the native chooser) or a drop on the drop zone."""
+    page.goto("/core/inventory/add/csv")
+    expect(page.locator("#csv-drop-zone")).to_be_visible()
+    assert_clean_page(page)
+    payload = {"name": "items.csv", "mimeType": "text/csv", "buffer": csv_text.encode()}
+    if via == "input":
+        page.locator("#csv-file-input").set_input_files(payload)
+    elif via == "browse":
+        with page.expect_file_chooser() as chooser:
+            page.locator("#csv-browse-btn").click()
+        chooser.value.set_files(payload)
+    elif via == "drop":
+        data_transfer = page.evaluate_handle(
+            """(text) => {
+                const dt = new DataTransfer();
+                dt.items.add(new File([text], 'items.csv', { type: 'text/csv' }));
+                return dt;
+            }""",
+            csv_text,
+        )
+        page.dispatch_event("#csv-drop-zone", "drop", {"dataTransfer": data_transfer})
+    else:  # pragma: no cover - guards a typo in a test, not app behaviour
+        raise AssertionError(f"unknown entry point {via!r}")
+
+
+@pytest.mark.parametrize("via", ["input", "browse", "drop"])
+def test_csv_upload_reaches_the_review_card_from_every_entry_point(logged_in_page, via):
+    """The file input, the Browse button's chooser and a drop on the drop zone are three
+    separate code paths into `handleCsvFile`; each must land the row on the review card."""
+    page = logged_in_page
+    name = f"E2E CSV Entry {via} {uuid.uuid4().hex[:8]}"
+
+    _offer_csv(page, f"Item Name,Quantity,Unit\n{name},2,kg\n", via=via)
+
+    expect(page.locator("#csv-review-name")).to_have_value(name)
+    expect(page.locator("#csv-review-qty")).to_have_value("2")
+
+
+def test_csv_upload_through_the_browser_reviews_then_adds_the_item(logged_in_page):
+    """The file-input -> review card -> commit path a user drives (findings-index 2cc8fc78).
+
+    The API-level tests above prove validate/commit; this proves the page wires an upload to
+    them and that the row only lands after the user accepts the review card. The three ways
+    of offering the file are covered by the entry-point test above.
+    """
+    page = logged_in_page
+    name = f"E2E CSV Browser {uuid.uuid4().hex[:8]}"
+
+    _offer_csv(page, f"Item Name,Quantity,Unit,Supplier Name\n{name},7.5,kg,E2E CSV Supplier\n")
+
+    # The review card is pre-filled from the validated row, and nothing is written yet.
+    expect(page.locator("#csv-review-name")).to_have_value(name)
+    expect(page.locator("#csv-review-qty")).to_have_value("7.5")
+    expect(page.locator("#csv-review-supplier")).to_have_value("E2E CSV Supplier")
+    before = page.request.get("/api/core/inventory")
+    assert before.status == 200, f"listing failed: {before.status} {before.text()}"
+    assert name not in before.text(), "the row was written before the user accepted the review card"
+
+    page.locator("#csv-review-accept").click()
+    page.wait_for_url(re.compile(r"/core$"), timeout=15_000)
+
+    listing = page.request.get("/api/core/inventory")
+    assert listing.status == 200, f"listing failed: {listing.status} {listing.text()}"
+    matching = [i for i in listing.json()["inventory_items"] if i["name"] == name]
+    assert len(matching) == 1, f"expected exactly one committed row for {name!r}, found {len(matching)}"
+    assert matching[0]["quantity"] == "7.5"
+    assert matching[0]["supplier"] == "E2E CSV Supplier"
+
+
+def test_csv_upload_through_the_browser_skipping_the_review_card_writes_nothing(logged_in_page):
+    """Declining the review card must leave inventory untouched and return to the drop zone."""
+    page = logged_in_page
+    name = f"E2E CSV Skipped {uuid.uuid4().hex[:8]}"
+
+    _offer_csv(page, f"Item Name,Quantity,Unit\n{name},3,kg\n")
+
+    expect(page.locator("#csv-review-name")).to_have_value(name)
+    page.locator("#csv-review-skip").click()
+
+    expect(page.locator("#csv-drop-zone")).to_be_visible()
+    expect(page.locator("#csv-review-card")).to_have_count(0)
+    listing = page.request.get("/api/core/inventory")
+    assert listing.status == 200, f"listing failed: {listing.status} {listing.text()}"
+    assert name not in listing.text(), "a skipped CSV row was written to inventory"
