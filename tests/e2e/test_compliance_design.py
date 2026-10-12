@@ -76,7 +76,7 @@ def test_board_keeps_evidence_and_actions_reachable(compliance_page, width):
     content = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
     assert title["y"] + title["height"] < tabs["y"] < content["y"]
     assert abs(title["x"] - content["x"]) <= 1, "page and section title must share their left edge"
-    expect(page.locator(".section-head__actions [data-compliance-primary]")).to_have_text("Map products")
+    expect(page.locator(".section-head__actions [data-compliance-primary]")).to_have_text("Review evidence")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
     if width >= 1440:
         readiness = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
@@ -96,7 +96,11 @@ def test_all_returned_actions_expand_and_primary_opens_mapping(compliance_page):
     expect(
         actions.locator("[data-next-action]").get_by_role("link", name="Map products", exact=True)
     ).to_have_attribute("href", "/compliant/nz-alcohol/configuration")
-    expect(page.locator("[data-compliance-primary]")).to_have_attribute("href", "/compliant/nz-alcohol/configuration")
+    # The tab-row primary is the everyday job, not a copy of the suggestion: the framework most in need of evidence.
+    expect(page.locator("[data-compliance-primary]")).to_have_text("Review evidence")
+    expect(page.locator("[data-compliance-primary]")).to_have_attribute(
+        "href", "/compliant/nz-alcohol/food-safety?filter=attention"
+    )
     page.locator("[data-more-actions] > summary").click()
     expect(page.locator("[data-priority-actions] > li")).to_have_count(len(overview["priority_actions"]) - 1)
     for action in overview["priority_actions"][1:]:
@@ -119,7 +123,7 @@ def test_board_loads_again_after_boosted_navigation(compliance_page):
     page.wait_for_function("window.__boostSettled === true")
     expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
     expect(page.get_by_role("article")).to_have_count(2)
-    expect(page.locator("[data-compliance-primary]")).to_have_text("Map products")
+    expect(page.locator("[data-compliance-primary]")).to_have_text("Review evidence")
     assert page.evaluate("window.complianceRoundTrip") == "same window", (
         "must exercise boosted swaps, not full navigation"
     )
@@ -161,12 +165,19 @@ def test_setup_and_quiet_states_do_not_invent_assurance(compliance_page):
         lambda route: route.fulfill(json={"frameworks": [], "priority_actions": [], "evidence_readiness": {}}),
     )
     _open(page)
-    expect(page.get_by_role("heading", name="Make this workspace yours")).to_be_visible()
-    # One label for one destination, in the card and on the tab row.
-    expect(
-        page.locator(".compliance-setup").get_by_role("link", name="Set up Compliance", exact=True)
-    ).to_have_attribute("href", "/compliant/nz-alcohol/configuration")
+    # Setting up is the next action, so its control lives in that card; the obligations card just says none apply.
+    next_action = page.get_by_role("region", name="Next action", exact=True)
+    expect(next_action.get_by_role("heading", name="Start with your operation")).to_be_visible()
+    expect(next_action.get_by_role("link", name="Set up Compliance", exact=True)).to_have_attribute(
+        "href", "/compliant/nz-alcohol/configuration"
+    )
+    expect(page.get_by_role("region", name="Your obligations", exact=True)).to_contain_text("No frameworks apply yet.")
+    expect(page.get_by_role("region", name="Your obligations", exact=True).get_by_role("link")).to_have_count(0)
     expect(page.locator("[data-compliance-primary]")).to_have_text("Set up Compliance")
+    # With nothing suggested the cards stack at natural height rather than stretching around blank space.
+    status = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
+    assert next_action.bounding_box()["y"] >= status["y"] + status["height"]
+    assert next_action.bounding_box()["height"] < 220
     expect(page.locator("[data-attention]")).to_have_text("—")
     # No figures and no disclaimer over checks that do not exist yet.
     expect(page.locator(".compliance-figures")).to_be_hidden()
@@ -255,7 +266,8 @@ def test_primary_action_matches_production_row_and_hides_during_reload(complianc
     _open(page)
     primary = page.locator("[data-compliance-primary]")
     secondary = page.locator(".compliance-header-actions").get_by_role("link", name="Premises", exact=True)
-    expect(primary).to_have_attribute("href", "/compliant/nz-alcohol/configuration")
+    expect(primary).to_have_text("Review evidence")
+    expect(primary).to_have_attribute("href", "/compliant/nz-alcohol/food-safety?filter=attention")
     expect(page.locator(".workspace-button--primary:visible")).to_have_count(1)
     p = primary.bounding_box()
     s = secondary.bounding_box()
@@ -271,11 +283,11 @@ def test_primary_action_matches_production_row_and_hides_during_reload(complianc
     page.route("**/api/compliant/overview", lambda route: route.fulfill(status=503, json={"error": "Unavailable"}))
     _open(page)
     expect(primary).not_to_be_visible()
-    expect(primary).not_to_have_attribute("href", "/compliant/nz-alcohol/configuration")
+    expect(primary).not_to_have_attribute("href", re.compile(".+"))
     page.unroute("**/api/compliant/overview")
     page.get_by_role("button", name="Try again", exact=True).click()
     expect(primary).to_be_visible()
-    expect(primary).to_have_text("Map products")
+    expect(primary).to_have_text("Review evidence")
 
 
 @pytest.mark.parametrize(
@@ -345,3 +357,43 @@ def test_framework_rows_stay_compact_at_a_laptop_width(compliance_page):
         assert link["x"] > title["x"] + title["width"]
         assert abs((link["y"] + link["height"] / 2) - (row.bounding_box()["y"] + row.bounding_box()["height"] / 2)) < 30
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+
+
+def _fulfil(payload):
+    return lambda route: route.fulfill(json=payload)
+
+
+def test_tab_row_primary_keeps_one_label_and_follows_the_framework_most_in_need(compliance_page):
+    page = compliance_page
+    response = page.request.get("/api/compliant/overview").json()
+    customs = next(f for f in response["frameworks"] if f["slug"] == "customs-alcohol")
+    customs["summary_health"] = {
+        "evidence_ready": 3,
+        "total_controls": 5,
+        "needs_attention": 2,
+        "overdue": 1,
+        "score": 60,
+    }
+    for actions in (response["priority_actions"], []):
+        payload = {**response, "priority_actions": actions}
+        page.unroute("**/api/compliant/overview")
+        page.route("**/api/compliant/overview", _fulfil(payload))
+        _open(page)
+        primary = page.locator("[data-compliance-primary]")
+        # Same label whatever is suggested; an overdue framework outranks a larger review backlog.
+        expect(primary).to_have_text("Review evidence")
+        expect(primary).to_have_attribute("href", "/compliant/nz-alcohol/customs")
+
+
+def test_framework_row_states_each_count_once_with_a_status_word(compliance_page):
+    page = compliance_page
+    response = page.request.get("/api/compliant/overview").json()
+    _open(page)
+    for framework in response["frameworks"]:
+        row = page.get_by_role("article").filter(has=page.get_by_role("heading", name=framework["name"], exact=True))
+        attention = framework["summary_health"]["needs_attention"]
+        expect(row.locator(".compliance-state")).to_have_text("Needs review")
+        text = row.inner_text()
+        assert text.count(f"{attention}") == 1 or attention == framework["summary_health"]["total_controls"]
+        assert "with current evidence" not in text
+        assert len(re.findall(r"to review", text)) == 1

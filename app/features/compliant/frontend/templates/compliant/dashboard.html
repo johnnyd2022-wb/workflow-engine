@@ -42,11 +42,7 @@
       <div class="workspace-card__header"><h2 id="framework-evidence-heading">Your obligations</h2><span class="compliance-count" data-framework-count>Checking…</span></div>
       <p class="workspace-caption">Only the frameworks that apply to your operation.</p>
       <section class="compliant-frameworks workspace-card-grid" aria-label="Applicable frameworks" data-frameworks></section>
-      <div class="compliance-setup" data-empty hidden>
-        <h3>Make this workspace yours</h3><p>Choose what you make to see the obligations and evidence that apply.</p>
-        {% if can('compliance.manage') %}<a class="workspace-button" href="/compliant/nz-alcohol/configuration" hx-boost="false">Set up Compliance</a>
-        {% else %}<p>Ask your organisation admin to configure Compliance.</p>{% endif %}
-      </div>
+      <p class="workspace-caption compliance-setup" data-empty hidden>No frameworks apply yet.</p>
     </section>
     {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
   </div>

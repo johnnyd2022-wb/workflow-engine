@@ -66,9 +66,12 @@
         var heading = el('summary', null, 'compliance-framework-heading');
         var title = el('div', null, 'compliance-framework-title');
         title.appendChild(el('h3', framework.name));
-        title.appendChild(el('span', values.ready + ' / ' + values.total + ' ' + (name ? name + ' checks' : 'controls') + ' with current evidence', 'compliance-framework-coverage'));
+        // The counts live once, in the figures; here the row says what it covers and how it stands.
+        title.appendChild(el('span', values.total + ' ' + (name ? name + ' check' : 'control') + (values.total === 1 ? '' : 's'), 'compliance-framework-coverage'));
         heading.appendChild(title);
-        heading.appendChild(el('span', values.overdue ? values.overdue + ' overdue' : values.attention ? values.attention + ' to review' : 'Evidence current', 'compliance-state'));
+        var state = el('span', values.overdue ? 'Action required' : values.attention ? 'Needs review' : 'Evidence current', 'compliance-state');
+        state.dataset.state = values.overdue ? 'overdue' : values.attention ? 'review' : 'current';
+        heading.appendChild(state);
         disclosure.appendChild(heading);
         var body = el('div', null, 'compliance-framework-body');
         var bar = el('div', null, 'compliance-coverage');
@@ -106,16 +109,18 @@
       set('[data-action-count]', actions.length ? actions.length + ' suggested' : '');
       root.querySelector('[data-more-actions]').hidden = actions.length < 2;
       set('[data-more-count]', actions.length > 1 ? '(' + (actions.length - 1) + ')' : '');
-      primary.hidden = true;
-      primary.removeAttribute('href');
+      // With nothing suggested the two top cards each take a full row, so neither is stretched around blank space.
+      root.querySelector('.compliance-layout').dataset.actions = actions.length ? 'some' : 'none';
       if (!actions.length) {
-        if (!hasFrameworks && canManage) {
-          primary.textContent = 'Set up Compliance';
-          primary.href = '/compliant/nz-alcohol/configuration';
-          primary.hidden = false;
-        }
         first.appendChild(el('h3', hasFrameworks ? 'No next steps suggested' : 'Start with your operation'));
-        first.appendChild(el('p', hasFrameworks ? 'Review your obligations below. Evidence status and dates still need your regular review.' : 'Select the frameworks that apply to see your next steps.', 'workspace-caption'));
+        first.appendChild(el('p', hasFrameworks ? 'Review your obligations below. Evidence status and dates still need your regular review.' : 'Choose what you make to see the obligations and evidence that apply.', 'workspace-caption'));
+        if (!hasFrameworks) {
+          if (canManage) {
+            var setup = link('Set up Compliance', '/compliant/nz-alcohol/configuration', 'workspace-button');
+            setup.setAttribute('data-next-action-link', '');
+            first.appendChild(setup);
+          } else first.appendChild(el('p', 'Ask your organisation admin to configure Compliance.', 'workspace-caption'));
+        }
         return;
       }
       actions.forEach(function (action, index) {
@@ -126,17 +131,35 @@
         item.appendChild(el('p', action.description, 'workspace-caption'));
         if (action.value) item.appendChild(el('p', action.value, 'compliance-action-value'));
         if (!index && href) {
-          primary.textContent = action.kind === 'product' ? 'Map products' : action.kind === 'profile' ? 'Set up Compliance' : 'Review evidence';
-          primary.href = href;
-          primary.hidden = false;
-          // The step and the control that starts it sit together; the tab row repeats it.
-          var start = link(primary.textContent, href, 'workspace-button');
+          // The step and the control that starts it sit together.
+          var start = link(action.kind === 'product' ? 'Map products' : action.kind === 'profile' ? 'Set up Compliance' : 'Review evidence', href, 'workspace-button');
           start.setAttribute('data-next-action-link', '');
           item.appendChild(start);
         }
         if (!href) item.appendChild(el('p', 'Ask your organisation admin to review this setup.', 'workspace-caption'));
         if (index) later.appendChild(item);
       });
+    }
+    // The tab-row primary keeps one label for the everyday job: open the framework that most needs
+    // evidence. It does not follow the suggestion queue, whose own control sits in the Next action card.
+    function renderPrimary(frameworks) {
+      primary.hidden = true;
+      primary.removeAttribute('href');
+      if (!frameworks.length) {
+        if (!canManage) return;
+        primary.textContent = 'Set up Compliance';
+        primary.href = '/compliant/nz-alcohol/configuration';
+        primary.hidden = false;
+        return;
+      }
+      var target = frameworks.filter(destination).map(function (framework) { return { framework: framework, values: health(framework) }; })
+        .sort(function (a, b) { return b.values.overdue - a.values.overdue || b.values.attention - a.values.attention; })[0];
+      if (!target) return;
+      var href = destination(target.framework);
+      if (programme(target.framework) && target.values.attention) href += target.values.overdue ? '?filter=overdue' : '?filter=attention';
+      primary.textContent = 'Review evidence';
+      primary.href = href;
+      primary.hidden = false;
     }
     function renderDataCoverage(coverage, hasFrameworks) {
       root.querySelector('[data-data-coverage]').hidden = !hasFrameworks;
@@ -177,6 +200,7 @@
       renderDataCoverage(overview.data_coverage || {}, frameworks.length > 0);
       renderFrameworks(frameworks);
       renderActions(overview.priority_actions || [], frameworks.length > 0);
+      renderPrimary(frameworks);
     }
     async function load() {
       if (loading) return;

@@ -139,3 +139,25 @@ record defects each pass and repeat until no defects remain. Use an isolated scr
 state folder and purge only this run's throwaway org.
 Run relevant frontend/unit and shared layout/render/navigation suites, JS syntax, ruff,
 semgrep and independent HTML/JS/test review. Upload comparison images into the draft MR.
+
+## Review round: stable primary, counts once, no stretched cards
+
+Review against the page-design bar found four things the shipped board still did.
+
+- **Tab-row primary.** Its label followed the first suggestion ("Map products", "Set up
+  Compliance", "Review evidence") and it vanished when nothing was suggested. It is now
+  always **Review evidence**, opening the framework most in need of evidence (overdue first,
+  then the largest review backlog). The suggested step keeps its own control inside the
+  Next action card. With no frameworks, a manager gets **Set up Compliance**.
+- **Counts once.** Readiness shows a status word ("Needs review", "Action required") above
+  its figures. A framework row shows what it covers ("5 controls"), a status word, and
+  each count once in its figures, instead of five restatements.
+- **No stretched cards.** With nothing suggested, readiness and Next action each take a
+  full row at natural height. Setting up is the next action, so its control is in that
+  card; the obligations card just says no frameworks apply yet.
+- **Laptop width.** Framework rows are one compact row from 760px of content.
+
+Premises stays as the outlined tab-row secondary, as settled in !515, although Manage
+compliance also links to it. These are design judgements from the review, not new research.
+No API, calculation, permission or destination changed; the primary's link is chosen from
+counts the overview API already returns.
