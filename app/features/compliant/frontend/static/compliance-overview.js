@@ -129,6 +129,10 @@
           primary.textContent = action.kind === 'product' ? 'Map products' : action.kind === 'profile' ? 'Set up Compliance' : 'Review evidence';
           primary.href = href;
           primary.hidden = false;
+          // The step and the control that starts it sit together; the tab row repeats it.
+          var start = link(primary.textContent, href, 'workspace-button');
+          start.setAttribute('data-next-action-link', '');
+          item.appendChild(start);
         }
         if (!href) item.appendChild(el('p', 'Ask your organisation admin to review this setup.', 'workspace-caption'));
         if (index) later.appendChild(item);
@@ -160,7 +164,12 @@
       frameworks.forEach(function (framework) { var values = health(framework); attention += values.attention; overdue += values.overdue; });
       set('[data-current-proof]', total ? ready : '—');
       set('[data-proof-total]', total ? 'of ' + total + ' checks with current evidence' : 'No applicable checks yet');
-      set('[data-compliant-summary]', total ? attention ? attention + ' to review' + (overdue ? ' · ' + overdue + ' overdue' : '') : 'All checks have current evidence' : 'Configure your obligations to get started');
+      // A status word, not a third copy of the counts shown in the figures beneath it.
+      var state = !total ? 'setup' : overdue ? 'overdue' : attention ? 'review' : 'current';
+      root.querySelector('.compliance-readiness').dataset.state = state;
+      set('[data-compliant-summary]', { setup: 'Configure your obligations to get started', overdue: 'Action required', review: 'Needs review', current: 'All checks have current evidence' }[state]);
+      root.querySelector('.compliance-figures').hidden = !total;
+      root.querySelector('[data-readiness]').hidden = !total;
       set('[data-ready]', total ? ready : '—');
       set('[data-attention]', total ? attention : '—');
       set('[data-overdue]', total ? overdue : '—');

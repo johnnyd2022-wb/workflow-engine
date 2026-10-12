@@ -42,7 +42,11 @@ def test_setup_checks_are_visible_in_readiness(compliance_page):
     attention = sum(f["summary_health"]["needs_attention"] for f in overview["frameworks"])
     assert attention > 0, "fixture must include checks still being set up"
     _open(page)
-    expect(page.get_by_role("region", name="Evidence readiness", exact=True)).to_contain_text(f"{attention} to review")
+    readiness = page.get_by_role("region", name="Evidence readiness", exact=True)
+    # The count appears once, in its figure; the headline is the status in words.
+    expect(readiness.locator("[data-attention]")).to_have_text(str(attention))
+    expect(readiness.locator("[data-compliant-summary]")).to_have_text(re.compile("^(Needs review|Action required)$"))
+    assert readiness.inner_text().count(f"{attention} to review") == 0
 
 
 def test_customs_and_np2_have_honest_evidence_labels(compliance_page):
@@ -72,7 +76,7 @@ def test_board_keeps_evidence_and_actions_reachable(compliance_page, width):
     content = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
     assert title["y"] + title["height"] < tabs["y"] < content["y"]
     assert abs(title["x"] - content["x"]) <= 1, "page and section title must share their left edge"
-    expect(page.locator('.section-head__actions [data-compliance-primary]')).to_have_text("Map products")
+    expect(page.locator(".section-head__actions [data-compliance-primary]")).to_have_text("Map products")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
     if width >= 1440:
         readiness = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
@@ -88,16 +92,18 @@ def test_all_returned_actions_expand_and_primary_opens_mapping(compliance_page):
     _open(page)
     actions = page.get_by_role("region", name="Next action", exact=True)
     expect(actions.get_by_role("heading", level=3)).to_have_text(overview["priority_actions"][0]["title"])
-    expect(page.get_by_role("link", name="Map products", exact=True)).to_have_attribute(
-        "href", "/compliant/nz-alcohol/configuration"
-    )
+    # The step's own control sits in the card with its explanation, matching the tab-row primary.
+    expect(
+        actions.locator("[data-next-action]").get_by_role("link", name="Map products", exact=True)
+    ).to_have_attribute("href", "/compliant/nz-alcohol/configuration")
+    expect(page.locator("[data-compliance-primary]")).to_have_attribute("href", "/compliant/nz-alcohol/configuration")
     page.locator("[data-more-actions] > summary").click()
     expect(page.locator("[data-priority-actions] > li")).to_have_count(len(overview["priority_actions"]) - 1)
     for action in overview["priority_actions"][1:]:
         expect(actions.get_by_role("link", name=action["title"], exact=True)).to_be_visible()
     page.locator("[data-more-actions] > summary").click()
     expect(page.locator("[data-priority-actions]")).not_to_be_visible()
-    page.get_by_role("link", name="Map products", exact=True).click()
+    actions.locator("[data-next-action]").get_by_role("link", name="Map products", exact=True).click()
     expect(page).to_have_url(re.compile("/configuration$"))
 
 
@@ -156,10 +162,15 @@ def test_setup_and_quiet_states_do_not_invent_assurance(compliance_page):
     )
     _open(page)
     expect(page.get_by_role("heading", name="Make this workspace yours")).to_be_visible()
-    expect(page.get_by_role("link", name="Configure Compliance", exact=True)).to_have_attribute(
-        "href", "/compliant/nz-alcohol/configuration"
-    )
+    # One label for one destination, in the card and on the tab row.
+    expect(
+        page.locator(".compliance-setup").get_by_role("link", name="Set up Compliance", exact=True)
+    ).to_have_attribute("href", "/compliant/nz-alcohol/configuration")
+    expect(page.locator("[data-compliance-primary]")).to_have_text("Set up Compliance")
     expect(page.locator("[data-attention]")).to_have_text("—")
+    # No figures and no disclaimer over checks that do not exist yet.
+    expect(page.locator(".compliance-figures")).to_be_hidden()
+    expect(page.locator("[data-readiness]")).to_be_hidden()
     expect(page.get_by_text("All checks have current evidence", exact=True)).not_to_be_visible()
     page.unroute("**/api/compliant/overview")
     response = page.request.get("/api/compliant/overview").json()
@@ -265,3 +276,72 @@ def test_primary_action_matches_production_row_and_hides_during_reload(complianc
     page.get_by_role("button", name="Try again", exact=True).click()
     expect(primary).to_be_visible()
     expect(primary).to_have_text("Map products")
+
+
+@pytest.mark.parametrize(
+    ("overdue", "attention", "state", "words"),
+    [
+        (2, 5, "overdue", "Action required"),
+        (0, 5, "review", "Needs review"),
+        (0, 0, "current", "All checks have current evidence"),
+    ],
+)
+def test_readiness_status_is_words_and_only_current_evidence_wears_the_accent(
+    compliance_page, overdue, attention, state, words
+):
+    page = compliance_page
+    response = page.request.get("/api/compliant/overview").json()
+    framework = response["frameworks"][0]
+    framework["summary_health"] = {
+        "evidence_ready": 10 - attention,
+        "total_controls": 10,
+        "needs_attention": attention,
+        "overdue": overdue,
+        "score": (10 - attention) * 10,
+    }
+    response["frameworks"] = [framework]
+    response["evidence_readiness"] = {"current_controls": 10 - attention, "total_controls": 10}
+    page.route("**/api/compliant/overview", lambda route: route.fulfill(json=response))
+    _open(page)
+    readiness = page.locator(".compliance-readiness")
+    expect(readiness).to_have_attribute("data-state", state)
+    expect(readiness.locator("[data-compliant-summary]")).to_have_text(words)
+    colours = page.evaluate(
+        """() => {
+          const probe = document.createElement('span');
+          probe.style.color = 'var(--ui-accent-strong)';
+          document.querySelector('.compliance-board').appendChild(probe);
+          const accent = getComputedStyle(probe).color;
+          probe.remove();
+          return [getComputedStyle(document.querySelector('[data-current-proof]')).color, accent];
+        }"""
+    )
+    assert (colours[0] == colours[1]) is (state == "current")
+
+
+def test_action_detail_text_does_not_look_like_a_link(compliance_page):
+    page = compliance_page
+    _open(page)
+    detail = page.locator("[data-next-action] .compliance-action-value")
+    expect(detail).to_be_visible()
+    link = page.locator("[data-next-action] [data-next-action-link]")
+    assert detail.evaluate("node => getComputedStyle(node).color") != page.locator(
+        ".compliance-framework-link"
+    ).first.evaluate("node => getComputedStyle(node).color")
+    expect(link).to_be_visible()
+
+
+def test_framework_rows_stay_compact_at_a_laptop_width(compliance_page):
+    """At 1280 with the sidebar open the board stacks, but each framework is still one row."""
+    page = compliance_page
+    page.set_viewport_size({"width": 1280, "height": 900})
+    _open(page)
+    status = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
+    following = page.get_by_role("region", name="Next action", exact=True).bounding_box()
+    assert following["y"] >= status["y"] + status["height"], "the pair should have stacked at this width"
+    for row in page.get_by_role("article").all():
+        title = row.get_by_role("heading", level=3).bounding_box()
+        link = row.locator(".compliance-framework-link").bounding_box()
+        assert link["x"] > title["x"] + title["width"]
+        assert abs((link["y"] + link["height"] / 2) - (row.bounding_box()["y"] + row.bounding_box()["height"] / 2)) < 30
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")

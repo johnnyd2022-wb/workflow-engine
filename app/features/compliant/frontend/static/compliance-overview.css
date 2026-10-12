@@ -7,12 +7,19 @@
 #page-content .compliance-board .workspace-caption { color: var(--ui-text-muted); font-size: 14px; }
 #page-content .compliance-board .compliance-count { color: var(--ui-text-muted); font-size: 13px; }
 #page-content .compliance-board .compliance-next .workspace-button { margin-top: 12px; }
-#page-content .compliance-board .compliance-action-value { color: var(--ui-accent-strong); font-size: 13px; margin: 6px 0 0; }
+/* Plain text, so it must not wear the link colour. */
+#page-content .compliance-board .compliance-action-value { color: var(--ui-text); font-size: 13px; font-weight: 500; margin: 6px 0 0; }
 #page-content .compliance-board .compliance-readiness { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 20px 0; }
 #page-content .compliance-board .compliance-proof { display: flex; align-items: center; gap: 18px; }
 #page-content .compliance-board .compliance-proof strong { font-size: 48px; line-height: 1.1; font-weight: 600; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; color: var(--ui-accent-strong); }
 #page-content .compliance-board .compliance-proof span { color: var(--ui-text-muted); font-size: 14px; max-width: 160px; line-height: 1.45; }
 #page-content .compliance-board .compliance-readiness-label { color: var(--ui-text); font-size: 16px; font-weight: 500; margin: 0; }
+/* The accent means current. Anything still to review is neutral; overdue takes Production's alert red. */
+#page-content .compliance-board .compliance-readiness:not([data-state="current"]) .compliance-proof strong { color: var(--ui-text); }
+#page-content .compliance-board .compliance-readiness[data-state="overdue"] .compliance-proof strong,
+#page-content .compliance-board .compliance-readiness[data-state="overdue"] .compliance-readiness-label { color: #b42318; }
+html[data-spa-theme="dark"] #page-content .compliance-board .compliance-readiness[data-state="overdue"] .compliance-proof strong,
+html[data-spa-theme="dark"] #page-content .compliance-board .compliance-readiness[data-state="overdue"] .compliance-readiness-label { color: #fca5a5; }
 #page-content .compliance-board .compliance-figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
 #page-content .compliance-board .compliance-figures > div { border: 1px solid var(--ui-border); border-radius: 8px; padding: 14px 16px; background: var(--ui-surface-subtle); }
 #page-content .compliance-board .compliance-figures dt { font-size: 12px; color: var(--ui-text-muted); }
@@ -47,6 +54,7 @@
 #page-content .compliance-board .compliance-more li p { margin: 6px 0; }
 #page-content .compliance-board .compliance-setup { padding: 20px 0 0; }
 #page-content .compliance-board .compliance-setup h3 { margin-top: 0; }
+#page-content .compliance-board .compliance-setup .workspace-button { margin-top: 12px; }
 #page-content .compliance-board .compliance-error { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; border-color: var(--ui-accent); }
 #page-content .compliance-board .compliance-error p { margin-bottom: 0; }
 /* Board pairs readiness with the next action, followed by full-width work rows. */
@@ -62,7 +70,8 @@
 }
 #page-content .compliance-board .compliant-frameworks { grid-template-columns: 1fr; gap: 0; }
 #page-content .compliance-board .compliance-framework { padding: 18px 0; border: 0; border-top: 1px solid var(--ui-border); border-radius: 0; }
-@container compliance (min-width: 1100px) {
+/* A framework row needs far less room than the paired board above it. */
+@container compliance (min-width: 760px) {
   #page-content .compliance-board .compliance-framework { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .85fr) auto; gap: 20px; align-items: center; }
   #page-content .compliance-board .compliance-framework-detail { display: contents; }
   #page-content .compliance-board .compliance-framework-body { margin: 0; }
