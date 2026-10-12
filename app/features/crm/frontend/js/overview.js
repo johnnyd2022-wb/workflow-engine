@@ -4,9 +4,6 @@ function crmOverview() {
   const SYSTEM_WIDGET_PREFS_KEY = 'crm_overview_system_widget_prefs_v1';
 
   return {
-    // CONCEPT ONLY — query and remembered layout go away after the pick.
-    salesStyle: '1',
-    hasSavedLayout: false,
     loading: true,
     loadError: false,
     loadErrorStatus: null,
@@ -73,33 +70,10 @@ function crmOverview() {
     },
     expandedProductName: null,
 
-    // CONCEPT ONLY: a saved custom order wins over each concept's suggested order.
-    get displayedWidgets() {
-      if (this.hasSavedLayout || this.salesStyle === '1') return this.widgetLayout;
-      const order = this.salesStyle === '2'
-        ? ['sales_trend', 'top_products', 'top_customers', 'task_board']
-        : ['task_board', 'sales_trend', 'top_products', 'top_customers'];
-      return this.widgetLayout.slice().sort((a, b) => {
-        const rank = widget => widget.kind === 'custom' ? order.length : order.indexOf(widget.type);
-        return rank(a) - rank(b);
-      });
-    },
-
-    setSalesStyle(style) {
-      if (!['1', '2', '3'].includes(style)) return;
-      this.salesStyle = style;
-      try { sessionStorage.setItem('sales-design-style', style); } catch (_) {}
-      this.$nextTick(() => { this.drawSalesChart(); this.drawAllCustomCharts(); });
-    },
-
     async init() {
       this.loading = true;
       this.loadError = false;
       this.error = null;
-      const queryStyle = new URLSearchParams(window.location.search).get('style');
-      let rememberedStyle;
-      try { rememberedStyle = sessionStorage.getItem('sales-design-style'); } catch (_) {}
-      this.setSalesStyle(['1', '2', '3'].includes(queryStyle) ? queryStyle : (rememberedStyle || '1'));
       if (!this.chartResizeObserver) {
         const widths = new WeakMap();
         this.chartResizeObserver = new ResizeObserver(entries => {
@@ -371,18 +345,13 @@ function crmOverview() {
         defaults.forEach((d) => {
           if (!next.some((x) => x.id === d.id)) next.push(d);
         });
-        this.hasSavedLayout = next.some((widget, index) => {
-          const original = defaults[index];
-          return !original || widget.id !== original.id || widget.size !== original.size || widget.locked !== original.locked;
-        });
         this.widgetLayout = next;
       } catch (_) {
         this.widgetLayout = defaults;
       }
     },
 
-    persistWidgetLayout(customized = true) {
-      if (customized) this.hasSavedLayout = true;
+    persistWidgetLayout() {
       try { localStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(this.widgetLayout)); } catch (_) {}
     },
 
@@ -658,7 +627,7 @@ function crmOverview() {
           w.rows = [];
         }
       }));
-      this.persistWidgetLayout(false);
+      this.persistWidgetLayout();
       this.$nextTick(() => this.drawAllCustomCharts());
     },
 

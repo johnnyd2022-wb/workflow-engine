@@ -1,4 +1,4 @@
-"""Sales concepts preserve the dashboard while matching the settled section head."""
+"""The chosen Sales board preserves dashboard behavior and aligns its paired cards."""
 
 import json
 import re
@@ -38,20 +38,17 @@ def _data(page):
     page.route("**/api/crm/analytics/monthly-sales*", lambda route: route.fulfill(json=MONTHLY))
 
 
-def _ready(page, style="1"):
-    page.goto(f"/crm?style={style}")
+def _ready(page):
+    page.goto("/crm")
     expect(page.get_by_role("heading", name="Sales Trend", exact=True)).to_be_visible()
 
 
-# CONCEPT ONLY — deleted with the losing layouts.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_concepts_preserve_regions_and_header_without_overflow(browser, app_url, workspace_user, style, width):
+def test_board_preserves_regions_and_header_without_overflow(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
         _data(page)
-        _ready(page, style)
-        expect(page.locator(".sales-overview")).to_have_attribute("data-sales-style", style)
+        _ready(page)
         expect(page.get_by_role("heading", level=1)).to_have_text("Sales")
         title = page.get_by_role("heading", level=1).bounding_box()
         tabs = page.get_by_role("navigation", name="Sales sections", exact=True).bounding_box()
@@ -61,7 +58,7 @@ def test_concepts_preserve_regions_and_header_without_overflow(browser, app_url,
         expect(page.get_by_role("button", name="Add widget", exact=True)).to_be_visible()
         for name in ["Sales Trend", "Task Board", "Top Products", "Top Customers"]:
             expect(page.get_by_role("heading", name=name, exact=True)).to_be_visible()
-        if width >= 1280 and style == "1":
+        if width >= 1280:
             trend = page.locator('[data-widget-type="sales_trend"]').bounding_box()
             assert abs(glance["y"] - trend["y"]) < 2
             assert glance["x"] + glance["width"] <= trend["x"]
@@ -69,12 +66,33 @@ def test_concepts_preserve_regions_and_header_without_overflow(browser, app_url,
         assert page.locator("#crmOverviewSalesChart").evaluate(
             "canvas => Math.abs(canvas.width / devicePixelRatio - canvas.parentElement.getBoundingClientRect().width) < 2"
         )
-        headings = page.locator(".crm-widget-card h2").all_text_contents()
-        if style == "2":
-            assert headings == ["Sales Trend", "Top Products", "Top Customers", "Task Board"]
-        elif style == "3":
-            assert headings == ["Task Board", "Sales Trend", "Top Products", "Top Customers"]
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("quiet", [False, True])
+def test_locked_trend_matches_glance_height(browser, app_url, workspace_user, theme, quiet):
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    try:
+        _data(page)
+        if quiet:
+            page.unroute("**/api/crm/overview")
+            page.unroute("**/api/crm/analytics/monthly-sales*")
+            page.route("**/api/crm/overview", lambda route: route.fulfill(json={}))
+            page.route("**/api/crm/analytics/monthly-sales*", lambda route: route.fulfill(json={"monthly_sales": []}))
+        _ready(page)
+        page.evaluate("theme => document.documentElement.setAttribute('data-spa-theme', theme)", theme)
+        glance = page.get_by_role("region", name="At a glance", exact=True).bounding_box()
+        trend = page.locator('[data-widget-type="sales_trend"]').bounding_box()
+        assert abs(glance["y"] - trend["y"]) < 2
+        assert abs(glance["height"] - trend["height"]) < 2
+        assert glance["x"] + glance["width"] <= trend["x"]
+        page.locator('[data-widget-type="sales_trend"]').get_by_role("button", name="Unlock layout", exact=True).click()
+        unlocked = page.locator('[data-widget-type="sales_trend"]').bounding_box()
+        assert unlocked["y"] >= glance["y"] + glance["height"]
+        assert unlocked["width"] > trend["width"]
     finally:
         context.close()
 
@@ -153,25 +171,22 @@ def test_initial_error_never_looks_like_zero_sales(browser, app_url, workspace_u
         context.close()
 
 
-def test_header_add_widget_and_saved_layout_survive_concept_switch(browser, app_url, workspace_user):
+def test_header_add_widget_and_saved_layout_survive_boosted_return(browser, app_url, workspace_user):
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
         _data(page)
         page.evaluate(
             "localStorage.setItem('crm_overview_widgets_v3', JSON.stringify([{id:'top-customers',kind:'system',size:'full',locked:false}]))"
         )
-        _ready(page, "3")
+        _ready(page)
         expect(page.locator(".crm-widget-card h2").first).to_have_text("Top Customers")
         page.get_by_role("button", name="Add widget", exact=True).click()
         expect(page.get_by_role("heading", name="Add Custom Widget", exact=True)).to_be_visible()
         page.get_by_role("button", name="Cancel", exact=True).first.click()
-        page.get_by_role("button", name="1 · Board", exact=True).click()
-        expect(page.locator(".sales-overview")).to_have_attribute("data-sales-style", "1")
         assert json.loads(page.evaluate("localStorage.getItem('crm_overview_widgets_v3')"))[0]["id"] == "top-customers"
         page.get_by_role("tab", name="Customers", exact=True).click()
         expect(page.get_by_role("tab", name="Customers", exact=True)).to_have_attribute("aria-selected", "true")
         page.get_by_role("tab", name="Overview", exact=True).click()
-        expect(page.locator(".sales-overview")).to_have_attribute("data-sales-style", "1")
         expect(page.locator(".crm-widget-card h2").first).to_have_text("Top Customers")
     finally:
         context.close()

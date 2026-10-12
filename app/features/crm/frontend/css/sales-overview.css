@@ -1,8 +1,4 @@
 #page-content .sales-overview { --sales-gap: 24px; }
-.sales-concepts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
-.sales-concepts > span { color: var(--ui-text-muted); font-size: .8rem; margin-right: 4px; }
-.sales-concepts .workspace-button { font-size: .8rem; padding: 7px 12px; min-height: 36px; }
-#page-content .sales-concepts [aria-pressed="true"] { border-color: var(--ui-accent); color: var(--ui-accent); background: var(--ui-surface-subtle); }
 #page-content .sales-content { gap: var(--sales-gap); }
 #page-content .sales-overview .crm-widget-grid { gap: var(--sales-gap); align-items: start; }
 #page-content .sales-overview .crm-widget-card { min-width: 0; padding: 24px; background: var(--ui-surface); color: var(--ui-text); }
@@ -15,31 +11,18 @@
 .sales-load-error p { color: var(--ui-text-muted); margin: 12px 0 20px; }
 #page-content .sales-overview a:not(.workspace-button) { color: var(--ui-accent); }
 .sales-layout-guide { background: repeating-linear-gradient(to right, transparent 0, transparent calc(50% - 1px), var(--ui-border) calc(50% - 1px), var(--ui-border) 50%); }
-/* Style 1: the settled Production board, figures beside trend, then work full width. */
+/* The chosen Production board: figures beside trend, then work full width. */
 @media (min-width: 1280px) {
-  #page-content .sales-overview[data-sales-style="1"] .sales-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  #page-content .sales-overview[data-sales-style="1"] .crm-widget-grid { display: contents; }
-  #page-content .sales-overview[data-sales-style="1"] .sales-glance { grid-column: span 1; }
-  #page-content .sales-overview[data-sales-style="1"] .sales-glance .crm-kpi-grid { grid-template-columns: 1fr; gap: 12px; }
-  #page-content .sales-overview[data-sales-style="1"] .sales-kpi { padding: 14px 18px; }
-  #page-content .sales-overview[data-sales-style="1"] .sales-kpi .crm-kpi-value { font-size: 1.5rem; margin: 4px 0; }
-  #page-content .sales-overview[data-sales-style="1"] .crm-widget-card--full { grid-column: span 2; }
-  #page-content .sales-overview[data-sales-style="1"] .crm-widget-card--half { grid-column: span 1; }
-  #page-content .sales-overview[data-sales-style="1"] [data-widget-type="sales_trend"][data-widget-locked="true"] { grid-column: span 1; }
+  #page-content .sales-overview .sales-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  #page-content .sales-overview .crm-widget-grid { display: contents; }
+  #page-content .sales-overview .sales-glance { grid-column: span 1; }
+  #page-content .sales-overview .sales-glance .crm-kpi-grid { grid-template-columns: 1fr; gap: 12px; }
+  #page-content .sales-overview .sales-kpi { padding: 14px 18px; }
+  #page-content .sales-overview .sales-kpi .crm-kpi-value { font-size: 1.5rem; margin: 4px 0; }
+  #page-content .sales-overview .crm-widget-card--full { grid-column: span 2; }
+  #page-content .sales-overview .crm-widget-card--half { grid-column: span 1; }
+  #page-content .sales-overview [data-widget-type="sales_trend"][data-widget-locked="true"] { grid-column: span 1; }
 }
-/* CONCEPT ONLY — Style 2: wide financial review, ranked revenue before follow-ups. */
-#page-content .sales-overview[data-sales-style="2"] .sales-glance { border-top: 3px solid var(--ui-accent); }
-#page-content .sales-overview[data-sales-style="2"] .sales-glance h2 { font-size: .9rem; }
-#page-content .sales-overview[data-sales-style="2"] .sales-kpi { background: var(--ui-surface); }
-/* CONCEPT ONLY — Style 3: one reading column, task board first, compact figures. */
-#page-content .sales-overview[data-sales-style="3"] { max-width: 1280px; margin-inline: auto; }
-#page-content .sales-overview[data-sales-style="3"] .sales-glance { padding: 18px 24px; }
-#page-content .sales-overview[data-sales-style="3"] .sales-glance h2 { font-size: .9rem; margin-bottom: 12px; }
-#page-content .sales-overview[data-sales-style="3"] .sales-kpi { padding: 12px 16px; }
-#page-content .sales-overview[data-sales-style="3"] .sales-kpi .crm-kpi-value { font-size: 1.5rem; }
-#page-content .sales-overview[data-sales-style="3"] .crm-widget-grid { grid-template-columns: minmax(0, 1fr); }
-#page-content .sales-overview[data-sales-style="3"] .crm-widget-card--half,
-#page-content .sales-overview[data-sales-style="3"] .crm-widget-card--full { grid-column: span 1; }
 @media (max-width: 1100px) {
   #page-content .sales-overview .crm-widget-grid { grid-template-columns: minmax(0, 1fr); }
   #page-content .sales-overview .crm-widget-card--half,
@@ -47,9 +30,7 @@
 }
 @media (max-width: 640px) {
   #page-content .sales-overview { --sales-gap: 16px; }
-  #page-content .sales-overview .crm-widget-card,
-  #page-content .sales-overview[data-sales-style="3"] .sales-glance { padding: 18px; }
-  .sales-concepts .workspace-button { font-size: .72rem; padding: 6px 8px; }
+  #page-content .sales-overview .crm-widget-card { padding: 18px; }
   #page-content .sales-overview .crm-table th,
   #page-content .sales-overview .crm-table td { padding-inline: 6px; overflow-wrap: anywhere; }
   #page-content #sales-operator-filter { min-width: 0; max-width: 100%; width: 100% !important; }
@@ -67,14 +48,12 @@ html[data-spa-theme="dark"] #page-content.page-content .sales-header-actions .sa
 #page-content .sales-overview .crm-table td:last-child { white-space: nowrap; overflow-wrap: normal; }
 
 #page-content .sales-overview .sales-glance .crm-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-@media (min-width: 1280px) { #page-content .sales-overview[data-sales-style="1"] .sales-glance .crm-kpi-grid { grid-template-columns: 1fr; } }
+@media (min-width: 1280px) { #page-content .sales-overview .sales-glance .crm-kpi-grid { grid-template-columns: 1fr; } }
 #page-content .sales-overview .flow-mode-segment--active { background: var(--ui-accent-soft); color: var(--ui-accent-strong); border-color: var(--ui-accent); }
 
-/* CONCEPT ONLY: keep the daily queue near the first phone screen. */
-@media (max-width: 640px) {
-  #page-content .sales-overview[data-sales-style="3"] .sales-glance .crm-kpi-grid { gap: 8px; }
-  #page-content .sales-overview[data-sales-style="3"] .sales-kpi { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 12px; align-items: center; }
-  #page-content .sales-overview[data-sales-style="3"] .sales-kpi > div:first-child { font-size: .65rem !important; }
-  #page-content .sales-overview[data-sales-style="3"] .sales-kpi .crm-kpi-value { grid-column: 2; grid-row: 1 / span 2; font-size: 1.15rem; white-space: nowrap; }
-  #page-content .sales-overview[data-sales-style="3"] .sales-kpi > div:last-child { grid-column: 1; font-size: .65rem !important; }
+
+/* Both cards fill the same board row; unlocked widgets retain normal sizing. */
+@media (min-width: 1280px) {
+  #page-content .sales-overview .sales-glance,
+  #page-content .sales-overview [data-widget-type="sales_trend"][data-widget-locked="true"] { align-self: stretch; }
 }

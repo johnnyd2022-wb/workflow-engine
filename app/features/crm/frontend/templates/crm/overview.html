@@ -14,15 +14,7 @@
 {# The section head above is this page's title. #}
 {% set section_head_is_page_title = true %}
 {% block content %}
-<div class="max-content crm-root workspace-overview sales-overview" data-sales-style="1" :data-sales-style="salesStyle" x-data="crmOverview()" @sales-add-widget.window="openWidgetModal()">
-  {# CONCEPT ONLY — removed with the two layouts not chosen. #}
-  <div class="sales-concepts" role="group" aria-label="Sales design concepts">
-    <span>Preview layout</span>
-    <template x-for="concept in [{id:'1',name:'1 · Board'}, {id:'2',name:'2 · Revenue review'}, {id:'3',name:'3 · Sales desk'}]" :key="concept.id">
-      <button type="button" class="workspace-button" :aria-pressed="salesStyle === concept.id" @click="setSalesStyle(concept.id)" x-text="concept.name"></button>
-    </template>
-  </div>
-
+<div class="max-content crm-root workspace-overview sales-overview" x-data="crmOverview()" @sales-add-widget.window="openWidgetModal()">
   <div x-show="error" class="crm-error-banner" role="alert" x-cloak>
     <span x-text="error"></span>
     <button type="button" x-show="!loadError" aria-label="Dismiss error" @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
@@ -66,7 +58,7 @@
     </section>
 
     <div class="crm-widget-grid" :class="showGridGuide ? 'crm-widget-grid--guide' : ''">
-      <template x-for="widget in displayedWidgets" :key="widget.id">
+      <template x-for="widget in widgetLayout" :key="widget.id">
         <section
           class="crm-card crm-widget-card" :data-widget-type="widget.type" :data-widget-locked="widget.locked"
           :class="widget.size === 'full' ? 'crm-widget-card--full' : 'crm-widget-card--half'"
