@@ -1,6 +1,6 @@
 # Sales page design — 2026-10-11
 
-Verdict: findings-open only for the user's concept choice. The implemented options and final browser pass have no remaining actionable defect.
+Verdict: patched. Style 1 Board selected and prepared for review.
 
 Scope: `/crm` overview, based on main ba166c7b and the settled Production !515 title/tabs/actions. Style 1 Board is the closest match; Style 2 Revenue review leads with financial analysis; Style 3 Sales desk brings follow-ups forward. Research, tradeoffs and deliberate saved-layout behavior are in `docs/sales-redesign-plan.md`.
 
@@ -28,4 +28,22 @@ The shared Sales layout test was intentionally updated from body action rows to 
 
 ## Shipping
 
-All six baseline and 60 final images uploaded for the draft MR. Only this run's throwaway UI Shots organisation is purged. No merge/deployment occurs until the user chooses one concept; the chooser and losing CSS/JS/tests must then be removed in the same MR.
+All six baseline and 60 concept images were uploaded for the draft MR. Only each run's
+throwaway UI Shots organisation is purged.
+
+## Winner selection
+
+The founder selected Style 1 Board and asked for Sales Trend to match the height of At a
+glance. The chooser, query/session selection, Style 2/3 CSS and concept sorting were removed.
+At 1280px and wider, a locked default trend now stretches within the same grid row as At a
+glance; unlocking it preserves the existing full-width editing flow and saved layout.
+
+A new browser regression measures the two bounding boxes in busy and quiet data, under
+light and dark themes, and requires a sub-two-pixel height difference. It then unlocks the
+trend and verifies that it moves below At a glance at full width. The winner-only Sales suite
+passes all 15 cases.
+
+Final winner pass: 20 of 20 screenshots inspected, covering busy/quiet desktop, laptop,
+phone, wall and dark; loading, 503/retry, task expansion, operator filtering, invoice detail,
+date-empty, custom widget, boosted return, layout editing and Top N. Equal-height pairing is
+visually present in busy and quiet desktop/dark views. The final defect list is empty.
