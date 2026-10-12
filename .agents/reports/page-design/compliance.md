@@ -2,11 +2,11 @@
 
 plan: docs/compliance-redesign-plan.md
 research: 3 comparable products (MaintainX, FoodDocs, SafetyCulture), 2 craft references (Linear, Notion), 1 pattern source (Carbon), plus Home !512 style 2
-directions: 3 (Focus, Board, Register); chosen: awaiting the pick
+directions: 3 (Board, Action desk, Register); chosen: Style 1 Board
 passes: 3 implementation passes, plus a capture-only correction for expanded scroll position
 screenshots: ~/.cache/workflow-engine-ui-shots/compliance/{00-before,01,02,03,04-rebase}
 tests: 23 browser cases added, 0 existing tests changed
-verdict: findings-open (concept selection and losing-style cleanup only)
+verdict: patched
 
 ## Findings and loop
 
@@ -128,3 +128,23 @@ duplicate, render the actual shared section head and assert one Compliance h1.
 The existing 12 concept browser cases independently assert the full page title.
 All 21 module-page tests passed locally. No application edit; final visual pass
 remains valid. Independent evaluation and final CI recorded in the MR.
+
+## Winner selection and shipping pass
+
+The founder selected Style 1, the Board. The preview chooser, query and session-storage
+selection, variant attributes, losing CSS and concept-only assertions were removed. A
+legacy-preference regression proves that an old Style 2 session value and `?style=3`
+cannot restore the preview UI or hide Board evidence. The selected layout retains the
+5/7 readiness/action pair and full-width framework rows.
+
+Final winner screenshots: 17 of 17 read at desktop, dark, phone, laptop and wall sizes,
+plus expanded, quiet, setup, loading, 503, 401/403, boosted-return and collapsed-sidebar
+states. The defect list is empty. The disposable screenshot organisation was purged after
+upload. Independent winner review found no HTML/JS/test issue; six focused cases passed,
+and the legacy-preference regression failed against the pre-cleanup assets before passing
+again after restoration.
+
+Final validation: 162 relevant browser, frontend, route, shared layout, render, sidebar
+and boosted-navigation cases passed. Ruff, JS syntax, whitespace, local Semgrep rules and
+Semgrep auto against the branch diff passed. The final pipeline result is recorded in the
+MR description.

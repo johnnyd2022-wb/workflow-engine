@@ -6,7 +6,7 @@ Branch: `feat/compliance-design`, initially based on fresh main `311458a4`, then
 onto `dbf2f6f3` after Home/sidebar !512 merged, and then `ba166c7b` after Production !515. All three concepts retain the shared
 expanded sidebar, labelled rail and phone navigation from that merge.
 The industry index and the NP, Customs, licensing and registration workspaces remain separate.
-Three concepts await the founder's pick in a draft MR; this is not a production rollout.
+The founder selected Style 1, the Board. The final MR ships only that layout.
 
 ## What is wrong today
 
@@ -47,7 +47,7 @@ We use its published action description, not an unseen dashboard. None of these 
 establishes how NZ regulatory compliance should be scored. Linear and Notion are craft
 references, not food-safety compliance products. No regulatory interpretation is introduced.
 
-## Round two: match the settled Production approach (!515)
+## Selected direction: match the settled Production approach (!515)
 
 Read !515's final MR and its four-round plan. The board was chosen first; then the
 header actions; then the title-first shared section head, underlined green tabs and
@@ -70,21 +70,23 @@ structure; !515's reviewed choices determine appearance. The SafetyCulture fetch
 still failed, so no unseen interface detail is claimed. No task dates or custom
 regulatory status can be invented from this overview response.
 
-| | Style 1: Board | Style 2: Action desk | Style 3: Register |
+| | Style 1: Board (selected) | Style 2: Action desk | Style 3: Register |
 |---|---|---|---|
 | Idea | Readiness beside next-action context; full-width framework rows and links | Compact readiness band, action queue at left, evidence cards at right | Compact readiness band, short action context and framework disclosures |
 | Taken from | Settled Production !515 board and direct row actions | MaintainX action work, FoodDocs monitoring and Notion important properties | Linear lists, Notion disclosure |
 | Best at | Familiarity across Home, Production and Compliance | Completing setup/review while consulting framework evidence | Comparing obligation summaries and inspecting one framework |
 | Gives up | Board needs a wide screen and stacks when narrower | Expanded queue takes more vertical room; cards stack on phones | One extra interaction for each detailed evidence breakdown |
 
-Style 1 is now the closest match to Production. Style 2 is deliberately a content
-experiment, not the previous Board concept under a different number. All share
-identical data, status wording, permissions, destinations and one script.
+Style 1 was selected because its paired readiness and next-action cards, followed by
+full-width framework rows, match the settled Production hierarchy while keeping the
+operator's evidence and next step visible together. Style 2 gave the action queue more
+vertical weight than this overview needs. Style 3 added disclosure interactions to a
+small framework set. The chooser, preview query, remembered preference and both losing
+layouts were removed before shipping.
 
-All three retain every applicable framework, all returned priority actions, evidence
-coverage, current/review/overdue counts and workspace management links. They use the
-same template, script, API and shared UI tokens. The three-button switch is temporary.
-`?style=1|2|3` takes precedence over the remembered choice; default is Style 1.
+The selected Board retains every applicable framework, all returned priority actions,
+evidence coverage, current/review/overdue counts and workspace management links. It uses
+the existing template, script, API and shared UI tokens.
 
 ### Shared design
 
@@ -110,7 +112,7 @@ framework into a keyboard-operable native disclosure; no draggable board semanti
 
 Loading, no configuration, a quiet queue, request failure/retry, dark, narrow screens and
 returning by boosted navigation all have explicit states. No endless loading copy or
-success-shaped zeros on an API failure. Collapse/expand and style selection do not fetch.
+success-shaped zeros on an API failure. Disclosure changes do not fetch.
 
 ## Not in this change
 
@@ -125,14 +127,15 @@ not finish a new source-to-sale capability, so no additional roadmap box is tick
 ## Checks
 
 Regression tests first against unchanged main: setup counts cannot disappear, Customs
-cannot be called NP3, and NP2 must link as NP2. Browser checks cover all styles at 390,
-1024, 1440 and 1920, dark theme, expansion, primary destination, quiet/setup/error/retry,
-choice persistence and boosted return. Style 1 deliberately changes readiness from a full-width card to a 5/7 pair on a wide
+cannot be called NP3, and NP2 must link as NP2. Browser checks cover the selected Board at
+390, 1024, 1440 and 1920, dark theme, expansion, primary destination,
+quiet/setup/error/retry and boosted return. The Board deliberately changes readiness from a full-width card to a 5/7 pair on a wide
 content container, while obligations and management remain full-width. Tests assert
 the new alignment, single shared title, action placement and unchanged destinations. No weakening of tests.
 
-Shoot every style on laptop, phone and dark and the board at 1920. Inspect every image,
+The final winner pass covers desktop, laptop, phone, wall, dark, expanded, quiet, setup,
+loading, failure, 401/403, boosted return and collapsed-sidebar states. Inspect every image,
 record defects each pass and repeat until no defects remain. Use an isolated screenshot
-state folder to avoid interfering with Claude's seed. Purge only this run's throwaway org.
+state folder and purge only this run's throwaway org.
 Run relevant frontend/unit and shared layout/render/navigation suites, JS syntax, ruff,
 semgrep and independent HTML/JS/test review. Upload comparison images into the draft MR.
