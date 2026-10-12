@@ -7,7 +7,7 @@
 {% block section_actions %}
 <div class="sales-header-actions">
 <button type="button" class="workspace-button" x-data @click="$dispatch('sales-add-widget')">Add widget</button>
-<a href="/crm/tasks" class="workspace-button workspace-button--primary sales-primary">Open tasks</a>
+<a href="/crm/tasks?new=1" class="workspace-button workspace-button--primary sales-primary">New task</a>
 </div>
 {% endblock %}
 
@@ -73,7 +73,7 @@
           <header class="crm-widget-card__header">
             <div>
               <h2 class="crm-section-title" x-text="widget.title"></h2>
-              <p style="font-size:.76rem; color:var(--text-secondary,#6b7280); margin-top:2px;" x-text="widgetSubtitle(widget)"></p>
+              <p style="font-size:.76rem; color:var(--text-secondary,#6b7280); margin-top:2px;" x-show="widgetSubtitle(widget)" x-text="widgetSubtitle(widget)"></p>
             </div>
             <div class="sales-widget-controls" style="display:flex; align-items:center; gap:6px;">
               <button type="button" class="crm-btn crm-btn--ghost crm-btn--sm" @click="toggleWidgetLock(widget)" :title="widget.locked ? 'Unlock layout' : 'Lock layout'" :aria-label="widget.locked ? 'Unlock layout' : 'Lock layout'">
@@ -98,14 +98,14 @@
                   </button>
                 </div>
                 <canvas role="img" aria-label="Sales revenue by month for the selected date range" id="crmOverviewSalesChart" style="width:100%; height:220px; display:block;" x-show="chartData.length > 0"></canvas>
-                <div x-show="chartData.length === 0" style="font-size:.82rem; color:var(--text-secondary,#6b7280);">No sales data available for this range.</div>
+                <div x-show="chartData.length === 0" style="font-size:.82rem; color:var(--text-secondary,#6b7280);" x-text="allMonthlySales.length ? 'No sales in this date range.' : 'No sales yet. Revenue appears here once invoices are authorised in Xero.'"></div>
               </div>
             </template>
 
             <template x-if="widget.kind === 'system' && widget.type === 'task_board'">
               <div>
                 <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
-                  <select class="crm-form-select" id="sales-operator-filter" aria-label="Filter tasks by operator" x-model="boardOperatorFilter" style="max-width:220px;">
+                  <select class="crm-form-select" id="sales-operator-filter" :hidden="!hasOpenTasks" aria-label="Filter tasks by operator" x-model="boardOperatorFilter" style="max-width:220px;">
                     <option value="">All operators</option>
                     <template x-for="u in operators" :key="`board-op-${u.id}`">
                       <option :value="u.id" x-text="u.display_name || u.email"></option>
@@ -113,7 +113,11 @@
                   </select>
                   <a href="/crm/tasks" style="font-size:.78rem; color:var(--crm-teal); font-weight:700;">View all tasks →</a>
                 </div>
-                <div class="crm-lane-mobile-selector crm-lane-mobile-selector--overview">
+                <div class="sales-tasks-empty" x-show="!hasOpenTasks" x-cloak>
+                  <p>No open follow-ups.</p>
+                  <a href="/crm/tasks?new=1" class="workspace-button">New task</a>
+                </div>
+                <div class="crm-lane-mobile-selector crm-lane-mobile-selector--overview" x-show="hasOpenTasks">
                   <div class="flow-mode-segmented" role="tablist" aria-label="Overview task lanes">
                     <template x-for="lane in taskColumns" :key="`overview-${lane.status}`">
                       <button
@@ -128,10 +132,10 @@
                     </template>
                   </div>
                 </div>
-                <div class="crm-overview-task-board-grid">
+                <div class="crm-overview-task-board-grid" x-show="hasOpenTasks">
                   <template x-for="column in taskColumns" :key="`${widget.id}-${column.status}`">
                     <div
-                      style="background:var(--surface-subtle,rgba(0,0,0,.03)); border-radius:10px; padding:10px; min-height:180px;"
+                      style="background:var(--surface-subtle,rgba(0,0,0,.03)); border-radius:10px; padding:10px; min-height:96px;"
                       @dragover.prevent
                       @drop.prevent="onColumnDrop(column.status)"
                       x-show="!isMobileViewport() || selectedOverviewTaskLane === column.status"
@@ -154,7 +158,7 @@
                             </span>
                             <span class="sales-task-due" :class="taskDue(task).overdue ? 'sales-task-due--overdue' : ''" :title="task.due_date || ''" x-text="taskDue(task).label"></span>
                           </div>
-                          <div style="font-size:.72rem; color:var(--text-secondary,#6b7280); margin-top:6px; white-space:pre-wrap;" x-text="task.description || 'No description'"></div>
+                          <div style="font-size:.72rem; color:var(--text-secondary,#6b7280); margin-top:6px; white-space:pre-wrap;" x-show="task.description" x-text="task.description"></div>
                           <div x-show="expandedTaskId === task.id" x-cloak style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border-default,#e5e7eb);">
                             <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" style="margin-top:8px;" @keydown.stop @click.stop="openTaskInTasksPage(task)">Open in Tasks</button>
                           </div>
@@ -169,7 +173,7 @@
             <template x-if="widget.kind === 'system' && widget.type === 'top_products'">
               <div>
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
-                  <div style="font-size:.75rem; color:var(--text-secondary,#6b7280);">Showing <span x-text="systemRows('top_products').length"></span> of <span x-text="maxSystemRows('top_products')"></span></div>
+                  <div style="font-size:.75rem; color:var(--text-secondary,#6b7280);"><span x-show="systemRows('top_products').length < maxSystemRows('top_products')">Showing <span x-text="systemRows('top_products').length"></span> of <span x-text="maxSystemRows('top_products')"></span></span></div>
                   <div style="display:flex; gap:6px;">
                     <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openTopNModal('top_products')">Top <span x-text="systemLimitLabel('top_products')"></span></button>
                     <button type="button" class="crm-btn crm-btn--ghost crm-btn--sm" x-show="isSystemExpanded('top_products')" x-cloak @click="collapseSystemRows('top_products')">Collapse</button>
@@ -220,7 +224,7 @@
             <template x-if="widget.kind === 'system' && widget.type === 'top_customers'">
               <div>
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
-                  <div style="font-size:.75rem; color:var(--text-secondary,#6b7280);">Showing <span x-text="systemRows('top_customers').length"></span> of <span x-text="maxSystemRows('top_customers')"></span></div>
+                  <div style="font-size:.75rem; color:var(--text-secondary,#6b7280);"><span x-show="systemRows('top_customers').length < maxSystemRows('top_customers')">Showing <span x-text="systemRows('top_customers').length"></span> of <span x-text="maxSystemRows('top_customers')"></span></span></div>
                   <div style="display:flex; gap:6px;">
                     <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" @click="openTopNModal('top_customers')">Top <span x-text="systemLimitLabel('top_customers')"></span></button>
                     <button type="button" class="crm-btn crm-btn--ghost crm-btn--sm" x-show="isSystemExpanded('top_customers')" x-cloak @click="collapseSystemRows('top_customers')">Collapse</button>

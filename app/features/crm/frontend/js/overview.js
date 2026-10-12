@@ -241,6 +241,12 @@ function crmOverview() {
       return Math.round(((current - previous) / previous) * 1000) / 10;
     },
 
+    // Open follow-ups before any operator filter: an empty board and a filtered-out board read differently.
+    get hasOpenTasks() {
+      const lanes = this.taskColumns.map((column) => column.status);
+      return (this.overview.overview_tasks || []).some((task) => lanes.includes(task.status));
+    },
+
     tasksFor(status) {
       return (this.overview.overview_tasks || []).filter((task) => {
         if (task.status !== status) return false;
@@ -377,7 +383,7 @@ function crmOverview() {
 
     widgetSubtitle(widget) {
       if (widget.type === 'sales_trend') return 'Invoiced revenue by month';
-      if (widget.type === 'task_board') return 'To Do and In Progress tasks';
+      if (widget.type === 'task_board') return '';
       if (widget.type === 'top_products') return 'Grouped by mapped product; expand to see Xero items';
       if (widget.type === 'top_customers') return 'By total invoiced revenue';
       if (widget.kind === 'custom') return this.customWidgetSubtitle(widget);

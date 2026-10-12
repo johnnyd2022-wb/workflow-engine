@@ -311,13 +311,16 @@ def test_sales_overview_keeps_figures_in_card_and_actions_in_header(browser, app
                 box = figure.bounding_box()
                 assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
         assert tools.bounding_box()["y"] < glance.bounding_box()["y"]
-        primary = tools.get_by_role("link", name="Open tasks", exact=True).bounding_box()
+        primary = tools.get_by_role("link", name="New task", exact=True).bounding_box()
         secondary = tools.get_by_role("button", name="Add widget", exact=True).bounding_box()
         assert abs(primary["y"] - secondary["y"]) < 2
         if width >= 1280:
             assert primary["x"] > secondary["x"]
+            # Figures run across the top; the trend then shares its row with the task board.
             trend = page.locator('[data-widget-type="sales_trend"]').bounding_box()
-            assert abs(glance.bounding_box()["y"] - trend["y"]) < 2
+            tasks = page.locator('[data-widget-type="task_board"]').bounding_box()
+            assert glance.bounding_box()["y"] + glance.bounding_box()["height"] <= trend["y"]
+            assert abs(trend["y"] - tasks["y"]) < 2
         else:
             assert primary["x"] < secondary["x"]
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")

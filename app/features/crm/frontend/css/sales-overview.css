@@ -8,25 +8,28 @@
 .sales-task { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); padding: 12px; margin-bottom: 8px; cursor: pointer; }
 .sales-task:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
 #page-content #sales-operator-filter { width: auto !important; min-width: 180px; max-width: 240px; padding: 8px 12px !important; font-size: .85rem !important; }
+/* base-spa.css forces a display on every select, so hiding needs the same weight. */
+#page-content #sales-operator-filter[hidden] { display: none !important; }
 .sales-load-error p { color: var(--ui-text-muted); margin: 12px 0 20px; }
 #page-content .sales-overview a:not(.workspace-button) { color: var(--ui-accent); }
 .sales-layout-guide { background: repeating-linear-gradient(to right, transparent 0, transparent calc(50% - 1px), var(--ui-border) calc(50% - 1px), var(--ui-border) 50%); }
-/* The chosen Production board: figures beside trend, then work full width.
-   The pair needs the locked trend to be the first widget; any other saved order
-   gives the figures the full row instead of leaving half of it empty. */
+/* The board: figures across the top, then the trend beside the day's follow-ups, then full-width work.
+   The pair needs the locked trend then the locked task board as the first two widgets;
+   any other saved order falls back to each widget's own size, so nothing is left at half a row. */
 #page-content .sales-board { container: sales-board / inline-size; }
 @container sales-board (min-width: 1100px) {
-  #page-content .sales-overview .sales-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  #page-content .sales-overview .sales-content { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; }
   #page-content .sales-overview .crm-widget-grid { display: contents; }
-  #page-content .sales-overview .sales-glance { grid-column: span 2; }
-  #page-content .sales-overview .crm-widget-card--full { grid-column: span 2; }
-  #page-content .sales-overview .crm-widget-card--half { grid-column: span 1; }
-  #page-content .sales-overview .sales-content:has(.crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]) .sales-glance,
-  #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"] { grid-column: span 1; align-self: stretch; }
-  #page-content .sales-overview .sales-content:has(.crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]) .sales-glance .crm-kpi-grid { grid-template-columns: 1fr; gap: 12px; }
-  #page-content .sales-overview .sales-kpi { padding: 14px 18px; }
-  #page-content .sales-overview .sales-kpi .crm-kpi-value { font-size: 1.5rem; margin: 4px 0; }
+  #page-content .sales-overview .sales-glance,
+  #page-content .sales-overview .crm-widget-card--full { grid-column: span 12; }
+  #page-content .sales-overview .crm-widget-card--half { grid-column: span 6; }
+  #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]:has(+ [data-widget-type="task_board"][data-widget-locked="true"]) { grid-column: span 5; align-self: stretch; }
+  #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"] + [data-widget-type="task_board"][data-widget-locked="true"] { grid-column: span 7; align-self: stretch; }
 }
+#page-content .sales-overview .sales-kpi { padding: 14px 18px; }
+#page-content .sales-overview .sales-kpi .crm-kpi-value { font-size: 1.5rem; margin: 4px 0; }
+.sales-tasks-empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 4px 0; }
+.sales-tasks-empty p { margin: 0; color: var(--ui-text-muted); font-size: .9rem; }
 @media (max-width: 1100px) {
   #page-content .sales-overview .crm-widget-grid { grid-template-columns: minmax(0, 1fr); }
   #page-content .sales-overview .crm-widget-card--half,

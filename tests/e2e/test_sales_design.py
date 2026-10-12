@@ -55,14 +55,16 @@ def test_board_preserves_regions_and_header_without_overflow(browser, app_url, w
         tabs = page.get_by_role("navigation", name="Sales sections", exact=True).bounding_box()
         glance = page.get_by_role("region", name="At a glance", exact=True).bounding_box()
         assert title["y"] < tabs["y"] < glance["y"]
-        expect(page.get_by_role("link", name="Open tasks", exact=True)).to_be_visible()
+        expect(page.get_by_role("link", name="New task", exact=True).first).to_be_visible()
         expect(page.get_by_role("button", name="Add widget", exact=True)).to_be_visible()
         for name in ["Sales Trend", "Task Board", "Top Products", "Top Customers"]:
             expect(page.get_by_role("heading", name=name, exact=True)).to_be_visible()
         if width >= 1280:
             trend = page.locator('[data-widget-type="sales_trend"]').bounding_box()
-            assert abs(glance["y"] - trend["y"]) < 2
-            assert glance["x"] + glance["width"] <= trend["x"]
+            tasks = page.locator('[data-widget-type="task_board"]').bounding_box()
+            assert glance["y"] + glance["height"] <= trend["y"]
+            assert abs(trend["y"] - tasks["y"]) < 2
+            assert trend["x"] + trend["width"] <= tasks["x"]
         page.wait_for_timeout(100)
         assert page.locator("#crmOverviewSalesChart").evaluate(
             "canvas => Math.abs(canvas.width / devicePixelRatio - canvas.parentElement.getBoundingClientRect().width) < 2"
@@ -74,7 +76,7 @@ def test_board_preserves_regions_and_header_without_overflow(browser, app_url, w
 
 @pytest.mark.parametrize("theme", ["light", "dark"])
 @pytest.mark.parametrize("quiet", [False, True])
-def test_locked_trend_matches_glance_height(browser, app_url, workspace_user, theme, quiet):
+def test_locked_trend_pairs_with_task_board_at_equal_height(browser, app_url, workspace_user, theme, quiet):
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
         _data(page)
@@ -87,16 +89,23 @@ def test_locked_trend_matches_glance_height(browser, app_url, workspace_user, th
         page.evaluate("theme => document.documentElement.setAttribute('data-spa-theme', theme)", theme)
         glance = page.get_by_role("region", name="At a glance", exact=True).bounding_box()
         trend = page.locator('[data-widget-type="sales_trend"]').bounding_box()
-        assert abs(glance["y"] - trend["y"]) < 2
-        assert abs(glance["height"] - trend["height"]) < 2
-        assert glance["x"] + glance["width"] <= trend["x"]
+        tasks = page.locator('[data-widget-type="task_board"]').bounding_box()
+        # Figures run across the top; the trend then shares a row with the day's follow-ups.
+        assert glance["y"] + glance["height"] <= trend["y"]
+        assert abs(glance["width"] - (tasks["x"] + tasks["width"] - trend["x"])) < 2
+        assert abs(trend["y"] - tasks["y"]) < 2
+        assert abs(trend["height"] - tasks["height"]) < 2
+        assert trend["x"] + trend["width"] <= tasks["x"]
+        assert tasks["width"] > trend["width"]
+        assert tasks["y"] < 700, "follow-ups must start on the first screen"
         page.locator('[data-widget-type="sales_trend"]').get_by_role("button", name="Unlock layout", exact=True).click()
         unlocked = page.locator('[data-widget-type="sales_trend"]').bounding_box()
-        # Unlocking ends the pair: the figures take the full row and the trend sits beneath them.
-        widened = page.get_by_role("region", name="At a glance", exact=True).bounding_box()
-        assert unlocked["y"] >= widened["y"] + widened["height"]
+        # Unlocking ends the pair: the trend takes a full row and the task board drops beneath it.
+        below = page.locator('[data-widget-type="task_board"]').bounding_box()
         assert unlocked["width"] > trend["width"]
-        assert abs(widened["width"] - unlocked["width"]) < 2
+        assert abs(glance["width"] - unlocked["width"]) < 2
+        assert below["y"] >= unlocked["y"] + unlocked["height"]
+        assert abs(below["width"] - unlocked["width"]) < 2
     finally:
         context.close()
 
@@ -253,5 +262,62 @@ def test_task_due_date_reads_as_words(browser, app_url, workspace_user, offset, 
         expect(chip).to_have_text(label)
         expect(chip).to_have_attribute("title", due)
         assert ("sales-task-due--overdue" in chip.get_attribute("class")) is overdue
+    finally:
+        context.close()
+
+
+def test_primary_action_starts_a_new_task(browser, app_url, workspace_user):
+    """The primary creates something; the Tasks tab beside it is already the way to the list."""
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    try:
+        _data(page)
+        _ready(page)
+        expect(page.get_by_role("link", name="Open tasks", exact=True)).to_have_count(0)
+        page.locator(".sales-header-actions").get_by_role("link", name="New task", exact=True).click()
+        expect(page).to_have_url(re.compile(r"/crm/tasks\?new=1$"))
+        expect(page.locator(".crm-task-sheet__title")).to_have_text("New Task")
+        expect(page.locator(".crm-task-sheet__title")).to_be_visible()
+    finally:
+        context.close()
+
+
+def test_empty_board_offers_a_next_step_and_filtered_board_does_not(browser, app_url, workspace_user):
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    try:
+        _data(page)
+        page.unroute("**/api/crm/overview")
+        page.route("**/api/crm/overview", lambda route: route.fulfill(json={**OVERVIEW, "overview_tasks": []}))
+        _ready(page)
+        board = page.locator('[data-widget-type="task_board"]')
+        expect(board.get_by_text("No open follow-ups.", exact=True)).to_be_visible()
+        expect(board.get_by_role("link", name="New task", exact=True)).to_have_attribute("href", "/crm/tasks?new=1")
+        expect(board.get_by_text("No tasks", exact=True).first).to_be_hidden()
+        expect(page.get_by_label("Filter tasks by operator")).to_be_hidden()
+        page.unroute("**/api/crm/overview")
+        page.route("**/api/crm/overview", lambda route: route.fulfill(json=OVERVIEW))
+        page.reload()
+        expect(page.get_by_role("heading", name="Sales Trend", exact=True)).to_be_visible()
+        operator = page.get_by_label("Filter tasks by operator")
+        operator.select_option(operator.locator("option").nth(1).get_attribute("value"))
+        # Filtered to nothing is not an empty board: the lanes and the filter stay so it can be undone.
+        expect(board.get_by_text("No open follow-ups.", exact=True)).to_be_hidden()
+        expect(board.get_by_text("No tasks", exact=True).first).to_be_visible()
+        expect(operator).to_be_visible()
+    finally:
+        context.close()
+
+
+def test_row_count_only_appears_when_rows_are_held_back(browser, app_url, workspace_user):
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    try:
+        _data(page)
+        customers = [
+            {"contact_id": f"c{i}", "name": f"Customer {i}", "invoice_count": 1, "revenue": 100 - i} for i in range(12)
+        ]
+        page.unroute("**/api/crm/overview")
+        page.route("**/api/crm/overview", lambda route: route.fulfill(json={**OVERVIEW, "top_customers": customers}))
+        _ready(page)
+        expect(page.locator('[data-widget-type="top_products"]').get_by_text("Showing", exact=False)).to_be_hidden()
+        expect(page.locator('[data-widget-type="top_customers"]')).to_contain_text("Showing 10 of 12")
     finally:
         context.close()

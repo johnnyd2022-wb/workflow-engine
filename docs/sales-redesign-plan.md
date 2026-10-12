@@ -80,3 +80,26 @@ Validation before selection: 125 shared/browser regression cases passed; the 19 
 cases passed three consecutive runs. Independent HTML/JS review was clean and test
 evaluation valid, with ten deliberately broken cases failing in isolated mutation probes.
 Winner-only validation and final CI are recorded in the MR and page-design report.
+
+## Review round: figures band, trend beside follow-ups
+
+Review against the page-design bar found the shipped board still put the Task Board below the
+first screen while naming follow-ups the everyday action, repeated one destination three times
+("Open tasks", the Tasks tab, "View all tasks"), and left the empty states without a next step.
+
+- **Board.** The three figures run across the top as one band. The locked Sales Trend (5 of 12
+  columns) then shares a row with the locked Task Board (7 of 12) at equal height, so figures,
+  trend and follow-ups are all on the first screen at 1440x900. Rankings stay paired below.
+  The pair needs trend then task board as the first two widgets; any other saved order falls
+  back to each widget's own size. The switch is a container query at 1100px of content.
+- **Primary action.** "New task" opens the Tasks page with the new-task form ready
+  (`/crm/tasks?new=1`). The Tasks tab and "View all tasks" remain the ways to the list.
+- **Status in words.** Due dates read "2 days overdue", "Due today", "Due in 3 days".
+- **Cut from the first read.** The task board caption, the "Showing N of N" line when nothing is
+  held back, and the "No description" placeholder. All data stays reachable.
+- **Empty states.** No open follow-ups shows one line and a "New task" button instead of two
+  empty lanes; a board filtered to nothing keeps its lanes and filter. The trend says whether
+  there are no sales yet or none in the chosen range.
+
+These are design judgements from the review, not new research findings. No API, calculation,
+export or permission changed; `?new=1` is read only by the Tasks page script.
