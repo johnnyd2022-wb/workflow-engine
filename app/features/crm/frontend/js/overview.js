@@ -262,6 +262,21 @@ function crmOverview() {
       this.expandedTaskId = this.expandedTaskId === task.id ? null : task.id;
     },
 
+    // Says how far away a due date is, in words. Dates are calendar days in the viewer's own timezone.
+    taskDue(task) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(task?.due_date || '');
+      if (!match) return { label: 'No due date', overdue: false };
+      const due = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const days = Math.round((due - today) / 86400000);
+      if (days < 0) return { label: `${-days} day${days === -1 ? '' : 's'} overdue`, overdue: true };
+      if (days === 0) return { label: 'Due today', overdue: false };
+      if (days === 1) return { label: 'Due tomorrow', overdue: false };
+      if (days <= 14) return { label: `Due in ${days} days`, overdue: false };
+      return { label: `Due ${due.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`, overdue: false };
+    },
+
     openTaskInTasksPage(task) {
       if (!task?.id) return;
       CRMAPI.navigate(`/crm/tasks?task_id=${encodeURIComponent(task.id)}`);
@@ -361,7 +376,7 @@ function crmOverview() {
     },
 
     widgetSubtitle(widget) {
-      if (widget.type === 'sales_trend') return this.chartMode === 'line' ? 'Line chart for larger ranges' : 'Bar chart for shorter ranges';
+      if (widget.type === 'sales_trend') return 'Invoiced revenue by month';
       if (widget.type === 'task_board') return 'To Do and In Progress tasks';
       if (widget.type === 'top_products') return 'Grouped by mapped product; expand to see Xero items';
       if (widget.type === 'top_customers') return 'By total invoiced revenue';
@@ -785,10 +800,12 @@ function crmOverview() {
         ctx.textAlign = 'center';
         ctx.font = '10px -apple-system, system-ui, sans-serif';
         this.drawWrappedXAxisLabel(ctx, String(row.xLabel || ''), x + barW / 2, pad.top + chartH + 14, Math.max(56, barW + gap - 2), 10, 3);
-        if (opts.showValueLabels && barW >= 75) {
+        // Narrow bars keep their value in short form ($10.8K) rather than losing it.
+        if (opts.showValueLabels && barW >= 34) {
           ctx.fillStyle = tokens.getPropertyValue('--ui-text').trim() || textColor;
           ctx.font = '10px -apple-system, system-ui, sans-serif';
-          ctx.fillText(this.formatCurrency2(row.yValue || 0), x + barW / 2, Math.max(pad.top + 10, y - 6));
+          const label = barW >= 75 ? this.formatCurrency2(row.yValue || 0) : this.formatCurrencyShort(row.yValue || 0);
+          ctx.fillText(label, x + barW / 2, Math.max(pad.top + 10, y - 6));
         }
       });
     },
@@ -805,6 +822,11 @@ function crmOverview() {
       if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
       if (value >= 1000) return `$${(value / 1000).toFixed(0)}k`;
       return `$${Number(value || 0).toFixed(0)}`;
+    },
+
+    formatCurrencyShort(value) {
+      if (this.obfuscateSalesFigures) return '*****';
+      return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', notation: 'compact', maximumFractionDigits: 1 }).format(value);
     },
 
     formatCurrency2(value) {

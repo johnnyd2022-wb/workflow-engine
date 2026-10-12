@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import date, timedelta
 
 import pytest
 from playwright.sync_api import expect
@@ -91,8 +92,11 @@ def test_locked_trend_matches_glance_height(browser, app_url, workspace_user, th
         assert glance["x"] + glance["width"] <= trend["x"]
         page.locator('[data-widget-type="sales_trend"]').get_by_role("button", name="Unlock layout", exact=True).click()
         unlocked = page.locator('[data-widget-type="sales_trend"]').bounding_box()
-        assert unlocked["y"] >= glance["y"] + glance["height"]
+        # Unlocking ends the pair: the figures take the full row and the trend sits beneath them.
+        widened = page.get_by_role("region", name="At a glance", exact=True).bounding_box()
+        assert unlocked["y"] >= widened["y"] + widened["height"]
         assert unlocked["width"] > trend["width"]
+        assert abs(widened["width"] - unlocked["width"]) < 2
     finally:
         context.close()
 
@@ -159,6 +163,8 @@ def test_initial_error_never_looks_like_zero_sales(browser, app_url, workspace_u
         page.goto("/crm")
         expect(page.get_by_role("region", name="Sales unavailable", exact=True)).to_be_visible()
         expect(page.get_by_role("region", name="At a glance", exact=True)).to_be_hidden()
+        # One message, not a banner repeating the card beneath it.
+        expect(page.locator(".crm-error-banner")).to_be_hidden()
         if status == 503:
             page.unroute("**/api/crm/overview")
             page.route("**/api/crm/overview", lambda route: route.fulfill(json=OVERVIEW))
@@ -188,5 +194,64 @@ def test_header_add_widget_and_saved_layout_survive_boosted_return(browser, app_
         expect(page.get_by_role("tab", name="Customers", exact=True)).to_have_attribute("aria-selected", "true")
         page.get_by_role("tab", name="Overview", exact=True).click()
         expect(page.locator(".crm-widget-card h2").first).to_have_text("Top Customers")
+    finally:
+        context.close()
+
+
+def test_saved_order_never_strands_the_figures_at_half_width(browser, app_url, workspace_user):
+    """A rearranged layout has no trend to pair with, so the figures must take the whole row."""
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    try:
+        _data(page)
+        page.evaluate(
+            "localStorage.setItem('crm_overview_widgets_v3', JSON.stringify(["
+            "{id:'task-board',kind:'system',size:'full',locked:true},"
+            "{id:'sales-trend',kind:'system',size:'full',locked:true}]))"
+        )
+        _ready(page)
+        glance = page.get_by_role("region", name="At a glance", exact=True).bounding_box()
+        tasks = page.locator('[data-widget-type="task_board"]').bounding_box()
+        trend = page.locator('[data-widget-type="sales_trend"]').bounding_box()
+        assert abs(glance["width"] - tasks["width"]) < 2
+        assert abs(trend["width"] - tasks["width"]) < 2
+        assert glance["y"] + glance["height"] <= tasks["y"] < trend["y"]
+    finally:
+        context.close()
+
+
+def test_board_pairs_on_content_width_not_window_width(browser, app_url, workspace_user):
+    """At 1280 with the sidebar open the content is too narrow to pair, whatever the window says."""
+    context, page = _page(browser, app_url, workspace_user, 1280)
+    try:
+        _data(page)
+        _ready(page)
+        board = page.locator(".sales-board").bounding_box()
+        assert board["width"] < 1100
+        glance = page.get_by_role("region", name="At a glance", exact=True).bounding_box()
+        trend = page.locator('[data-widget-type="sales_trend"]').bounding_box()
+        assert trend["y"] >= glance["y"] + glance["height"]
+        assert abs(glance["width"] - trend["width"]) < 2
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize(
+    ("offset", "label", "overdue"),
+    [(-2, "2 days overdue", True), (-1, "1 day overdue", True), (0, "Due today", False), (3, "Due in 3 days", False)],
+)
+def test_task_due_date_reads_as_words(browser, app_url, workspace_user, offset, label, overdue):
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    try:
+        _data(page)
+        due = (date.today() + timedelta(days=offset)).isoformat()
+        task = {**OVERVIEW["overview_tasks"][0], "due_date": due}
+        page.unroute("**/api/crm/overview")
+        page.route("**/api/crm/overview", lambda route: route.fulfill(json={**OVERVIEW, "overview_tasks": [task]}))
+        _ready(page)
+        chip = page.locator(".sales-task .sales-task-due")
+        expect(chip).to_have_text(label)
+        expect(chip).to_have_attribute("title", due)
+        assert ("sales-task-due--overdue" in chip.get_attribute("class")) is overdue
     finally:
         context.close()

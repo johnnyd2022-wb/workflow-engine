@@ -15,7 +15,7 @@
 {% set section_head_is_page_title = true %}
 {% block content %}
 <div class="max-content crm-root workspace-overview sales-overview" x-data="crmOverview()" @sales-add-widget.window="openWidgetModal()">
-  <div x-show="error" class="crm-error-banner" role="alert" x-cloak>
+  <div x-show="error && !loadError" class="crm-error-banner" role="alert" x-cloak>
     <span x-text="error"></span>
     <button type="button" x-show="!loadError" aria-label="Dismiss error" @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit;">&times;</button>
   </div>
@@ -35,6 +35,8 @@
     </div>
   </template>
 
+  {# Sized by its own width, so the board pairs only when the content area has room for it. #}
+  <div class="sales-board">
   <div class="workspace-stack sales-content" :class="showGridGuide ? 'sales-layout-guide' : ''" x-show="!loading && !loadError" x-cloak>
     <section class="workspace-card sales-glance" aria-labelledby="sales-glance-title">
     <h2 id="sales-glance-title">At a glance</h2>
@@ -150,7 +152,7 @@
                             <span class="crm-task-card-due" x-show="task.assigned_to_user_id" x-cloak>
                               <span x-text="assigneeName(task.assigned_to_user_id)"></span>
                             </span>
-                            <span style="font-size:.7rem; color:var(--text-secondary,#6b7280);" x-text="task.due_date || 'No due date'"></span>
+                            <span class="sales-task-due" :class="taskDue(task).overdue ? 'sales-task-due--overdue' : ''" :title="task.due_date || ''" x-text="taskDue(task).label"></span>
                           </div>
                           <div style="font-size:.72rem; color:var(--text-secondary,#6b7280); margin-top:6px; white-space:pre-wrap;" x-text="task.description || 'No description'"></div>
                           <div x-show="expandedTaskId === task.id" x-cloak style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border-default,#e5e7eb);">
@@ -281,6 +283,7 @@
       </template>
     </div>
 
+  </div>
   </div>
   {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
 

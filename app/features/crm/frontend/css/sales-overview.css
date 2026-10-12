@@ -11,17 +11,21 @@
 .sales-load-error p { color: var(--ui-text-muted); margin: 12px 0 20px; }
 #page-content .sales-overview a:not(.workspace-button) { color: var(--ui-accent); }
 .sales-layout-guide { background: repeating-linear-gradient(to right, transparent 0, transparent calc(50% - 1px), var(--ui-border) calc(50% - 1px), var(--ui-border) 50%); }
-/* The chosen Production board: figures beside trend, then work full width. */
-@media (min-width: 1280px) {
+/* The chosen Production board: figures beside trend, then work full width.
+   The pair needs the locked trend to be the first widget; any other saved order
+   gives the figures the full row instead of leaving half of it empty. */
+#page-content .sales-board { container: sales-board / inline-size; }
+@container sales-board (min-width: 1100px) {
   #page-content .sales-overview .sales-content { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   #page-content .sales-overview .crm-widget-grid { display: contents; }
-  #page-content .sales-overview .sales-glance { grid-column: span 1; }
-  #page-content .sales-overview .sales-glance .crm-kpi-grid { grid-template-columns: 1fr; gap: 12px; }
-  #page-content .sales-overview .sales-kpi { padding: 14px 18px; }
-  #page-content .sales-overview .sales-kpi .crm-kpi-value { font-size: 1.5rem; margin: 4px 0; }
+  #page-content .sales-overview .sales-glance { grid-column: span 2; }
   #page-content .sales-overview .crm-widget-card--full { grid-column: span 2; }
   #page-content .sales-overview .crm-widget-card--half { grid-column: span 1; }
-  #page-content .sales-overview [data-widget-type="sales_trend"][data-widget-locked="true"] { grid-column: span 1; }
+  #page-content .sales-overview .sales-content:has(.crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]) .sales-glance,
+  #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"] { grid-column: span 1; align-self: stretch; }
+  #page-content .sales-overview .sales-content:has(.crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]) .sales-glance .crm-kpi-grid { grid-template-columns: 1fr; gap: 12px; }
+  #page-content .sales-overview .sales-kpi { padding: 14px 18px; }
+  #page-content .sales-overview .sales-kpi .crm-kpi-value { font-size: 1.5rem; margin: 4px 0; }
 }
 @media (max-width: 1100px) {
   #page-content .sales-overview .crm-widget-grid { grid-template-columns: minmax(0, 1fr); }
@@ -48,12 +52,7 @@ html[data-spa-theme="dark"] #page-content.page-content .sales-header-actions .sa
 #page-content .sales-overview .crm-table td:last-child { white-space: nowrap; overflow-wrap: normal; }
 
 #page-content .sales-overview .sales-glance .crm-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-@media (min-width: 1280px) { #page-content .sales-overview .sales-glance .crm-kpi-grid { grid-template-columns: 1fr; } }
 #page-content .sales-overview .flow-mode-segment--active { background: var(--ui-accent-soft); color: var(--ui-accent-strong); border-color: var(--ui-accent); }
 
-
-/* Both cards fill the same board row; unlocked widgets retain normal sizing. */
-@media (min-width: 1280px) {
-  #page-content .sales-overview .sales-glance,
-  #page-content .sales-overview [data-widget-type="sales_trend"][data-widget-locked="true"] { align-self: stretch; }
-}
+.sales-task-due { font-size: .7rem; color: var(--ui-text-muted); }
+.sales-task-due--overdue { color: var(--crm-red); font-weight: 700; }
