@@ -1,7 +1,7 @@
-/* Compliance overview. One set of server evidence and actions serves every review concept. */
+/* Compliance overview. Evidence readiness and priority actions in the Production board layout. */
 (function () {
   'use strict';
-  window.bize.onPage('[data-compliance-style]', function (root) {
+  window.bize.onPage('[data-compliant-surface="overview"]', function (root) {
     var canManage = root.dataset.canManage === '1';
     var primary = root.closest('#page-content').querySelector('[data-compliance-primary]');
     var error = root.querySelector('[data-compliant-error]');
@@ -62,8 +62,7 @@
         var href = destination(framework);
         var card = el('article', null, 'compliance-framework workspace-tile');
         var disclosure = el('details', null, 'compliance-framework-detail');
-        // CONCEPT ONLY: Register starts collapsed; Board and Action desk keep evidence in view.
-        disclosure.open = root.dataset.complianceStyle !== '3';
+        disclosure.open = true;
         var heading = el('summary', null, 'compliance-framework-heading');
         var title = el('div', null, 'compliance-framework-title');
         title.appendChild(el('h3', framework.name));
@@ -206,24 +205,6 @@
     }
     retry.addEventListener('click', load);
 
-    // CONCEPT ONLY: remove chooser, query parameter and storage after the founder's pick.
-    function setStyle(style, updateUrl) {
-      if (!/^[123]$/.test(style || '')) style = '1';
-      root.dataset.complianceStyle = style;
-      root.querySelectorAll('[data-style-pick]').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.stylePick === style)); });
-      root.querySelector('[data-more-actions]').open = style === '2';
-      root.querySelectorAll('.compliance-framework-detail').forEach(function (detail) { detail.open = style !== '3'; });
-      try { sessionStorage.setItem('compliance-design-style', style); } catch (_err) { /* Preferences are optional. */ }
-      if (updateUrl) {
-        var url = new URL(window.location.href);
-        url.searchParams.set('style', style);
-        window.history.replaceState(window.history.state, '', url);
-      }
-    }
-    var saved = '1';
-    try { saved = sessionStorage.getItem('compliance-design-style') || '1'; } catch (_err) { /* Defaults work without storage. */ }
-    setStyle(new URLSearchParams(window.location.search).get('style') || saved, false);
-    root.querySelectorAll('[data-style-pick]').forEach(function (button) { button.addEventListener('click', function () { setStyle(button.dataset.stylePick, true); }); });
     load();
     return function () { controller.abort(); };
   });

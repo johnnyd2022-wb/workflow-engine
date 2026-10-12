@@ -1,4 +1,4 @@
-"""Compliance overview: honest evidence labels, next actions and three review concepts."""
+"""Compliance overview: honest evidence labels, next actions in the selected Board layout."""
 
 import re
 from uuid import UUID
@@ -31,8 +31,8 @@ def compliance_page(browser, app_url, fresh_user, db):
     context.close()
 
 
-def _open(page, style=1):
-    page.goto(f"/compliant/nz-alcohol?style={style}")
+def _open(page):
+    page.goto("/compliant/nz-alcohol")
     expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
 
 
@@ -54,13 +54,11 @@ def test_customs_and_np2_have_honest_evidence_labels(compliance_page):
     expect(page.get_by_role("link", name="Open NP2", exact=True)).to_be_visible()
 
 
-# CONCEPT ONLY: removed with the chooser after the founder selects one layout.
-@pytest.mark.parametrize("style", [1, 2, 3])
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_concepts_keep_evidence_and_actions_reachable(compliance_page, style, width):
+def test_board_keeps_evidence_and_actions_reachable(compliance_page, width):
     page = compliance_page
     page.set_viewport_size({"width": width, "height": 1080})
-    _open(page, style)
+    _open(page)
     expect(page.get_by_role("region", name="Evidence readiness", exact=True)).to_be_visible()
     expect(page.get_by_role("region", name="Next action", exact=True)).to_be_visible()
     obligations = page.get_by_role("region", name="Your obligations", exact=True)
@@ -76,23 +74,12 @@ def test_concepts_keep_evidence_and_actions_reachable(compliance_page, style, wi
     assert abs(title["x"] - content["x"]) <= 1, "page and section title must share their left edge"
     expect(page.locator('.section-head__actions [data-compliance-primary]')).to_have_text("Map products")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
-    if style == 1 and width >= 1440:
+    if width >= 1440:
         readiness = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
         actions = page.get_by_role("region", name="Next action", exact=True).bounding_box()
         assert readiness["y"] == actions["y"]
         assert readiness["x"] + readiness["width"] < actions["x"]
         assert round(readiness["height"]) == round(actions["height"])
-    if style == 3:
-        customs = page.get_by_role("article").filter(
-            has=page.get_by_role("heading", name="Customs alcohol reconciliation")
-        )
-        expect(customs.get_by_text("Evidence coverage", exact=True)).not_to_be_visible()
-        customs.locator("summary").focus()
-        page.keyboard.press("Enter")
-        expect(customs.get_by_text("Evidence coverage", exact=True)).to_be_visible()
-        customs.locator("summary").focus()
-        page.keyboard.press("Enter")
-        expect(customs.get_by_text("Evidence coverage", exact=True)).not_to_be_visible()
 
 
 def test_all_returned_actions_expand_and_primary_opens_mapping(compliance_page):
@@ -114,13 +101,10 @@ def test_all_returned_actions_expand_and_primary_opens_mapping(compliance_page):
     expect(page).to_have_url(re.compile("/configuration$"))
 
 
-def test_concept_switch_remembers_choice_and_survives_boosted_return(compliance_page):
+def test_board_loads_again_after_boosted_navigation(compliance_page):
     page = compliance_page
     _open(page)
     page.evaluate('window.complianceRoundTrip = "same window"')
-    page.get_by_role("button", name="2 · Action desk", exact=True).click()
-    expect(page.get_by_role("button", name="2 · Action desk", exact=True)).to_have_attribute("aria-pressed", "true")
-    expect(page).to_have_url(re.compile(r"\?style=2$"))
     from tests.e2e.test_boosted_navigation import _BOOSTED_CLICK_JS
 
     page.evaluate(_BOOSTED_CLICK_JS, "/core/suppliers")
@@ -128,13 +112,23 @@ def test_concept_switch_remembers_choice_and_survives_boosted_return(compliance_
     page.evaluate(_BOOSTED_CLICK_JS, "/compliant/nz-alcohol")
     page.wait_for_function("window.__boostSettled === true")
     expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
-    expect(page.get_by_role("button", name="2 · Action desk", exact=True)).to_have_attribute("aria-pressed", "true")
     expect(page.get_by_role("article")).to_have_count(2)
+    expect(page.locator("[data-compliance-primary]")).to_have_text("Map products")
     assert page.evaluate("window.complianceRoundTrip") == "same window", (
         "must exercise boosted swaps, not full navigation"
     )
-    _open(page, 3)
-    expect(page.get_by_role("button", name="3 · Register", exact=True)).to_have_attribute("aria-pressed", "true")
+
+
+def test_legacy_preview_preferences_do_not_change_board(compliance_page):
+    page = compliance_page
+    page.evaluate('sessionStorage.setItem("compliance-design-style", "2")')
+    page.goto("/compliant/nz-alcohol?style=3")
+    expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
+    expect(page.get_by_role("group", name="Design concepts")).to_have_count(0)
+    expect(page.get_by_role("article")).to_have_count(2)
+    for framework in page.get_by_role("article").all():
+        expect(framework.get_by_text("Evidence coverage", exact=True)).to_be_visible()
+        expect(framework.locator("details")).to_have_attribute("open", "")
 
 
 def test_failed_load_has_no_success_totals_and_retry_recovers(compliance_page):
