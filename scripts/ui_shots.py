@@ -53,7 +53,7 @@ REPO = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
 STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
-SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales")
+SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales", "planner")
 
 
 def say(*parts) -> None:
@@ -496,6 +496,60 @@ def _seed_production(db, org_id, inv) -> None:
     start("Limoncello", 0, 0)
 
 
+def _seed_planner(db, org_id, inv) -> None:
+    """Demand for the Planner: orders and forecasts against the production workflows' outputs,
+    overdue, due this week, due later and cancelled. Needs `production` seeded first."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.core.db.models.step import Step
+    from app.features.planning import demand_service
+
+    # The planner only offers outputs that carry an id, as the workflow editor gives them.
+    for step in db.query(Step).filter(Step.org_id == org_id).all():
+        if any(isinstance(o, dict) and not o.get("id") for o in step.outputs or []):
+            step.outputs = [{**o, "id": o.get("id") or str(uuid.uuid4())} for o in step.outputs]
+            flag_modified(step, "outputs")
+    db.commit()
+    outputs = demand_service.output_catalog(db, org_id)
+    if not outputs:
+        raise SystemExit("ui-shots: `planner` needs the `production` seed before it (seed production planner)")
+    today = date.today()
+
+    def pick(word):
+        return next((row for row in outputs if word.lower() in row["name"].lower()), outputs[0])
+
+    # (reference, output it is for, quantity, days until due, priority)
+    orders = [
+        ("Regional Wines — summer order", "navy strength gin: bottle", 240, -2, 80),
+        ("Moore Wilson's — standing order", "pink gin: bottle", 120, 1, 60),
+        ("Hawthorn Lounge — cocktail range", "limoncello: bottle", 60, 3, 40),
+        ("Bottle-O Greytown — restock", "navy strength gin: bottle", 180, 6, 50),
+        ("Cellar door — December forecast", "pink gin: bottle", 300, 21, 20),
+        ("Christmas gift packs — forecast", "limoncello: bottle", 150, 35, 30),
+        ("Trade show samples", "navy strength gin: distil", 40, 12, 10),
+    ]
+    made = []
+    for reference, word, quantity, days, priority in orders:
+        output = pick(word)
+        row = demand_service.create_demand(
+            db,
+            org_id,
+            {
+                "reference": reference,
+                "source_output_id": output["id"],
+                "quantity": str(quantity),
+                "due_date": (today + timedelta(days=max(days, 0))).isoformat(),
+                "priority": priority,
+            },
+        )
+        if days < 0:  # the service refuses past dates on entry; an order goes overdue by time passing
+            row.due_date = today + timedelta(days=days)
+        made.append(row)
+    db.commit()
+    demand_service.cancel_demand(db, org_id, made[-1].id)
+    db.commit()
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -533,6 +587,7 @@ def cmd_seed(args) -> int:
             "compliance": _seed_compliance,
             "production": _seed_production,
             "sales": _seed_sales,
+            "planner": _seed_planner,
         }[kind](db, org.id, inv)
         say(f"seeded {kind}")
     say(f"org {org.name!r}, sign-in {user.email}")

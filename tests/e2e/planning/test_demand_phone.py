@@ -36,12 +36,16 @@ def test_phone_workspace_creates_and_cancels_demand_without_overflow(demand_clie
     try:
         page.goto("https://planner.test/core/planner")
         page.locator('[data-output-select] option[value="' + str(output_id) + '"]').wait_for(state="attached")
+        # The form sits behind the page's primary action, so the demand itself is the first thing shown.
+        assert not page.locator('[name="reference"]').is_visible()
+        page.get_by_role("button", name="Add demand", exact=True).first.click()
         page.locator('[name="reference"]').fill("Phone order <script>alert(1)</script>")
         page.locator('[name="source_output_id"]').select_option(str(output_id))
         page.locator('[name="quantity"]').fill("600")
         page.locator('[name="due_date"]').fill("2026-10-10")
-        page.get_by_role("button", name="Add demand").click()
+        page.get_by_role("button", name="Save demand", exact=True).click()
         page.get_by_role("heading", name="Phone order <script>alert(1)</script>").wait_for()
+        assert not page.locator('[name="reference"]').is_visible()
         assert page.locator("[data-demand-list] script").count() == 0
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         assert page.locator("[data-planning-root] input, [data-planning-root] select").evaluate_all(
@@ -49,7 +53,12 @@ def test_phone_workspace_creates_and_cancels_demand_without_overflow(demand_clie
             "return r.left >= 0 && r.right <= window.innerWidth; })"
         )
         page.get_by_role("button", name="Cancel demand").click()
-        page.get_by_text("Due 2026-10-10 · Priority 0 · cancelled", exact=True).wait_for()
+        # A cancelled demand leaves the open list for the closed one, labelled in words.
+        page.locator("[data-closed] > summary").click()
+        closed = page.locator("[data-closed-list] .planner-row")
+        closed.get_by_text("Cancelled", exact=True).wait_for()
+        assert closed.locator(".planner-due").get_attribute("title") == "2026-10-10"
+        assert page.locator("[data-demand-list] .planner-row").count() == 0
         assert page.get_by_role("button", name="Cancel demand").count() == 0
     finally:
         page.close()
