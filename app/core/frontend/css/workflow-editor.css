@@ -113,3 +113,7 @@
  #workflow-editor .workflow-editor__journey li > span:first-child { display:none; }
  #workflow-editor .workflow-editor__eyebrow { display:none; }
 }
+/* The preview switch reads the way it does on Settings, Sales and Compliance. */
+#workflow-editor .workflow-editor__concepts { align-items:center; flex-wrap:wrap; }
+#workflow-editor .workflow-editor__concepts > span { color:var(--ui-text-muted); font-size:.8rem; margin-right:4px; }
+#workflow-editor [data-style-pick] { font-size:.8rem; min-height:36px; padding:7px 12px; }

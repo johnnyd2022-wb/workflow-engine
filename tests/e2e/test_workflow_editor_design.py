@@ -15,7 +15,7 @@ def test_workflow_editor_stage_and_style_persist(logged_in_page):
     root = page.locator("#workflow-editor")
     expect(root).to_have_attribute("data-workflow-editor-style", "1")
     expect(root.locator('[aria-current="step"]')).to_have_text("1Workflow")
-    page.get_by_role("button", name="Style 2", exact=True).click()
+    page.get_by_role("button", name="2 · Editing desk", exact=True).click()
     page.locator("#guided-process-workflow-name").fill("Design review workflow")
     page.get_by_role("button", name="Next", exact=True).click()
     expect(page).to_have_url(re.compile(r"/core/flows/create/step-name"))
@@ -120,7 +120,7 @@ def test_first_stage_has_no_back_and_guidance_has_no_click_instruction(logged_in
     expect(guide.locator(".flow-wizard-example-disclosure__hint")).to_be_hidden()
     # Beside the form there is room, so the stage's guidance is already open.
     assert guide.locator("details").evaluate("node => node.open")
-    page.get_by_role("button", name="Style 2", exact=True).click()
+    page.get_by_role("button", name="2 · Editing desk", exact=True).click()
     assert not guide.locator("details").evaluate("node => node.open")
 
 

@@ -494,7 +494,7 @@
             </div>
             {# CONCEPT ONLY: removed when the design is chosen. #}
             <div class="workflow-editor__concepts" role="group" aria-label="Design concepts">
-              {% for style in [1, 2, 3] %}<button type="button" class="workspace-button" data-style-pick="{{ style }}" aria-pressed="{{ 'true' if style == 1 else 'false' }}">Style {{ style }}</button>{% endfor %}
+              <span>Preview layout</span>{% for style, label in [(1, 'Board'), (2, 'Editing desk'), (3, 'Document')] %}<button type="button" class="workspace-button" data-style-pick="{{ style }}" aria-pressed="{{ 'true' if style == 1 else 'false' }}">{{ style }} · {{ label }}</button>{% endfor %}
             </div>
           </header>
           <div class="workflow-editor__layout">
