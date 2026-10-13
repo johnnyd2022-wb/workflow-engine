@@ -14,6 +14,9 @@
       {% endif %}
     </div>
     <div class="spa-fixed-action-bar__right flow-wizard-sticky-bar__right">
+      {# Back sits beside Next; the wizard keeps what has been entered, as it does for the browser's own back. #}
+      {% set _prev = {'step-name': 'process-overview', 'inputs': 'step-name', 'outputs': 'inputs', 'evidence-and-prompts': 'outputs'}.get(flow_wizard_page) %}
+      {% if _prev %}<a class="btn btn-secondary flow-wizard-sticky-back" href="/core/flows/create/{{ _prev }}{{ flow_qs }}" hx-boost="false">Back</a>{% endif %}
       {% if _v == 'process_overview' %}
       <button type="button" class="btn btn-primary" onclick="window.goFromProcessOverviewToStepName()">Next</button>
       {% elif _v == 'step_name' or _v == 'inputs' or _v == 'outputs' %}

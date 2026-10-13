@@ -499,8 +499,10 @@
           </header>
           <div class="workflow-editor__layout">
             <section class="workflow-editor__journey workspace-card" aria-label="Workflow setup stages">
-              <p class="workflow-editor__eyebrow">Workflow setup</p>
-              <ol>{% for slug, label in stages %}<li {% if slug == flow_wizard_page %}aria-current="step"{% endif %}><span>{{ loop.index }}</span>{{ label }}</li>{% endfor %}</ol>
+              {# Stages before the current one are marked done, so progress reads at a glance. #}
+              {% set stage_slugs = stages | map(attribute=0) | list %}
+              {% set current_stage = stage_slugs.index(flow_wizard_page) if flow_wizard_page in stage_slugs else 0 %}
+              <ol data-progress="Stage {{ current_stage + 1 }} of {{ stages | length }}">{% for slug, label in stages %}<li {% if slug == flow_wizard_page %}aria-current="step"{% elif loop.index0 < current_stage %}data-stage-done{% endif %}><span>{{ loop.index }}</span>{{ label }}{% if loop.index0 < current_stage %}<span class="sr-only"> (done)</span>{% endif %}</li>{% endfor %}</ol>
             </section>
             <section class="card spa-primary-flat process-flow-card notifications-card workspace-card workflow-editor__form" aria-labelledby="modal-title">
               {% block wizard_pre_card %}{% endblock %}
@@ -509,8 +511,7 @@
               </div>
             </section>
             <aside class="workspace-card workflow-editor__guide" aria-label="Guidance for this stage">
-              <div class="workflow-editor__guide-intro"><h2>As you build</h2>
-              <p>One workflow, repeatable steps.</p></div>
+              <div class="workflow-editor__guide-intro"><h2>About this stage</h2></div>
               {% block wizard_more_information %}{% endblock %}
               <div class="workflow-editor__note"><h3>{% if process_id %}Changes and production{% else %}Start with the essentials{% endif %}</h3><p>{% if process_id %}Saved changes apply to future runs. Production already recorded keeps its history.{% else %}Name the workflow, then add a step. Inputs, outputs and evidence can be configured as you go.{% endif %}</p></div>
             </aside>
