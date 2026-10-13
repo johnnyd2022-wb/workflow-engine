@@ -83,7 +83,9 @@ or monitor CI after push. Browser screenshot flows and syntax/scanner checks run
 
 ## Review round: what settings guidance says, and what changed
 
-Reviewed against the page-design bar and two further sources read on 13 October 2026.
+Reviewed against the page-design bar and two further sources found on 13 October 2026. Both rows
+below come from search-result summaries of those pages; the pages themselves were not opened, so
+treat them as pointers rather than quoted guidance.
 
 | Source | Pattern | What it changes here |
 |---|---|---|
