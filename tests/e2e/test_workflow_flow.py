@@ -67,7 +67,8 @@ def test_workflow_directory_filters_and_keeps_history_as_a_separate_action(logge
     # Follow the dashboard's operational CTA through the SPA, rather than only proving
     # a hard navigation. The directory search must bind to the freshly swapped markup.
     page.goto("/core/dashboard")
-    page.locator('a[href="/core/processes"]').click()
+    # Home now links to the list from more than one figure; any of them is the same in-app route.
+    page.locator('a[href="/core/processes"]').first.click()
     page.wait_for_url("**/core/processes")
     page.wait_for_selector(".processes-list-item")
     search = page.locator("#processes-list-search")

@@ -7,14 +7,37 @@
 {% endblock %}
 
 {% block content %}
-  <div class="max-content workspace-overview workspace-page processes-list-page">
+  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='workflows-design.css') }}">
+  <div class="max-content workspace-overview workspace-page processes-list-page" data-workflows-style="1" data-state="loading">
     <header class="workspace-header">
       <div><h1>Workflows</h1><p>The product workflows you run, and the batches made on each.</p></div>
       <div class="workspace-header__actions">
         <a href="/core/flows/create/start" class="workspace-button workspace-button--primary processes-list-create">Create product workflow</a>
       </div>
     </header>
-    <div class="workspace-stack">
+    {# CONCEPT ONLY — removed once a direction is selected. #}
+    <div class="workflows-concepts" role="group" aria-label="Workflows design concepts">
+      <span>Preview layout</span>
+      <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Board</button>
+      <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · Catalogue</button>
+      <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · Register</button>
+    </div>
+    <div class="workspace-stack workflows-layout">
+      {# Styles 2 and 3 open on one sentence instead of the figures card. #}
+      <p class="workflows-brief" data-workflows-brief hidden></p>
+      <section class="workspace-card workflows-glance" aria-labelledby="workflows-glance-title">
+        <h2 id="workflows-glance-title">At a glance</h2>
+        <dl class="workflows-figures">
+          <div class="workspace-tile"><dt>Workflows</dt><dd data-figure-total>—</dd><span data-figure-total-note>ready to run</span></div>
+          <div class="workspace-tile"><dt>Under way</dt><dd data-figure-active>—</dd><span data-figure-active-note>batches in production</span></div>
+          <div class="workspace-tile"><dt>Made</dt><dd data-figure-made>—</dd><span>batches completed</span></div>
+        </dl>
+      </section>
+      <section class="workspace-card workflows-running" aria-labelledby="workflows-running-title">
+        <h2 id="workflows-running-title">In production now</h2>
+        <p class="workspace-caption" data-running-caption>Workflows with a batch under way.</p>
+        <ul class="workflows-running__list" data-running-list></ul>
+      </section>
       <section class="workspace-card processes-list-hero" aria-labelledby="processes-list-title">
         <div class="workspace-card__header">
           <h2 id="processes-list-title">Product workflows</h2>
@@ -22,7 +45,7 @@
         </div>
         <div class="workspace-form processes-list-toolbar">
           <label class="processes-list-search" for="processes-list-search">
-            <span>Find a workflow</span>
+            <span class="workflows-sr-only">Find a workflow</span>
             <input
               id="processes-list-search"
               type="search"
@@ -33,8 +56,14 @@
           </label>
         </div>
         <div class="processes-list-results">
-          <div id="processes-list-loading" class="processes-list-loading workspace-empty">Loading product workflows…</div>
-          <div id="processes-list-empty" class="processes-list-empty workspace-empty" style="display: none;"></div>
+          <div id="processes-list-loading" class="processes-list-loading workspace-empty"><span data-loading-text>Loading product workflows…</span> <button type="button" class="workspace-button" data-workflows-retry hidden>Try again</button></div>
+          <div id="processes-list-empty" class="processes-list-empty workflows-empty" style="display: none;">
+            <strong data-empty-title></strong>
+            <p class="workspace-caption" data-empty-text></p>
+            <a href="/core/flows/create/start" class="workspace-button" data-empty-create>Create product workflow</a>
+          </div>
+          {# CONCEPT ONLY (Style 3): column headings for the register. #}
+          <div class="workflows-columns" aria-hidden="true"><span>Workflow</span><span>Status</span><span>Steps</span><span>Made</span><span></span></div>
           <div id="processes-list-stack" class="processes-list-stack" style="display: none;"></div>
         </div>
       </section>
@@ -89,78 +118,117 @@
         }
       }
 
+      function pageRoot() { return document.querySelector('.processes-list-page'); }
+      function plural(count, one, many) { return count + ' ' + (count === 1 ? one : many); }
+      function counts(p) {
+        return {
+          steps: typeof p.step_count === 'number' ? p.step_count : 0,
+          active: typeof p.active_executions === 'number' ? p.active_executions : 0,
+          made: typeof p.completed_executions === 'number' ? p.completed_executions : 0
+        };
+      }
+      // What a workflow is doing, in words: a draft, running, or idle.
+      function stateOf(p) {
+        var c = counts(p);
+        if (p.is_draft) return { key: 'draft', label: 'Draft' };
+        if (c.active > 0) return { key: 'running', label: c.active + ' under way' };
+        return { key: 'idle', label: 'Not running' };
+      }
+      // Running workflows first (most batches first), then by name; drafts last.
+      function ordered(processes) {
+        var rank = { running: 0, idle: 1, draft: 2 };
+        return processes.slice().sort(function (a, b) {
+          return rank[stateOf(a).key] - rank[stateOf(b).key]
+            || counts(b).active - counts(a).active
+            || String(a.name || '').localeCompare(String(b.name || ''));
+        });
+      }
+
+      function renderSummary() {
+        var root = pageRoot();
+        if (!root) return;
+        var style = root.getAttribute('data-workflows-style') || '1';
+        var live = allProcesses.filter(function (p) { return !p.is_draft; });
+        var drafts = allProcesses.length - live.length;
+        var running = live.filter(function (p) { return counts(p).active > 0; });
+        var active = live.reduce(function (sum, p) { return sum + counts(p).active; }, 0);
+        var made = live.reduce(function (sum, p) { return sum + counts(p).made; }, 0);
+        function set(selector, text) { var node = root.querySelector(selector); if (node) node.textContent = text; }
+        set('[data-figure-total]', String(live.length));
+        set('[data-figure-total-note]', drafts ? 'ready to run · ' + plural(drafts, 'draft', 'drafts') : 'ready to run');
+        set('[data-figure-active]', String(active));
+        set('[data-figure-active-note]', running.length ? 'across ' + plural(running.length, 'workflow', 'workflows') : 'nothing in production');
+        set('[data-figure-made]', String(made));
+        root.setAttribute('data-state', allProcesses.length ? 'ready' : 'empty');
+
+        var list = root.querySelector('[data-running-list]');
+        if (list) {
+          list.innerHTML = ordered(running).map(function (p) {
+            return '<li><a href="/core/flows?id=' + esc(encodeURIComponent(p.id || '')) + '">' + esc(p.name || 'Untitled') + '</a>' +
+              '<strong>' + esc(plural(counts(p).active, 'batch', 'batches')) + '</strong></li>';
+          }).join('');
+          set('[data-running-caption]', running.length ? 'Workflows with a batch under way.' : 'Nothing is in production. Open a workflow to start a batch.');
+        }
+        // CONCEPT ONLY: Styles 2 and 3 lead with a sentence in place of the figures card.
+        var brief = root.querySelector('[data-workflows-brief]');
+        if (brief) {
+          brief.hidden = style === '1' || !allProcesses.length;
+          brief.textContent = plural(live.length, 'product workflow', 'product workflows') + ': '
+            + (running.length ? plural(active, 'batch', 'batches') + ' under way across ' + running.length : 'nothing in production')
+            + ', ' + plural(made, 'batch', 'batches') + ' made' + (drafts ? ', ' + plural(drafts, 'draft', 'drafts') : '') + '.';
+        }
+      }
+
       function render() {
         var loading = document.getElementById('processes-list-loading');
         var empty = document.getElementById('processes-list-empty');
         var stack = document.getElementById('processes-list-stack');
         if (loading) loading.style.display = 'none';
-        var processes = filteredProcesses();
+        renderSummary();
+        var processes = ordered(filteredProcesses());
         setResultCount(processes.length);
         if (!processes || !processes.length) {
           if (empty) {
             var input = document.getElementById('processes-list-search');
-            empty.textContent = input && input.value.trim()
-              ? 'No workflows match that search.'
-              : 'No product workflows yet. Create one to define your production work.';
-            empty.style.display = 'block';
+            var searching = !!(input && input.value.trim());
+            empty.querySelector('[data-empty-title]').textContent = searching ? 'No workflows match that search' : 'No product workflows yet';
+            empty.querySelector('[data-empty-text]').textContent = searching
+              ? 'Check the spelling, or clear the search to see every workflow.'
+              : 'A workflow is the recipe for one product: its steps, what goes in and what comes out.';
+            empty.querySelector('[data-empty-create]').hidden = searching;
+            empty.style.display = 'flex';
           }
           if (stack) { stack.style.display = 'none'; stack.innerHTML = ''; }
           return;
         }
         if (empty) empty.style.display = 'none';
         if (stack) {
-          stack.style.display = 'flex';
+          stack.style.display = '';
           stack.innerHTML = processes.map(function (p) {
             var id = p.id || '';
             var href = '/core/flows?id=' + encodeURIComponent(id);
-            var steps = typeof p.step_count === 'number' ? p.step_count : 0;
-            var active = typeof p.active_executions === 'number' ? p.active_executions : 0;
-            var done = typeof p.completed_executions === 'number' ? p.completed_executions : 0;
-            var draft = p.is_draft ? ' · Draft' : '';
-            var meta = steps + ' step' + (steps === 1 ? '' : 's') + ' · ' + active + ' active · ' + done + ' completed' + draft;
+            var c = counts(p);
+            var state = stateOf(p);
+            var name = p.name || 'Untitled';
             var es = p.event_summary || null;
-            var auditLine = '';
-            if (es) {
-              var parts = [];
-              if (es.current_version && es.current_version > 1) parts.push('v' + es.current_version);
-              if (es.last_modified_by && es.last_modified_at) {
-                parts.push('Last edited by ' + es.last_modified_by + ' · ' + fmtDate(es.last_modified_at));
-              } else if (es.created_by && es.created_at) {
-                parts.push('Created by ' + es.created_by + ' · ' + fmtDate(es.created_at));
-              }
-              if (es.total_runs > 0) {
-                var totalR = es.total_runs;
-                var completedR = es.completed_runs || 0;
-                var cancelledR = es.cancelled_runs || 0;
-                var failedR = es.failed_runs || 0;
-                var successRate = totalR > 0 ? Math.round((completedR / totalR) * 100) : null;
-                var runStr = totalR + ' run' + (totalR === 1 ? '' : 's');
-                if (successRate !== null && totalR > 1) runStr += ' · ' + successRate + '% success';
-                if (cancelledR > 0) runStr += ' · ' + cancelledR + ' cancelled';
-                parts.push(runStr);
-              }
-              if (parts.length) auditLine = '<p class="processes-list-item__audit">' + esc(parts.join(' · ')) + '</p>';
-            }
+            var edited = '';
+            if (es && es.last_modified_by && es.last_modified_at) edited = 'Last edited by ' + es.last_modified_by + ' · ' + fmtDate(es.last_modified_at);
+            else if (es && es.created_by && es.created_at) edited = 'Created by ' + es.created_by + ' · ' + fmtDate(es.created_at);
             return (
-              '<article class="processes-list-item">' +
-                '<a href="' + esc(href) + '" class="processes-list-item__open" aria-label="Open workflow: ' + esc(p.name || 'Untitled') + '">' +
-                '<span class="processes-list-item__icon" aria-hidden="true">' +
-                  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                    '<rect x="3" y="3" width="7" height="9" rx="1"/>' +
-                    '<rect x="14" y="3" width="7" height="5" rx="1"/>' +
-                    '<rect x="14" y="12" width="7" height="9" rx="1"/>' +
-                    '<rect x="3" y="16" width="7" height="5" rx="1"/>' +
-                  '</svg>' +
-                '</span>' +
-                '<div class="processes-list-item__main">' +
-                  '<p class="processes-list-item__name">' + esc(p.name || 'Untitled') + '</p>' +
-                  '<p class="processes-list-item__meta">' + esc(meta) + '</p>' +
-                  auditLine +
-                '</div>' +
+              '<article class="processes-list-item" data-state="' + esc(state.key) + '">' +
+                '<a href="' + esc(href) + '" class="processes-list-item__open" aria-label="Open workflow: ' + esc(name) + '">' +
+                  '<div class="processes-list-item__main">' +
+                    '<p class="processes-list-item__name">' + esc(name) + '</p>' +
+                    '<p class="processes-list-item__meta">' + esc(plural(c.steps, 'step', 'steps') + ' · ' + plural(c.made, 'batch', 'batches') + ' made') + '</p>' +
+                    (edited ? '<p class="processes-list-item__audit">' + esc(edited) + '</p>' : '') +
+                  '</div>' +
+                  '<span class="workflows-state" data-state="' + esc(state.key) + '">' + esc(state.label) + '</span>' +
+                  '<span class="workflows-cell">' + esc(String(c.steps)) + '</span>' +
+                  '<span class="workflows-cell">' + esc(String(c.made)) + '</span>' +
                 '</a>' +
                 '<div class="processes-list-item__actions">' +
-                  '<button class="processes-list-item__history-btn" type="button" data-process-id="' + esc(id) + '" data-process-name="' + esc(p.name || 'Untitled') + '" aria-label="View history for ' + esc(p.name || 'Untitled') + '">History</button>' +
-                  '<a href="' + esc(href) + '" class="processes-list-item__arrow" aria-label="Open workflow: ' + esc(p.name || 'Untitled') + '">' +
+                  '<button class="processes-list-item__history-btn" type="button" data-process-id="' + esc(id) + '" data-process-name="' + esc(name) + '" aria-label="View history for ' + esc(name) + '">History</button>' +
+                  '<a href="' + esc(href) + '" class="processes-list-item__arrow" tabindex="-1" aria-hidden="true">' +
                     '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                       '<polyline points="9 18 15 12 9 6"/>' +
                     '</svg>' +
@@ -172,10 +240,22 @@
         }
       }
 
+      // A failed load is not an empty catalogue: say so, offer a retry, and show no figures.
+      function fail(message) {
+        var root = pageRoot();
+        var loading = document.getElementById('processes-list-loading');
+        if (root) root.setAttribute('data-state', 'error');
+        if (!loading) return;
+        loading.style.display = '';
+        loading.querySelector('[data-loading-text]').textContent = message;
+        loading.querySelector('[data-workflows-retry]').hidden = false;
+        var count = document.getElementById('processes-list-count');
+        if (count) count.textContent = '';
+      }
+
       function load() {
         if (!window.CoreAPI || !window.CoreAPI.getProcesses) {
-          var loading = document.getElementById('processes-list-loading');
-          if (loading) loading.textContent = 'Products API is not available.';
+          fail('Product workflows could not load.');
           return;
         }
         window.CoreAPI.getProcesses()
@@ -185,8 +265,7 @@
           })
           .catch(function (e) {
             console.error(e);
-            var loading = document.getElementById('processes-list-loading');
-            if (loading) loading.textContent = 'Failed to load products.';
+            fail('Product workflows could not load.');
           });
       }
 
@@ -207,8 +286,37 @@
         if (!stack || stack === initializedStack) return;
         initializedStack = stack;
         initSearch();
+        initStyle();
         load();
       }
+
+      // CONCEPT ONLY — preview switch; fold the chosen layout into the base rules after selection.
+      function applyStyle(value) {
+        var root = pageRoot();
+        if (!root) return;
+        var style = ['1', '2', '3'].indexOf(value) === -1 ? '1' : value;
+        root.setAttribute('data-workflows-style', style);
+        try { sessionStorage.setItem('workflows-design-style', style); } catch (_) { /* Storage is optional. */ }
+        root.querySelectorAll('[data-style-pick]').forEach(function (button) {
+          button.setAttribute('aria-pressed', String(button.getAttribute('data-style-pick') === style));
+        });
+        if (allProcesses.length) renderSummary();
+      }
+      function initStyle() {
+        var remembered;
+        try { remembered = sessionStorage.getItem('workflows-design-style'); } catch (_) { /* Defaults work without storage. */ }
+        applyStyle(new URLSearchParams(window.location.search).get('style') || remembered || '1');
+      }
+      document.addEventListener('click', function (e) {
+        var pick = e.target.closest('.processes-list-page [data-style-pick]');
+        if (pick) { applyStyle(pick.getAttribute('data-style-pick')); return; }
+        var retry = e.target.closest('.processes-list-page [data-workflows-retry]');
+        if (retry) {
+          retry.hidden = true;
+          document.querySelector('#processes-list-loading [data-loading-text]').textContent = 'Loading product workflows…';
+          load();
+        }
+      });
       window.processesListInitPage = initPage;
 
       // Wire history buttons (delegated — cards re-render on load)

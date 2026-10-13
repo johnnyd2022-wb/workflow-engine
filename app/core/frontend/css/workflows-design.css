@@ -1,0 +1,122 @@
+/* Product workflows list. Cards and layout come from the shared workspace rules; this file
+   holds what the list adds. Style 1, the Board, is the base. */
+#page-content .processes-list-page { container: workflows / inline-size; }
+#page-content .processes-list-page [hidden] { display: none !important; }
+#page-content .processes-list-page .processes-list-create { background: var(--ui-accent); border-color: var(--ui-accent); color: #fff; }
+#page-content .processes-list-page .processes-list-create:hover { background: var(--ui-accent-strong); border-color: var(--ui-accent-strong); }
+html[data-spa-theme="dark"] #page-content.page-content .processes-list-page .processes-list-create,
+html[data-spa-theme="dark"] #page-content.page-content .processes-list-page .processes-list-create:hover { background: var(--ui-accent); border-color: var(--ui-accent); color: #042f2e; }
+.workflows-concepts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 24px; }
+.workflows-concepts > span { color: var(--ui-text-muted); font-size: .8rem; margin-right: 4px; }
+.workflows-concepts .workspace-button { padding: 7px 12px; font-size: .8rem; min-height: 36px; }
+#page-content .workflows-concepts [aria-pressed="true"] { border-color: var(--ui-accent); color: var(--ui-accent); background: var(--ui-surface-subtle); }
+.workflows-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+#page-content .workflows-brief { margin: 0; font-size: 18px; line-height: 1.5; color: var(--ui-text); }
+
+.workflows-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0 0; }
+.workflows-figures > div { display: flex; flex-direction: column; gap: 4px; }
+.workflows-figures dt { font-size: 13px; color: var(--ui-text-muted); }
+.workflows-figures dd { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.2; color: var(--ui-text); font-variant-numeric: tabular-nums; }
+.workflows-figures span { font-size: 13px; color: var(--ui-text-muted); }
+.workflows-running__list { list-style: none; margin: 14px 0 0; padding: 0; }
+.workflows-running__list:empty { display: none; }
+.workflows-running__list li { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--ui-border); }
+.workflows-running__list li:first-child { border-top: 0; padding-top: 4px; }
+#page-content .workflows-running__list a { color: var(--ui-text); font-size: 14px; font-weight: 500; text-decoration: none; overflow-wrap: anywhere; }
+#page-content .workflows-running__list a:hover { color: var(--ui-accent-strong); text-decoration: underline; }
+.workflows-running__list strong { font-size: 14px; font-weight: 600; color: var(--ui-accent-strong); white-space: nowrap; }
+
+/* The search sits on the card's heading row, sized for a name rather than the full width. */
+#page-content .processes-list-page .processes-list-toolbar { display: block; margin-top: 14px; }
+#page-content .processes-list-page #processes-list-search { width: 100% !important; max-width: 340px !important; padding: 9px 14px !important; font-size: 14px !important; }
+#page-content .processes-list-page .processes-list-count { font-size: 13px; }
+#page-content .processes-list-page .processes-list-loading { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+#page-content .workflows-empty { flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 0 0; text-align: left; border: 0; }
+#page-content .workflows-empty strong { font-size: 16px; font-weight: 600; color: var(--ui-text); }
+#page-content .workflows-empty p { margin: 0 0 10px; }
+
+/* Rows: a name, what it is doing in words, and a quiet way to its history. */
+#page-content .processes-list-page .processes-list-stack { display: block; }
+#page-content .processes-list-page .processes-list-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 0; padding: 14px 0; border: 0; border-top: 1px solid var(--ui-border); border-radius: 0; background: none; box-shadow: none; }
+#page-content .processes-list-page .processes-list-item:first-child { border-top: 0; }
+#page-content .processes-list-page .processes-list-item:hover,
+#page-content .processes-list-page .processes-list-item:focus-within { background: none; box-shadow: none; border-color: var(--ui-border); }
+#page-content .processes-list-page .processes-list-item__open { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 20px; min-width: 0; color: inherit; text-decoration: none; }
+#page-content .processes-list-page .processes-list-item__name { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--ui-text); overflow-wrap: anywhere; }
+#page-content .processes-list-page .processes-list-item__open:hover .processes-list-item__name { color: var(--ui-accent-strong); }
+#page-content .processes-list-page .processes-list-item__meta { margin: 2px 0 0; font-size: 13px; color: var(--ui-text-muted); }
+#page-content .processes-list-page .processes-list-item__audit { display: none; margin: 2px 0 0; font-size: 12px; color: var(--ui-text-muted); }
+.workflows-state { display: inline-flex; align-items: center; padding: 4px 10px; border: 1px solid var(--ui-border); border-radius: 6px; background: var(--ui-surface-subtle); color: var(--ui-text-muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.workflows-state[data-state="running"] { border-color: var(--ui-accent); background: var(--ui-accent-soft); color: var(--ui-accent-strong); font-weight: 600; }
+.workflows-cell { display: none; }
+.workflows-columns { display: none; }
+#page-content .processes-list-page .processes-list-item__history-btn { min-height: 36px; padding: 6px 10px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--ui-text-muted); font-size: 13px; font-weight: 600; }
+#page-content .processes-list-page .processes-list-item__history-btn:hover,
+#page-content .processes-list-page .processes-list-item__history-btn:focus-visible { border-color: var(--ui-border); background: var(--ui-surface-subtle); color: var(--ui-text); }
+#page-content .processes-list-page .processes-list-item__arrow { color: var(--ui-text-muted); }
+#page-content .processes-list-page .processes-list-item:hover .processes-list-item__arrow { color: var(--ui-accent-strong); }
+html[data-spa-theme="dark"] #page-content.page-content .processes-list-page .processes-list-item__arrow { color: var(--ui-text-muted); }
+html[data-spa-theme="dark"] #page-content.page-content .processes-list-page .processes-list-item:hover .processes-list-item__arrow { color: var(--ui-accent); }
+#page-content .processes-list-page .processes-list-results { margin-top: 10px; }
+#page-content .processes-list-page[data-workflows-style="2"] .processes-list-results { margin-top: 18px; }
+
+/* Nothing to list, or nothing loaded: no figures and no "in production" card around it. */
+.processes-list-page[data-state="empty"] .workflows-glance, .processes-list-page[data-state="empty"] .workflows-running,
+.processes-list-page[data-state="error"] .workflows-glance, .processes-list-page[data-state="error"] .workflows-running,
+.processes-list-page[data-state="loading"] .workflows-running,
+.processes-list-page[data-state="empty"] .processes-list-toolbar, .processes-list-page[data-state="error"] .processes-list-toolbar,
+.processes-list-page[data-state="empty"] .processes-list-count { display: none !important; }
+
+/* The Board: figures beside what is in production, then every workflow full width. */
+@container workflows (min-width: 1000px) {
+  #page-content .processes-list-page[data-workflows-style="1"] .workflows-layout { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: stretch; }
+  .processes-list-page[data-workflows-style="1"] .workflows-layout > * { grid-column: 1 / -1; }
+  .processes-list-page[data-workflows-style="1"] .workflows-glance { grid-column: span 5; }
+  .processes-list-page[data-workflows-style="1"] .workflows-running { grid-column: span 7; }
+  .processes-list-page[data-workflows-style="1"] .workflows-figures { grid-template-columns: 1fr; }
+  .processes-list-page[data-workflows-style="1"] .workflows-figures > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; }
+  .processes-list-page[data-workflows-style="1"] .workflows-figures dd { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+}
+
+/* CONCEPT ONLY — Style 2: a catalogue of cards, one per product. */
+.processes-list-page[data-workflows-style="2"] .workflows-glance,
+.processes-list-page[data-workflows-style="2"] .workflows-running { display: none; }
+#page-content .processes-list-page[data-workflows-style="2"] .processes-list-stack { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+#page-content .processes-list-page[data-workflows-style="2"] .processes-list-item { grid-template-columns: minmax(0, 1fr); align-content: space-between; gap: 18px; padding: 18px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface-subtle); }
+#page-content .processes-list-page[data-workflows-style="2"] .processes-list-item:first-child { border-top: 1px solid var(--ui-border); }
+#page-content .processes-list-page[data-workflows-style="2"] .processes-list-item:hover { border-color: var(--ui-accent); }
+#page-content .processes-list-page[data-workflows-style="2"] .processes-list-item__open { grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.processes-list-page[data-workflows-style="2"] .workflows-state { justify-self: start; order: -1; }
+#page-content .processes-list-page[data-workflows-style="2"] .processes-list-item__audit { display: block; margin-top: 8px; }
+#page-content .processes-list-page[data-workflows-style="2"] .processes-list-item__actions { justify-content: space-between; margin: 0 -10px -6px; }
+
+/* CONCEPT ONLY — Style 3: a register with one line per workflow and a column for each fact. */
+.processes-list-page[data-workflows-style="3"] .workflows-glance,
+.processes-list-page[data-workflows-style="3"] .workflows-running { display: none; }
+.processes-list-page[data-workflows-style="3"][data-state="ready"] .workflows-columns,
+#page-content .processes-list-page[data-workflows-style="3"] .processes-list-item__open { display: grid; grid-template-columns: minmax(0, 1fr) 150px 70px 70px; gap: 0 20px; align-items: center; }
+.processes-list-page[data-workflows-style="3"][data-state="ready"] .workflows-columns { grid-template-columns: minmax(0, 1fr) 150px 70px 70px 102px; padding: 0 0 8px; border-bottom: 1px solid var(--ui-border); font-size: 12px; font-weight: 600; color: var(--ui-text-muted); }
+.processes-list-page[data-workflows-style="3"] .workflows-columns span:nth-child(3),
+.processes-list-page[data-workflows-style="3"] .workflows-columns span:nth-child(4),
+.processes-list-page[data-workflows-style="3"] .workflows-cell { display: block; text-align: right; font-size: 14px; color: var(--ui-text); font-variant-numeric: tabular-nums; }
+.processes-list-page[data-workflows-style="3"] .workflows-columns span:nth-child(3),
+.processes-list-page[data-workflows-style="3"] .workflows-columns span:nth-child(4) { font-size: 12px; color: var(--ui-text-muted); }
+#page-content .processes-list-page[data-workflows-style="3"] .processes-list-item { padding: 10px 0; grid-template-columns: minmax(0, 1fr) 110px; }
+#page-content .processes-list-page[data-workflows-style="3"] .processes-list-item__meta { display: none; }
+.processes-list-page[data-workflows-style="3"] .workflows-state { justify-self: start; }
+
+@container workflows (max-width: 700px) {
+  .workflows-figures { grid-template-columns: 1fr; }
+  .workflows-figures > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; }
+  .workflows-figures dd { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-size: 24px; }
+  #page-content .workflows-brief { font-size: 16px; }
+  #page-content .processes-list-page .processes-list-item__open { grid-template-columns: minmax(0, 1fr); }
+  .workflows-state { justify-self: start; }
+  #page-content .processes-list-page #processes-list-search { max-width: none !important; }
+  /* The register falls back to the two-line row: four columns do not fit a phone. */
+  .processes-list-page[data-workflows-style="3"][data-state="ready"] .workflows-columns { display: none; }
+  #page-content .processes-list-page[data-workflows-style="3"] .processes-list-item__open { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  #page-content .processes-list-page[data-workflows-style="3"] .processes-list-item__meta { display: block; }
+  .processes-list-page[data-workflows-style="3"] .workflows-cell { display: none; }
+  #page-content .processes-list-page[data-workflows-style="3"] .processes-list-item { grid-template-columns: minmax(0, 1fr) auto; }
+}
