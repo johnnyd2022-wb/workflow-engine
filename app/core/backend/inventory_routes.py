@@ -144,12 +144,16 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
             return jsonify({"error": "Invalid limit or cursor parameter"}), 400
 
         repo = InventoryRepository(db_session)
+        compact = request.args.get("view") == "compact"
         items = repo.list_inventory_items(
             org_id=org_id,
             inventory_type=inventory_type,
             process_id=process_id,
             limit=(page_limit + 1 if page_limit is not None else None),
             cursor=cursor,
+            # The full view hides empty items. Filtering in the query (not on the fetched
+            # page below) keeps every page full while has_more is true. Compact lists all.
+            exclude_empty=not compact,
         )
         has_more = page_limit is not None and len(items) > page_limit
         if has_more:
@@ -160,7 +164,7 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
         # producing-step hydration, ready-date lookups, audit history). The sourcemap browse
         # grid groups the whole list by name / batch / supplier and needs none of that; the
         # full representation is ~20x larger.
-        if request.args.get("view") == "compact":
+        if compact:
             return jsonify(
                 {
                     "inventory_items": [
@@ -276,7 +280,8 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
 
         result = []
         for item in items:
-            # Filter out items with zero or negative quantity
+            # Empty items are already excluded by the query (exclude_empty); this stays as the
+            # guard for an unparseable stored quantity.
             # QUANTITY PRECISION: Use Decimal for safe comparison
             try:
                 quantity_decimal = parse_stored_quantity_to_decimal(item.quantity)
@@ -592,9 +597,8 @@ def register_routes(bp, *, parse_page_params, encode_list_cursor, split_executio
 
         body = {"inventory_items": result}
         if page_limit is not None:
-            # next_cursor points at the last FETCHED row (pre zero-quantity filtering) so the
-            # next page's keyset scan continues from the right place regardless of how many
-            # rows the display filter dropped.
+            # Empty items are excluded in the query (exclude_empty), so a page holds exactly
+            # `limit` rows whenever has_more is true and next_cursor is the last row shown.
             body["has_more"] = has_more
             body["next_cursor"] = next_cursor
         return jsonify(body), 200

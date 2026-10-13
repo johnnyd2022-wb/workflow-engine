@@ -916,12 +916,18 @@ class InventoryRepository:
         cursor: tuple | None = None,
         site_id: UUID | None = None,
         producer_owned_only: bool = False,
+        exclude_empty: bool = False,
     ) -> list[InventoryItem]:
         """List inventory items for an organisation, optionally filtered by type or process.
 
         ``limit``/``cursor`` are opt-in keyset pagination: with no ``limit`` the full list
         is returned exactly as before. ``cursor`` is (created_at, id) of the last row a
         previous page returned; the sort is (created_at DESC, id DESC).
+
+        ``exclude_empty`` drops rows below ``_LISTED_MIN_QTY`` (zero-quantity and
+        sub-resolution stock). A caller that hides those rows must ask for it here rather
+        than filter the returned page: a page filtered after the fetch comes back short
+        while ``has_more`` is still true.
         """
         from sqlalchemy import tuple_ as _tuple
 
@@ -932,6 +938,8 @@ class InventoryRepository:
             query = query.filter(InventoryItem.site_id == site_id)
         if inventory_type:
             query = query.filter(InventoryItem.inventory_type == inventory_type)
+        if exclude_empty:
+            query = query.filter(InventoryItem.quantity >= self._LISTED_MIN_QTY)
         if process_id:
             from app.core.db.models.execution import Execution
 
@@ -968,6 +976,11 @@ class InventoryRepository:
     # Items with quantity at/below this are "empty" and excluded from every hub count,
     # matching the frontend's `Number(quantity) > 0.0001` guard (core2.html).
     _NONZERO_QTY = Decimal("0.0001")
+
+    # The smallest quantity the inventory list still shows. NUMERIC(18,4) stores nothing
+    # between 0 and this, so ``quantity >= _LISTED_MIN_QTY`` is exactly the list route's old
+    # post-fetch test (``q > 0 and abs(q) >= 0.0001``). Inclusive, unlike _NONZERO_QTY above.
+    _LISTED_MIN_QTY = Decimal("0.0001")
 
     def hub_overview_aggregates(self, org_id: UUID, today: date) -> dict:
         """All the scalar inventory numbers the /core hub Overview renders, in one query.

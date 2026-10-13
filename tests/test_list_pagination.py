@@ -7,6 +7,7 @@ behaviour. These tests pin both halves -- the unchanged default, and the paginat
 stable disjoint pages, an honest has_more, and a 400 (not a 500) for a tampered cursor.
 """
 
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -172,6 +173,80 @@ def test_inventory_limit_is_clamped_to_50(db, client_org):
     body = client.get("/api/core/inventory?limit=1000").get_json()
     assert len(body["inventory_items"]) == 50
     assert body["has_more"] is True
+
+
+def _seed_items_newest_first(db, org, quantities):
+    """Seed one item per entry in ``quantities``, with created_at falling strictly in list
+    order, so the first entry is the newest and is therefore the first row of page one."""
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    items = []
+    for offset, quantity in enumerate(quantities):
+        item = InventoryItemFactory(org_id=org.id, quantity=quantity)
+        item.created_at = base - timedelta(minutes=offset)
+        items.append(item)
+    db.commit()
+    return items
+
+
+def _walk_inventory_pages(client, limit):
+    pages, cursor = [], None
+    while True:
+        url = f"/api/core/inventory?limit={limit}" + (f"&cursor={cursor}" if cursor else "")
+        body = client.get(url).get_json()
+        pages.append(body)
+        if not body["has_more"]:
+            assert body["next_cursor"] is None
+            return pages
+        cursor = body["next_cursor"]
+        assert cursor
+        assert len(pages) < 10, "pagination did not terminate"
+
+
+def test_inventory_pages_are_full_when_zero_quantity_rows_are_interleaved(db, client_org):
+    """The list hides empty (zero-quantity) items. That filter must run in the query, not on
+    the fetched page -- otherwise a page that drew empty rows comes back short while
+    has_more is still true, and a client that stops on a short page loses the rest."""
+    org, client = client_org
+    # Newest first: P Z Z P Z Z P Z P  -> four real rows, five empty ones between them.
+    items = _seed_items_newest_first(db, org, ["5", "0", "0", "5", "0", "0", "5", "0", "5"])
+    live = {str(item.id) for item in items if item.quantity > 0}
+    assert len(live) == 4
+
+    pages = _walk_inventory_pages(client, limit=3)
+
+    sizes = [len(page["inventory_items"]) for page in pages]
+    assert sizes == [3, 1], f"pages were not filled to the limit: {sizes}"
+    seen = [row["id"] for page in pages for row in page["inventory_items"]]
+    assert len(set(seen)) == len(seen), "pages overlapped"
+    assert set(seen) == live, "a page lost or invented rows"
+
+
+def test_inventory_hides_empty_items_but_keeps_the_smallest_stored_quantity(db, client_org):
+    """The list's emptiness boundary: zero is hidden, 0.0001 (the smallest NUMERIC(18,4)
+    step) is still stock. Same answer paged or not. (The hub's counts draw the line one step
+    higher -- strictly above 0.0001 -- which this list deliberately does not.)"""
+    org, client = client_org
+    items = _seed_items_newest_first(db, org, ["0", "0.0001", "0", "3"])
+    live = {str(items[1].id), str(items[3].id)}
+
+    unpaged = client.get("/api/core/inventory").get_json()
+    assert {row["id"] for row in unpaged["inventory_items"]} == live
+
+    paged = client.get("/api/core/inventory?limit=2").get_json()
+    assert {row["id"] for row in paged["inventory_items"]} == live
+    assert paged["has_more"] is False and paged["next_cursor"] is None
+
+
+def test_inventory_compact_view_still_lists_empty_items(db, client_org):
+    """Only the full view hides empty items. The compact view (the sourcemap browse grid)
+    has always listed everything, so the in-query filter must not reach it."""
+    org, client = client_org
+    items = _seed_items_newest_first(db, org, ["0", "5", "0"])
+
+    body = client.get("/api/core/inventory?view=compact&limit=10").get_json()
+
+    assert {row["id"] for row in body["inventory_items"]} == {str(item.id) for item in items}
+    assert body["has_more"] is False
 
 
 @pytest.mark.parametrize("path", ["/api/core/executions", "/api/core/inventory"])
