@@ -120,15 +120,6 @@ Wildflower is the first product historically (VAT1, 2024-01-22) — the timeline
 reflect that naturally once sorted by date; no special-casing needed beyond the
 dependency edges above.
 
-## Open questions being researched before implementation starts
-
-- Whether a trial is just a regular execution of a "trial" workflow (reusing the same
-  two endpoints) or has its own route.
-- Whether completing a step with `actual_inputs` pointing at an inventory item actually
-  decrements that item's quantity through the real route (confirms "replay exercises
-  real logic" claim) or only via the direct-ORM path today.
-- Customs/compliance lodgement route and payload shape.
-
 ## Resolved questions
 
 Answered from the code rather than from the research notes in the progress log below, and
@@ -175,6 +166,33 @@ there instead of partway through a run. (verified 2026-09-19 by findings-sweep)
   pending account, and five wrong codes end the pending session. The replay is
   unaffected — it never calls `/auth/verify-2fa` and aborts if login answers `requires_2fa`
   (`scripts/whistlebird_replay.py:143`). (verified 2026-09-30 by findings-sweep)
+- **Is a trial a regular execution, or does it have its own route? A regular execution.**
+  `_trial_events` (`scripts/whistlebird_replay_timeline.py`) compiles a trial to one
+  `create_execution` event followed by one `complete_step` event per trial step — the same two
+  event types, dispatched to the same executors (`DISPATCH` in `scripts/whistlebird_replay.py`),
+  as a production batch. A trial is therefore `POST /api/core/executions` and then
+  `POST /api/core/executions/<id>/steps/<step_id>/complete`; there is no trial route.
+  Pinned by `tests/test_replay_app_contract.py::test_a_trial_replays_through_the_same_two_endpoints_as_a_production_batch`.
+  (verified 2026-10-13 by findings-sweep)
+- **Does completing a step with `actual_inputs` decrement the inventory item through the real
+  route? Yes — and only there.** The `complete_step` view
+  (`app/core/backend/execution_routes.py`) debits each consumed item under
+  `allow_inventory_quantity_write(InventoryQuantityWriteReason.EXECUTION_STEP_INVENTORY)`
+  (`:1202`); `ExecutionRepository.complete_step` (`app/core/db/repositories/execution_repo.py`)
+  writes no quantities, so the old ORM-direct script never exercised the consumption. Pinned by
+  `tests/test_executions.py::TestConsumptionOnlyStepCompletion`, which drives the real view and
+  takes a produced item from 10 to 0. (verified 2026-10-13 by findings-sweep)
+- **Customs lodgement route and payload shape: `POST /api/compliant/records`.**
+  `_execute_customs` (`scripts/whistlebird_replay.py`) sends `framework_slug: "customs-alcohol"`,
+  `control_id: "period-lodgement"`, `record_type: "lodgement"`, `status: "complete"`, the
+  lodgement date as both `period_start` and `period_end`, and the legacy row's volume, ABV and
+  bottle count under `details` (with the `import_ref` marker the replay uses to stay idempotent).
+  The route is behind the parent blueprint's per-org `compliant` subscription gate
+  (`app/features/compliant/compliant_bp.py`) and answers 409 "Configure Compliance before adding
+  records" until the org's Compliance profile is enabled, which is why the replay checks
+  `MarkerStore.compliant_profile_enabled()` first. Pinned by
+  `tests/test_replay_app_contract.py::test_the_replays_customs_lodgement_payload_is_accepted_by_the_compliant_records_route`,
+  which runs the real executor through the real route. (verified 2026-10-13 by findings-sweep)
 
 ## Progress log (update this as work lands — this is the resume point after any
 interruption, read it before re-deriving anything)
