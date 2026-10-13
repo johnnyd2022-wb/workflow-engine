@@ -71,3 +71,6 @@ styled by its own query). Pass 2: Timeline's totals landed above the list, leavi
 half screen; the quiet state was three zeros and two empty cards; a failed load showed
 dashes. Pass 3: a sticky totals card slid under the top bar. Pass 4: no defects found.
 Awaiting the pick.
+
+The shared Production layout test required every card on a sub-page to sit in one column.
+It now accepts the board's paired rows, checking that each row starts and ends at the same edges.
