@@ -467,7 +467,7 @@
         }
       } finally {
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Changes';
+        saveBtn.textContent = 'Save changes';
       }
     }
 
@@ -1385,7 +1385,7 @@
         }
       } finally {
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Session Timeout';
+        saveBtn.textContent = 'Save session timeout';
       }
     }
 
@@ -1529,7 +1529,7 @@
           errorDiv.style.display = 'block';
         } finally {
           submitButton.disabled = false;
-          submitButton.textContent = 'Update Password';
+          submitButton.textContent = 'Update password';
         }
       });
     }

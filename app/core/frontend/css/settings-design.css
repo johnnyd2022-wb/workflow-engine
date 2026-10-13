@@ -41,7 +41,11 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
 #page-content .settings-overview[data-settings-style="2"] .settings-nav a[aria-current] { background: var(--ui-surface-subtle); box-shadow: inset 3px 0 var(--ui-accent); }
 .settings-overview[data-settings-style="2"] .settings-groups { display: block; }
 .settings-overview[data-settings-style="2"] .settings-group-content { grid-template-columns: minmax(0, 1fr) !important; }
-.settings-overview[data-settings-style="2"] .settings-card { max-width: 800px; }
+.settings-overview[data-settings-style="2"] .settings-card { max-width: 640px; }
+/* Short fields sit in pairs so a name or a phone number is not typed into a full-width box. */
+.settings-overview[data-settings-style="2"] #settings-account .settings-section-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
+.settings-overview[data-settings-style="2"] #settings-account .settings-section-list > :first-child { grid-column: 1 / -1; }
+.settings-overview[data-settings-style="2"] .settings-nav { position: sticky; top: 72px; }
 /* CONCEPT ONLY — Style 3: a compact register of expandable categories. */
 .settings-overview[data-settings-style="3"] .settings-nav { display: none; }
 .settings-overview[data-settings-style="3"] .settings-groups { display: flex; flex-direction: column; gap: 12px; }
@@ -60,7 +64,9 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
 }
 @media (max-width: 640px) {
   .settings-overview[data-settings-style="2"] .settings-layout { display: block; }
-  .settings-overview[data-settings-style="2"] .settings-nav { flex-direction: row; }
+  .settings-overview[data-settings-style="2"] .settings-nav { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; position: static; scrollbar-width: none; }
+  #page-content .settings-overview[data-settings-style="2"] .settings-nav a { white-space: nowrap; flex: 0 0 auto; }
+  .settings-overview[data-settings-style="2"] #settings-account .settings-section-list { display: block; }
   #page-content .settings-nav a { padding: 10px 8px; font-size: .8rem; }
   #page-content .settings-overview .settings-card { padding: 18px; }
   .settings-overview[data-settings-style="3"] #settings-account .settings-section-list { display: block; }

@@ -29,7 +29,7 @@
       <form action="/auth/google/link" method="post"> <!-- nosemgrep: python.django.security.django-no-csrf-token.django-no-csrf-token -->
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label class="form-label">Confirm your password<input class="form-input" name="password" type="password" autocomplete="current-password" required></label>
-        <button class="workspace-button workspace-button--primary" type="submit">Link Google</button>
+        <button class="workspace-button" type="submit">Link Google</button>
       </form>
     {% endif %}
   </div>

@@ -1,5 +1,7 @@
 """Settings concepts keep every real control reachable and account load failures explicit."""
 
+import re
+
 import pytest
 from playwright.sync_api import expect
 
@@ -29,7 +31,7 @@ def test_concepts_keep_all_settings_reachable(browser, app_url, workspace_user, 
         page.goto(f"/core/settings?style={style}")
         expect(page.locator(".settings-overview")).to_have_attribute("data-settings-style", style)
         expect(page.get_by_role("heading", level=1)).to_have_text("Settings")
-        expect(page.get_by_label("First Name", exact=True)).to_be_enabled()
+        expect(page.get_by_label("First name", exact=True)).to_be_enabled()
         for category, heading in [
             ("account", "Account information"),
             ("organisation", "Manage sites"),
@@ -52,27 +54,77 @@ def test_profile_load_failure_disables_editing_until_retry(browser, app_url, wor
         page.route("**/auth/settings", lambda route: route.fulfill(status=503, json={"error": "unavailable"}))
         page.goto("/core/settings")
         expect(page.get_by_role("status").filter(has_text="Your account could not load")).to_be_visible()
-        for label in ["First Name", "Last Name", "Email", "Phone Number"]:
+        for label in ["First name", "Last name", "Email", "Phone number"]:
             expect(page.get_by_label(label, exact=True)).to_be_disabled()
-        expect(page.get_by_role("button", name="Save Changes", exact=True)).to_be_disabled()
+        expect(page.get_by_role("button", name="Save changes", exact=True)).to_be_disabled()
         page.unroute("**/auth/settings")
         page.get_by_role("button", name="Retry account load", exact=True).click()
         expect(page.get_by_label("Email", exact=True)).to_have_value(workspace_user["email"])
-        expect(page.get_by_role("button", name="Save Changes", exact=True)).to_be_enabled()
+        expect(page.get_by_role("button", name="Save changes", exact=True)).to_be_enabled()
         expect(page.locator("#settings-load-status")).to_be_hidden()
     finally:
         context.close()
 
 
-def test_notification_controls_are_explicitly_unavailable(browser, app_url, workspace_user):
+def test_switches_that_never_saved_anything_are_gone(browser, app_url, workspace_user):
+    """The three notification switches had no save behaviour; a control that does nothing is not shown."""
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
-        page.goto("/core/settings")
-        expect(page.get_by_text("Notification preferences are not available yet.", exact=False)).to_be_visible()
-        for name in ["Email Notifications", "Compliance Alerts", "Weekly Reports"]:
-            expect(page.get_by_role("checkbox", name=name, exact=True)).to_be_disabled()
-            expect(page.get_by_role("checkbox", name=name, exact=True)).not_to_be_checked()
+        page.goto("/core/settings?style=2#settings-preferences")
+        expect(page.get_by_role("heading", name="Appearance", exact=True)).to_be_visible()
         expect(page.get_by_role("checkbox", name="Dark mode", exact=True)).to_be_enabled()
+        for name in ["Email Notifications", "Compliance Alerts", "Weekly Reports"]:
+            expect(page.get_by_role("checkbox", name=name, exact=True)).to_have_count(0)
+        expect(page.locator(".settings-overview input:disabled:visible")).to_have_count(0)
+    finally:
+        context.close()
+
+
+def test_each_category_has_its_own_address_and_back_returns_to_it(browser, app_url, workspace_user):
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    try:
+        page.goto("/core/settings?style=2")
+        page.locator('[data-settings-link="security"]').click()
+        assert page.evaluate("location.hash") == "#settings-security"
+        expect(page.get_by_role("heading", name="Two-factor authentication", exact=True)).to_be_visible()
+        page.locator('[data-settings-link="preferences"]').click()
+        expect(page.get_by_role("heading", name="Appearance", exact=True)).to_be_visible()
+        page.go_back()
+        expect(page.get_by_role("heading", name="Two-factor authentication", exact=True)).to_be_visible()
+        expect(page.locator('[data-settings-link="security"]')).to_have_attribute("aria-current", "page")
+        # A link straight to a category opens that category.
+        page.goto("/core/settings?style=2#settings-preferences")
+        expect(page.get_by_role("heading", name="Appearance", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="Account information", exact=True)).to_be_hidden()
+    finally:
+        context.close()
+
+
+def test_settings_desk_pairs_short_fields_and_keeps_one_filled_action_per_card(browser, app_url, workspace_user):
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    try:
+        page.goto("/core/settings?style=2")
+        first = page.get_by_label("First name", exact=True).bounding_box()
+        last = page.get_by_label("Last name", exact=True).bounding_box()
+        assert abs(first["y"] - last["y"]) < 2 and first["x"] + first["width"] <= last["x"]
+        assert first["width"] < 320
+        page.locator('[data-settings-link="security"]').click()
+        for card in page.locator('[data-settings-group="security"] .settings-card').all():
+            assert card.locator(".workspace-button--primary:visible").count() <= 1
+        expect(page.get_by_role("button", name="Save session timeout", exact=True)).not_to_have_class(
+            re.compile("workspace-button--primary")
+        )
+    finally:
+        context.close()
+
+
+def test_phone_category_row_stays_on_one_line(browser, app_url, workspace_user):
+    context, page = _page(browser, app_url, workspace_user, 390)
+    try:
+        page.goto("/core/settings?style=2")
+        tops = {round(link.bounding_box()["y"]) for link in page.locator("[data-settings-link]").all()}
+        assert len(tops) == 1
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
     finally:
         context.close()
 
@@ -81,14 +133,14 @@ def test_concept_switch_preserves_draft_and_boosted_return(browser, app_url, wor
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
         page.goto("/core/settings?style=1")
-        expect(page.get_by_label("First Name", exact=True)).to_be_enabled()
-        page.get_by_label("First Name", exact=True).fill("Unsaved draft")
+        expect(page.get_by_label("First name", exact=True)).to_be_enabled()
+        page.get_by_label("First name", exact=True).fill("Unsaved draft")
         page.get_by_role("button", name="2 · Settings desk", exact=True).click()
         _category(page, "2", "security")
-        expect(page.get_by_label("First Name", exact=True)).to_be_hidden()
+        expect(page.get_by_label("First name", exact=True)).to_be_hidden()
         _category(page, "2", "account")
         page.get_by_role("button", name="3 · Register", exact=True).click()
-        expect(page.get_by_label("First Name", exact=True)).to_have_value("Unsaved draft")
+        expect(page.get_by_label("First name", exact=True)).to_have_value("Unsaved draft")
         page.evaluate("window.__settingsNavigationSentinel = true")
         page.get_by_role("link", name="Home", exact=True).first.click()
         page.get_by_role("heading", name="Home", exact=True).wait_for()

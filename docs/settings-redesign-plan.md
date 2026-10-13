@@ -80,3 +80,34 @@ availability assertion. The existing shared Settings test changes its obsolete s
 geometry assertions to the intentional Board while retaining links, headings and overflow.
 Per the user's standing instruction, CI runs the test suite; do not wait on local pytest
 or monitor CI after push. Browser screenshot flows and syntax/scanner checks run locally.
+
+## Review round: what settings guidance says, and what changed
+
+Reviewed against the page-design bar and two further sources read on 13 October 2026.
+
+| Source | Pattern | What it changes here |
+|---|---|---|
+| [GitLab design: saving and feedback](https://gitlab.com/gitlab-org/gitlab-design/issues/121) | Save single low-stakes fields as they change; make saving explicit for grouped or sensitive edits | Dark mode stays an instant switch; profile, password and session timeout keep their own Save |
+| [Stripe Dashboard basics](https://docs.stripe.com/dashboard/basics) | Settings split into personal and business groups, each reached on its own | Supports the Settings desk: one category at a time, personal first, organisation separate |
+
+Practitioner write-ups on settings pages also recommend a sidebar of categories once a page
+is long, and an address per category so a support link can open the right place. They are
+common practice, not studies.
+
+**Recommendation: Style 2, Settings desk.** It is the only concept where the navigation does
+what it looks like it does. In Style 1 the row of tabs only scrolls a 2,000px page; in Style 3
+every category is closed behind a click.
+
+Changed in all three concepts:
+
+- The three notification switches are removed. They never saved anything, and a disabled
+  control that explains it does nothing is still clutter. Preferences now holds Appearance.
+- Each category has its own address (`#settings-security`), and Back returns to the last one.
+- Labels and buttons are sentence case, matching the rest of the app. The "Security" card is
+  named "Password", which is what it holds.
+- One filled action per card: "Save session timeout", "Link Google" and "Disable 2FA" are
+  outlined.
+
+Changed in the Settings desk: cards are 640px wide, first and last name share a row, as do
+email and phone, and the category list stays in view while the page scrolls. On a phone the
+categories are one scrolling row.

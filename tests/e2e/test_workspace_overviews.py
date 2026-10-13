@@ -368,10 +368,11 @@ def test_settings_groups_account_security_and_organisation_in_cards(browser, app
         expect(people.get_by_role("link", name="Manage people", exact=True)).to_have_attribute("href", "/core/people")
         assert sites.bounding_box()["y"] < people.bounding_box()["y"]
         headings = page.locator(".settings-overview .workspace-card h2").all_inner_texts()
-        expected = ["Account information", "Manage sites", "People and roles", "Security"]
+        expected = ["Account information", "Manage sites", "People and roles", "Password"]
         expected += ["Two-factor authentication", "Session settings"]
         assert [heading for heading in headings if heading in expected] == expected
-        assert headings[-2:] == ["Notification preferences", "Appearance"]
+        assert headings[-1] == "Appearance"
+        assert "Notification preferences" not in headings
         account = page.locator('[data-settings-group="account"]').bounding_box()
         organisation = page.locator('[data-settings-group="organisation"]').bounding_box()
         if width >= 1280:
