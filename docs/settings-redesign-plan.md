@@ -110,6 +110,7 @@ Changed in all three concepts:
 - One filled action per card: "Save session timeout", "Link Google" and "Disable 2FA" are
   outlined.
 
-Changed in the Settings desk: cards are 640px wide, first and last name share a row, as do
-email and phone, and the category list stays in view while the page scrolls. On a phone the
-categories are one scrolling row.
+Changed in the Settings desk: the categories are the same underlined tab row that Production,
+Compliance and Sales use beneath their titles, so Settings is navigated the way its sibling
+sections are (the vertical list is gone). Cards are 640px wide, and first and last name share a
+row, as do email and phone. On a phone the tabs are one scrolling row.

@@ -34,18 +34,16 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
 .settings-overview .switch input:disabled + .switch-slider { cursor: not-allowed; opacity: .5; }
 .settings-overview .settings-2fa-actions { align-items: flex-start; }
 .settings-load-status { color: var(--ui-text-muted); margin-bottom: 16px; }
-/* CONCEPT ONLY — Style 2: a settings desk, one category at a time. */
-.settings-overview[data-settings-style="2"] .settings-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 32px; align-items: start; }
-.settings-overview[data-settings-style="2"] .settings-nav { flex-direction: column; border: 0; gap: 4px; }
-#page-content .settings-overview[data-settings-style="2"] .settings-nav a { border: 0; border-radius: 8px; }
-#page-content .settings-overview[data-settings-style="2"] .settings-nav a[aria-current] { background: var(--ui-surface-subtle); box-shadow: inset 3px 0 var(--ui-accent); }
+/* CONCEPT ONLY — Style 2: a settings desk, one category at a time.
+   The categories are the same underlined tab row Production, Compliance and Sales use
+   beneath their titles, so Settings is navigated the way its sibling sections are. */
 .settings-overview[data-settings-style="2"] .settings-groups { display: block; }
 .settings-overview[data-settings-style="2"] .settings-group-content { grid-template-columns: minmax(0, 1fr) !important; }
+.settings-overview[data-settings-style="2"] .settings-group-heading { display: none; }
 .settings-overview[data-settings-style="2"] .settings-card { max-width: 640px; }
 /* Short fields sit in pairs so a name or a phone number is not typed into a full-width box. */
 .settings-overview[data-settings-style="2"] #settings-account .settings-section-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; }
 .settings-overview[data-settings-style="2"] #settings-account .settings-section-list > :first-child { grid-column: 1 / -1; }
-.settings-overview[data-settings-style="2"] .settings-nav { position: sticky; top: 72px; }
 /* CONCEPT ONLY — Style 3: a compact register of expandable categories. */
 .settings-overview[data-settings-style="3"] .settings-nav { display: none; }
 .settings-overview[data-settings-style="3"] .settings-groups { display: flex; flex-direction: column; gap: 12px; }
@@ -63,8 +61,7 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
   #settings-security .settings-group-content, #settings-preferences .settings-group-content { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
-  .settings-overview[data-settings-style="2"] .settings-layout { display: block; }
-  .settings-overview[data-settings-style="2"] .settings-nav { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; position: static; scrollbar-width: none; }
+  .settings-overview[data-settings-style="2"] .settings-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   #page-content .settings-overview[data-settings-style="2"] .settings-nav a { white-space: nowrap; flex: 0 0 auto; }
   .settings-overview[data-settings-style="2"] #settings-account .settings-section-list { display: block; }
   #page-content .settings-nav a { padding: 10px 8px; font-size: .8rem; }
