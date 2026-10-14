@@ -120,15 +120,6 @@ Wildflower is the first product historically (VAT1, 2024-01-22) — the timeline
 reflect that naturally once sorted by date; no special-casing needed beyond the
 dependency edges above.
 
-## Open questions being researched before implementation starts
-
-- Whether a trial is just a regular execution of a "trial" workflow (reusing the same
-  two endpoints) or has its own route.
-- Whether completing a step with `actual_inputs` pointing at an inventory item actually
-  decrements that item's quantity through the real route (confirms "replay exercises
-  real logic" claim) or only via the direct-ORM path today.
-- Customs/compliance lodgement route and payload shape.
-
 ## Resolved questions
 
 Answered from the code rather than from the research notes in the progress log below, and
@@ -175,6 +166,46 @@ there instead of partway through a run. (verified 2026-09-19 by findings-sweep)
   pending account, and five wrong codes end the pending session. The replay is
   unaffected — it never calls `/auth/verify-2fa` and aborts if login answers `requires_2fa`
   (`scripts/whistlebird_replay.py:143`). (verified 2026-09-30 by findings-sweep)
+- **Is a trial a regular execution of a "trial" workflow, or does it have its own route?
+  A regular execution; the app has no trial route.** A trial is replayed as one
+  `create_execution` event plus one `complete_step` event per `TRIAL_STEP_KEYS`
+  (`scripts/whistlebird_replay_timeline.py:571`, `scripts/whistlebird_migration.py:496`),
+  the same two event types a production batch uses, dispatched to the same two executors
+  (`scripts/whistlebird_replay.py:639,656`). Creating one is `POST /api/core/executions`
+  with the process id of the record's own trial workflow (`WB recipe trials`, `GG gin
+  trials` or `SGS spirit trials`, `whistlebird_migration.py:476-478`;
+  `execution_routes.py:282`), and each step is completed through
+  `POST /api/core/executions/<id>/steps/<id>/complete` (`execution_routes.py:599`). Pinned
+  by `test_a_trial_replays_through_the_same_two_endpoints_as_a_production_batch` in
+  `tests/test_replay_app_contract.py`, which also asserts no route in the app's URL map
+  mentions a trial. (verified 2026-10-12 by findings-sweep)
+- **Does completing a step with `actual_inputs` that name an inventory item decrement it
+  through the real route? Yes, and only the route does it.** The route works out each
+  item's new quantity from the entries naming it (`execution_routes.py:867-868`) and writes
+  it inside the `EXECUTION_STEP_INVENTORY` quantity guard (`:1202-1204`). The repository's
+  `ExecutionRepository.complete_step` records an `inventory_item.consumed` event but never
+  writes the item's quantity, so the ORM-direct import script that bypasses the route never
+  exercised the debit and the replay does. Pinned by
+  `test_completing_a_step_through_the_replay_client_debits_the_item_its_input_names` in
+  `tests/test_replay_app_contract.py` (10 kg less 4 kg is 6 kg, through the real
+  `ReplayClient` and CSRF handshake) and, for a full draw to zero,
+  `tests/test_executions.py::TestConsumptionOnlyStepCompletion`.
+  (verified 2026-10-12 by findings-sweep)
+- **What are the customs/compliance lodgement route and payload shape?
+  `POST /api/compliant/records`, a `lodgement` record on the `customs-alcohol` /
+  `period-lodgement` control.** `_execute_customs` (`scripts/whistlebird_replay.py:914`)
+  sends `framework_slug`, `control_id`, `record_type`, `status`, `title`, `period_start`,
+  `period_end` (both the lodgement date; the legacy `date_period` is only a label),
+  `evidence_reference`, `measured_value` (the LAL), `details` (carrying the `import_ref`
+  marker that makes the replay resumable) and `source_refs` (the execution created most
+  recently, the nearest real link the legacy data allows). The route
+  (`app/features/compliant/routes/api_routes.py:672`) and the control's capture
+  requirements (`catalogue.py:341`: record type `lodgement`, a period, an evidence
+  reference) accept exactly that, and answer 409 until the org's NZ-alcohol profile is
+  enabled, which is why `_execute_customs` checks it first. Pinned by
+  `test_a_customs_lodgement_the_replay_builds_clears_the_compliant_records_route` in
+  `tests/test_replay_app_contract.py`, which runs `_execute_customs` against the real
+  route as an admin of a Compliant-subscribed org. (verified 2026-10-12 by findings-sweep)
 
 ## Progress log (update this as work lands — this is the resume point after any
 interruption, read it before re-deriving anything)

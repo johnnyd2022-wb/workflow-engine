@@ -174,6 +174,84 @@ def test_inventory_limit_is_clamped_to_50(db, client_org):
     assert body["has_more"] is True
 
 
+def _seed_interleaved_empty_lines(db, org):
+    """Twelve lines, oldest first: every fourth one has stock, the rest are sold out. The list
+    sorts newest first, so each page of the raw keyset scan is mostly sold-out lines."""
+    for i in range(12):
+        InventoryItemFactory(org_id=org.id, name=f"Line {i}", quantity="5" if i % 4 == 3 else "0")
+    return {"Line 3", "Line 7", "Line 11"}
+
+
+def test_inventory_pages_stay_full_when_sold_out_lines_are_interleaved(db, client_org):
+    """The enriched list hides lines with nothing left, so that filter has to run in the
+    query. Applied to the fetched page instead, a limit=2 page holding one sold-out line
+    came back with a single row while has_more was true -- a client cannot tell a short page
+    from the end of the list (docs/core-load-performance-design.md, findings-index 7d1088e4)."""
+    org, client = client_org
+    on_hand = _seed_interleaved_empty_lines(db, org)
+
+    seen = []
+    cursor = None
+    for _ in range(5):
+        url = "/api/core/inventory?limit=2" + (f"&cursor={cursor}" if cursor else "")
+        body = client.get(url).get_json()
+        seen.extend(i["name"] for i in body["inventory_items"])
+        if not body["has_more"]:
+            assert body["next_cursor"] is None
+            break
+        assert len(body["inventory_items"]) == 2, "a page that has_more must be full"
+        cursor = body["next_cursor"]
+    else:
+        pytest.fail("pagination did not terminate")
+
+    assert sorted(seen) == sorted(on_hand), "every line with stock exactly once, none of the sold-out ones"
+
+
+def test_unpaginated_and_compact_inventory_lists_are_unchanged_by_the_empty_line_filter(db, client_org):
+    """Only the enriched, paginated list moves its filter into the query. The full list keeps
+    its Python-side filter, and the compact view (sourcemap's browse grid) has never hidden
+    sold-out lines -- paginating it must not start to."""
+    org, client = client_org
+    on_hand = _seed_interleaved_empty_lines(db, org)
+
+    full = client.get("/api/core/inventory").get_json()["inventory_items"]
+    assert {i["name"] for i in full} == on_hand
+
+    compact = client.get("/api/core/inventory?view=compact&limit=5").get_json()
+    assert len(compact["inventory_items"]) == 5
+    assert compact["has_more"] is True
+    assert any(float(i["quantity"]) == 0 for i in compact["inventory_items"])
+
+
+def test_inventory_page_filter_agrees_with_the_unpaginated_filter_at_the_edges(db, client_org):
+    """The query's `quantity >= 0.0001` stands in for the route's Python filter (skip `<= 0` and
+    `abs < 0.0001`). Seed the values either side of that boundary and require the two lists to
+    show the same lines, so neither filter can drift from the other unnoticed."""
+    org, client = client_org
+    for name, quantity in [
+        ("smallest", "0.0001"),
+        ("rounds to zero", "0.00004"),
+        ("zero", "0"),
+        ("ordinary", "2"),
+        ("another", "3"),
+    ]:
+        InventoryItemFactory(org_id=org.id, name=name, quantity=quantity)
+
+    unpaginated = {i["name"] for i in client.get("/api/core/inventory").get_json()["inventory_items"]}
+    assert "smallest" in unpaginated and "zero" not in unpaginated, unpaginated
+
+    paged = set()
+    cursor = None
+    for _ in range(5):
+        body = client.get("/api/core/inventory?limit=2" + (f"&cursor={cursor}" if cursor else "")).get_json()
+        paged.update(i["name"] for i in body["inventory_items"])
+        if not body["has_more"]:
+            break
+        cursor = body["next_cursor"]
+
+    assert paged == unpaginated
+
+
 @pytest.mark.parametrize("path", ["/api/core/executions", "/api/core/inventory"])
 def test_bad_limit_and_tampered_cursor_are_400_not_500(client_org, path):
     _org, client = client_org

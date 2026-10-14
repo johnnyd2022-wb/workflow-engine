@@ -266,10 +266,16 @@ edit/delete/reconcile (removed — `loadCore2Overview()` already refreshes metri
   in the picker. `completed_7d` (the scalar the Workflows card shows) is still summed over
   every process. This keeps the payload bounded on an org with a large recent
   recipe/SKU catalogue.
-- **Paginated `/api/core/inventory` page sizes are not uniform**: the route drops
-  zero-quantity rows *after* the DB page is fetched, so a page can return fewer than
-  `limit` display rows while `has_more` is true. `next_cursor` correctly points at the
-  last *fetched* row so the scan continues correctly. Acceptable for the opt-in v1.
+- **Paginated `/api/core/inventory` page sizes were not uniform**: the route dropped
+  zero-quantity rows *after* the DB page was fetched, so a page could return fewer than
+  `limit` display rows while `has_more` was true. `next_cursor` correctly pointed at the
+  last *fetched* row so the scan continued correctly. Acceptable for the opt-in v1.
+  Resolved by findings-sweep (2026-10-12): the enriched list now excludes sold-out lines
+  inside the keyset query (`list_inventory_items(non_empty_only=True)`), so a page that
+  has more is always exactly `limit` rows and `next_cursor` is its last row. The unpaginated
+  list keeps its Python-side filter and the compact view still returns sold-out lines, as
+  before. Pinned by `tests/test_list_pagination.py::test_inventory_pages_stay_full_when_sold_out_lines_are_interleaved`
+  and `::test_unpaginated_and_compact_inventory_lists_are_unchanged_by_the_empty_line_filter`.
 - **Index necessity is unproven at scale.** Local/CI data is tiny; the reversibility
   check proves the indexes build/drop cleanly and `EXPLAIN` shows they're *used*, not
   that the planner *needs* them yet. Recalibrate with production-shaped volume.

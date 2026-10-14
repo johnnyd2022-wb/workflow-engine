@@ -916,16 +916,24 @@ class InventoryRepository:
         cursor: tuple | None = None,
         site_id: UUID | None = None,
         producer_owned_only: bool = False,
+        non_empty_only: bool = False,
     ) -> list[InventoryItem]:
         """List inventory items for an organisation, optionally filtered by type or process.
 
         ``limit``/``cursor`` are opt-in keyset pagination: with no ``limit`` the full list
         is returned exactly as before. ``cursor`` is (created_at, id) of the last row a
         previous page returned; the sort is (created_at DESC, id DESC).
+
+        ``non_empty_only`` drops lines with nothing left in the query itself, so a page
+        holds ``limit`` display rows rather than ``limit`` fetched rows minus however many
+        a caller then discards. It is the SQL form of the list route's display filter
+        (skip ``quantity <= 0`` and ``abs(quantity) < 0.0001``).
         """
         from sqlalchemy import tuple_ as _tuple
 
         query = self.db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
+        if non_empty_only:
+            query = query.filter(InventoryItem.quantity >= self._NONZERO_QTY)
         if producer_owned_only:
             query = query.filter(producer_stock_predicate())
         if site_id is not None:
