@@ -1,29 +1,52 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Compliance — NZ Alcohol{% endblock %}
 {% block body_class %}compliant-page{% endblock %}
-{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/compliance-overview.css">{% endblock %}
+{% set section_head_is_page_title = true %}
+{% block section_actions %}
+<div class="compliance-header-actions">
+  <a class="workspace-button" href="/compliant/nz-alcohol/premises" hx-boost="false">Premises</a>
+  <a class="workspace-button workspace-button--primary" data-compliance-primary hx-boost="false" hidden></a>
+</div>
+{% endblock %}
 {% block content %}
-<main class="compliant-shell workspace-overview compliance-overview" data-compliant-root data-compliant-surface="overview" aria-busy="true">
-  <header class="workspace-header">
-    <div><h1>Compliance</h1><p>Your obligations, evidence and next actions.</p></div>
-  </header>
-  <div class="workspace-stack">
-  <section class="workspace-card compliance-status" aria-labelledby="compliance-status-title">
-    <h2 id="compliance-status-title">Evidence readiness</h2>
-    <div class="compliant-summary" role="status" aria-live="polite"><strong data-compliant-summary>Loading status…</strong><span data-readiness>Checking your applicable obligations…</span></div>
-  </section>
-
-  <p class="compliant-error" data-compliant-error hidden></p>
-
-  <section class="workspace-card compliance-obligations" aria-labelledby="framework-evidence-heading">
-    <h2 id="framework-evidence-heading">Your obligations</h2>
-    <p class="workspace-caption">Coverage shows current evidence, not a legal compliance score.</p>
-    <section class="compliant-frameworks workspace-card-grid" aria-label="Applicable frameworks" data-frameworks></section>
-  </section>
-  {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
+<link rel="stylesheet" href="/compliant/static/compliance-overview.css">
+<main class="compliant-shell workspace-overview compliance-overview compliance-board"
+      data-compliant-root data-compliant-surface="overview"
+      data-can-manage="{{ '1' if can('compliance.manage') else '0' }}" aria-busy="true">
+  <div class="compliance-error workspace-card" data-compliant-error role="alert" hidden>
+    <div><strong data-error-title>Readiness could not load</strong><p data-error-message></p></div>
+    <button class="workspace-button" type="button" data-retry>Try again</button>
+    <a class="workspace-button" href="/" hx-boost="false" data-sign-in hidden>Sign in</a>
+  </div>
+  <div class="workspace-stack compliance-layout">
+    <section class="workspace-card compliance-status" aria-labelledby="compliance-status-title">
+      <h2 id="compliance-status-title">Evidence readiness</h2>
+      <div class="compliance-readiness" role="status" aria-live="polite">
+        <div class="compliance-proof"><strong data-current-proof data-ready>—</strong><span data-proof-total>Checking your evidence…</span></div>
+        <p class="compliance-readiness-label" data-compliant-summary>Loading status…</p>
+      </div>
+      <dl class="compliance-figures">
+        <div><dt>To review</dt><dd data-attention>—</dd></div>
+        <div><dt>Overdue</dt><dd data-overdue>—</dd></div>
+      </dl>
+      <p class="workspace-caption compliance-disclaimer" data-readiness>Evidence coverage, not a legal compliance score.</p>
+      <details class="compliance-data" data-data-coverage hidden><summary data-data-summary>Data coverage</summary><p class="workspace-caption" data-data-scope></p><dl data-data-facts></dl></details>
+    </section>
+    <section class="workspace-card compliance-next" aria-labelledby="compliance-next-title">
+      <div class="workspace-card__header"><h2 id="compliance-next-title">Next action</h2><span class="compliance-count" data-action-count>Checking…</span></div>
+      <div data-next-action><p class="workspace-caption">Finding your next step…</p></div>
+      <details class="compliance-more" data-more-actions hidden><summary>More next steps <span data-more-count></span></summary><ol data-priority-actions></ol></details>
+    </section>
+    <section class="workspace-card compliance-obligations" aria-labelledby="framework-evidence-heading">
+      <div class="workspace-card__header"><h2 id="framework-evidence-heading">Your obligations</h2><span class="compliance-count" data-framework-count>Checking…</span></div>
+      <p class="workspace-caption">Only the frameworks that apply to your operation.</p>
+      <section class="compliant-frameworks workspace-card-grid" aria-label="Applicable frameworks" data-frameworks></section>
+      <p class="workspace-caption compliance-setup" data-empty hidden>No frameworks apply yet.</p>
+    </section>
+    {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
   </div>
 </main>
+<script src="/compliant/static/compliance-overview.js" defer></script>
 {% endblock %}
-{# The overview places its own workspace links, inside the page column. #}
 {% block workspace_links %}{% endblock %}
-{% block scripts %}<script src="/compliant/static/compliant.js"></script>{% endblock %}

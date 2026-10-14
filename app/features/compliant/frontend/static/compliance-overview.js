@@ -1,0 +1,247 @@
+/* Compliance overview. Evidence readiness and priority actions in the Production board layout. */
+(function () {
+  'use strict';
+  window.bize.onPage('[data-compliant-surface="overview"]', function (root) {
+    var canManage = root.dataset.canManage === '1';
+    var primary = root.closest('#page-content').querySelector('[data-compliance-primary]');
+    var error = root.querySelector('[data-compliant-error]');
+    var retry = root.querySelector('[data-retry]');
+    var controller = new AbortController();
+    var loading = false;
+
+    function el(tag, text, className) {
+      var node = document.createElement(tag);
+      if (text != null) node.textContent = text;
+      if (className) node.className = className;
+      return node;
+    }
+    function set(selector, text) { root.querySelector(selector).textContent = text; }
+    function count(value) { return Math.max(0, Number(value) || 0); }
+    function health(framework) {
+      var summary = framework.summary_health || {};
+      var coverage = framework.evidence_coverage || {};
+      var ready = count(summary.evidence_ready == null ? coverage.current_controls : summary.evidence_ready);
+      var total = count(summary.total_controls == null ? coverage.total_controls : summary.total_controls);
+      return {
+        ready: ready, total: total,
+        attention: count(summary.needs_attention == null ? total - ready : summary.needs_attention),
+        overdue: count(summary.overdue),
+        score: count(summary.score == null ? coverage.percent : summary.score)
+      };
+    }
+    function programme(framework) {
+      var match = /^(np[123])-food-control$/.exec(framework.slug);
+      return match ? match[1].toUpperCase() : null;
+    }
+    function destination(framework) {
+      if (programme(framework)) return '/compliant/nz-alcohol/food-safety';
+      if (framework.slug === 'customs-alcohol') return '/compliant/nz-alcohol/customs';
+      return canManage ? '/compliant/nz-alcohol/configuration' : null;
+    }
+    function link(label, href, className) {
+      var node = el('a', label, className || 'workspace-link');
+      node.href = href;
+      // Preserve the former overview’s full-navigation behavior for workspace links.
+      node.setAttribute('hx-boost', 'false');
+      return node;
+    }
+    function metric(number, label, href) {
+      var node = href ? link('', href, 'compliance-metric') : el('span', '', 'compliance-metric');
+      node.appendChild(el('strong', String(number)));
+      node.appendChild(el('span', label));
+      return node;
+    }
+    function renderFrameworks(frameworks) {
+      var target = root.querySelector('[data-frameworks]');
+      target.replaceChildren();
+      root.querySelector('[data-empty]').hidden = frameworks.length > 0;
+      set('[data-framework-count]', frameworks.length + ' applicable');
+      frameworks.forEach(function (framework) {
+        var values = health(framework);
+        var name = programme(framework);
+        var href = destination(framework);
+        var card = el('article', null, 'compliance-framework workspace-tile');
+        var disclosure = el('details', null, 'compliance-framework-detail');
+        disclosure.open = true;
+        var heading = el('summary', null, 'compliance-framework-heading');
+        var title = el('div', null, 'compliance-framework-title');
+        title.appendChild(el('h3', framework.name));
+        // The counts live once, in the figures; here the row says what it covers and how it stands.
+        title.appendChild(el('span', values.total + ' ' + (name ? name + ' check' : 'control') + (values.total === 1 ? '' : 's'), 'compliance-framework-coverage'));
+        heading.appendChild(title);
+        var state = el('span', values.overdue ? 'Action required' : values.attention ? 'Needs review' : 'Evidence current', 'compliance-state');
+        state.dataset.state = values.overdue ? 'overdue' : values.attention ? 'review' : 'current';
+        heading.appendChild(state);
+        disclosure.appendChild(heading);
+        var body = el('div', null, 'compliance-framework-body');
+        var bar = el('div', null, 'compliance-coverage');
+        bar.appendChild(el('span', 'Evidence coverage'));
+        bar.appendChild(el('strong', values.score + '%'));
+        var progress = el('progress');
+        progress.max = 100;
+        progress.value = Math.min(100, values.score);
+        progress.setAttribute('aria-label', framework.name + ' evidence coverage');
+        bar.appendChild(progress);
+        body.appendChild(bar);
+        var metrics = el('div', null, 'compliance-framework-metrics');
+        metrics.appendChild(metric(values.ready, 'current', name ? href + '?filter=ok' : null));
+        metrics.appendChild(metric(values.attention, 'to review', name ? href + '?filter=attention' : null));
+        metrics.appendChild(metric(values.overdue, 'overdue', name ? href + '?filter=overdue' : null));
+        body.appendChild(metrics);
+        disclosure.appendChild(body);
+        card.appendChild(disclosure);
+        if (href) card.appendChild(link(name ? 'Open ' + name : framework.slug === 'customs-alcohol' ? 'Open Customs' : 'Review configuration', href, 'workspace-link compliance-framework-link'));
+        else card.appendChild(el('p', 'Ask your admin about this framework.', 'workspace-caption'));
+        target.appendChild(card);
+      });
+    }
+    function actionHref(action) {
+      if (action.kind === 'profile' || action.kind === 'product') return canManage ? '/compliant/nz-alcohol/configuration' : null;
+      if (/^np[123]-food-control$/.test(action.framework_slug || '')) return '/compliant/nz-alcohol/food-safety';
+      if (action.framework_slug === 'customs-alcohol') return '/compliant/nz-alcohol/customs?control=' + encodeURIComponent(action.control_id || '');
+      return canManage ? '/compliant/nz-alcohol/configuration' : null;
+    }
+    function renderActions(actions, hasFrameworks) {
+      var first = root.querySelector('[data-next-action]');
+      var later = root.querySelector('[data-priority-actions]');
+      first.replaceChildren();
+      later.replaceChildren();
+      set('[data-action-count]', actions.length ? actions.length + ' suggested' : '');
+      root.querySelector('[data-more-actions]').hidden = actions.length < 2;
+      set('[data-more-count]', actions.length > 1 ? '(' + (actions.length - 1) + ')' : '');
+      // With nothing suggested the two top cards each take a full row, so neither is stretched around blank space.
+      root.querySelector('.compliance-layout').dataset.actions = actions.length ? 'some' : 'none';
+      if (!actions.length) {
+        first.appendChild(el('h3', hasFrameworks ? 'No next steps suggested' : 'Start with your operation'));
+        first.appendChild(el('p', hasFrameworks ? 'Review your obligations below. Evidence status and dates still need your regular review.' : 'Choose what you make to see the obligations and evidence that apply.', 'workspace-caption'));
+        if (!hasFrameworks) {
+          if (canManage) {
+            var setup = link('Set up Compliance', '/compliant/nz-alcohol/configuration', 'workspace-button');
+            setup.setAttribute('data-next-action-link', '');
+            first.appendChild(setup);
+          } else first.appendChild(el('p', 'Ask your organisation admin to configure Compliance.', 'workspace-caption'));
+        }
+        return;
+      }
+      actions.forEach(function (action, index) {
+        var href = actionHref(action);
+        var item = index ? el('li') : first;
+        if (index) item.appendChild(href ? link(action.title, href) : el('strong', action.title));
+        else item.appendChild(el('h3', action.title));
+        item.appendChild(el('p', action.description, 'workspace-caption'));
+        if (action.value) item.appendChild(el('p', action.value, 'compliance-action-value'));
+        if (!index && href) {
+          // The step and the control that starts it sit together.
+          var start = link(action.kind === 'product' ? 'Map products' : action.kind === 'profile' ? 'Set up Compliance' : 'Review evidence', href, 'workspace-button');
+          start.setAttribute('data-next-action-link', '');
+          item.appendChild(start);
+        }
+        if (!href) item.appendChild(el('p', 'Ask your organisation admin to review this setup.', 'workspace-caption'));
+        if (index) later.appendChild(item);
+      });
+    }
+    // The tab-row primary keeps one label for the everyday job: open the framework that most needs
+    // evidence. It does not follow the suggestion queue, whose own control sits in the Next action card.
+    function renderPrimary(frameworks) {
+      primary.hidden = true;
+      primary.removeAttribute('href');
+      if (!frameworks.length) {
+        if (!canManage) return;
+        primary.textContent = 'Set up Compliance';
+        primary.href = '/compliant/nz-alcohol/configuration';
+        primary.hidden = false;
+        return;
+      }
+      var target = frameworks.filter(destination).map(function (framework) { return { framework: framework, values: health(framework) }; })
+        .sort(function (a, b) { return b.values.overdue - a.values.overdue || b.values.attention - a.values.attention; })[0];
+      if (!target) return;
+      var href = destination(target.framework);
+      if (programme(target.framework) && target.values.attention) href += target.values.overdue ? '?filter=overdue' : '?filter=attention';
+      primary.textContent = 'Review evidence';
+      primary.href = href;
+      primary.hidden = false;
+    }
+    function renderDataCoverage(coverage, hasFrameworks) {
+      root.querySelector('[data-data-coverage]').hidden = !hasFrameworks;
+      var gaps = count(coverage.unresolved_live_data_gaps);
+      set('[data-data-summary]', 'Data coverage · ' + gaps + ' live-data gap' + (gaps === 1 ? '' : 's'));
+      set('[data-data-scope]', coverage.scope || 'Live Production data and recorded evidence support these checks.');
+      var facts = root.querySelector('[data-data-facts]');
+      facts.replaceChildren();
+      [['completed_core_steps_with_captured_data', 'Production steps with captured data'],
+        ['active_core_evidence_files', 'Active Production evidence files'],
+        ['manual_evidence_records', 'Manual evidence records'],
+        ['records_linked_to_core', 'Records linked to Production'],
+        ['records_with_evidence_reference', 'Records with an evidence reference'],
+        ['alcohol_product_profiles', 'Alcohol product profiles']].forEach(function (item) {
+        facts.appendChild(el('dt', item[1]));
+        facts.appendChild(el('dd', String(count(coverage[item[0]]))));
+      });
+    }
+    function render(overview) {
+      var frameworks = overview.frameworks || [];
+      var evidence = overview.evidence_readiness || {};
+      var ready = count(evidence.current_controls);
+      var total = count(evidence.total_controls);
+      var attention = 0, overdue = 0;
+      frameworks.forEach(function (framework) { var values = health(framework); attention += values.attention; overdue += values.overdue; });
+      set('[data-current-proof]', total ? ready : '—');
+      set('[data-proof-total]', total ? 'of ' + total + ' checks with current evidence' : 'No applicable checks yet');
+      // A status word, not a third copy of the counts shown in the figures beneath it.
+      var state = !total ? 'setup' : overdue ? 'overdue' : attention ? 'review' : 'current';
+      root.querySelector('.compliance-readiness').dataset.state = state;
+      set('[data-compliant-summary]', { setup: 'Configure your obligations to get started', overdue: 'Action required', review: 'Needs review', current: 'All checks have current evidence' }[state]);
+      root.querySelector('.compliance-figures').hidden = !total;
+      root.querySelector('[data-readiness]').hidden = !total;
+      set('[data-ready]', total ? ready : '—');
+      set('[data-attention]', total ? attention : '—');
+      set('[data-overdue]', total ? overdue : '—');
+      set('[data-readiness]', 'Evidence coverage, not a legal compliance score. Overdue checks are included in those to review.');
+      renderDataCoverage(overview.data_coverage || {}, frameworks.length > 0);
+      renderFrameworks(frameworks);
+      renderActions(overview.priority_actions || [], frameworks.length > 0);
+      renderPrimary(frameworks);
+    }
+    async function load() {
+      if (loading) return;
+      loading = true;
+      retry.disabled = true;
+      retry.hidden = false;
+      root.querySelector('[data-sign-in]').hidden = true;
+      var status = 0;
+      root.setAttribute('aria-busy', 'true');
+      error.hidden = true;
+      root.removeAttribute('data-load-failed');
+      primary.hidden = true;
+      primary.removeAttribute('href');
+      try {
+        var response = await fetch('/api/compliant/overview', { signal: controller.signal });
+        status = response.status;
+        if (!response.ok) throw new Error('Could not load your evidence. Try again in a moment.');
+        render(await response.json());
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        set('[data-error-title]', status === 401 ? 'Sign in again to check your evidence' : status === 403 ? 'Compliance access unavailable' : 'Readiness could not load');
+        set('[data-error-message]', status === 401 ? 'Your session has ended.' : status === 403 ? 'Ask your organisation admin to check your Compliance access.' : 'Check your connection and try again in a moment.');
+        retry.hidden = status === 401 || status === 403;
+        root.querySelector('[data-sign-in]').hidden = status !== 401;
+        set('[data-compliant-summary]', 'Evidence status unavailable');
+        set('[data-proof-total]', 'Try again to check your evidence');
+        set('[data-framework-count]', 'Unavailable');
+        set('[data-action-count]', 'Unavailable');
+        root.querySelector('[data-next-action]').replaceChildren(el('p', 'Next steps are unavailable until evidence loads.', 'workspace-caption'));
+        error.hidden = false;
+        // The message above says it once; the cards it would have filled are put away, not drawn with dashes.
+        root.setAttribute('data-load-failed', '');
+      } finally {
+        loading = false;
+        retry.disabled = false;
+        root.setAttribute('aria-busy', 'false');
+      }
+    }
+    retry.addEventListener('click', load);
+
+    load();
+    return function () { controller.abort(); };
+  });
+})();

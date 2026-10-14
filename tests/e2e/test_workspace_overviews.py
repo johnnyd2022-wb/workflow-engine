@@ -287,7 +287,14 @@ def test_compliance_overview_groups_obligations_and_actions_in_cards(browser, ap
             assert outer["x"] < box["x"] and box["x"] + box["width"] < outer["x"] + outer["width"]
         boxes = [item.bounding_box() for item in [readiness, obligations, manage]]
         assert [box["y"] for box in boxes] == sorted(box["y"] for box in boxes)
-        assert len({round(box["width"]) for box in boxes}) == 1, "every block spans the content column"
+        assert round(boxes[1]["width"]) == round(boxes[2]["width"]), "obligations and actions span the column"
+        if width >= 1440:
+            next_action = page.get_by_role("region", name="Next action", exact=True).bounding_box()
+            assert boxes[0]["y"] == next_action["y"]
+            assert boxes[0]["x"] + boxes[0]["width"] < next_action["x"]
+            assert round(next_action["x"] + next_action["width"]) == round(boxes[1]["x"] + boxes[1]["width"])
+        else:
+            assert len({round(box["width"]) for box in boxes}) == 1, "narrow screens stack every block"
         links = [link.bounding_box() for link in manage.get_by_role("link").all()]
         assert len(links) >= 2 and links[0]["y"] == links[1]["y"]
         assert len({round(link["width"]) for link in links}) == 1

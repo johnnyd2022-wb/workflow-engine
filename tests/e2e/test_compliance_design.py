@@ -1,0 +1,400 @@
+"""Compliance overview: honest evidence labels, next actions in the selected Board layout."""
+
+import re
+from uuid import UUID
+
+import pytest
+from playwright.sync_api import expect
+
+from app.core.db.models.user import UserRole
+from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+from tests.e2e.conftest import csrf_headers, login_through_ui
+
+pytestmark = pytest.mark.e2e
+
+
+@pytest.fixture
+def compliance_page(browser, app_url, fresh_user, db):
+    user = fresh_user(UserRole.ADMIN)
+    FeatureSubscriptionRepository(db).grant(UUID(user["org_id"]), "compliant")
+    db.commit()
+    context = browser.new_context(base_url=app_url, ignore_https_errors=True, viewport={"width": 1440, "height": 900})
+    page = context.new_page()
+    login_through_ui(page, user["email"], user["password"])
+    saved = page.request.put(
+        "/api/compliant/profile",
+        headers=csrf_headers(page),
+        data={"enabled": True, "settings": {"food_control_programme": "np2", "alcohol_product_types": ["spirits"]}},
+    )
+    assert saved.ok, saved.text()
+    yield page
+    context.close()
+
+
+def _open(page):
+    page.goto("/compliant/nz-alcohol")
+    expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
+
+
+def test_setup_checks_are_visible_in_readiness(compliance_page):
+    page = compliance_page
+    overview = page.request.get("/api/compliant/overview").json()
+    attention = sum(f["summary_health"]["needs_attention"] for f in overview["frameworks"])
+    assert attention > 0, "fixture must include checks still being set up"
+    _open(page)
+    readiness = page.get_by_role("region", name="Evidence readiness", exact=True)
+    # The count appears once, in its figure; the headline is the status in words.
+    expect(readiness.locator("[data-attention]")).to_have_text(str(attention))
+    expect(readiness.locator("[data-compliant-summary]")).to_have_text(re.compile("^(Needs review|Action required)$"))
+    assert readiness.inner_text().count(f"{attention} to review") == 0
+
+
+def test_customs_and_np2_have_honest_evidence_labels(compliance_page):
+    page = compliance_page
+    _open(page)
+    customs = page.get_by_role("article").filter(has=page.get_by_role("heading", name="Customs alcohol reconciliation"))
+    expect(customs).not_to_contain_text("NP3")
+    expect(customs).not_to_contain_text("Compliance score")
+    expect(page.get_by_role("link", name="Open NP2", exact=True)).to_be_visible()
+
+
+@pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
+def test_board_keeps_evidence_and_actions_reachable(compliance_page, width):
+    page = compliance_page
+    page.set_viewport_size({"width": width, "height": 1080})
+    _open(page)
+    expect(page.get_by_role("region", name="Evidence readiness", exact=True)).to_be_visible()
+    expect(page.get_by_role("region", name="Next action", exact=True)).to_be_visible()
+    obligations = page.get_by_role("region", name="Your obligations", exact=True)
+    expect(obligations.get_by_role("article")).to_have_count(2)
+    expect(page.get_by_role("link", name="Open NP2", exact=True)).to_be_visible()
+    expect(page.get_by_role("link", name="Open Customs", exact=True)).to_be_visible()
+    expect(page.get_by_role("heading", level=1)).to_have_count(1)
+    expect(page.get_by_role("heading", level=1)).to_have_text("Compliance")
+    title = page.get_by_role("heading", level=1).bounding_box()
+    tabs = page.get_by_role("navigation", name="Compliance sections").bounding_box()
+    content = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
+    assert title["y"] + title["height"] < tabs["y"] < content["y"]
+    assert abs(title["x"] - content["x"]) <= 1, "page and section title must share their left edge"
+    expect(page.locator(".section-head__actions [data-compliance-primary]")).to_have_text("Review evidence")
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+    if width >= 1440:
+        readiness = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
+        actions = page.get_by_role("region", name="Next action", exact=True).bounding_box()
+        assert readiness["y"] == actions["y"]
+        assert readiness["x"] + readiness["width"] < actions["x"]
+        assert round(readiness["height"]) == round(actions["height"])
+
+
+def test_all_returned_actions_expand_and_primary_opens_mapping(compliance_page):
+    page = compliance_page
+    overview = page.request.get("/api/compliant/overview").json()
+    _open(page)
+    actions = page.get_by_role("region", name="Next action", exact=True)
+    expect(actions.get_by_role("heading", level=3)).to_have_text(overview["priority_actions"][0]["title"])
+    # The step's own control sits in the card with its explanation, matching the tab-row primary.
+    expect(
+        actions.locator("[data-next-action]").get_by_role("link", name="Map products", exact=True)
+    ).to_have_attribute("href", "/compliant/nz-alcohol/configuration")
+    # The tab-row primary is the everyday job, not a copy of the suggestion: the framework most in need of evidence.
+    expect(page.locator("[data-compliance-primary]")).to_have_text("Review evidence")
+    expect(page.locator("[data-compliance-primary]")).to_have_attribute(
+        "href", "/compliant/nz-alcohol/food-safety?filter=attention"
+    )
+    page.locator("[data-more-actions] > summary").click()
+    expect(page.locator("[data-priority-actions] > li")).to_have_count(len(overview["priority_actions"]) - 1)
+    for action in overview["priority_actions"][1:]:
+        expect(actions.get_by_role("link", name=action["title"], exact=True)).to_be_visible()
+    page.locator("[data-more-actions] > summary").click()
+    expect(page.locator("[data-priority-actions]")).not_to_be_visible()
+    actions.locator("[data-next-action]").get_by_role("link", name="Map products", exact=True).click()
+    expect(page).to_have_url(re.compile("/configuration$"))
+
+
+def test_board_loads_again_after_boosted_navigation(compliance_page):
+    page = compliance_page
+    _open(page)
+    page.evaluate('window.complianceRoundTrip = "same window"')
+    from tests.e2e.test_boosted_navigation import _BOOSTED_CLICK_JS
+
+    page.evaluate(_BOOSTED_CLICK_JS, "/core/suppliers")
+    page.wait_for_function("window.__boostSettled === true")
+    page.evaluate(_BOOSTED_CLICK_JS, "/compliant/nz-alcohol")
+    page.wait_for_function("window.__boostSettled === true")
+    expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
+    expect(page.get_by_role("article")).to_have_count(2)
+    expect(page.locator("[data-compliance-primary]")).to_have_text("Review evidence")
+    assert page.evaluate("window.complianceRoundTrip") == "same window", (
+        "must exercise boosted swaps, not full navigation"
+    )
+
+
+def test_legacy_preview_preferences_do_not_change_board(compliance_page):
+    page = compliance_page
+    page.evaluate('sessionStorage.setItem("compliance-design-style", "2")')
+    page.goto("/compliant/nz-alcohol?style=3")
+    expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
+    expect(page.get_by_role("group", name="Design concepts")).to_have_count(0)
+    expect(page.get_by_role("article")).to_have_count(2)
+    for framework in page.get_by_role("article").all():
+        expect(framework.get_by_text("Evidence coverage", exact=True)).to_be_visible()
+        expect(framework.locator("details")).to_have_attribute("open", "")
+
+
+def test_failed_load_has_no_success_totals_and_retry_recovers(compliance_page):
+    page = compliance_page
+    page.route("**/api/compliant/overview", lambda route: route.fulfill(status=503, json={"error": "Unavailable"}))
+    _open(page)
+    expect(page.get_by_role("alert")).to_contain_text("Readiness could not load")
+    # The failure is said once; no readiness figures, actions or obligations are drawn around it.
+    for region in ["Evidence readiness", "Next action", "Your obligations"]:
+        expect(page.get_by_role("region", name=region, exact=True)).to_be_hidden()
+    expect(page.locator("[data-ready]")).to_have_text("—")
+    expect(page.get_by_role("link", name="Configuration", exact=True)).to_be_visible()
+    page.unroute("**/api/compliant/overview")
+    page.get_by_role("button", name="Try again", exact=True).click()
+    expect(page.get_by_role("alert")).not_to_be_visible()
+    expect(page.get_by_role("region", name="Evidence readiness", exact=True)).to_be_visible()
+    expect(page.get_by_role("article")).to_have_count(2)
+    expect(page.locator("[data-ready]")).not_to_have_text("—")
+
+
+def test_setup_and_quiet_states_do_not_invent_assurance(compliance_page):
+    page = compliance_page
+    page.route(
+        "**/api/compliant/overview",
+        lambda route: route.fulfill(json={"frameworks": [], "priority_actions": [], "evidence_readiness": {}}),
+    )
+    _open(page)
+    # Setting up is the next action, so its control lives in that card; the obligations card just says none apply.
+    next_action = page.get_by_role("region", name="Next action", exact=True)
+    expect(next_action.get_by_role("heading", name="Start with your operation")).to_be_visible()
+    expect(next_action.get_by_role("link", name="Set up Compliance", exact=True)).to_have_attribute(
+        "href", "/compliant/nz-alcohol/configuration"
+    )
+    expect(page.get_by_role("region", name="Your obligations", exact=True)).to_contain_text("No frameworks apply yet.")
+    expect(page.get_by_role("region", name="Your obligations", exact=True).get_by_role("link")).to_have_count(0)
+    expect(page.locator("[data-compliance-primary]")).to_have_text("Set up Compliance")
+    # With nothing suggested the cards stack at natural height rather than stretching around blank space.
+    status = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
+    assert next_action.bounding_box()["y"] >= status["y"] + status["height"]
+    assert next_action.bounding_box()["height"] < 220
+    expect(page.locator("[data-attention]")).to_have_text("—")
+    # No figures and no disclaimer over checks that do not exist yet.
+    expect(page.locator(".compliance-figures")).to_be_hidden()
+    expect(page.locator("[data-readiness]")).to_be_hidden()
+    expect(page.get_by_text("All checks have current evidence", exact=True)).not_to_be_visible()
+    page.unroute("**/api/compliant/overview")
+    response = page.request.get("/api/compliant/overview").json()
+    response["priority_actions"] = []
+    page.route("**/api/compliant/overview", lambda route: route.fulfill(json=response))
+    _open(page)
+    expect(page.get_by_role("heading", name="No next steps suggested")).to_be_visible()
+    expect(page.get_by_role("region", name="Next action", exact=True)).to_contain_text(
+        "Evidence status and dates still need your regular review"
+    )
+    expect(page.locator("[data-more-actions]")).not_to_be_visible()
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_access_errors_offer_sign_in_or_admin_instead_of_retry(compliance_page, status):
+    page = compliance_page
+    page.route("**/api/compliant/overview", lambda route: route.fulfill(status=status, json={"error": "Unavailable"}))
+    _open(page)
+    expect(page.get_by_role("button", name="Try again", exact=True)).not_to_be_visible()
+    if status == 401:
+        expect(page.get_by_role("alert")).to_contain_text("Your session has ended")
+        expect(page.get_by_role("link", name="Sign in", exact=True)).to_have_attribute("href", "/")
+    else:
+        expect(page.get_by_role("alert")).to_contain_text("Ask your organisation admin")
+        expect(page.get_by_role("link", name="Sign in", exact=True)).not_to_be_visible()
+
+
+def test_np2_and_customs_links_boot_their_destination_scripts(compliance_page):
+    page = compliance_page
+    _open(page)
+    page.get_by_role("link", name="Open NP2", exact=True).click()
+    expect(page.locator("[data-np3-audit-root]")).to_have_attribute("aria-busy", "false")
+    expect(page.locator("[data-np3-categories]")).not_to_be_empty()
+    _open(page)
+    page.get_by_role("link", name="Open Customs", exact=True).click()
+    expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")
+    expect(page.locator("[data-control-select] option")).not_to_have_count(0)
+
+
+def test_non_manager_has_no_configuration_action(browser, app_url, fresh_user, db):
+    user = fresh_user(UserRole.MEMBER)
+    org_id = UUID(user["org_id"])
+    FeatureSubscriptionRepository(db).grant(org_id, "compliant")
+    from app.features.compliant.models import ComplianceProfile
+
+    db.add(
+        ComplianceProfile(
+            org_id=org_id,
+            enabled=True,
+            settings={"food_control_programme": "np1", "alcohol_product_types": ["spirits"]},
+        )
+    )
+    db.commit()
+    context = browser.new_context(base_url=app_url, ignore_https_errors=True)
+    try:
+        page = context.new_page()
+        login_through_ui(page, user["email"], user["password"])
+        _open(page)
+        expect(page.get_by_role("region", name="Next action", exact=True)).to_contain_text(
+            "Ask your organisation admin"
+        )
+        expect(page.get_by_role("link", name="Map products", exact=True)).not_to_be_visible()
+        expect(page.get_by_role("link", name="Open NP1", exact=True)).to_be_visible()
+        expect(page.get_by_role("link", name="Configuration", exact=True)).not_to_be_visible()
+    finally:
+        context.close()
+
+
+def test_data_coverage_keeps_live_gaps_and_sources_accessible(compliance_page):
+    page = compliance_page
+    response = page.request.get("/api/compliant/overview").json()
+    response["data_coverage"].update(unresolved_live_data_gaps=3, manual_evidence_records=7)
+    page.route("**/api/compliant/overview", lambda route: route.fulfill(json=response))
+    _open(page)
+    page.get_by_text("Data coverage · 3 live-data gaps", exact=True).click()
+    expect(page.locator("[data-data-facts]")).to_contain_text("Manual evidence records7")
+    expect(page.locator("[data-data-scope]")).to_have_text(response["data_coverage"]["scope"])
+
+
+def test_primary_action_matches_production_row_and_hides_during_reload(compliance_page):
+    page = compliance_page
+    _open(page)
+    primary = page.locator("[data-compliance-primary]")
+    secondary = page.locator(".compliance-header-actions").get_by_role("link", name="Premises", exact=True)
+    expect(primary).to_have_text("Review evidence")
+    expect(primary).to_have_attribute("href", "/compliant/nz-alcohol/food-safety?filter=attention")
+    expect(page.locator(".workspace-button--primary:visible")).to_have_count(1)
+    p = primary.bounding_box()
+    s = secondary.bounding_box()
+    tabs = page.get_by_role("navigation", name="Compliance sections").bounding_box()
+    assert p["x"] > s["x"] and abs(p["y"] - s["y"]) < 1
+    assert p["y"] < tabs["y"] + tabs["height"]
+    assert primary.evaluate("el => getComputedStyle(el).backgroundColor") != secondary.evaluate(
+        "el => getComputedStyle(el).backgroundColor"
+    )
+    page.set_viewport_size({"width": 390, "height": 844})
+    p, s = primary.bounding_box(), secondary.bounding_box()
+    assert p["y"] < s["y"], "primary action comes first when the tab row wraps"
+    page.route("**/api/compliant/overview", lambda route: route.fulfill(status=503, json={"error": "Unavailable"}))
+    _open(page)
+    expect(primary).not_to_be_visible()
+    expect(primary).not_to_have_attribute("href", re.compile(".+"))
+    page.unroute("**/api/compliant/overview")
+    page.get_by_role("button", name="Try again", exact=True).click()
+    expect(primary).to_be_visible()
+    expect(primary).to_have_text("Review evidence")
+
+
+@pytest.mark.parametrize(
+    ("overdue", "attention", "state", "words"),
+    [
+        (2, 5, "overdue", "Action required"),
+        (0, 5, "review", "Needs review"),
+        (0, 0, "current", "All checks have current evidence"),
+    ],
+)
+def test_readiness_status_is_words_and_only_current_evidence_wears_the_accent(
+    compliance_page, overdue, attention, state, words
+):
+    page = compliance_page
+    response = page.request.get("/api/compliant/overview").json()
+    framework = response["frameworks"][0]
+    framework["summary_health"] = {
+        "evidence_ready": 10 - attention,
+        "total_controls": 10,
+        "needs_attention": attention,
+        "overdue": overdue,
+        "score": (10 - attention) * 10,
+    }
+    response["frameworks"] = [framework]
+    response["evidence_readiness"] = {"current_controls": 10 - attention, "total_controls": 10}
+    page.route("**/api/compliant/overview", lambda route: route.fulfill(json=response))
+    _open(page)
+    readiness = page.locator(".compliance-readiness")
+    expect(readiness).to_have_attribute("data-state", state)
+    expect(readiness.locator("[data-compliant-summary]")).to_have_text(words)
+    colours = page.evaluate(
+        """() => {
+          const probe = document.createElement('span');
+          probe.style.color = 'var(--ui-accent-strong)';
+          document.querySelector('.compliance-board').appendChild(probe);
+          const accent = getComputedStyle(probe).color;
+          probe.remove();
+          return [getComputedStyle(document.querySelector('[data-current-proof]')).color, accent];
+        }"""
+    )
+    assert (colours[0] == colours[1]) is (state == "current")
+
+
+def test_action_detail_text_does_not_look_like_a_link(compliance_page):
+    page = compliance_page
+    _open(page)
+    detail = page.locator("[data-next-action] .compliance-action-value")
+    expect(detail).to_be_visible()
+    link = page.locator("[data-next-action] [data-next-action-link]")
+    assert detail.evaluate("node => getComputedStyle(node).color") != page.locator(
+        ".compliance-framework-link"
+    ).first.evaluate("node => getComputedStyle(node).color")
+    expect(link).to_be_visible()
+
+
+def test_framework_rows_stay_compact_at_a_laptop_width(compliance_page):
+    """At 1280 with the sidebar open the board stacks, but each framework is still one row."""
+    page = compliance_page
+    page.set_viewport_size({"width": 1280, "height": 900})
+    _open(page)
+    status = page.get_by_role("region", name="Evidence readiness", exact=True).bounding_box()
+    following = page.get_by_role("region", name="Next action", exact=True).bounding_box()
+    assert following["y"] >= status["y"] + status["height"], "the pair should have stacked at this width"
+    for row in page.get_by_role("article").all():
+        title = row.get_by_role("heading", level=3).bounding_box()
+        link = row.locator(".compliance-framework-link").bounding_box()
+        assert link["x"] > title["x"] + title["width"]
+        assert abs((link["y"] + link["height"] / 2) - (row.bounding_box()["y"] + row.bounding_box()["height"] / 2)) < 30
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+
+
+def _fulfil(payload):
+    return lambda route: route.fulfill(json=payload)
+
+
+def test_tab_row_primary_keeps_one_label_and_follows_the_framework_most_in_need(compliance_page):
+    page = compliance_page
+    response = page.request.get("/api/compliant/overview").json()
+    customs = next(f for f in response["frameworks"] if f["slug"] == "customs-alcohol")
+    customs["summary_health"] = {
+        "evidence_ready": 3,
+        "total_controls": 5,
+        "needs_attention": 2,
+        "overdue": 1,
+        "score": 60,
+    }
+    for actions in (response["priority_actions"], []):
+        payload = {**response, "priority_actions": actions}
+        page.unroute("**/api/compliant/overview")
+        page.route("**/api/compliant/overview", _fulfil(payload))
+        _open(page)
+        primary = page.locator("[data-compliance-primary]")
+        # Same label whatever is suggested; an overdue framework outranks a larger review backlog.
+        expect(primary).to_have_text("Review evidence")
+        expect(primary).to_have_attribute("href", "/compliant/nz-alcohol/customs")
+
+
+def test_framework_row_states_each_count_once_with_a_status_word(compliance_page):
+    page = compliance_page
+    response = page.request.get("/api/compliant/overview").json()
+    _open(page)
+    for framework in response["frameworks"]:
+        row = page.get_by_role("article").filter(has=page.get_by_role("heading", name=framework["name"], exact=True))
+        attention = framework["summary_health"]["needs_attention"]
+        expect(row.locator(".compliance-state")).to_have_text("Needs review")
+        text = row.inner_text()
+        assert text.count(f"{attention}") == 1 or attention == framework["summary_health"]["total_controls"]
+        assert "with current evidence" not in text
+        assert len(re.findall(r"to review", text)) == 1
