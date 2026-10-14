@@ -13,23 +13,15 @@ pytestmark = pytest.mark.e2e
 workspace_user = _workspace_user
 
 
-def _category(page, style, name):
-    if style == "3":
-        group = page.locator(f'[data-settings-group="{name}"]')
-        if not group.evaluate("element => element.open"):
-            group.locator("summary").click()
-    else:
-        page.locator(f'[data-settings-link="{name}"]').click()
+def _category(page, name):
+    page.locator(f'[data-settings-link="{name}"]').click()
 
 
-# CONCEPT ONLY — retain the winning widths and remove losing cases after selection.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_concepts_keep_all_settings_reachable(browser, app_url, workspace_user, style, width):
+def test_every_setting_is_reachable_one_category_at_a_time(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
-        page.goto(f"/core/settings?style={style}")
-        expect(page.locator(".settings-overview")).to_have_attribute("data-settings-style", style)
+        page.goto("/core/settings")
         expect(page.get_by_role("heading", level=1)).to_have_text("Settings")
         expect(page.get_by_label("First name", exact=True)).to_be_enabled()
         for category, heading in [
@@ -38,12 +30,30 @@ def test_concepts_keep_all_settings_reachable(browser, app_url, workspace_user, 
             ("security", "Two-factor authentication"),
             ("preferences", "Appearance"),
         ]:
-            _category(page, style, category)
+            _category(page, category)
             expect(page.get_by_role("heading", name=heading, exact=True)).to_be_visible()
+            # Only the chosen category is on screen.
+            expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
-        _category(page, style, "organisation")
+        _category(page, "organisation")
         expect(page.get_by_role("link", name="View sites", exact=True)).to_have_attribute("href", "/core/sites")
         expect(page.get_by_role("link", name="Manage people", exact=True)).to_have_attribute("href", "/core/people")
+    finally:
+        context.close()
+
+
+def test_settings_has_no_layout_preview_left(browser, app_url, workspace_user):
+    """The chooser and the two layouts not picked are gone; an old remembered choice changes nothing."""
+    context, page = _page(browser, app_url, workspace_user, 1440)
+    try:
+        page.goto("/core/settings")
+        page.evaluate('sessionStorage.setItem("settings-design-style", "3")')
+        page.goto("/core/settings?style=1")
+        expect(page.get_by_role("group", name="Settings design concepts")).to_have_count(0)
+        expect(page.locator("[data-style-pick]")).to_have_count(0)
+        expect(page.locator(".settings-overview details")).to_have_count(0)
+        expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
+        expect(page.get_by_role("heading", name="Account information", exact=True)).to_be_visible()
     finally:
         context.close()
 
@@ -70,7 +80,7 @@ def test_switches_that_never_saved_anything_are_gone(browser, app_url, workspace
     """The three notification switches had no save behaviour; a control that does nothing is not shown."""
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
-        page.goto("/core/settings?style=2#settings-preferences")
+        page.goto("/core/settings#settings-preferences")
         expect(page.get_by_role("heading", name="Appearance", exact=True)).to_be_visible()
         expect(page.get_by_role("checkbox", name="Dark mode", exact=True)).to_be_enabled()
         for name in ["Email Notifications", "Compliance Alerts", "Weekly Reports"]:
@@ -83,7 +93,7 @@ def test_switches_that_never_saved_anything_are_gone(browser, app_url, workspace
 def test_each_category_has_its_own_address_and_back_returns_to_it(browser, app_url, workspace_user):
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
-        page.goto("/core/settings?style=2")
+        page.goto("/core/settings")
         page.locator('[data-settings-link="security"]').click()
         assert page.evaluate("location.hash") == "#settings-security"
         expect(page.get_by_role("heading", name="Two-factor authentication", exact=True)).to_be_visible()
@@ -93,7 +103,7 @@ def test_each_category_has_its_own_address_and_back_returns_to_it(browser, app_u
         expect(page.get_by_role("heading", name="Two-factor authentication", exact=True)).to_be_visible()
         expect(page.locator('[data-settings-link="security"]')).to_have_attribute("aria-current", "page")
         # A link straight to a category opens that category.
-        page.goto("/core/settings?style=2#settings-preferences")
+        page.goto("/core/settings#settings-preferences")
         expect(page.get_by_role("heading", name="Appearance", exact=True)).to_be_visible()
         expect(page.get_by_role("heading", name="Account information", exact=True)).to_be_hidden()
     finally:
@@ -103,7 +113,7 @@ def test_each_category_has_its_own_address_and_back_returns_to_it(browser, app_u
 def test_settings_desk_pairs_short_fields_and_keeps_one_filled_action_per_card(browser, app_url, workspace_user):
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
-        page.goto("/core/settings?style=2")
+        page.goto("/core/settings")
         first = page.get_by_label("First name", exact=True).bounding_box()
         last = page.get_by_label("Last name", exact=True).bounding_box()
         assert abs(first["y"] - last["y"]) < 2 and first["x"] + first["width"] <= last["x"]
@@ -121,7 +131,7 @@ def test_settings_desk_pairs_short_fields_and_keeps_one_filled_action_per_card(b
 def test_phone_category_row_stays_on_one_line(browser, app_url, workspace_user):
     context, page = _page(browser, app_url, workspace_user, 390)
     try:
-        page.goto("/core/settings?style=2")
+        page.goto("/core/settings")
         tops = {round(link.bounding_box()["y"]) for link in page.locator("[data-settings-link]").all()}
         assert len(tops) == 1
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
@@ -129,23 +139,21 @@ def test_phone_category_row_stays_on_one_line(browser, app_url, workspace_user):
         context.close()
 
 
-def test_concept_switch_preserves_draft_and_boosted_return(browser, app_url, workspace_user):
+def test_switching_category_keeps_a_draft_and_boosted_return_reloads(browser, app_url, workspace_user):
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
-        page.goto("/core/settings?style=1")
+        page.goto("/core/settings")
         expect(page.get_by_label("First name", exact=True)).to_be_enabled()
         page.get_by_label("First name", exact=True).fill("Unsaved draft")
-        page.get_by_role("button", name="2 · Settings desk", exact=True).click()
-        _category(page, "2", "security")
+        _category(page, "security")
         expect(page.get_by_label("First name", exact=True)).to_be_hidden()
-        _category(page, "2", "account")
-        page.get_by_role("button", name="3 · Register", exact=True).click()
+        _category(page, "account")
         expect(page.get_by_label("First name", exact=True)).to_have_value("Unsaved draft")
         page.evaluate("window.__settingsNavigationSentinel = true")
         page.get_by_role("link", name="Home", exact=True).first.click()
         page.get_by_role("heading", name="Home", exact=True).wait_for()
         page.get_by_role("link", name="Settings", exact=True).first.click()
-        expect(page.locator(".settings-overview")).to_have_attribute("data-settings-style", "3")
+        expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
         expect(page.get_by_label("Email", exact=True)).to_have_value(workspace_user["email"])
         assert page.evaluate("window.__settingsNavigationSentinel")
     finally:

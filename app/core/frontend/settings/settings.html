@@ -12,21 +12,13 @@
 
 {% block content %}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='settings-design.css') }}">
-  <div class="max-content workspace-overview settings-overview" data-settings-style="1">
+  <div class="max-content workspace-overview settings-overview" data-settings-root>
 
     <header class="workspace-header" aria-label="Settings header">
       <div>
         <h1 class="page-title">Settings</h1>
       </div>
     </header>
-
-    {# CONCEPT ONLY — removed once a direction is selected. #}
-    <div class="settings-concepts" role="group" aria-label="Settings design concepts">
-      <span>Preview layout</span>
-      <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Board</button>
-      <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · Settings desk</button>
-      <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · Register</button>
-    </div>
 
     <!-- Long-session warning: security nudge when timeout > 24h and 2FA disabled; not an enforcement mechanism -->
     <div id="long-session-banner" class="long-session-banner" role="alert" aria-live="polite" style="display: none;">
@@ -46,8 +38,8 @@
         <a href="#settings-preferences" data-settings-link="preferences">Preferences</a>
       </nav>
       <div class="settings-groups">
-        <details class="settings-group" id="settings-account" data-settings-group="account" open>
-          <summary><span>My account</span><small>Profile and contact details</small></summary><div class="settings-group-heading" role="heading" aria-level="2"><span>My account</span><small>Profile and contact details</small></div>
+        <section class="settings-group" id="settings-account" data-settings-group="account">
+          <div class="settings-group-heading" role="heading" aria-level="2"><span>My account</span><small>Profile and contact details</small></div>
           <div class="settings-group-content">
           <section class="workspace-card settings-card">
             <div class="card-header">
@@ -121,11 +113,11 @@
             </div>
           </section>
           </div>
-        </details>
+        </section>
 
           {% if can('settings.manage') or can('users.manage') %}
-        <details class="settings-group" id="settings-organisation" data-settings-group="organisation" open>
-          <summary><span>Organisation</span><small>Places, people and access</small></summary><div class="settings-group-heading" role="heading" aria-level="2"><span>Organisation</span><small>Places, people and access</small></div>
+        <section class="settings-group" id="settings-organisation" data-settings-group="organisation">
+          <div class="settings-group-heading" role="heading" aria-level="2"><span>Organisation</span><small>Places, people and access</small></div>
           <div class="settings-group-content">
             {% if can('settings.manage') %}
             <section class="workspace-card settings-card" aria-labelledby="settings-sites-title">
@@ -142,11 +134,11 @@
             </section>
             {% endif %}
           </div>
-        </details>
+        </section>
           {% endif %}
 
-        <details class="settings-group" id="settings-security" data-settings-group="security" open>
-          <summary><span>Security and sign-in</span><small>Password, two-factor authentication and sessions</small></summary><div class="settings-group-heading" role="heading" aria-level="2"><span>Security and sign-in</span><small>Password, two-factor authentication and sessions</small></div>
+        <section class="settings-group" id="settings-security" data-settings-group="security">
+          <div class="settings-group-heading" role="heading" aria-level="2"><span>Security and sign-in</span><small>Password, two-factor authentication and sessions</small></div>
           <div class="settings-group-content">
           <section class="workspace-card settings-card">
             <div class="card-header">
@@ -242,10 +234,10 @@
 
           {% include 'google_account_settings.html' %}
           </div>
-        </details>
+        </section>
 
-        <details class="settings-group" id="settings-preferences" data-settings-group="preferences" open>
-          <summary><span>Preferences</span><small>How the app looks on this device</small></summary><div class="settings-group-heading" role="heading" aria-level="2"><span>Preferences</span><small>How the app looks on this device</small></div>
+        <section class="settings-group" id="settings-preferences" data-settings-group="preferences">
+          <div class="settings-group-heading" role="heading" aria-level="2"><span>Preferences</span><small>How the app looks on this device</small></div>
           <div class="settings-group-content">
           <section class="workspace-card settings-card" aria-label="Appearance">
             <div class="card-header">
@@ -266,7 +258,7 @@
             </div>
           </section>
           </div>
-        </details>
+        </section>
       </div>
     </div>
   </div>

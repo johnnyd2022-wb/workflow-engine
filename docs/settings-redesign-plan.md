@@ -114,3 +114,12 @@ Changed in the Settings desk: the categories are the same underlined tab row tha
 Compliance and Sales use beneath their titles, so Settings is navigated the way its sibling
 sections are (the vertical list is gone). Cards are 640px wide, and first and last name share a
 row, as do email and phone. On a phone the tabs are one scrolling row.
+
+## Decision: Style 2, the Settings desk
+
+Chosen by the founder on 14 October 2026. Settings shows one category at a time, reached from
+the same underlined tab row Production, Compliance and Sales use, and each category has its own
+address. The Board lost because its tabs only scrolled a page about 2,000px tall; the Register
+lost because every category started closed behind a click. The preview switch, both losing
+layouts, the `?style=` handling and the concept-only tests are removed, and the desk's rules are
+the base stylesheet.

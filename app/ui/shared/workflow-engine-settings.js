@@ -180,7 +180,7 @@ function initWorkflowEngineSettingsSpa() {
   if (!_isWorkflowEngineSettingsRoute()) return;
   // The dedicated Settings page owns loading and handlers on full/boosted loads.
   // Running the legacy fallback too can overwrite a draft after the page is ready.
-  if (document.querySelector('.settings-overview[data-settings-style]')) return;
+  if (document.querySelector('.settings-overview[data-settings-root]')) return;
 
   const root = document.getElementById('page-content') || document.body;
   if (root && root.dataset && root.dataset.weSettingsSpaInit === '1') {
