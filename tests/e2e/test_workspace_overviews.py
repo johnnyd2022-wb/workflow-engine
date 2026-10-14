@@ -379,21 +379,31 @@ def test_settings_groups_account_security_and_organisation_in_cards(browser, app
         expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
         sites = page.get_by_role("region", name="Manage sites", exact=True)
         people = page.get_by_role("region", name="People and roles", exact=True)
+        # Organisation is its own category: its cards appear once its tab is chosen.
+        tabs_nav = page.get_by_role("navigation", name="Settings sections", exact=True)
+        tabs_nav.get_by_role("link", name="Organisation", exact=True).click()
         expect(sites.get_by_role("link", name="View sites", exact=True)).to_have_attribute("href", "/core/sites")
         expect(people.get_by_role("link", name="Manage people", exact=True)).to_have_attribute("href", "/core/people")
-        side_by_side = sites.bounding_box()["y"] == people.bounding_box()["y"]
-        assert side_by_side == (width >= 1024)
+        assert sites.bounding_box()["y"] < people.bounding_box()["y"]
+        tabs_nav.get_by_role("link", name="My account", exact=True).click()
         headings = page.locator(".settings-overview .workspace-card h2").all_inner_texts()
-        expected = ["Account information", "Manage sites", "People and roles", "Security"]
+        expected = ["Account information", "Manage sites", "People and roles", "Password"]
         expected += ["Two-factor authentication", "Session settings"]
         assert [heading for heading in headings if heading in expected] == expected
-        assert headings[-2:] == ["Notification preferences", "Appearance"]
-        lefts = {round(card.bounding_box()["x"]) for card in page.locator(".settings-overview .workspace-card").all()}
-        assert len(lefts) == (2 if side_by_side else 1)
+        assert headings[-1] == "Appearance"
+        assert "Notification preferences" not in headings
+        # One category at a time, under the underlined tab row the other sections use.
+        tabs = page.get_by_role("navigation", name="Settings sections", exact=True)
+        expect(tabs.get_by_role("link")).to_have_text(
+            ["My account", "Organisation", "Security and sign-in", "Preferences"]
+        )
+        expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
+        account = page.locator('[data-settings-group="account"]').bounding_box()
+        assert tabs.bounding_box()["y"] + tabs.bounding_box()["height"] <= account["y"]
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "settings-layout", width)
         page.evaluate("localStorage.setItem('spa-theme', 'dark')")
-        page.goto("/core/settings")
+        page.goto("/core/settings#settings-organisation")
         expect(sites).to_be_visible()
         _capture(page, "settings-layout-dark", width)
         page.evaluate("localStorage.removeItem('spa-theme')")
