@@ -146,14 +146,15 @@ def test_failed_load_has_no_success_totals_and_retry_recovers(compliance_page):
     page.route("**/api/compliant/overview", lambda route: route.fulfill(status=503, json={"error": "Unavailable"}))
     _open(page)
     expect(page.get_by_role("alert")).to_contain_text("Readiness could not load")
-    expect(page.get_by_role("region", name="Evidence readiness", exact=True)).to_contain_text(
-        "Evidence status unavailable"
-    )
+    # The failure is said once; no readiness figures, actions or obligations are drawn around it.
+    for region in ["Evidence readiness", "Next action", "Your obligations"]:
+        expect(page.get_by_role("region", name=region, exact=True)).to_be_hidden()
     expect(page.locator("[data-ready]")).to_have_text("—")
-    expect(page.get_by_role("region", name="Next action", exact=True)).to_contain_text("Next steps are unavailable")
+    expect(page.get_by_role("link", name="Configuration", exact=True)).to_be_visible()
     page.unroute("**/api/compliant/overview")
     page.get_by_role("button", name="Try again", exact=True).click()
     expect(page.get_by_role("alert")).not_to_be_visible()
+    expect(page.get_by_role("region", name="Evidence readiness", exact=True)).to_be_visible()
     expect(page.get_by_role("article")).to_have_count(2)
     expect(page.locator("[data-ready]")).not_to_have_text("—")
 

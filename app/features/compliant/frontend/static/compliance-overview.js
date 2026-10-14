@@ -211,6 +211,7 @@
       var status = 0;
       root.setAttribute('aria-busy', 'true');
       error.hidden = true;
+      root.removeAttribute('data-load-failed');
       primary.hidden = true;
       primary.removeAttribute('href');
       try {
@@ -230,6 +231,8 @@
         set('[data-action-count]', 'Unavailable');
         root.querySelector('[data-next-action]').replaceChildren(el('p', 'Next steps are unavailable until evidence loads.', 'workspace-caption'));
         error.hidden = false;
+        // The message above says it once; the cards it would have filled are put away, not drawn with dashes.
+        root.setAttribute('data-load-failed', '');
       } finally {
         loading = false;
         retry.disabled = false;
