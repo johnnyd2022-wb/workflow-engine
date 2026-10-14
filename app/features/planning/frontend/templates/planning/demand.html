@@ -1,19 +1,27 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Production demand | biz-e{% endblock %}
 {% block head_extras %}{{ super() }}
+<link rel="stylesheet" href="{{ url_for('planning.static', filename='planner.css') }}">
 {% endblock %}
 {% block content %}
-<main class="planning-demand workspace-overview workspace-page" data-planning-root>
+<link rel="stylesheet" href="{{ url_for('planning.static', filename='planner.css') }}">
+<main class="planning-demand workspace-overview workspace-page" data-planning-root data-state="loading" data-can-record="{{ 'true' if can('production.record') else 'false' }}">
   <header class="workspace-header">
     <div><h1>Planner</h1><p>What needs making, and when it is due.</p></div>
     <div class="workspace-header__actions">
       <a class="workspace-button" href="{{ url_for('planning.planner_board') }}">Production board</a>
+      {% if can('production.record') %}
+      <button type="button" class="workspace-button workspace-button--primary planner-primary" data-add-toggle aria-expanded="false" aria-controls="planner-add">Add demand</button>
+      {% endif %}
     </div>
   </header>
-  <p class="workspace-notice" role="alert" data-planning-error hidden></p>
-  <div class="workspace-stack">
+  <div class="workspace-notice planner-error" role="alert" data-planning-error hidden>
+    <span data-planning-error-text></span>
+    <button type="button" class="workspace-button" data-planning-retry hidden>Try again</button>
+  </div>
+  <div class="workspace-stack planner-layout" data-planner-layout aria-busy="true">
     {% if can('production.record') %}
-    <section class="workspace-card" aria-labelledby="planner-add-title">
+    <section class="workspace-card planner-add" id="planner-add" aria-labelledby="planner-add-title" hidden>
       <h2 id="planner-add-title">Add demand</h2>
       <p class="workspace-caption">An order or forecast that production needs to meet.</p>
       <form data-demand-form class="planning-form workspace-form" hx-boost="false">
@@ -22,21 +30,44 @@
         <label>Quantity<input name="quantity" required inputmode="decimal" type="number" min="0.0001" step="0.0001"></label>
         <label>Due date<input name="due_date" required type="date"></label>
         <label>Priority (0–100)<input name="priority" type="number" min="0" max="100" step="1" value="0" required></label>
-        <button type="submit" class="workspace-button workspace-button--primary">Add demand</button>
+        <div class="workspace-form__actions">
+          <button type="submit" class="workspace-button workspace-button--primary planner-primary">Save demand</button>
+          <button type="button" class="workspace-button" data-add-close>Close</button>
+        </div>
       </form>
     </section>
     {% endif %}
-    <section class="workspace-card" aria-labelledby="planner-demand-title">
-      <h2 id="planner-demand-title">Production demand</h2>
-      <p class="workspace-caption">Open and past demand, most recent first.</p>
-      <p class="workspace-empty" data-planning-empty hidden>No production demand yet.</p>
-      <section class="workspace-list" aria-label="Production demand" data-demand-list data-can-record="{{ 'true' if can('production.record') else 'false' }}"></section>
+    <section class="workspace-card planner-glance" aria-labelledby="planner-glance-title">
+      <h2 id="planner-glance-title">At a glance</h2>
+      <dl class="planner-figures">
+        <div class="workspace-tile"><dt>Open</dt><dd data-figure-open>—</dd><span>orders and forecasts</span></div>
+        <div class="workspace-tile" data-figure-overdue-tile><dt>Overdue</dt><dd data-figure-overdue>—</dd><span data-figure-overdue-note>past their due date</span></div>
+        <div class="workspace-tile"><dt>Due this week</dt><dd data-figure-week>—</dd><span>in the next 7 days</span></div>
+      </dl>
+    </section>
+    <section class="workspace-card planner-make" aria-labelledby="planner-make-title">
+      <h2 id="planner-make-title">To make</h2>
+      <p class="workspace-caption">Open demand added up by product.</p>
+      <p class="workspace-empty" data-make-empty hidden>Nothing waiting to be made.</p>
+      <ul class="planner-make__list" data-make-list></ul>
+    </section>
+    <section class="workspace-card planner-demand" aria-labelledby="planner-demand-title">
+      <div class="workspace-card__header"><h2 id="planner-demand-title">Production demand</h2><span class="planner-count" data-demand-count></span></div>
+      <p class="workspace-caption" data-demand-caption>Open demand, soonest due first.</p>
+      <div class="planner-empty" data-planning-empty hidden>
+        <strong>No production demand yet</strong>
+        <p class="workspace-caption">Add an order or a forecast, then plan its batches on the production board.</p>
+        {% if can('production.record') %}<button type="button" class="workspace-button" data-add-toggle>Add demand</button>{% endif %}
+      </div>
+      <section class="planner-rows" aria-label="Production demand" data-demand-list></section>
+      <details class="planner-closed" data-closed hidden>
+        <summary><span data-closed-summary>Closed demand</span></summary>
+        <section class="planner-rows planner-rows--closed" aria-label="Closed demand" data-closed-list></section>
+      </details>
     </section>
     {% with workspace_links_card = true %}{% include 'shared/workspace_links.html' %}{% endwith %}
   </div>
 </main>
-{% endblock %}
-{% block scripts %}{{ super() }}
-<script src="{{ url_for('planning.static', filename='demand.js') }}"></script>
+<script src="{{ url_for('planning.static', filename='demand.js') }}" defer></script>
 {% endblock %}
 {% block workspace_links %}{% endblock %}
