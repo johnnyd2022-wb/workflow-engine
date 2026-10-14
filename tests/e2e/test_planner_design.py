@@ -48,9 +48,9 @@ def _demands():
     }
 
 
-def _open(page, style="1", payload=None):
+def _open(page, style=None, payload=None):
     page.route("**/api/core/planner/demands", lambda route: route.fulfill(json=payload or _demands()))
-    page.goto(f"/core/planner?style={style}")
+    page.goto("/core/planner" + (f"?style={style}" if style else ""))
     expect(page.locator("[data-planner-layout]")).to_have_attribute("aria-busy", "false")
 
 
@@ -169,45 +169,40 @@ def test_planner_loads_again_after_leaving_by_a_tab_and_returning(browser, app_u
         context.close()
 
 
-# CONCEPT ONLY — delete with the preview switch and the two layouts not chosen.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_concepts_fit_and_keep_every_region(browser, app_url, workspace_user, style, width):
+def test_planner_fits_every_width_and_keeps_every_region(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
-        _open(page, style)
-        root = page.locator("[data-planning-root]")
-        expect(root).to_have_attribute("data-planner-style", style)
+        _open(page)
         expect(page.locator("[data-demand-list] .planner-row")).to_have_count(4)
         expect(page.get_by_role("region", name="To make", exact=True)).to_be_visible()
         expect(page.locator("[data-closed] > summary")).to_be_visible()
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
-        # Nothing in a demand row is drawn outside its card.
         card = page.locator(".planner-demand").bounding_box()
         for row in page.locator("[data-demand-list] .planner-row").all():
             box = row.bounding_box()
             assert box["x"] >= card["x"] and box["x"] + box["width"] <= card["x"] + card["width"] + 1
+        # The board: figures beside what to make where there is room, one above the other where not.
+        glance = page.get_by_role("region", name="At a glance", exact=True).bounding_box()
+        make = page.get_by_role("region", name="To make", exact=True).bounding_box()
+        if width >= 1440:
+            assert abs(glance["y"] - make["y"]) < 2 and glance["x"] + glance["width"] <= make["x"]
+        else:
+            assert make["y"] >= glance["y"] + glance["height"]
     finally:
         context.close()
 
 
-# CONCEPT ONLY
-def test_each_concept_orders_the_same_demand_its_own_way(browser, app_url, workspace_user):
+def test_planner_has_no_layout_preview_left(browser, app_url, workspace_user):
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
-        _open(page, "1")
-        names = lambda: page.locator("[data-demand-list] .planner-row h3").all_inner_texts()  # noqa: E731
-        assert names()[0] == "Regional Wines summer order"  # soonest due first
-        expect(page.locator("[data-planner-brief]")).to_be_hidden()
-        page.get_by_role("button", name="2 · Queue", exact=True).click()
-        assert names()[0] == "Bottle-O restock"  # highest priority first
-        expect(page.locator("[data-demand-list] .planner-row__rank").first).to_have_text("1")
-        expect(page.locator("[data-planner-brief]")).to_have_text(
-            "4 orders and forecasts are open: 1 overdue, 2 due this week, 1 later."
-        )
-        expect(page.get_by_role("region", name="At a glance", exact=True)).to_be_hidden()
-        page.get_by_role("button", name="3 · Timeline", exact=True).click()
-        expect(page.locator("[data-demand-list] .planner-group")).to_have_text(["Overdue1", "This week2", "Later1"])
-        assert names()[0] == "Regional Wines summer order"
+        page.goto("/core/planner")
+        page.evaluate('sessionStorage.setItem("planner-design-style", "2")')
+        _open(page, "3")
+        expect(page.locator("[data-style-pick]")).to_have_count(0)
+        expect(page.locator(".planner-row__rank")).to_have_count(0)
+        expect(page.locator(".planner-group")).to_have_count(0)
+        # Soonest due first, as the board orders it.
+        assert page.locator("[data-demand-list] .planner-row h3").first.inner_text() == "Regional Wines summer order"
     finally:
         context.close()

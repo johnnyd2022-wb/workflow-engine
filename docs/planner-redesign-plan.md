@@ -74,3 +74,11 @@ Awaiting the pick.
 
 The shared Production layout test required every card on a sub-page to sit in one column.
 It now accepts the board's paired rows, checking that each row starts and ends at the same edges.
+
+## Decision: Style 1, the Board
+
+Chosen by the founder on 14 October 2026. The figures sit beside what to make, then the demand
+soonest due first, matching Home and Production. The Queue lost the due-date order and moved the
+totals below the list; the Timeline gave up the figures and priority order. The preview switch,
+both losing layouts, the summary sentence and rank and group markers they used, and the
+concept-only tests are removed.

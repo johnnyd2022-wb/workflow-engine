@@ -15,7 +15,6 @@
     var addToggle = root.querySelector('.workspace-header [data-add-toggle]');
     var controller = new AbortController();
     var cache = null;
-    var style = '1';
 
     function el(tag, text, className) {
       var node = document.createElement(tag);
@@ -66,11 +65,10 @@
     }
     function plural(count, one, many) { return count + ' ' + (count === 1 ? one : many); }
 
-    function row(demand, outputs, rank) {
+    function row(demand, outputs) {
       var open = demand.status === 'open';
       var card = el('article', null, 'planner-row');
       card.dataset.status = demand.status;
-      if (rank) card.appendChild(el('span', String(rank), 'planner-row__rank'));
       var main = el('div', null, 'planner-row__main');
       main.appendChild(el('h3', demand.reference));
       var output = outputs.get(demand.source_output_id);
@@ -112,14 +110,6 @@
       set('[data-figure-overdue-note]', overdue.length ? 'past their due date' : 'nothing is late');
       set('[data-demand-count]', open.length ? plural(open.length, 'open', 'open') : '');
 
-      // CONCEPT ONLY: Styles 2 and 3 lead with a sentence in place of the figures card.
-      var brief = root.querySelector('[data-planner-brief]');
-      brief.hidden = style === '1' || !cache.demands.length;
-      brief.textContent = !open.length ? 'Nothing is waiting to be made.'
-        : plural(open.length, 'order or forecast is', 'orders and forecasts are') + ' open: '
-          + (overdue.length ? overdue.length + ' overdue, ' : '') + week.length + ' due this week, ' + later.length + ' later.';
-      brief.dataset.state = overdue.length ? 'overdue' : 'clear';
-
       // What to make: open quantities added up by product output, in the order demand falls due.
       var totals = new Map();
       open.forEach(function (item) {
@@ -143,26 +133,8 @@
       root.querySelector('[data-planning-empty]').hidden = cache.demands.length > 0;
       var caption = root.querySelector('[data-demand-caption]');
       caption.hidden = !open.length;
-      if (style === '2') {
-        // CONCEPT ONLY: a single queue, highest priority first, numbered in the order to make it.
-        caption.textContent = 'Open demand in the order to make it: highest priority first, then soonest due.';
-        open.slice().sort(function (a, b) { return b.priority - a.priority || a.due_date.localeCompare(b.due_date); })
-          .forEach(function (item, index) { list.appendChild(row(item, outputs, index + 1)); });
-      } else if (style === '3') {
-        // CONCEPT ONLY: grouped by when it falls due.
-        caption.textContent = 'Open demand, grouped by when it is due.';
-        [['Overdue', overdue, 'overdue'], ['This week', week, 'soon'], ['Later', later, 'later']].forEach(function (group) {
-          if (!group[1].length) return;
-          var heading = el('h3', group[0], 'planner-group');
-          heading.dataset.state = group[2];
-          heading.appendChild(el('span', String(group[1].length)));
-          list.appendChild(heading);
-          group[1].forEach(function (item) { list.appendChild(row(item, outputs)); });
-        });
-      } else {
-        caption.textContent = 'Open demand, soonest due first.';
-        open.forEach(function (item) { list.appendChild(row(item, outputs)); });
-      }
+      caption.textContent = 'Open demand, soonest due first.';
+      open.forEach(function (item) { list.appendChild(row(item, outputs)); });
       if (open.length === 0 && cache.demands.length > 0) list.appendChild(el('p', 'No open demand. Everything here has been met or cancelled.', 'workspace-empty'));
 
       closedList.replaceChildren();
@@ -208,10 +180,7 @@
     function onClick(event) {
       if (event.target.closest('[data-add-toggle]')) { showForm(addCard.hidden); return; }
       if (event.target.closest('[data-add-close]')) { showForm(false); return; }
-      if (event.target.closest('[data-planning-retry]')) { load(); return; }
-      // CONCEPT ONLY — preview switch.
-      var pick = event.target.closest('[data-style-pick]');
-      if (pick) setStyle(pick.dataset.stylePick);
+      if (event.target.closest('[data-planning-retry]')) load();
     }
     async function onSubmit(event) {
       event.preventDefault(); report('');
@@ -225,22 +194,8 @@
         form.reset(); showForm(false); await load();
       } catch (err) { if (err.name !== 'AbortError') report(err.message); } finally { button.disabled = false; }
     }
-    // CONCEPT ONLY — fold the chosen layout into the base rules after selection.
-    function setStyle(value) {
-      style = ['1', '2', '3'].includes(value) ? value : '1';
-      root.dataset.plannerStyle = style;
-      try { sessionStorage.setItem('planner-design-style', style); } catch (_) { /* Storage is optional. */ }
-      root.querySelectorAll('[data-style-pick]').forEach(function (button) {
-        button.setAttribute('aria-pressed', String(button.dataset.stylePick === style));
-      });
-      render();
-    }
-
     root.addEventListener('click', onClick);
     if (form) form.addEventListener('submit', onSubmit);
-    var remembered;
-    try { remembered = sessionStorage.getItem('planner-design-style'); } catch (_) { /* Defaults work without storage. */ }
-    setStyle(new URLSearchParams(window.location.search).get('style') || remembered || '1');
     load();
     return function () {
       controller.abort();

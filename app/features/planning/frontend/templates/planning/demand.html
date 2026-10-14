@@ -5,7 +5,7 @@
 {% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('planning.static', filename='planner.css') }}">
-<main class="planning-demand workspace-overview workspace-page" data-planning-root data-planner-style="1" data-state="loading" data-can-record="{{ 'true' if can('production.record') else 'false' }}">
+<main class="planning-demand workspace-overview workspace-page" data-planning-root data-state="loading" data-can-record="{{ 'true' if can('production.record') else 'false' }}">
   <header class="workspace-header">
     <div><h1>Planner</h1><p>What needs making, and when it is due.</p></div>
     <div class="workspace-header__actions">
@@ -15,13 +15,6 @@
       {% endif %}
     </div>
   </header>
-  {# CONCEPT ONLY — removed once a direction is selected. #}
-  <div class="planner-concepts" role="group" aria-label="Planner design concepts">
-    <span>Preview layout</span>
-    <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Board</button>
-    <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · Queue</button>
-    <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · Timeline</button>
-  </div>
   <div class="workspace-notice planner-error" role="alert" data-planning-error hidden>
     <span data-planning-error-text></span>
     <button type="button" class="workspace-button" data-planning-retry hidden>Try again</button>
@@ -44,8 +37,6 @@
       </form>
     </section>
     {% endif %}
-    {# Styles 2 and 3 open on one sentence instead of the figures card. #}
-    <p class="planner-brief" data-planner-brief hidden></p>
     <section class="workspace-card planner-glance" aria-labelledby="planner-glance-title">
       <h2 id="planner-glance-title">At a glance</h2>
       <dl class="planner-figures">

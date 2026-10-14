@@ -5,10 +5,6 @@
 #page-content .planning-demand .planner-primary:hover { background: var(--ui-accent-strong); border-color: var(--ui-accent-strong); }
 html[data-spa-theme="dark"] #page-content.page-content .planning-demand .planner-primary,
 html[data-spa-theme="dark"] #page-content.page-content .planning-demand .planner-primary:hover { background: var(--ui-accent); border-color: var(--ui-accent); color: #042f2e; }
-.planner-concepts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 24px; }
-.planner-concepts > span { color: var(--ui-text-muted); font-size: .8rem; margin-right: 4px; }
-.planner-concepts .workspace-button { padding: 7px 12px; font-size: .8rem; min-height: 36px; }
-#page-content .planner-concepts [aria-pressed="true"] { border-color: var(--ui-accent); color: var(--ui-accent); background: var(--ui-surface-subtle); }
 /* Nothing to plan yet, or nothing loaded: one card says so, without a row of zeros or dashes around it. */
 .planning-demand[data-state="empty"] .planner-glance, .planning-demand[data-state="empty"] .planner-make,
 .planning-demand[data-state="error"] .planner-glance, .planning-demand[data-state="error"] .planner-make,
@@ -54,66 +50,29 @@ html[data-spa-theme="dark"] .planner-figures [data-state="overdue"] span { color
 .planner-due[data-state="overdue"] { font-weight: 600; color: #b42318; }
 html[data-spa-theme="dark"] .planner-due[data-state="overdue"] { color: #fca5a5; }
 .planner-row__priority { font-size: 13px; color: var(--ui-text-muted); white-space: nowrap; }
-.planner-row__rank { display: none; }
 #page-content .planner-cancel { justify-self: end; min-height: 36px; padding: 6px 10px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--ui-text-muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 #page-content .planner-cancel:hover, #page-content .planner-cancel:focus-visible { border-color: var(--ui-border); color: var(--ui-text); background: var(--ui-surface-subtle); }
 .planner-row[data-status]:not([data-status="open"]) h3 { color: var(--ui-text-muted); font-weight: 500; }
 .planner-closed { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--ui-border); }
 .planner-closed > summary { cursor: pointer; font-size: 13px; color: var(--ui-text-muted); min-height: 32px; align-content: center; }
-#page-content .planner-brief { margin: 0; font-size: 18px; line-height: 1.5; color: var(--ui-text); }
-#page-content .planner-group { display: flex; align-items: center; gap: 8px; margin: 22px 0 0; padding-bottom: 8px; border-bottom: 1px solid var(--ui-border); font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ui-text-muted); }
-#page-content .planner-rows > .planner-group:first-child { margin-top: 4px; }
-.planner-group span { font-weight: 400; }
-#page-content .planner-group[data-state="overdue"] { color: #b42318; }
-html[data-spa-theme="dark"] #page-content .planner-group[data-state="overdue"] { color: #fca5a5; }
-#page-content .planner-group + .planner-row { border-top: 0; }
 
 /* The Board: figures beside what to make, then the demand itself full width. */
 @container planner (min-width: 1000px) {
-  #page-content .planning-demand[data-planner-style="1"] .planner-layout { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: stretch; }
-  .planning-demand[data-planner-style="1"] .planner-layout > * { grid-column: 1 / -1; }
-  .planning-demand[data-planner-style="1"] .planner-glance { grid-column: span 5; }
-  .planning-demand[data-planner-style="1"] .planner-make { grid-column: span 7; }
-  .planning-demand[data-planner-style="1"] .planner-figures { grid-template-columns: 1fr; }
-  .planning-demand[data-planner-style="1"] .planner-figures > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; }
-  .planning-demand[data-planner-style="1"] .planner-figures dd { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
-}
-
-/* CONCEPT ONLY — Style 2: one numbered queue in the order to make it; totals follow the queue. */
-.planning-demand[data-planner-style="2"] .planner-glance { display: none; }
-.planning-demand[data-planner-style="2"] .planner-make { order: 3; }
-.planning-demand[data-planner-style="2"] .planner-demand { order: 2; }
-.planning-demand[data-planner-style="2"] .workspace-links { order: 4; }
-.planning-demand[data-planner-style="2"] .planner-layout { display: flex; flex-direction: column; }
-.planning-demand[data-planner-style="2"] .planner-row { grid-template-columns: 32px minmax(0, 1fr) 140px 90px 76px; }
-.planning-demand[data-planner-style="2"] .planner-rows:not(.planner-rows--closed) .planner-row__rank { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--ui-border); border-radius: 50%; font-size: 13px; font-weight: 600; color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
-.planning-demand[data-planner-style="2"] .planner-rows--closed .planner-row { grid-template-columns: minmax(0, 1fr) 140px 90px 76px; }
-.planning-demand[data-planner-style="2"] .planner-make__list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 32px; }
-.planning-demand[data-planner-style="2"] .planner-make__list li:nth-child(-n+3) { border-top: 0; }
-.planning-demand[data-planner-style="2"] .planner-make__list li { align-content: start; padding-top: 4px; }
-
-/* CONCEPT ONLY — Style 3: a timeline grouped by when it is due, with totals alongside. */
-.planning-demand[data-planner-style="3"] .planner-glance { display: none; }
-@container planner (min-width: 1000px) {
-  #page-content .planning-demand[data-planner-style="3"] .planner-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
-  .planning-demand[data-planner-style="3"] .planner-layout > * { grid-column: 1 / -1; }
-  /* The totals follow the demand card in placement order so they land beside it, not above it. */
-  .planning-demand[data-planner-style="3"] .planner-demand { grid-column: 1; }
-  .planning-demand[data-planner-style="3"] .planner-make { grid-column: 2; order: 1; }
-  .planning-demand[data-planner-style="3"] .workspace-links { order: 2; }
-  .planning-demand[data-planner-style="3"] .planner-row { grid-template-columns: minmax(0, 1fr) 130px 82px 64px; gap: 6px 14px; }
+  #page-content .planning-demand .planner-layout { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: stretch; }
+  .planning-demand .planner-layout > * { grid-column: 1 / -1; }
+  .planning-demand .planner-glance { grid-column: span 5; }
+  .planning-demand .planner-make { grid-column: span 7; }
+  .planning-demand .planner-figures { grid-template-columns: 1fr; }
+  .planning-demand .planner-figures > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; }
+  .planning-demand .planner-figures dd { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
 }
 
 /* Narrow: each demand becomes two lines, and nothing needs a sideways scroll. */
 @container planner (max-width: 760px) {
-  .planner-row, .planning-demand[data-planner-style="2"] .planner-rows--closed .planner-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .planning-demand[data-planner-style="2"] .planner-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
+  .planner-row { grid-template-columns: minmax(0, 1fr) auto; }
   .planner-row__main { grid-column: 1 / -1; }
-  .planning-demand[data-planner-style="2"] .planner-rows:not(.planner-rows--closed) .planner-row__main { grid-column: 2 / -1; }
-  .planning-demand[data-planner-style="2"] .planner-rows:not(.planner-rows--closed) .planner-due { grid-column: 2; }
   .planner-row__priority { display: none; }
   .planner-figures { grid-template-columns: 1fr; }
   .planner-figures > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; }
   .planner-figures dd { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-size: 24px; }
-  #page-content .planner-brief { font-size: 16px; }
 }
