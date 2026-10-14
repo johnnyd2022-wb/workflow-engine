@@ -2,66 +2,166 @@
 {% block title %}Contract orders · biz-e{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">{% endblock %}
 {% block content %}
-<main class="contract-workspace workspace-overview workspace-page">
+<link rel="stylesheet" href="{{ url_for('contracts.static', filename='orders.css') }}">
+{% set open_orders = orders | selectattr('status', 'in', ['draft', 'confirmed']) | list %}
+{% set closed_orders = orders | rejectattr('status', 'in', ['draft', 'confirmed']) | list %}
+{% set customer_names = customers | map(attribute='name') | list %}
+<main class="contract-workspace workspace-overview workspace-page" data-contracts-root data-contracts-style="1">
   <header class="workspace-header">
     <div><h1>Contract orders</h1><p>Orders made for your customers.</p></div>
-    {% if can('inventory.view') %}
-    <div class="workspace-header__actions"><a class="workspace-button" href="{{ url_for('contracts.materials_page') }}">Customer raw materials</a></div>
-    {% endif %}
+    <div class="workspace-header__actions">
+      {% if can('inventory.view') %}<a class="workspace-button" href="{{ url_for('contracts.materials_page') }}">Customer raw materials</a>{% endif %}
+      {% if can('sales.record') %}<button type="button" class="workspace-button workspace-button--primary contracts-primary" data-toggle-form="contracts-new-order" aria-expanded="false" aria-controls="contracts-new-order">New order</button>{% endif %}
+    </div>
   </header>
+  {# CONCEPT ONLY — removed once a direction is selected. #}
+  <div class="contracts-concepts" role="group" aria-label="Contract orders design concepts">
+    <span>Preview layout</span>
+    <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Board</button>
+    <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · Tabs</button>
+    <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · By customer</button>
+  </div>
   <p class="contract-error workspace-notice" role="alert" hidden></p>
-  <div class="workspace-stack">
-  <section class="contract-card workspace-card" aria-labelledby="contracts-orders-title">
-    <h2 id="contracts-orders-title">Orders</h2>
-    {% if orders %}
-    <div class="contract-table workspace-scroll"><table class="workspace-table"><thead><tr><th>Order</th><th>Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
-    {% for order in orders %}
-    <tr><td><a href="{{ url_for('contracts.order_page', order_id=order.id) }}">{{ order.reference }}</a></td>
-      <td>{{ order.customer_name }}</td><td>{{ order.due_date }}</td><td>{{ order.status|capitalize }}</td>
-      <td>{% for line in order.lines %}{{ line.quantity }} {{ line.unit }} {{ line.product_name }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>
-    {% endfor %}
-    </tbody></table></div>
-    {% else %}<p class="workspace-empty">No contract orders yet.</p>{% endif %}
-  </section>
+  <div class="workspace-stack contracts-layout">
   {% if can('sales.record') %}
-  <section class="contract-card workspace-card" aria-labelledby="contracts-new-order-title">
+  <section class="contract-card workspace-card contracts-new-order" id="contracts-new-order" aria-labelledby="contracts-new-order-title" hidden>
     <h2 id="contracts-new-order-title">New order</h2>
-    <form class="workspace-form" hx-boost="false" data-contract-api="/api/core/contract-orders" data-method="POST" data-create-order>
-      <label>Customer<select name="customer_id" required><option value="">Choose a customer</option>{% for customer in customers if customer.is_active %}<option value="{{ customer.id }}">{{ customer.name }}</option>{% endfor %}</select></label>
-      <label>Order reference<input name="reference" maxlength="100" required></label>
-      <label>Due date<input name="due_date" type="date" required></label>
-      <label>Status<select name="status"><option value="draft">Draft</option><option value="confirmed">Confirmed</option></select></label>
-      <label>Duty responsibility<select name="duty_responsibility" required><option value="">Choose responsibility</option><option value="producer_licensee">Producer as licensee</option><option value="customer_licensee">Customer as licensee</option><option value="customer_underbond">Underbond to customer's CCA</option></select></label>
-      <label>Customer CCA reference<input name="customer_cca_reference" maxlength="255"></label>
-      {% set line_prefix = 'line.' %}{% include "contracts/_line_fields.html" %}
-      <button class="workspace-button workspace-button--primary" type="submit">Create order</button>
-    </form>
-  </section>
-  <section class="contract-card workspace-card" aria-labelledby="contracts-new-customer-title">
-    <h2 id="contracts-new-customer-title">New contract customer</h2>
-    <form class="workspace-form" hx-boost="false" data-contract-api="/api/core/contract-customers" data-method="POST">
-      <label>Customer or brand name<input name="name" maxlength="255" required></label>
-      <label>CRM contact<select name="crm_contact_id"><option value="">No CRM contact</option>{% for contact in crm_contacts %}<option value="{{ contact.id }}">{{ contact.name }}</option>{% endfor %}</select></label>
-      <button class="workspace-button workspace-button--primary" type="submit">Add customer</button>
+    <form class="contracts-order-form" hx-boost="false" data-contract-api="/api/core/contract-orders" data-method="POST" data-create-order>
+      <fieldset><legend>Customer and reference</legend>
+        <label>Customer<select name="customer_id" required><option value="">Choose a customer</option>{% for customer in customers if customer.is_active %}<option value="{{ customer.id }}">{{ customer.name }}</option>{% endfor %}</select></label>
+        <label>Order reference<input name="reference" maxlength="100" required></label>
+        <label>Due date<input name="due_date" type="date" required></label>
+      </fieldset>
+      <fieldset><legend>Product and quantity</legend>
+        <label>Product<input name="line.product_name" maxlength="255" required></label>
+        <label>Quantity<input name="line.quantity" type="number" min="0.0001" step="0.0001" required></label>
+        <label>Unit<input name="line.unit" maxlength="50" placeholder="bottles, L, kg" required></label>
+      </fieldset>
+      <fieldset><legend>Materials and specification</legend>
+        <label>Materials supplied by<select name="line.materials_source" required><option value="">Choose materials</option><option value="producer">Producer</option><option value="customer">Customer</option><option value="mixed">Customer and producer</option></select></label>
+        {% if can('production.view') %}
+        <label>Specification reference<input name="line.spec_reference" maxlength="500"></label>
+        <label>Recipe version and product<select name="line.product_mapping"><option value="">Map later</option>{% for recipe in recipe_outputs %}<option value="{{ recipe.value }}">{{ recipe.label }}</option>{% endfor %}</select></label>
+        {% endif %}
+      </fieldset>
+      <fieldset><legend>Duty and status</legend>
+        <label>Duty responsibility<select name="duty_responsibility" required><option value="">Choose responsibility</option><option value="producer_licensee">Producer as licensee</option><option value="customer_licensee">Customer as licensee</option><option value="customer_underbond">Underbond to customer's CCA</option></select></label>
+        <label>Customer CCA reference<input name="customer_cca_reference" maxlength="255"></label>
+        <label>Status<select name="status"><option value="draft">Draft</option><option value="confirmed">Confirmed</option></select></label>
+      </fieldset>
+      <div class="workspace-form__actions">
+        <button class="workspace-button workspace-button--primary contracts-primary" type="submit">Create order</button>
+        <button class="workspace-button" type="button" data-toggle-form="contracts-new-order">Close</button>
+      </div>
     </form>
   </section>
   {% endif %}
-  {% if can('sales.view') %}
-  <section class="contract-card workspace-card" aria-labelledby="contracts-customers-title"><h2 id="contracts-customers-title">Contract customers</h2>
-    <div class="workspace-form-list">
-    {% for customer in customers %}
-    <form class="workspace-form" hx-boost="false" data-contract-api="/api/core/contract-customers/{{ customer.id }}" data-method="PATCH">
-      <label>Name<input name="name" maxlength="255" value="{{ customer.name }}" required {% if not can('sales.record') %}readonly{% endif %}></label>
-      {% if can('sales.record') %}
-      <label>CRM contact<select name="crm_contact_id"><option value="">No CRM contact</option>{% for contact in crm_contacts %}<option value="{{ contact.id }}" {% if customer.crm_contact_id == contact.id %}selected{% endif %}>{{ contact.name }}</option>{% endfor %}</select></label>
-      <label>Access to new orders<select name="is_active"><option value="true" {% if customer.is_active %}selected{% endif %}>Active</option><option value="false" {% if not customer.is_active %}selected{% endif %}>Inactive</option></select></label>
-      <button class="workspace-button" type="submit">Save customer</button>
+
+  {# CONCEPT ONLY: Styles 2 and 3 open on one sentence instead of the figures card. #}
+  <p class="contracts-brief" data-contracts-brief hidden></p>
+
+  <section class="contract-card workspace-card contracts-glance" aria-labelledby="contracts-glance-title">
+    <h2 id="contracts-glance-title">At a glance</h2>
+    <dl class="contracts-figures">
+      <div class="workspace-tile"><dt>Open orders</dt><dd data-figure="open">{{ open_orders | length }}</dd><span>draft or confirmed</span></div>
+      <div class="workspace-tile" data-figure-tile="overdue"><dt>Overdue</dt><dd data-figure="overdue">—</dd><span data-figure-note="overdue">past their due date</span></div>
+      <div class="workspace-tile"><dt>Due this week</dt><dd data-figure="week">—</dd><span>in the next 7 days</span></div>
+    </dl>
+  </section>
+
+  {# CONCEPT ONLY (Style 2): orders and customers as two tabs. #}
+  <div class="contracts-tabs" role="tablist" aria-label="Contract orders sections">
+    <button type="button" role="tab" aria-selected="true" data-contracts-tab="orders">Orders <span>{{ open_orders | length }}</span></button>
+    {% if can('sales.view') %}<button type="button" role="tab" aria-selected="false" data-contracts-tab="customers">Customers <span>{{ customers | length }}</span></button>{% endif %}
+  </div>
+
+  <section class="contract-card workspace-card contracts-orders" aria-labelledby="contracts-orders-title" data-contracts-panel="orders">
+    <div class="workspace-card__header"><h2 id="contracts-orders-title">Orders</h2><span class="contracts-count">{{ open_orders | length }} open</span></div>
+    {% macro order_rows(rows) %}
+      {% for order in rows %}
+      <tr data-order-status="{{ order.status }}" data-customer="{{ order.customer_name }}">
+        <td><a href="{{ url_for('contracts.order_page', order_id=order.id) }}">{{ order.reference }}</a></td>
+        <td class="contracts-col-customer">{{ order.customer_name }}</td>
+        <td><span class="contracts-due" data-due="{{ order.due_date }}" title="{{ order.due_date }}">{{ order.due_date }}</span></td>
+        <td><span class="contracts-status" data-status="{{ order.status }}">{{ order.status|capitalize }}</span></td>
+        <td class="contracts-products">{% for line in order.lines %}<span data-quantity="{{ line.quantity }}" data-unit="{{ line.unit }}">{{ line.quantity }} {{ line.unit }}</span> {{ line.product_name }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+      </tr>
+      {% endfor %}
+    {% endmacro %}
+    {% if orders %}
+      {% if open_orders %}
+      <div class="contract-table workspace-scroll contracts-table-open"><table class="workspace-table"><thead><tr><th>Order</th><th class="contracts-col-customer">Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
+      {{ order_rows(open_orders) }}
+      </tbody></table></div>
+      {# CONCEPT ONLY (Style 3): the same open orders grouped under each customer. #}
+      <div class="contracts-groups">
+        {% for name, group in open_orders | groupby('customer_name') %}
+        <section class="contracts-group" aria-label="Orders for {{ name }}">
+          <h3>{{ name }} <span>{{ group | length }} open</span></h3>
+          <div class="contract-table workspace-scroll"><table class="workspace-table"><thead><tr><th>Order</th><th class="contracts-col-customer">Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
+          {{ order_rows(group) }}
+          </tbody></table></div>
+        </section>
+        {% endfor %}
+      </div>
+      {% else %}<p class="workspace-empty">No open orders. Everything here is completed or cancelled.</p>{% endif %}
+      {% if closed_orders %}
+      <details class="contracts-closed"><summary>Completed and cancelled ({{ closed_orders | length }})</summary>
+        <div class="contract-table workspace-scroll"><table class="workspace-table"><thead><tr><th>Order</th><th class="contracts-col-customer">Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
+        {{ order_rows(closed_orders) }}
+        </tbody></table></div>
+      </details>
       {% endif %}
-    </form>{% else %}<p class="workspace-empty">No contract customers yet.</p>{% endfor %}
+    {% else %}
+      <div class="contracts-empty"><strong>No contract orders yet</strong>
+        <p class="workspace-caption">An order records what you will make for a customer brand, when it is due and who holds the duty.</p>
+        {% if can('sales.record') %}<button type="button" class="workspace-button" data-toggle-form="contracts-new-order">New order</button>{% endif %}
+      </div>
+    {% endif %}
+  </section>
+
+  {% if can('sales.view') %}
+  <section class="contract-card workspace-card contracts-customers" aria-labelledby="contracts-customers-title" data-contracts-panel="customers">
+    <div class="workspace-card__header"><h2 id="contracts-customers-title">Contract customers</h2>
+      {% if can('sales.record') %}<button type="button" class="workspace-button" data-toggle-form="contracts-new-customer" aria-expanded="false" aria-controls="contracts-new-customer">Add customer</button>{% endif %}
     </div>
+    {% if can('sales.record') %}
+    <div class="contracts-new-customer" id="contracts-new-customer" hidden>
+      <h3>New contract customer</h3>
+      <form class="workspace-form" hx-boost="false" data-contract-api="/api/core/contract-customers" data-method="POST">
+        <label>Customer or brand name<input name="name" maxlength="255" required></label>
+        <label>CRM contact<select name="crm_contact_id"><option value="">No CRM contact</option>{% for contact in crm_contacts %}<option value="{{ contact.id }}">{{ contact.name }}</option>{% endfor %}</select></label>
+        <div class="workspace-form__actions"><button class="workspace-button workspace-button--primary contracts-primary" type="submit">Add customer</button><button class="workspace-button" type="button" data-toggle-form="contracts-new-customer">Close</button></div>
+      </form>
+    </div>
+    {% endif %}
+    <ul class="contracts-customer-list">
+    {% for customer in customers %}
+      {% set count = open_orders | selectattr('customer_id', 'equalto', customer.id) | list | length %}
+      <li class="contracts-customer">
+        <div class="contracts-customer__row">
+          <strong>{{ customer.name }}</strong>
+          <span class="contracts-customer__orders">{{ count }} open order{{ '' if count == 1 else 's' }}</span>
+          <span class="contracts-status" data-status="{{ 'active' if customer.is_active else 'inactive' }}">{{ 'Active' if customer.is_active else 'Not taking new orders' }}</span>
+        </div>
+        {% if can('sales.record') %}
+        <details class="contracts-customer__edit"><summary>Edit</summary>
+          <form class="workspace-form" hx-boost="false" data-contract-api="/api/core/contract-customers/{{ customer.id }}" data-method="PATCH">
+            <label>Name<input name="name" maxlength="255" value="{{ customer.name }}" required></label>
+            <label>CRM contact<select name="crm_contact_id"><option value="">No CRM contact</option>{% for contact in crm_contacts %}<option value="{{ contact.id }}" {% if customer.crm_contact_id == contact.id %}selected{% endif %}>{{ contact.name }}</option>{% endfor %}</select></label>
+            <label>Access to new orders<select name="is_active"><option value="true" {% if customer.is_active %}selected{% endif %}>Active</option><option value="false" {% if not customer.is_active %}selected{% endif %}>Inactive</option></select></label>
+            <button class="workspace-button" type="submit">Save customer</button>
+          </form>
+        </details>
+        {% endif %}
+      </li>
+    {% else %}
+      <li class="contracts-empty"><strong>No contract customers yet</strong><p class="workspace-caption">Add the brands you make product for, then take orders for them.</p></li>
+    {% endfor %}
+    </ul>
   </section>
   {% endif %}
   </div>
 </main>
+<script src="{{ url_for('contracts.static', filename='orders.js') }}" defer></script>
 {% endblock %}
-{% block scripts %}<script src="{{ url_for('contracts.static', filename='orders.js') }}"></script>{% endblock %}
