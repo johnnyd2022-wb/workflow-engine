@@ -126,10 +126,10 @@ def test_phone_capacity_group_step_and_overload(db, board_clients, browser, widt
         page.locator('[data-board-range] [name="date"]').fill(next_day)
         page.locator('[data-board-range] [name="view"]').select_option("day")
         page.get_by_role("button", name="Show board").click()
-        page.get_by_text(next_day + " – " + next_day, exact=True).wait_for()
+        page.locator(f'[data-board-title][data-start="{next_day}"][data-end="{next_day}"]').wait_for()
         assert page.locator(f'[data-batch-id="{long_batch["id"]}"]').count() == 0
         page.get_by_role("button", name="Review and move suggested batch").first.click()
-        page.get_by_text(TODAY.isoformat() + " – " + TODAY.isoformat(), exact=True).wait_for()
+        page.locator(f'[data-board-title][data-start="{TODAY.isoformat()}"][data-end="{TODAY.isoformat()}"]').wait_for()
         page.get_by_text("Choose a new start date, then move the suggested batch.", exact=True).wait_for()
         assert (
             page.locator('[name="start_date"]:focus').evaluate("el => el.closest('[data-batch-id]').dataset.batchId")

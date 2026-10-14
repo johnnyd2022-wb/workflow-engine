@@ -57,6 +57,8 @@ def test_phone_binds_raw_lot_and_records_unresolved_material_evidence(db, board_
         ).wait_for()
         assert page.locator(".board-batch").count() == 3
         assert page.get_by_text("Material availability unresolved", exact=True).count() == 3
+        # A batch that cannot start keeps its disabled Start button in its Details.
+        page.locator(".board-batch").first.locator(".board-batch__details > summary").click()
         assert page.get_by_role("button", name="Start batch").first.is_disabled()
         assert page.locator("[data-board-root] script, [data-board-root] img").count() == 0
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
