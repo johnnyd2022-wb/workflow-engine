@@ -8,23 +8,14 @@
 
 {% block content %}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='workflows-design.css') }}">
-  <div class="max-content workspace-overview workspace-page processes-list-page" data-workflows-style="1" data-state="loading">
+  <div class="max-content workspace-overview workspace-page processes-list-page" data-state="loading">
     <header class="workspace-header">
       <div><h1>Workflows</h1><p>The product workflows you run, and the batches made on each.</p></div>
       <div class="workspace-header__actions">
         <a href="/core/flows/create/start" class="workspace-button workspace-button--primary processes-list-create">Create product workflow</a>
       </div>
     </header>
-    {# CONCEPT ONLY — removed once a direction is selected. #}
-    <div class="workflows-concepts" role="group" aria-label="Workflows design concepts">
-      <span>Preview layout</span>
-      <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Board</button>
-      <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · Catalogue</button>
-      <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · Register</button>
-    </div>
     <div class="workspace-stack workflows-layout">
-      {# Styles 2 and 3 open on one sentence instead of the figures card. #}
-      <p class="workflows-brief" data-workflows-brief hidden></p>
       <section class="workspace-card workflows-glance" aria-labelledby="workflows-glance-title">
         <h2 id="workflows-glance-title">At a glance</h2>
         <dl class="workflows-figures">
@@ -62,8 +53,7 @@
             <p class="workspace-caption" data-empty-text></p>
             <a href="/core/flows/create/start" class="workspace-button" data-empty-create>Create product workflow</a>
           </div>
-          {# CONCEPT ONLY (Style 3): column headings for the register. #}
-          <div class="workflows-columns" aria-hidden="true"><span>Workflow</span><span>Status</span><span>Steps</span><span>Made</span><span></span></div>
+
           <div id="processes-list-stack" class="processes-list-stack" style="display: none;"></div>
         </div>
       </section>
@@ -147,7 +137,6 @@
       function renderSummary() {
         var root = pageRoot();
         if (!root) return;
-        var style = root.getAttribute('data-workflows-style') || '1';
         var live = allProcesses.filter(function (p) { return !p.is_draft; });
         var drafts = allProcesses.length - live.length;
         var running = live.filter(function (p) { return counts(p).active > 0; });
@@ -168,14 +157,6 @@
               '<strong>' + esc(plural(counts(p).active, 'batch', 'batches')) + '</strong></li>';
           }).join('');
           set('[data-running-caption]', running.length ? 'Workflows with a batch under way.' : 'Nothing is in production. Open a workflow to start a batch.');
-        }
-        // CONCEPT ONLY: Styles 2 and 3 lead with a sentence in place of the figures card.
-        var brief = root.querySelector('[data-workflows-brief]');
-        if (brief) {
-          brief.hidden = style === '1' || !allProcesses.length;
-          brief.textContent = plural(live.length, 'product workflow', 'product workflows') + ': '
-            + (running.length ? plural(active, 'batch', 'batches') + ' under way across ' + running.length : 'nothing in production')
-            + ', ' + plural(made, 'batch', 'batches') + ' made' + (drafts ? ', ' + plural(drafts, 'draft', 'drafts') : '') + '.';
         }
       }
 
@@ -223,8 +204,6 @@
                     (edited ? '<p class="processes-list-item__audit">' + esc(edited) + '</p>' : '') +
                   '</div>' +
                   '<span class="workflows-state" data-state="' + esc(state.key) + '">' + esc(state.label) + '</span>' +
-                  '<span class="workflows-cell">' + esc(String(c.steps)) + '</span>' +
-                  '<span class="workflows-cell">' + esc(String(c.made)) + '</span>' +
                 '</a>' +
                 '<div class="processes-list-item__actions">' +
                   '<button class="processes-list-item__history-btn" type="button" data-process-id="' + esc(id) + '" data-process-name="' + esc(name) + '" aria-label="View history for ' + esc(name) + '">History</button>' +
@@ -286,30 +265,10 @@
         if (!stack || stack === initializedStack) return;
         initializedStack = stack;
         initSearch();
-        initStyle();
         load();
       }
 
-      // CONCEPT ONLY — preview switch; fold the chosen layout into the base rules after selection.
-      function applyStyle(value) {
-        var root = pageRoot();
-        if (!root) return;
-        var style = ['1', '2', '3'].indexOf(value) === -1 ? '1' : value;
-        root.setAttribute('data-workflows-style', style);
-        try { sessionStorage.setItem('workflows-design-style', style); } catch (_) { /* Storage is optional. */ }
-        root.querySelectorAll('[data-style-pick]').forEach(function (button) {
-          button.setAttribute('aria-pressed', String(button.getAttribute('data-style-pick') === style));
-        });
-        if (allProcesses.length) renderSummary();
-      }
-      function initStyle() {
-        var remembered;
-        try { remembered = sessionStorage.getItem('workflows-design-style'); } catch (_) { /* Defaults work without storage. */ }
-        applyStyle(new URLSearchParams(window.location.search).get('style') || remembered || '1');
-      }
       document.addEventListener('click', function (e) {
-        var pick = e.target.closest('.processes-list-page [data-style-pick]');
-        if (pick) { applyStyle(pick.getAttribute('data-style-pick')); return; }
         var retry = e.target.closest('.processes-list-page [data-workflows-retry]');
         if (retry) {
           retry.hidden = true;

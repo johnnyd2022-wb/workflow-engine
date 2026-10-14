@@ -34,9 +34,9 @@ PROCESSES = {
 }
 
 
-def _open(page, style="1", payload=None):
+def _open(page, style=None, payload=None):
     page.route("**/api/core/processes", lambda route: route.fulfill(json=PROCESSES if payload is None else payload))
-    page.goto(f"/core/processes?style={style}")
+    page.goto("/core/processes" + (f"?style={style}" if style else ""))
     expect(page.locator("#processes-list-loading")).to_be_hidden()
 
 
@@ -139,14 +139,11 @@ def test_list_loads_again_after_leaving_by_a_tab_and_returning(browser, app_url,
         context.close()
 
 
-# CONCEPT ONLY — delete with the preview switch and the two layouts not chosen.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_concepts_fit_and_keep_every_workflow(browser, app_url, workspace_user, style, width):
+def test_list_fits_every_width_and_keeps_every_workflow(browser, app_url, workspace_user, width):
     context, page = _page(browser, app_url, workspace_user, width)
     try:
-        _open(page, style)
-        expect(page.locator(".processes-list-page")).to_have_attribute("data-workflows-style", style)
+        _open(page)
         rows = page.locator(".processes-list-item")
         expect(rows).to_have_count(4)
         expect(page.locator(".workflows-state:visible")).to_have_count(4)
@@ -156,31 +153,26 @@ def test_concepts_fit_and_keep_every_workflow(browser, app_url, workspace_user, 
         for row in rows.all():
             box = row.bounding_box()
             assert box["x"] >= card["x"] and box["x"] + box["width"] <= card["x"] + card["width"] + 1
+        assert rows.nth(1).bounding_box()["y"] > rows.nth(0).bounding_box()["y"]  # one per line
+        # The board: figures beside what is in production where there is room, stacked where not.
+        glance = page.get_by_role("region", name="At a glance", exact=True).bounding_box()
+        running = page.get_by_role("region", name="In production now", exact=True).bounding_box()
+        if width >= 1440:
+            assert abs(glance["y"] - running["y"]) < 2 and glance["x"] + glance["width"] <= running["x"]
+        else:
+            assert running["y"] >= glance["y"] + glance["height"]
     finally:
         context.close()
 
 
-# CONCEPT ONLY
-def test_each_concept_arranges_the_same_workflows_its_own_way(browser, app_url, workspace_user):
+def test_list_has_no_layout_preview_left(browser, app_url, workspace_user):
     context, page = _page(browser, app_url, workspace_user, 1440)
     try:
-        _open(page, "1")
-        rows = page.locator(".processes-list-item")
-        expect(page.locator("[data-workflows-brief]")).to_be_hidden()
-        assert rows.nth(1).bounding_box()["y"] > rows.nth(0).bounding_box()["y"]  # one per line
-        page.get_by_role("button", name="2 · Catalogue", exact=True).click()
-        expect(page.get_by_role("region", name="At a glance", exact=True)).to_be_hidden()
-        expect(page.locator("[data-workflows-brief]")).to_have_text(
-            "3 product workflows: 5 batches under way across 2, 3 batches made, 1 draft."
-        )
-        assert abs(rows.nth(1).bounding_box()["y"] - rows.nth(0).bounding_box()["y"]) < 2  # cards side by side
-        page.get_by_role("button", name="3 · Register", exact=True).click()
-        header = page.locator(".workflows-columns")
-        expect(header).to_be_visible()
-        # Each column heading ends where its figures end.
-        made_heading = header.locator("span").nth(3).bounding_box()
-        made_cell = rows.nth(0).locator(".workflows-cell").nth(1).bounding_box()
-        assert abs((made_heading["x"] + made_heading["width"]) - (made_cell["x"] + made_cell["width"])) < 2
-        expect(rows.nth(0).locator(".workflows-cell")).to_have_text(["3", "1"])
+        page.goto("/core/processes")
+        page.evaluate('sessionStorage.setItem("workflows-design-style", "2")')
+        _open(page, "3")
+        expect(page.locator("[data-style-pick]")).to_have_count(0)
+        expect(page.locator(".workflows-columns")).to_have_count(0)
+        expect(page.get_by_role("region", name="At a glance", exact=True)).to_be_visible()
     finally:
         context.close()

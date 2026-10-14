@@ -74,3 +74,12 @@ The shared Production layout test required every card on a sub-page to sit in on
 It now accepts the board's paired rows, checking that each row starts and ends at the same
 edges. One existing test clicked "the" link to this page from Home, which now has several;
 it clicks the first.
+
+## Decision: Style 1, the Board
+
+Chosen by the founder on 14 October 2026. Figures sit beside what is in production now, then
+every workflow one per line, matching Home and Production. The Catalogue's cards take more
+height as the range grows; the Register needs width and drops its columns on a phone. The
+preview switch, both losing layouts, the summary sentence and column headings they used, and
+the concept-only tests are removed. The success percentage stays out of the row until the
+founder decides how it should be counted.
