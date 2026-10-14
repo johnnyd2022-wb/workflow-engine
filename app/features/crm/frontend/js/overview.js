@@ -5,6 +5,10 @@ function crmOverview() {
 
   return {
     loading: true,
+    loadError: false,
+    loadErrorStatus: null,
+    chartResizeObserver: null,
+    chartThemeObserver: null,
     error: null,
     overview: {},
     operators: [],
@@ -67,6 +71,28 @@ function crmOverview() {
     expandedProductName: null,
 
     async init() {
+      this.loading = true;
+      this.loadError = false;
+      this.error = null;
+      if (!this.chartResizeObserver) {
+        const widths = new WeakMap();
+        this.chartResizeObserver = new ResizeObserver(entries => {
+          const changed = entries.some(entry => {
+            const width = Math.round(entry.contentRect.width);
+            if (widths.get(entry.target) === width) return false;
+            widths.set(entry.target, width);
+            return true;
+          });
+          if (!changed) return;
+          this.drawSalesChart();
+          this.drawAllCustomCharts();
+        });
+        this.chartResizeObserver.observe(this.$root);
+        this.chartThemeObserver = new MutationObserver(() => {
+          this.drawSalesChart(); this.drawAllCustomCharts();
+        });
+        this.chartThemeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-spa-theme'] });
+      }
       try {
         const [overview, monthly, users, traceCfg] = await Promise.all([
           CRMAPI.getOverview(),
@@ -85,12 +111,20 @@ function crmOverview() {
         await this.refreshCustomWidgets();
       } catch (e) {
         this.error = e.message || 'Failed to load Sales overview.';
+        this.loadError = true;
+        this.loadErrorStatus = e.status;
       } finally {
         this.loading = false;
         await this.$nextTick();
         this.drawSalesChart();
         this.drawAllCustomCharts();
       }
+    },
+
+    destroy() {
+      this.endWidgetResize();
+      this.chartResizeObserver?.disconnect();
+      this.chartThemeObserver?.disconnect();
     },
 
     setDefaultDateRange() {
@@ -207,6 +241,12 @@ function crmOverview() {
       return Math.round(((current - previous) / previous) * 1000) / 10;
     },
 
+    // Open follow-ups before any operator filter: an empty board and a filtered-out board read differently.
+    get hasOpenTasks() {
+      const lanes = this.taskColumns.map((column) => column.status);
+      return (this.overview.overview_tasks || []).some((task) => lanes.includes(task.status));
+    },
+
     tasksFor(status) {
       return (this.overview.overview_tasks || []).filter((task) => {
         if (task.status !== status) return false;
@@ -226,6 +266,21 @@ function crmOverview() {
     toggleTask(task) {
       if (Date.now() < this.dragSuppressUntil) return;
       this.expandedTaskId = this.expandedTaskId === task.id ? null : task.id;
+    },
+
+    // Says how far away a due date is, in words. Dates are calendar days in the viewer's own timezone.
+    taskDue(task) {
+      const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(task?.due_date || '');
+      if (!match) return { label: 'No due date', overdue: false };
+      const due = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const days = Math.round((due - today) / 86400000);
+      if (days < 0) return { label: `${-days} day${days === -1 ? '' : 's'} overdue`, overdue: true };
+      if (days === 0) return { label: 'Due today', overdue: false };
+      if (days === 1) return { label: 'Due tomorrow', overdue: false };
+      if (days <= 14) return { label: `Due in ${days} days`, overdue: false };
+      return { label: `Due ${due.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`, overdue: false };
     },
 
     openTaskInTasksPage(task) {
@@ -327,8 +382,8 @@ function crmOverview() {
     },
 
     widgetSubtitle(widget) {
-      if (widget.type === 'sales_trend') return this.chartMode === 'line' ? 'Line chart for larger ranges' : 'Bar chart for shorter ranges';
-      if (widget.type === 'task_board') return 'To Do and In Progress tasks';
+      if (widget.type === 'sales_trend') return 'Invoiced revenue by month';
+      if (widget.type === 'task_board') return '';
       if (widget.type === 'top_products') return 'Grouped by mapped product; expand to see Xero items';
       if (widget.type === 'top_customers') return 'By total invoiced revenue';
       if (widget.kind === 'custom') return this.customWidgetSubtitle(widget);
@@ -598,7 +653,7 @@ function crmOverview() {
     },
 
     drawSalesChart() {
-      const canvas = document.getElementById('crmOverviewSalesChart');
+      const canvas = this.$root.querySelector('#crmOverviewSalesChart');
       if (!canvas || !this.chartData.length) return;
       const mode = this.chartMode === 'line' ? 'line' : 'bar';
       this.drawSeriesChart(
@@ -614,7 +669,7 @@ function crmOverview() {
 
     drawCustomChart(widget) {
       if (!widget || widget.viewMode !== 'graph' || !widget.rows?.length) return;
-      const canvas = document.getElementById(`customWidgetChart-${widget.id}`);
+      const canvas = this.$root.querySelector(`#${CSS.escape(`customWidgetChart-${widget.id}`)}`);
       if (!canvas) return;
       this.drawSeriesChart(
         canvas,
@@ -674,7 +729,10 @@ function crmOverview() {
     drawSeriesChart(canvas, rows, opts = {}) {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.parentElement.getBoundingClientRect();
-      const W = rect.width || 600;
+      if (!this.$root.isConnected) return;
+      this.chartResizeObserver?.observe(canvas.parentElement);
+      if (!rect.width) return;
+      const W = rect.width;
       const H = Number(canvas.style.height?.replace('px', '') || 220);
       canvas.width = W * dpr;
       canvas.height = H * dpr;
@@ -685,10 +743,11 @@ function crmOverview() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
 
-      const textColor = '#6b7280';
-      const gridColor = 'rgba(107,114,128,0.18)';
-      const accent = '#2DD4BF';
-      const accentLine = '#14B8A6';
+      const tokens = getComputedStyle(canvas);
+      const textColor = tokens.getPropertyValue('--ui-text-muted').trim() || '#6b7280';
+      const gridColor = tokens.getPropertyValue('--ui-border').trim() || '#dce4e9';
+      const accent = tokens.getPropertyValue('--ui-accent').trim() || '#0f766e';
+      const accentLine = accent;
       const pad = { top: 16, right: 16, bottom: 38, left: 58 };
       const chartW = W - pad.left - pad.right;
       const chartH = H - pad.top - pad.bottom;
@@ -747,10 +806,12 @@ function crmOverview() {
         ctx.textAlign = 'center';
         ctx.font = '10px -apple-system, system-ui, sans-serif';
         this.drawWrappedXAxisLabel(ctx, String(row.xLabel || ''), x + barW / 2, pad.top + chartH + 14, Math.max(56, barW + gap - 2), 10, 3);
-        if (opts.showValueLabels) {
-          ctx.fillStyle = '#0f172a';
+        // Narrow bars keep their value in short form ($10.8K) rather than losing it.
+        if (opts.showValueLabels && barW >= 34) {
+          ctx.fillStyle = tokens.getPropertyValue('--ui-text').trim() || textColor;
           ctx.font = '10px -apple-system, system-ui, sans-serif';
-          ctx.fillText(this.formatCurrency2(row.yValue || 0), x + barW / 2, Math.max(pad.top + 10, y - 6));
+          const label = barW >= 75 ? this.formatCurrency2(row.yValue || 0) : this.formatCurrencyShort(row.yValue || 0);
+          ctx.fillText(label, x + barW / 2, Math.max(pad.top + 10, y - 6));
         }
       });
     },
@@ -767,6 +828,11 @@ function crmOverview() {
       if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
       if (value >= 1000) return `$${(value / 1000).toFixed(0)}k`;
       return `$${Number(value || 0).toFixed(0)}`;
+    },
+
+    formatCurrencyShort(value) {
+      if (this.obfuscateSalesFigures) return '*****';
+      return new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', notation: 'compact', maximumFractionDigits: 1 }).format(value);
     },
 
     formatCurrency2(value) {

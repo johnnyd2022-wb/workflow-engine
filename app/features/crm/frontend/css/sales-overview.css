@@ -1,0 +1,61 @@
+#page-content .sales-overview { --sales-gap: 24px; }
+#page-content .sales-content { gap: var(--sales-gap); }
+#page-content .sales-overview .crm-widget-grid { gap: var(--sales-gap); align-items: start; }
+#page-content .sales-overview .crm-widget-card { min-width: 0; padding: 24px; background: var(--ui-surface); color: var(--ui-text); }
+#page-content .sales-overview .crm-widget-card__header { margin-bottom: 20px; }
+#page-content .sales-overview .sales-glance .crm-kpi-grid { margin-bottom: 0; }
+#page-content .sales-overview .sales-kpi { text-align: left; }
+.sales-task { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); padding: 12px; margin-bottom: 8px; cursor: pointer; }
+.sales-task:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+#page-content #sales-operator-filter { width: auto !important; min-width: 180px; max-width: 240px; padding: 8px 12px !important; font-size: .85rem !important; }
+/* base-spa.css forces a display on every select, so hiding needs the same weight. */
+#page-content #sales-operator-filter[hidden] { display: none !important; }
+.sales-load-error p { color: var(--ui-text-muted); margin: 12px 0 20px; }
+#page-content .sales-overview a:not(.workspace-button) { color: var(--ui-accent); }
+.sales-layout-guide { background: repeating-linear-gradient(to right, transparent 0, transparent calc(50% - 1px), var(--ui-border) calc(50% - 1px), var(--ui-border) 50%); }
+/* The board: figures across the top, then the trend beside the day's follow-ups, then full-width work.
+   The pair needs the locked trend then the locked task board as the first two widgets;
+   any other saved order falls back to each widget's own size, so nothing is left at half a row. */
+#page-content .sales-board { container: sales-board / inline-size; }
+@container sales-board (min-width: 1100px) {
+  #page-content .sales-overview .sales-content { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; }
+  #page-content .sales-overview .crm-widget-grid { display: contents; }
+  #page-content .sales-overview .sales-glance,
+  #page-content .sales-overview .crm-widget-card--full { grid-column: span 12; }
+  #page-content .sales-overview .crm-widget-card--half { grid-column: span 6; }
+  #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"]:has(+ [data-widget-type="task_board"][data-widget-locked="true"]) { grid-column: span 5; align-self: stretch; }
+  #page-content .sales-overview .crm-widget-grid > template:first-child + [data-widget-type="sales_trend"][data-widget-locked="true"] + [data-widget-type="task_board"][data-widget-locked="true"] { grid-column: span 7; align-self: stretch; }
+}
+#page-content .sales-overview .sales-kpi { padding: 14px 18px; }
+#page-content .sales-overview .sales-kpi .crm-kpi-value { font-size: 1.5rem; margin: 4px 0; }
+.sales-tasks-empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 4px 0; }
+.sales-tasks-empty p { margin: 0; color: var(--ui-text-muted); font-size: .9rem; }
+@media (max-width: 1100px) {
+  #page-content .sales-overview .crm-widget-grid { grid-template-columns: minmax(0, 1fr); }
+  #page-content .sales-overview .crm-widget-card--half,
+  #page-content .sales-overview .crm-widget-card--full { grid-column: span 1; }
+}
+@media (max-width: 640px) {
+  #page-content .sales-overview { --sales-gap: 16px; }
+  #page-content .sales-overview .crm-widget-card { padding: 18px; }
+  #page-content .sales-overview .crm-table th,
+  #page-content .sales-overview .crm-table td { padding-inline: 6px; overflow-wrap: anywhere; }
+  #page-content #sales-operator-filter { min-width: 0; max-width: 100%; width: 100% !important; }
+}
+#page-content .sales-header-actions { display: flex; align-items: center; gap: 10px; }
+#page-content .sales-header-actions .sales-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: var(--text-inverse); }
+#page-content .sales-header-actions .sales-primary:hover { background: var(--ui-accent-strong); }
+html[data-spa-theme="dark"] #page-content.page-content .sales-header-actions .sales-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: var(--ui-surface-subtle); }
+@container sechead (max-width: 1099px) {
+  #page-content .sales-header-actions .sales-primary { order: -1; }
+}
+
+#page-content .sales-overview .crm-widget-card__header { padding: 0; }
+#page-content .sales-overview .crm-widget-card__body { padding: 0; }
+#page-content .sales-overview .crm-table td:last-child { white-space: nowrap; overflow-wrap: normal; }
+
+#page-content .sales-overview .sales-glance .crm-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+#page-content .sales-overview .flow-mode-segment--active { background: var(--ui-accent-soft); color: var(--ui-accent-strong); border-color: var(--ui-accent); }
+
+.sales-task-due { font-size: .7rem; color: var(--ui-text-muted); }
+.sales-task-due--overdue { color: var(--crm-red); font-weight: 700; }

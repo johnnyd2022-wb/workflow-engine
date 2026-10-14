@@ -53,7 +53,7 @@ REPO = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
 STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
-SEED_KINDS = ("stock", "lineage", "compliance", "production")
+SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales")
 
 
 def say(*parts) -> None:
@@ -345,6 +345,70 @@ def _seed_lineage(db, org_id, inv) -> None:
         db.commit()
 
 
+def _seed_sales(db, org_id, inv) -> None:
+    """Six months of local sales, receivables and realistic customer follow-ups."""
+    from app.features.crm.models.crm_task import CRMTask
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+
+    contacts = db.query(XeroContact).filter(XeroContact.org_id == org_id).order_by(XeroContact.name).all()
+    if not contacts:
+        raise ValueError("sales requires the lineage seed for realistic customer contacts")
+    today = date.today()
+    invoices = db.query(XeroInvoice).filter(XeroInvoice.org_id == org_id).all()
+    for number, invoice in enumerate(invoices):
+        invoice.sub_total = Decimal(900 + number * 225)
+        invoice.total_tax = invoice.sub_total * Decimal("0.15")
+        invoice.total = invoice.sub_total + invoice.total_tax
+        invoice.amount_due = invoice.total if number % 2 else Decimal(0)
+        invoice.amount_paid = invoice.total - invoice.amount_due
+        invoice.due_date = today + timedelta(days=7 - number * 2)
+        for line in db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.invoice_id == invoice.id).all():
+            line.line_amount = invoice.sub_total
+            line.unit_amount = invoice.sub_total / line.quantity
+    for months_back in range(1, 6):
+        serial = today.year * 12 + today.month - 1 - months_back
+        month_date = date(serial // 12, serial % 12 + 1, 8)
+        db.add(
+            XeroInvoice(
+                org_id=org_id,
+                xero_invoice_id=str(uuid.uuid4()),
+                xero_tenant_id="ui-shots",
+                contact_id=contacts[months_back % len(contacts)].id,
+                invoice_type="ACCREC",
+                invoice_number=f"INV-{1030 - months_back}",
+                status="PAID",
+                date=month_date,
+                sub_total=Decimal(6500 + months_back * 850),
+                total=Decimal(6500 + months_back * 850),
+                amount_paid=Decimal(6500 + months_back * 850),
+                amount_due=Decimal(0),
+            )
+        )
+    for number, (title, status, priority, due) in enumerate(
+        [
+            ("Confirm summer gin order — Regional Wines", "pending", "high", -1),
+            ("Send cocktail range samples — Hawthorn Lounge", "pending", "medium", 2),
+            ("Follow up tasting — Moore Wilson’s", "pending", "medium", 4),
+            ("Agree delivery window — Bottle-O Greytown", "in_progress", "high", 0),
+            ("Review wholesale price list", "in_progress", "medium", 5),
+        ]
+    ):
+        db.add(
+            CRMTask(
+                org_id=org_id,
+                contact_id=contacts[number % len(contacts)].id,
+                title=title,
+                description="Customer follow-up for the next wholesale order.",
+                status=status,
+                priority=priority,
+                due_date=today + timedelta(days=due),
+            )
+        )
+    db.commit()
+
+
 def _seed_compliance(db, org_id, inv) -> None:
     """Subscribe the org to Compliance and put it on the NP3 food control programme, so pages
     that summarise compliance (the dashboard) have a module with a score to show."""
@@ -468,6 +532,7 @@ def cmd_seed(args) -> int:
             "lineage": _seed_lineage,
             "compliance": _seed_compliance,
             "production": _seed_production,
+            "sales": _seed_sales,
         }[kind](db, org.id, inv)
         say(f"seeded {kind}")
     say(f"org {org.name!r}, sign-in {user.email}")

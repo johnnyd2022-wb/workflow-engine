@@ -314,6 +314,8 @@ function crmTasks() {
     openTaskFromQueryString() {
       const params = new URLSearchParams(window.location.search || '');
       const taskId = params.get('task_id');
+      // "New task" on the Sales overview lands here with the form already open.
+      if (!taskId && params.get('new') === '1') { this.openCreate(); return; }
       if (!taskId) return;
       const task = this.tasks.find((t) => t.id === taskId);
       if (task) this.openEdit(task);
