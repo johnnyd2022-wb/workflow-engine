@@ -64,13 +64,19 @@ def test_production_pages_share_the_header_and_card_layout(browser, app_url, pro
             cards = [card for card in column.locator(".workspace-stack > .workspace-card").all() if card.is_visible()]
             assert cards, f"{path}: no cards"
             outer = column.bounding_box()
-            lefts, rights = set(), set()
+            # Cards sit in one column, or pair up in a row as the Production board does. Either way
+            # every row starts at the same left edge and ends at the same right edge.
+            rows: dict[int, list[dict]] = {}
             for card in cards:
                 box = card.bounding_box()
-                lefts.add(round(box["x"]))
-                rights.add(round(box["x"] + box["width"]))
+                rows.setdefault(round(box["y"]), []).append(box)
                 assert box["x"] >= outer["x"] and box["x"] + box["width"] <= outer["x"] + outer["width"] + 1, path
-            assert len(lefts) == 1 and len(rights) == 1, f"{path}: cards do not share one column ({lefts}, {rights})"
+            lefts = {round(min(box["x"] for box in row)) for row in rows.values()}
+            rights = {round(max(box["x"] + box["width"] for box in row)) for row in rows.values()}
+            assert len(lefts) == 1 and len(rights) == 1, (
+                f"{path}: card rows do not share their edges ({lefts}, {rights})"
+            )
+            assert all(len(row) <= 2 for row in rows.values()), f"{path}: more than two cards in a row"
             # Health and next-step cards belong to the overview only.
             expect(page.get_by_role("region", name="Production health", exact=True), path).to_have_count(
                 0
