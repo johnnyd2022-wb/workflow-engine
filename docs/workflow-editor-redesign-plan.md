@@ -63,3 +63,12 @@ validation still decides when a stage can be reached.
 Found, not fixed: leaving the Inputs stage within milliseconds of arriving can drop an unsaved
 step-name edit, because the draft is written while that page settles. Real use does not move
 that fast; the browser test now waits for the page to settle.
+
+## Decision: Style 1, the Board
+
+Chosen by the founder on 14 October 2026. Stages run across the top, the form sits beside the
+stage's guidance, and on a phone progress is one line. The Editing desk lost because its
+guidance sat below the form, where NN/g's wizard guidance says it should not be; the Document
+lost because it gave up both side-by-side guidance and working width. The preview switch,
+both losing layouts, the `?style=` passthrough in the wizard's redirects and the concept-only
+tests are removed.

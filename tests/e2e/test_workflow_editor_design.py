@@ -8,37 +8,40 @@ from playwright.sync_api import expect
 pytestmark = pytest.mark.e2e
 
 
-# CONCEPT ONLY: delete style-persistence coverage with the preview switch.
-def test_workflow_editor_stage_and_style_persist(logged_in_page):
+def test_workflow_editor_stage_persists_and_no_preview_is_left(logged_in_page):
     page = logged_in_page
-    page.goto("/core/flows/create/process-overview?fresh=1&style=1")
+    # An old remembered preview choice or ?style= changes nothing now one layout ships.
+    page.goto("/core/flows/create/process-overview?fresh=1")
+    page.evaluate('sessionStorage.setItem("workflow-editor-concept", "3")')
+    page.goto("/core/flows/create/process-overview?fresh=1")
     root = page.locator("#workflow-editor")
-    expect(root).to_have_attribute("data-workflow-editor-style", "1")
-    expect(root.locator('[aria-current="step"]')).to_have_text("1Workflow")
-    page.get_by_role("button", name="2 · Editing desk", exact=True).click()
+    expect(root.locator("[data-style-pick]")).to_have_count(0)
+    expect(root).not_to_have_attribute("data-workflow-editor-style", re.compile(".*"))
+    expect(root.locator('[aria-current="step"]')).to_contain_text("Workflow")
     page.locator("#guided-process-workflow-name").fill("Design review workflow")
     page.get_by_role("button", name="Next", exact=True).click()
     expect(page).to_have_url(re.compile(r"/core/flows/create/step-name"))
-    expect(page.locator("#workflow-editor")).to_have_attribute("data-workflow-editor-style", "2")
+    assert "style=" not in page.url
     expect(page.get_by_role("textbox", name="Step name", exact=False)).to_be_visible()
-    expect(page.locator('#workflow-editor [aria-current="step"]')).to_have_text("2Step name")
+    expect(page.locator('#workflow-editor [aria-current="step"]')).to_contain_text("Step name")
 
 
-# CONCEPT ONLY: delete these comparisons when one style is selected.
-@pytest.mark.parametrize("style", [1, 2, 3])
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_workflow_editor_concept_regions_fit(logged_in_page, style, width):
+def test_workflow_editor_regions_fit(logged_in_page, width):
     page = logged_in_page
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"/core/flows/create/process-overview?fresh=1&style={style}")
+    page.goto("/core/flows/create/process-overview?fresh=1")
     root = page.locator("#workflow-editor")
-    expect(root).to_have_attribute("data-workflow-editor-style", str(style))
     for selector in [".workflow-editor__journey", ".workflow-editor__form", ".workflow-editor__guide"]:
         expect(root.locator(selector)).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     form, guide = [root.locator(s).bounding_box() for s in [".workflow-editor__form", ".workflow-editor__guide"]]
     assert form and guide
-    assert form["x"] + form["width"] <= guide["x"] + 1 or form["y"] + form["height"] <= guide["y"] + 1
+    # Guidance sits beside the form where there is room, and below it where there is not.
+    if width >= 1440:
+        assert form["x"] + form["width"] <= guide["x"] + 1 and abs(form["y"] - guide["y"]) < 2
+    else:
+        assert form["x"] + form["width"] <= guide["x"] + 1 or form["y"] + form["height"] <= guide["y"] + 1
 
 
 def test_existing_workflow_editor_keeps_saved_step_fields(logged_in_page):
@@ -59,7 +62,7 @@ def test_existing_workflow_editor_keeps_saved_step_fields(logged_in_page):
     )
     assert step.status == 201
     sid = step.json()["id"]
-    page.goto(f"/core/flows/create/step-name?id={pid}&edit={sid}&style=1")
+    page.goto(f"/core/flows/create/step-name?id={pid}&edit={sid}")
     expect(page.locator("#guided-step-name")).to_have_value("Blend botanicals")
     expect(page.locator("#guided-step-description")).to_have_value("Weigh and verify the blend.")
     expect(page.locator("#workflow-editor")).to_contain_text("Editing workflow")
@@ -73,8 +76,8 @@ def test_existing_workflow_editor_keeps_saved_step_fields(logged_in_page):
     expect(page.locator("#guided-step-name")).to_have_value("Blend and verify botanicals")
 
 
-def _start_step(page, style=1):
-    page.goto(f"/core/flows/create/process-overview?fresh=1&style={style}")
+def _start_step(page):
+    page.goto("/core/flows/create/process-overview?fresh=1")
     page.locator("#guided-process-workflow-name").fill("Stage progress workflow")
     page.get_by_role("button", name="Next", exact=True).click()
     expect(page).to_have_url(re.compile(r"/core/flows/create/step-name"))
@@ -113,15 +116,15 @@ def test_finished_stages_are_marked_and_back_keeps_what_was_entered(logged_in_pa
 def test_first_stage_has_no_back_and_guidance_has_no_click_instruction(logged_in_page):
     page = logged_in_page
     page.set_viewport_size({"width": 1440, "height": 900})
-    page.goto("/core/flows/create/process-overview?fresh=1&style=1")
+    page.goto("/core/flows/create/process-overview?fresh=1")
     expect(page.locator(".flow-wizard-sticky-back")).to_have_count(0)
     guide = page.locator("#workflow-editor .workflow-editor__guide")
     expect(guide).not_to_contain_text("As you build")
     expect(guide.locator(".flow-wizard-example-disclosure__hint")).to_be_hidden()
-    # Beside the form there is room, so the stage's guidance is already open.
+    # Beside the form there is room, so the stage's guidance is already open; on a narrow screen it waits.
     assert guide.locator("details").evaluate("node => node.open")
-    page.get_by_role("button", name="2 · Editing desk", exact=True).click()
-    assert not guide.locator("details").evaluate("node => node.open")
+    page.set_viewport_size({"width": 1000, "height": 900})
+    expect(guide.locator("details")).not_to_have_attribute("open", "")
 
 
 def test_inputs_stage_filters_materials_by_name(logged_in_page):

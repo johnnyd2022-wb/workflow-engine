@@ -484,17 +484,13 @@
 {% block content %}
         <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='workflow-editor.css') }}">
         {% set stages = [('process-overview', 'Workflow'), ('step-name', 'Step name'), ('inputs', 'Inputs'), ('outputs', 'Outputs'), ('evidence-and-prompts', 'Evidence'), ('summary', 'Review'), ('next-steps', 'Finish')] %}
-        <div id="workflow-editor" class="max-content workspace-overview" data-workflow-editor-style="1" data-stage="{{ flow_wizard_page }}">
+        <div id="workflow-editor" class="max-content workspace-overview" data-stage="{{ flow_wizard_page }}">
           <header class="workspace-header workflow-editor__header">
             <div>
               <a class="workspace-link" href="/core/processes">Workflows</a>
               <p class="workspace-caption">{% if process_id %}Editing workflow{% else %}New workflow{% endif %}</p>
               <h1 id="modal-title">{% block wizard_title %}{{ {'step-name': 'Step name', 'inputs': 'Inputs', 'outputs': 'Outputs', 'evidence-and-prompts': 'Evidence and prompts'}.get(flow_wizard_page, 'Create process step') }}{% endblock %}</h1>
               <p id="modal-description">{% block wizard_tagline %}Define what this step needs, makes and records.{% endblock %}</p>
-            </div>
-            {# CONCEPT ONLY: removed when the design is chosen. #}
-            <div class="workflow-editor__concepts" role="group" aria-label="Design concepts">
-              <span>Preview layout</span>{% for style, label in [(1, 'Board'), (2, 'Editing desk'), (3, 'Document')] %}<button type="button" class="workspace-button" data-style-pick="{{ style }}" aria-pressed="{{ 'true' if style == 1 else 'false' }}">{{ style }} · {{ label }}</button>{% endfor %}
             </div>
           </header>
           <div class="workflow-editor__layout">

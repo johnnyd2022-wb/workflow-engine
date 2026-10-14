@@ -2,8 +2,6 @@
 #page-content #workflow-editor { max-width:1280px; padding:28px 24px 130px; box-sizing:border-box; }
 #workflow-editor .workflow-editor__header { align-items:flex-start; margin-bottom:24px; }
 #workflow-editor .workflow-editor__header h1 { margin-top:8px; }
-#workflow-editor .workflow-editor__concepts { display:flex; gap:6px; flex-shrink:0; }
-#workflow-editor [data-style-pick] { min-height:40px; padding:8px 12px; }
 #workflow-editor [aria-pressed="true"] { background:var(--ui-accent-soft); border-color:var(--ui-accent); }
 #workflow-editor .workflow-editor__layout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:24px; align-items:start; }
 #workflow-editor .workflow-editor__journey { grid-column:1 / -1; padding:18px 24px; }
@@ -33,47 +31,22 @@
 #workflow-editor .create-process-step-body { padding:0 !important; }
 #workflow-editor .flow-spa-stack { gap:20px; }
 #workflow-editor .flow-wizard-sticky-bar .btn-primary { border-radius:8px; }
-/* CONCEPT ONLY — Style 2: a stage rail beside a focused editing desk. */
-#workflow-editor[data-workflow-editor-style="2"] .workflow-editor__layout { grid-template-columns:190px minmax(0,1fr); gap:24px; }
-#workflow-editor[data-workflow-editor-style="2"] .workflow-editor__journey { grid-column:1; grid-row:1 / 3; position:sticky; top:70px; padding:24px 18px; }
-#workflow-editor[data-workflow-editor-style="2"] .workflow-editor__journey ol { display:flex; flex-direction:column; gap:22px; }
-#workflow-editor[data-workflow-editor-style="2"] .workflow-editor__guide { grid-column:2; display:grid; grid-template-columns:1fr 1fr; gap:12px 24px; }
-#workflow-editor[data-workflow-editor-style="2"] .workflow-editor__guide-intro > p { grid-column:1; margin:0; }
-#workflow-editor[data-workflow-editor-style="2"] .process-flow-wizard__more { grid-column:2; grid-row:1; margin:0; }
-#workflow-editor[data-workflow-editor-style="2"] .workflow-editor__note { grid-column:1 / -1; }
-/* CONCEPT ONLY — Style 3: a single document, with reference below the working section. */
-#page-content #workflow-editor[data-workflow-editor-style="3"] { max-width:1050px; }
-#workflow-editor[data-workflow-editor-style="3"] .workflow-editor__layout { display:flex; flex-direction:column; gap:0; border:1px solid var(--ui-border); border-radius:12px; background:var(--ui-surface); overflow:hidden; }
-#workflow-editor[data-workflow-editor-style="3"] .workflow-editor__layout > .workspace-card { border:0 !important; border-radius:0 !important; box-shadow:none; width:100%; box-sizing:border-box; }
-#workflow-editor[data-workflow-editor-style="3"] .workflow-editor__journey { border-bottom:1px solid var(--ui-border) !important; }
-#workflow-editor[data-workflow-editor-style="3"] .workflow-editor__eyebrow { display:none; }
-#workflow-editor[data-workflow-editor-style="3"] .workflow-editor__guide { border-top:1px solid var(--ui-border) !important; background:var(--ui-surface-subtle); }
-#workflow-editor[data-workflow-editor-style="3"] .workflow-editor__guide-intro { display:none; }
-#workflow-editor[data-workflow-editor-style="3"] .process-flow-wizard__more { margin:0; }
 @media(max-width:1100px) {
  #workflow-editor .workflow-editor__layout { grid-template-columns:minmax(0,1fr) 250px; gap:16px; }
  #workflow-editor .workflow-editor__journey ol { gap:8px; }
  #workflow-editor .workflow-editor__journey li { flex-direction:column; text-align:center; gap:6px; font-size:12px; }
- #workflow-editor[data-workflow-editor-style="2"] .workflow-editor__journey li { flex-direction:row; text-align:left; }
 }
 @media(max-width:700px) {
  #page-content #workflow-editor { padding:20px 16px 180px; }
  #workflow-editor .workflow-editor__header { flex-direction:column; gap:16px; }
  #workflow-editor .workflow-editor__header h1 { font-size:24px; }
- #workflow-editor .workflow-editor__layout,
- #workflow-editor[data-workflow-editor-style="2"] .workflow-editor__layout { display:flex; flex-direction:column; gap:16px; }
+ #workflow-editor .workflow-editor__layout { display:flex; flex-direction:column; gap:16px; }
  #workflow-editor .workflow-editor__layout > * { width:100%; box-sizing:border-box; }
- #workflow-editor .workflow-editor__journey,
- #workflow-editor[data-workflow-editor-style="2"] .workflow-editor__journey { padding:16px; position:static; }
- #workflow-editor .workflow-editor__journey ol,
- #workflow-editor[data-workflow-editor-style="2"] .workflow-editor__journey ol { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px 8px; }
- #workflow-editor .workflow-editor__journey li,
- #workflow-editor[data-workflow-editor-style="2"] .workflow-editor__journey li { flex-direction:column; font-size:11px; text-align:center; }
+ #workflow-editor .workflow-editor__journey { padding:16px; position:static; }
+ #workflow-editor .workflow-editor__journey ol { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px 8px; }
+ #workflow-editor .workflow-editor__journey li { flex-direction:column; font-size:11px; text-align:center; }
  #workflow-editor .workflow-editor__form { padding:20px 16px !important; }
  #workflow-editor .workflow-editor__guide { padding:20px 16px; }
- #workflow-editor[data-workflow-editor-style="2"] .workflow-editor__guide { display:block; }
- #workflow-editor[data-workflow-editor-style="2"] .process-flow-wizard__more { margin-top:16px; }
- #workflow-editor[data-workflow-editor-style="3"] .workflow-editor__layout { gap:0; }
 }
 
 /* Forms use intrinsic height rather than reserving a viewport inside each card. */
@@ -84,7 +57,6 @@
 #workflow-editor .flow-spa-stack__item:not(:first-child) { padding-top:20px; }
 #workflow-editor .create-process-step:has(.spa-fixed-action-bar) { padding-bottom:0 !important; }
 
-#workflow-editor[data-workflow-editor-style="2"] .workflow-editor__guide { align-items:start; }
 #page-content #workflow-editor .spa-form-section-title { text-transform:none; letter-spacing:0; }
 
 /* Progress: finished stages carry a tick and the accent; the label for the stage strip is its aria-label. */
@@ -104,16 +76,13 @@
 #workflow-editor [hidden].workflow-editor__filter { display:none !important; }
 /* Phone: one line of progress instead of seven circles over two rows. */
 @media(max-width:700px) {
- #workflow-editor .workflow-editor__journey ol,
- #workflow-editor[data-workflow-editor-style="2"] .workflow-editor__journey ol { display:flex; align-items:center; gap:10px; }
+ #workflow-editor .workflow-editor__journey ol { display:flex; align-items:center; gap:10px; }
  #workflow-editor .workflow-editor__journey ol::before { content:attr(data-progress); color:var(--ui-text-muted); font-size:13px; }
  #workflow-editor .workflow-editor__journey li:not([aria-current]) { display:none; }
- #workflow-editor .workflow-editor__journey li,
- #workflow-editor[data-workflow-editor-style="2"] .workflow-editor__journey li { flex-direction:row; font-size:14px; }
+ #workflow-editor .workflow-editor__journey li { flex-direction:row; font-size:14px; }
  #workflow-editor .workflow-editor__journey li > span:first-child { display:none; }
  #workflow-editor .workflow-editor__eyebrow { display:none; }
 }
-/* The preview switch reads the way it does on Settings, Sales and Compliance. */
-#workflow-editor .workflow-editor__concepts { align-items:center; flex-wrap:wrap; }
-#workflow-editor .workflow-editor__concepts > span { color:var(--ui-text-muted); font-size:.8rem; margin-right:4px; }
-#workflow-editor [data-style-pick] { font-size:.8rem; min-height:36px; padding:7px 12px; }
+/* Dark theme: the action rail uses the accent like every other page, not the legacy yellow. */
+html[data-spa-theme="dark"] #page-content .flow-wizard-sticky-bar .btn-primary { background:var(--ui-accent); border-color:var(--ui-accent); color:#042f2e; }
+html[data-spa-theme="dark"] #page-content .flow-wizard-sticky-bar .btn-secondary { background:transparent; border:1px solid var(--ui-border); color:var(--ui-text); }

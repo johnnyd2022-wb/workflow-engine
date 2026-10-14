@@ -27,8 +27,7 @@ logger = get_logger(__name__)
 _PROCESS_SETTINGS_KEYS = {"fifo_auto_select", "library_stock_name"}  # library: plan 1.2
 
 
-# "style" is CONCEPT ONLY: the design-preview choice; drop it with the chooser.
-_FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh", "style"}
+_FLOW_ALLOWED_QUERY_PARAMS = {"id", "fresh"}
 _FLOW_WIZARD_PAGE_TO_STEP = {
     "process-overview": 1,
     "step-name": 2,
@@ -202,10 +201,6 @@ def _filtered_flow_query_args() -> dict[str, str]:
     if request.args.get("fresh") is not None:
         # Treat "fresh" as a boolean flag; normalize to "1" when present.
         args["fresh"] = "1"
-
-    # CONCEPT ONLY: carry the previewed layout through wizard redirects.
-    if request.args.get("style") in {"1", "2", "3"}:
-        args["style"] = request.args["style"]
 
     return {k: v for k, v in args.items() if k in _FLOW_ALLOWED_QUERY_PARAMS}
 
