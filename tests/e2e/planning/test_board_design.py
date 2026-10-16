@@ -1,6 +1,6 @@
 """The Production board's redesign (docs/production-board-redesign-plan.md): compact batch cards
 with their actions behind Details, period stepping, the at-a-glance figures, a calendar-aligned
-month, and the three CONCEPT ONLY layouts. Actions themselves are covered in test_board_phone.py."""
+month, and the layout at every width. Actions themselves are covered in test_board_phone.py."""
 
 from datetime import timedelta
 from urllib.parse import urlsplit
@@ -150,26 +150,15 @@ def test_arriving_by_an_in_app_link_renders_the_board(planned, browser):
         page.close()
 
 
-# CONCEPT ONLY: remove with the losing styles once one is picked.
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-@pytest.mark.parametrize("style", ["1", "2", "3"])
-def test_concept_styles_fit_the_width_and_arrange_the_batches(planned, browser, style, width):
-    client, demand, batches = planned
-    page = _open(browser, client, width=width, path=f"/core/planner/board?style={style}")
+def test_board_fits_every_width_with_the_figures_and_batches(planned, browser, width):
+    client, _, batches = planned
+    page = _open(browser, client, width=width)
     try:
         page.locator('[data-board-range] [name="date"]').fill(batches[0]["proposed_start_date"])
         page.get_by_role("button", name="Show board").click()
         expect(page.locator(".board-batch")).to_have_count(len(batches))
+        expect(page.locator(".board-figures")).to_be_visible()
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-        if style == "1":
-            expect(page.locator(".board-figures")).to_be_visible()
-        else:
-            expect(page.locator("[data-board-brief]")).to_contain_text(f"{len(batches)} batches planned")
-            expect(page.locator(".board-figures")).to_be_hidden()
-        if style == "3":
-            lanes = page.locator(".board-lane:not(.board-lane--head)")
-            expect(lanes).to_have_count(1)
-            expect(lanes.first.locator(".board-lane__label strong")).to_have_text(demand["reference"])
-            expect(page.locator(".board-batch h4").first).to_have_text("Batch 1")
     finally:
         page.close()

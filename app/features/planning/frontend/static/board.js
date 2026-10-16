@@ -44,7 +44,6 @@
     }
     function option(select, value, text) { const element = node('option', text); element.value = value; select.append(element); }
     function field(form, text, name, type, value) { const label = node('label', text); const input = node('input'); input.type = type; input.name = name; input.value = value; input.required = true; label.append(input); form.append(label); return input; }
-    function style() { return root.dataset.boardStyle || '1'; }
 
     function clearDrag() {
       draggedBatch = null;
@@ -149,7 +148,7 @@
         button.title = batch.pinned ? 'Pinned: the planner will not move it. Select to unpin.' : 'Pin to keep it on this day';
       } else if (batch.pinned) top.append(node('span', 'Pinned', 'board-batch__pinned'));
       card.append(top);
-      card.append(node('h4', (style() === '3' ? '' : batch.snapshot.demand_reference + ' · ') + 'Batch ' + batch.batch_number));
+      card.append(node('h4', batch.snapshot.demand_reference + ' · Batch ' + batch.batch_number));
       card.append(node('p', current.text, 'board-batch__state'));
       card.append(node('p', amount(batch.quantity) + ' ' + batch.unit + ' · ' + batch.snapshot.output_name, 'board-batch__what'));
       card.append(node('p', batch.snapshot.site_name + ' · Priority ' + batch.priority + (batch.pinned ? ' · Pinned' : ''), 'board-batch__meta'));
@@ -313,10 +312,6 @@
       set('batches', batches.length); set('ready', ready); set('blocked', blocked); set('overloaded', overloads);
       root.querySelector('[data-figure-tile="overloaded"]').dataset.state = overloads ? 'alert' : '';
       root.querySelector('[data-figure-tile="ready"]').dataset.state = ready ? 'good' : '';
-      let brief = 'No batches planned in this period.';
-      if (batches.length) brief = plural(batches.length, 'batch', 'batches') + ' planned: ' + ready + ' ready to start, ' + blocked + ' waiting on checks.';
-      if (overloads) brief += ' ' + plural(overloads, 'resource-day is', 'resource-days are') + ' over capacity.';
-      root.querySelector('[data-board-brief]').textContent = brief;
       root.querySelector('[data-board-count]').textContent = '';
       root.querySelector('.board-figures').hidden = !batches.length;
     }
@@ -325,43 +320,12 @@
       const {dates, result} = lastBoard;
       const days = root.querySelector('[data-board-days]'); days.replaceChildren();
       const view = rangeForm.elements.view.value;
-      days.dataset.view = view; days.dataset.layout = style();
+      days.dataset.view = view;
       // A week whose weekend has nothing planned gives those two days less room.
       const weekendBusy = result.batches.some(batch => [0, 6].includes(day(batch.proposed_start_date).getDay()));
       days.dataset.weekend = weekendBusy ? 'busy' : 'quiet';
       root.querySelector('[data-board-empty]').hidden = result.batches.length !== 0;
       const entries = daysOf(dates);
-      if (style() === '3') {
-        // By demand: one lane per demand, a column per day.
-        days.style.setProperty('--board-columns', String(entries.length));
-        const head = node('div', undefined, 'board-lane board-lane--head');
-        head.append(node('span', 'Demand', 'board-lane__label'));
-        entries.forEach(entry => { const cell = node('div', undefined, 'board-lane__cell'); cell.append(dayHeading(entry)); head.append(cell); });
-        days.append(head);
-        const lanes = new Map();
-        result.batches.forEach(batch => {
-          const key = batch.demand_id || batch.snapshot.demand_reference;
-          if (!lanes.has(key)) lanes.set(key, {reference: batch.snapshot.demand_reference, due: batch.snapshot.due_date, batches: []});
-          lanes.get(key).batches.push(batch);
-        });
-        lanes.forEach(lane => {
-          const row = node('div', undefined, 'board-lane');
-          const label = node('div', undefined, 'board-lane__label');
-          label.append(node('strong', lane.reference));
-          if (lane.due) label.append(node('span', 'Due ' + short(lane.due, {day: 'numeric', month: 'short'})));
-          label.append(node('span', plural(lane.batches.length, 'batch', 'batches')));
-          row.append(label);
-          entries.forEach(entry => {
-            const cell = node('section', undefined, 'board-lane__cell board-day');
-            cell.setAttribute('aria-label', entry.date.toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'long'}));
-            dropDay(cell, entry.key);
-            lane.batches.filter(batch => batch.proposed_start_date === entry.key).forEach(batch => cell.append(batchCard(batch)));
-            row.append(cell);
-          });
-          days.append(row);
-        });
-        return;
-      }
       entries.forEach(entry => {
         const section = node('section', undefined, 'board-day');
         const todays = result.batches.filter(batch => batch.proposed_start_date === entry.key);
@@ -369,7 +333,7 @@
         const weekday = (entry.date.getDay() + 6) % 7;
         if (weekday >= 5) section.dataset.weekend = 'true';
         if (iso(new Date()) === entry.key) section.dataset.today = 'true';
-        if (view === 'month' && entry === entries[0] && style() === '1') section.style.gridColumnStart = String(weekday + 1);
+        if (view === 'month' && entry === entries[0]) section.style.gridColumnStart = String(weekday + 1);
         dropDay(section, entry.key);
         section.append(dayHeading(entry));
         const list = node('div', undefined, 'board-day__batches');
@@ -504,22 +468,6 @@
       try { await api('/api/core/planner/material-assessments', {}); await loadBoard(); notice.textContent = 'Materials observed. Refresh after stock changes; delivery and start checks remain pending.'; }
       catch (exc) { fail(exc); } finally { button.disabled = false; }
     });
-
-    // CONCEPT ONLY: the layout preview switch goes once a style is picked.
-    function setStyle(value) {
-      const picked = ['1', '2', '3'].includes(value) ? value : '1';
-      root.dataset.boardStyle = picked;
-      root.querySelectorAll('[data-style-pick]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.stylePick === picked)));
-      try { sessionStorage.setItem('board-design-style', picked); } catch (_) { /* Storage is optional. */ }
-      renderDays();
-    }
-    root.querySelector('.board-concepts')?.addEventListener('click', event => {
-      const pick = event.target.closest('[data-style-pick]');
-      if (pick) setStyle(pick.dataset.stylePick);
-    });
-    let remembered = null;
-    try { remembered = sessionStorage.getItem('board-design-style'); } catch (_) { /* Defaults work without storage. */ }
-    setStyle(new URLSearchParams(window.location.search).get('style') || remembered || '1');
 
     Promise.all([loadInputs(), loadBoard()]).catch(fail);
     return function () { alive = false; boardRequest += 1; };

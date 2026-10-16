@@ -89,4 +89,14 @@ Five screenshot passes:
 4. **Pass 4.** Pale settings save button and unstyled working-days fieldset; an open card stretched its neighbours in Style 2.
 5. **Pass 5.** No defects found.
 
-Also fixed in `scripts/ui_shots.py`: `purge` imported only modules named `*.models`, so planning's `batch_models` tables were never deleted and the purge stopped at `processes`. Awaiting the pick.
+Also fixed in `scripts/ui_shots.py`: `purge` imported only modules named `*.models`, so planning's `batch_models` tables were never deleted and the purge stopped at `processes`.
+
+## Decision: Style 1, the Week
+
+Chosen by the founder on 16 October 2026. The controls card, then the figures strip and the
+seven-day grid with quiet weekends narrowed; on a phone each day is a row and empty days fold.
+The preview switch, Style 2's agenda rows and one-sentence brief, and Style 3's demand lanes are
+removed. The CONCEPT ONLY tests became one permanent check at 390, 1024, 1440 and 1920: the
+figures and every batch show, with no sideways scroll. A final screenshot pass
+(`board-06-final`) of the locked page found nothing to fix. A by-demand view remains a
+candidate follow-up if planners ask how one order spreads across days.

@@ -5,20 +5,13 @@
 {% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('planning.static', filename='board.css') }}">
-<main class="production-board workspace-overview workspace-page" data-board-root data-board-style="1" data-can-record="{{ 'true' if can('production.record') else 'false' }}">
+<main class="production-board workspace-overview workspace-page" data-board-root data-can-record="{{ 'true' if can('production.record') else 'false' }}">
   <header class="workspace-header">
     <div><h1>Production board</h1><p>When each planned batch is due to start.</p></div>
     <div class="workspace-header__actions">
       <a class="workspace-button" href="{{ url_for('planning.planner_page') }}">Production demand</a>
     </div>
   </header>
-  {# CONCEPT ONLY: remove with the losing styles once one is picked. #}
-  <div class="board-concepts" role="group" aria-label="Production board design concepts">
-    <span>Preview layout</span>
-    <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Week</button>
-    <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · Agenda</button>
-    <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · By demand</button>
-  </div>
   <p class="workspace-notice board-error" role="alert" data-board-error hidden></p>
   <p class="workspace-notice board-notice" role="status" data-board-notice></p>
   <div class="workspace-stack board-layout">
@@ -47,7 +40,6 @@
       </form>
       {% endif %}
     </section>
-    <p class="board-brief" data-board-brief></p>
     <section class="workspace-card board-plan-card" aria-labelledby="board-days-title">
       <div class="workspace-card__header"><h2 id="board-days-title">Planned batches</h2><span class="board-count" data-board-count></span></div>
       <dl class="board-figures" aria-label="This period at a glance">
