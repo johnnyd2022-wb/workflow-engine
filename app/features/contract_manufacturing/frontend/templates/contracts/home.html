@@ -6,7 +6,7 @@
 {% set open_orders = orders | selectattr('status', 'in', ['draft', 'confirmed']) | list %}
 {% set closed_orders = orders | rejectattr('status', 'in', ['draft', 'confirmed']) | list %}
 {% set customer_names = customers | map(attribute='name') | list %}
-<main class="contract-workspace workspace-overview workspace-page" data-contracts-root data-contracts-style="1">
+<main class="contract-workspace workspace-overview workspace-page" data-contracts-root>
   <header class="workspace-header">
     <div><h1>Contract orders</h1><p>Orders made for your customers.</p></div>
     <div class="workspace-header__actions">
@@ -14,13 +14,6 @@
       {% if can('sales.record') %}<button type="button" class="workspace-button workspace-button--primary contracts-primary" data-toggle-form="contracts-new-order" aria-expanded="false" aria-controls="contracts-new-order">New order</button>{% endif %}
     </div>
   </header>
-  {# CONCEPT ONLY — removed once a direction is selected. #}
-  <div class="contracts-concepts" role="group" aria-label="Contract orders design concepts">
-    <span>Preview layout</span>
-    <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Board</button>
-    <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · Tabs</button>
-    <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · By customer</button>
-  </div>
   <p class="contract-error workspace-notice" role="alert" hidden></p>
   <div class="workspace-stack contracts-layout">
   {% if can('sales.record') %}
@@ -57,9 +50,6 @@
   </section>
   {% endif %}
 
-  {# CONCEPT ONLY: Styles 2 and 3 open on one sentence instead of the figures card. #}
-  <p class="contracts-brief" data-contracts-brief hidden></p>
-
   <section class="contract-card workspace-card contracts-glance" aria-labelledby="contracts-glance-title">
     <h2 id="contracts-glance-title">At a glance</h2>
     <dl class="contracts-figures">
@@ -69,17 +59,11 @@
     </dl>
   </section>
 
-  {# CONCEPT ONLY (Style 2): orders and customers as two tabs. #}
-  <div class="contracts-tabs" role="tablist" aria-label="Contract orders sections">
-    <button type="button" role="tab" aria-selected="true" data-contracts-tab="orders">Orders <span>{{ open_orders | length }}</span></button>
-    {% if can('sales.view') %}<button type="button" role="tab" aria-selected="false" data-contracts-tab="customers">Customers <span>{{ customers | length }}</span></button>{% endif %}
-  </div>
-
-  <section class="contract-card workspace-card contracts-orders" aria-labelledby="contracts-orders-title" data-contracts-panel="orders">
+  <section class="contract-card workspace-card contracts-orders" aria-labelledby="contracts-orders-title">
     <div class="workspace-card__header"><h2 id="contracts-orders-title">Orders</h2><span class="contracts-count">{{ open_orders | length }} open</span></div>
     {% macro order_rows(rows) %}
       {% for order in rows %}
-      <tr data-order-status="{{ order.status }}" data-customer="{{ order.customer_name }}">
+      <tr data-order-status="{{ order.status }}">
         <td><a href="{{ url_for('contracts.order_page', order_id=order.id) }}">{{ order.reference }}</a></td>
         <td class="contracts-col-customer">{{ order.customer_name }}</td>
         <td><span class="contracts-due" data-due="{{ order.due_date }}" title="{{ order.due_date }}">{{ order.due_date }}</span></td>
@@ -93,17 +77,6 @@
       <div class="contract-table workspace-scroll contracts-table-open"><table class="workspace-table"><thead><tr><th>Order</th><th class="contracts-col-customer">Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
       {{ order_rows(open_orders) }}
       </tbody></table></div>
-      {# CONCEPT ONLY (Style 3): the same open orders grouped under each customer. #}
-      <div class="contracts-groups">
-        {% for name, group in open_orders | groupby('customer_name') %}
-        <section class="contracts-group" aria-label="Orders for {{ name }}">
-          <h3>{{ name }} <span>{{ group | length }} open</span></h3>
-          <div class="contract-table workspace-scroll"><table class="workspace-table"><thead><tr><th>Order</th><th class="contracts-col-customer">Customer</th><th>Due</th><th>Status</th><th>Products</th></tr></thead><tbody>
-          {{ order_rows(group) }}
-          </tbody></table></div>
-        </section>
-        {% endfor %}
-      </div>
       {% else %}<p class="workspace-empty">No open orders. Everything here is completed or cancelled.</p>{% endif %}
       {% if closed_orders %}
       <details class="contracts-closed"><summary>Completed and cancelled ({{ closed_orders | length }})</summary>
@@ -121,7 +94,7 @@
   </section>
 
   {% if can('sales.view') %}
-  <section class="contract-card workspace-card contracts-customers" aria-labelledby="contracts-customers-title" data-contracts-panel="customers">
+  <section class="contract-card workspace-card contracts-customers" aria-labelledby="contracts-customers-title">
     <div class="workspace-card__header"><h2 id="contracts-customers-title">Contract customers</h2>
       {% if can('sales.record') %}<button type="button" class="workspace-button" data-toggle-form="contracts-new-customer" aria-expanded="false" aria-controls="contracts-new-customer">Add customer</button>{% endif %}
     </div>

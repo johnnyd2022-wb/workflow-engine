@@ -75,4 +75,13 @@ Five screenshot passes. Pass 1: the style switch did nothing (the root's own
 Pass 2: Style 3's per-customer tables had different column widths. Pass 3: at 1440 the
 Board put figures and customers first and pushed the orders below the fold. Pass 4: with
 orders beside customers at 1440, order references and products wrapped mid-word. Pass 5:
-no defects found. Awaiting the pick.
+no defects found.
+
+## Decision: Style 1, the Board
+
+Chosen by the founder on 16 October 2026. The figures strip leads, then the orders, with the
+customers beside them once the content is at least 1,200px wide (below it they follow the
+orders). The preview switch, Style 2's tabs and one-sentence brief, and Style 3's per-customer
+grouping are removed. The CONCEPT ONLY tests became one permanent check: every width fits
+without sideways scroll, the orders are visible, and at 1920 the customers sit beside them.
+A final screenshot pass (`contracts-06-final`) of the locked page found nothing to fix.

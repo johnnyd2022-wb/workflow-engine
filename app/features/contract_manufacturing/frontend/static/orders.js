@@ -95,20 +95,15 @@
     return { label: date.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: days < -300 || days > 300 ? 'numeric' : undefined }), state: 'later' };
   }
   function init(root) {
-    const plural = (count, one, many) => count + ' ' + (count === 1 ? one : many);
     let overdue = 0;
     let week = 0;
-    const counted = new Set();
     root.querySelectorAll('tr[data-order-status]').forEach((row) => {
       const open = row.dataset.orderStatus === 'draft' || row.dataset.orderStatus === 'confirmed';
       const due = row.querySelector('[data-due]');
       const words = dueWords(due.dataset.due, open);
       due.textContent = words.label;
       due.dataset.state = words.state;
-      // The same order appears in the table and in the customer grouping; count it once.
-      const key = row.querySelector('a') ? row.querySelector('a').getAttribute('href') : '';
-      if (open && !counted.has(key)) {
-        counted.add(key);
+      if (open) {
         const days = daysUntil(due.dataset.due);
         if (days < 0) overdue += 1;
         else if (days <= 7) week += 1;
@@ -124,14 +119,6 @@
     set('[data-figure-note="overdue"]', overdue ? 'past their due date' : 'nothing is late');
     const overdueTile = root.querySelector('[data-figure-tile="overdue"]');
     if (overdueTile) overdueTile.dataset.state = overdue ? 'overdue' : 'clear';
-    const open = Number(root.querySelector('[data-figure="open"]')?.textContent || 0);
-    // CONCEPT ONLY: Styles 2 and 3 lead with a sentence in place of the figures card.
-    const brief = root.querySelector('[data-contracts-brief]');
-    function renderBrief(style) {
-      if (!brief) return;
-      brief.hidden = style === '1';
-      brief.textContent = open ? plural(open, 'open order', 'open orders') + ': ' + (overdue ? overdue + ' overdue, ' : '') + week + ' due this week.' : 'No open contract orders.';
-    }
 
     function toggle(id, show) {
       const target = root.querySelector('#' + id);
@@ -142,31 +129,11 @@
       if (opening) target.querySelector('input, select')?.focus();
       else root.querySelector('[aria-controls="' + id + '"]')?.focus();
     }
-    // CONCEPT ONLY — preview switch and the tab pair Style 2 uses.
-    function selectTab(name) {
-      root.dataset.contractsTab = name;
-      root.querySelectorAll('button[data-contracts-tab]').forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.contractsTab === name)));
-    }
-    function setStyle(value) {
-      const style = ['1', '2', '3'].includes(value) ? value : '1';
-      root.dataset.contractsStyle = style;
-      try { sessionStorage.setItem('contracts-design-style', style); } catch (_) { /* Storage is optional. */ }
-      root.querySelectorAll('[data-style-pick]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.stylePick === style)));
-      renderBrief(style);
-    }
     function onClick(event) {
       const toggleButton = event.target.closest('[data-toggle-form]');
-      if (toggleButton) { toggle(toggleButton.dataset.toggleForm); return; }
-      const tab = event.target.closest('button[data-contracts-tab]');
-      if (tab) { selectTab(tab.dataset.contractsTab); return; }
-      const pick = event.target.closest('[data-style-pick]');
-      if (pick) setStyle(pick.dataset.stylePick);
+      if (toggleButton) toggle(toggleButton.dataset.toggleForm);
     }
     root.addEventListener('click', onClick);
-    selectTab('orders');
-    let remembered;
-    try { remembered = sessionStorage.getItem('contracts-design-style'); } catch (_) { /* Defaults work without storage. */ }
-    setStyle(new URLSearchParams(window.location.search).get('style') || remembered || '1');
     return () => root.removeEventListener('click', onClick);
   }
   if (window.bize && window.bize.onPage) window.bize.onPage('[data-contracts-root]', init);

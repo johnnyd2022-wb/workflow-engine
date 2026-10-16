@@ -84,8 +84,8 @@ def contracts_page(browser, app_url, fresh_user):
     context.close()
 
 
-def _open(page, style=None):
-    page.goto("/core/contracts" + (f"?style={style}" if style else ""))
+def _open(page):
+    page.goto("/core/contracts")
     expect(page.locator("[data-contracts-root]")).to_be_visible()
 
 
@@ -188,30 +188,16 @@ def test_page_loads_again_after_leaving_and_returning(contracts_page):
     expect(page.locator(".contracts-table-open .contracts-due").first).to_have_text("3 days overdue")
 
 
-# CONCEPT ONLY — delete with the preview switch and the two layouts not chosen.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_concepts_fit_every_width(contracts_page, style, width):
+def test_page_fits_every_width_with_the_orders_on_the_first_screen(contracts_page, width):
     page = contracts_page
     page.set_viewport_size({"width": width, "height": 900})
-    _open(page, style)
-    expect(page.locator("[data-contracts-root]")).to_have_attribute("data-contracts-style", style)
-    expect(page.get_by_role("heading", name="Orders", exact=True)).to_be_visible()
+    _open(page)
+    orders = page.get_by_role("region", name="Orders", exact=True)
+    expect(orders).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
-
-
-# CONCEPT ONLY
-def test_each_concept_arranges_orders_and_customers_its_own_way(contracts_page):
-    page = contracts_page
-    _open(page, "1")
-    expect(page.get_by_role("region", name="At a glance", exact=True)).to_be_visible()
-    expect(page.locator("[data-contracts-brief]")).to_be_hidden()
-    page.get_by_role("button", name="2 · Tabs", exact=True).click()
-    expect(page.locator("[data-contracts-brief]")).to_have_text("3 open orders: 1 overdue, 1 due this week.")
-    expect(page.get_by_role("region", name="Contract customers", exact=True)).to_be_hidden()
-    page.get_by_role("tab", name="Customers").click()
-    expect(page.get_by_role("region", name="Contract customers", exact=True)).to_be_visible()
-    expect(page.get_by_role("region", name="Orders", exact=True)).to_be_hidden()
-    page.get_by_role("button", name="3 · By customer", exact=True).click()
-    expect(page.get_by_role("region", name="Orders for Harbour Spirits Co.")).to_be_visible()
-    expect(page.locator(".contracts-table-open")).to_be_hidden()
+    if width >= 1920:
+        # Wide enough for the orders table and the customers side by side.
+        customers = page.get_by_role("region", name="Contract customers", exact=True)
+        assert abs(orders.bounding_box()["y"] - customers.bounding_box()["y"]) < 2
+        assert customers.bounding_box()["x"] > orders.bounding_box()["x"] + orders.bounding_box()["width"] - 1
