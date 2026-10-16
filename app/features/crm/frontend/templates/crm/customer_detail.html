@@ -89,6 +89,21 @@
               <div class="crm-form-group"><label class="crm-form-label" for="edit-email">Email</label><input class="crm-form-input" id="edit-email" name="email_address" type="email" x-model="editForm.email_address" maxlength="255"></div>
               <div class="crm-form-group"><label class="crm-form-label" for="edit-phone">Phone</label><input class="crm-form-input" id="edit-phone" name="phone_number" type="tel" x-model="editForm.phone_number" maxlength="50"></div>
             </div>
+            {# Xero keeps a postal and a street address; both are edited here and sent together. #}
+            <template x-for="kind in ['POBOX', 'STREET']" :key="kind">
+              <fieldset data-edit-address :data-address-type="kind" style="border:0; margin:8px 0 0; padding:10px 0 0; border-top:1px solid var(--border-default,#e5e7eb); display:grid; gap:8px;">
+                <legend class="crm-form-label" style="padding:0 0 6px; font-size:.84rem; color:var(--text-primary,#111827);" x-text="addressLabel(kind)"></legend>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px;">
+                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-line1`">Address line 1</label><input class="crm-form-input" :id="`edit-${kind}-line1`" x-model="editForm.addresses[kind].line1" maxlength="500"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-line2`">Address line 2</label><input class="crm-form-input" :id="`edit-${kind}-line2`" x-model="editForm.addresses[kind].line2" maxlength="500"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-city`">Town or city</label><input class="crm-form-input" :id="`edit-${kind}-city`" x-model="editForm.addresses[kind].city" maxlength="255"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-region`">Region</label><input class="crm-form-input" :id="`edit-${kind}-region`" x-model="editForm.addresses[kind].region" maxlength="255"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-postal`">Postcode</label><input class="crm-form-input" :id="`edit-${kind}-postal`" x-model="editForm.addresses[kind].postal_code" maxlength="50"></div>
+                  <div class="crm-form-group"><label class="crm-form-label" :for="`edit-${kind}-country`">Country</label><input class="crm-form-input" :id="`edit-${kind}-country`" x-model="editForm.addresses[kind].country" maxlength="50"></div>
+                </div>
+              </fieldset>
+            </template>
+            <button type="button" class="crm-btn crm-btn--ghost crm-btn--sm" style="justify-self:start;" @click="copyPostalToStreet()">Street address is the same as postal</button>
             <p style="margin:0; font-size:.78rem; color:var(--text-secondary,#6b7280);" x-show="xeroSync.syncs">Saving sends these changes to Xero; you will see them before they go.</p>
             <p class="crm-error-banner" role="alert" x-show="editError" x-text="editError" x-cloak></p>
             <div style="display:flex; gap:8px; justify-content:flex-end;">
@@ -105,7 +120,7 @@
                 <li><span x-text="change.label"></span>: <span x-text="change.before || 'blank'" style="text-decoration:line-through; opacity:.7;"></span> → <strong x-text="change.after || 'blank'"></strong></li>
               </template>
             </ul>
-            <p style="margin:0; font-size:.78rem; color:var(--text-secondary,#6b7280);">Xero keeps anything Biz-E does not hold, such as addresses and other phone numbers.</p>
+            <p style="margin:0; font-size:.78rem; color:var(--text-secondary,#6b7280);">Xero keeps anything Biz-E does not hold, such as other phone numbers and address lines 3 and 4.</p>
             <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
               <button type="button" class="crm-btn crm-btn--secondary" @click="confirming=false">Back to editing</button>
               <button type="button" class="crm-btn crm-btn--primary" data-confirm-xero-save @click="saveEdit()" :disabled="editSaving" x-text="editSaving ? 'Saving…' : (xeroSync.in_xero ? 'Save and update Xero' : 'Save and create in Xero')">Save and update Xero</button>
@@ -127,8 +142,12 @@
               <span x-text="customer.phone_number || '—'">—</span>
             </div>
             <div class="crm-detail-field">
-              <label>Address</label>
-              <span x-text="primaryAddress || '—'">—</span>
+              <label>Postal address</label>
+              <span data-address="POBOX" x-text="addressLine('POBOX') || '—'">—</span>
+            </div>
+            <div class="crm-detail-field">
+              <label>Street address</label>
+              <span data-address="STREET" x-text="addressLine('STREET') || '—'">—</span>
             </div>
             <div class="crm-detail-field">
               <label>Tax Number</label>

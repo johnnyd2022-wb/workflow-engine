@@ -185,7 +185,8 @@ class XeroAPIClient:
         """Send changed Biz-E fields to an existing Xero contact and return Xero's copy.
 
         Only the fields given are sent, so Xero keeps anything Biz-E does not hold (other phone
-        types, addresses, tax settings)."""
+        types, tax settings). Addresses go as both types Biz-E holds, every part included, so a
+        changed postal address cannot blank the street one."""
         from xero_python.accounting import AccountingApi
         from xero_python.accounting.models import Contacts
 
@@ -446,11 +447,27 @@ class XeroAPIClient:
 def _contact_model(fields: dict, contact_id: str | None = None):
     """A xero-python Contact carrying only the given fields. An empty string clears a field in
     Xero; a key that is absent leaves Xero's value alone."""
-    from xero_python.accounting.models import Contact, Phone
+    from xero_python.accounting.models import Address, Contact, Phone
 
     kwargs = {key: fields[key] for key in ("name", "first_name", "last_name", "email_address") if key in fields}
     if "phone_number" in fields:
         kwargs["phones"] = [Phone(phone_type="DEFAULT", phone_number=fields["phone_number"] or "")]
+    if fields.get("addresses"):
+        kwargs["addresses"] = [
+            Address(
+                address_type=item["type"],
+                address_line1=item.get("line1") or "",
+                address_line2=item.get("line2") or "",
+                address_line3=item.get("line3") or "",
+                address_line4=item.get("line4") or "",
+                city=item.get("city") or "",
+                region=item.get("region") or "",
+                postal_code=item.get("postal_code") or "",
+                country=item.get("country") or "",
+                attention_to=item.get("attention_to") or "",
+            )
+            for item in fields["addresses"]
+        ]
     if contact_id:
         kwargs["contact_id"] = contact_id
     return Contact(**kwargs)

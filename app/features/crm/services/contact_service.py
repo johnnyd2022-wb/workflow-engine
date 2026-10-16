@@ -42,6 +42,21 @@ EDITABLE_FIELDS: dict[str, int] = {
     "email_address": 255,
     "phone_number": 50,
 }
+# Xero's two address types, and the parts of each Biz-E keeps (Xero's own length limits).
+ADDRESS_TYPES = ("POBOX", "STREET")
+ADDRESS_PARTS: dict[str, int] = {
+    "line1": 500,
+    "line2": 500,
+    "line3": 500,
+    "line4": 500,
+    "city": 255,
+    "region": 255,
+    "postal_code": 50,
+    "country": 50,
+    "attention_to": 255,
+}
+# Everything Biz-E sends to Xero for a contact: the text details plus its addresses.
+SYNCED_FIELDS: tuple[str, ...] = (*EDITABLE_FIELDS, "addresses")
 CONTACT_WRITE_SCOPE = "accounting.contacts"
 
 
@@ -138,6 +153,8 @@ class ContactSyncService:
         self, org_id: UUID, data: dict[str, Any], *, actor_id: UUID | None = None
     ) -> tuple[XeroContact, dict[str, Any]]:
         fields = _clean_fields(data, require_name=True)
+        if "addresses" in data:
+            fields["addresses"] = _clean_addresses(data["addresses"], None)
         self._refuse_duplicate_name(org_id, fields["name"])
         sync_choice = data.get("sync_to_xero")
         if sync_choice is not None and not isinstance(sync_choice, bool):
@@ -165,10 +182,12 @@ class ContactSyncService:
         Returns the contact, its Xero state, and the fields that changed."""
         contact = self._get(org_id, contact_id)
         fields = _clean_fields(data, require_name=False)
+        if "addresses" in data:
+            fields["addresses"] = _clean_addresses(data["addresses"], contact.addresses)
         if "name" in fields and fields["name"].casefold() != (contact.name or "").casefold():
             self._refuse_duplicate_name(org_id, fields["name"], exclude=contact.id)
         before = _snapshot(contact)
-        changed = {key: value for key, value in fields.items() if (getattr(contact, key) or None) != value}
+        changed = {key: value for key, value in fields.items() if _current(contact, key) != value}
         for key, value in changed.items():
             setattr(contact, key, value)
         if changed:
@@ -264,6 +283,8 @@ class ContactSyncService:
             error = "The Xero connection only allows reading contacts. Reconnect Xero, then try again."
         else:
             payload = {key: getattr(contact, key) or "" for key in (fields or EDITABLE_FIELDS)}
+            if fields is None or "addresses" in fields:
+                payload["addresses"] = _addresses(contact.addresses)
             payload["name"] = contact.name
             try:
                 client = XeroAPIClient(self.db, org_id)
@@ -349,7 +370,7 @@ class ContactSyncService:
 def _clean_fields(data: dict[str, Any], *, require_name: bool) -> dict[str, str | None]:
     if not isinstance(data, dict):
         raise ValueError("Expected a JSON object")
-    unknown = set(data) - set(EDITABLE_FIELDS) - {"sync_to_xero"}
+    unknown = set(data) - set(EDITABLE_FIELDS) - {"sync_to_xero", "addresses"}
     if unknown:
         raise ValueError("Unknown field(s): " + ", ".join(sorted(unknown)))
     fields: dict[str, str | None] = {}
@@ -372,5 +393,57 @@ def _clean_fields(data: dict[str, Any], *, require_name: bool) -> dict[str, str 
     return fields
 
 
+def _addresses(raw) -> list[dict[str, Any]]:
+    """Stored addresses in one shape: one per Xero type, every part present, POBOX first."""
+    by_type = {str(item.get("type") or "").upper(): item for item in (raw or []) if isinstance(item, dict)}
+    shaped = []
+    for kind in ADDRESS_TYPES:
+        if kind in by_type:
+            item = by_type[kind]
+            shaped.append({"type": kind, **{part: (item.get(part) or None) for part in ADDRESS_PARTS}})
+    return shaped
+
+
+def _clean_addresses(value: Any, existing) -> list[dict[str, Any]]:
+    """Addresses sent from the page, merged over the stored ones: a type the page leaves out
+    keeps its stored value, and parts the page does not edit (lines 3 and 4, attention to)
+    are kept from the stored copy unless sent."""
+    if not isinstance(value, list):
+        raise ValueError("addresses must be a list")
+    current = {item["type"]: item for item in _addresses(existing)}
+    seen = set()
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("Each address must be an object")
+        kind = str(item.get("type") or "").upper()
+        if kind not in ADDRESS_TYPES:
+            raise ValueError("Address type must be POBOX (postal) or STREET")
+        if kind in seen:
+            raise ValueError("Send at most one postal and one street address")
+        seen.add(kind)
+        unknown = set(item) - set(ADDRESS_PARTS) - {"type"}
+        if unknown:
+            raise ValueError("Unknown address field(s): " + ", ".join(sorted(unknown)))
+        merged = dict(current.get(kind) or {"type": kind, **dict.fromkeys(ADDRESS_PARTS)})
+        for part, limit in ADDRESS_PARTS.items():
+            if part not in item:
+                continue
+            text = item[part]
+            if text is not None and not isinstance(text, str):
+                raise ValueError(f"Address {part} must be text")
+            text = (text or "").strip() or None
+            if text is not None and len(text) > limit:
+                raise ValueError(f"Address {part} must be at most {limit} characters")
+            merged[part] = text
+        current[kind] = merged
+    return [current[kind] for kind in ADDRESS_TYPES if kind in current]
+
+
+def _current(contact: XeroContact, key: str):
+    if key == "addresses":
+        return _addresses(contact.addresses)
+    return getattr(contact, key) or None
+
+
 def _snapshot(contact: XeroContact) -> dict[str, Any]:
-    return {key: getattr(contact, key) for key in EDITABLE_FIELDS}
+    return {key: _current(contact, key) for key in SYNCED_FIELDS}

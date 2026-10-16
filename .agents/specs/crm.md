@@ -27,7 +27,9 @@ needs its own flag check, and none has one.
   whether a `bize` contact is sent and kept in step. Contacts from Xero always are.
 - Sending is `ContactSyncService` (app/features/crm/services/contact_service.py): create with
   an idempotency key, update with only the changed fields (name, first and last name, email,
-  default phone). The local save commits first; a failed send is recorded on the contact
+  default phone, and the postal (POBOX) and street addresses). A changed address is sent
+  with both types Biz-E holds and every part, including lines 3 and 4 and "attention to",
+  which the pull now stores, so an edit never blanks what the page does not show. The local save commits first; a failed send is recorded on the contact
   (`xero_push_status=failed`, reason) with a retry, and the Xero pull leaves those fields
   alone until a send succeeds. The pull links a `bize` contact also made in Xero by hand by
   exact name instead of duplicating it.

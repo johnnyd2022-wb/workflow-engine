@@ -188,3 +188,32 @@ def test_the_sales_default_sends_waiting_customers(sales_page, db, org, xero):
     page.goto("https://crm.test/crm/customers")
     page.get_by_role("button", name="New customer").click()
     expect(page.get_by_role("dialog", name="New customer").get_by_role("checkbox")).to_be_checked()
+
+
+def test_editing_an_address_shows_it_in_the_warning_and_sends_both(sales_page, db, org, xero):
+    from tests.test_crm_contact_sync import XERO_ADDRESSES
+
+    page = sales_page
+    _connect(db, org.id)
+    contact = _xero_contact(db, org.id, addresses=XERO_ADDRESSES)
+    page.goto(f"https://crm.test/crm/customers/{contact.id}")
+    expect(page.locator('[data-address="POBOX"]')).to_have_text("PO Box 12, Wellington, 6140, New Zealand")
+    page.get_by_role("button", name="Edit details").click()
+    page.locator("#edit-POBOX-line1").fill("PO Box 99")
+    page.locator("[data-edit-form]").get_by_role("button", name="Save").click()
+    warning = page.locator("[data-xero-warning]")
+    expect(warning.get_by_role("listitem")).to_have_text(
+        ["Postal address: PO Box 12, Wellington, 6140, New Zealand → PO Box 99, Wellington, 6140, New Zealand"]
+    )
+    _shot(page, "address-warning")
+    page.get_by_role("button", name="Save and update Xero").click()
+    expect(page.locator('[data-address="POBOX"]')).to_have_text("PO Box 99, Wellington, 6140, New Zealand")
+    postal, street = xero.updated[-1][1]["addresses"]
+    assert postal["line1"] == "PO Box 99" and postal["line3"] == "Level 2"
+    assert street["line1"] == "1 Wharf St"
+
+    # "Same as postal" copies the postal address into the street fields.
+    page.get_by_role("button", name="Edit details").click()
+    page.get_by_role("button", name="Street address is the same as postal").click()
+    expect(page.locator("#edit-STREET-line1")).to_have_value("PO Box 99")
+    _shot(page, "address-edit")

@@ -367,3 +367,134 @@ def test_the_sales_default_needs_sales_manage_but_adding_a_customer_does_not(db,
             assert client.get("/api/crm/contact-sync-settings").status_code == 200
             assert client.put("/api/crm/contact-sync-settings", json={"sync_contacts_to_xero": True}).status_code == 403
             assert client.post("/api/crm/customers", json={"name": "Sales Made Ltd"}).status_code == 201
+
+
+# ─── Addresses ──────────────────────────────────────────────────────────────
+
+XERO_ADDRESSES = [
+    {
+        "type": "POBOX",
+        "line1": "PO Box 12",
+        "line2": None,
+        "line3": "Level 2",
+        "line4": "Rear entrance",
+        "city": "Wellington",
+        "region": None,
+        "postal_code": "6140",
+        "country": "New Zealand",
+        "attention_to": "Accounts",
+    },
+    {"type": "STREET", "line1": "1 Wharf St", "city": "Wellington", "postal_code": "6011", "country": "New Zealand"},
+]
+
+
+def test_a_changed_postal_address_goes_with_both_addresses_and_keeps_what_biz_e_does_not_edit(db, org, xero):
+    _connect(db, org.id)
+    contact = _xero_contact(db, org.id, addresses=XERO_ADDRESSES)
+    contact, state, changed = ContactSyncService(db).update_contact(
+        org.id, contact.id, {"addresses": [{"type": "POBOX", "line1": "PO Box 99", "postal_code": "6141"}]}
+    )
+    assert list(changed) == ["addresses"] and state["push_status"] == "synced"
+    (xero_id, sent) = xero.updated[-1]
+    postal, street = sent["addresses"]
+    # The edit lands; lines 3 and 4 and "attention to" ride along unchanged, and the street
+    # address is sent whole so Xero cannot blank it.
+    assert (postal["line1"], postal["postal_code"], postal["line3"], postal["attention_to"]) == (
+        "PO Box 99",
+        "6141",
+        "Level 2",
+        "Accounts",
+    )
+    assert street["line1"] == "1 Wharf St" and street["type"] == "STREET"
+    db.refresh(contact)
+    assert [a["line1"] for a in contact.addresses] == ["PO Box 99", "1 Wharf St"]
+    diff = _events(db, org.id, "crm_contact.updated")[-1].diff
+    assert diff["addresses"]["before"][0]["line1"] == "PO Box 12"
+
+
+def test_an_address_sent_unchanged_is_not_a_change(db, org, xero):
+    _connect(db, org.id)
+    contact = _xero_contact(db, org.id, addresses=XERO_ADDRESSES)
+    _, _, changed = ContactSyncService(db).update_contact(
+        org.id, contact.id, {"addresses": [{"type": "STREET", "line1": "1 Wharf St", "city": "Wellington"}]}
+    )
+    assert changed == {} and xero.updated == []
+
+
+def test_a_new_customer_can_start_with_a_postal_address_sent_to_xero(db, org, xero):
+    _connect(db, org.id)
+    contact, _ = ContactSyncService(db).create_contact(
+        org.id,
+        {
+            "name": "Address Ltd",
+            "sync_to_xero": True,
+            "addresses": [{"type": "POBOX", "line1": "12 Vine Rd", "city": "Martinborough", "country": "NZ"}],
+        },
+    )
+    sent, _ = xero.created[-1]
+    assert sent["addresses"][0]["line1"] == "12 Vine Rd" and sent["addresses"][0]["type"] == "POBOX"
+    assert contact.addresses[0]["city"] == "Martinborough"
+
+
+def test_the_pull_keeps_addresses_xero_has_not_seen_and_stores_every_line(db, org, xero, monkeypatch):
+    from app.features.crm.services.xero_sync_service import XeroSyncService
+
+    _connect(db, org.id)
+    contact = _xero_contact(db, org.id, addresses=XERO_ADDRESSES)
+    xero.fail_with = RuntimeError("down")
+    ContactSyncService(db).update_contact(org.id, contact.id, {"addresses": [{"type": "POBOX", "line1": "New box"}]})
+    stale = SimpleNamespace(
+        contact_id=contact.xero_contact_id,
+        name=contact.name,
+        first_name=None,
+        last_name=None,
+        email_address=None,
+        phones=[],
+        addresses=[
+            SimpleNamespace(
+                address_type="POBOX",
+                address_line1="PO Box 12",
+                address_line2=None,
+                address_line3="Level 2",
+                address_line4=None,
+                city="Wellington",
+                region=None,
+                postal_code="6140",
+                country="New Zealand",
+                attention_to="Accounts",
+            )
+        ],
+        payment_terms=None,
+        tax_number=None,
+        account_number=None,
+        contact_status="ACTIVE",
+        is_customer=True,
+        is_supplier=False,
+        updated_date_utc=datetime.now(UTC),
+    )
+    monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", lambda self, **kw: [stale])
+    monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", lambda self, **kw: [])
+    assert XeroSyncService(db).full_sync(org.id, triggered_by="test").success
+    db.refresh(contact)
+    assert contact.addresses[0]["line1"] == "New box"  # the unsent edit survives
+
+    other = _xero_contact(db, org.id, name="Fresh From Xero")
+    stale.contact_id, stale.name = other.xero_contact_id, other.name
+    assert XeroSyncService(db).full_sync(org.id, triggered_by="test").success
+    db.refresh(other)
+    assert other.addresses[0]["line3"] == "Level 2" and other.addresses[0]["attention_to"] == "Accounts"
+
+
+@pytest.mark.parametrize(
+    "addresses, message",
+    [
+        ("12 Vine Rd", "must be a list"),
+        ([{"type": "HOME", "line1": "x"}], "POBOX"),
+        ([{"type": "POBOX"}, {"type": "pobox"}], "at most one"),
+        ([{"type": "POBOX", "suburb": "x"}], "Unknown address field"),
+        ([{"type": "POBOX", "postal_code": "x" * 51}], "at most 50"),
+    ],
+)
+def test_invalid_addresses_are_refused(db, org, addresses, message):
+    with pytest.raises(ValueError, match=message):
+        ContactSyncService(db).create_contact(org.id, {"name": "Bad Address Ltd", "addresses": addresses})

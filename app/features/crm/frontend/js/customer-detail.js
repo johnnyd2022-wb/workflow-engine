@@ -1,4 +1,8 @@
 /* Customer detail Alpine.js component */
+// The address parts the edit form holds; lines 3 and 4 and "attention to" stay as Xero has them.
+var ADDRESS_EDIT_PARTS = ['line1', 'line2', 'city', 'region', 'postal_code', 'country'];
+function joinAddress(parts) { return ADDRESS_EDIT_PARTS.map((part) => (parts[part] || '').trim()).filter(Boolean).join(', '); }
+
 function crmCustomerDetail(contactId) {
   return {
     contactId,
@@ -730,6 +734,7 @@ function crmCustomerDetail(contactId) {
     startEdit() {
       const c = this.customer;
       this.editForm = { name: c.name || '', first_name: c.first_name || '', last_name: c.last_name || '', email_address: c.email_address || '', phone_number: c.phone_number || '' };
+      this.editForm.addresses = { POBOX: this.addressParts('POBOX'), STREET: this.addressParts('STREET') };
       this.editError = '';
       this.confirming = false;
       this.editing = true;
@@ -740,10 +745,32 @@ function crmCustomerDetail(contactId) {
 
     editedFields() {
       const labels = { name: 'Name', first_name: 'First name', last_name: 'Last name', email_address: 'Email', phone_number: 'Phone' };
-      return Object.keys(labels)
+      const changes = Object.keys(labels)
         .map((field) => ({ field, label: labels[field], before: this.customer[field] || '', after: (this.editForm[field] || '').trim() }))
         .filter((change) => change.before !== change.after);
+      ['POBOX', 'STREET'].forEach((kind) => {
+        const before = this.addressParts(kind);
+        const after = {};
+        ADDRESS_EDIT_PARTS.forEach((part) => { after[part] = (this.editForm.addresses[kind][part] || '').trim(); });
+        if (ADDRESS_EDIT_PARTS.some((part) => before[part] !== after[part])) {
+          changes.push({ field: 'address:' + kind, kind, parts: after, label: this.addressLabel(kind), before: joinAddress(before), after: joinAddress(after) });
+        }
+      });
+      return changes;
     },
+
+    addressLabel(kind) { return kind === 'POBOX' ? 'Postal address' : 'Street address'; },
+
+    addressParts(kind) {
+      const stored = (this.customer?.addresses || []).find((a) => (a.type || '').toUpperCase() === kind) || {};
+      const parts = {};
+      ADDRESS_EDIT_PARTS.forEach((part) => { parts[part] = stored[part] || ''; });
+      return parts;
+    },
+
+    addressLine(kind) { return joinAddress(this.addressParts(kind)); },
+
+    copyPostalToStreet() { this.editForm.addresses.STREET = { ...this.editForm.addresses.POBOX }; },
 
     // Edits to a customer that is in Xero (or about to be) wait for an explicit confirmation.
     reviewEdit() {
@@ -759,7 +786,10 @@ function crmCustomerDetail(contactId) {
       this.editSaving = true;
       this.editError = '';
       const body = {};
-      this.pendingChanges.forEach((change) => { body[change.field] = change.after; });
+      this.pendingChanges.forEach((change) => {
+        if (change.kind) (body.addresses = body.addresses || []).push({ type: change.kind, ...change.parts });
+        else body[change.field] = change.after;
+      });
       try {
         const saved = await CRMAPI.updateCustomer(this.contactId, body);
         Object.assign(this.customer, saved.customer);

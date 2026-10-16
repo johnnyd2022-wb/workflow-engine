@@ -202,6 +202,17 @@
             <input class="crm-form-input" id="new-customer-phone" name="phone_number" type="tel" x-model="newCustomer.form.phone_number" maxlength="50">
           </div>
         </div>
+        <details data-new-customer-address>
+          <summary class="crm-form-label" style="cursor:pointer;">Add a postal address</summary>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-top:8px;">
+            <div class="crm-form-group"><label class="crm-form-label" for="new-customer-line1">Address line 1</label><input class="crm-form-input" id="new-customer-line1" x-model="newCustomer.form.address.line1" maxlength="500"></div>
+            <div class="crm-form-group"><label class="crm-form-label" for="new-customer-line2">Address line 2</label><input class="crm-form-input" id="new-customer-line2" x-model="newCustomer.form.address.line2" maxlength="500"></div>
+            <div class="crm-form-group"><label class="crm-form-label" for="new-customer-city">Town or city</label><input class="crm-form-input" id="new-customer-city" x-model="newCustomer.form.address.city" maxlength="255"></div>
+            <div class="crm-form-group"><label class="crm-form-label" for="new-customer-region">Region</label><input class="crm-form-input" id="new-customer-region" x-model="newCustomer.form.address.region" maxlength="255"></div>
+            <div class="crm-form-group"><label class="crm-form-label" for="new-customer-postal">Postcode</label><input class="crm-form-input" id="new-customer-postal" x-model="newCustomer.form.address.postal_code" maxlength="50"></div>
+            <div class="crm-form-group"><label class="crm-form-label" for="new-customer-country">Country</label><input class="crm-form-input" id="new-customer-country" x-model="newCustomer.form.address.country" maxlength="50"></div>
+          </div>
+        </details>
         <label style="display:flex; align-items:flex-start; gap:8px; font-size:.84rem;">
           <input type="checkbox" name="sync_to_xero" x-model="newCustomer.form.sync" style="margin-top:3px;">
           <span>

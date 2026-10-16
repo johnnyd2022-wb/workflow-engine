@@ -14,7 +14,7 @@ from app.features.crm.repositories.xero_contact_repo import XeroContactRepositor
 from app.features.crm.repositories.xero_invoice_repo import XeroInvoiceRepository
 from app.features.crm.repositories.xero_sync_job_repo import XeroSyncJobRepository
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
-from app.features.crm.services.contact_service import EDITABLE_FIELDS
+from app.features.crm.services.contact_service import SYNCED_FIELDS
 from app.features.crm.services.xero_api_client import XeroAPIClient
 from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
 from app.observability import get_logger, start_span
@@ -193,6 +193,9 @@ class XeroSyncService:
                             "type": getattr(a, "address_type", None),
                             "line1": getattr(a, "address_line1", None),
                             "line2": getattr(a, "address_line2", None),
+                            "line3": getattr(a, "address_line3", None),
+                            "line4": getattr(a, "address_line4", None),
+                            "attention_to": getattr(a, "attention_to", None),
                             "city": getattr(a, "city", None),
                             "region": getattr(a, "region", None),
                             "postal_code": getattr(a, "postal_code", None),
@@ -227,7 +230,7 @@ class XeroSyncService:
                     existing = self._link_contact_made_in_bize(org_id, name, xero_contact_id, tenant_id)
                 if existing is not None and existing.xero_push_status in ("pending", "failed"):
                     # Biz-E holds edits Xero has not seen yet; keep them until a send succeeds.
-                    for key in EDITABLE_FIELDS:
+                    for key in SYNCED_FIELDS:
                         fields.pop(key, None)
                     name = existing.name
                 self.contact_repo.upsert(
