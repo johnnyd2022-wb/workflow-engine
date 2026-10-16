@@ -53,7 +53,7 @@ REPO = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
 STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
-SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales", "planner", "contracts")
+SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales", "planner", "contracts", "stocktake")
 
 
 def say(*parts) -> None:
@@ -648,6 +648,41 @@ def _seed_contracts(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_stocktake(db, org_id, inv) -> None:
+    """Stocktakes over the stock seed's finished goods: one finished in July with every line
+    matching, and one under way today with a line short, one over, one under investigation and
+    the rest still to count. Needs `stock` first."""
+    from datetime import UTC, datetime
+
+    from app.core.backend import stocktake as stocktake_service
+    from app.core.db.models.stocktake import StocktakeLine
+    from app.core.db.models.user import User
+
+    def lines_of(stocktake):
+        return db.query(StocktakeLine).filter(StocktakeLine.stocktake_id == stocktake.id).all()
+
+    user = db.query(User).filter(User.org_id == org_id).first()
+    today = date.today()
+
+    earlier = stocktake_service.start_stocktake(db, org_id, today - timedelta(days=97), "scheduled", None, user.id)
+    for line in lines_of(earlier):
+        stocktake_service.record_count(db, line, line.expected_quantity)
+    earlier.status = "done"
+    earlier.completed_at = datetime.now(UTC) - timedelta(days=97)
+    db.commit()
+
+    current = stocktake_service.start_stocktake(db, org_id, today, "scheduled", None, user.id)
+    lines = sorted(lines_of(current), key=lambda line: str(line.inventory_item_id))
+    if len(lines) < 4:
+        raise SystemExit("ui-shots: `stocktake` needs the `stock` seed's finished goods first")
+    stocktake_service.record_count(db, lines[0], lines[0].expected_quantity)  # matches
+    stocktake_service.record_count(db, lines[1], lines[1].expected_quantity - 6)  # six short
+    stocktake_service.record_count(db, lines[2], lines[2].expected_quantity + 2)  # two over
+    stocktake_service.record_count(db, lines[3], lines[3].expected_quantity - 1)
+    stocktake_service.resolve_line(db, org_id, lines[3], [{"reason": "investigating", "quantity": "1"}], user.id, today)
+    db.commit()
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -685,6 +720,7 @@ def cmd_seed(args) -> int:
             "compliance": _seed_compliance,
             "production": _seed_production,
             "sales": _seed_sales,
+            "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "contracts": _seed_contracts,
         }[kind](db, org.id, inv)
