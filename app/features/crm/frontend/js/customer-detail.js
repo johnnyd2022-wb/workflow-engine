@@ -30,6 +30,18 @@ function crmCustomerDetail(contactId) {
     loading: true,
     error: null,
 
+    // Details and their sync to Xero
+    xeroSync: {},
+    xeroConnection: {},
+    editing: false,
+    confirming: false,
+    editSaving: false,
+    editError: '',
+    editForm: {},
+    pendingChanges: [],
+    syncSaving: false,
+    syncMessage: '',
+
     // Notes
     newNoteContent: '',
     addingNote: false,
@@ -82,6 +94,8 @@ function crmCustomerDetail(contactId) {
       try {
         const data = await CRMAPI.getCustomer(this.contactId);
         this.customer = data.customer;
+        this.xeroSync = data.xero_sync || {};
+        this.xeroConnection = data.xero_connection || {};
         this.invoices = data.recent_invoices || [];
         this.notes    = data.notes || [];
         this.tasks    = data.tasks || [];
@@ -705,6 +719,94 @@ function crmCustomerDetail(contactId) {
       this.analyticsDateTo = this.analyticsDraftTo || this.analyticsDateTo;
       this.showAnalyticsDateModal = false;
       await this.loadCustomerAnalytics();
+    },
+
+    get syncChoice() {
+      if (this.xeroSync.sync_to_xero === true) return 'on';
+      if (this.xeroSync.sync_to_xero === false) return 'off';
+      return 'default';
+    },
+
+    startEdit() {
+      const c = this.customer;
+      this.editForm = { name: c.name || '', first_name: c.first_name || '', last_name: c.last_name || '', email_address: c.email_address || '', phone_number: c.phone_number || '' };
+      this.editError = '';
+      this.confirming = false;
+      this.editing = true;
+      this.$nextTick(() => document.getElementById('edit-name')?.focus());
+    },
+
+    cancelEdit() { this.editing = false; this.confirming = false; this.editError = ''; },
+
+    editedFields() {
+      const labels = { name: 'Name', first_name: 'First name', last_name: 'Last name', email_address: 'Email', phone_number: 'Phone' };
+      return Object.keys(labels)
+        .map((field) => ({ field, label: labels[field], before: this.customer[field] || '', after: (this.editForm[field] || '').trim() }))
+        .filter((change) => change.before !== change.after);
+    },
+
+    // Edits to a customer that is in Xero (or about to be) wait for an explicit confirmation.
+    reviewEdit() {
+      this.editError = '';
+      if (!(this.editForm.name || '').trim()) { this.editError = 'A customer needs a name.'; return; }
+      this.pendingChanges = this.editedFields();
+      if (!this.pendingChanges.length) { this.cancelEdit(); return; }
+      if (this.xeroSync.syncs) { this.confirming = true; return; }
+      this.saveEdit();
+    },
+
+    async saveEdit() {
+      this.editSaving = true;
+      this.editError = '';
+      const body = {};
+      this.pendingChanges.forEach((change) => { body[change.field] = change.after; });
+      try {
+        const saved = await CRMAPI.updateCustomer(this.contactId, body);
+        Object.assign(this.customer, saved.customer);
+        this.xeroSync = { ...this.xeroSync, ...saved.xero_sync };
+        this.editing = false;
+        this.confirming = false;
+        const status = saved.xero_sync.push_status;
+        if (!this.xeroSync.syncs) this.syncMessage = 'Saved.';
+        else if (status === 'synced') this.syncMessage = 'Saved and sent to Xero.';
+        else this.syncMessage = 'Saved in Biz-E. Xero has not got these changes yet.';
+      } catch (e) {
+        this.confirming = false;
+        this.editError = e.message || 'Could not save the details.';
+      } finally {
+        this.editSaving = false;
+      }
+    },
+
+    async setXeroSync(value) {
+      const choice = value === 'on' ? true : value === 'off' ? false : null;
+      this.syncSaving = true;
+      this.syncMessage = '';
+      try {
+        const saved = await CRMAPI.setCustomerXeroSync(this.contactId, choice);
+        Object.assign(this.customer, saved.customer);
+        this.xeroSync = { ...this.xeroSync, ...saved.xero_sync };
+        if (this.xeroSync.syncs && this.xeroSync.push_status === 'synced') this.syncMessage = 'Sent to Xero. Later edits follow when you save them.';
+        else if (!this.xeroSync.syncs && this.xeroSync.in_xero) this.syncMessage = 'Edits now stay in Biz-E. The customer is not removed from Xero.';
+      } catch (e) {
+        this.error = e.message || 'Could not change the Xero setting.';
+      } finally {
+        this.syncSaving = false;
+      }
+    },
+
+    async retryXero() {
+      this.syncSaving = true;
+      try {
+        const saved = await CRMAPI.retryCustomerXeroSync(this.contactId);
+        Object.assign(this.customer, saved.customer);
+        this.xeroSync = { ...this.xeroSync, ...saved.xero_sync };
+        this.syncMessage = this.xeroSync.push_status === 'synced' ? 'Sent to Xero.' : '';
+      } catch (e) {
+        this.error = e.message || 'Could not send to Xero.';
+      } finally {
+        this.syncSaving = false;
+      }
     },
 
     async loadCustomerAnalytics() {

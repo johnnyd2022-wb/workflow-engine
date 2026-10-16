@@ -84,6 +84,30 @@
     </div>
   </div>
 
+  <div class="crm-card" style="margin-bottom:16px;" data-contact-sync-settings>
+    <div class="crm-analytics-header"><span class="crm-analytics-title">Customers created in Biz-E</span></div>
+    <div style="padding:16px; display:grid; gap:10px;">
+      <p style="margin:0; font-size:.82rem; color:var(--text-secondary,#6b7280);">
+        Every Xero contact comes into Sales. Customers you add here stay in Biz-E unless they are sent to Xero.
+        Each customer can override this on its own page.
+      </p>
+      <label style="display:inline-flex; align-items:center; gap:8px; font-size:.86rem; color:var(--text-primary,#111827); font-weight:600;">
+        <input type="checkbox" data-sync-default :checked="contactSync.sync_contacts_to_xero" :disabled="contactSync.saving" @change="saveContactSyncDefault($event.target.checked)">
+        Send customers created in Biz-E to Xero, and keep their details in step
+      </label>
+      <p style="margin:0; font-size:.78rem; color:var(--text-secondary,#6b7280);" x-show="contactSync.sync_contacts_to_xero" x-cloak>
+        New customers go to Xero when you save them. Edits to any customer that is in Xero are sent to Xero when you save.
+      </p>
+      <p style="margin:0; font-size:.78rem; color:#b45309;" x-show="contactSync.loaded && !contactSync.xero.connected" x-cloak>
+        Xero is not connected, so nothing is sent yet. Customers wait and go once Xero is connected and you retry them.
+      </p>
+      <p style="margin:0; font-size:.78rem; color:#b45309;" x-show="contactSync.xero.connected && !contactSync.xero.can_write_contacts" x-cloak>
+        The Xero connection only allows reading contacts. Disconnect and connect Xero again to let Biz-E send customers.
+      </p>
+      <p style="margin:0; font-size:.78rem; color:var(--text-secondary,#6b7280);" role="status" data-sync-default-result x-text="contactSync.message"></p>
+    </div>
+  </div>
+
   <div class="crm-card" style="margin-bottom:16px;">
     <div class="crm-analytics-header"><span class="crm-analytics-title">Sales Traceability</span></div>
     <div style="padding:16px; display:grid; gap:12px;">

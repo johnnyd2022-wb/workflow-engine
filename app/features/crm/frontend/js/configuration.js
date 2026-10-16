@@ -34,6 +34,8 @@ function crmConfiguration() {
       notes: '',
     },
 
+    contactSync: { loaded: false, saving: false, sync_contacts_to_xero: false, xero: { connected: false, can_write_contacts: false }, message: '' },
+
     async init() {
       this.loading = true;
       this.error = null;
@@ -75,6 +77,34 @@ function crmConfiguration() {
         this.error = e.message || 'Failed to load configuration.';
       } finally {
         this.loading = false;
+      }
+      await this.loadContactSync();
+    },
+
+    async loadContactSync() {
+      try {
+        const settings = await CRMAPI.getContactSyncSettings();
+        Object.assign(this.contactSync, settings, { loaded: true });
+      } catch (_) {
+        this.contactSync.loaded = true;
+      }
+    },
+
+    async saveContactSyncDefault(enabled) {
+      this.contactSync.saving = true;
+      this.contactSync.message = '';
+      try {
+        const saved = await CRMAPI.updateContactSyncSettings(enabled);
+        Object.assign(this.contactSync, saved);
+        const parts = [enabled ? 'On.' : 'Off. Customers created in Biz-E stay in Biz-E unless their own page says otherwise.'];
+        if (saved.sent) parts.push(`${saved.sent} waiting customer${saved.sent === 1 ? '' : 's'} sent to Xero.`);
+        if (saved.failed) parts.push(`${saved.failed} could not be sent; open them to see why and try again.`);
+        this.contactSync.message = parts.join(' ');
+      } catch (e) {
+        this.error = e.message || 'Could not save the Xero setting.';
+        this.contactSync.sync_contacts_to_xero = !enabled;
+      } finally {
+        this.contactSync.saving = false;
       }
     },
 

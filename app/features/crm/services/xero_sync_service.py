@@ -5,13 +5,16 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
+from app.features.crm.models.xero_contact import XeroContact
 from app.features.crm.repositories.xero_contact_repo import XeroContactRepository
 from app.features.crm.repositories.xero_invoice_repo import XeroInvoiceRepository
 from app.features.crm.repositories.xero_sync_job_repo import XeroSyncJobRepository
 from app.features.crm.repositories.xero_tenant_repo import XeroTenantRepository
+from app.features.crm.services.contact_service import EDITABLE_FIELDS
 from app.features.crm.services.xero_api_client import XeroAPIClient
 from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
 from app.observability import get_logger, start_span
@@ -203,23 +206,36 @@ class XeroSyncService:
                 if xc.updated_date_utc:
                     xero_updated_at = xc.updated_date_utc
 
+                xero_contact_id = str(xc.contact_id)
+                name = xc.name or "(No name)"
+                fields = {
+                    "first_name": xc.first_name,
+                    "last_name": xc.last_name,
+                    "email_address": xc.email_address,
+                    "phone_number": phone_number,
+                    "addresses": addresses or None,
+                    "payment_terms": payment_terms,
+                    "tax_number": getattr(xc, "tax_number", None),
+                    "account_number": xc.account_number,
+                    "contact_status": str(xc.contact_status) if xc.contact_status else None,
+                    "is_customer": bool(xc.is_customer),
+                    "is_supplier": bool(xc.is_supplier),
+                    "xero_updated_at": xero_updated_at,
+                }
+                existing = self.contact_repo.get_by_xero_id(xero_contact_id, org_id)
+                if existing is None:
+                    existing = self._link_contact_made_in_bize(org_id, name, xero_contact_id, tenant_id)
+                if existing is not None and existing.xero_push_status in ("pending", "failed"):
+                    # Biz-E holds edits Xero has not seen yet; keep them until a send succeeds.
+                    for key in EDITABLE_FIELDS:
+                        fields.pop(key, None)
+                    name = existing.name
                 self.contact_repo.upsert(
                     org_id=org_id,
-                    xero_contact_id=str(xc.contact_id),
+                    xero_contact_id=xero_contact_id,
                     xero_tenant_id=tenant_id,
-                    name=xc.name or "(No name)",
-                    first_name=xc.first_name,
-                    last_name=xc.last_name,
-                    email_address=xc.email_address,
-                    phone_number=phone_number,
-                    addresses=addresses or None,
-                    payment_terms=payment_terms,
-                    tax_number=getattr(xc, "tax_number", None),
-                    account_number=xc.account_number,
-                    contact_status=str(xc.contact_status) if xc.contact_status else None,
-                    is_customer=bool(xc.is_customer),
-                    is_supplier=bool(xc.is_supplier),
-                    xero_updated_at=xero_updated_at,
+                    name=name,
+                    **fields,
                 )
                 result.contacts_synced += 1
             except Exception as e:
@@ -233,6 +249,31 @@ class XeroSyncService:
         # Flush after all contacts so FK lookups work for invoices
         self.db.flush()
         return result
+
+    def _link_contact_made_in_bize(self, org_id: UUID, name: str, xero_contact_id: str, tenant_id: str):
+        """A Biz-E contact not yet sent to Xero that someone also made in Xero by hand: link the
+        two by name (Xero names are unique) instead of pulling in a second copy. Only an exact,
+        unambiguous match links; anything else arrives as a new contact."""
+        matches = (
+            self.db.query(XeroContact)
+            .filter(
+                XeroContact.org_id == org_id,
+                XeroContact.source == "bize",
+                XeroContact.xero_contact_id.is_(None),
+                func.lower(XeroContact.name) == name.casefold(),
+            )
+            .limit(2)
+            .all()
+        )
+        if len(matches) != 1:
+            return None
+        contact = matches[0]
+        contact.xero_contact_id = xero_contact_id
+        contact.xero_tenant_id = tenant_id
+        # The upsert that follows looks the contact up by its Xero id; flush so it finds this row.
+        self.db.flush()
+        logger.info("xero_contact_linked_by_name", org_id=str(org_id), contact_id=str(contact.id))
+        return contact
 
     # ------------------------------------------------------------------
     # Internal: invoices

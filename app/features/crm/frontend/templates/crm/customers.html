@@ -22,6 +22,9 @@
       </p>
     </div>
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      {% if can('sales.record') %}
+      <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" data-new-customer @click="openNewCustomer()">New customer</button>
+      {% endif %}
       <template x-if="isConnected">
         <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="doSync()" :disabled="syncing">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" :style="syncing ? 'animation:spin 1s linear infinite' : ''"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -106,7 +109,7 @@
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
         <h3 x-text="missingContactOnly ? 'All customers have contact details' : search ? 'No customers match your search' : 'No customers yet'">No customers yet</h3>
-        <p x-text="missingContactOnly ? 'There are no customers missing a phone number or email address.' : search ? 'Try a different search term.' : isConnected ? 'Sync Xero to import your contacts.' : 'Connect Xero to get started.'"></p>
+        <p x-text="missingContactOnly ? 'There are no customers missing a phone number or email address.' : search ? 'Try a different search term.' : isConnected ? 'Sync Xero to import your contacts, or add a customer.' : 'Connect Xero to bring in your contacts, or add a customer.'"></p>
         <template x-if="!isConnected">
           <button type="button" class="crm-btn crm-btn--primary" style="margin-top:8px;" @click="beginXeroConnect()">Connect Xero</button>
         </template>
@@ -139,6 +142,8 @@
                     <div style="display:flex; align-items:center; gap:10px;">
                       <div style="width:30px;height:30px;border-radius:50%;background:var(--crm-teal);display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:#0f1a1a;flex-shrink:0;" x-text="initials(c.name)"></div>
                       <span class="col-name" x-text="c.name">—</span>
+                      <span class="crm-badge crm-badge--draft" x-show="!c.in_xero && c.xero_push_status !== 'failed'" title="Created in Biz-E and not in Xero">Biz-E only</span>
+                      <span class="crm-badge crm-badge--medium" x-show="c.xero_push_status === 'failed'" title="Biz-E could not send this customer's details to Xero. Open it to see why.">Not sent to Xero</span>
                     </div>
                   </td>
                   <td class="col-secondary" x-text="c.email_address || '—'">—</td>
@@ -165,6 +170,54 @@
       </div>
     </template>
   </div>
+
+  {% if can('sales.record') %}
+  {# ── New customer ── #}
+  <div class="crm-task-sheet-overlay" x-show="newCustomer.open" x-cloak @click.self="closeNewCustomer()" @keydown.escape.window="closeNewCustomer()" style="display:flex;">
+    <form class="crm-task-sheet" style="height:auto; max-height:90vh;" data-new-customer-form role="dialog" aria-modal="true" aria-labelledby="new-customer-title" @submit.prevent="saveNewCustomer()" hx-boost="false">
+      <div class="crm-task-sheet__header">
+        <span class="crm-task-sheet__title" id="new-customer-title">New customer</span>
+        <button type="button" class="crm-btn crm-btn--ghost" @click="closeNewCustomer()" aria-label="Close" style="font-size:1.2rem;">&times;</button>
+      </div>
+      <div class="crm-task-sheet__body">
+        <div class="crm-form-group">
+          <label class="crm-form-label" for="new-customer-name">Customer or business name <span style="color:var(--crm-red);">*</span></label>
+          <input class="crm-form-input" id="new-customer-name" name="name" x-model="newCustomer.form.name" maxlength="255" required>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px;">
+          <div class="crm-form-group">
+            <label class="crm-form-label" for="new-customer-first">Contact first name</label>
+            <input class="crm-form-input" id="new-customer-first" name="first_name" x-model="newCustomer.form.first_name" maxlength="255">
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label" for="new-customer-last">Contact last name</label>
+            <input class="crm-form-input" id="new-customer-last" name="last_name" x-model="newCustomer.form.last_name" maxlength="255">
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label" for="new-customer-email">Email</label>
+            <input class="crm-form-input" id="new-customer-email" name="email_address" type="email" x-model="newCustomer.form.email_address" maxlength="255">
+          </div>
+          <div class="crm-form-group">
+            <label class="crm-form-label" for="new-customer-phone">Phone</label>
+            <input class="crm-form-input" id="new-customer-phone" name="phone_number" type="tel" x-model="newCustomer.form.phone_number" maxlength="50">
+          </div>
+        </div>
+        <label style="display:flex; align-items:flex-start; gap:8px; font-size:.84rem;">
+          <input type="checkbox" name="sync_to_xero" x-model="newCustomer.form.sync" style="margin-top:3px;">
+          <span>
+            <strong>Also create this customer in Xero</strong>
+            <span style="display:block; color:var(--text-secondary,#6b7280);" x-text="newCustomer.hint"></span>
+          </span>
+        </label>
+        <p class="crm-error-banner" role="alert" x-show="newCustomer.error" x-text="newCustomer.error" x-cloak></p>
+      </div>
+      <div class="crm-task-sheet__footer" style="display:flex; gap:8px; justify-content:flex-end; padding:12px 16px;">
+        <button type="button" class="crm-btn crm-btn--secondary" @click="closeNewCustomer()">Cancel</button>
+        <button type="submit" class="crm-btn crm-btn--primary" :disabled="newCustomer.saving" x-text="newCustomer.saving ? 'Saving…' : (newCustomer.form.sync ? 'Save and create in Xero' : 'Save customer')">Save customer</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
 
 </div>
 

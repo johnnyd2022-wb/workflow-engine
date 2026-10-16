@@ -156,8 +156,13 @@ class CRMService:
         tasks = self.task_repo.list_for_org(org_id, contact_id=contact_id)
         mappings = self.mapping_repo.list_for_org(org_id)
         last_contact = self.contact_repo.last_contact_for_org(org_id, [contact.id])
+        from app.features.crm.services.contact_service import ContactSyncService
+
+        sync = ContactSyncService(self.db)
         return {
             "customer": {**_serialise_contact(contact), **_serialise_last_contact(last_contact.get(contact.id))},
+            "xero_sync": {**sync.describe(contact), "default": sync.sync_default(org_id)},
+            "xero_connection": sync.connection(org_id),
             "recent_invoices": [_serialise_invoice(i, with_line_items=True, db=self.db) for i in invoices],
             "notes": [_serialise_note(n) for n in notes],
             "tasks": [_serialise_task(t, db=self.db) for t in tasks],
@@ -1308,6 +1313,9 @@ def _serialise_contact(c) -> dict:
         "is_supplier": c.is_supplier,
         "last_synced_at": c.last_synced_at.isoformat() if c.last_synced_at else None,
         "xero_updated_at": c.xero_updated_at.isoformat() if c.xero_updated_at else None,
+        "source": getattr(c, "source", None) or "xero",
+        "in_xero": bool(c.xero_contact_id),
+        "xero_push_status": getattr(c, "xero_push_status", None),
     }
 
 
