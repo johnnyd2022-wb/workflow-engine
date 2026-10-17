@@ -237,6 +237,19 @@ relevant_tests:
     - *install_uv
     - uv sync --extra dev
     - |
+      # Test impact analysis (docs/test-impact-analysis.md): replace the rules' full-suite
+      # fallback with the tests that executed the changed lines in main's recorded run. Never
+      # fails the job; anything unavailable falls back to the rules' own targets.
+      if uv run python scripts/tia.py select --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" \
+          --rules-targets /tmp/relevant-pytest-targets --out /tmp/tia-pytest-targets --record \
+          --mr "$CI_MERGE_REQUEST_IID" --pipeline "$CI_PIPELINE_ID"; then
+        mv /tmp/tia-pytest-targets /tmp/relevant-pytest-targets
+      fi
+      if [ ! -s /tmp/relevant-pytest-targets ]; then
+        echo "Test impact analysis: no recorded test executes the changed code."
+        exit 0
+      fi
+    - |
       if python3 scripts/select_relevant_tests.py --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --needs-database; then
         test -n "${CI_PREBUILT:-}" || apt-get update -o Acquire::AllowInsecureRepositories=true -qq
         test -n "${CI_PREBUILT:-}" || apt-get install -y -qq postgresql-client curl openssl ca-certificates
@@ -264,11 +277,12 @@ relevant_tests:
         ./ci/setup_server.sh
       fi
     - |
-      TEST_TARGETS="$(cat /tmp/relevant-pytest-targets)"
+      # One target per line; @file keeps parametrised test IDs with spaces intact.
+      tr ' ' '\n' < /tmp/relevant-pytest-targets | sed '/^$/d' > /tmp/pytest-args
       if python3 scripts/select_relevant_tests.py --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --head "$CI_COMMIT_SHA" --needs-e2e; then
-        E2E_BASE_URL="$(cat /tmp/flask.base-url)" ENVIRONMENT=test uv run pytest $TEST_TARGETS -v
+        E2E_BASE_URL="$(cat /tmp/flask.base-url)" ENVIRONMENT=test uv run pytest @/tmp/pytest-args -v
       else
-        ENVIRONMENT=test uv run pytest $TEST_TARGETS -v
+        ENVIRONMENT=test uv run pytest @/tmp/pytest-args -v
       fi
   after_script:
     - |
@@ -356,7 +370,19 @@ unit_tests:
     # ENVIRONMENT=test their conftest intentionally skips, so this complete Python
     # suite does not download Chromium or start an unused local server.
   script:
-    - ENVIRONMENT=test uv run pytest tests/ -v
+    # The full suite stays the release gate; it also records which lines each test executes
+    # (coverage contexts + scripts/tia_probe.py) so MR pipelines can run only affected tests.
+    # Recording never blocks: the job's result is pytest's alone.
+    - >
+      ENVIRONMENT=test PYTHONPATH=scripts TIA_PROBE_OUT=tia-probe.json
+      uv run pytest tests/ -v -p tia_probe
+      --cov --cov-config=ci/tia.coveragerc --cov-context=test --cov-report=
+      || PYTEST_STATUS=$?
+    - >
+      uv run python scripts/tia.py record --coverage .coverage --probe tia-probe.json
+      --sha "$CI_COMMIT_SHA" --ref "$CI_COMMIT_BRANCH" --pipeline-id "$CI_PIPELINE_ID"
+      || echo "tia: recording failed; selection keeps using the previous run"
+    - exit "${PYTEST_STATUS:-0}"
   only:
     - main
   allow_failure: false
