@@ -53,7 +53,7 @@ REPO = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
 STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
-SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales", "planner", "contracts", "stocktake")
+SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales", "planner", "board", "contracts", "stocktake")
 
 
 def say(*parts) -> None:
@@ -683,6 +683,88 @@ def _seed_stocktake(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_board(db, org_id, inv) -> None:
+    """Planned batches for the Production board: batch sizes and timings for each output the
+    Planner's demand asks for, every open demand planned, the batches spread over this week and
+    next, one pinned, and a still with too few minutes so one day is overloaded. Needs
+    `production planner` seeded first."""
+    from app.core.db.models.organisation import Organisation
+    from app.features.planning import batch_service, capacity_service
+    from app.features.planning.batch_models import PlanningBatch
+    from app.features.planning.models import PlanningDemand
+
+    demands = (
+        db.query(PlanningDemand)
+        .filter(PlanningDemand.org_id == org_id, PlanningDemand.status == "open")
+        .order_by(PlanningDemand.due_date)
+        .all()
+    )
+    if not demands:
+        raise SystemExit("ui-shots: `board` needs `production planner` before it (seed production planner board)")
+    catalog = {row["id"]: row for row in batch_service.workflow_catalog(db, org_id)}
+    configured = set()
+    for demand in demands:
+        output = catalog.get(str(demand.source_output_id))
+        if output is None or output["id"] in configured:
+            continue
+        configured.add(output["id"])
+        batch_service.save_setting(
+            db,
+            org_id,
+            uuid.UUID(output["process_id"]),
+            {
+                "source_output_id": output["id"],
+                "batch_quantity": "120" if output["unit"] != "L" else "40",
+                "steps": [
+                    {"step_id": step["step_id"], "duration_minutes": 180, "waiting_minutes": 60}
+                    for step in output["steps"]
+                ],
+                "expected_revision": 0,
+            },
+        )
+    db.commit()
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    offset = 0
+    for demand in demands:
+        if str(demand.source_output_id) not in configured:
+            continue
+        rows, _ = batch_service.plan_demand(db, org_id, demand.id, {}, today=today)
+        for row in rows:  # one batch a working day, so the week reads as a schedule
+            day = monday + timedelta(days=offset % 10 + (offset % 10 >= 5) * 2)
+            shift = day - row.proposed_start_date
+            row.proposed_start_date = day
+            if row.theoretical_ready_date is not None:
+                row.theoretical_ready_date += shift
+            offset += 1
+    db.commit()
+    first = (
+        db.query(PlanningBatch)
+        .filter(PlanningBatch.org_id == org_id)
+        .order_by(PlanningBatch.proposed_start_date)
+        .first()
+    )
+    if first is not None:
+        first.pinned = True
+        db.commit()
+    org = db.query(Organisation).filter(Organisation.id == org_id).one()
+    site = batch_service.resolve_planning_site(db, org, None)
+    if site is not None:
+        still = str(uuid.uuid4())
+        steps = {step["step_id"] for row in catalog.values() for step in row["steps"][:1]}
+        capacity_service.save_setting(
+            db,
+            org_id,
+            site.id,
+            {
+                "groups": [{"id": still, "name": "Still", "minutes_per_day": 300}],
+                "assignments": [{"step_id": step, "group_id": still} for step in steps],
+                "expected_revision": 0,
+            },
+        )
+        db.commit()
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -722,6 +804,7 @@ def cmd_seed(args) -> int:
             "sales": _seed_sales,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
+            "board": _seed_board,
             "contracts": _seed_contracts,
         }[kind](db, org.id, inv)
         say(f"seeded {kind}")
@@ -741,7 +824,7 @@ def cmd_purge(_args) -> int:
 
     # purge_org walks Base.metadata, which only knows the tables whose models are imported.
     for module in pkgutil.walk_packages(features.__path__, features.__name__ + "."):
-        if ".models" in module.name:
+        if module.name.rsplit(".", 1)[-1].endswith("models") or ".models." in module.name:
             try:
                 importlib.import_module(module.name)
             except Exception:  # an optional feature that will not import has no rows here either

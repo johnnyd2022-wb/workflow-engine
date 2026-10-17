@@ -17,7 +17,7 @@ pytestmark = pytest.mark.e2e
 # path -> (page heading, a card heading that must be present)
 PAGES = {
     "/core/planner": ("Planner", "Production demand"),
-    "/core/planner/board": ("Production board", "Rough site capacity"),
+    "/core/planner/board": ("Production board", "Planned batches"),
     "/core/contracts": ("Contract orders", "Orders"),
     "/core/contracts/materials": ("Customer materials", "Materials held"),
     "/core/processes": ("Workflows", "Product workflows"),

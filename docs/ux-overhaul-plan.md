@@ -167,7 +167,7 @@ Go through the audit screenshots in this order; each item is a small MR or a bat
 - [x] **4.2** (!478) **Production overview:** standard header, one primary tab row,
   grouped rectangular action buttons, an in-page setup/health card with explicit status
   wording, and scan-friendly metric tiles. Desktop/mobile and light/dark screenshots inspected.
-- [ ] **4.3** **Planner board:**
+- [x] **4.3** (!526) **Planner board:**
    - controls (view, date, Today) in a toolbar row;
    - batch sizes and site capacity as styled disclosures or a side panel;
    - demand selection and "Plan batches" / "Check materials" as a clear action group;

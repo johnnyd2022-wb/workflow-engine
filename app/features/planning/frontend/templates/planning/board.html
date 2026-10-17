@@ -4,60 +4,76 @@
 <link rel="stylesheet" href="{{ url_for('planning.static', filename='board.css') }}">
 {% endblock %}
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('planning.static', filename='board.css') }}">
 <main class="production-board workspace-overview workspace-page" data-board-root data-can-record="{{ 'true' if can('production.record') else 'false' }}">
   <header class="workspace-header">
-    <div><h1>Production board</h1><p>Proposed work dates. A delivery estimate is available once materials, capacity and site checks are complete.</p></div>
+    <div><h1>Production board</h1><p>When each planned batch is due to start.</p></div>
     <div class="workspace-header__actions">
       <a class="workspace-button" href="{{ url_for('planning.planner_page') }}">Production demand</a>
     </div>
   </header>
-  <p class="workspace-notice" role="alert" data-board-error hidden></p>
-  <p class="workspace-notice" role="status" data-board-notice></p>
-  <div class="workspace-stack">
-    <section class="workspace-card" aria-labelledby="board-view-title">
-      <h2 id="board-view-title">Period</h2>
-      <form class="board-toolbar workspace-form" data-board-range hx-boost="false">
-        <label>View<select name="view"><option value="week">Week</option><option value="month">Month</option><option value="day">Day</option></select></label>
-        <label>Date<input type="date" name="date" required></label>
-        <div class="workspace-form__actions">
-          <button type="submit" class="workspace-button workspace-button--primary">Show board</button>
+  <p class="workspace-notice board-error" role="alert" data-board-error hidden></p>
+  <p class="workspace-notice board-notice" role="status" data-board-notice></p>
+  <div class="workspace-stack board-layout">
+    <section class="workspace-card board-controls" aria-label="Board controls">
+      <form class="board-toolbar" data-board-range hx-boost="false">
+        <div class="board-toolbar__nav">
+          <button type="button" class="workspace-button board-step-button" data-board-step="-1" aria-label="Previous period">‹</button>
           <button type="button" class="workspace-button" data-board-today>Today</button>
+          <button type="button" class="workspace-button board-step-button" data-board-step="1" aria-label="Next period">›</button>
+          <h2 class="board-toolbar__title" data-board-title>Planned work</h2>
+        </div>
+        <div class="board-toolbar__period">
+          <label class="board-field"><span class="board-sr">View</span><select name="view" id="board-view"><option value="week">Week</option><option value="month">Month</option><option value="day">Day</option></select></label>
+          <label class="board-field"><span class="board-sr">Date</span><input type="date" name="date" id="board-date" required></label>
+          <button type="submit" class="workspace-button">Show board</button>
         </div>
       </form>
-    </section>
-    {% if can('production.record') %}
-    <section class="workspace-card" aria-labelledby="board-plan-title">
-      <h2 id="board-plan-title">Plan batches</h2>
-      <p class="workspace-caption">Turn a demand into proposed batches, and check the materials they need.</p>
-      <form data-plan-form class="board-toolbar workspace-form" hx-boost="false">
-        <label>Production demand<select name="demand" required data-plan-demand></select></label>
-        <label>Site<select name="site" data-plan-site><option value="">Main site</option></select></label>
-        <div class="workspace-form__actions">
-          <button type="submit" class="workspace-button workspace-button--primary">Plan batches</button>
+      {% if can('production.record') %}
+      <form data-plan-form class="board-plan" hx-boost="false">
+        <label class="board-field board-plan__demand"><span>Plan a demand</span><select name="demand" id="board-plan-demand" required data-plan-demand></select></label>
+        <label class="board-field board-plan__site" data-plan-site-field><span>Site</span><select name="site" id="board-plan-site" data-plan-site><option value="">Main site</option></select></label>
+        <div class="board-plan__actions">
+          <button type="submit" class="workspace-button workspace-button--primary board-primary">Plan batches</button>
           <button type="button" class="workspace-button" data-check-materials>Check materials</button>
         </div>
       </form>
+      {% endif %}
+    </section>
+    <section class="workspace-card board-plan-card" aria-labelledby="board-days-title">
+      <div class="workspace-card__header"><h2 id="board-days-title">Planned batches</h2><span class="board-count" data-board-count></span></div>
+      <dl class="board-figures" aria-label="This period at a glance">
+        <div class="workspace-tile"><dt>Batches</dt><dd data-figure="batches">—</dd><span>planned to start</span></div>
+        <div class="workspace-tile" data-figure-tile="ready"><dt>Ready to start</dt><dd data-figure="ready">—</dd><span>every check passed</span></div>
+        <div class="workspace-tile" data-figure-tile="blocked"><dt>Waiting on checks</dt><dd data-figure="blocked">—</dd><span data-figure-note="blocked">not ready to start</span></div>
+        <div class="workspace-tile" data-figure-tile="overloaded"><dt>Over capacity</dt><dd data-figure="overloaded">—</dd><span>resource-days</span></div>
+      </dl>
+      {% if can('production.record') %}<p class="workspace-caption board-hint">Drag a batch by its handle to another day, or open its details to move it.</p>{% endif %}
+      <p class="workspace-empty board-empty" data-board-empty hidden>No planned batches in this period. Choose a demand above and plan its batches.</p>
+      <section class="board-days" data-board-days aria-label="Planned production by day"></section>
+    </section>
+    <section class="workspace-card board-capacity" aria-labelledby="capacity-title">
+      <h2 id="capacity-title">Capacity</h2>
+      <div class="board-capacity__results" data-capacity-results aria-live="polite"></div>
+    </section>
+    {% if can('production.record') %}
+    <section class="workspace-card board-settings" aria-labelledby="board-settings-title">
+      <h2 id="board-settings-title">Planning settings</h2>
+      <p class="workspace-caption">How big a batch is, how long each step takes, and how many minutes each resource has in a day.</p>
       <details class="workspace-disclosure board-settings-disclosure" data-workflow-settings>
-        <summary class="workspace-disclosure__summary"><span class="workspace-disclosure__text"><span class="workspace-disclosure__title">Workflow batch sizes and timings</span></span></summary>
+        <summary class="workspace-disclosure__summary"><span class="workspace-disclosure__text"><span class="workspace-disclosure__title">Batch sizes and step timings</span></span></summary>
         <div class="workspace-disclosure__body">
-          <form data-setting-form class="board-settings workspace-form" hx-boost="false">
+          <form data-setting-form class="board-settings__form workspace-form" hx-boost="false">
             <label>Product output<select name="output" required data-workflow-output></select></label>
             <label>Usual batch quantity<input name="batch_quantity" type="number" min="0.0001" step="0.0001" required></label>
             <p data-setting-help></p>
             <fieldset data-step-timings><legend>Step durations and waiting time (minutes)</legend></fieldset>
-            <button type="submit" class="workspace-button workspace-button--primary">Save planning settings</button>
+            <button type="submit" class="workspace-button workspace-button--primary board-primary">Save planning settings</button>
           </form>
         </div>
       </details>
-    </section>
-    {% endif %}
-    <section class="board-capacity workspace-card" aria-labelledby="capacity-title">
-      <h2 id="capacity-title">Rough site capacity</h2>
-      <p class="workspace-caption">Observed minutes by resource group and day. Overloads suggest a lower-priority batch to move; no resource is reserved and no delivery date is promised.</p>
-      <div class="board-capacity__results" data-capacity-results aria-live="polite"></div>
-      {% if can('production.record') %}
       <details class="workspace-disclosure board-settings-disclosure" data-capacity-settings>
-        <summary class="workspace-disclosure__summary"><span class="workspace-disclosure__text"><span class="workspace-disclosure__title">Set resource capacity, working calendars and workflow steps</span></span></summary>
+        <summary class="workspace-disclosure__summary"><span class="workspace-disclosure__text"><span class="workspace-disclosure__title">Resources, working days and step assignments</span></span></summary>
         <div class="workspace-disclosure__body">
           <form class="workspace-form" data-capacity-group-form hx-boost="false">
             <label>Site<select name="site_id" required data-capacity-site></select></label>
@@ -73,17 +89,9 @@
           </form>
         </div>
       </details>
-      {% endif %}
     </section>
-    <section class="workspace-card" aria-labelledby="board-days-title">
-      <h2 id="board-days-title" data-board-title>Planned work</h2>
-      {% if can('production.record') %}<p class="workspace-caption">Drag an unpinned batch to another day to move it, or use its new start date form.</p>{% endif %}
-      <p class="workspace-empty" data-board-empty hidden>No planned batches in this period.</p>
-      <section class="board-days" data-board-days aria-label="Planned production by day"></section>
-    </section>
+    {% endif %}
   </div>
 </main>
-{% endblock %}
-{% block scripts %}{{ super() }}
-<script src="{{ url_for('planning.static', filename='board.js') }}"></script>
+<script src="{{ url_for('planning.static', filename='board.js') }}" defer></script>
 {% endblock %}
