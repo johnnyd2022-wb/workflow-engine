@@ -283,6 +283,8 @@ def test_schedule_and_due_reminder(st):
     assert due_soon[0]["title"].startswith("Stocktake due") and due_soon[0]["overdue"] is False
     assert stocktake._add_months(date(2026, 1, 31), 1) == date(2026, 2, 28)
 
+    assert listing["schedule"]["bulk_tolerance_percent"] == "1"
+
     # The profile form doesn't wipe the schedule (it doesn't send these keys).
     client.put("/api/compliant/profile", json={"enabled": True, "settings": {"alcohol_product_types": ["spirits"]}})
     assert client.get("/api/core/stocktakes").get_json()["schedule"]["frequency"] == "quarterly"
