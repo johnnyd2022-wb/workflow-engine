@@ -1,6 +1,6 @@
 """The Stocktake page's redesign (docs/stocktake-redesign-plan.md): what home leads with, the
 open count as the primary action, the schedule keeping its tolerance, the count view's filters,
-the reconciliation on a phone, and the three CONCEPT ONLY layouts."""
+and the reconciliation on a phone."""
 
 import pytest
 from playwright.sync_api import expect
@@ -43,7 +43,10 @@ def test_saving_how_often_to_count_keeps_the_bulk_tolerance(alcohol_scenario):
     _home(page)
     page.locator("[data-st-schedule-form] summary").click()
     page.locator("[data-st-tolerance]").fill("1.5")
-    page.locator("[data-st-save-schedule]").click()
+    # The save reloads home, which writes the saved frequency back into the select and only then
+    # asks for the stock position; wait for that so the reload can't undo the next choice.
+    with page.expect_request("**/api/core/stock-position"):
+        page.locator("[data-st-save-schedule]").click()
     expect(page.locator("[data-st-message]")).to_have_text("Schedule saved.")
     expect(page.locator("[data-st-tolerance]")).to_have_value("1.5")
 
@@ -84,23 +87,14 @@ def test_count_filters_show_what_is_left_and_the_reconciliation_reads_on_a_phone
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
 
 
-# CONCEPT ONLY: remove with the losing styles once one is picked.
-@pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-@pytest.mark.parametrize("style", ["1", "2", "3"])
-def test_concept_styles_fit_the_width(alcohol_scenario, style, width):
+@pytest.mark.parametrize("width", [390, 1440])
+def test_home_is_the_board_with_no_layout_preview_left(alcohol_scenario, width):
     page = alcohol_scenario["page"]
     page.set_viewport_size({"width": width, "height": 900})
-    _home(page, f"?style={style}")
-    expect(page.locator("[data-stocktake-root]")).to_have_attribute("data-st-style", style)
+    page.goto("/core/stocktake")
+    page.evaluate('sessionStorage.setItem("stocktake-design-style", "2")')
+    _home(page, "?style=3")
+    expect(page.locator("[data-style-pick]")).to_have_count(0)
+    expect(page.locator(".st-glance")).to_be_visible()
     expect(page.get_by_role("heading", name="Stock position", exact=True)).to_be_visible()
-    if style == "1":
-        expect(page.locator(".st-glance")).to_be_visible()
-        expect(page.locator("[data-st-brief]")).to_be_hidden()
-    else:
-        expect(page.locator(".st-glance")).to_be_hidden()
-        expect(page.locator("[data-st-brief]")).to_contain_text("No stocktake finished yet.")
-    if style == "2":
-        expect(page.locator("[data-st-next]")).to_contain_text("Start a first stocktake to set a baseline.")
-    else:
-        expect(page.locator("[data-st-next]")).to_be_hidden()
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")

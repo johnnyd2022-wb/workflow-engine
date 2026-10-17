@@ -61,7 +61,7 @@ and keep it (the bug above).
   - saving a new frequency keeps the tolerance;
   - the count filters and progress;
   - the reconciliation as labelled cards at 390px;
-  - a CONCEPT ONLY group for each style at 390, 1024, 1440 and 1920.
+  - home is the Board, with no layout preview left, at 390 and 1440.
 - Existing: the customs stocktake e2e, production layout, boosted navigation, pages render and go-live suites.
 - Screenshots: each style at desktop, laptop, tablet, phone, wall and dark; the count at desktop, phone and dark; the differences filter; the schedule open; resolving both differences and finishing; home after finishing.
 
@@ -74,4 +74,11 @@ Four screenshot passes:
 3. **Pass 3.** At laptop width the three header buttons wrapped onto two rows. Start is now hidden while a count is open.
 4. **Pass 4** (including resolving, finishing and the quiet home). No defects found.
 
-Awaiting the pick.
+## Decision: Style 1, the Board
+
+Chosen by the founder on 17 October 2026. Four figures, then the open differences beside the
+stocktakes, then the stock position, matching Planner and Home. Next step gave up the figures for
+one card, which says less than the board does once a count is under way; Position first put
+counting a click further away on the page used most for counting. The preview switch, both losing
+layouts, the summary sentence and next-step card they used, and the concept-only tests are
+removed.

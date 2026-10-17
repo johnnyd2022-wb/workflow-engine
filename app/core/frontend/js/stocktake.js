@@ -171,28 +171,6 @@
       });
       $('[data-st-history-wrap]').hidden = !list.stocktakes.length;
 
-      // CONCEPT ONLY: the sentence Styles 2 and 3 lead with, and Style 2's next step.
-      var brief = [];
-      brief.push(counting ? 'A stocktake from ' + fmtDate(counting.counted_on) + ' is still open.' :
-        s.next_due ? (s.overdue ? 'The next stocktake is overdue.' : 'Next stocktake ' + (due === 0 ? 'today' : 'in ' + plural(due, 'day', 'days')) + '.') : 'No stocktake finished yet.');
-      if (list.open_variances.length) brief.push(plural(list.open_variances.length, 'difference is', 'differences are') + ' still open.');
-      $('[data-st-brief]').textContent = brief.join(' ');
-      var nextText = $('[data-st-next-text]');
-      var nextAction = $('[data-st-next-action]');
-      if (counting) {
-        nextText.textContent = 'Finish the stocktake from ' + fmtDate(counting.counted_on) + ': count what is left and explain every difference.';
-        nextAction.textContent = 'Continue stocktake';
-        nextAction.onclick = function () { openStocktake(counting.id).catch(fail); };
-      } else if (list.open_variances.length) {
-        nextText.textContent = 'Resolve the ' + plural(list.open_variances.length, 'difference', 'differences') + ' left from the last count.';
-        nextAction.textContent = 'Open the last stocktake';
-        nextAction.onclick = function () { openStocktake(list.open_variances[0].stocktake_id).catch(fail); };
-      } else {
-        nextText.textContent = s.next_due ? 'Nothing to do until the next count' + (due !== null && due >= 0 ? ', ' + fmtDate(s.next_due) + '.' : '. It is overdue: start it now.') : 'Start a first stocktake to set a baseline.';
-        nextAction.textContent = 'Start stocktake';
-        nextAction.onclick = function () { $('[data-st-start="scheduled"]').click(); };
-      }
-      nextAction.hidden = !canAdjust;
       loadPosition().catch(fail);
     }
 
@@ -485,21 +463,6 @@
     });
 
     $('[data-st-continue]').addEventListener('click', function () { if (counting) openStocktake(counting.id).catch(fail); });
-
-    // CONCEPT ONLY: the layout preview switch goes once a style is picked.
-    function setStyle(value) {
-      var picked = ['1', '2', '3'].indexOf(value) >= 0 ? value : '1';
-      root.dataset.stStyle = picked;
-      root.querySelectorAll('[data-style-pick]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.stylePick === picked)); });
-      try { sessionStorage.setItem('stocktake-design-style', picked); } catch (_) { /* optional */ }
-    }
-    root.querySelector('.st-concepts').addEventListener('click', function (e) {
-      var pick = e.target.closest('[data-style-pick]');
-      if (pick) setStyle(pick.dataset.stylePick);
-    });
-    var remembered = null;
-    try { remembered = sessionStorage.getItem('stocktake-design-style'); } catch (_) { /* optional */ }
-    setStyle(new URLSearchParams(location.search).get('style') || remembered || '1');
 
     var id = new URLSearchParams(location.search).get('id');
     (id ? openStocktake(id) : loadHome()).catch(fail);

@@ -7,12 +7,6 @@
 #page-content .st-shell .st-primary { background: var(--ui-accent-strong, #115e59); border-color: var(--ui-accent-strong, #115e59); color: #fff; }
 html[data-spa-theme="dark"] #page-content .st-shell .st-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: #04211d; }
 
-/* CONCEPT ONLY — the layout preview switch. */
-.st-concepts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 24px; }
-.st-concepts > span { color: var(--ui-text-muted); font-size: .8rem; margin-right: 4px; }
-#page-content .st-concepts .workspace-button { padding: 7px 12px; font-size: .8rem; min-height: 36px; }
-#page-content .st-concepts [aria-pressed="true"] { border-color: var(--ui-accent); color: var(--ui-accent); background: var(--ui-surface-subtle); }
-
 .st-message { margin-bottom: 20px; padding: 12px 14px; border-radius: 8px; font-size: 14px; }
 .st-message--error { background: rgba(180, 35, 24, .08); color: #b42318; border: 1px solid rgba(180, 35, 24, .4); }
 .st-message--ok { background: var(--ui-accent-soft, #e6f6f3); color: var(--ui-accent-strong, #115e59); border: 1px solid var(--ui-accent); }
@@ -36,9 +30,6 @@ html[data-spa-theme="dark"] .st-message--error { color: #fca5a5; }
 .st-figures [data-state="warn"] dd { color: #b45309; }
 html[data-spa-theme="dark"] .st-figures [data-state="bad"] dd, html[data-spa-theme="dark"] .st-figures [data-state="bad"] span { color: #fca5a5; }
 html[data-spa-theme="dark"] .st-figures [data-state="warn"] dd { color: #fbbf24; }
-#page-content .st-shell .st-brief { display: none; margin: 0; font-size: 18px; line-height: 1.5; color: var(--ui-text); }
-.st-next { display: none; }
-#page-content .st-shell .st-next p { margin: 8px 0 14px; font-size: 15px; color: var(--ui-text); }
 
 /* Lists of differences and stocktakes: one line each, the state in words at the end. */
 .st-rows { list-style: none; margin: 12px 0 0; padding: 0; }
@@ -99,33 +90,13 @@ html[data-spa-theme="dark"] #page-content .st-shell .st-chip-button[aria-pressed
 html[data-spa-theme="dark"] .st-link-btn { color: var(--ui-accent); }
 .st-remove { padding: 8px 4px; border: 0; background: none; color: #b42318; font-size: 18px; line-height: 1; cursor: pointer; }
 
-/* Style 1 · Board: figures, then differences beside the stocktakes, then the position. */
+/* Figures, then differences beside the stocktakes, then the position. */
 @container stocktake (min-width: 1000px) {
-  #page-content [data-st-style="1"] .st-layout { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; }
-  [data-st-style="1"] .st-layout > * { grid-column: 1 / -1; }
-  [data-st-style="1"] .st-differences { grid-column: span 7; }
-  [data-st-style="1"] .st-history { grid-column: span 5; }
-  [data-st-style="1"] .st-differences[hidden] + .st-history { grid-column: 1 / -1; }
-}
-
-/* CONCEPT ONLY — Style 2 · Next step: a sentence, then the one thing to do now. */
-[data-st-style="2"] .st-glance, [data-st-style="3"] .st-glance { display: none; }
-#page-content [data-st-style="2"] .st-brief, #page-content [data-st-style="3"] .st-brief { display: block; }
-[data-st-style="2"] .st-next { display: block; }
-
-/* CONCEPT ONLY — Style 3 · Position first: where everything is leads; the stocktakes sit beside it. */
-#page-content [data-st-style="3"] .st-layout { display: flex; flex-direction: column; }
-[data-st-style="3"] .st-position { order: 1; }
-[data-st-style="3"] .st-differences { order: 2; }
-[data-st-style="3"] .st-history { order: 3; }
-[data-st-style="3"] .st-schedule { order: 4; }
-[data-st-style="3"] .st-count-card, [data-st-style="3"] .st-recon { order: 0; }
-@container stocktake (min-width: 1000px) {
-  #page-content [data-st-style="3"] .st-layout { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; }
-  [data-st-style="3"] .st-layout > * { grid-column: 1 / -1; }
-  [data-st-style="3"] .st-brief { order: 0; }
-  [data-st-style="3"] .st-position { grid-column: span 8; grid-row: span 3; }
-  [data-st-style="3"] .st-differences, [data-st-style="3"] .st-history, [data-st-style="3"] .st-schedule { grid-column: span 4; }
+  #page-content .st-shell .st-layout { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; }
+  .st-shell .st-layout > * { grid-column: 1 / -1; }
+  .st-shell .st-differences { grid-column: span 7; }
+  .st-shell .st-history { grid-column: span 5; }
+  .st-shell .st-differences[hidden] + .st-history { grid-column: 1 / -1; }
 }
 
 @container stocktake (max-width: 860px) {
@@ -156,5 +127,3 @@ html[data-spa-theme="dark"] .st-link-btn { color: var(--ui-accent); }
   .st-position .st-table td:nth-child(2), .st-position .st-table td:nth-child(3) { grid-column: 1; font-size: 13px; color: var(--ui-text-muted); }
   .st-position .st-table td.st-num { grid-column: 2; grid-row: 1; }
 }
-/* CONCEPT ONLY — Style 2's next-step card carries Continue; the header does not repeat it. */
-#page-content [data-st-style="2"] [data-st-continue] { display: none; }
