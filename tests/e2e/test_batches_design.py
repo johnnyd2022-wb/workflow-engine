@@ -89,7 +89,8 @@ def _open(browser, app_url, floor, width=1440, query=""):
     page = context.new_page()
     login_through_ui(page, floor["user"]["email"], floor["user"]["password"])
     page.goto(PAGE + query)
-    page.locator('[data-batches-root][data-state="ready"]').wait_for()
+    # A batch card, not the new root, so the two bug tests below also run against the old board.
+    page.locator("#core2-active-pipeline-grid [data-core2-execution-id]").first.wait_for()
     return context, page
 
 
