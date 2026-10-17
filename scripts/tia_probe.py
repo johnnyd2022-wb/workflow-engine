@@ -11,6 +11,7 @@ Read by `python3 scripts/tia.py record`. See docs/test-impact-analysis.md.
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -161,5 +162,18 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     target = os.environ.get("TIA_PROBE_OUT")
     if not target:
         return
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker:
+        # Under pytest-xdist each worker saw only its own tests' files; the controller, which
+        # receives every result, merges the parts after the workers finish.
+        with open(f"{target}.{worker}", "w", encoding="utf-8") as out:
+            json.dump({"files": {k: sorted(v) for k, v in _files.items()}}, out)
+        return
+    files = {k: set(v) for k, v in _files.items()}
+    for part in sorted(glob.glob(f"{glob.escape(target)}.gw*")):
+        with open(part, encoding="utf-8") as f:
+            for test, paths in json.load(f)["files"].items():
+                files.setdefault(test, set()).update(paths)
+        os.remove(part)
     with open(target, "w", encoding="utf-8") as out:
-        json.dump({"files": {k: sorted(v) for k, v in _files.items()}, "results": _results}, out)
+        json.dump({"files": {k: sorted(v) for k, v in files.items()}, "results": _results}, out)

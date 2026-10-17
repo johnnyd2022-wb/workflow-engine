@@ -88,9 +88,26 @@ Event Factory's red-`main` handling already turns the failure into a fix job.
 `bize_dev_admin` through `docker exec`. It's idempotent. CI's `bize_dev_rw` role can only
 read and append.
 
+## Parallel full runs
+
+When a run needs the full suite (`main`, or an MR whose selection is large), it runs on 6
+pytest-xdist workers, each against its own copy of the test database. The CI-scope suite
+takes about 3 minutes with coverage recording (13.5 single-process), and about 2.5 without
+(11–12).
+
+- `app/utils/config_loader.py` appends the worker ID (`gw0`…) to the database name in the
+  local and test environments only.
+- `tests/xdist_db.py` clones each worker's database from `<db>_xdist_template` before the
+  worker starts. In CI it copies the freshly migrated database directly. Locally the
+  deployed test container keeps that database open, so it migrates a private template
+  instead, and rebuilds it only when its migration revision falls behind.
+- `scripts/tia_probe.py` writes a part file per worker, and the controller merges them, so
+  the recorded map is the same as a single-process run.
+- Test IDs must be the same on every collection. A parametrised value generated at import
+  time (a `uuid4()`) needs explicit `ids=`, or xdist refuses to start and the map can't
+  match the test.
+
 ## Next
 
-- Run the full-suite paths (`main`, global-input MRs) on pytest-xdist workers, each with its
-  own database cloned from a migrated template.
 - Skip tests whose recorded inputs are byte-identical to a passing run (a result cache).
 - Record MR file claims, to warn about overlapping MRs before they conflict.

@@ -35,9 +35,17 @@ def _relaxed_under(env: dict[str, str]) -> bool:
 
 @pytest.fixture(autouse=True)
 def _restore_module():
-    """Leave the imported module matching the real environment for other tests."""
+    """Leave auth_routes exactly as it was, original Limiter and blueprint included.
+
+    Reloading it again to "restore" it creates yet another Limiter that no app has ever
+    initialised; any module imported afterwards (portal routes, say) binds to that one, and
+    its tests then fail depending on which tests ran first.
+    """
+    module = importlib.import_module("app.api.routes.auth_routes")
+    saved = dict(vars(module))
     yield
-    importlib.reload(importlib.import_module("app.api.routes.auth_routes"))
+    vars(module).clear()
+    vars(module).update(saved)
 
 
 # --- must NOT relax -------------------------------------------------------------------
