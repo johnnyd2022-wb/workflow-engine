@@ -66,7 +66,7 @@ reviewers should be able to run it), fix summary, chain subset run.
 
 ```bash
 git push -u origin <branch>
-glab mr create --fill --assignee johnnyd2022 \
+glab mr create --fill --assignee johnnyd2022 --label 'factory::ready' \
   --title "<type>: <slug summary>" --description-file <(cat <<'EOF'
 <the assembled description>
 EOF
@@ -75,6 +75,17 @@ EOF
 Title prefix matches the front door: `feat:` (new-feature), `refactor:`/`fix:`
 (review-feature, depending on what it did), `fix:` (fix-bug). Username and assignee
 convention: `johnnyd2022` (`.claude/agents/AGENTS.md`).
+
+Apply `factory::ready` to every MR opened by this skill. When updating an existing
+MR, add it with `glab mr update <iid> --label 'factory::ready'`, preserving other
+labels. If the project label is missing, create it with
+`glab label create --name 'factory::ready' --color '#428BCA'`. Verify the MR's labels
+with `glab mr view <iid> --output json`; report any failure to apply the label.
+
+The MR label records the requested Factory routing convention. Factory currently
+uses `factory::ready` on **issues** to create work; an MR label alone does not
+enrol an unrelated MR or launch a review agent. Do not automatically label linked
+issues or submit the same task again, which could create competing work.
 
 ## 3. Watch the pipeline
 
