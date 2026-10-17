@@ -108,6 +108,58 @@ def status(_args) -> int:
     return 0
 
 
+def covers(selection: list[str], test: str) -> bool:
+    """Whether a recorded selection ran this test (node IDs, module paths, or everything)."""
+    for target in selection:
+        target = target.rstrip("/")
+        if target == "tests" or test == target or test.startswith(target + "::") or test.startswith(target + "/"):
+            return True
+    return False
+
+
+def find_escapes(failed: list[str], selections: list[tuple]) -> list[tuple]:
+    """(mr, test) for every test that failed on main but a merged MR's selection skipped."""
+    return [
+        (mr, test)
+        for mr, decision, tests in selections
+        if decision in ("select", "none")
+        for test in failed
+        if not covers(tests, test)
+    ]
+
+
+def escapes(_args) -> int:
+    """Ongoing accuracy check: main's failures that an MR merged since the last run skipped."""
+    try:
+        conn = connect()
+    except UnavailableError as e:
+        print(f"tia: unavailable ({e})")
+        return 0
+    with conn, conn.cursor() as cur:
+        cur.execute("SELECT id, sha, recorded_at FROM tia.runs WHERE ref = 'main' ORDER BY id DESC LIMIT 2")
+        runs = cur.fetchall()
+        if len(runs) < 2:
+            print("tia: need two recorded main runs")
+            return 0
+        (latest, sha, until), (_, _, since) = runs
+        cur.execute(
+            "SELECT t.nodeid FROM tia.results r JOIN tia.tests t ON t.id = r.test_id "
+            "WHERE r.run_id = %s AND r.outcome = 'failed'",
+            (latest,),
+        )
+        failed = [row[0] for row in cur.fetchall()]
+        cur.execute(
+            "SELECT DISTINCT ON (mr_iid) mr_iid, decision, tests FROM tia.selections "
+            "WHERE recorded_at > %s AND recorded_at <= %s ORDER BY mr_iid, id DESC",
+            (since, until),
+        )
+        found = find_escapes(failed, cur.fetchall())
+    print(f"tia: run {latest} ({sha[:12]}): {len(failed)} failing tests, {len(found)} selection escapes")
+    for mr, test in found:
+        print(f"  escape: !{mr} skipped {test}")
+    return 1 if found else 0
+
+
 # --------------------------------------------------------------------------------------
 # Record (main)
 # --------------------------------------------------------------------------------------
@@ -415,6 +467,7 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate").set_defaults(func=migrate)
     sub.add_parser("status").set_defaults(func=status)
+    sub.add_parser("escapes", help="tests main failed that a merged MR skipped").set_defaults(func=escapes)
     rec = sub.add_parser("record")
     rec.add_argument("--coverage", required=True)
     rec.add_argument("--probe", required=True)

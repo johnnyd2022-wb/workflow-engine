@@ -297,3 +297,18 @@ def test_a_node_tested_file_selects_only_the_js_runner_module(repo):
     base = git(repo, "rev-parse", "HEAD")
     head = commit(repo, "app/board.js", "export const x = 3;\n")
     assert tia.plan(Cursor(base, {}), base, head)["tests"] == ["tests/test_js_runner.py"]
+
+
+def test_escapes_are_main_failures_a_merged_selection_skipped():
+    selections = [
+        (10, "select", ["tests/test_a.py::test_one", "tests/test_b.py"]),
+        (11, "none", []),
+        (12, "full", ["tests/"]),
+    ]
+    failed = ["tests/test_a.py::test_one", "tests/test_b.py::test_x", "tests/test_c.py::test_y"]
+    assert tia.find_escapes(failed, selections) == [
+        (10, "tests/test_c.py::test_y"),
+        (11, "tests/test_a.py::test_one"),
+        (11, "tests/test_b.py::test_x"),
+        (11, "tests/test_c.py::test_y"),
+    ]

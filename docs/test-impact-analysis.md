@@ -35,7 +35,8 @@ We replayed the last 40 merges against a measured map:
    |---|---|
    | Lines of a Python file | the tests that executed those lines (an insertion counts its neighbours) |
    | A template or static file | every test that rendered or served it |
-   | A file no test executed in-process (Node-tested JS, a new file) | the test modules that name it; none if nothing does, since the full suite gives no signal on it either |
+   | A file a test ran in a child process (Node-tested JS, `python script.py`) | the test that started the process |
+| A file no test executes (a new file, CI config) | the test modules that name it (JS tests by their runner); none if nothing does, since the full suite gives no signal on it either |
    | A test module | that module |
    | `conftest.py`, `tests/` support files, `pyproject.toml`, `uv.lock`, `app/config/*.ini`, migrations, `ci/setup_database.sh`, test factories | everything |
    | Docs, skills, reports | nothing |
@@ -46,6 +47,24 @@ We replayed the last 40 merges against a measured map:
 3. **Never blocks.** If the database is unreachable, there's no recorded ancestor run, or
    anything goes wrong, the job uses the path rules' own targets. Every decision is logged
    to `tia.selections` with its reasons, map run and estimated seconds.
+
+## How accurate it is
+
+It was measured with mutation checks on places recent merges actually changed:
+
+1. One small behaviour-changing edit per site, on top of the recorded `main` commit: a flipped comparison, `and`/`or` swapped, a constant or return value changed, an id or text removed from markup.
+2. The **full** suite runs on each mutant, and its failures are the ground truth.
+3. Any failing test the selector didn't pick is an escape.
+
+| Round | Mutants | Detected by the full suite | Failing tests | Escapes |
+|---|---|---|---|---|
+| 1: 30 Python, 6 templates, 4 JS | 40 | 20 | 132 | **0** |
+| 2: every Node-tested JS file, 12 new Python | 22 | 8 | 24 | **0** |
+
+- **Selections stayed small.** The typical one was 1–20 tests, often exactly the failing ones (13 of 13, 11 of 11). The largest was 346, for `app/core/backend/event_writer.py`, which almost every write path calls. No mutant needed the full suite.
+- **Templates and most JS aren't checked by the Python suite.** No template mutant and no JS mutant outside the Node-tested files failed even under the full suite. Selection can't add signal the suite doesn't have; that's the browser tests' job.
+
+`main` keeps checking accuracy on real changes after every merge: `scripts/tia.py escapes` lists any test that failed on `main` which an MR merged since the previous run skipped.
 
 ## Checking it
 
