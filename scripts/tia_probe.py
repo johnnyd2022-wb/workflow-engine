@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import subprocess
 
 import flask
 import flask.templating
@@ -85,6 +87,60 @@ def _send_from_directory_probe(directory, path, **kwargs):
 
 flask.helpers.send_from_directory = _send_from_directory_probe
 flask.send_from_directory = _send_from_directory_probe
+
+# Code a test runs in a child process (Node unit tests, `python script.py`) is invisible to
+# coverage. Record every repo file a child process is handed, and for a JS test file every
+# repo file it loads, so a change to them selects the test that started the process.
+_QUOTED = re.compile(r"""['"]([^'"\s]+\.(?:js|mjs|html|css|json))['"]""")
+_tracked: list[str] | None = None
+
+
+def _repo_files() -> list[str]:
+    global _tracked
+    if _tracked is None:
+        try:
+            _tracked = subprocess.run(
+                ["git", "ls-files", "app", "scripts", "tests"], cwd=_root, capture_output=True, text=True, check=True
+            ).stdout.split()
+        except (OSError, subprocess.CalledProcessError):
+            _tracked = []
+    return _tracked
+
+
+def _loaded_by(js_test: str) -> set[str]:
+    """Repo files a JS test names, by path suffix: path.join pieces or a bare file name."""
+    try:
+        source = open(js_test, encoding="utf-8").read()
+    except OSError:
+        return set()
+    # path.join(__dirname, '..', '..', 'app', 'x', 'y.js') -> app/x/y.js
+    joined = [
+        "/".join(p for p in re.findall(r"['\"]([^'\"]+)['\"]", call) if p != "..")
+        for call in re.findall(r"path\.join\(([^)]*)\)", source)
+    ]
+    names = {n.lstrip("./") for n in _QUOTED.findall(source)} | {j for j in joined if j}
+    return {f for f in _repo_files() for n in names if f == n or f.endswith("/" + n)}
+
+
+def _child_probe(original):
+    def init(self, args, *rest, **kwargs):
+        if _current["test"]:
+            for arg in [args] if isinstance(args, (str, bytes, os.PathLike)) else args or []:
+                arg = os.fsdecode(arg) if isinstance(arg, (bytes, os.PathLike)) else arg
+                if not isinstance(arg, str) or not arg or arg.startswith("-"):
+                    continue
+                path = arg if os.path.isabs(arg) else os.path.join(kwargs.get("cwd") or os.getcwd(), arg)
+                if os.path.isfile(path):
+                    _record(path)
+                    if path.endswith((".test.js", ".test.mjs")):
+                        for loaded in _loaded_by(path):
+                            _record(os.path.join(_root, loaded))
+        return original(self, args, *rest, **kwargs)
+
+    return init
+
+
+subprocess.Popen.__init__ = _child_probe(subprocess.Popen.__init__)
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:

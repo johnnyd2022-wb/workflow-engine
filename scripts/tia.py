@@ -297,20 +297,25 @@ def plan(cur, base: str, head: str) -> dict:
             selected |= named
             reasons["executed by no recorded test"].append(f"{p}: {len(named)} test modules name it")
             continue
-        if any(ls is None for _, ls in rows):
-            hit = {t for t, _ in rows}
-            reasons["template or static file"].append(f"{p}: {len(hit)} tests")
-        else:
+        # Whole-file users (rendered or served it, or ran it in a child process) always count;
+        # line-level users count when they executed a changed line.
+        whole = {t for t, ls in rows if ls is None}
+        line_rows = [(t, ls) for t, ls in rows if ls is not None]
+        hit = set(whole)
+        if whole:
+            reasons["used as a whole file"].append(f"{p}: {len(whole)} tests")
+        if line_rows:
             wanted = touched_lines(run_sha, head, p)
-            hit = {t for t, ls in rows if wanted.intersection(ls)}
-            covered = set().union(*(ls for _, ls in rows))
+            by_line = {t for t, ls in line_rows if wanted.intersection(ls)}
+            covered = set().union(*(ls for _, ls in line_rows))
             if code_lines(run_sha, p, wanted - covered):
                 # Real code no test ran inside its own context: module level (imports, def
                 # lines, constants, decorators) runs at import. Everything using the file counts.
-                hit = {t for t, _ in rows}
-                reasons["module-level change"].append(f"{p}: {len(hit)} tests")
+                by_line = {t for t, _ in line_rows}
+                reasons["module-level change"].append(f"{p}: {len(by_line)} tests")
             else:
-                reasons["changed lines"].append(f"{p}: {len(wanted)} lines, {len(hit)} tests")
+                reasons["changed lines"].append(f"{p}: {len(wanted)} lines, {len(by_line)} tests")
+            hit |= by_line
         selected |= hit
     if not selected:
         return {"decision": "none", "tests": [], "reasons": reasons, "paths": paths, "run": run_id}
