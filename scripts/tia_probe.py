@@ -16,6 +16,7 @@ import os
 
 import flask
 import flask.templating
+import jinja2.meta
 import pytest
 
 _current: dict[str, str | None] = {"test": None}
@@ -33,10 +34,30 @@ def _record(path: str | None) -> None:
 
 
 _render = flask.templating._render
+_chains: dict[tuple[int, str], list[str]] = {}
+
+
+def _template_chain(env, name: str, seen: set[str]) -> list[str]:
+    """The files of a template and everything it extends, includes or imports."""
+    if not name or name in seen:
+        return []
+    seen.add(name)
+    try:
+        source, filename, _ = env.loader.get_source(env, name)
+    except Exception:  # noqa: BLE001 - a dynamic or missing reference must not break a test
+        return []
+    files = [filename]
+    for ref in jinja2.meta.find_referenced_templates(env.parse(source)):
+        files += _template_chain(env, ref, seen)
+    return files
 
 
 def _render_probe(app, template, context):
-    _record(template.filename)
+    key = (id(template.environment), template.name or template.filename or "")
+    if key not in _chains:
+        _chains[key] = _template_chain(template.environment, template.name, set()) or [template.filename]
+    for filename in _chains[key]:
+        _record(filename)
     return _render(app, template, context)
 
 

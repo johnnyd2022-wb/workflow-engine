@@ -163,3 +163,57 @@ def test_selection_never_fails_the_pipeline_when_the_database_is_unreachable(tmp
     rules.write_text("tests/test_x.py tests/test_y.py")
     assert tia.main(["select", "--base", "a", "--head", "b", "--out", str(out), "--rules-targets", str(rules)]) == 0
     assert out.read_text().split() == ["tests/test_x.py", "tests/test_y.py"]
+
+
+def test_a_module_level_change_selects_every_test_that_used_the_file(repo):
+    base = git(repo, "rev-parse", "HEAD")
+    rows = {
+        ("tests/test_a.py::test_uses_line5", "app/stock.py"): [5],
+        ("tests/test_b.py::test_uses_line9", "app/stock.py"): [9],
+    }
+    # Line 1 is real code no test executed in its own context (it ran at import).
+    head = commit(repo, "app/stock.py", (repo / "app" / "stock.py").read_text().replace("line1 = 1", "line1 = 10"))
+    plan = tia.plan(Cursor(base, rows), base, head)
+    assert plan["tests"] == ["tests/test_a.py::test_uses_line5", "tests/test_b.py::test_uses_line9"]
+    assert plan["reasons"]["module-level change"] == ["app/stock.py: 2 tests"]
+
+
+def test_a_comment_only_change_outside_any_test_selects_nothing(repo):
+    commit(repo, "app/stock.py", "# header\n" + (repo / "app" / "stock.py").read_text())
+    base = git(repo, "rev-parse", "HEAD")
+    head = commit(repo, "app/stock.py", (repo / "app" / "stock.py").read_text().replace("# header", "# new header"))
+    rows = {("tests/test_a.py::test_uses_line5", "app/stock.py"): [6]}
+    assert tia.plan(Cursor(base, rows), base, head)["decision"] == "none"
+
+
+def test_ci_config_changes_select_the_tests_that_read_it(repo):
+    (repo / "tests" / "test_ci_config.py").write_text("CONFIG = '.gitlab-ci.yml'\n")
+    commit(repo, "tests/test_ci_config.py", (repo / "tests" / "test_ci_config.py").read_text())
+    base = git(repo, "rev-parse", "HEAD")
+    head = commit(repo, ".gitlab-ci.yml", "stages: [test]\n")
+    plan = tia.plan(Cursor(base, {}), base, head)
+    assert plan["tests"] == ["tests/test_ci_config.py"]
+    assert plan["reasons"]["named by tests"] == [".gitlab-ci.yml: 1 test modules"]
+
+
+def test_a_new_test_module_is_found_at_head_not_in_the_working_tree(repo):
+    base = git(repo, "rev-parse", "HEAD")
+    head = commit(repo, "tests/test_new.py", "def test_new():\n    assert True\n")
+    git(repo, "checkout", "-q", base)
+    assert tia.plan(Cursor(base, {}), base, head)["tests"] == ["tests/test_new.py"]
+
+
+def test_the_probe_records_every_template_a_page_extends_or_includes(tmp_path):
+    import jinja2
+
+    spec = importlib.util.spec_from_file_location("tia_probe", ROOT / "scripts" / "tia_probe.py")
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)
+    (tmp_path / "base.html").write_text("<main>{% block body %}{% endblock %}</main>")
+    (tmp_path / "_part.html").write_text("<p>part</p>")
+    (tmp_path / "page.html").write_text(
+        '{% extends "base.html" %}{% block body %}{% include "_part.html" %}{% endblock %}'
+    )
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(tmp_path))
+    chain = probe._template_chain(env, "page.html", set())
+    assert sorted(Path(f).name for f in chain) == ["_part.html", "base.html", "page.html"]

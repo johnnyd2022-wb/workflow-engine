@@ -52,6 +52,8 @@ GLOBAL_INPUTS = (
 CODE = re.compile(r"^(app|scripts)/.+\.(py|html|jinja|js|css|json|sql)$")
 TEST_MODULE = re.compile(r"^tests/(.+/)?test_[^/]+\.py$")
 TEST_SUPPORT = re.compile(r"^tests/.+\.(py|js|json)$")
+# Changes no test can observe: prose, agent skills, reports.
+DOCS = re.compile(r"(^docs/|^\.agents/|^\.claude/|^skills/|\.md$)")
 
 
 # --------------------------------------------------------------------------------------
@@ -202,10 +204,22 @@ def touched_lines(since: str, head: str, path: str) -> set[int]:
     return lines
 
 
+def exists_at(commit: str, path: str) -> bool:
+    return subprocess.run(["git", "cat-file", "-e", f"{commit}:{path}"], cwd=ROOT, capture_output=True).returncode == 0
+
+
+def code_lines(commit: str, path: str, lines: set[int]) -> set[int]:
+    """Which of these line numbers hold code (not blank, not a comment) in path at commit."""
+    if not lines or not exists_at(commit, path):
+        return set()
+    text = git("show", f"{commit}:{path}").splitlines()
+    return {n for n in lines if 0 < n <= len(text) and text[n - 1].strip() and not text[n - 1].lstrip().startswith("#")}
+
+
 def modules_naming(path: str) -> set[str]:
     """Python test modules that mention the file by name, directly or via a JS test that does."""
     name = Path(path).name
-    if len(Path(path).stem) < 4:
+    if len(name) < 6:
         return set()
     hits = subprocess.run(
         ["git", "grep", "-l", "-F", name, "--", "tests"], cwd=ROOT, capture_output=True, text=True
@@ -238,12 +252,13 @@ def plan(cur, base: str, head: str) -> dict:
         return {"decision": "full", "tests": FULL, "reasons": reasons, "paths": paths, "run": None}
 
     code = [p for p in paths if CODE.match(p)]
-    test_modules = [p for p in paths if TEST_MODULE.match(p) and (ROOT / p).exists()]
+    test_modules = [p for p in paths if TEST_MODULE.match(p) and exists_at(head, p)]
+    other = [p for p in paths if not (CODE.match(p) or TEST_SUPPORT.match(p) or DOCS.search(p))]
     support = [p for p in paths if TEST_SUPPORT.match(p) and not TEST_MODULE.match(p)]
     if support:
         reasons["full"].extend(f"shared test support: {p}" for p in support)
         return {"decision": "full", "tests": FULL, "reasons": reasons, "paths": paths, "run": None}
-    if not code and not test_modules:
+    if not code and not test_modules and not other:
         return {
             "decision": "none",
             "tests": [],
@@ -260,6 +275,11 @@ def plan(cur, base: str, head: str) -> dict:
     selected: set[str] = set(test_modules)
     for p in test_modules:
         reasons["changed test module"].append(p)
+    for p in other:
+        # CI config, shell scripts, Dockerfiles: the tests that read them do so by name.
+        named = modules_naming(p)
+        selected |= named
+        reasons["named by tests"].append(f"{p}: {len(named)} test modules")
     for p in code:
         cur.execute(
             "SELECT t.nodeid, tl.lines FROM tia.test_lines tl "
@@ -283,7 +303,14 @@ def plan(cur, base: str, head: str) -> dict:
         else:
             wanted = touched_lines(run_sha, head, p)
             hit = {t for t, ls in rows if wanted.intersection(ls)}
-            reasons["changed lines"].append(f"{p}: {len(wanted)} lines, {len(hit)} tests")
+            covered = set().union(*(ls for _, ls in rows))
+            if code_lines(run_sha, p, wanted - covered):
+                # Real code no test ran inside its own context: module level (imports, def
+                # lines, constants, decorators) runs at import. Everything using the file counts.
+                hit = {t for t, _ in rows}
+                reasons["module-level change"].append(f"{p}: {len(hit)} tests")
+            else:
+                reasons["changed lines"].append(f"{p}: {len(wanted)} lines, {len(hit)} tests")
         selected |= hit
     if not selected:
         return {"decision": "none", "tests": [], "reasons": reasons, "paths": paths, "run": run_id}
