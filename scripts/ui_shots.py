@@ -431,7 +431,7 @@ def _seed_compliance(db, org_id, inv) -> None:
 
 def _seed_production(db, org_id, inv) -> None:
     """A working week on the floor: three product workflows with seven batches under way, at
-    different steps and ages, one of them not yet started. For pages that show what is in
+    different steps and ages, one of them not yet started, and two finished this week. For pages that show what is in
     production right now."""
     from datetime import UTC, datetime
 
@@ -465,7 +465,11 @@ def _seed_production(db, org_id, inv) -> None:
         made[name] = process
     db.commit()
 
-    def start(name, done, hours):
+    people = ["Aroha Ngata", "Sam Price", "Mere Tane"]
+
+    def start(name, done, hours, code=None):
+        """`code` is the batch number recorded on the first step's output, as a distiller
+        writes it on the tank; a batch with none shows by its start time."""
         execution = execs.create_execution(org_id, made[name].id)
         rows = (
             db.query(ExecutionStep)
@@ -479,21 +483,29 @@ def _seed_production(db, org_id, inv) -> None:
                 rows[index].id,
                 org_id,
                 actual_inputs=[],
-                actual_outputs=[],
+                actual_outputs=(
+                    [{"name": f"{name}: step {index + 1}", "quantity": 100, "unit": "L", "batch_id": code}]
+                    if code and index == 0
+                    else []
+                ),
+                execution_data={"completed_by": people[(index + hours) % len(people)]},
                 completed_at_override=started + timedelta(hours=(index + 1) * max(1, hours // (done + 1))),
             )
         if hours:
             db.query(Execution).filter(Execution.id == execution.id).update({"started_at": started})
         db.commit()
 
-    # (workflow, steps already done, hours since it started)
-    start("Whistlebird Navy Strength Gin", 2, 76)
-    start("Whistlebird Navy Strength Gin", 1, 27)
+    # (workflow, steps already done, hours since it started, batch number)
+    start("Whistlebird Navy Strength Gin", 2, 76, "NS-2610")
+    start("Whistlebird Navy Strength Gin", 1, 27, "NS-2611")
     start("Whistlebird Navy Strength Gin", 0, 2)
-    start("Whistlebird Pink Gin", 3, 120)
-    start("Whistlebird Pink Gin", 1, 20)
-    start("Limoncello", 1, 190)
+    start("Whistlebird Pink Gin", 3, 120, "PG-0907")
+    start("Whistlebird Pink Gin", 1, 20, "PG-0908")
+    start("Limoncello", 1, 190, "LC-0311")
     start("Limoncello", 0, 0)
+    # Finished this week, for the pages that count what was made.
+    start("Whistlebird Navy Strength Gin", 3, 140, "NS-2609")
+    start("Limoncello", 3, 100, "LC-0310")
 
 
 def _seed_planner(db, org_id, inv) -> None:
