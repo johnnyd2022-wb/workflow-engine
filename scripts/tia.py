@@ -108,6 +108,58 @@ def status(_args) -> int:
     return 0
 
 
+def covers(selection: list[str], test: str) -> bool:
+    """Whether a recorded selection ran this test (node IDs, module paths, or everything)."""
+    for target in selection:
+        target = target.rstrip("/")
+        if target == "tests" or test == target or test.startswith(target + "::") or test.startswith(target + "/"):
+            return True
+    return False
+
+
+def find_escapes(failed: list[str], selections: list[tuple]) -> list[tuple]:
+    """(mr, test) for every test that failed on main but a merged MR's selection skipped."""
+    return [
+        (mr, test)
+        for mr, decision, tests in selections
+        if decision in ("select", "none")
+        for test in failed
+        if not covers(tests, test)
+    ]
+
+
+def escapes(_args) -> int:
+    """Ongoing accuracy check: main's failures that an MR merged since the last run skipped."""
+    try:
+        conn = connect()
+    except UnavailableError as e:
+        print(f"tia: unavailable ({e})")
+        return 0
+    with conn, conn.cursor() as cur:
+        cur.execute("SELECT id, sha, recorded_at FROM tia.runs WHERE ref = 'main' ORDER BY id DESC LIMIT 2")
+        runs = cur.fetchall()
+        if len(runs) < 2:
+            print("tia: need two recorded main runs")
+            return 0
+        (latest, sha, until), (_, _, since) = runs
+        cur.execute(
+            "SELECT t.nodeid FROM tia.results r JOIN tia.tests t ON t.id = r.test_id "
+            "WHERE r.run_id = %s AND r.outcome = 'failed'",
+            (latest,),
+        )
+        failed = [row[0] for row in cur.fetchall()]
+        cur.execute(
+            "SELECT DISTINCT ON (mr_iid) mr_iid, decision, tests FROM tia.selections "
+            "WHERE recorded_at > %s AND recorded_at <= %s ORDER BY mr_iid, id DESC",
+            (since, until),
+        )
+        found = find_escapes(failed, cur.fetchall())
+    print(f"tia: run {latest} ({sha[:12]}): {len(failed)} failing tests, {len(found)} selection escapes")
+    for mr, test in found:
+        print(f"  escape: !{mr} skipped {test}")
+    return 1 if found else 0
+
+
 # --------------------------------------------------------------------------------------
 # Record (main)
 # --------------------------------------------------------------------------------------
@@ -225,11 +277,12 @@ def modules_naming(path: str) -> set[str]:
         ["git", "grep", "-l", "-F", name, "--", "tests"], cwd=ROOT, capture_output=True, text=True
     ).stdout.split()
     modules = {h for h in hits if TEST_MODULE.match(h)}
-    for js in (h for h in hits if h.endswith(".js")):
-        runner = subprocess.run(
-            ["git", "grep", "-l", "-F", Path(js).parent.name, "--", "tests"], cwd=ROOT, capture_output=True, text=True
+    if any(h.endswith((".test.js", ".test.mjs")) for h in hits):
+        # A JS test names it; the Python modules that run the JS tests do so by glob.
+        runners = subprocess.run(
+            ["git", "grep", "-l", "-F", ".test.js", "--", "tests"], cwd=ROOT, capture_output=True, text=True
         ).stdout.split()
-        modules |= {h for h in runner if TEST_MODULE.match(h)}
+        modules |= {h for h in runners if TEST_MODULE.match(h)}
     return modules
 
 
@@ -297,20 +350,25 @@ def plan(cur, base: str, head: str) -> dict:
             selected |= named
             reasons["executed by no recorded test"].append(f"{p}: {len(named)} test modules name it")
             continue
-        if any(ls is None for _, ls in rows):
-            hit = {t for t, _ in rows}
-            reasons["template or static file"].append(f"{p}: {len(hit)} tests")
-        else:
+        # Whole-file users (rendered or served it, or ran it in a child process) always count;
+        # line-level users count when they executed a changed line.
+        whole = {t for t, ls in rows if ls is None}
+        line_rows = [(t, ls) for t, ls in rows if ls is not None]
+        hit = set(whole)
+        if whole:
+            reasons["used as a whole file"].append(f"{p}: {len(whole)} tests")
+        if line_rows:
             wanted = touched_lines(run_sha, head, p)
-            hit = {t for t, ls in rows if wanted.intersection(ls)}
-            covered = set().union(*(ls for _, ls in rows))
+            by_line = {t for t, ls in line_rows if wanted.intersection(ls)}
+            covered = set().union(*(ls for _, ls in line_rows))
             if code_lines(run_sha, p, wanted - covered):
                 # Real code no test ran inside its own context: module level (imports, def
                 # lines, constants, decorators) runs at import. Everything using the file counts.
-                hit = {t for t, _ in rows}
-                reasons["module-level change"].append(f"{p}: {len(hit)} tests")
+                by_line = {t for t, _ in line_rows}
+                reasons["module-level change"].append(f"{p}: {len(by_line)} tests")
             else:
-                reasons["changed lines"].append(f"{p}: {len(wanted)} lines, {len(hit)} tests")
+                reasons["changed lines"].append(f"{p}: {len(wanted)} lines, {len(by_line)} tests")
+            hit |= by_line
         selected |= hit
     if not selected:
         return {"decision": "none", "tests": [], "reasons": reasons, "paths": paths, "run": run_id}
@@ -409,6 +467,7 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("migrate").set_defaults(func=migrate)
     sub.add_parser("status").set_defaults(func=status)
+    sub.add_parser("escapes", help="tests main failed that a merged MR skipped").set_defaults(func=escapes)
     rec = sub.add_parser("record")
     rec.add_argument("--coverage", required=True)
     rec.add_argument("--probe", required=True)

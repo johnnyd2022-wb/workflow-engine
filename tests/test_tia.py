@@ -203,12 +203,10 @@ def test_a_new_test_module_is_found_at_head_not_in_the_working_tree(repo):
     assert tia.plan(Cursor(base, {}), base, head)["tests"] == ["tests/test_new.py"]
 
 
-def test_the_probe_records_every_template_a_page_extends_or_includes(tmp_path):
+def test_the_probe_records_every_template_a_page_extends_or_includes(tmp_path, monkeypatch):
     import jinja2
 
-    spec = importlib.util.spec_from_file_location("tia_probe", ROOT / "scripts" / "tia_probe.py")
-    probe = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(probe)
+    probe = _probe(monkeypatch)
     (tmp_path / "base.html").write_text("<main>{% block body %}{% endblock %}</main>")
     (tmp_path / "_part.html").write_text("<p>part</p>")
     (tmp_path / "page.html").write_text(
@@ -217,3 +215,100 @@ def test_the_probe_records_every_template_a_page_extends_or_includes(tmp_path):
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(tmp_path))
     chain = probe._template_chain(env, "page.html", set())
     assert sorted(Path(f).name for f in chain) == ["_part.html", "base.html", "page.html"]
+
+
+def _probe(monkeypatch):
+    """Load the probe; monkeypatch restores everything it patches when the test ends."""
+    import subprocess as sp
+
+    import flask
+    import flask.templating
+
+    for owner, name in [
+        (sp.Popen, "__init__"),
+        (flask.templating, "_render"),
+        (flask.Flask, "send_static_file"),
+        (flask.Blueprint, "send_static_file"),
+        (flask.helpers, "send_from_directory"),
+        (flask, "send_from_directory"),
+    ]:
+        monkeypatch.setattr(owner, name, getattr(owner, name))
+    spec = importlib.util.spec_from_file_location("tia_probe_child", ROOT / "scripts" / "tia_probe.py")
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)
+    return probe
+
+
+def test_a_js_test_names_its_app_files_by_path_join_or_bare_name(tmp_path, monkeypatch):
+    probe = _probe(monkeypatch)
+    probe._tracked = ["app/core/frontend/js/live-sync.js", "app/core/frontend/js/execution-session.js", "app/other.js"]
+    js_test = tmp_path / "x.test.js"
+    js_test.write_text(
+        "const a = path.join(__dirname, '..', '..', 'app', 'core', 'frontend', 'js', 'live-sync.js');\n"
+        "load('execution-session.js');\n"
+    )
+    assert probe._loaded_by(str(js_test)) == {
+        "app/core/frontend/js/live-sync.js",
+        "app/core/frontend/js/execution-session.js",
+    }
+
+
+def test_a_child_process_records_its_script_and_the_files_a_js_test_loads(tmp_path, monkeypatch):
+    import subprocess as sp
+
+    probe = _probe(monkeypatch)
+    monkeypatch.setattr(probe, "_root", str(tmp_path))
+    app_js = tmp_path / "app" / "live-sync.js"
+    app_js.parent.mkdir()
+    app_js.write_text("export {}\n")
+    js_test = tmp_path / "tests" / "js" / "live.test.js"
+    js_test.parent.mkdir(parents=True)
+    js_test.write_text("require('live-sync.js');\n")
+    probe._tracked = ["app/live-sync.js"]
+    probe._current["test"] = "tests/test_js.py::test_node"
+    try:
+        sp.run(["true", str(js_test), "--flag"], check=False)
+    finally:
+        probe._current["test"] = None
+    assert probe._files["tests/test_js.py::test_node"] == {"tests/js/live.test.js", "app/live-sync.js"}
+
+
+def test_whole_file_users_and_changed_line_users_both_count(repo):
+    base = git(repo, "rev-parse", "HEAD")
+    head = commit(repo, "app/stock.py", (repo / "app" / "stock.py").read_text().replace("line5 = 5", "line5 = 50"))
+    rows = {
+        ("tests/test_cli.py::test_runs_script", "app/stock.py"): None,
+        ("tests/test_a.py::test_hits", "app/stock.py"): [5],
+        ("tests/test_b.py::test_misses", "app/stock.py"): [9],
+    }
+    plan = tia.plan(Cursor(base, rows), base, head)
+    assert plan["tests"] == ["tests/test_a.py::test_hits", "tests/test_cli.py::test_runs_script"]
+
+
+def test_a_node_tested_file_selects_only_the_js_runner_module(repo):
+    js = repo / "tests" / "js"
+    js.mkdir()
+    (js / "board.test.js").write_text("require('board.js');\n")
+    (repo / "tests" / "test_js_runner.py").write_text("TESTS = glob('tests/js/*.test.js')\n")
+    (repo / "tests" / "test_unrelated.py").write_text("ASSETS = 'static/js/app'\n")
+    (repo / "tests" / "test_board_js.py").unlink()
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "js tests")
+    base = git(repo, "rev-parse", "HEAD")
+    head = commit(repo, "app/board.js", "export const x = 3;\n")
+    assert tia.plan(Cursor(base, {}), base, head)["tests"] == ["tests/test_js_runner.py"]
+
+
+def test_escapes_are_main_failures_a_merged_selection_skipped():
+    selections = [
+        (10, "select", ["tests/test_a.py::test_one", "tests/test_b.py"]),
+        (11, "none", []),
+        (12, "full", ["tests/"]),
+    ]
+    failed = ["tests/test_a.py::test_one", "tests/test_b.py::test_x", "tests/test_c.py::test_y"]
+    assert tia.find_escapes(failed, selections) == [
+        (10, "tests/test_c.py::test_y"),
+        (11, "tests/test_a.py::test_one"),
+        (11, "tests/test_b.py::test_x"),
+        (11, "tests/test_c.py::test_y"),
+    ]

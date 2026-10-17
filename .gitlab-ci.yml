@@ -389,6 +389,10 @@ unit_tests:
       uv run python scripts/tia.py record --coverage .coverage --probe tia-probe.json
       --sha "$CI_COMMIT_SHA" --ref "$CI_COMMIT_BRANCH" --pipeline-id "$CI_PIPELINE_ID"
       || echo "tia: recording failed; selection keeps using the previous run"
+    # Accuracy check: did any MR merged since the last run skip a test that fails here?
+    - >
+      uv run python scripts/tia.py escapes
+      || echo "tia: selection escapes above (see docs/test-impact-analysis.md)"
     - exit "${PYTEST_STATUS:-0}"
   only:
     - main
