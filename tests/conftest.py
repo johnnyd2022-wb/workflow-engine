@@ -92,6 +92,19 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip)
 
 
+_xdist_template: list[str] = []
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_configure_node(node) -> None:
+    """pytest-xdist controller, before each worker starts: give it its own test database."""
+    from tests.xdist_db import clone_for, ensure_template
+
+    if not _xdist_template:
+        _xdist_template.append(ensure_template())
+    clone_for(node.gateway.id, _xdist_template[0])
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _purge_orgs_created_by_this_run():
     """Backstop for finding 4ff460ee: leave no organisation of this run in the shared test DB.

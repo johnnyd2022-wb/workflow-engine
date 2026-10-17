@@ -44,6 +44,8 @@ dev = [
     # runs `pytest --cov=<module> --cov-report=term-missing`; without this that stage
     # errors with "unrecognized arguments" and coverage has to be eyeballed instead.
     "pytest-cov>=5.0.0",
+    # Runs the full suite across workers, each on its own test database (tests/xdist_db.py).
+    "pytest-xdist>=3.6.0",
 ]
 
 # System Dependencies (not managed by uv):

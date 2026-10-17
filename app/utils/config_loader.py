@@ -239,7 +239,14 @@ class Config:
 
     @property
     def db_name(self) -> str:
-        return self.get("database", "name", "workflow-engine-test-db")
+        name = self.get("database", "name", "workflow-engine-test-db")
+        # Each pytest-xdist worker gets its own copy of the test database (tests/conftest.py
+        # creates it), so parallel workers never see each other's rows. Never applies outside
+        # the local and test environments.
+        worker = os.getenv("PYTEST_XDIST_WORKER")
+        if worker and self.environment in {"local", "test"}:
+            return f"{name}_{worker}"
+        return name
 
     @property
     def db_user(self) -> str:

@@ -138,7 +138,7 @@ def test_documented_testing_and_volume_are_required(db, measured, changes):
     assert not capture_spirits_removal_basis(db, org, context, product, source).valid
 
 
-@pytest.mark.parametrize("owner", [str(uuid4()), False, {}])
+@pytest.mark.parametrize("owner", [str(uuid4()), False, {}], ids=["a-customer-id", "false", "empty-dict"])
 def test_contract_duty_is_not_inferred_from_material_owner(db, measured, owner):
     org, context, product, source, _ = measured
     context.source_snapshot = {"contract_customer_id": owner}
