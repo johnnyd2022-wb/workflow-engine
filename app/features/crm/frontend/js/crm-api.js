@@ -81,6 +81,13 @@ window.CRMAPI = (function () {
     return request(`/customers${qs ? '?' + qs : ''}`);
   }
   async function getCustomer(id) { return request(`/customers/${id}`); }
+  // Contacts created and edited in Biz-E, and their sync to Xero.
+  async function createCustomer(data) { return request('/customers', { method: 'POST', body: data }); }
+  async function updateCustomer(id, data) { return request(`/customers/${id}`, { method: 'PATCH', body: data }); }
+  async function setCustomerXeroSync(id, choice) { return request(`/customers/${id}/xero-sync`, { method: 'PUT', body: { sync_to_xero: choice } }); }
+  async function retryCustomerXeroSync(id) { return request(`/customers/${id}/xero-sync/retry`, { method: 'POST' }); }
+  async function getContactSyncSettings() { return request('/contact-sync-settings'); }
+  async function updateContactSyncSettings(enabled) { return request('/contact-sync-settings', { method: 'PUT', body: { sync_contacts_to_xero: enabled } }); }
   async function getCustomerInvoices(contactId, params = {}) {
     const qs = new URLSearchParams(params).toString();
     return request(`/customers/${contactId}/invoices${qs ? '?' + qs : ''}`);
@@ -172,7 +179,7 @@ window.CRMAPI = (function () {
   return {
     request, csrfToken, navigate,
     getXeroStatus, getXeroAuthUrl, triggerSync, disconnectXero,
-    getCustomers, getCustomer, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice, getInvoiceViewUrl, invoicePdfUrl,
+    getCustomers, getCustomer, createCustomer, updateCustomer, setCustomerXeroSync, retryCustomerXeroSync, getContactSyncSettings, updateContactSyncSettings, getCustomerInvoices, getOrgInvoices, getCustomerLineItemOptions, getOrgLineItemOptions, getCustomerLineItemPricing, getCustomerInvoiceDefaults, getCustomerAnalytics, createCustomerInvoice, authoriseInvoice, getInvoiceViewUrl, invoicePdfUrl,
     createNote, updateNote, deleteNote,
     getTasks, createTask, updateTask, deleteTask, getTaskLanes, createTaskLane, updateTaskLane, reorderTaskLanes, deleteTaskLane, assignTaskLane,
     getMonthlySales, getCustomerBreakdown, getRankings, getChurnRisk, getCustomerContact, getOverview, getTraceabilityConfig, updateTraceabilityConfig, getOrgUsers,
