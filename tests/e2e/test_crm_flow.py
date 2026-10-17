@@ -3,8 +3,8 @@
 CRM is feature-flagged; the E2E boot runs with crm_enabled on (local.ini), so these run
 rather than skip — a flag regression surfaces here as a failure, not silent absence.
 
-Customers in this app are sourced from Xero sync, not a create endpoint, so "create a
-customer" is not a UI flow to drive. What matters and is reliably testable: the Xero OAuth
+Customers mostly arrive from Xero sync; adding one in Biz-E and sending it to Xero is driven
+against a faked Xero in test_crm_contact_sync_ui.py, which a live-server test cannot fake. What matters and is reliably testable: the Xero OAuth
 entry degrades safely when unconfigured (it must never 500 or leak), the CRM API is
 auth-gated, and CRM data is org-scoped like everything else.
 

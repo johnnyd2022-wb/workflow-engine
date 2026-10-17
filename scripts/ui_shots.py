@@ -53,7 +53,7 @@ REPO = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
 STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
-SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales", "planner", "board")
+SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales", "planner", "board", "contracts", "stocktake")
 
 
 def say(*parts) -> None:
@@ -547,6 +547,139 @@ def _seed_planner(db, org_id, inv) -> None:
         made.append(row)
     db.commit()
     demand_service.cancel_demand(db, org_id, made[-1].id)
+
+
+def _seed_contracts(db, org_id, inv) -> None:
+    """Contract manufacturing: four brand customers (one inactive) with orders overdue, due this
+    week, later, completed and cancelled, across producer-, customer- and mixed-supplied lines."""
+    from app.features.contract_manufacturing.models.orders import ContractOrder
+    from app.features.contract_manufacturing.services.orders import ContractOrderService
+
+    service = ContractOrderService(db, org_id)
+    customers = {}
+    for name, active in [
+        ("Harbour Spirits Co.", True),
+        ("Kererū Botanicals", True),
+        ("Southern Cross Liqueurs", True),
+        ("Old Mill Brewing (paused)", False),
+    ]:
+        row = service.save_customer({"name": name, "is_active": active})
+        customers[name] = row.id
+    db.commit()
+    today = date.today()
+
+    # (reference, customer, days until due, status, duty, [(product, quantity, unit, materials)])
+    orders = [
+        (
+            "HS-1042",
+            "Harbour Spirits Co.",
+            -3,
+            "confirmed",
+            "producer_licensee",
+            [("Harbour Navy Gin 700 mL", 600, "bottles", "producer")],
+        ),
+        (
+            "KB-0217",
+            "Kererū Botanicals",
+            2,
+            "confirmed",
+            "customer_licensee",
+            [
+                ("Kawakawa Bitters 200 mL", 240, "bottles", "customer"),
+                ("Horopito Tincture 50 mL", 480, "bottles", "mixed"),
+            ],
+        ),
+        (
+            "SC-0088",
+            "Southern Cross Liqueurs",
+            5,
+            "confirmed",
+            "customer_underbond",
+            [("Feijoa Liqueur bulk", 900, "L", "customer")],
+        ),
+        (
+            "HS-1043",
+            "Harbour Spirits Co.",
+            19,
+            "draft",
+            "producer_licensee",
+            [("Harbour Pink Gin 700 mL", 300, "bottles", "producer")],
+        ),
+        (
+            "KB-0216",
+            "Kererū Botanicals",
+            -20,
+            "completed",
+            "customer_licensee",
+            [("Kawakawa Bitters 200 mL", 240, "bottles", "customer")],
+        ),
+        (
+            "SC-0085",
+            "Southern Cross Liqueurs",
+            9,
+            "cancelled",
+            "customer_underbond",
+            [("Boysenberry Liqueur bulk", 400, "L", "customer")],
+        ),
+    ]
+    for reference, customer, days, status, duty, lines in orders:
+        created = service.create_order(
+            {
+                "customer_id": str(customers[customer]),
+                "reference": reference,
+                "due_date": (today + timedelta(days=max(days, 1))).isoformat(),
+                "status": "draft" if status in ("completed", "cancelled") else status,
+                "duty_responsibility": duty,
+                "customer_cca_reference": None if duty == "producer_licensee" else f"CCA-{reference}",
+                "lines": [
+                    {"product_name": product, "quantity": str(qty), "unit": unit, "materials_source": source}
+                    for product, qty, unit, source in lines
+                ],
+            }
+        )
+        row = (
+            created
+            if isinstance(created, ContractOrder)
+            else db.query(ContractOrder).filter_by(org_id=org_id, reference=reference).one()
+        )
+        row.due_date = today + timedelta(days=days)
+        if status in ("completed", "cancelled"):
+            row.status = status
+    db.commit()
+
+
+def _seed_stocktake(db, org_id, inv) -> None:
+    """Stocktakes over the stock seed's finished goods: one finished in July with every line
+    matching, and one under way today with a line short, one over, one under investigation and
+    the rest still to count. Needs `stock` first."""
+    from datetime import UTC, datetime
+
+    from app.core.backend import stocktake as stocktake_service
+    from app.core.db.models.stocktake import StocktakeLine
+    from app.core.db.models.user import User
+
+    def lines_of(stocktake):
+        return db.query(StocktakeLine).filter(StocktakeLine.stocktake_id == stocktake.id).all()
+
+    user = db.query(User).filter(User.org_id == org_id).first()
+    today = date.today()
+
+    earlier = stocktake_service.start_stocktake(db, org_id, today - timedelta(days=97), "scheduled", None, user.id)
+    for line in lines_of(earlier):
+        stocktake_service.record_count(db, line, line.expected_quantity)
+    earlier.status = "done"
+    earlier.completed_at = datetime.now(UTC) - timedelta(days=97)
+    db.commit()
+
+    current = stocktake_service.start_stocktake(db, org_id, today, "scheduled", None, user.id)
+    lines = sorted(lines_of(current), key=lambda line: str(line.inventory_item_id))
+    if len(lines) < 4:
+        raise SystemExit("ui-shots: `stocktake` needs the `stock` seed's finished goods first")
+    stocktake_service.record_count(db, lines[0], lines[0].expected_quantity)  # matches
+    stocktake_service.record_count(db, lines[1], lines[1].expected_quantity - 6)  # six short
+    stocktake_service.record_count(db, lines[2], lines[2].expected_quantity + 2)  # two over
+    stocktake_service.record_count(db, lines[3], lines[3].expected_quantity - 1)
+    stocktake_service.resolve_line(db, org_id, lines[3], [{"reason": "investigating", "quantity": "1"}], user.id, today)
     db.commit()
 
 
@@ -669,8 +802,10 @@ def cmd_seed(args) -> int:
             "compliance": _seed_compliance,
             "production": _seed_production,
             "sales": _seed_sales,
+            "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "board": _seed_board,
+            "contracts": _seed_contracts,
         }[kind](db, org.id, inv)
         say(f"seeded {kind}")
     say(f"org {org.name!r}, sign-in {user.email}")

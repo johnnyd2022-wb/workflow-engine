@@ -1,0 +1,129 @@
+/* Stocktake (/core/stocktake). Layout comes from workspace-overviews.css; only the page's own
+   pieces are styled here, with the shared --ui-* tokens so dark mode follows. */
+#page-content .st-shell[data-stocktake-root] { max-width: 1280px; margin: 0 auto; padding: 24px 24px 40px; box-sizing: border-box; container: stocktake / inline-size; }
+@media (max-width: 767px) { #page-content .st-shell[data-stocktake-root] { padding: 16px; } }
+.st-shell [hidden] { display: none !important; }
+
+#page-content .st-shell .st-primary { background: var(--ui-accent-strong, #115e59); border-color: var(--ui-accent-strong, #115e59); color: #fff; }
+html[data-spa-theme="dark"] #page-content .st-shell .st-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: #04211d; }
+
+.st-message { margin-bottom: 20px; padding: 12px 14px; border-radius: 8px; font-size: 14px; }
+.st-message--error { background: rgba(180, 35, 24, .08); color: #b42318; border: 1px solid rgba(180, 35, 24, .4); }
+.st-message--ok { background: var(--ui-accent-soft, #e6f6f3); color: var(--ui-accent-strong, #115e59); border: 1px solid var(--ui-accent); }
+html[data-spa-theme="dark"] .st-message--error { color: #fca5a5; }
+
+#page-content .st-shell .st-hint { margin: 0; color: var(--ui-text-muted); font-size: 14px; line-height: 1.5; max-width: 72ch; }
+.st-count-note { font-size: 13px; color: var(--ui-text-muted); }
+.st-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.st-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--ui-text); }
+#page-content .st-shell .st-field select, #page-content .st-shell .st-field input { min-height: 40px; height: 40px; padding: 6px 10px; font-size: 14px; border-radius: 8px; box-sizing: border-box; }
+#page-content .st-shell #st-frequency { width: 150px; }
+#page-content .st-shell #st-tolerance { width: 110px; }
+
+/* At a glance. */
+.st-figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0 0; }
+.st-figures > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.st-figures dt { font-size: 13px; color: var(--ui-text-muted); }
+.st-figures dd { margin: 0; font-size: 24px; font-weight: 600; line-height: 1.2; color: var(--ui-text); font-variant-numeric: tabular-nums; }
+.st-figures span { font-size: 13px; color: var(--ui-text-muted); }
+.st-figures [data-state="bad"] dd, .st-figures [data-state="bad"] span { color: #b42318; }
+.st-figures [data-state="warn"] dd { color: #b45309; }
+html[data-spa-theme="dark"] .st-figures [data-state="bad"] dd, html[data-spa-theme="dark"] .st-figures [data-state="bad"] span { color: #fca5a5; }
+html[data-spa-theme="dark"] .st-figures [data-state="warn"] dd { color: #fbbf24; }
+
+/* Lists of differences and stocktakes: one line each, the state in words at the end. */
+.st-rows { list-style: none; margin: 12px 0 0; padding: 0; }
+.st-row-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--ui-border); }
+.st-row-item:first-child { border-top: 0; }
+.st-row-item__main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; min-width: 0; flex: 1 1 220px; }
+.st-row-item > .st-chip { margin-left: auto; }
+.st-row-item__main a { font-weight: 600; color: var(--ui-accent-strong, #115e59); text-decoration: none; }
+.st-row-item__main a:hover { text-decoration: underline; }
+html[data-spa-theme="dark"] .st-row-item__main a { color: var(--ui-accent); }
+.st-row-item__meta { font-size: 13px; color: var(--ui-text-muted); }
+
+.st-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--ui-surface-subtle); color: var(--ui-text-muted); border: 1px solid var(--ui-border); }
+.st-chip--warn { background: rgba(217, 119, 6, .1); color: #b45309; border-color: rgba(217, 119, 6, .35); }
+.st-chip--ok { background: var(--ui-accent-soft, #e6f6f3); color: var(--ui-accent-strong, #115e59); border-color: var(--ui-accent); }
+.st-chip--bad { background: rgba(180, 35, 24, .08); color: #b42318; border-color: rgba(180, 35, 24, .35); }
+html[data-spa-theme="dark"] .st-chip--warn { color: #fbbf24; }
+html[data-spa-theme="dark"] .st-chip--ok { background: transparent; color: var(--ui-accent); }
+html[data-spa-theme="dark"] .st-chip--bad { color: #fca5a5; }
+
+/* Stock position. */
+#page-content .st-shell .st-place-title { margin: 18px 0 6px; font-size: 14px; font-weight: 600; color: var(--ui-text); }
+.st-table-wrap { overflow-x: auto; }
+.st-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.st-table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--ui-text-muted); padding: 8px 10px; border-bottom: 1px solid var(--ui-border); }
+.st-table td { padding: 9px 10px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text); font-variant-numeric: tabular-nums; vertical-align: top; }
+.st-table .st-num, .st-table th.st-num { text-align: right; }
+#page-content .st-shell .st-schedule__more { margin-top: 12px; }
+
+/* Counting. */
+.st-progress { height: 6px; margin-top: 14px; border-radius: 999px; background: var(--ui-surface-subtle); overflow: hidden; }
+.st-progress span { display: block; height: 100%; width: 0; background: var(--ui-accent); transition: width .2s ease; }
+#page-content .st-shell [data-st-count-summary] { margin-top: 8px; }
+.st-tools { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.st-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+#page-content .st-shell .st-chip-button { min-height: 34px; padding: 4px 12px; border: 1px solid var(--ui-border); border-radius: 999px; background: var(--ui-surface); color: var(--ui-text-muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+#page-content .st-shell .st-chip-button[aria-pressed="true"] { border-color: var(--ui-accent); color: var(--ui-accent-strong, #115e59); background: var(--ui-accent-soft, #e6f6f3); }
+html[data-spa-theme="dark"] #page-content .st-shell .st-chip-button[aria-pressed="true"] { background: transparent; color: var(--ui-accent); }
+.st-find { flex: 0 1 360px; min-width: 0; }
+#page-content .st-shell #st-find { width: 100%; }
+.st-lines { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.st-place { margin: 10px 0 2px; font-size: 12px; font-weight: 600; color: var(--ui-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.st-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; padding: 12px 14px; border: 1px solid var(--ui-border); border-left: 3px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); }
+.st-line[data-state="done"] { border-left-color: var(--ui-accent); }
+.st-line--open { border-color: rgba(217, 119, 6, .5); border-left-color: #d97706; }
+.st-line-name { font-weight: 600; color: var(--ui-text); }
+.st-line-meta { margin-top: 2px; font-size: 13px; color: var(--ui-text-muted); }
+.st-count { display: flex; gap: 8px; align-items: center; justify-content: flex-end; font-size: 14px; color: var(--ui-text-muted); }
+/* base-spa.css widens every input; these two must stay a fixed pair. */
+#page-content .st-shell .st-count input { width: 7.5rem; min-height: 40px; height: 40px; padding: 6px 10px; font-size: 16px; text-align: right; border-radius: 8px; box-sizing: border-box; }
+#page-content .st-shell .st-count .btn,
+#page-content .st-shell .st-count button { width: auto; min-width: 88px; min-height: 40px; white-space: nowrap; }
+.st-resolve { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--ui-border); }
+.st-part { display: grid; grid-template-columns: 1.6fr .6fr 1.2fr .9fr 1.4fr auto; gap: 8px; align-items: end; }
+#page-content .st-shell .st-part select, #page-content .st-shell .st-part input { width: 100%; min-width: 0; min-height: 40px; height: 40px; padding: 6px 10px; font-size: 14px; border-radius: 8px; box-sizing: border-box; }
+.st-done-list { margin: 0; padding-left: 1.1em; font-size: 13px; color: var(--ui-text-muted); }
+.st-link-btn { align-self: flex-start; padding: 6px 0; border: 0; background: none; color: var(--ui-accent-strong, #115e59); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+html[data-spa-theme="dark"] .st-link-btn { color: var(--ui-accent); }
+.st-remove { padding: 8px 4px; border: 0; background: none; color: #b42318; font-size: 18px; line-height: 1; cursor: pointer; }
+
+/* Figures, then differences beside the stocktakes, then the position. */
+@container stocktake (min-width: 1000px) {
+  #page-content .st-shell .st-layout { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; }
+  .st-shell .st-layout > * { grid-column: 1 / -1; }
+  .st-shell .st-differences { grid-column: span 7; }
+  .st-shell .st-history { grid-column: span 5; }
+  .st-shell .st-differences[hidden] + .st-history { grid-column: 1 / -1; }
+}
+
+@container stocktake (max-width: 860px) {
+  .st-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container stocktake (max-width: 640px) {
+  .st-figures { grid-template-columns: minmax(0, 1fr); }
+  .st-figures > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 16px; }
+  .st-figures dd { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-size: 20px; text-align: right; }
+  .st-line { grid-template-columns: minmax(0, 1fr); }
+  .st-count { justify-content: stretch; }
+  #page-content .st-shell .st-count input { flex: 1 1 auto; width: auto; }
+  .st-part { grid-template-columns: 1fr 1fr; }
+  .st-find { flex-basis: 100%; }
+  /* The reconciliation as one card per product, each figure labelled. */
+  .st-recon-table thead { display: none; }
+  .st-recon-table, .st-recon-table tbody, .st-recon-table tr, .st-recon-table td { display: block; }
+  .st-recon-table tr { padding: 10px 0; border-bottom: 1px solid var(--ui-border); }
+  .st-recon-table td { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border: 0; }
+  .st-recon-table td::before { content: attr(data-label); color: var(--ui-text-muted); font-size: 13px; }
+  .st-recon-table td.st-recon-product { font-weight: 600; }
+  .st-recon-table td.st-recon-product::before { content: none; }
+  /* Stock position rows stack too: product first, the rest on one muted line. */
+  .st-position .st-table thead { display: none; }
+  .st-position .st-table, .st-position .st-table tbody, .st-position .st-table tr { display: block; }
+  .st-position .st-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-bottom: 1px solid var(--ui-border); }
+  .st-position .st-table td { padding: 0; border: 0; }
+  .st-position .st-table td:nth-child(2), .st-position .st-table td:nth-child(3) { grid-column: 1; font-size: 13px; color: var(--ui-text-muted); }
+  .st-position .st-table td.st-num { grid-column: 2; grid-row: 1; }
+}

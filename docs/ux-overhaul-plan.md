@@ -172,7 +172,7 @@ Go through the audit screenshots in this order; each item is a small MR or a bat
    - batch sizes and site capacity as styled disclosures or a side panel;
    - demand selection and "Plan batches" / "Check materials" as a clear action group;
    - a week grid with an empty state inside the grid.
-- [ ] **4.4** **Contract orders:**
+- [x] **4.4** (!525) **Contract orders:**
    - the list first, with the primary action "New order" top-right opening a form page or drawer;
    - customers as its own sub-tab or a panel with "Add customer";
    - the order form grouped into sections (Customer and reference, Product and quantity, Materials and specification, Duty and status).

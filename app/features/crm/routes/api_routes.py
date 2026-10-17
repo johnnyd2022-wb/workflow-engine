@@ -93,6 +93,110 @@ def get_customer(contact_id: str):
     return jsonify(result), 200
 
 
+def _contact_sync():
+    from app.features.crm.services.contact_service import ContactSyncService
+
+    return ContactSyncService(db_session())
+
+
+def _actor() -> UUID | None:
+    return UUID(g.user_id) if getattr(g, "user_id", None) else None
+
+
+def _contact_response(contact, xero_state: dict, status: int = 200, **extra):
+    from app.features.crm.services.crm_service import _serialise_contact
+
+    return jsonify({"customer": _serialise_contact(contact), "xero_sync": xero_state, **extra}), status
+
+
+@api_bp.route("/api/crm/customers", methods=["POST"])
+@requires_auth
+def create_customer():
+    """Create a contact in Biz-E. It goes to Xero now if its sync (or the Sales default) is on."""
+    try:
+        contact, state = _contact_sync().create_contact(
+            UUID(g.org_id), request.get_json(silent=True) or {}, actor_id=_actor()
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return _contact_response(contact, state, 201)
+
+
+@api_bp.route("/api/crm/customers/<contact_id>", methods=["PATCH"])
+@requires_auth
+def update_customer(contact_id: str):
+    """Save edited contact details; a contact that syncs sends the changed ones to Xero."""
+    from app.features.crm.services.contact_service import ContactNotFoundError
+
+    contact_uuid = _uuid_or_none(contact_id)
+    if contact_uuid is None:
+        return jsonify({"error": "Invalid customer ID"}), 400
+    try:
+        contact, state, changed = _contact_sync().update_contact(
+            UUID(g.org_id), contact_uuid, request.get_json(silent=True) or {}, actor_id=_actor()
+        )
+    except ContactNotFoundError:
+        return jsonify({"error": "Customer not found"}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return _contact_response(contact, state, changed=sorted(changed))
+
+
+@api_bp.route("/api/crm/customers/<contact_id>/xero-sync", methods=["PUT"])
+@requires_auth
+def set_customer_xero_sync(contact_id: str):
+    """A Biz-E contact's own Xero sync: true, false, or null to follow the Sales default."""
+    from app.features.crm.services.contact_service import ContactNotFoundError
+
+    contact_uuid = _uuid_or_none(contact_id)
+    data = request.get_json(silent=True)
+    if contact_uuid is None or not isinstance(data, dict) or "sync_to_xero" not in data:
+        return jsonify({"error": "Send sync_to_xero: true, false or null"}), 400
+    try:
+        contact, state = _contact_sync().set_contact_sync(
+            UUID(g.org_id), contact_uuid, data["sync_to_xero"], actor_id=_actor()
+        )
+    except ContactNotFoundError:
+        return jsonify({"error": "Customer not found"}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return _contact_response(contact, state)
+
+
+@api_bp.route("/api/crm/customers/<contact_id>/xero-sync/retry", methods=["POST"])
+@requires_auth
+def retry_customer_xero_sync(contact_id: str):
+    from app.features.crm.services.contact_service import ContactNotFoundError
+
+    contact_uuid = _uuid_or_none(contact_id)
+    if contact_uuid is None:
+        return jsonify({"error": "Invalid customer ID"}), 400
+    try:
+        contact, state = _contact_sync().retry(UUID(g.org_id), contact_uuid, actor_id=_actor())
+    except ContactNotFoundError:
+        return jsonify({"error": "Customer not found"}), 404
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return _contact_response(contact, state)
+
+
+@api_bp.route("/api/crm/contact-sync-settings", methods=["GET"])
+@requires_auth
+def get_contact_sync_settings():
+    return jsonify(_contact_sync().settings(UUID(g.org_id))), 200
+
+
+@api_bp.route("/api/crm/contact-sync-settings", methods=["PUT"])
+@requires_auth
+def update_contact_sync_settings():
+    """The Sales default for contacts created in Biz-E. Turning it on sends those not yet in Xero."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("sync_contacts_to_xero"), bool):
+        return jsonify({"error": "Send sync_contacts_to_xero: true or false"}), 400
+    result = _contact_sync().set_sync_default(UUID(g.org_id), data["sync_contacts_to_xero"], actor_id=_actor())
+    return jsonify(result), 200
+
+
 # ------------------------------------------------------------------
 # Invoices
 # ------------------------------------------------------------------

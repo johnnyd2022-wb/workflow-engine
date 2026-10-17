@@ -695,6 +695,8 @@ def schedule(session, org_id: UUID, settings: dict | None, today: date) -> dict:
         "last_completed_on": last.counted_on.isoformat() if last else None,
         "next_due": due.isoformat() if due else None,
         "overdue": bool(due and today > due),
+        # The settings form shows it and sends it back, so saving a new frequency keeps it.
+        "bulk_tolerance_percent": _s(_tolerance("L", settings)),
     }
 
 

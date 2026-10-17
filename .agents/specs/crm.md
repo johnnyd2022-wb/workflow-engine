@@ -6,10 +6,12 @@ blueprint: app/features/crm/
 url_prefix: /crm, /api/crm, /crm/xero
 
 ## Description
-Customer relationship + invoicing integration layered on top of Xero. Customers, invoices,
-and payment terms are sourced from a one-way OAuth2 sync from a connected Xero
-organisation — this app never creates Xero contacts, only invoices against contacts that
-already exist there. On top of the synced Xero data it adds app-native CRM objects (notes,
+Customer relationship + invoicing integration layered on top of Xero. Every Xero contact,
+invoice and payment term is pulled in by OAuth2 sync from a connected Xero organisation.
+Since 2026-10-16 customers can also be created in Biz-E: they stay in Biz-E unless their own
+"sync to Xero" choice, or the Sales default (`sync_contacts_to_xero` on the CRM config), sends
+them to Xero; edits to any customer that is in Xero are sent back after an on-screen warning
+listing the changes (see "Contacts created in Biz-E" below). On top of the synced Xero data it adds app-native CRM objects (notes,
 tasks, product-to-Xero-description mappings, a sales-traceability matching config) and
 sales analytics (monthly revenue, customer/product rankings, churn risk).
 
@@ -17,6 +19,23 @@ Gated behind the `crm_enabled` feature flag — the only flag in the app that ga
 blueprint's registration (`app_factory.py:112`), not a per-route check. ASSUMPTION: because
 the flag gate is structural (blueprint never registered when off), no individual route
 needs its own flag check, and none has one.
+
+## Contacts created in Biz-E (2026-10-16)
+- `xero_contacts.source` is `xero` or `bize`; a `bize` contact has no Xero id until it is sent
+  (a check constraint keeps the Xero id required for `xero` rows).
+- `sync_to_xero` on the contact (true, false, or null to follow the Sales default) decides
+  whether a `bize` contact is sent and kept in step. Contacts from Xero always are.
+- Sending is `ContactSyncService` (app/features/crm/services/contact_service.py): create with
+  an idempotency key, update with only the changed fields (name, first and last name, email,
+  default phone, and the postal (POBOX) and street addresses). A changed address is sent
+  with both types Biz-E holds and every part, including lines 3 and 4 and "attention to",
+  which the pull now stores, so an edit never blanks what the page does not show. The local save commits first; a failed send is recorded on the contact
+  (`xero_push_status=failed`, reason) with a retry, and the Xero pull leaves those fields
+  alone until a send succeeds. The pull links a `bize` contact also made in Xero by hand by
+  exact name instead of duplicating it.
+- Needs the `accounting.contacts` scope; connections made before 2026-10-16 must reconnect.
+- Permissions: creating and editing customers is `sales.record`; the Sales default is
+  `sales.manage`.
 
 ## Provenance
 ASSUMPTION: reconstructed 2026-08-15 from code — no prior `.agents/specs/crm.md` existed.

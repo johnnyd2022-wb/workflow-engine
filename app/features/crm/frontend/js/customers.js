@@ -16,6 +16,7 @@ function crmCustomers() {
     missingContactOnly: false,
     xeroStatus: null,
     syncing: false,
+    newCustomer: { open: false, saving: false, error: '', hint: '', form: {} },
 
     async init() {
       this.missingContactOnly = new URLSearchParams(window.location.search).get('missing_contact') === '1';
@@ -82,6 +83,49 @@ function crmCustomers() {
     nextPage() { if (this.page < this.totalPages) { this.page++; this.loadCustomers(); } },
 
     openCustomer(id) { CRMAPI.navigate(`/crm/customers/${id}`); },
+
+    async openNewCustomer() {
+      let settings = { sync_contacts_to_xero: false, xero: { connected: false, can_write_contacts: false } };
+      try { settings = await CRMAPI.getContactSyncSettings(); } catch (_) { /* The form still works without it. */ }
+      const xero = settings.xero || {};
+      this.newCustomer = {
+        open: true,
+        saving: false,
+        error: '',
+        // A blank choice follows the Sales default; ticking or unticking makes it this customer's own.
+        defaultSync: settings.sync_contacts_to_xero === true,
+        hint: !xero.connected
+          ? 'Xero is not connected, so it stays in Biz-E until Xero is connected and you try again.'
+          : !xero.can_write_contacts
+            ? 'The Xero connection only allows reading contacts. Reconnect Xero to send customers.'
+            : `Later edits are sent to ${xero.tenant_name || 'Xero'} when you save them.`,
+        form: { name: '', first_name: '', last_name: '', email_address: '', phone_number: '', sync: settings.sync_contacts_to_xero === true,
+          address: { line1: '', line2: '', city: '', region: '', postal_code: '', country: '' } },
+      };
+      this.$nextTick(() => document.getElementById('new-customer-name')?.focus());
+    },
+
+    closeNewCustomer() { this.newCustomer.open = false; },
+
+    async saveNewCustomer() {
+      const form = this.newCustomer.form;
+      if (!form.name.trim()) { this.newCustomer.error = 'A customer needs a name.'; return; }
+      this.newCustomer.saving = true;
+      this.newCustomer.error = '';
+      const body = { name: form.name, first_name: form.first_name, last_name: form.last_name, email_address: form.email_address, phone_number: form.phone_number };
+      if (Object.values(form.address).some((part) => part.trim())) body.addresses = [{ type: 'POBOX', ...form.address }];
+      // Only an explicit difference from the Sales default is stored on the customer.
+      body.sync_to_xero = form.sync === this.newCustomer.defaultSync ? null : form.sync;
+      try {
+        const saved = await CRMAPI.createCustomer(body);
+        this.newCustomer.open = false;
+        this.openCustomer(saved.customer.id);
+      } catch (e) {
+        this.newCustomer.error = e.message || 'Could not save the customer.';
+      } finally {
+        this.newCustomer.saving = false;
+      }
+    },
 
     beginXeroConnect() {
       window.location.assign('/crm/xero/auth');
