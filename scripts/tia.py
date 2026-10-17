@@ -225,11 +225,12 @@ def modules_naming(path: str) -> set[str]:
         ["git", "grep", "-l", "-F", name, "--", "tests"], cwd=ROOT, capture_output=True, text=True
     ).stdout.split()
     modules = {h for h in hits if TEST_MODULE.match(h)}
-    for js in (h for h in hits if h.endswith(".js")):
-        runner = subprocess.run(
-            ["git", "grep", "-l", "-F", Path(js).parent.name, "--", "tests"], cwd=ROOT, capture_output=True, text=True
+    if any(h.endswith((".test.js", ".test.mjs")) for h in hits):
+        # A JS test names it; the Python modules that run the JS tests do so by glob.
+        runners = subprocess.run(
+            ["git", "grep", "-l", "-F", ".test.js", "--", "tests"], cwd=ROOT, capture_output=True, text=True
         ).stdout.split()
-        modules |= {h for h in runner if TEST_MODULE.match(h)}
+        modules |= {h for h in runners if TEST_MODULE.match(h)}
     return modules
 
 

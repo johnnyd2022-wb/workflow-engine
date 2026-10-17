@@ -283,3 +283,17 @@ def test_whole_file_users_and_changed_line_users_both_count(repo):
     }
     plan = tia.plan(Cursor(base, rows), base, head)
     assert plan["tests"] == ["tests/test_a.py::test_hits", "tests/test_cli.py::test_runs_script"]
+
+
+def test_a_node_tested_file_selects_only_the_js_runner_module(repo):
+    js = repo / "tests" / "js"
+    js.mkdir()
+    (js / "board.test.js").write_text("require('board.js');\n")
+    (repo / "tests" / "test_js_runner.py").write_text("TESTS = glob('tests/js/*.test.js')\n")
+    (repo / "tests" / "test_unrelated.py").write_text("ASSETS = 'static/js/app'\n")
+    (repo / "tests" / "test_board_js.py").unlink()
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "js tests")
+    base = git(repo, "rev-parse", "HEAD")
+    head = commit(repo, "app/board.js", "export const x = 3;\n")
+    assert tia.plan(Cursor(base, {}), base, head)["tests"] == ["tests/test_js_runner.py"]
