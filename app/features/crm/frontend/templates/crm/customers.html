@@ -25,6 +25,8 @@
       {% if can('sales.record') %}
       <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" data-new-customer @click="openNewCustomer()">New customer</button>
       {% endif %}
+      {# Syncing and connecting Xero need sales.manage (access_policy: crm.crm_oauth.*). #}
+      {% if can('sales.manage') %}
       <template x-if="isConnected">
         <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="doSync()" :disabled="syncing">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" :style="syncing ? 'animation:spin 1s linear infinite' : ''"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -37,6 +39,7 @@
           Connect Xero
         </button>
       </template>
+      {% endif %}
     </div>
   </div>
 
@@ -55,7 +58,9 @@
         <strong>Connect Xero to sync your customers</strong>
         <p>Your contacts and invoices will appear here once Xero is connected.</p>
       </div>
+      {% if can('sales.manage') %}
       <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click="beginXeroConnect()">Connect Xero</button>
+      {% endif %}
     </div>
   </template>
 
@@ -110,9 +115,11 @@
         </div>
         <h3 x-text="missingContactOnly ? 'All customers have contact details' : search ? 'No customers match your search' : 'No customers yet'">No customers yet</h3>
         <p x-text="missingContactOnly ? 'There are no customers missing a phone number or email address.' : search ? 'Try a different search term.' : isConnected ? 'Sync Xero to import your contacts, or add a customer.' : 'Connect Xero to bring in your contacts, or add a customer.'"></p>
+        {% if can('sales.manage') %}
         <template x-if="!isConnected">
           <button type="button" class="crm-btn crm-btn--primary" style="margin-top:8px;" @click="beginXeroConnect()">Connect Xero</button>
         </template>
+        {% endif %}
       </div>
     </template>
 

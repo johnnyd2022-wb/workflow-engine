@@ -154,3 +154,34 @@ test('saving configuration sends the tenant sales-figure obfuscation preference'
   assert.equal(calls.traceConfig[0].obfuscate_sales_figures, true);
   assert.equal(page.traceConfig.obfuscate_sales_figures, true);
 });
+
+// The sync route answers 200 with ok:false when part of a sync failed (the rest is kept); the
+// page used to read only the counts, so a sync that half-failed looked like a clean one.
+function makeSyncPage(syncReply) {
+  const CRMAPI = {
+    ensureBackButton() {},
+    triggerSync: async () => syncReply,
+    getXeroStatus: async () => ({ connected: true }),
+  };
+  const context = vm.createContext({ CRMAPI, window: {}, console });
+  vm.runInContext(SRC, context);
+  return context.crmConfiguration();
+}
+
+test('a sync that only partly finished shows why on the page', async () => {
+  const page = makeSyncPage({
+    ok: false,
+    sales_allocated: 3,
+    errors: ['Invoice sync error: timed out'],
+    error: 'The Xero sync did not finish: Invoice sync error: timed out',
+  });
+  await page.doSync();
+  assert.equal(page.error, 'The Xero sync did not finish: Invoice sync error: timed out');
+  assert.equal(page.syncSummary.allocated, 3);
+});
+
+test('a clean sync leaves no error', async () => {
+  const page = makeSyncPage({ ok: true, sales_allocated: 1, errors: [] });
+  await page.doSync();
+  assert.equal(page.error, null);
+});

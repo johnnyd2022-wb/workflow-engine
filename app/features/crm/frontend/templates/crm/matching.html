@@ -40,7 +40,7 @@
       <div class="mt-meta" x-show="mode === 'manual'" x-cloak>You pick the batch for each sale. Sales below are waiting for one.</div>
     </div>
     <div class="mt-actions">
-      <a class="crm-btn crm-btn--secondary crm-btn--sm" href="/crm/configuration">Change mode</a>
+      {% if can('sales.manage') %}<a class="crm-btn crm-btn--secondary crm-btn--sm" href="/crm/configuration">Change mode</a>{% endif %}
       <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="runNow()">Re-run matching</button>
     </div>
   </div>

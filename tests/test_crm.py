@@ -1846,3 +1846,314 @@ class TestXeroAPIClientHelpers:
         from app.features.crm.services.xero_api_client import _normalise_payment_terms
 
         assert _normalise_payment_terms(SimpleNamespace(sales=None, bills=None)) is None
+
+
+# ─────────────────────────────────────────────
+# Review 2026-10-18 (.agents/reports/crm/review.md): failures that reached users as the wrong answer
+# ─────────────────────────────────────────────
+
+
+def _connect_xero(db, org_id):
+    TestXeroSyncService()._connect_tenant(db, org_id)
+
+
+def _xero_customer(db, org_id, **fields):
+    from app.features.crm.models.xero_contact import XeroContact
+
+    contact = XeroContact(
+        org_id=org_id,
+        xero_contact_id=f"fake-xero-{uuid4()}",
+        xero_tenant_id="fake-tenant-id",
+        name=f"Review Customer {uuid4()}",
+        contact_status="ACTIVE",
+        **fields,
+    )
+    db.add(contact)
+    db.commit()
+    return contact
+
+
+def _draft_invoice(db, org_id, contact, status="DRAFT"):
+    from app.features.crm.models.xero_invoice import XeroInvoice
+
+    invoice = XeroInvoice(
+        org_id=org_id,
+        xero_invoice_id=f"fake-inv-{uuid4()}",
+        xero_tenant_id="fake-tenant-id",
+        contact_id=contact.id,
+        invoice_type="ACCREC",
+        status=status,
+        date=date.today(),
+        total=Decimal("10"),
+    )
+    db.add(invoice)
+    db.commit()
+    return invoice
+
+
+def _xero_bad_request(message):
+    """What xero-python raises for a 400: an ApiException carrying Xero's JSON reply."""
+    from xero_python.exceptions import ApiException
+
+    body = {"Elements": [{"ValidationErrors": [{"Message": message}]}]}
+    return ApiException(
+        http_resp=SimpleNamespace(status=400, reason="Bad Request", data=json.dumps(body).encode(), getheaders=dict)
+    )
+
+
+class TestXeroFailuresOnInvoiceRoutes:
+    """A Xero refusal or an expired connection on the invoice routes raised out of the view as a
+    bare 500, so the page showed "HTTP 500" instead of what to fix."""
+
+    LINE = {"description": "Gin 700ml", "quantity": 1, "unit_amount": 50}
+
+    def test_xero_refusing_to_authorise_an_invoice_is_a_400_in_xeros_words(self, app_client, db, org, monkeypatch):
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+
+        _connect_xero(db, org.id)
+        invoice = _draft_invoice(db, org.id, _xero_customer(db, org.id))
+
+        def refuse(self, **kwargs):
+            raise _xero_bad_request("Invoice not of valid status for modification")
+
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "authorise_invoice", refuse)
+
+        resp = app_client.post(f"/api/crm/invoices/{invoice.id}/authorise")
+
+        assert resp.status_code == 400
+        assert "Invoice not of valid status for modification" in json.loads(resp.data)["error"]
+
+    def test_an_expired_xero_connection_on_invoice_create_asks_for_a_reconnect(self, app_client, db, org, monkeypatch):
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+        from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
+
+        contact = _xero_customer(db, org.id)
+
+        def expired(self, **kwargs):
+            raise XeroTokenExpiredError("Refresh token rejected")
+
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "create_invoice", expired)
+
+        resp = app_client.post(
+            f"/api/crm/customers/{contact.id}/invoices",
+            json={"invoice_date": "2026-10-01", "line_items": [self.LINE]},
+        )
+
+        assert resp.status_code == 401
+        body = json.loads(resp.data)
+        assert body["action"] == "reconnect_xero"
+        assert "Reconnect Xero" in body["error"]
+
+    def test_xero_being_unreachable_for_a_view_link_is_a_named_502(self, app_client, db, org, monkeypatch):
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+
+        invoice = _draft_invoice(db, org.id, _xero_customer(db, org.id), status="AUTHORISED")
+
+        def unreachable(self, **kwargs):
+            raise ConnectionError("Connection reset by peer")
+
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_online_invoice_url", unreachable)
+
+        resp = app_client.get(f"/api/crm/invoices/{invoice.id}/view-url")
+
+        assert resp.status_code == 502
+        assert "Xero" in json.loads(resp.data)["error"]
+
+
+class TestCRMTaskAssignee:
+    """CRM tasks took any UUID as their assignee; core tasks (app/core/backend/tasks.py) only take
+    an active user of the same organisation. A foreign user id was stored, and an unknown one hit
+    the foreign key and answered 500."""
+
+    @pytest.fixture()
+    def other_org_user(self, db):
+        org_b = OrganisationRepository(db).create_org(f"Org B {uuid4()}")
+        db.commit()
+        other = UserRepository(db).create_user(
+            org_id=org_b.id, email=f"crm_other_{uuid4()}@test.com", password_hash=AuthService.hash_password("x" * 12)
+        )
+        db.commit()
+        yield other
+        db.query(Organisation).filter(Organisation.id == org_b.id).delete(synchronize_session=False)
+        db.commit()
+
+    def test_a_task_cannot_be_assigned_to_another_organisations_user(self, app_client, other_org_user):
+        resp = app_client.post("/api/crm/tasks", json={"title": "Call", "assigned_to_user_id": str(other_org_user.id)})
+
+        assert resp.status_code == 400
+        assert "active user in this organisation" in json.loads(resp.data)["error"]
+
+    def test_a_task_cannot_be_reassigned_to_another_organisations_user(self, app_client, other_org_user):
+        task = json.loads(app_client.post("/api/crm/tasks", json={"title": "Call"}).data)["task"]
+
+        resp = app_client.put(f"/api/crm/tasks/{task['id']}", json={"assigned_to_user_id": str(other_org_user.id)})
+
+        assert resp.status_code == 400
+        assert json.loads(app_client.get("/api/crm/tasks").data)["tasks"][0]["assigned_to_user_id"] is None
+
+    def test_an_unknown_assignee_is_a_400_not_a_500(self, app_client):
+        resp = app_client.post("/api/crm/tasks", json={"title": "Call", "assigned_to_user_id": str(uuid4())})
+
+        assert resp.status_code == 400
+
+    def test_a_task_can_still_be_assigned_to_someone_in_the_organisation(self, app_client, db, org):
+        """[CONTROL] the check does not refuse the caller's colleagues (not just the caller)."""
+        colleague = UserRepository(db).create_user(
+            org_id=org.id, email=f"crm_colleague_{uuid4()}@test.com", password_hash=AuthService.hash_password("x" * 12)
+        )
+        db.commit()
+
+        resp = app_client.post("/api/crm/tasks", json={"title": "Call", "assigned_to_user_id": str(colleague.id)})
+
+        assert resp.status_code == 201
+        assert json.loads(resp.data)["task"]["assigned_to_user_id"] == str(colleague.id)
+
+
+class TestCustomerStatusFilter:
+    """A customer created in Biz-E has no Xero contact status until Xero sends one, so choosing
+    "Active" on the customers list hid every customer just added in Biz-E."""
+
+    def test_the_active_filter_includes_customers_made_in_bize(self, app_client, db, org):
+        from app.features.crm.services.contact_service import ContactSyncService
+
+        made_here, _ = ContactSyncService(db).create_contact(org.id, {"name": "Kererū Botanicals"})
+
+        resp = app_client.get("/api/crm/customers", query_string={"status": "ACTIVE"})
+
+        assert [c["id"] for c in json.loads(resp.data)["customers"]] == [str(made_here.id)]
+
+    def test_the_archived_filter_still_leaves_them_out(self, app_client, db, org):
+        """[CONTROL] they count as active, not as every status."""
+        from app.features.crm.services.contact_service import ContactSyncService
+
+        ContactSyncService(db).create_contact(org.id, {"name": "Kererū Botanicals"})
+        archived = _xero_customer(db, org.id)
+        archived.contact_status = "ARCHIVED"
+        db.commit()
+
+        resp = app_client.get("/api/crm/customers", query_string={"status": "ARCHIVED"})
+
+        assert [c["id"] for c in json.loads(resp.data)["customers"]] == [str(archived.id)]
+
+
+class TestManualSyncFailures:
+    """POST /api/crm/xero/sync answered 200 ``ok: true`` whatever happened, and the three pages
+    that call it only look at the status, so a sync that failed looked like one that worked."""
+
+    def _fail(self, monkeypatch, *, contacts=None, invoices=None, contacts_reply=()):
+        from app.features.crm.services import xero_api_client as xero_api_client_module
+
+        def outcome(error, reply=()):
+            def call(self, **kwargs):
+                if error:
+                    raise error
+                return list(reply)
+
+            return call
+
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_contacts", outcome(contacts, contacts_reply))
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "get_all_invoices", outcome(invoices))
+
+    def test_a_sync_that_failed_outright_is_an_error_the_page_shows(self, app_client, db, org, monkeypatch):
+        _connect_xero(db, org.id)
+        self._fail(monkeypatch, contacts=RuntimeError("Xero is down"), invoices=RuntimeError("Xero is down"))
+
+        resp = app_client.post("/api/crm/xero/sync")
+
+        assert resp.status_code == 502
+        body = json.loads(resp.data)
+        assert body["ok"] is False
+        assert "Xero is down" in body["error"]
+
+    def test_a_partly_failed_sync_says_it_did_not_finish(self, app_client, db, org, monkeypatch):
+        _connect_xero(db, org.id)
+        xero_contact = SimpleNamespace(
+            contact_id=f"xero-{uuid4()}",
+            name="Harbour Spirits Co.",
+            first_name=None,
+            last_name=None,
+            email_address=None,
+            phones=[],
+            addresses=[],
+            payment_terms=None,
+            tax_number=None,
+            account_number=None,
+            contact_status="ACTIVE",
+            is_customer=True,
+            is_supplier=False,
+            updated_date_utc=datetime.now(UTC),
+        )
+        self._fail(monkeypatch, invoices=RuntimeError("Invoices timed out"), contacts_reply=[xero_contact])
+
+        resp = app_client.post("/api/crm/xero/sync")
+
+        # The contact came in, so this is a partial sync: kept, but reported as not finished.
+        assert resp.status_code == 200
+        body = json.loads(resp.data)
+        assert (body["ok"], body["contacts_synced"]) == (False, 1)
+        assert "Invoices timed out" in body["error"]
+
+    def test_a_clean_sync_is_still_ok(self, app_client, db, org, monkeypatch):
+        """[CONTROL]"""
+        _connect_xero(db, org.id)
+        self._fail(monkeypatch)
+
+        resp = app_client.post("/api/crm/xero/sync")
+
+        assert resp.status_code == 200
+        assert json.loads(resp.data)["ok"] is True
+
+
+class TestCustomersPageXeroButtons:
+    """/crm/customers showed Sync and Connect Xero to everyone who can see Sales, but both need
+    sales.manage (access_policy: crm.crm_oauth.*), so a Sales user's Sync answered "You don't have
+    permission to do this." and Connect Xero bounced them to the dashboard."""
+
+    def _client_as(self, db, org, role):
+        from app.api.app_factory import create_app
+        from app.core.db.models.user import UserRole
+
+        email = f"crm_{role}_{uuid4()}@test.com"
+        UserRepository(db).create_user(
+            org_id=org.id, email=email, password_hash=AuthService.hash_password("TestPass123!"), role=UserRole(role)
+        )
+        db.commit()
+        flask_app = create_app()
+        flask_app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
+        client = flask_app.test_client()
+        client.environ_base["wsgi.url_scheme"] = "https"
+        client.environ_base["HTTP_X_FORWARDED_PROTO"] = "https"
+        assert client.post("/auth/login", json={"email": email, "password": "TestPass123!"}).status_code in (200, 201)
+        return client
+
+    def test_a_sales_user_is_not_offered_xero_buttons_they_cannot_use(self, db, org):
+        client = self._client_as(db, org, "sales")
+
+        page = client.get("/crm/customers").get_data(as_text=True)
+
+        assert client.post("/api/crm/xero/sync").status_code == 403  # why the button must not show
+        assert "data-new-customer" in page  # they can still add customers
+        assert "doSync()" not in page
+        assert "beginXeroConnect()" not in page
+
+    def test_a_sales_user_is_not_sent_to_the_configuration_page_they_cannot_open(self, db, org):
+        # Overview's "Map" / "Review product mappings" and Batch matching's "Change mode" all
+        # linked to /crm/configuration, which redirects a Sales user to the dashboard.
+        client = self._client_as(db, org, "sales")
+
+        assert client.get("/crm/configuration").status_code in (302, 403)  # dashboard redirect in a browser
+        for path, marker in (("/crm", "Xero products needing a mapping"), ("/crm/matching", "Re-run matching")):
+            resp = client.get(path)
+            page = resp.get_data(as_text=True)
+            assert resp.status_code == 200 and marker in page, path  # the page itself rendered for them
+            assert "/crm/configuration" not in page, path
+
+    def test_someone_who_manages_sales_still_gets_them(self, db, org):
+        """[CONTROL]"""
+        client = self._client_as(db, org, "member")
+        page = client.get("/crm/customers").get_data(as_text=True)
+
+        assert "doSync()" in page
+        assert "beginXeroConnect()" in page
+        for path in ("/crm", "/crm/matching"):
+            assert "/crm/configuration" in client.get(path).get_data(as_text=True), path

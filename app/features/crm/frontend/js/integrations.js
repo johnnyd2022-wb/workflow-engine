@@ -34,8 +34,9 @@ function xeroIntegration() {
       this.syncing = true;
       this.error = null;
       try {
-        await CRMAPI.triggerSync();
+        const result = await CRMAPI.triggerSync();
         await this.init();
+        if (result?.ok === false) this.error = result.error || 'The Xero sync did not finish.';
       } catch (e) {
         this.error = e.message || 'Sync failed.';
       } finally {

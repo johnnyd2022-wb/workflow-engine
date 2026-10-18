@@ -4,7 +4,10 @@ from datetime import date, timedelta
 from io import BytesIO
 from uuid import UUID
 
+import requests
 from flask import Blueprint, g, jsonify, request, send_file
+from urllib3.exceptions import HTTPError as Urllib3HTTPError
+from xero_python.exceptions import OpenApiException
 
 from app.core.backend.tasks import (
     TaskError,
@@ -20,7 +23,8 @@ from app.core.security.permissions import requires_auth
 from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
 from app.features.crm.models.xero_invoice import XeroInvoice
 from app.features.crm.services.crm_service import CRMService
-from app.features.crm.services.xero_api_client import XeroInsufficientScopeError
+from app.features.crm.services.xero_api_client import XeroInsufficientScopeError, _extract_exception_error_message
+from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
 from app.observability import get_logger
 
 api_bp = Blueprint("crm_api", __name__)
@@ -91,6 +95,35 @@ def get_customer(contact_id: str):
     if not result:
         return jsonify({"error": "Customer not found"}), 404
     return jsonify(result), 200
+
+
+# What a call to Xero raises when Xero refuses it or cannot be reached (RuntimeError is
+# XeroAPIClient's own "no usable reply"). Anything else is a Biz-E bug and stays a 500.
+_XERO_CALL_ERRORS = (OpenApiException, requests.RequestException, Urllib3HTTPError, ConnectionError, RuntimeError)
+
+
+def _xero_failure(exc: Exception, action: str):
+    """The answer for a Xero call that failed, in words the page can show."""
+    if isinstance(exc, XeroInsufficientScopeError):
+        return jsonify({"error": "xero_insufficient_scope", "message": str(exc), "action": "reconnect_xero"}), 401
+    if isinstance(exc, XeroTokenExpiredError):
+        return jsonify(
+            {
+                "error": "The Xero connection has expired. Reconnect Xero, then try again.",
+                "code": "reconnect_required",
+                "action": "reconnect_xero",
+            }
+        ), 401
+    if isinstance(exc, ValueError):
+        return jsonify({"error": str(exc)}), 400
+    if not isinstance(exc, _XERO_CALL_ERRORS):
+        raise exc
+    refused = _extract_exception_error_message(exc)
+    if refused:
+        logger.warning("crm_xero_call_refused", action=action, org_id=g.org_id, error=refused)
+        return jsonify({"error": f"Xero refused this: {refused}"}), 400
+    logger.exception("crm_xero_call_failed", action=action, org_id=g.org_id)
+    return jsonify({"error": "Xero could not be reached. Try again in a moment."}), 502
 
 
 def _contact_sync():
@@ -323,19 +356,8 @@ def create_customer_invoice(contact_id: str):
     data = request.get_json() or {}
     try:
         invoice = _crm_service().create_customer_invoice(UUID(contact_id), org_id, data)
-    except XeroInsufficientScopeError as e:
-        return (
-            jsonify(
-                {
-                    "error": "xero_insufficient_scope",
-                    "message": str(e),
-                    "action": "reconnect_xero",
-                }
-            ),
-            401,
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001 - every Xero failure gets an answer the page can show
+        return _xero_failure(e, "create_invoice")
     return jsonify({"invoice": invoice}), 201
 
 
@@ -345,19 +367,8 @@ def authorise_invoice(invoice_id: str):
     org_id = UUID(g.org_id)
     try:
         invoice = _crm_service().authorise_invoice(UUID(invoice_id), org_id)
-    except XeroInsufficientScopeError as e:
-        return (
-            jsonify(
-                {
-                    "error": "xero_insufficient_scope",
-                    "message": str(e),
-                    "action": "reconnect_xero",
-                }
-            ),
-            401,
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001 - every Xero failure gets an answer the page can show
+        return _xero_failure(e, "authorise_invoice")
     return jsonify({"invoice": invoice}), 200
 
 
@@ -368,19 +379,8 @@ def get_invoice_pdf(invoice_id: str):
     inline = str(request.args.get("inline") or "").strip().lower() in {"1", "true", "yes"}
     try:
         pdf_bytes, filename = _crm_service().get_invoice_pdf(UUID(invoice_id), org_id)
-    except XeroInsufficientScopeError as e:
-        return (
-            jsonify(
-                {
-                    "error": "xero_insufficient_scope",
-                    "message": str(e),
-                    "action": "reconnect_xero",
-                }
-            ),
-            401,
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001 - every Xero failure gets an answer the page can show
+        return _xero_failure(e, "invoice_pdf")
     return send_file(
         BytesIO(pdf_bytes),
         mimetype="application/pdf",
@@ -395,19 +395,8 @@ def get_invoice_view_url(invoice_id: str):
     org_id = UUID(g.org_id)
     try:
         view_url = _crm_service().get_invoice_view_url(UUID(invoice_id), org_id)
-    except XeroInsufficientScopeError as e:
-        return (
-            jsonify(
-                {
-                    "error": "xero_insufficient_scope",
-                    "message": str(e),
-                    "action": "reconnect_xero",
-                }
-            ),
-            401,
-        )
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001 - every Xero failure gets an answer the page can show
+        return _xero_failure(e, "invoice_view_url")
     return jsonify({"view_url": view_url}), 200
 
 

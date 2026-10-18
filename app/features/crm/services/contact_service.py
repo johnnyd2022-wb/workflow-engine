@@ -187,6 +187,9 @@ class ContactSyncService:
         if "name" in fields and fields["name"].casefold() != (contact.name or "").casefold():
             self._refuse_duplicate_name(org_id, fields["name"], exclude=contact.id)
         before = _snapshot(contact)
+        # Xero is behind on more than this edit when it has never had the contact, or a send
+        # failed (or never finished): send everything then, or the pull undoes what it missed.
+        send_all = not contact.xero_contact_id or contact.xero_push_status in ("pending", "failed")
         changed = {key: value for key, value in fields.items() if _current(contact, key) != value}
         for key, value in changed.items():
             setattr(contact, key, value)
@@ -206,7 +209,7 @@ class ContactSyncService:
                 contact.xero_push_status = "pending"
         self.db.commit()
         if changed and self.effective_sync(contact):
-            self._push(org_id, contact, fields=list(changed), actor_id=actor_id)
+            self._push(org_id, contact, fields=None if send_all else list(changed), actor_id=actor_id)
         return contact, self.describe(contact), changed
 
     def set_contact_sync(

@@ -724,7 +724,7 @@ class CRMService:
             description=data.get("description"),
             due_date=due_date,
             priority=data.get("priority", "medium"),
-            assigned_to_user_id=UUID(assigned_raw) if assigned_raw else None,
+            assigned_to_user_id=_assignee(self.db, org_id, assigned_raw),
             created_by_user_id=user_id,
         )
         self.db.flush()  # populate task.id (client-side default) before event emission
@@ -765,10 +765,7 @@ class CRMService:
             raw_assigned = updates["assigned_to_user_id"]
             if isinstance(raw_assigned, str) and raw_assigned.strip().lower() in {"", "null", "none"}:
                 raw_assigned = None
-            if raw_assigned:
-                updates["assigned_to_user_id"] = UUID(raw_assigned)
-            else:
-                updates["assigned_to_user_id"] = None
+            updates["assigned_to_user_id"] = _assignee(self.db, org_id, raw_assigned)
         if "contact_id" in updates:
             raw_contact = updates["contact_id"]
             if isinstance(raw_contact, str) and raw_contact.strip().lower() in {"", "null", "none"}:
@@ -1192,6 +1189,13 @@ class CRMService:
 # ------------------------------------------------------------------
 # Serialisers
 # ------------------------------------------------------------------
+
+
+def _assignee(db: Session, org_id: UUID, raw) -> UUID | None:
+    """The task's assignee: an active user of this organisation, as core tasks require."""
+    from app.core.backend.tasks import _parse_optional_user
+
+    return _parse_optional_user(db, org_id, raw)
 
 
 def _safe_event_uuid(raw: str | None, *, fallback: UUID) -> UUID:

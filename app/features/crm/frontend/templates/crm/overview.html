@@ -213,10 +213,11 @@
                   <p style="font-size:.74rem; color:var(--text-secondary,#6b7280); margin:0 0 8px;">These items are excluded from product totals until mapped.</p>
                   <ul style="font-size:.76rem; margin:0 0 8px; padding-left:18px;">
                     <template x-for="(item, index) in overview.unmapped_products || []" :key="`${item.item_code || ''}-${item.description || ''}-${index}`">
-                      <li><span x-text="item.description || 'No description'"></span> · <span x-text="item.item_code || 'No item code'"></span> <a :href="'/crm/configuration?xero_line=' + encodeURIComponent(item.description || item.item_code || '')">Map</a></li>
+                      <li><span x-text="item.description || 'No description'"></span> · <span x-text="item.item_code || 'No item code'"></span>{% if can('sales.manage') %} <a :href="'/crm/configuration?xero_line=' + encodeURIComponent(item.description || item.item_code || '')">Map</a>{% endif %}</li>
                     </template>
                   </ul>
-                  <a href="/crm/configuration">Review product mappings</a>
+                  {# Product mappings live on the configuration page, which needs sales.manage. #}
+                  {% if can('sales.manage') %}<a href="/crm/configuration">Review product mappings</a>{% endif %}
                 </section>
               </div>
             </template>

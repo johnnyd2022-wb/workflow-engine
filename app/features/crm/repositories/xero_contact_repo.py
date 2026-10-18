@@ -94,7 +94,8 @@ class XeroContactRepository:
             _ = term  # noqa: F841
 
         if status:
-            q = q.filter(XeroContact.contact_status == status.upper())
+            # A contact made in Biz-E has no Xero status until Xero sends one; it is active.
+            q = q.filter(func.coalesce(XeroContact.contact_status, "ACTIVE") == status.upper())
 
         if missing_contact:
             has_email = func.nullif(func.trim(XeroContact.email_address), "").isnot(None)
