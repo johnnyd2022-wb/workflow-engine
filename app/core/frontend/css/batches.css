@@ -1,6 +1,6 @@
 /* Batches (/core/executions/live). Layout comes from workspace-overviews.css; only the page's
    own pieces are styled here, with the shared --ui-* tokens so dark mode follows.
-   The base rules are Style 1 (Lanes); Styles 2 and 3 are the CONCEPT ONLY blocks at the foot. */
+   One lane per workflow keeps the whole process visible. */
 .batches-page [hidden] { display: none !important; }
 .batches-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .batches-page .core2-active-view { min-height: 0; }
@@ -15,20 +15,11 @@ html[data-spa-theme="dark"] #page-content .batches-primary { background: var(--u
 #page-content .core2-active-detail-foot .batches-primary { background: var(--ui-accent-strong, #115e59); border-color: var(--ui-accent-strong, #115e59); color: #fff; }
 html[data-spa-theme="dark"] #page-content .core2-active-detail-foot .batches-primary { background: var(--ui-accent); border-color: var(--ui-accent); color: #04211d; }
 
-/* CONCEPT ONLY: the layout preview switch. */
-.batches-concepts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 20px; }
-.batches-concepts > span { color: var(--ui-text-muted); font-size: .8rem; margin-right: 4px; }
-#page-content .batches-concepts .workspace-button { padding: 7px 12px; font-size: .8rem; min-height: 36px; }
-#page-content .batches-concepts [aria-pressed="true"] { border-color: var(--ui-accent); color: var(--ui-accent); background: var(--ui-surface-subtle); }
-
 /* Head: the title and figures on the left, the view toggle on the right. */
 .batches-card { display: grid; gap: 18px; }
 .batches-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
 .batches-head__text { min-width: 0; flex: 1 1 320px; }
 #page-content .batches-card h2 { margin: 0; }
-.batches-brief { display: none; margin: 8px 0 0; max-width: 70ch; font-size: 15px; line-height: 1.55; color: var(--ui-text); }
-.batches-warn-text { color: #b45309; font-weight: 600; }
-html[data-spa-theme="dark"] .batches-warn-text { color: #fbbf24; }
 
 .batches-figures { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 12px 0 0; }
 .batches-figures > div { display: flex; align-items: baseline; gap: 8px; }
@@ -67,7 +58,7 @@ html[data-spa-theme="dark"] #page-content .batches-chip.is-active { background: 
 .batches-age--waiting { padding: 1px 8px; border-radius: 999px; background: rgba(217, 119, 6, .1); border: 1px solid rgba(217, 119, 6, .35); color: #b45309; font-weight: 600; }
 html[data-spa-theme="dark"] .batches-age--waiting { color: #fbbf24; background: rgba(251, 191, 36, .08); }
 
-/* A batch card (Style 1), also the base for the others' openers. */
+/* A batch card. */
 #page-content .batches-page .core2-active-card { display: grid; gap: 4px; justify-items: start; width: 100%; padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: 10px; background: var(--ui-surface); color: var(--ui-text); text-align: left; font: inherit; cursor: pointer; box-sizing: border-box; }
 #page-content .batches-page .core2-active-card:hover { border-color: var(--ui-accent); }
 #page-content .batches-page .core2-active-card:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 2px; }
@@ -75,12 +66,12 @@ html[data-spa-theme="dark"] .batches-age--waiting { color: #fbbf24; background: 
 .batches-page .core2-active-card-id { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--ui-text); overflow-wrap: anywhere; }
 .batches-item__meta { font-size: 12px; color: var(--ui-text-muted); }
 
-/* Style 1: a lane per workflow, a column per step. Empty steps stay, narrower. */
+/* A lane per workflow, a column per step. Empty steps stay, narrower. */
 .batches-board { display: grid; gap: 22px; }
 .batches-lane { display: grid; gap: 10px; }
 .batches-lane + .batches-lane { padding-top: 22px; border-top: 1px solid var(--ui-border); }
 .batches-lane__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-#page-content .batches-lane__head h3, #page-content .batches-queue__head h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ui-text); }
+#page-content .batches-lane__head h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ui-text); }
 .batches-lane__meta { font-size: 13px; color: var(--ui-text-muted); }
 .batches-lane__steps { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .batches-step { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 10px; border-radius: 12px; background: var(--ui-surface-subtle); }
@@ -97,7 +88,7 @@ html[data-spa-theme="dark"] .batches-age--waiting { color: #fbbf24; background: 
   .batches-step.is-empty { padding: 6px 10px; }
 }
 
-/* Timeline view (shared by all styles). */
+/* Timeline view. */
 .batches-page .core2-active-timeline { border: 1px solid var(--ui-border); border-radius: 12px; overflow: hidden; background: var(--ui-surface); }
 .batches-page .core2-active-timeline:empty { display: none; }
 #page-content .batches-page .core2-active-timeline-help { margin: 0 0 10px; color: var(--ui-text-muted); font-size: 13px; }
@@ -110,12 +101,12 @@ html[data-spa-theme="dark"] .batches-age--waiting { color: #fbbf24; background: 
 .batches-sheet .core2-active-detail-foot { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 767px) {
-  /* The heading and the view toggle share a row; the brief and figures run full width under them. */
+  /* The heading and the view toggle share a row; the figures run full width under them. */
   .batches-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; }
   .batches-head__text { display: contents; }
   #page-content .batches-card h2 { grid-column: 1; grid-row: 1; }
   .batches-view-toggle { grid-column: 2; grid-row: 1; }
-  .batches-brief, .batches-figures { grid-column: 1 / -1; margin-top: 0; }
+  .batches-figures { grid-column: 1 / -1; margin-top: 0; }
   #page-content .batches-view-btn { min-height: 32px; padding: 0 10px; font-size: 12px; }
   .batches-card { gap: 14px; }
   .batches-field--search { flex-basis: 100%; max-width: none; }
@@ -123,67 +114,4 @@ html[data-spa-theme="dark"] .batches-age--waiting { color: #fbbf24; background: 
   #page-content .batches-page #core2-active-process-select { min-width: 0; max-width: none; }
   .batches-figures { gap: 4px 16px; }
   .batches-figures dd { font-size: 18px; }
-}
-
-/* ── CONCEPT ONLY: Style 2, List. One row per batch, longest wait first. ─────────────── */
-.batches-table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
-/* Fixed columns, so a filter does not make them jump. */
-.batches-table th:nth-child(1) { width: 26%; }
-.batches-table th:nth-child(2) { width: 22%; }
-.batches-table th:nth-child(3) { width: 20%; }
-.batches-table th:nth-child(4) { width: 14%; }
-.batches-table th { padding: 8px 12px; border-bottom: 1px solid var(--ui-border); text-align: left; font-size: 12px; font-weight: 600; color: var(--ui-text-muted); }
-.batches-table td { padding: 12px; border-bottom: 1px solid var(--ui-border); vertical-align: top; color: var(--ui-text); }
-.batches-table tr:last-child td { border-bottom: 0; }
-.batches-table tr.is-waiting td:first-child { box-shadow: inset 3px 0 0 #d97706; }
-.batches-table td > * { display: block; }
-.batches-table td > .batches-age { display: inline-block; }
-.batches-table__sub { margin-top: 4px; font-size: 12px; color: var(--ui-text-muted); }
-.batches-table__step { font-weight: 600; }
-.batches-table__who { color: var(--ui-text-muted); font-size: 13px; }
-.batches-table__action { text-align: right; overflow-wrap: anywhere; }
-#page-content .batches-page .batches-row-open { display: inline-block; width: auto; padding: 0; border: 0; border-radius: 4px; background: none; }
-#page-content .batches-page .batches-row-open:hover .core2-active-card-id { color: var(--ui-accent-strong); text-decoration: underline; }
-html[data-spa-theme="dark"] #page-content .batches-page .batches-row-open:hover .core2-active-card-id { color: var(--ui-accent); }
-.batches-link { font-size: 13px; font-weight: 600; color: var(--ui-accent-strong, #115e59); text-decoration: none; }
-.batches-link:hover { text-decoration: underline; }
-html[data-spa-theme="dark"] .batches-link { color: var(--ui-accent); }
-.batches-progress { display: inline-flex; gap: 2px; vertical-align: middle; }
-.batches-progress > span { width: 12px; height: 5px; border-radius: 3px; background: var(--ui-border); }
-.batches-progress > span.is-done { background: var(--ui-accent); }
-.batches-progress > span.is-current { background: var(--ui-accent-soft, #ccfbf1); box-shadow: inset 0 0 0 1px var(--ui-accent); }
-@media (max-width: 767px) {
-  .batches-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .batches-table, .batches-table tbody, .batches-table tr { display: block; }
-  .batches-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 12px 0; border-bottom: 1px solid var(--ui-border); }
-  .batches-table tr:last-child { border-bottom: 0; }
-  .batches-table td { display: block; padding: 0; border: 0; }
-  .batches-table tr.is-waiting td:first-child { box-shadow: none; }
-  .batches-table tr.is-waiting { box-shadow: inset 3px 0 0 #d97706; padding-left: 12px; }
-  .batches-table__batch { grid-column: 1; }
-  .batches-table td[data-label="Step"] { grid-column: 1; }
-  .batches-table td[data-label="At this step"] { grid-column: 2; grid-row: 1; text-align: right; }
-  .batches-table td[data-label="At this step"] .batches-table__sub { display: none; }
-  .batches-table__who { display: none !important; }
-  .batches-table__action { grid-column: 2; grid-row: 2; align-self: end; }
-}
-
-/* ── CONCEPT ONLY: Style 3, Next steps. A sentence, then the work grouped by the step to record. */
-[data-batches-style="3"] .batches-brief { display: block; }
-[data-batches-style="3"] .batches-figures { display: none; }
-/* Kept to a reading width so the age and Record sit near the batch on a wide screen. */
-.batches-queue { display: grid; gap: 8px; max-width: 860px; }
-.batches-queue + .batches-queue { padding-top: 18px; border-top: 1px solid var(--ui-border); }
-.batches-queue__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-.batches-queue__items { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
-.batches-queue__item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, auto) auto; align-items: center; gap: 8px 16px; padding: 10px 0 10px 12px; border-top: 1px solid var(--ui-border); }
-.batches-queue__item:first-child { border-top: 0; }
-.batches-queue__item.is-waiting { box-shadow: inset 3px 0 0 #d97706; }
-#page-content .batches-page .batches-queue__item .batches-row-open { display: grid; gap: 2px; }
-.batches-queue__item > .batches-age { justify-self: end; }
-#page-content .batches-page .batches-queue__record { min-height: 36px; padding: 0 16px; font-size: 13px; }
-@media (max-width: 767px) {
-  .batches-queue__item { grid-template-columns: minmax(0, 1fr) auto; }
-  .batches-queue__item .batches-age { grid-column: 1; grid-row: 2; justify-self: start; }
-  #page-content .batches-page .batches-queue__record { grid-column: 2; grid-row: 1 / span 2; }
 }

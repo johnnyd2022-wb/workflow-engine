@@ -1,6 +1,5 @@
 """The Batches page's redesign (docs/batches-redesign-plan.md): every workflow's batches at once,
-the time each has waited at its step, filters kept in the URL, and the three CONCEPT ONLY
-layouts. Two tests pin bugs the old board had: searching by workflow name matched nothing (the
+the time each has waited at its step, filters kept in the URL, and the selected lanes layout. Two tests pin bugs the old board had: searching by workflow name matched nothing (the
 search read a field the executions list never sends), and in the dark theme batch titles were
 pale text on white cards."""
 
@@ -214,13 +213,14 @@ def test_batch_titles_stay_readable_in_the_dark_theme(browser, app_url, floor):
         context.close()
 
 
-# ── CONCEPT ONLY: deleted with the two styles that are not picked. ───────────────────────
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_each_style_holds_together_at_every_width(browser, app_url, floor, style, width):
-    context, page = _open(browser, app_url, floor, width=width, query=f"?style={style}")
+def test_lanes_hold_together_at_every_width_even_with_an_old_preview_link(browser, app_url, floor, width):
+    context, page = _open(browser, app_url, floor, width=width, query="?style=3")
     try:
-        expect(page.locator("[data-batches-root]")).to_have_attribute("data-batches-style", style)
+        expect(page.get_by_role("group", name="Batches design concepts")).to_have_count(0)
+        expect(page.locator(".batches-lane")).to_have_count(2)
+        expect(page.locator('link[href*="/batches.css"]')).to_have_count(1)
+        assert page.locator(".batches-sr").first.evaluate("el => getComputedStyle(el).position") == "absolute"
         for key in ("waiting", "moving", "fresh"):
             expect(_card(page, floor[key])).to_be_visible()
         expect(page.locator("#core2-active-search")).to_be_visible()
@@ -239,6 +239,6 @@ def test_each_style_holds_together_at_every_width(browser, app_url, floor, style
                     or a["y"] + a["height"] <= b["y"] + 1
                     or b["y"] + b["height"] <= a["y"] + 1
                 )
-                assert apart, f"batch cards overlap at {width}px in style {style}"
+                assert apart, f"batch cards overlap at {width}px"
     finally:
         context.close()

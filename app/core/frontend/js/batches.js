@@ -139,7 +139,6 @@
       workflow: params.get('workflow') || '',
       show: params.get('show') === 'waiting' ? 'waiting' : 'all',
       view: params.get('view') === 'timeline' ? 'timeline' : 'pipeline',
-      style: '1',
     };
     var request = 0;
     var loadedAt = 0;
@@ -203,26 +202,6 @@
       var waitingFigure = $('[data-batches-waiting-figure]');
       if (waitingFigure) waitingFigure.setAttribute('data-state', waiting.length ? 'warn' : 'ok');
 
-      var brief = $('[data-batches-brief]');
-      if (!brief) return;
-      brief.textContent = '';
-      // With nothing under way the message below the filters says so; the brief stays quiet.
-      if (!scoped.length) return;
-      var workflows = {};
-      scoped.forEach(function (b) { workflows[b.processId] = true; });
-      var count = Object.keys(workflows).length;
-      brief.appendChild(document.createTextNode(
-        plural(scoped.length, 'batch', 'batches') + ' under way' + (state.workflow ? '' : ' across ' + plural(count, 'workflow')) + '. '));
-      if (!waiting.length) {
-        brief.appendChild(document.createTextNode('None has waited more than 2 days for its next step.'));
-      } else {
-        waiting.sort(byWait);
-        var names = waiting.slice(0, 3).map(function (b) { return b.title; });
-        var more = waiting.length > 3 ? ' and ' + plural(waiting.length - 3, 'other') : '';
-        brief.appendChild(el('strong', { className: 'batches-warn-text', text: waiting.length + (waiting.length === 1 ? ' has' : ' have') + ' waited more than 2 days' }));
-        brief.appendChild(document.createTextNode(': ' + names.join(', ') + more + '.'));
-      }
-      if (finished !== null) brief.appendChild(document.createTextNode(' ' + plural(finished, 'batch', 'batches') + ' finished in the last 7 days.'));
     }
 
     // ── Shared pieces ────────────────────────────────────────────────────────────────
@@ -234,20 +213,11 @@
       return '/core/flows/batches/start?id=' + encodeURIComponent(batch.processId) + '&execution_id=' + encodeURIComponent(batch.id);
     }
 
-    function progress(batch) {
-      var bar = el('span', { className: 'batches-progress', role: 'img', 'aria-label': batch.done + ' of ' + batch.total + ' steps done' });
-      for (var i = 0; i < batch.total; i += 1) {
-        bar.appendChild(el('span', { className: i < batch.done ? 'is-done' : (i === batch.done ? 'is-current' : '') }));
-      }
-      return bar;
-    }
-
     // A batch card: what it is, how long it has waited, and who last touched it.
-    function card(batch, extra) {
+    function card(batch) {
       return el('button', { type: 'button', className: 'core2-active-card batches-item' + (batch.waiting ? ' is-waiting' : ''), 'data-core2-execution-id': batch.id, 'aria-label': 'Open ' + batch.title }, [
         el('span', { className: 'core2-active-card-id batches-item__title', text: batch.title }),
         ageTag(batch),
-        extra || null,
         batch.lastBy ? el('span', { className: 'batches-item__meta', text: 'Last by ' + batch.lastBy }) : null,
       ]);
     }
@@ -270,7 +240,7 @@
       return widest.map(function (s, i) { return { number: i + 1, name: scalarText(s.step_name) || 'Step ' + (i + 1) }; });
     }
 
-    // ── Style 1: a lane per workflow, a column per step ──────────────────────────────
+    // ── Lanes: a lane per workflow, a column per step ──────────────────────────────
     function renderLanes(batches) {
       var frag = document.createDocumentFragment();
       groupByWorkflow(batches).forEach(function (group) {
@@ -300,67 +270,6 @@
             el('span', { className: 'batches-lane__meta', text: plural(group.batches.length, 'batch', 'batches') + ' under way' + (waiting ? ' · ' + waiting + ' waiting' : '') }),
           ]),
           track,
-        ]));
-      });
-      return frag;
-    }
-
-    // ── Style 2: one list, longest wait first ────────────────────────────────────────
-    function renderList(batches) {
-      var rows = batches.slice().sort(byWait).map(function (b) {
-        return el('tr', { className: b.waiting ? 'is-waiting' : null }, [
-          el('td', { className: 'batches-table__batch', 'data-label': 'Batch' }, [
-            el('button', { type: 'button', className: 'core2-active-card batches-row-open', 'data-core2-execution-id': b.id, 'aria-label': 'Open ' + b.title }, [
-              el('span', { className: 'core2-active-card-id', text: b.title }),
-            ]),
-            el('span', { className: 'batches-table__sub', text: b.workflow }),
-          ]),
-          el('td', { 'data-label': 'Step' }, [
-            el('span', { className: 'batches-table__step', text: b.stepName }),
-            el('span', { className: 'batches-table__sub' }, [progress(b), ' ' + b.done + ' of ' + b.total + ' done']),
-          ]),
-          el('td', { 'data-label': 'At this step' }, [ageTag(b), el('span', { className: 'batches-table__sub', text: 'since ' + formatDateTime(b.since) })]),
-          el('td', { 'data-label': 'Last by', className: 'batches-table__who', text: b.lastBy || '—' }),
-          el('td', { className: 'batches-table__action' }, [el('a', { className: 'batches-link', href: recordHref(b), text: 'Record ' + b.stepName })]),
-        ]);
-      });
-      return el('table', { className: 'batches-table' }, [
-        el('thead', {}, [el('tr', {}, ['Batch', 'Step', 'At this step', 'Last by', ''].map(function (h) {
-          return el('th', { scope: 'col', text: h || null }, h ? [] : [el('span', { className: 'batches-sr', text: 'Action' })]);
-        }))]),
-        el('tbody', {}, rows),
-      ]);
-    }
-
-    // ── Style 3: the work to do, grouped by the step to record next ──────────────────
-    function renderQueue(batches) {
-      var groups = {};
-      batches.forEach(function (b) {
-        var key = b.stepName.toLowerCase();
-        (groups[key] = groups[key] || { name: b.stepName, batches: [] }).batches.push(b);
-      });
-      var list = Object.keys(groups).map(function (k) {
-        groups[k].batches.sort(byWait);
-        return groups[k];
-      }).sort(function (a, b) { return b.batches[0].age - a.batches[0].age; });
-      var frag = document.createDocumentFragment();
-      list.forEach(function (group) {
-        var waiting = group.batches.filter(function (b) { return b.waiting; }).length;
-        frag.appendChild(el('section', { className: 'batches-queue', 'aria-label': 'Record ' + group.name }, [
-          el('header', { className: 'batches-queue__head' }, [
-            el('h3', { text: group.name }),
-            el('span', { className: 'batches-lane__meta', text: plural(group.batches.length, 'batch', 'batches') + ' to record' + (waiting ? ' · ' + waiting + ' waiting' : '') }),
-          ]),
-          el('ul', { className: 'batches-queue__items' }, group.batches.map(function (b) {
-            return el('li', { className: 'batches-queue__item' + (b.waiting ? ' is-waiting' : '') }, [
-              el('button', { type: 'button', className: 'core2-active-card batches-row-open', 'data-core2-execution-id': b.id, 'aria-label': 'Open ' + b.title }, [
-                el('span', { className: 'core2-active-card-id', text: b.title }),
-                el('span', { className: 'batches-table__sub', text: b.workflow + ' · step\u00a0' + (b.stepNumber || '?') + '\u00a0of\u00a0' + b.total }),
-              ]),
-              ageTag(b),
-              el('a', { className: 'workspace-button batches-queue__record', href: recordHref(b), text: 'Record' , 'aria-label': 'Record ' + group.name + ' for ' + b.title }),
-            ]);
-          })),
         ]));
       });
       return frag;
@@ -535,8 +444,7 @@
         return;
       }
       message('');
-      var style = root.getAttribute('data-batches-style') || '1';
-      board.appendChild(style === '2' ? renderList(shown) : (style === '3' ? renderQueue(shown) : renderLanes(shown)));
+      board.appendChild(renderLanes(shown));
       renderTimeline(shown);
     }
 
@@ -608,19 +516,6 @@
     });
     // The age on every batch moves with the clock.
     var tick = window.setInterval(render, 60000);
-
-    // CONCEPT ONLY: the layout preview switch goes once a style is picked.
-    function setStyle(picked) {
-      if (['1', '2', '3'].indexOf(picked) === -1) picked = '1';
-      root.setAttribute('data-batches-style', picked);
-      page.querySelectorAll('[data-style-pick]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.stylePick === picked)); });
-      try { sessionStorage.setItem('batches-design-style', picked); } catch (_) { /* optional */ }
-      render();
-    }
-    page.querySelectorAll('[data-style-pick]').forEach(function (b) { on(b, 'click', function () { setStyle(b.dataset.stylePick); }); });
-    var remembered = null;
-    try { remembered = sessionStorage.getItem('batches-design-style'); } catch (_) { /* optional */ }
-    setStyle(params.get('style') || remembered || '1');
 
     load();
 

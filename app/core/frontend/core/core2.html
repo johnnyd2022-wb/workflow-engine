@@ -5,9 +5,6 @@
 {% block head_extras %}
   <meta name="description" content="SupplyChain V2 - Modern Process Hub for managing manufacturing workflows and executions">
   {# CSS extracted to core2.css and loaded globally in base_spa.html for HTMX boost compatibility. #}
-  {% if core2_focus == 'active_batches_live' %}
-  <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batches.css') }}">
-  {% endif %}
 {% endblock %}
 
 {% block topbar %}
@@ -375,22 +372,11 @@
             </div>
           </div>
           {% elif core2_focus_mode == 'active_batches_live' %}
-          {# Again here for a boosted visit, which swaps only #page-content and never reads the head. #}
-          <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='batches.css') }}">
-          {# CONCEPT ONLY: the layout preview switch goes once a style is picked (docs/batches-redesign-plan.md). #}
-          <div class="batches-concepts" role="group" aria-label="Batches design concepts" data-batches-concepts>
-            <span>Preview layout</span>
-            <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Lanes</button>
-            <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · List</button>
-            <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · Next steps</button>
-          </div>
-          <div class="workspace-stack batches-page" data-batches-root data-batches-style="1" data-state="loading">
+          <div class="workspace-stack batches-page" data-batches-root data-state="loading">
           <section id="core2-active-batches-panel" class="workspace-card batches-card" aria-labelledby="core2-active-batches-title" data-core2-active-board="full">
             <div class="batches-head">
               <div class="batches-head__text">
                 <h2 id="core2-active-batches-title">Under way</h2>
-                {# Style 3 leads with this sentence; Styles 1 and 2 show the figures instead. #}
-                <p class="batches-brief" data-batches-brief aria-live="polite"></p>
                 <dl class="batches-figures" data-batches-figures>
                   <div><dt>under way</dt><dd data-core2-inflight-count>–</dd></div>
                   <div data-batches-waiting-figure><dt>waiting over 2 days</dt><dd data-batches-waiting-count>–</dd></div>

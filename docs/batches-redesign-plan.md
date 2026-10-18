@@ -1,5 +1,9 @@
 # Batches redesign: three directions
 
+## Selected design — 2026-10-18
+
+The founder selected **Style 1: Lanes**. Styles 2 and 3 were not selected and are removed, together with the preview switch and remembered/query-string layout selection. The comparison below records the alternatives considered; the shipped page has one layout. Final responsive tests retain the selected layout at phone, 1024, desktop and wall widths, including old preview bookmarks.
+
 Scope: `/core/executions/live`, the **Batches** page (Production › Batches; registry title
 "Batches"). Purpose: **show every batch under way, where each one is, and which ones have
 been waiting too long for their next step, so someone can record it.** The executions API,
@@ -50,7 +54,7 @@ Research limits: only the Katana production-process and Linear board pages were 
 read; the rest are search summaries. Searches for Primer (GitHub's design system) guidance on
 run lists, and for an Ekos in-progress screen, came back with nothing usable.
 
-## Three directions to choose from
+## Three directions considered
 
 | | Style 1: Lanes | Style 2: List | Style 3: Next steps |
 |---|---|---|---|
@@ -99,7 +103,7 @@ present); moving it into the content block is left for the cleanup after the pic
   - workflow filter and the Waiting chip, written to the URL, and Clear filters;
   - the detail sheet's Record next step link;
   - dark theme batch titles readable (failed before: white cards, pale text);
-  - a CONCEPT ONLY group loading each style at 390, 1024, 1440 and 1920 with no sideways scroll.
+  - selected Lanes layout at 390, 1024, 1440 and 1920 with no sideways scroll or overlapping cards, old preview bookmarks, one stylesheet and hidden accessible filter labels.
 - **Existing tests**: the shared layout test now finds the page by its "Under way" card.
   `test_workflow_flow.py` picks a workflow with the new filter.
 - **Screenshots**: each style at laptop, phone, wall and dark; busy and quiet; filtered,
@@ -138,3 +142,9 @@ the detail sheet, the timeline, and arriving by an in-app link:
 The local screenshot server also drops Stocktake's page stylesheet on a cold first load, so
 that failure is the dev server's, not this page's; the scenario file reloads once when it
 happens. The two console errors in every pass are the 503s the load-error scenario injects.
+
+## Final selection verification — 2026-10-18
+
+The founder chose Style 1 (Lanes). List and Next steps were not selected, and their renderers, CSS, DOM, preview controls and layout persistence are deleted. Historical comparisons above document the choice. All 21 final screenshots in `batches-style1-final/03` were visually inspected, including dark/phone, filters, detail, timeline, quiet/empty states, error/retry and boosted return; no visual defects remain. The two console errors are the intentionally injected 503 responses. Earlier passes encountered Chromium `ERR_TOO_MANY_RETRIES` for the stylesheet. Duplicate page stylesheet links were replaced with a single shared-head link following the sibling-page pattern; this removes redundant/late loading without claiming to diagnose the transport failure. The final pass had no such failed requests.
+
+Independent review caught the shared visually-hidden filter-label utility during cleanup; it is restored. Four responsive tests assert one stylesheet and the hidden label utility, and all nine final page cases passed, including the unchanged 4.5:1 contrast threshold. Independent HTML/JS/test review found no further cleanup findings or weakened assertions. Node syntax and Ruff passed. The page HTML/JS Semgrep scan passed; expanding the scan to the shared base template flags its existing inline data-URI favicon as missing external-resource integrity, on an unchanged line. The baseline comparison is recorded in the MR; shared-suite results and exact-head CI are recorded in the MR. Screenshot fixture purged.
