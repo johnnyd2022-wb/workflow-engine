@@ -27,7 +27,9 @@ needs its own flag check, and none has one.
   whether a `bize` contact is sent and kept in step. Contacts from Xero always are.
 - Sending is `ContactSyncService` (app/features/crm/services/contact_service.py): create with
   an idempotency key, update with only the changed fields (name, first and last name, email,
-  default phone, and the postal (POBOX) and street addresses). A changed address is sent
+  default phone, and the postal (POBOX) and street addresses) — unless Xero is behind on more
+  than this edit (never had the contact, or the last send failed or never finished): then the
+  edit sends every field, so the pull cannot undo what Xero missed (review 2026-10-18). A changed address is sent
   with both types Biz-E holds and every part, including lines 3 and 4 and "attention to",
   which the pull now stores, so an edit never blanks what the page does not show. The local save commits first; a failed send is recorded on the contact
   (`xero_push_status=failed`, reason) with a retry, and the Xero pull leaves those fields
@@ -78,7 +80,9 @@ the mechanism tenant isolation actually relies on here).
   refreshed on ordinary status checks, not just on sync.
 - `POST /api/crm/xero/sync` — manual sync, `?mode=incremental` (else full). Full is the
   default because it's the only mode that reconciles deleted/missing Xero invoices.
-  Returns `{ok, contacts_synced, invoices_synced, errors}`. Expired token → 401
+  Returns `{ok, contacts_synced, invoices_synced, errors}`; `ok` is false whenever `errors`
+  is not empty, with an `error` message the page shows. A sync that brought nothing in is a
+  502; one that brought some in is a 200 with its errors (review 2026-10-18). Expired token → 401
   `reconnect_required`; insufficient Xero scope → 401 `xero_insufficient_scope` with
   `action: reconnect_xero`; any other failure → 500 with a message, never a bare 500 with
   no body.
@@ -88,7 +92,8 @@ the mechanism tenant isolation actually relies on here).
 
 ### Customers (`routes/api_routes.py`)
 - `GET /api/crm/customers` — paginated, searchable (`q`), filterable (`status`), sortable
-  list, org-scoped. `page_size` clamped to [1, 100].
+  list, org-scoped. `page_size` clamped to [1, 100]. A contact with no Xero status (made in
+  Biz-E, not yet pulled back) counts as `ACTIVE` for the status filter.
 - `GET /api/crm/customers/<id>` — single customer with recent invoices (last 5), notes,
   tasks, and all org product mappings. 404 `Customer not found` if the id doesn't resolve
   in this org (including a different org's real id — cross-tenant read must 404, not leak).
@@ -105,7 +110,13 @@ the mechanism tenant isolation actually relies on here).
   (`description` required, `quantity > 0`, `unit_amount` present), commits a local
   `crm_invoice.created` event, then best-effort incremental-syncs so the new invoice shows
   up locally without waiting for the next scheduled sync. Insufficient Xero scope → 401
-  `xero_insufficient_scope`; any other validation failure → 400.
+  `xero_insufficient_scope`; any other validation failure → 400. An invoice Xero refuses
+  (returned with `ValidationErrors` under `summarize_errors=False`) is a 400 in Xero's words,
+  never a created invoice. Every attempt of one create carries the same idempotency key, so a
+  retry after a 5xx cannot make a second invoice.
+- All four Xero-calling invoice routes (create, authorise, pdf, view-url): an expired Xero
+  connection → 401 with `action: reconnect_xero`; a Xero refusal → 400 with Xero's message;
+  Xero unreachable → 502 with a message. A non-Xero exception stays a 500.
 - `POST /api/crm/invoices/<id>/authorise` — authorises a DRAFT invoice in Xero. Already
   AUTHORISED/PAID → returns the current state idempotently (no-op, not an error). Any
   other non-DRAFT status → 400. Updates the local row immediately, then best-effort
@@ -129,9 +140,10 @@ the mechanism tenant isolation actually relies on here).
 - `GET /api/crm/tasks` — filterable by `contact_id`/`status`/`assigned_to`, org-scoped.
 - `POST /api/crm/tasks` — `title` required. Optional `contact_id` must resolve in this org
   or 400 `Customer not found` (a task cannot be silently attached to another org's
-  customer).
+  customer). Optional `assigned_to_user_id` must be an active user of this org, or 400 — the
+  same rule core tasks apply (review 2026-10-18).
 - `PUT /api/crm/tasks/<id>` — partial update over an explicit allow-list of fields; same
-  cross-tenant `contact_id` re-validation on change. 404 if the task itself isn't in this
+  cross-tenant `contact_id` and `assigned_to_user_id` re-validation on change. 404 if the task itself isn't in this
   org.
 - `DELETE /api/crm/tasks/<id>` — 404 if not found in this org.
 
