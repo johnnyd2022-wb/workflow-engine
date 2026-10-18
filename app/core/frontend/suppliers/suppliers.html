@@ -5,7 +5,7 @@
   <meta name="description" content="Who you buy from, what you buy from them, and how to reach them.">
 {% endblock %}
 {% block content %}
-<main class="sup-shell workspace-overview workspace-page" data-suppliers-page data-suppliers-style="1" aria-busy="true">
+<main class="sup-shell workspace-overview workspace-page" data-suppliers-page aria-busy="true">
   <header class="workspace-header">
     <div><h1>Suppliers</h1><p>Who you buy from, what you buy from them, and how to reach them.</p></div>
     <div class="workspace-header__actions">
@@ -14,20 +14,11 @@
     </div>
   </header>
 
-  {# CONCEPT ONLY: the layout preview switch goes once a style is picked (docs/suppliers-redesign-plan.md). #}
-  <div class="sup-concepts" role="group" aria-label="Suppliers design concepts">
-    <span>Preview layout</span>
-    <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Register</button>
-    <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · Address book</button>
-    <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · Cards</button>
-  </div>
-
   <p class="sup-message" data-suppliers-message role="status" aria-live="polite" hidden></p>
 
   <div class="workspace-stack sup-layout">
     <section class="workspace-card sup-glance" aria-labelledby="sup-glance-title">
       <h2 id="sup-glance-title">At a glance</h2>
-      <p class="sup-summary" data-suppliers-summary aria-live="polite"></p>
       <div class="sup-figures" data-suppliers-figures></div>
     </section>
 
@@ -46,8 +37,6 @@
       <div class="sup-list" data-suppliers-table><p class="sup-empty">Loading suppliers…</p></div>
     </section>
 
-    {# CONCEPT ONLY: Style 2's detail pane. Styles 1 and 3 open the same details in the drawer below. #}
-    <section class="workspace-card sup-pane" data-suppliers-pane aria-label="Supplier details"></section>
   </div>
 
   <div class="sup-drawer" data-supplier-drawer hidden>

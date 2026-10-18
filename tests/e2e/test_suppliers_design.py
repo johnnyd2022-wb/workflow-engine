@@ -160,22 +160,19 @@ def test_the_search_box_is_sized_like_the_controls_beside_it(suppliers_page):
     assert box["height"] <= 44, box
 
 
-# CONCEPT ONLY: deleted with the two styles not chosen.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
+# The selected register stays usable at every width, including old preview links.
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_each_style_holds_together_at_every_width(suppliers_page, style, width):
+def test_register_and_detail_drawer_work_at_every_width(suppliers_page, width):
     page = suppliers_page
     page.set_viewport_size({"width": width, "height": 1000})
-    _open(page, f"?style={style}")
-    expect(page.locator("[data-suppliers-page]")).to_have_attribute("data-suppliers-style", style)
+    page.evaluate("sessionStorage.setItem('suppliers-design-style', '3')")
+    _open(page, "?style=2")
+    expect(page.get_by_role("group", name="Suppliers design concepts")).to_have_count(0)
     expect(page.get_by_role("heading", name="At a glance")).to_be_visible()
-    expect(page.locator("[data-supplier-open]", has_text="Davis Trading")).to_be_visible()
+    expect(page.locator(".sup-table__row", has_text="Davis Trading")).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), "scrolls sideways"
-    if style == "2" and width >= 1024:
-        expect(page.locator("[data-suppliers-pane]")).to_contain_text("Davis Trading")
-        page.locator("[data-supplier-open]", has_text="Southern Hops").click()
-        expect(page.locator("[data-suppliers-pane]")).to_contain_text("Southern Hops")
-        expect(page.locator("[data-supplier-drawer]")).to_be_hidden()
-    else:
-        page.locator("[data-supplier-open]", has_text="Southern Hops").click()
-        expect(page.locator("[data-supplier-drawer]")).to_contain_text("Southern Hops")
+    page.locator("[data-supplier-open]", has_text="Southern Hops").click()
+    expect(page.locator("[data-supplier-drawer]")).to_contain_text("Southern Hops")
+    expect(page.get_by_role("link", name="Email", exact=True)).to_have_attribute("href", "mailto:kate@hops.nz")
+    page.get_by_role("button", name="Close supplier details").click()
+    expect(page.locator("[data-supplier-drawer]")).to_be_hidden()

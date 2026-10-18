@@ -1,6 +1,5 @@
 /* The Suppliers page: who you buy from, what you buy from them, and how to reach them.
-   Reads the supplier list and the compact inventory list (for "what you buy"); one script draws
-   all three preview layouts, picked by data-suppliers-style on the page root. */
+   Reads the supplier list and compact inventory list for the register and its detail drawer. */
 (function () {
   'use strict';
 
@@ -9,17 +8,14 @@
 
   var $ = function (selector) { return root.querySelector(selector); };
   var figures = $('[data-suppliers-figures]');
-  var summary = $('[data-suppliers-summary]');
   var chips = $('[data-suppliers-chips]');
   var list = $('[data-suppliers-table]');
   var count = $('[data-suppliers-count]');
   var heading = $('[data-suppliers-heading]');
   var search = $('[data-suppliers-search]');
   var message = $('[data-suppliers-message]');
-  var pane = $('[data-suppliers-pane]');
   var drawer = $('[data-supplier-drawer]');
   var drawerBody = $('[data-supplier-drawer-body]');
-  var narrow = window.matchMedia('(max-width: 899px)');
 
   var suppliers = [];
   var unlisted = [];  // names on inventory lines with no supplier record: [{name, lines}]
@@ -56,7 +52,6 @@
     return words.slice(0, -1).join(', ') + ' or ' + words[words.length - 1];
   }
   function key(name) { return String(name || '').trim().toLowerCase(); }
-  function style() { return root.getAttribute('data-suppliers-style') || '1'; }
   function say(text, isError) {
     message.textContent = text || '';
     message.className = 'sup-message' + (isError ? ' sup-message--error' : ' sup-message--ok');
@@ -135,11 +130,9 @@
   // ── At a glance ─────────────────────────────────────────────────────────────────────────
   function renderGlance() {
     figures.replaceChildren();
-    summary.replaceChildren();
     if (!loaded) {
       if (failed) {
         figures.appendChild(el('p', 'sup-none sup-glance-note', 'The figures appear once suppliers load.'));
-        summary.textContent = 'The summary appears once suppliers load.';
       }
       return;
     }
@@ -173,18 +166,6 @@
       figures.appendChild(node);
     });
 
-    // The sentence Style 3 leads with.
-    var parts = [plural(suppliers.length, 'supplier') + (stockKnown ? ', ' + buying + ' with stock in hand.' : '.')];
-    if (incomplete) parts.push(incomplete + (incomplete === 1 ? ' is' : ' are') + ' missing a phone, email or address.');
-    else if (suppliers.length) parts.push('Every supplier has a phone, email and address.');
-    summary.appendChild(document.createTextNode(parts.join(' ') + ' '));
-    if (unlisted.length) {
-      summary.appendChild(document.createTextNode(
-        (unlisted.length === 1 ? unlisted[0].name + ' is' : plural(unlisted.length, 'name') + ' are') + ' on your stock but not here yet. '));
-      var add = button('sup-inline-action', unlisted.length === 1 ? 'Add it' : 'Add them');
-      add.addEventListener('click', importFromInventory);
-      summary.appendChild(add);
-    }
   }
 
   function renderChips() {
@@ -199,7 +180,7 @@
     });
   }
 
-  // ── The list, one shape per style ───────────────────────────────────────────────────────
+  // ── Supplier register ──────────────────────────────────────────────────────────────────
   function renderList() {
     list.replaceChildren();
     if (failed) {
@@ -229,7 +210,7 @@
       list.appendChild(empty);
       return;
     }
-    ({ 1: renderTable, 2: renderRows, 3: renderCards })[style()](visible);
+    renderTable(visible);
   }
 
   function renderTable(visible) {
@@ -269,57 +250,8 @@
     list.appendChild(table);
   }
 
-  function renderRows(visible) {
-    if (!visible.some(function (s) { return s.id === selectedId; })) selectedId = visible[0].id;
-    var ul = el('ul', 'sup-rows');
-    visible.forEach(function (supplier) {
-      var li = el('li', 'sup-rows__item');
-      var open = openButton(supplier, 'sup-rows__open');
-      open.replaceChildren(el('span', 'sup-rows__name', supplier.name));
-      var meta = buysText(supplier, 2);
-      if (meta) open.appendChild(el('span', 'sup-sub', meta));
-      if (supplier.missing.length) open.appendChild(tag(missingText(supplier), 'warn'));
-      if (supplier.id === selectedId && usesPane()) open.setAttribute('aria-current', 'true');
-      li.appendChild(open);
-      ul.appendChild(li);
-    });
-    list.appendChild(ul);
-  }
-
-  function renderCards(visible) {
-    var groups = activeFilter === 'all' && !query
-      ? [['Need details', visible.filter(FILTERS.incomplete.test)], ['Complete', visible.filter(function (s) { return !s.missing.length; })]]
-      : [['', visible]];
-    groups.forEach(function (group) {
-      if (!group[1].length) return;
-      if (group[0]) list.appendChild(el('h3', 'sup-group-title', group[0] + ' · ' + group[1].length));
-      var grid = el('div', 'sup-cards');
-      group[1].forEach(function (supplier) {
-        var card = el('article', 'sup-card');
-        var top = el('div', 'sup-card__top');
-        top.appendChild(openButton(supplier, 'sup-card__name'));
-        if (supplier.missing.length) top.appendChild(tag(missingText(supplier), 'warn'));
-        card.appendChild(top);
-        if (supplier.contact_name) card.appendChild(el('p', 'sup-sub', supplier.contact_name));
-        var buys = buysText(supplier, 3);
-        if (buys) card.appendChild(el('p', 'sup-card__buys', buys + (lotsText(supplier) ? ' · ' + lotsText(supplier) : '')));
-        var actions = el('div', 'sup-card__actions');
-        if (supplier.phone) actions.appendChild(contactLink('phone', supplier.phone, 'sup-pill'));
-        if (supplier.email) actions.appendChild(contactLink('email', supplier.email, 'sup-pill'));
-        if (supplier.missing.length) {
-          var fill = button('sup-pill sup-pill--add', 'Add ' + joinWords(supplier.missing.map(function (f) { return FIELD_WORDS[f]; })));
-          fill.addEventListener('click', function () { edit(supplier, fill); });
-          actions.appendChild(fill);
-        }
-        card.appendChild(actions);
-        grid.appendChild(card);
-      });
-      list.appendChild(grid);
-    });
-  }
-
-  // ── Details: the drawer (Styles 1 and 3, and Style 2 on a narrow screen) or Style 2's pane ──
-  function detailFor(supplier, inDrawer) {
+  // ── Supplier detail drawer ─────────────────────────────────────────────────────────────
+  function detailFor(supplier) {
     var wrap = el('div', 'sup-detail');
     var head = el('div', 'sup-detail__head');
     var titles = el('div');
@@ -331,12 +263,10 @@
       saved.setAttribute('role', 'status');
       titles.appendChild(saved);
     }
-    if (inDrawer) {
-      var close = button('sup-detail__close', '×');
-      close.setAttribute('aria-label', 'Close supplier details');
-      close.setAttribute('data-supplier-drawer-close', '');
-      head.appendChild(close);
-    }
+    var close = button('sup-detail__close', '×');
+    close.setAttribute('aria-label', 'Close supplier details');
+    close.setAttribute('data-supplier-drawer-close', '');
+    head.appendChild(close);
     wrap.appendChild(head);
 
     if (supplier.phone || supplier.email) {
@@ -396,28 +326,13 @@
     return wrap;
   }
 
-  function usesPane() { return style() === '2' && !narrow.matches; }
-
-  function renderPane() {
-    pane.replaceChildren();
-    pane.hidden = failed;
-    if (style() !== '2' || !loaded || failed) return;
-    var supplier = suppliers.filter(function (s) { return s.id === selectedId; })[0];
-    if (!supplier || !suppliers.filter(matches).length) {
-      pane.appendChild(el('p', 'sup-empty', suppliers.length ? 'Pick a supplier to see their details.' : 'Add a supplier to see their details here.'));
-      return;
-    }
-    pane.appendChild(detailFor(supplier, false));
-  }
-
   function showDetail(id, opener) {
     if (id !== selectedId) savedId = null;
     selectedId = id;
-    if (usesPane()) { renderList(); renderPane(); return; }
     var supplier = suppliers.filter(function (s) { return s.id === id; })[0];
     if (!supplier) return;
     drawerOpener = opener || document.activeElement;
-    drawerBody.replaceChildren(detailFor(supplier, true));
+    drawerBody.replaceChildren(detailFor(supplier));
     drawer.hidden = false;
     drawerBody.focus();
   }
@@ -437,8 +352,7 @@
       savedId = saved.id;
       await load();
       // Back to the details just changed, so the change is seen where it was made.
-      if (!usesPane()) showDetail(saved.id, opener);
-      else pane.scrollIntoView({ block: 'start' });
+      showDetail(saved.id, opener);
     });
   }
 
@@ -447,7 +361,6 @@
     renderGlance();
     renderChips();
     renderList();
-    renderPane();
   }
   function setFilter(next) {
     activeFilter = FILTERS[next] ? next : 'all';
@@ -505,7 +418,6 @@
     query = String(search.value || '').trim().toLowerCase();
     renderGlance();
     renderList();
-    renderPane();
   });
   $('[data-supplier-add]').addEventListener('click', function () {
     window.CoreSuppliers.openForm(null, function (saved) { selectedId = saved.id; load('Added ' + saved.name + '.'); });
@@ -518,21 +430,6 @@
   root.addEventListener('keydown', function (event) {
     if (event.key === 'Escape' && !document.querySelector('[data-supplier-sheet]')) closeDrawer();
   });
-  narrow.addEventListener('change', function () { if (style() === '2') { closeDrawer(false); render(); } });
-
-  // CONCEPT ONLY: the layout preview switch goes once a style is picked.
-  function setStyle(picked) {
-    if (['1', '2', '3'].indexOf(picked) === -1) picked = '1';
-    root.setAttribute('data-suppliers-style', picked);
-    root.querySelectorAll('[data-style-pick]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.stylePick === picked)); });
-    try { sessionStorage.setItem('suppliers-design-style', picked); } catch (_) { /* optional */ }
-    closeDrawer(false);
-    render();
-  }
-  root.querySelectorAll('[data-style-pick]').forEach(function (b) { b.addEventListener('click', function () { setStyle(b.dataset.stylePick); }); });
-  var remembered = null;
-  try { remembered = sessionStorage.getItem('suppliers-design-style'); } catch (_) { /* optional */ }
-  setStyle(new URLSearchParams(window.location.search).get('style') || remembered || '1');
-
+  render();
   load();
 })();

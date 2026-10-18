@@ -1,5 +1,9 @@
 # Suppliers redesign: three directions
 
+## Selected design — 2026-10-18
+
+The founder selected **Style 1: Register**. Styles 2 and 3 were not selected and are removed, together with the preview switch and remembered/query-string layout selection. The comparison below records the alternatives considered; the shipped page has one layout. Final responsive tests retain the selected layout at phone, 1024, desktop and wall widths, including old preview bookmarks.
+
 Scope: `/core/suppliers` (Production › Inventory › Suppliers; registry title "Suppliers").
 Purpose: **who you buy from, what you buy from them, and how to reach them.** That sentence
 decides the first screen: each supplier with what you buy from them and a way to call or email,
@@ -49,7 +53,7 @@ The three schools found: **a table you scan** (Katana, Carbon), **a list beside 
 record** (Apple Contacts and Mail, Attio, Fiori), and **a gallery of cards** (Notion, GOV.UK
 summary cards).
 
-## Three directions to choose from
+## Three directions considered
 
 | | Style 1: Register | Style 2: Address book | Style 3: Cards |
 |---|---|---|---|
@@ -102,8 +106,7 @@ record by id rather than by name.
   - a failed load offers Try again;
   - dark theme text contrast ≥ 4.5 (fails on the old page at 1.02);
   - search box ≤ 44px tall (fails on the old page at 60px);
-  - **CONCEPT ONLY**: each style at 390, 1024, 1440 and 1920 — no sideways scroll, the
-    regions present, the details open in the pane (Style 2, wide) or the drawer.
+  - Selected register at 390, 1024, 1440 and 1920: no sideways scroll, old preview links and remembered choices use the register, correct contact details open and close in the drawer.
 - Existing: production pages layout, pages render, boosted navigation, compliance design (it
   boosts to `/core/suppliers`), `tests/test_core_suppliers.py`, `tests/test_navigation.py`.
 - Screenshots: each style at 1440, 1024, 390 (and full height), 1920 and dark; search, nothing
@@ -125,3 +128,9 @@ Six screenshot passes over all three styles (`~/.cache/workflow-engine-ui-shots/
    state left "At a glance" empty.
 5. **Pass 5.** Style 2 on a phone still highlighted a selection it was not showing.
 6. **Pass 6.** No defects found in any style.
+
+## Final selection verification — 2026-10-18
+
+Style 1 (Register) is the founder’s choice. Address book and Cards were not selected; their renderers, styles, DOM and preview controls are deleted. The historical research and comparison remain above. All 16 final states were visually reviewed, followed by a clean 15-image normal-state pass (`suppliers-style1-final/02`). The intentionally injected API error was inspected separately in pass 01; its expected console error is recorded rather than suppressed.
+
+The selected-page browser tests, supplier API tests and navigation tests passed (47 tests). Node syntax, Ruff and scoped Semgrep passed. Independent test evaluation found no weakened assertions; functional cases remain, while the retired concept matrix becomes four register-and-drawer width cases. Shared suite results are recorded in the MR.
