@@ -1,183 +1,116 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Customers · Sales{% endblock %}
 {% block body_class %}crm-page{% endblock %}
-
-{% block head_extras %}
-  <link rel="stylesheet" href="/crm/static/css/crm.css">
-{% endblock %}
-
-
 {% block content %}
-<div class="max-content crm-root" x-data="crmCustomers()" x-init="init()">
-  {% set crm_heading = "Customers" %}
-  {% set crm_subtitle = "View synced contacts and customer sales context" %}
-  {% include "crm/_crm_banner.html" %}
+<link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='customers.css') }}">
+<div id="customers-page" class="crm-root workspace-overview customers-page" x-data="crmCustomers()"
+     :data-customers-style="style" :data-preview-open="Boolean(selected)" data-customers-style="1" @keydown.escape.window="closePreview()" @resize.window="resizePreview()">
+  <header class="workspace-header">
+    <div><h1>Customers</h1><p>Find a customer. Keep their contact details ready.</p></div>
+    {% if can('sales.record') %}
+    <button type="button" class="workspace-button workspace-button--primary" data-new-customer @click="openNewCustomer()">New customer</button>
+    {% endif %}
+  </header>
 
-  {# ── Page Header ── #}
-  <div class="crm-page-header">
-    <div>
-      <p class="crm-page-subtitle">
-        <span class="crm-sync-dot" :class="isConnected ? 'crm-sync-dot--ok' : 'crm-sync-dot--off'"></span>
-        <span x-text="syncSubtitle">Loading…</span>
-      </p>
-    </div>
-    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      {% if can('sales.record') %}
-      <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" data-new-customer @click="openNewCustomer()">New customer</button>
-      {% endif %}
-      {# Syncing and connecting Xero need sales.manage (access_policy: crm.crm_oauth.*). #}
-      {% if can('sales.manage') %}
-      <template x-if="isConnected">
-        <button class="crm-btn crm-btn--secondary crm-btn--sm" @click="doSync()" :disabled="syncing">
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" :style="syncing ? 'animation:spin 1s linear infinite' : ''"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          <span x-text="syncing ? 'Syncing…' : 'Sync'">Sync</span>
-        </button>
-      </template>
-      <template x-if="!isConnected">
-        <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click="beginXeroConnect()">
-          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          Connect Xero
-        </button>
-      </template>
-      {% endif %}
-    </div>
+  {# CONCEPT ONLY: three finished structures for the founder to compare. #}
+  <div class="customers-style-pick" role="group" aria-label="Customer design options">
+    <span>Compare designs</span>
+    <template x-for="option in [{id:'1',name:'1 · Directory'},{id:'2',name:'2 · Desk'},{id:'3',name:'3 · Contact book'}]" :key="option.id">
+      <button type="button" :aria-pressed="style === option.id" @click="chooseStyle(option.id)" x-text="option.name"></button>
+    </template>
   </div>
 
-  {# ── Error ── #}
-  <div x-show="error" class="crm-error-banner" x-cloak>
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span x-text="error"></span>
-    <button @click="error=null" style="margin-left:auto; background:none; border:none; cursor:pointer; color:inherit; font-size:1rem;">&times;</button>
+  <div class="customers-connection">
+    <p x-text="syncSubtitle" aria-live="polite">Loading connection…</p>
+    {% if can('sales.manage') %}
+    <button type="button" class="customers-text-action" x-show="isConnected" @click="doSync()" :disabled="syncing" x-text="syncing ? 'Syncing…' : 'Sync Xero'">Sync Xero</button>
+    <button type="button" class="customers-text-action" x-show="xeroStatus && !isConnected" x-cloak @click="beginXeroConnect()">Connect Xero</button>
+    {% endif %}
+    <span x-show="xeroStatus && !isConnected" x-cloak class="customers-connection-hint">Customers you add here stay available without Xero.</span>
+  </div>
+  <div x-show="error" class="customers-error" role="alert" x-cloak>
+    <span x-text="error"></span><button type="button" class="workspace-button" @click="loadCustomers()">Try again</button>
   </div>
 
-  {# ── Not connected banner ── #}
-  <template x-if="xeroStatus && !isConnected">
-    <div class="crm-connect-banner">
-      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--crm-teal); flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <div class="crm-connect-banner-text">
-        <strong>Connect Xero to sync your customers</strong>
-        <p>Your contacts and invoices will appear here once Xero is connected.</p>
-      </div>
-      {% if can('sales.manage') %}
-      <button type="button" class="crm-btn crm-btn--primary crm-btn--sm" @click="beginXeroConnect()">Connect Xero</button>
-      {% endif %}
+  <section class="workspace-card customers-directory" aria-label="Customer directory" :aria-busy="loading">
+    <div class="customers-toolbar">
+      <label class="customers-search" for="customers-search"><span class="customers-sr">Search customers</span>
+        <input id="customers-search" type="search" placeholder="Search name or email" x-model="search" @input="onSearchInput()" autocomplete="off">
+      </label>
+      <label class="customers-status" for="customers-status"><span class="customers-sr">Customer status</span>
+        <select id="customers-status" aria-label="Customer status" x-model="statusFilter" @change="page=1; loadCustomers()"><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="ARCHIVED">Archived</option></select>
+      </label>
+      <button type="button" class="workspace-button" :aria-pressed="missingContactOnly" @click="missingContactOnly=!missingContactOnly; page=1; loadCustomers()">Missing contact details</button>
+      <button type="button" class="customers-text-action" :aria-expanded="filtersOpen" @click="filtersOpen=!filtersOpen">Sort</button>
     </div>
-  </template>
-
-  {# ── Main Card ── #}
-  <div class="crm-card">
-    {# Toolbar #}
-    <div class="crm-toolbar">
-      <div class="crm-search-wrap crm-search-wrap--plain">
-        <input
-          class="crm-search crm-search--plain"
-          type="search"
-          placeholder="Search by name or email…"
-          x-model="search"
-          @input="onSearchInput()"
-          autocomplete="off"
-        >
-      </div>
-      <select class="crm-select" x-model="statusFilter" @change="page=1; loadCustomers()">
-        <option value="">All statuses</option>
-        <option value="ACTIVE">Active</option>
-        <option value="ARCHIVED">Archived</option>
+    <div class="customers-sort" x-show="filtersOpen" x-cloak>
+      <label for="customers-sort">Order by</label>
+      <select id="customers-sort" :value="sortBy + ':' + sortDir" @change="changeOrder($event.target.value)">
+        <option value="name:asc">Name A–Z</option><option value="name:desc">Name Z–A</option>
+        <option value="synced:desc">Recently synced first</option><option value="synced:asc">Oldest sync first</option>
       </select>
-      <button type="button" class="crm-btn crm-btn--secondary crm-btn--sm" :aria-pressed="missingContactOnly" @click="missingContactOnly=!missingContactOnly; page=1; loadCustomers()" x-text="missingContactOnly ? 'Show all contacts' : 'Missing contact details'">
-        Missing contact details
-      </button>
     </div>
-    <p x-show="missingContactOnly" style="margin:0 16px 12px; color:var(--text-secondary,#6b7280);" x-cloak>
-      Update missing phone or email details in Xero, then sync contacts here.
-    </p>
+    <div class="customers-results" aria-live="polite">
+      <p x-text="loading ? 'Loading customers…' : resultLabel"></p>
+      <button type="button" class="customers-text-action" x-show="search || statusFilter || missingContactOnly" x-cloak @click="clearFilters()">Clear filters</button>
+    </div>
+    <p class="customers-filter-hint" x-show="missingContactOnly" x-cloak>Missing a phone number or email. Open the customer to update their details.</p>
 
-    {# Loading skeletons #}
-    <template x-if="loading">
-      <div>
-        <template x-for="i in 8" :key="i">
-          <div class="crm-skeleton-row">
-            <div class="crm-skeleton crm-skeleton-circle"></div>
-            <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
-              <div class="crm-skeleton crm-skeleton-line" :style="'width:' + (40 + Math.random()*30) + '%'"></div>
-              <div class="crm-skeleton crm-skeleton-line" :style="'width:' + (25 + Math.random()*20) + '%'"></div>
-            </div>
-            <div class="crm-skeleton crm-skeleton-line" style="width:60px; height:20px; border-radius:10px;"></div>
-          </div>
-        </template>
-      </div>
-    </template>
+    <div x-show="loading" class="customers-loading" role="status"><span class="crm-skeleton"></span><span class="crm-skeleton"></span><span class="crm-skeleton"></span><span>Loading customer directory…</span></div>
+    <div x-show="!loading && !error && customers.length === 0" class="customers-empty" x-cloak>
+      <h2 x-text="search || statusFilter || missingContactOnly ? 'No customers match these filters' : 'Your customer directory starts here'"></h2>
+      <p x-text="search || statusFilter || missingContactOnly ? 'Try another search, or clear the filters.' : 'Add your first customer, or connect Xero to bring existing contacts in.'"></p>
+      <button type="button" class="workspace-button" x-show="search || statusFilter || missingContactOnly" @click="clearFilters()">Show all customers</button>
+      {% if can('sales.record') %}<button type="button" class="workspace-button" x-show="!search && !statusFilter && !missingContactOnly" @click="openNewCustomer()">Add a customer</button>{% endif %}
+    </div>
 
-    {# Empty state #}
-    <template x-if="!loading && customers.length === 0">
-      <div class="crm-empty">
-        <div class="crm-empty-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        </div>
-        <h3 x-text="missingContactOnly ? 'All customers have contact details' : search ? 'No customers match your search' : 'No customers yet'">No customers yet</h3>
-        <p x-text="missingContactOnly ? 'There are no customers missing a phone number or email address.' : search ? 'Try a different search term.' : isConnected ? 'Sync Xero to import your contacts, or add a customer.' : 'Connect Xero to bring in your contacts, or add a customer.'"></p>
-        {% if can('sales.manage') %}
-        <template x-if="!isConnected">
-          <button type="button" class="crm-btn crm-btn--primary" style="margin-top:8px;" @click="beginXeroConnect()">Connect Xero</button>
-        </template>
-        {% endif %}
-      </div>
-    </template>
-
-    {# Table #}
-    <template x-if="!loading && customers.length > 0">
-      <div>
-        <div class="crm-table-wrap">
-          <table class="crm-table">
-            <thead>
-              <tr>
-                <th class="sortable" :class="sortBy==='name' ? 'sort-active' : ''" @click="setSort('name')">
-                  Name <span class="sort-arrow" x-text="sortBy==='name' ? (sortDir==='asc' ? '↑' : '↓') : '↕'"></span>
-                </th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Status</th>
-                <th>Last contact</th>
-                <th class="sortable" :class="sortBy==='synced' ? 'sort-active' : ''" @click="setSort('synced')">
-                  Last Synced <span class="sort-arrow" x-text="sortBy==='synced' ? (sortDir==='asc' ? '↑' : '↓') : '↕'"></span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <template x-for="c in customers" :key="c.id">
-                <tr @click="openCustomer(c.id)">
-                  <td>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                      <div style="width:30px;height:30px;border-radius:50%;background:var(--crm-teal);display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:#0f1a1a;flex-shrink:0;" x-text="initials(c.name)"></div>
-                      <span class="col-name" x-text="c.name">—</span>
-                      <span class="crm-badge crm-badge--draft" x-show="!c.in_xero && c.xero_push_status !== 'failed'" title="Created in Biz-E and not in Xero">Biz-E only</span>
-                      <span class="crm-badge crm-badge--medium" x-show="c.xero_push_status === 'failed'" title="Biz-E could not send this customer's details to Xero. Open it to see why.">Not sent to Xero</span>
-                    </div>
-                  </td>
-                  <td class="col-secondary" x-text="c.email_address || '—'">—</td>
-                  <td class="col-secondary" x-text="c.phone_number || '—'">—</td>
-                  <td>
-                    <span class="crm-badge" :class="statusBadgeClass(c.contact_status)" x-text="c.contact_status || '—'">—</span>
-                  </td>
-                  <td class="col-secondary" x-text="c.last_contact_date ? `${formatDate(c.last_contact_date)} · ${c.last_contact_source}` : 'None recorded'">—</td>
-                  <td class="col-secondary" x-text="formatDate(c.last_synced_at)">—</td>
-                </tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-
-        {# Pagination #}
-        <div class="crm-pagination">
-          <span x-text="total === 0 ? 'No results' : `${paginationStart}–${paginationEnd} of ${total}`"></span>
-          <div class="crm-pagination-btns">
-            <button class="crm-btn-page" @click="prevPage()" :disabled="page <= 1">← Prev</button>
-            <button class="crm-btn-page" @click="nextPage()" :disabled="page >= totalPages">Next →</button>
-          </div>
+    <div class="customers-body" x-show="!loading && customers.length > 0 && !error" x-cloak>
+      <div class="customers-records">
+        <table class="customers-table" x-show="style !== '3'">
+          <thead><tr><th scope="col"><button type="button" class="customers-text-action" @click="setSort('name')" :aria-label="sortBy === 'name' && sortDir === 'asc' ? 'Sort names Z to A' : 'Sort names A to Z'">Customer <span aria-hidden="true" x-text="sortBy === 'name' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'"></span></button></th><th scope="col">Contact</th><th scope="col">Last contact</th><th scope="col"><span class="customers-sr">Actions</span></th></tr></thead>
+          <tbody><template x-for="c in customers" :key="c.id"><tr :class="{'is-selected':selected?.id === c.id}">
+            <td><a class="customers-name" :href="customerUrl(c.id)" x-text="c.name"></a><span class="customers-meta" x-text="c.contact_status || 'Status not set'"></span><span class="customers-flag" x-show="!c.in_xero || c.xero_push_status === 'failed'" x-text="c.xero_push_status === 'failed' ? 'Not sent to Xero' : 'Biz-E only'"></span></td>
+            <td class="customers-contact"><span x-text="c.email_address || 'No email'"></span><span class="customers-meta" x-text="c.phone_number || 'No phone'"></span></td>
+            <td class="customers-activity"><span x-text="c.last_contact_date ? formatDate(c.last_contact_date) : 'None recorded'"></span><span class="customers-meta" x-text="c.last_contact_source || ''"></span></td>
+            <td class="customers-preview-cell"><button type="button" class="customers-text-action" :aria-label="'Preview ' + c.name" @click="previewCustomer(c, $event.currentTarget)" :aria-expanded="selected?.id === c.id">Preview</button></td>
+          </tr></template></tbody>
+        </table>
+        {# CONCEPT ONLY: Contact book groups only the current result page, never all customers. #}
+        <div class="customers-book" x-show="style === '3'">
+          <template x-for="group in contactGroups" :key="group.name"><section class="customers-book-group" x-show="group.rows.length">
+            <header><h2 x-text="group.name"></h2><span x-text="group.rows.length + ' on this page'"></span></header>
+            <div class="customers-card-grid"><template x-for="c in group.rows" :key="c.id"><article class="customers-person">
+              <a class="customers-name" :href="customerUrl(c.id)" x-text="c.name"></a>
+              <span class="customers-meta" x-text="c.contact_status || 'Status not set'"></span>
+              <p><span x-text="c.email_address || 'Email missing'"></span><span x-text="c.phone_number || 'Phone missing'"></span></p>
+              <span class="customers-flag" x-show="!c.in_xero || c.xero_push_status === 'failed'" x-text="c.xero_push_status === 'failed' ? 'Not sent to Xero' : 'Biz-E only'"></span>
+              <button type="button" class="customers-text-action" :aria-label="'Preview ' + c.name" @click="previewCustomer(c, $event.currentTarget)">Preview contact</button>
+            </article></template></div>
+          </section></template>
         </div>
       </div>
-    </template>
-  </div>
-
+      <div class="customers-preview-backdrop" x-show="selected && !(style === '2' && wide)" @click="closePreview()" x-cloak></div>
+      <aside class="customers-preview" x-show="selected" :role="style === '2' && wide ? 'region' : 'dialog'" :aria-modal="style === '2' && wide ? null : 'true'" aria-labelledby="customer-preview-title" x-cloak @keydown.tab="trapPreviewFocus($event)">
+        <template x-if="selected"><div>
+          <div class="customers-preview-head"><span>Contact preview</span><button type="button" class="customers-text-action" data-close-preview @click="closePreview()" aria-label="Close customer preview">Close</button></div>
+          <h2 id="customer-preview-title" x-text="selected.name"></h2>
+          <p class="customers-meta" x-text="selected.contact_status || 'Status not set'"></p>
+          <dl><dt>Email</dt><dd><a x-show="selected.email_address" :href="'mailto:' + selected.email_address" x-text="selected.email_address"></a><span x-show="!selected.email_address">No email recorded</span></dd>
+            <dt>Phone</dt><dd><a x-show="selected.phone_number" :href="'tel:' + selected.phone_number" x-text="selected.phone_number"></a><span x-show="!selected.phone_number">No phone recorded</span></dd>
+            <dt>Last contact</dt><dd x-text="selected.last_contact_date ? formatDate(selected.last_contact_date) + ' · ' + selected.last_contact_source : 'None recorded'"></dd>
+            <dt>Xero</dt><dd x-text="selected.xero_push_status === 'failed' ? 'Not sent to Xero' : selected.in_xero ? 'In Xero' : 'Biz-E only'"></dd>
+            <dt>Last synced</dt><dd x-text="formatDate(selected.last_synced_at)"></dd>
+          </dl>
+          <a class="workspace-button workspace-button--primary" :href="customerUrl(selected.id)">Open customer</a>
+          <p class="customers-meta customers-preview-note">Details, invoices, notes and follow-ups live in the customer record.</p>
+        </div></template>
+      </aside>
+    </div>
+    <footer class="customers-pagination" x-show="!loading && customers.length > 0 && !error" x-cloak>
+      <span x-text="`${paginationStart}–${paginationEnd} of ${total}`"></span>
+      <div><button type="button" class="workspace-button" @click="prevPage()" :disabled="page <= 1">← Prev</button><button type="button" class="workspace-button" @click="nextPage()" :disabled="page >= totalPages">Next →</button></div>
+    </footer>
+  </section>
   {% if can('sales.record') %}
   {# ── New customer ── #}
   <div class="crm-task-sheet-overlay" x-show="newCustomer.open" x-cloak @click.self="closeNewCustomer()" @keydown.escape.window="closeNewCustomer()" style="display:flex;">
@@ -238,9 +171,5 @@
   {% endif %}
 
 </div>
-
-<style>
-@keyframes spin { to { transform: rotate(360deg); } }
-</style>
-
+<script src="{{ url_for('crm.serve_crm_js', filename='customers.js') }}" defer></script>
 {% endblock %}

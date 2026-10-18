@@ -53,7 +53,18 @@ REPO = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
 STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
-SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales", "planner", "board", "contracts", "stocktake")
+SEED_KINDS = (
+    "stock",
+    "lineage",
+    "compliance",
+    "production",
+    "sales",
+    "planner",
+    "board",
+    "contracts",
+    "stocktake",
+    "customers",
+)
 
 
 def say(*parts) -> None:
@@ -404,6 +415,57 @@ def _seed_sales(db, org_id, inv) -> None:
                 status=status,
                 priority=priority,
                 due_date=today + timedelta(days=due),
+            )
+        )
+    db.commit()
+
+
+def _seed_customers(db, org_id, inv) -> None:
+    """A fictional trade directory with complete, missing, archived and unsent contacts.
+
+    Works alone; use lineage + sales first when customer activity is also needed.
+    Every address is reserved .example data. No Xero connection or API call is made.
+    """
+    from app.core.utils.time import utc_now
+    from app.features.crm.models.xero_contact import XeroContact
+
+    names = [
+        "Aro Valley Wine Bar",
+        "Beacon Bottle Shop",
+        "Coastal Kitchen",
+        "Dune Trading Co.",
+        "Elm & Harbour Hospitality",
+        "Fernhill Lodge",
+        "Golden Bay Grocer",
+        "Hilltop Cellar",
+        "Island Social Club",
+        "Juniper House",
+        "Kererū Botanicals",
+        "Laneway Drinks",
+        "Mānuka Restaurant",
+        "North Wharf Hotel",
+        "Orchard Lane",
+        "Portside Provisions",
+        "Quay Street Deli",
+        "Riverbend Retreat",
+        "Southern Table",
+        "The Long Afternoon",
+    ]
+    for index, name in enumerate(names):
+        local = index % 5 == 0
+        db.add(
+            XeroContact(
+                org_id=org_id,
+                name=name,
+                source="bize" if local else "xero",
+                xero_contact_id=None if local else str(uuid.uuid4()),
+                xero_tenant_id=None if local else "ui-shots",
+                email_address=None if index % 6 == 0 else f"orders@customer-{index + 1}.example",
+                phone_number=None if index % 7 == 0 else f"021 555 {1000 + index}",
+                contact_status="ARCHIVED" if index in (3, 12, 18) else "ACTIVE",
+                last_synced_at=None if local else utc_now() - timedelta(days=index % 9),
+                xero_push_status="failed" if index == 10 else None,
+                xero_push_error="Fixture: connection unavailable" if index == 10 else None,
             )
         )
     db.commit()
@@ -806,6 +868,7 @@ def cmd_seed(args) -> int:
             "planner": _seed_planner,
             "board": _seed_board,
             "contracts": _seed_contracts,
+            "customers": _seed_customers,
         }[kind](db, org.id, inv)
         say(f"seeded {kind}")
     say(f"org {org.name!r}, sign-in {user.email}")
