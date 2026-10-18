@@ -211,6 +211,51 @@ def test_a_failed_send_keeps_the_edit_the_pull_leaves_it_alone_and_retry_sends_i
     assert xero.updated[-1][1]["phone_number"] == "04 555 0999"
 
 
+def test_after_a_failed_send_the_next_edit_also_sends_what_xero_missed(db, org, xero):
+    # The next edit used to send only its own field and mark the contact synced, so the pull
+    # that followed put Xero's old email back over the one Xero never received.
+    _connect(db, org.id)
+    contact = _xero_contact(db, org.id)
+    service = ContactSyncService(db)
+    xero.fail_with = RuntimeError("connection reset")
+    service.update_contact(org.id, contact.id, {"email_address": "new@harbour.example"})
+
+    xero.fail_with = None
+    _, state, _ = service.update_contact(org.id, contact.id, {"phone_number": "04 555 0222"})
+
+    assert state["push_status"] == "synced"
+    sent = xero.updated[-1][1]
+    assert (sent["email_address"], sent["phone_number"]) == ("new@harbour.example", "04 555 0222")
+
+
+def test_a_contact_xero_never_got_is_created_with_all_its_details_on_its_next_edit(db, org, xero):
+    # Saved while Xero was not connected, then edited once it was: the create carried only the
+    # edited field and the name, so Xero got a contact without the email or address.
+    service = ContactSyncService(db)
+    contact, state = service.create_contact(
+        org.id,
+        {
+            "name": "Offline Ltd",
+            "email_address": "hello@offline.example",
+            "addresses": [{"type": "POBOX", "line1": "PO Box 12", "city": "Nelson"}],
+            "sync_to_xero": True,
+        },
+    )
+    assert state["push_status"] == "failed"
+    _connect(db, org.id)
+
+    _, state, _ = service.update_contact(org.id, contact.id, {"phone_number": "03 555 0101"})
+
+    assert state["push_status"] == "synced"
+    ((sent, _key),) = xero.created
+    assert (sent["name"], sent["email_address"], sent["phone_number"]) == (
+        "Offline Ltd",
+        "hello@offline.example",
+        "03 555 0101",
+    )
+    assert sent["addresses"][0]["line1"] == "PO Box 12"
+
+
 def test_the_pull_links_a_contact_also_made_in_xero_instead_of_duplicating_it(db, org, xero, monkeypatch):
     from app.features.crm.services.xero_sync_service import XeroSyncService
 

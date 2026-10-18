@@ -7,7 +7,7 @@ import json
 import time
 from collections import deque
 from datetime import UTC, date, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import requests
 from sqlalchemy.orm import Session
@@ -281,18 +281,29 @@ class XeroAPIClient:
             line_items=li_models,
         )
         payload = Invoices(invoices=[invoice_model])
+        # One key for every attempt below: a 5xx can arrive after Xero made the invoice, and the
+        # retry must return that invoice rather than make a second one.
+        idempotency_key = f"bize-invoice-{uuid4()}"
 
         def _create():
             try:
-                return api.create_invoices(tenant_id, invoices=payload, summarize_errors=False)
+                return api.create_invoices(
+                    tenant_id, invoices=payload, summarize_errors=False, idempotency_key=idempotency_key
+                )
             except TypeError:
-                return api.create_invoices(tenant_id, payload, summarize_errors=False)
+                return api.create_invoices(tenant_id, payload, summarize_errors=False, idempotency_key=idempotency_key)
 
         result = self._call_with_retry(_create)
         invoices = getattr(result, "invoices", None) or []
         if not invoices:
             raise RuntimeError("Xero did not return a created invoice")
-        return invoices[0]
+        invoice = invoices[0]
+        # With summarize_errors=False Xero answers 200 for an invoice it refused, carrying the
+        # reasons on the invoice itself.
+        errors = getattr(invoice, "validation_errors", None) or []
+        if errors:
+            raise ValueError("; ".join(str(getattr(error, "message", error)) for error in errors))
+        return invoice
 
     def authorise_invoice(self, *, xero_invoice_id: str):
         """Authorise an existing ACCREC invoice in Xero."""

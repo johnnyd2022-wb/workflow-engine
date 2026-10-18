@@ -130,6 +130,7 @@ function crmConfiguration() {
           unmapped: Number(result?.sales_unmapped || 0),
           insufficientStock: Number(result?.sales_insufficient_stock || 0),
         };
+        if (result?.ok === false) this.error = result.error || 'The Xero sync did not finish.';
         this.xero = await CRMAPI.getXeroStatus();
       } catch (e) {
         this.error = e.message || 'Sync failed.';

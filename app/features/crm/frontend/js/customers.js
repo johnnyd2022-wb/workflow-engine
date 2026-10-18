@@ -144,10 +144,11 @@ function crmCustomers() {
       if (this.syncing) return;
       this.syncing = true;
       try {
-        await CRMAPI.triggerSync();
+        const result = await CRMAPI.triggerSync();
         await this.loadXeroStatus();
         this.page = 1;
         await this.loadCustomers();
+        if (result?.ok === false) this.error = result.error || 'The Xero sync did not finish.';
       } catch (e) {
         this.error = e.message || 'Sync failed.';
       } finally {

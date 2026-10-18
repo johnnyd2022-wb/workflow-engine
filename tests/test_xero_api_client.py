@@ -483,6 +483,41 @@ class TestCreateInvoice:
         assert len(calls) == 2
         assert sleeps == [2]
 
+    def test_an_invoice_xero_refused_is_an_error_in_xeros_words_not_a_created_invoice(self, xero, fake_api):
+        # summarize_errors=False makes Xero answer 200 with the refused invoice and its errors
+        # (and an all-zero InvoiceID) instead of a 400. That reply is not a created invoice.
+        install, _calls = fake_api
+        install(
+            create_invoices=_created(
+                invoice_id="00000000-0000-0000-0000-000000000000",
+                has_errors=True,
+                validation_errors=[
+                    SimpleNamespace(message="Account code '999' is not a valid code for this document.")
+                ],
+            )
+        )
+
+        with pytest.raises(ValueError, match="Account code '999' is not a valid code"):
+            self._create(xero)
+
+    def test_a_create_retried_after_a_server_error_sends_the_same_idempotency_key(self, xero, fake_api, sleeps):
+        # A 503 can arrive after Xero made the invoice; without a key the retry makes a second one.
+        install, calls = fake_api
+        install(create_invoices=[XeroHTTPError(503), _created(invoice_id="inv-4")])
+
+        assert self._create(xero).invoice_id == "inv-4"
+        keys = [kwargs.get("idempotency_key") for _name, _args, kwargs in calls]
+        assert len(keys) == 2 and keys[0] and keys[0] == keys[1]
+
+    def test_two_separate_creates_do_not_share_an_idempotency_key(self, xero, fake_api):
+        install, calls = fake_api
+        install(create_invoices=[_created(invoice_id="inv-5"), _created(invoice_id="inv-6")])
+
+        self._create(xero)
+        self._create(xero)
+
+        assert calls[0][2]["idempotency_key"] != calls[1][2]["idempotency_key"]
+
 
 class TestAuthoriseInvoice:
     def test_sends_an_authorised_status_update_for_the_given_invoice(self, xero, fake_api):

@@ -262,17 +262,21 @@ def xero_sync():
             result = sync_service.incremental_sync(org_id, triggered_by="manual_incremental")
         else:
             result = sync_service.full_sync(org_id, triggered_by="manual_full")
-        return jsonify(
-            {
-                "ok": True,
-                "contacts_synced": result.contacts_synced,
-                "invoices_synced": result.invoices_synced,
-                "sales_allocated": result.sales_allocated,
-                "sales_unmapped": result.sales_unmapped,
-                "sales_insufficient_stock": result.sales_insufficient_stock,
-                "errors": result.errors,
-            }
-        ), 200
+        body = {
+            "ok": result.success,
+            "contacts_synced": result.contacts_synced,
+            "invoices_synced": result.invoices_synced,
+            "sales_allocated": result.sales_allocated,
+            "sales_unmapped": result.sales_unmapped,
+            "sales_insufficient_stock": result.sales_insufficient_stock,
+            "errors": result.errors,
+        }
+        if result.success:
+            return jsonify(body), 200
+        more = len(result.errors) - 1
+        body["error"] = f"The Xero sync did not finish: {result.errors[0]}" + (f" (and {more} more)" if more else "")
+        # A sync that brought nothing in failed; one that brought some in is reported with its errors.
+        return jsonify(body), 200 if result.partial else 502
     except XeroTokenExpiredError:
         return jsonify({"error": "reconnect_required", "message": "Xero token expired — please reconnect."}), 401
     except XeroInsufficientScopeError as e:

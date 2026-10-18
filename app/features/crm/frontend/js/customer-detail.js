@@ -2,6 +2,11 @@
 // The address parts the edit form holds; lines 3 and 4 and "attention to" stay as Xero has them.
 var ADDRESS_EDIT_PARTS = ['line1', 'line2', 'city', 'region', 'postal_code', 'country'];
 function joinAddress(parts) { return ADDRESS_EDIT_PARTS.map((part) => (parts[part] || '').trim()).filter(Boolean).join(', '); }
+// The edit form is in the page (hidden) from the start, so it needs every field it binds to before it opens.
+function blankEditForm() {
+  const blankAddress = () => Object.fromEntries(ADDRESS_EDIT_PARTS.map((part) => [part, '']));
+  return { name: '', first_name: '', last_name: '', email_address: '', phone_number: '', addresses: { POBOX: blankAddress(), STREET: blankAddress() } };
+}
 
 function crmCustomerDetail(contactId) {
   return {
@@ -41,7 +46,7 @@ function crmCustomerDetail(contactId) {
     confirming: false,
     editSaving: false,
     editError: '',
-    editForm: {},
+    editForm: blankEditForm(),
     pendingChanges: [],
     syncSaving: false,
     syncMessage: '',
