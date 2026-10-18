@@ -1,34 +1,58 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Suppliers · Inventory · Production{% endblock %}
 {% block body_class %}suppliers-page{% endblock %}
-{% block head_extras %}<meta name="description" content="Contact details for the businesses you buy from.">{% endblock %}
+{% block head_extras %}
+  <meta name="description" content="Who you buy from, what you buy from them, and how to reach them.">
+{% endblock %}
 {% block content %}
-<main class="sup-shell workspace-overview workspace-page" data-suppliers-page aria-busy="true">
+<main class="sup-shell workspace-overview workspace-page" data-suppliers-page data-suppliers-style="1" aria-busy="true">
   <header class="workspace-header">
-    <div><h1>Suppliers</h1><p>Contact details for the businesses you buy from.</p></div>
+    <div><h1>Suppliers</h1><p>Who you buy from, what you buy from them, and how to reach them.</p></div>
     <div class="workspace-header__actions">
       <button type="button" class="workspace-button" data-suppliers-import title="Add a supplier for each supplier name on your inventory items that is not in this list yet. Existing suppliers and inventory are not changed.">Import from inventory</button>
       <button type="button" class="workspace-button workspace-button--primary" data-supplier-add>Add new supplier</button>
     </div>
   </header>
-  <p class="sup-message workspace-notice" data-suppliers-message role="status" aria-live="polite" hidden></p>
-  <div class="workspace-stack">
-  <section class="workspace-card" aria-labelledby="sup-overview-title">
-    <h2 id="sup-overview-title">At a glance</h2>
-    <p class="workspace-caption">Select a group to filter the list.</p>
-    <div class="sup-cards" data-suppliers-cards aria-live="polite"></div>
-  </section>
-  <section class="workspace-card sup-register" aria-label="Suppliers">
-    <div class="sup-toolbar">
-      <h2 data-suppliers-heading>Suppliers</h2>
-      <label class="sup-search">
-        <svg class="sup-search__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
-        <input type="search" data-suppliers-search autocomplete="off" aria-label="Search suppliers" placeholder="Search suppliers">
-      </label>
-    </div>
-    <p class="sup-count" data-suppliers-count aria-live="polite"></p>
-    <div class="sup-table-wrap" data-suppliers-table></div>
-  </section>
+
+  {# CONCEPT ONLY: the layout preview switch goes once a style is picked (docs/suppliers-redesign-plan.md). #}
+  <div class="sup-concepts" role="group" aria-label="Suppliers design concepts">
+    <span>Preview layout</span>
+    <button type="button" class="workspace-button" data-style-pick="1" aria-pressed="true">1 · Register</button>
+    <button type="button" class="workspace-button" data-style-pick="2" aria-pressed="false">2 · Address book</button>
+    <button type="button" class="workspace-button" data-style-pick="3" aria-pressed="false">3 · Cards</button>
+  </div>
+
+  <p class="sup-message" data-suppliers-message role="status" aria-live="polite" hidden></p>
+
+  <div class="workspace-stack sup-layout">
+    <section class="workspace-card sup-glance" aria-labelledby="sup-glance-title">
+      <h2 id="sup-glance-title">At a glance</h2>
+      <p class="sup-summary" data-suppliers-summary aria-live="polite"></p>
+      <div class="sup-figures" data-suppliers-figures></div>
+    </section>
+
+    <section class="workspace-card sup-register" aria-labelledby="sup-list-title">
+      <div class="sup-toolbar">
+        <h2 id="sup-list-title" data-suppliers-heading>Suppliers</h2>
+        <div class="sup-toolbar__controls">
+          <div class="sup-chips" role="group" aria-label="Show" data-suppliers-chips></div>
+          <label class="sup-search">
+            <svg class="sup-search__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+            <input type="search" id="sup-search-input" data-suppliers-search autocomplete="off" aria-label="Search suppliers" placeholder="Name, contact or what you buy">
+          </label>
+        </div>
+      </div>
+      <p class="sup-count" data-suppliers-count aria-live="polite"></p>
+      <div class="sup-list" data-suppliers-table><p class="sup-empty">Loading suppliers…</p></div>
+    </section>
+
+    {# CONCEPT ONLY: Style 2's detail pane. Styles 1 and 3 open the same details in the drawer below. #}
+    <section class="workspace-card sup-pane" data-suppliers-pane aria-label="Supplier details"></section>
+  </div>
+
+  <div class="sup-drawer" data-supplier-drawer hidden>
+    <div class="sup-drawer__backdrop" data-supplier-drawer-close></div>
+    <aside class="sup-drawer__panel" role="dialog" aria-modal="true" aria-label="Supplier details" data-supplier-drawer-body tabindex="-1"></aside>
   </div>
 </main>
 {# Inside the content block, deferred, on purpose: boosted navigation swaps only #page-content, so a
