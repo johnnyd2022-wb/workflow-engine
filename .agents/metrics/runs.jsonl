@@ -207,3 +207,4 @@
 {"duration_s": null, "findings": 2, "notes": null, "ref": "factory/fd35062c/attempt-1", "run_type": "chained", "scope": "crm", "skill": "observability", "ts": "2026-10-18T04:29:25+00:00", "verdict": "patched"}
 {"duration_s": null, "findings": 0, "notes": null, "ref": "factory/fd35062c/attempt-1", "run_type": "chained", "scope": "crm", "skill": "ci-gate", "ts": "2026-10-18T04:29:25+00:00", "verdict": "clean"}
 {"duration_s": null, "findings": 9, "notes": null, "ref": "factory/fd35062c/attempt-1", "run_type": "chained", "scope": "crm", "skill": "review-feature", "ts": "2026-10-18T04:29:25+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 6, "notes": null, "ref": "feat/customers-design", "run_type": "interactive", "scope": "customers", "skill": "page-design", "ts": "2026-10-18T18:28:13+00:00", "verdict": "findings-open"}
