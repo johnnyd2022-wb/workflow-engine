@@ -1,4 +1,14 @@
 /* Customers list Alpine.js component */
+
+// The new-customer sheet is in the page from the start (hidden), so Alpine evaluates its
+// bindings on load: the form must already have every field, address included.
+function blankCustomerForm(sync = false) {
+  return {
+    name: '', first_name: '', last_name: '', email_address: '', phone_number: '', sync,
+    address: { line1: '', line2: '', city: '', region: '', postal_code: '', country: '' },
+  };
+}
+
 function crmCustomers() {
   return {
     customers: [],
@@ -16,7 +26,7 @@ function crmCustomers() {
     missingContactOnly: false,
     xeroStatus: null,
     syncing: false,
-    newCustomer: { open: false, saving: false, error: '', hint: '', form: {} },
+    newCustomer: { open: false, saving: false, error: '', hint: '', form: blankCustomerForm() },
 
     async init() {
       this.missingContactOnly = new URLSearchParams(window.location.search).get('missing_contact') === '1';
@@ -99,8 +109,7 @@ function crmCustomers() {
           : !xero.can_write_contacts
             ? 'The Xero connection only allows reading contacts. Reconnect Xero to send customers.'
             : `Later edits are sent to ${xero.tenant_name || 'Xero'} when you save them.`,
-        form: { name: '', first_name: '', last_name: '', email_address: '', phone_number: '', sync: settings.sync_contacts_to_xero === true,
-          address: { line1: '', line2: '', city: '', region: '', postal_code: '', country: '' } },
+        form: blankCustomerForm(settings.sync_contacts_to_xero === true),
       };
       this.$nextTick(() => document.getElementById('new-customer-name')?.focus());
     },
