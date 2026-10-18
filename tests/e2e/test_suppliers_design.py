@@ -50,9 +50,7 @@ def suppliers_page(browser, app_url, fresh_user, db):
                 address="12 Kingsford Smith St, Wellington",
             ),
             Supplier(org_id=org_id, name="Wairarapa Foragers", phone="027 455 0193", email="hemi@foragers.nz"),
-            Supplier(
-                org_id=org_id, name="Southern Hops", phone="03 545 1288", email="kate@hops.nz", address="Riwaka"
-            ),
+            Supplier(org_id=org_id, name="Southern Hops", phone="03 545 1288", email="kate@hops.nz", address="Riwaka"),
         ]
     )
     db.commit()
