@@ -11,6 +11,9 @@ function blankCustomerForm(sync = false) {
 
 function crmCustomers() {
   return {
+    filtersOpen: false,
+    selected: null,
+    previewTrigger: null,
     customers: [],
     total: 0,
     page: 1,
@@ -66,11 +69,53 @@ function crmCustomers() {
         this.total      = data.total      || 0;
         this.totalPages = data.total_pages || 1;
         this.page       = data.page       || 1;
+        this.selected = null;
       } catch (e) {
         this.error = e.message || 'Failed to load customers.';
       } finally {
         this.loading = false;
       }
+    },
+
+    get resultLabel() {
+      if (this.error) return 'Customer directory unavailable';
+      return `${this.total} ${this.total === 1 ? 'customer' : 'customers'}${this.search || this.statusFilter || this.missingContactOnly ? ' match' : ' in your directory'}`;
+    },
+
+    changeOrder(value) {
+      [this.sortBy, this.sortDir] = value.split(':');
+      this.page = 1;
+      this.loadCustomers();
+    },
+
+    clearFilters() {
+      clearTimeout(this.searchTimer);
+      this.search = '';
+      this.statusFilter = '';
+      this.missingContactOnly = false;
+      this.page = 1;
+      this.loadCustomers();
+    },
+
+    customerUrl(id) { return `/crm/customers/${encodeURIComponent(id)}`; },
+
+    previewCustomer(customer, trigger) {
+      this.selected = customer;
+      this.previewTrigger = trigger;
+      this.$nextTick(() => this.$root.querySelector('[data-close-preview]')?.focus());
+    },
+
+    closePreview() {
+      this.selected = null;
+      if (this.previewTrigger?.isConnected) this.previewTrigger.focus();
+      this.previewTrigger = null;
+    },
+
+    trapPreviewFocus(event) {
+      const links = [...event.currentTarget.querySelectorAll('button, a[href]')].filter(el => el.getClientRects().length);
+      const first = links[0], last = links[links.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     },
 
     onSearchInput() {
@@ -92,7 +137,7 @@ function crmCustomers() {
     prevPage() { if (this.page > 1) { this.page--; this.loadCustomers(); } },
     nextPage() { if (this.page < this.totalPages) { this.page++; this.loadCustomers(); } },
 
-    openCustomer(id) { CRMAPI.navigate(`/crm/customers/${id}`); },
+    openCustomer(id) { CRMAPI.navigate(this.customerUrl(id)); },
 
     async openNewCustomer() {
       let settings = { sync_contacts_to_xero: false, xero: { connected: false, can_write_contacts: false } };

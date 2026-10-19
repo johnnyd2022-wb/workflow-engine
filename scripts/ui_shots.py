@@ -63,6 +63,7 @@ SEED_KINDS = (
     "board",
     "contracts",
     "stocktake",
+    "customers",
     "suppliers",
 )
 
@@ -494,6 +495,57 @@ def _seed_suppliers(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_customers(db, org_id, inv) -> None:
+    """A fictional trade directory with complete, missing, archived and unsent contacts.
+
+    Works alone; use lineage + sales first when customer activity is also needed.
+    Every address is reserved .example data. No Xero connection or API call is made.
+    """
+    from app.core.utils.time import utc_now
+    from app.features.crm.models.xero_contact import XeroContact
+
+    names = [
+        "Aro Valley Wine Bar",
+        "Beacon Bottle Shop",
+        "Coastal Kitchen",
+        "Dune Trading Co.",
+        "Elm & Harbour Hospitality",
+        "Fernhill Lodge",
+        "Golden Bay Grocer",
+        "Hilltop Cellar",
+        "Island Social Club",
+        "Juniper House",
+        "Kererū Botanicals",
+        "Laneway Drinks",
+        "Mānuka Restaurant",
+        "North Wharf Hotel",
+        "Orchard Lane",
+        "Portside Provisions",
+        "Quay Street Deli",
+        "Riverbend Retreat",
+        "Southern Table",
+        "The Long Afternoon",
+    ]
+    for index, name in enumerate(names):
+        local = index % 5 == 0
+        db.add(
+            XeroContact(
+                org_id=org_id,
+                name=name,
+                source="bize" if local else "xero",
+                xero_contact_id=None if local else str(uuid.uuid4()),
+                xero_tenant_id=None if local else "ui-shots",
+                email_address=None if index % 6 == 0 else f"orders@customer-{index + 1}.example",
+                phone_number=None if index % 7 == 0 else f"021 555 {1000 + index}",
+                contact_status="ARCHIVED" if index in (3, 12, 18) else "ACTIVE",
+                last_synced_at=None if local else utc_now() - timedelta(days=index % 9),
+                xero_push_status="failed" if index == 10 else None,
+                xero_push_error="Fixture: connection unavailable" if index == 10 else None,
+            )
+        )
+    db.commit()
+
+
 def _seed_compliance(db, org_id, inv) -> None:
     """Subscribe the org to Compliance and put it on the NP3 food control programme, so pages
     that summarise compliance (the dashboard) have a module with a score to show."""
@@ -516,7 +568,7 @@ def _seed_compliance(db, org_id, inv) -> None:
 
 def _seed_production(db, org_id, inv) -> None:
     """A working week on the floor: three product workflows with seven batches under way, at
-    different steps and ages, one of them not yet started, and two finished this week. For pages that show what is in
+    different steps and ages, one of them not yet started. For pages that show what is in
     production right now."""
     from datetime import UTC, datetime
 
@@ -550,11 +602,7 @@ def _seed_production(db, org_id, inv) -> None:
         made[name] = process
     db.commit()
 
-    people = ["Aroha Ngata", "Sam Price", "Mere Tane"]
-
-    def start(name, done, hours, code=None):
-        """`code` is the batch number recorded on the first step's output, as a distiller
-        writes it on the tank; a batch with none shows by its start time."""
+    def start(name, done, hours):
         execution = execs.create_execution(org_id, made[name].id)
         rows = (
             db.query(ExecutionStep)
@@ -568,29 +616,21 @@ def _seed_production(db, org_id, inv) -> None:
                 rows[index].id,
                 org_id,
                 actual_inputs=[],
-                actual_outputs=(
-                    [{"name": f"{name}: step {index + 1}", "quantity": 100, "unit": "L", "batch_id": code}]
-                    if code and index == 0
-                    else []
-                ),
-                execution_data={"completed_by": people[(index + hours) % len(people)]},
+                actual_outputs=[],
                 completed_at_override=started + timedelta(hours=(index + 1) * max(1, hours // (done + 1))),
             )
         if hours:
             db.query(Execution).filter(Execution.id == execution.id).update({"started_at": started})
         db.commit()
 
-    # (workflow, steps already done, hours since it started, batch number)
-    start("Whistlebird Navy Strength Gin", 2, 76, "NS-2610")
-    start("Whistlebird Navy Strength Gin", 1, 27, "NS-2611")
+    # (workflow, steps already done, hours since it started)
+    start("Whistlebird Navy Strength Gin", 2, 76)
+    start("Whistlebird Navy Strength Gin", 1, 27)
     start("Whistlebird Navy Strength Gin", 0, 2)
-    start("Whistlebird Pink Gin", 3, 120, "PG-0907")
-    start("Whistlebird Pink Gin", 1, 20, "PG-0908")
-    start("Limoncello", 1, 190, "LC-0311")
+    start("Whistlebird Pink Gin", 3, 120)
+    start("Whistlebird Pink Gin", 1, 20)
+    start("Limoncello", 1, 190)
     start("Limoncello", 0, 0)
-    # Finished this week, for the pages that count what was made.
-    start("Whistlebird Navy Strength Gin", 3, 140, "NS-2609")
-    start("Limoncello", 3, 100, "LC-0310")
 
 
 def _seed_planner(db, org_id, inv) -> None:
@@ -903,6 +943,7 @@ def cmd_seed(args) -> int:
             "planner": _seed_planner,
             "board": _seed_board,
             "contracts": _seed_contracts,
+            "customers": _seed_customers,
             "suppliers": _seed_suppliers,
         }[kind](db, org.id, inv)
         say(f"seeded {kind}")

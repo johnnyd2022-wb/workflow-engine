@@ -1,0 +1,84 @@
+/* Customer directory and accessible contact preview. Shared CRM forms stay intact. */
+#page-content #customers-page { max-width: 1440px; padding-bottom: 48px; color: var(--ui-text); }
+#customers-page *, #customers-page *::before, #customers-page *::after { box-sizing: border-box; }
+#customers-page [x-cloak] { display: none !important; }
+#customers-page .customers-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+#customers-page .customers-connection { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 22px; font-size: 13px; color: var(--ui-text-muted); }
+#customers-page .customers-connection p { margin: 0; }
+#customers-page .customers-connection-hint { flex-basis: 100%; }
+#customers-page .customers-text-action { display: inline-flex; align-items: center; min-height: 40px; padding: 4px 2px; border: 0; background: none; color: var(--ui-accent-strong); font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; }
+#customers-page :is(a, button, input, select):focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 3px; }
+#customers-page button:disabled { opacity: .5; cursor: default; }
+#page-content #customers-page .customers-directory { padding: 0; overflow: visible; }
+#customers-page .customers-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 20px 24px 12px; }
+#customers-page .customers-search { flex: 1 1 240px; min-width: 120px; }
+#page-content #customers-search, #page-content #customers-status, #page-content #customers-sort { width: 100% !important; min-height: 44px !important; height: auto !important; padding: 10px 12px !important; border: 1px solid var(--ui-border) !important; border-radius: 8px !important; background: var(--ui-surface) !important; color: var(--ui-text) !important; font: inherit !important; font-size: 14px !important; }
+#customers-page .customers-status { flex: 0 1 150px; }
+#customers-page .customers-toolbar [aria-pressed="true"] { border-color: var(--ui-accent); background: var(--ui-accent-soft); }
+#customers-page .customers-sort { display: flex; align-items: center; gap: 12px; padding: 4px 24px 12px; font-size: 13px; }
+#page-content #customers-sort { max-width: 240px; }
+#customers-page .customers-results { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 0 24px 12px; min-height: 40px; font-size: 13px; color: var(--ui-text-muted); }
+#customers-page .customers-results p { margin: 0; }
+#customers-page .customers-filter-hint { padding: 0 24px 16px; margin: 0; font-size: 13px; color: var(--ui-text-muted); }
+#customers-page .customers-body { position: relative; }
+#customers-page .customers-records { min-width: 0; }
+#customers-page .customers-table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 14px; }
+#customers-page .customers-table th { padding: 6px 24px; text-align: left; background: var(--ui-surface-subtle); color: var(--ui-text-muted); font-size: 12px; font-weight: 500; border-block: 1px solid var(--ui-border); }
+#customers-page .customers-table th:first-child { width: 35%; }
+#customers-page .customers-table th:nth-child(2) { width: 30%; }
+#customers-page .customers-table th:nth-child(3) { width: 23%; }
+#customers-page .customers-table th:last-child { width: 12%; }
+#customers-page .customers-table td { padding: 18px 24px; border-bottom: 1px solid var(--ui-border); vertical-align: top; overflow-wrap: anywhere; }
+#customers-page .customers-table tr:last-child td { border-bottom: 0; }
+#customers-page .customers-table tbody tr:hover { background: var(--ui-surface-subtle); }
+#customers-page .customers-name { display: block; color: var(--ui-text); font-size: 15px; line-height: 1.5; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+#customers-page .customers-name:hover { color: var(--ui-accent-strong); text-decoration: underline; }
+#customers-page .customers-meta { display: block; color: var(--ui-text-muted); font-size: 12px; line-height: 1.6; margin-top: 3px; overflow-wrap: anywhere; }
+#customers-page .customers-flag { display: inline-block; font-size: 11px; font-weight: 600; color: var(--ui-accent-strong); border: 1px solid var(--ui-border); border-radius: 4px; padding: 2px 6px; margin-top: 6px; }
+#customers-page .customers-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--ui-border); padding: 16px 24px; color: var(--ui-text-muted); font-size: 13px; }
+#customers-page .customers-pagination > div { display: flex; gap: 8px; }
+#customers-page .customers-empty { padding: 54px 24px 60px; text-align: center; }
+#customers-page .customers-empty p { color: var(--ui-text-muted); font-size: 14px; margin-block: 12px 24px; }
+#customers-page .customers-loading { display: grid; gap: 18px; padding: 24px; color: var(--ui-text-muted); font-size: 13px; }
+#customers-page .customers-loading .crm-skeleton { display: block; height: 48px; }
+#customers-page .customers-error { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; padding: 16px 20px; border: 1px solid var(--ui-border); border-left: 4px solid var(--ui-accent); border-radius: 8px; background: var(--ui-surface); }
+#customers-page .customers-preview-backdrop { position: fixed; inset: 0; z-index: 1200; background: rgb(15 23 42 / 35%); }
+#customers-page .customers-preview { position: fixed; z-index: 1201; inset: 0 0 0 auto; width: min(440px, 100%); padding: 28px; background: var(--ui-surface); border-left: 1px solid var(--ui-border); overflow-y: auto; color: var(--ui-text); box-shadow: -12px 0 40px rgb(0 0 0 / 10%); }
+#customers-page .customers-preview-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 30px; color: var(--ui-text-muted); font-size: 12px; }
+#customers-page .customers-preview h2 { font-size: 23px; line-height: 1.4; overflow-wrap: anywhere; }
+#customers-page .customers-preview dl { margin-block: 28px; }
+#customers-page .customers-preview dt { margin-top: 20px; color: var(--ui-text-muted); font-size: 12px; }
+#customers-page .customers-preview dd { margin: 5px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+#customers-page .customers-preview dd a { color: var(--ui-accent-strong); }
+#customers-page .customers-preview-note { margin-top: 20px; }
+@media (max-width: 700px) {
+  #page-content #customers-page { padding: 20px 16px 100px; }
+  #customers-page .workspace-header { align-items: flex-start; gap: 18px; }
+  #customers-page .workspace-header h1 { font-size: 25px; }
+  #customers-page .workspace-header p { font-size: 13px; }
+  #customers-page .workspace-header button { flex-shrink: 0; padding-inline: 12px; font-size: 12px; }
+  #customers-page .customers-toolbar { gap: 10px; padding: 16px; }
+  #customers-page .customers-search { flex-basis: 100%; }
+  #customers-page .customers-status { flex: 1 1 100px; }
+  #customers-page .customers-toolbar > .workspace-button { font-size: 12px; padding-inline: 10px; }
+  #customers-page .customers-results, #customers-page .customers-filter-hint { padding-inline: 16px; }
+  #customers-page .customers-sort { padding-inline: 16px; }
+  #customers-page .customers-table, #customers-page .customers-table tbody { display: block; }
+  #customers-page .customers-table thead { display: none; }
+  #customers-page .customers-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 18px 16px; border-top: 1px solid var(--ui-border); }
+  #customers-page .customers-table td { display: block; padding: 0; border: 0; }
+  #customers-page .customers-table td:first-child { grid-column: 1; }
+  #customers-page .customers-table .customers-contact { grid-row: 2; grid-column: 1 / -1; margin-top: 12px; font-size: 13px; }
+  #customers-page .customers-table .customers-activity { display: none; }
+  #customers-page .customers-table .customers-preview-cell { grid-row: 1; grid-column: 2; padding-left: 8px; }
+  #customers-page .customers-pagination { padding: 16px; flex-wrap: wrap; }
+  #customers-page .customers-preview { padding: 24px; }
+}
+
+/* Keep the directory on the first phone screen. */
+#page-content #customers-page .workspace-header { margin-bottom: 16px; }
+@media (max-width: 700px) {
+  #page-content #customers-page .workspace-header { flex-direction: row; flex-wrap: nowrap; align-items: flex-start; gap: 12px; }
+  #customers-page .customers-connection { margin-bottom: 12px; }
+  #customers-page .customers-connection-hint { display: none; }
+}
