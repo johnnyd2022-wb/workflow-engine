@@ -1,4 +1,4 @@
-"""Customer directory behavior and the three temporary layout comparisons."""
+"""The chosen customer directory preserves behavior, contact access and responsive layout."""
 
 import re
 from urllib.parse import parse_qs, urlsplit
@@ -28,8 +28,8 @@ def contacts(db, org):
     return complete, missing
 
 
-def _open(page, style=1):
-    page.goto(f"https://crm.test/crm/customers?style={style}")
+def _open(page, query=""):
+    page.goto("https://crm.test/crm/customers" + query)
     expect(page.locator(".customers-results")).to_contain_text("2 customers")
 
 
@@ -141,21 +141,19 @@ def test_pagination_keeps_filters_and_shows_the_requested_page(sales_page, conta
     expect(page.get_by_role("button", name="← Prev", exact=True)).to_be_disabled()
 
 
-# CONCEPT ONLY: these protect all offered options until the founder selects one.
-@pytest.mark.parametrize("style", [1, 2, 3])
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_each_concept_preserves_contact_access_and_no_overflow(sales_page, contacts, xero, style, width):
+def test_directory_and_drawer_work_at_every_width_despite_old_preview_choices(sales_page, contacts, xero, width):
     page = sales_page
     page.set_viewport_size({"width": width, "height": 900})
-    _open(page, style)
-    expect(page.locator("#customers-page")).to_have_attribute("data-customers-style", str(style))
-    if style == 3:
-        expect(page.get_by_role("heading", name="Contact details needed", exact=True)).to_be_visible()
-        expect(page.get_by_role("heading", name="Ready to reach", exact=True)).to_be_visible()
-    else:
-        expect(page.locator("tbody .customers-name")).to_have_text(["Aro Valley Wine Bar", "Beacon Bottle Shop"])
+    page.goto("https://crm.test/crm/customers")
+    page.evaluate("sessionStorage.setItem('customers-design-style', '3')")
+    _open(page, "?style=2")
+    expect(page.get_by_role("group", name="Customer design options")).to_have_count(0)
+    expect(page.locator("tbody .customers-name")).to_have_text(["Aro Valley Wine Bar", "Beacon Bottle Shop"])
+    expect(page.locator(".customers-contact").first).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
-    records = page.locator(".customers-person:visible" if style == 3 else "tbody tr:visible")
+    assert page.locator("#page-content").evaluate("main => main.scrollWidth <= main.clientWidth + 1")
+    records = page.locator("tbody tr:visible")
     boxes = [record.bounding_box() for record in records.all()]
     for i, left in enumerate(boxes):
         for right in boxes[i + 1 :]:
@@ -166,21 +164,15 @@ def test_each_concept_preserves_contact_access_and_no_overflow(sales_page, conta
                 or right["y"] + right["height"] <= left["y"] + 1
             )
     page.get_by_role("button", name="Preview Beacon Bottle Shop", exact=True).click()
-    preview = page.get_by_role(
-        "region" if style == 2 and width >= 900 else "dialog", name="Beacon Bottle Shop", exact=True
-    )
+    preview = page.get_by_role("dialog", name="Beacon Bottle Shop", exact=True)
     expect(preview.get_by_role("link", name="orders@harbour.example")).to_be_visible()
     expect(preview.get_by_role("link", name="Open customer")).to_be_visible()
-    if style == 2 and width >= 900:
-        table = page.locator(".customers-table").bounding_box()
-        panel = preview.bounding_box()
-        assert table["x"] + table["width"] <= panel["x"] + 1
     page.get_by_role("button", name="Close customer preview").click()
     expect(preview).to_be_hidden()
+    expect(page.locator(".customers-contact").first).to_be_visible()
     page.evaluate("document.documentElement.setAttribute('data-spa-theme', 'dark')")
     page.wait_for_timeout(300)
-    if style != 3 and width >= 700:
-        # The old CRM header stayed light with pale text in dark mode.
+    if width >= 700:
         colors = page.locator(".customers-table th").first.evaluate(
             "el => ({fg:getComputedStyle(el).color,bg:getComputedStyle(el).backgroundColor})"
         )
@@ -196,51 +188,15 @@ def test_each_concept_preserves_contact_access_and_no_overflow(sales_page, conta
         assert (light + 0.05) / (dark + 0.05) >= 4.5, colors
 
 
-@pytest.mark.parametrize("width", [1024, 1440])
-def test_closing_the_desk_preview_restores_the_full_directory(sales_page, contacts, xero, width):
+def test_directory_search_survives_a_boosted_round_trip(sales_page, contacts, xero):
     page = sales_page
-    page.set_viewport_size({"width": width, "height": 900})
-    _open(page, 2)
-    table = page.locator(".customers-table")
-    open_width = table.bounding_box()["width"]
-    expect(page.locator(".customers-contact").first).to_be_hidden()
-    page.get_by_role("button", name="Close customer preview").click()
-    expect(page.locator(".customers-contact").first).to_be_visible()
-    expect(page.locator(".customers-activity").first).to_be_visible()
-    assert table.bounding_box()["width"] > open_width + 200
-    page.get_by_role("button", name="Preview Beacon Bottle Shop", exact=True).click()
-    expect(page.get_by_role("region", name="Beacon Bottle Shop", exact=True)).to_be_visible()
-    assert abs(table.bounding_box()["width"] - open_width) < 2
-
-
-def test_resizing_an_open_desk_preview_moves_focus_into_the_phone_dialog(sales_page, contacts, xero):
-    page = sales_page
-    _open(page, 2)
-    trigger = page.get_by_role("button", name="Preview Beacon Bottle Shop", exact=True)
-    trigger.click()
-    expect(page.get_by_role("region", name="Beacon Bottle Shop", exact=True)).to_be_visible()
-    trigger.focus()
-    page.set_viewport_size({"width": 390, "height": 844})
-    dialog = page.get_by_role("dialog", name="Beacon Bottle Shop", exact=True)
-    expect(dialog).to_be_visible()
-    expect(dialog.get_by_role("button", name="Close customer preview")).to_be_focused()
-    page.keyboard.press("Escape")
-    expect(dialog).to_be_hidden()
-    expect(trigger).to_be_focused()
-
-
-@pytest.mark.parametrize("style", [1, 2, 3])
-def test_the_chosen_concept_survives_a_boosted_round_trip(sales_page, contacts, xero, style):
-    page = sales_page
-    page.goto("https://crm.test/crm/customers")
-    page.evaluate("sessionStorage.removeItem('customers-design-style')")
-    _open(page, style)
+    _open(page)
     tabs = page.get_by_role("navigation", name="Sales sections", exact=True)
     tabs.get_by_role("tab", name="Analytics", exact=True).click()
     expect(page).to_have_url(re.compile(r"/crm/analytics$"))
     tabs.get_by_role("tab", name="Customers", exact=True).click()
-    expect(page.locator("#customers-page")).to_have_attribute("data-customers-style", str(style))
     page.wait_for_load_state("networkidle")
+    expect(page.locator("tbody .customers-name")).to_have_text(["Aro Valley Wine Bar", "Beacon Bottle Shop"])
     page.get_by_role("searchbox", name="Search customers").fill("Beacon")
     expect(page.get_by_role("link", name="Beacon Bottle Shop", exact=True)).to_be_visible()
     expect(page.locator(".customers-results")).to_contain_text("1 customer match")

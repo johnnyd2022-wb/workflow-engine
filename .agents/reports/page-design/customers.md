@@ -2,26 +2,29 @@
 
 plan: docs/customers-redesign-plan.md
 research: 3 comparable products (Pipedrive, HubSpot, Attio), 2 craft references (Linear, Notion), 1 pattern source (Carbon)
-directions: 3 (Directory, Desk, Contact book); chosen: awaiting the pick
-passes: 3 plus baseline and an unchanged-code supplemental state pass; defects fixed during concept passes: 6 (phone header/chooser density, laptop Desk structure, status accessible name, closed Desk layout, modal focus on resize, URL-style persistence)
-screenshots: ~/.cache/workflow-engine-ui-shots/customers-design/{00-before,01,02,03,04}; counts 9 / 30 / 63 / 68, plus 12 supplemental images in 04, all inspected
-verdict: findings-open — three finished options are presented for a founder choice; final visual pass has no remaining defects
+directions considered: 3; selected by founder: Style 1, Directory
+verdict: patched — selected implementation complete; no remaining visual or independent-review findings
 
-The source/history audit selected Customers because it is a primary Sales destination without prior design work or a competing open MR. Sales tasks, Batch matching and customer detail remain separate candidates. Recent customer creation and Xero fixes from !527/!538/!539 are retained.
+## Selected result
 
-The original page's duplicate connection actions, control stack, phone table and dark header are recorded in the plan. Customer names now have real keyboard-accessible links. Phone/email and sync metadata remain reachable through preview; full customer records and original create/edit/Xero flows remain in place. Contact book counts explicitly refer to the current result page, not the entire directory.
+The full-width Directory is the only production layout. Removed the temporary chooser, Desk and Contact book DOM/CSS/helpers, URL/session selection, and Desk region/resize logic. Preview is an accessible modal drawer at every width, with keyboard focus trapping and return to its opener. Search, status, missing-details filtering, ordering, server pagination, real record links, create/edit and permission-aware Xero actions retain their existing APIs. Recent CRM creation/Xero regressions from !527/!538/!539 remain covered. No schema, API, calculation, tenant/auth or export changes; no production data used.
 
-## Screenshot evidence
+The source/open-MR audit selected Customers as a primary Sales destination without competing redesign work. Sales tasks, Batch matching and customer detail remain separate candidates. The plan preserves the research and three-direction comparison history rather than inventing a reason for the founder's choice.
 
-`01` found phone density, missing laptop split and an inaccessible select label; its interaction scenario failed and the pass was not clean. `02` captured every scenario without execution errors, but review still found closed Desk and resize-focus issues, non-persistent URL concepts and the wrapping phone header. `03` captured 68 images with no scenario/console failures and an empty visual defect list. It includes actual create/save navigation and cleanup in the private fixture, filtered/empty/error/recovery/loading states, phone long contacts, boosted return and explicit close/reopen at 1024/1440 plus modal resize. No scenario was removed to get a clean pass. Supplemental `04` adds all three quiet layouts at laptop/phone/dark and empty phone: 12 more images, all inspected with no defects on unchanged code. Both screenshot fixtures were purged successfully.
+## Final screenshot evidence
 
-## Verification
+`~/.cache/workflow-engine-ui-shots/customers-style1-final/01`: **37 final PNGs, every image inspected**, all seven scenarios passed, zero console errors and an empty visual defect list. Busy and quiet directories at 390/1024/1440/1920 in both themes, archived/missing/search/no matches, loading/empty/error/retry, long contacts, desktop/phone drawer, create/save navigation and real boosted return/search are included. All 37 uploaded into !540. Private synthetic fixture purged successfully; state credentials were not committed or published. Independent parent spot-checks of phone, phone drawer and dark also found no defects.
 
-- Page, all 22 new browser cases, existing contact-sync UI and API regressions: **59 passed**, 30 warnings, 44.74s. Warnings are Flask-Limiter's existing in-memory local storage notice.
-- Shared layout/render/boosted navigation, CRM flow/API and navigation: **272 passed**, 123 warnings, 351.71s. No failures.
-- Ruff app + changed Python files, node syntax, diff whitespace: pass.
-- Semgrep auto: **214 rules on both changed template/script files, zero findings**, final code. The screenshot helper separately ran 290 rules: two pre-existing trusted-CLI findings (dynamic model import, existing fixed-host GitLab upload) are present unchanged on origin/main; baseline-aware comparison reports zero new findings. No suppression added.
-- Independent test evaluation and HTML/JS/CSS review: **valid / clean**, `.agents/reports/test-evaluator/2026-10-19-customers.md`. Existing tests/assertions unchanged. Reviewer changed only exact customer links in a separate disposable checkout: keyboard link test failed at href assertion, then passed when restored. Author checkout never mutated.
-- New Desk close-width and resize-focus tests: all three failed on the pre-fix implementation, then pass after the fixes. URL-style tests for 2/3 failed at persisted-style checks before correction. A separate provisional Style 1 filtering failure was caused by test interaction before boosted initialization; explicit network-idle readiness fixed the test while retaining the actual one-result filter assertion. No shared runtime change was made. Removed redundant explicit x-init because Alpine already calls init.
+Historical comparison evidence remains at `customers-design/{00-before,01,02,03,04}`: 9 baseline/sibling, 30 first-pass, 63 second-pass, 68 final comparison and 12 unchanged-code supplemental images, all inspected. Pass 01 had a scenario failure and visual findings; pass 02 had clean execution but visual findings. Pass 03 plus supplemental 04 were clean. Those findings and fixes remain in the plan. The final selected-layout pass above was rerun after removing the rejected designs.
 
-No schema/API/calculation/export changes. No production data used. No Slack announcement: this is deliberately a draft comparison MR. Human style selection and merge remain pending.
+## Final verification
+
+- Selected page plus existing contact-sync browser/API suite: **46 passed**,17 warnings,44.94s (`customers-style1-final/tests-page-final.log`). All nine selected-page cases ran, including strengthened main-scroller overflow assertions.
+- Shared production layout, pages, boosted navigation, CRM flow/API and navigation suite: **272 passed**,123 warnings,395.09s (`tests-shared-final.log`). **318 passed total in two serial processes.** Warnings are existing Flask-Limiter local storage and structlog formatting notices.
+- An initial combined nine-file invocation ended **232 passed / 86 setup errors** (159.77s), with shared `app_url`, `logged_in_page` and `e2e_user` fixtures absent during setup. This was not counted as a pass. The same suites then passed in the original separate invocation groups; no fixture, test assertion or application change was made to achieve those results. Precise import/collection-order root cause was not established; retained log `tests-final.log` documents the limitation.
+
+- Ruff app + changed test, Node syntax and diff whitespace: pass.
+- Semgrep auto on final app template/script: **214 rules, zero findings**. Screenshot helper unchanged since exploration; earlier separate 290-rule scan had two unchanged trusted-CLI patterns and baseline-aware comparison zero new findings. No suppression added.
+- Independent test evaluation and final HTML/JS/CSS review: **valid / clean**, `.agents/reports/test-evaluator/2026-10-19-customers.md`. The four original behavioral cases are unchanged. Four selected Directory width cases replace the temporary concept matrix; one real boosted return/search case replaces the concept persistence matrix. Desk-only close/resize tests retire with their removed structure, not to hide a failure.
+- Independent CSS mutation exposed a real validity gap: forcing 1100px page width at 390px escaped the document-only overflow check. All four width cases now additionally check the actual `#page-content` scroll container. Verified mutation then failed at the added assertion (7.25s); restoring exact CSS passed (8.19s). The earlier exact-link href mutation also failed, then passed on restoration. All probes ran in a separate disposable worktree, now removed; author production files were never mutated.
+- No dependency, migration or shared-runtime changes. MR head CI is monitored separately in GitLab; readiness is set only after its exact head passes. No merge or automatic merge enabled.

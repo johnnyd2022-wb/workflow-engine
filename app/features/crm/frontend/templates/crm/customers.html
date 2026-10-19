@@ -4,21 +4,13 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('crm.serve_crm_css', filename='customers.css') }}">
 <div id="customers-page" class="crm-root workspace-overview customers-page" x-data="crmCustomers()"
-     :data-customers-style="style" :data-preview-open="Boolean(selected)" data-customers-style="1" @keydown.escape.window="closePreview()" @resize.window="resizePreview()">
+     @keydown.escape.window="closePreview()">
   <header class="workspace-header">
     <div><h1>Customers</h1><p>Find a customer. Keep their contact details ready.</p></div>
     {% if can('sales.record') %}
     <button type="button" class="workspace-button workspace-button--primary" data-new-customer @click="openNewCustomer()">New customer</button>
     {% endif %}
   </header>
-
-  {# CONCEPT ONLY: three finished structures for the founder to compare. #}
-  <div class="customers-style-pick" role="group" aria-label="Customer design options">
-    <span>Compare designs</span>
-    <template x-for="option in [{id:'1',name:'1 · Directory'},{id:'2',name:'2 · Desk'},{id:'3',name:'3 · Contact book'}]" :key="option.id">
-      <button type="button" :aria-pressed="style === option.id" @click="chooseStyle(option.id)" x-text="option.name"></button>
-    </template>
-  </div>
 
   <div class="customers-connection">
     <p x-text="syncSubtitle" aria-live="polite">Loading connection…</p>
@@ -66,31 +58,18 @@
 
     <div class="customers-body" x-show="!loading && customers.length > 0 && !error" x-cloak>
       <div class="customers-records">
-        <table class="customers-table" x-show="style !== '3'">
+        <table class="customers-table">
           <thead><tr><th scope="col"><button type="button" class="customers-text-action" @click="setSort('name')" :aria-label="sortBy === 'name' && sortDir === 'asc' ? 'Sort names Z to A' : 'Sort names A to Z'">Customer <span aria-hidden="true" x-text="sortBy === 'name' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'"></span></button></th><th scope="col">Contact</th><th scope="col">Last contact</th><th scope="col"><span class="customers-sr">Actions</span></th></tr></thead>
-          <tbody><template x-for="c in customers" :key="c.id"><tr :class="{'is-selected':selected?.id === c.id}">
+          <tbody><template x-for="c in customers" :key="c.id"><tr>
             <td><a class="customers-name" :href="customerUrl(c.id)" x-text="c.name"></a><span class="customers-meta" x-text="c.contact_status || 'Status not set'"></span><span class="customers-flag" x-show="!c.in_xero || c.xero_push_status === 'failed'" x-text="c.xero_push_status === 'failed' ? 'Not sent to Xero' : 'Biz-E only'"></span></td>
             <td class="customers-contact"><span x-text="c.email_address || 'No email'"></span><span class="customers-meta" x-text="c.phone_number || 'No phone'"></span></td>
             <td class="customers-activity"><span x-text="c.last_contact_date ? formatDate(c.last_contact_date) : 'None recorded'"></span><span class="customers-meta" x-text="c.last_contact_source || ''"></span></td>
             <td class="customers-preview-cell"><button type="button" class="customers-text-action" :aria-label="'Preview ' + c.name" @click="previewCustomer(c, $event.currentTarget)" :aria-expanded="selected?.id === c.id">Preview</button></td>
           </tr></template></tbody>
         </table>
-        {# CONCEPT ONLY: Contact book groups only the current result page, never all customers. #}
-        <div class="customers-book" x-show="style === '3'">
-          <template x-for="group in contactGroups" :key="group.name"><section class="customers-book-group" x-show="group.rows.length">
-            <header><h2 x-text="group.name"></h2><span x-text="group.rows.length + ' on this page'"></span></header>
-            <div class="customers-card-grid"><template x-for="c in group.rows" :key="c.id"><article class="customers-person">
-              <a class="customers-name" :href="customerUrl(c.id)" x-text="c.name"></a>
-              <span class="customers-meta" x-text="c.contact_status || 'Status not set'"></span>
-              <p><span x-text="c.email_address || 'Email missing'"></span><span x-text="c.phone_number || 'Phone missing'"></span></p>
-              <span class="customers-flag" x-show="!c.in_xero || c.xero_push_status === 'failed'" x-text="c.xero_push_status === 'failed' ? 'Not sent to Xero' : 'Biz-E only'"></span>
-              <button type="button" class="customers-text-action" :aria-label="'Preview ' + c.name" @click="previewCustomer(c, $event.currentTarget)">Preview contact</button>
-            </article></template></div>
-          </section></template>
-        </div>
       </div>
-      <div class="customers-preview-backdrop" x-show="selected && !(style === '2' && wide)" @click="closePreview()" x-cloak></div>
-      <aside class="customers-preview" x-show="selected" :role="style === '2' && wide ? 'region' : 'dialog'" :aria-modal="style === '2' && wide ? null : 'true'" aria-labelledby="customer-preview-title" x-cloak @keydown.tab="trapPreviewFocus($event)">
+      <div class="customers-preview-backdrop" x-show="selected" @click="closePreview()" x-cloak></div>
+      <aside class="customers-preview" x-show="selected" role="dialog" aria-modal="true" aria-labelledby="customer-preview-title" x-cloak @keydown.tab="trapPreviewFocus($event)">
         <template x-if="selected"><div>
           <div class="customers-preview-head"><span>Contact preview</span><button type="button" class="customers-text-action" data-close-preview @click="closePreview()" aria-label="Close customer preview">Close</button></div>
           <h2 id="customer-preview-title" x-text="selected.name"></h2>

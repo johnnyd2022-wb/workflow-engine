@@ -1,5 +1,14 @@
 # Customers redesign — 18 October 2026
 
+## Selected design — 19 October 2026
+
+The founder selected **Style 1: Directory**. It is now the only implementation: full-width customer rows and an accessible preview drawer at every width. The temporary chooser, URL/session style selection, Desk and Contact book markup, grouped render helper, losing CSS and concept-only tests are removed. Old preview URLs and saved choices have no effect.
+
+Desk was not selected; its persistent split and closed/reopened layout states are retired. Contact book was not selected; its readiness card groups are retired. Their original trade-offs and research remain below as the design history. Search, filters, sorting, pagination, full-record links, contact preview, customer creation and Xero flows remain.
+
+The responsive matrix now tests the chosen directory at 390, 1024, 1440 and 1920 pixels, including ignored old choices, contact access, the drawer, overlap/overflow and dark contrast. Desk-only tests are deleted with the structure they protected; the original four behavior tests and one real boosted-return/filter regression remain.
+
+
 ## Purpose and scope
 
 Find the right customer and reach them, with trustworthy contact details. This pass covers `/crm/customers`; customer records, invoice calculations, Xero integration contracts and permissions stay in their existing flows.
@@ -33,7 +42,7 @@ Primary sources read on 18 October 2026. These are structural patterns, not pale
 
 The comparable sources do not establish that readiness grouping is the right model for this business. That grouping is an explicit design hypothesis to compare, based on existing phone/email fields. No new CRM scoring, global completeness total or sales pipeline is inferred.
 
-## Three directions to choose from
+## Three directions considered
 
 | | Style 1: Directory | Style 2: Desk | Style 3: Contact book |
 |---|---|---|---|
@@ -54,7 +63,7 @@ Before and three complete screenshot passes: each style at 390, 1024, 1440 and 1
 
 New browser coverage must check filters/order/pagination, accessible links and preview focus, error versus empty, old navigation and the three structures at all widths. Preserve the existing contact-sync UI and API tests; run shared layout/render/boosted suites, Ruff, node syntax and Semgrep. Independent test and template/script reviews gate publication.
 
-Direction: **awaiting the founder's choice**. This MR stays a draft with the comparison switch until two concepts are deleted.
+Direction: **Style 1 selected by the founder**. The comparison history below is retained; production code contains only Directory.
 
 ## Screenshot review log
 
@@ -63,7 +72,16 @@ Direction: **awaiting the founder's choice**. This MR stays a draft with the com
 - `02`: all 63 images captured without scenario or console failures and inspected. This was **not** a clean design pass: independent review found closing Desk left its column empty, and resizing its open preview to phone needed focus transfer. Inspection also found a URL-selected design was not remembered on an in-app round trip. The phone header still wrapped the action below its title; tightened its layout. Added loading/long-contact states rather than shrinking the scenarios.
 - These Desk close/resize defects have regression evidence: all three new cases failed before the fixes. The URL choice now persists; all three designs are checked by leaving via Analytics, returning and searching a real server-backed directory. The test waits for the boosted page's initial network work before typing; a provisional earlier failure from typing before initialization was a test-readiness issue, not a proven shared-runtime bug.
 - Alpine calls its component `init()` automatically; removed the duplicate explicit `x-init` invocation. Shared initialization code and the customer detail page are unchanged.
-- `03`: 68 images captured, all seven scenarios passed with no console errors, all images inspected. Directory/Desk/Contact book at all four widths, dark, filters, no matches, quiet/empty, loading, error/retry, preview, long contacts, create/save, boosted return and Desk close/reopen/resize now produce an empty defect list. The private screenshot organisation was purged afterwards. This is complete design exploration, not selection: all three remain in the draft MR until the founder chooses one.
+- `03`: 68 images captured, all seven scenarios passed with no console errors, all images inspected. Directory/Desk/Contact book at all four widths, dark, filters, no matches, quiet/empty, loading, error/retry, preview, long contacts, create/save, boosted return and Desk close/reopen/resize now produce an empty defect list. The private screenshot organisation was purged afterwards. At exploration submission all three remained in the draft MR awaiting the founder's choice; Directory was subsequently selected as recorded above.
 - `04` (supplemental, unchanged final code): 12 further images cover a quiet directory at laptop, phone and dark, plus empty phone, for every style. All scenarios and console checks passed; all 12 images inspected with no further defects. Recreated only the private synthetic fixture, then purged it again. These extend coverage without claiming a fourth implementation iteration.
 
-Final local verification: 59 page/contact cases and 272 shared layout/render/boosted/CRM/navigation cases passed. Independent test grade valid and HTML/JS/CSS review clean. App Semgrep auto: 214 rules, zero findings. The screenshot helper's separate 290-rule scan reported two unchanged trusted-CLI patterns (dynamic model imports and its existing fixed-host GitLab upload); baseline-aware comparison against origin/main reports zero new findings. No scanner rule or assertion was weakened.
+Exploration verification: 59 page/contact cases and 272 shared layout/render/boosted/CRM/navigation cases passed. Independent test grade valid and HTML/JS/CSS review clean. App Semgrep auto: 214 rules, zero findings. The screenshot helper's separate 290-rule scan reported two unchanged trusted-CLI patterns (dynamic model imports and its existing fixed-host GitLab upload); baseline-aware comparison against origin/main reports zero new findings. No scanner rule or assertion was weakened.
+
+
+## Selected Directory finalization
+
+After the founder selected Style 1, removed the chooser and both rejected layouts, their helpers/selectors, style URL/session state and wide-screen Desk region/resize handling. Preview is consistently a modal drawer. Kept original customer form, server queries/pagination, links, contact access, permissions and Xero contracts.
+
+Final evidence: `customers-style1-final/01`, 37 PNGs covering busy/quiet all four widths in both themes, drawer desktop/phone, long contacts, archived/missing/search/no matches, loading/empty/error/retry, create/save and boosted round trip. All seven scenarios and console checks passed; every PNG inspected, empty defect list, synthetic fixture purged. All images uploaded into the final MR description.
+
+Tests now retain four unchanged behavior cases, four Directory width/drawer/overlap/dark cases (also proving old preview URLs/stored choices are ignored), and one real boosted return/filter case. Retired Desk-only region/resize cases with that implementation. Independent mutation found document-only overflow could miss the SPA scroll container; retained it and added the actual main-scroll-width assertion. Verified red 7.25s / restored green 8.19s. Independent final test grade valid; HTML/JS/CSS clean. Final results and the explicitly reported combined-invocation fixture-discovery error are in the page-design report.
