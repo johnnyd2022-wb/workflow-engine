@@ -21,7 +21,7 @@ PAGES = {
     "/core/contracts": ("Contract orders", "Orders"),
     "/core/contracts/materials": ("Customer materials", "Materials held"),
     "/core/processes": ("Workflows", "Product workflows"),
-    "/core/executions/live": ("Batches", "Production board"),
+    "/core/executions/live": ("Batches", "Under way"),
     "/core/inventory/view": ("Inventory", "Stock on hand"),
     "/core/inventory/live": ("Live inventory", "Stock"),
     "/core/inventory/add": ("Add to inventory", "How would you like to add it?"),

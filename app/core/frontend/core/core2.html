@@ -35,7 +35,7 @@
           <header class="workspace-header" aria-labelledby="core2-hub-title"{% if not core2_focus_mode %} data-core2-own-header{% if section_head_is_page_title %} hidden{% endif %}{% endif %}>
             <div>
               <h1 id="core2-hub-title" class="page-title">{% if core2_focus_mode == 'inventory_live' %}Live inventory{% elif core2_focus_mode == 'active_batches_live' %}Batches{% else %}Production{% endif %}</h1>
-              <p id="core2-hub-caption">{% if core2_focus_mode == 'inventory_live' %}Stock on hand, what has moved, and what each process holds.{% elif core2_focus_mode == 'active_batches_live' %}Every batch in production, by the step it is at.{% else %}Keep production moving, from stock to finished batches.{% endif %}</p>
+              <p id="core2-hub-caption">{% if core2_focus_mode == 'inventory_live' %}Stock on hand, what has moved, and what each process holds.{% elif core2_focus_mode == 'active_batches_live' %}Every batch under way, the step it is at, and how long it has waited.{% else %}Keep production moving, from stock to finished batches.{% endif %}</p>
             </div>
             {% if core2_focus_mode == 'inventory_live' %}
             <div class="workspace-header__actions"><a class="workspace-button" href="/core/inventory/view">Back to inventory</a></div>
@@ -372,68 +372,60 @@
             </div>
           </div>
           {% elif core2_focus_mode == 'active_batches_live' %}
-          <div class="workspace-stack">
-          <section id="core2-active-batches-panel" class="workspace-card core2-active-batches-panel" aria-labelledby="core2-active-batches-title" data-core2-active-board="full">
-              <div class="core2-active-details-body">
-              <div class="core2-active-header-row">
-                <div class="core2-active-heading-wrap">
-                  <h2 id="core2-active-batches-title">Production board</h2>
-                  <p class="workspace-caption core2-active-subline">Select a batch to see its history.</p>
-                </div>
-                <div class="core2-active-controls">
-                  <label class="core2-active-control">
-                    <span class="sr-only">Process</span>
-                    <select id="core2-active-process-select" class="core2-active-select" aria-label="Select process">
-                      <option value="">Loading processes...</option>
-                    </select>
-                  </label>
-                  <div class="core2-active-view-toggle" role="tablist" aria-label="Active batch view mode">
-                    <button type="button" class="core2-active-view-btn core2-active-view-btn--active" data-core2-active-view="pipeline" role="tab" aria-selected="true">Pipeline</button>
-                    <button type="button" class="core2-active-view-btn" data-core2-active-view="timeline" role="tab" aria-selected="false">Timeline</button>
-                  </div>
-                </div>
+          <div class="workspace-stack batches-page" data-batches-root data-state="loading">
+          <section id="core2-active-batches-panel" class="workspace-card batches-card" aria-labelledby="core2-active-batches-title" data-core2-active-board="full">
+            <div class="batches-head">
+              <div class="batches-head__text">
+                <h2 id="core2-active-batches-title">Under way</h2>
+                <dl class="batches-figures" data-batches-figures>
+                  <div><dt>under way</dt><dd data-core2-inflight-count>–</dd></div>
+                  <div data-batches-waiting-figure><dt>waiting over 2 days</dt><dd data-batches-waiting-count>–</dd></div>
+                  <div><dt>finished in the last 7 days</dt><dd data-core2-completed7d-count>–</dd></div>
+                </dl>
               </div>
-              <div class="core2-active-filter-row" aria-label="Filter active batches">
-                <label class="core2-active-search-label" for="core2-active-search">Find a batch
-                  <input id="core2-active-search" type="search" class="spa-inp" placeholder="Batch ID, step or person" autocomplete="off">
-                </label>
-                <div class="core2-active-status-filter" role="group" aria-label="Batch status">
-                  <button type="button" class="core2-filter-chip is-active" data-core2-active-status="all" aria-pressed="true">All</button>
-                  <button type="button" class="core2-filter-chip" data-core2-active-status="pending" aria-pressed="false">Ready to record</button>
-                  <button type="button" class="core2-filter-chip" data-core2-active-status="in_progress" aria-pressed="false">In progress</button>
-                </div>
+              <div class="batches-view-toggle" role="tablist" aria-label="Show batches as">
+                <button type="button" class="batches-view-btn is-active" data-core2-active-view="pipeline" role="tab" aria-selected="true">Batches</button>
+                <button type="button" class="batches-view-btn" data-core2-active-view="timeline" role="tab" aria-selected="false">Timeline</button>
               </div>
+            </div>
 
-              <div class="core2-active-status-row">
-                <div class="core2-active-status-metrics">
-                  <span><strong data-core2-inflight-count>0</strong> active</span>
-                  <span><strong data-core2-ready-count>0</strong> ready to record</span>
-                  <span><strong data-core2-completed7d-count>0</strong> finished in the last 7 days</span>
-                </div>
-                <div class="core2-active-status-note">
-                  <span data-core2-active-total-note>Showing 0 active batches</span>
-                </div>
+            <div class="batches-filters" role="search" aria-label="Filter batches" data-batches-filters>
+              <label class="batches-field batches-field--search">
+                <span class="batches-sr">Find a batch</span>
+                <input id="core2-active-search" type="search" placeholder="Find a batch, workflow, step or person" autocomplete="off" aria-label="Find a batch">
+              </label>
+              <label class="batches-field">
+                <span class="batches-sr">Workflow</span>
+                <select id="core2-active-process-select" aria-label="Workflow">
+                  <option value="">All workflows</option>
+                </select>
+              </label>
+              <div class="batches-chips" role="group" aria-label="Which batches">
+                <button type="button" class="batches-chip is-active" data-core2-active-status="all" aria-pressed="true">All</button>
+                <button type="button" class="batches-chip" data-core2-active-status="waiting" aria-pressed="false">Waiting</button>
               </div>
+            </div>
 
-              <div class="core2-active-step-rail" id="core2-active-step-rail" aria-live="polite">
-                <p class="core2-active-batches-empty">Loading process steps...</p>
-              </div>
+            <div class="batches-message" data-batches-message role="status" hidden>
+              <p data-batches-message-text></p>
+              <button type="button" class="workspace-button" data-batches-clear hidden>Clear filters</button>
+              <button type="button" class="workspace-button" data-batches-retry hidden>Try again</button>
+              <a class="workspace-button" href="/core/processes" data-batches-start hidden>Start a batch from a workflow</a>
+            </div>
 
-              <div class="core2-active-view" id="core2-active-pipeline-view">
-                <div class="core2-active-pipeline-grid" id="core2-active-pipeline-grid">
-                  <p class="core2-active-batches-empty">Loading active batches...</p>
-                </div>
+            <div class="core2-active-view batches-view" id="core2-active-pipeline-view">
+              <div class="batches-board" id="core2-active-pipeline-grid" aria-live="polite">
+                <p class="batches-loading">Loading batches…</p>
               </div>
+            </div>
 
-              <div class="core2-active-view" id="core2-active-timeline-view" hidden>
-                <p class="core2-active-timeline-help">Each bar shows how long a batch spent in a production step. Select a row for the full batch record.</p>
-                <div class="core2-active-timeline" id="core2-active-timeline">
-                  <p class="core2-active-batches-empty">Loading timeline...</p>
-                </div>
-              </div>
-              </div>
+            <div class="core2-active-view batches-view" id="core2-active-timeline-view" hidden>
+              <p class="core2-active-timeline-help">Each bar is the time a batch spent at a step. Select a row for the full batch record.</p>
+              <div class="core2-active-timeline" id="core2-active-timeline"></div>
+            </div>
           </section>
           </div>
+          <script src="{{ url_for('core.serve_core_js', filename='batches.js') }}" defer></script>
           {% endif %}
 
           <div class="core2-health-sheet-overlay" id="core2-health-sheet-overlay" hidden>
@@ -452,23 +444,22 @@
           </div>
           {% if core2_focus_mode == 'active_batches_live' %}
           <div class="core2-active-detail-overlay" id="core2-active-detail-overlay" hidden>
-            <div class="core2-active-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="core2-active-detail-title">
+            <div class="core2-active-detail-sheet batches-sheet" role="dialog" aria-modal="true" aria-labelledby="core2-active-detail-id">
               <div class="core2-active-detail-head">
-                <h3 id="core2-active-detail-title">Batch details</h3>
+                <div>
+                  <h3 class="core2-active-detail-id" id="core2-active-detail-id">Batch</h3>
+                  <p class="core2-active-detail-meta" id="core2-active-detail-process">Workflow</p>
+                </div>
                 <button type="button" class="core2-active-detail-close" data-core2-detail-close aria-label="Close batch details">&times;</button>
               </div>
               <div class="core2-active-detail-body">
-                <p class="core2-active-detail-id" id="core2-active-detail-id">Execution</p>
-                <p class="core2-active-detail-meta" id="core2-active-detail-process">Process</p>
                 <p class="core2-active-detail-meta" id="core2-active-detail-started">Started</p>
                 <h4 class="core2-active-detail-heading">Steps</h4>
-                <div class="core2-active-detail-steps" id="core2-active-detail-steps">
-                  <p class="core2-active-batches-empty">No step metadata available.</p>
-                </div>
+                <div class="core2-active-detail-steps" id="core2-active-detail-steps"></div>
               </div>
               <div class="core2-active-detail-foot">
-                <button type="button" class="core2-active-detail-btn core2-active-detail-btn--ghost" data-core2-detail-close>Close</button>
-                <a class="core2-active-detail-btn core2-active-detail-btn--primary" id="core2-active-detail-next-step" href="/core/processes">Record next step</a>
+                <button type="button" class="workspace-button" data-core2-detail-close>Close</button>
+                <a class="workspace-button batches-primary" id="core2-active-detail-next-step" href="/core/processes">Record next step</a>
               </div>
             </div>
           </div>
@@ -2823,7 +2814,7 @@
       // The dedicated /core/inventory/live page renders the live-inventory grid outside
       // the tabbed hub (it links back via ?back_tab=, not ?tab=), so core2CurrentMainTab()
       // never resolves to 'inventory' there. Detect it directly by its grid element,
-      // the same way core-active-batches-graph.js detects its own dedicated page.
+      // the same way batches.js finds the Batches page by its root.
       var isDedicatedInventoryPage = !!document.getElementById('core2-inv-items-grid');
       if (tab === 'inventory' || isDedicatedInventoryPage) loadCore2InventoryTab();
       else if (tab === 'workflows') loadCore2WorkflowsTab();
