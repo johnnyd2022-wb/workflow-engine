@@ -1,7 +1,7 @@
 """XeroSyncService — orchestrates contact and invoice sync from Xero."""
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -20,6 +20,11 @@ from app.features.crm.services.xero_oauth_service import XeroTokenExpiredError
 from app.observability import get_logger, start_span
 
 logger = get_logger(__name__)
+
+# An incremental sync asks Xero for records modified after the previous sync's start, less this
+# margin for clock differences between us and Xero. Pulling a record twice is harmless: contact
+# and invoice upserts and FIFO matching are idempotent. Missing one is not.
+RESUME_OVERLAP = timedelta(minutes=5)
 
 
 @dataclass
@@ -64,6 +69,7 @@ class XeroSyncService:
             if not tenant:
                 raise ValueError("No connected Xero tenant for this org.")
 
+            started_at = datetime.now(UTC)
             job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "full", triggered_by)
             self.db.commit()
 
@@ -103,7 +109,7 @@ class XeroSyncService:
                 logger.exception("xero_invoice_sync_failed", org_id=str(org_id))
                 result.errors.append(f"Invoice sync error: {e}")
 
-            self._finalise_job(job.id, org_id, result)
+            self._finalise_job(job.id, org_id, result, started_at=started_at)
             return result
 
     def incremental_sync(self, org_id: UUID, triggered_by: str = "manual") -> SyncResult:
@@ -117,6 +123,7 @@ class XeroSyncService:
                 raise ValueError("No connected Xero tenant for this org.")
 
             modified_after = tenant.last_successful_sync_at
+            started_at = datetime.now(UTC)
             job = self.sync_job_repo.create(org_id, tenant.xero_tenant_id, "incremental", triggered_by)
             self.db.commit()
 
@@ -159,7 +166,7 @@ class XeroSyncService:
                 logger.exception("xero_incremental_invoice_sync_failed", org_id=str(org_id))
                 result.errors.append(str(e))
 
-            self._finalise_job(job.id, org_id, result)
+            self._finalise_job(job.id, org_id, result, started_at=started_at)
             return result
 
     # ------------------------------------------------------------------
@@ -225,21 +232,25 @@ class XeroSyncService:
                     "is_supplier": bool(xc.is_supplier),
                     "xero_updated_at": xero_updated_at,
                 }
-                existing = self.contact_repo.get_by_xero_id(xero_contact_id, org_id)
-                if existing is None:
-                    existing = self._link_contact_made_in_bize(org_id, name, xero_contact_id, tenant_id)
-                if existing is not None and existing.xero_push_status in ("pending", "failed"):
-                    # Biz-E holds edits Xero has not seen yet; keep them until a send succeeds.
-                    for key in SYNCED_FIELDS:
-                        fields.pop(key, None)
-                    name = existing.name
-                self.contact_repo.upsert(
-                    org_id=org_id,
-                    xero_contact_id=xero_contact_id,
-                    xero_tenant_id=tenant_id,
-                    name=name,
-                    **fields,
-                )
+                # Each record in its own savepoint: one the database rejects rolls back alone
+                # instead of failing every record after it, and the invoice sync with them.
+                with self.db.begin_nested():
+                    existing = self.contact_repo.get_by_xero_id(xero_contact_id, org_id)
+                    if existing is None:
+                        existing = self._link_contact_made_in_bize(org_id, name, xero_contact_id, tenant_id)
+                    if existing is not None and existing.xero_push_status in ("pending", "failed"):
+                        # Biz-E holds edits Xero has not seen yet; keep them until a send succeeds.
+                        for key in SYNCED_FIELDS:
+                            fields.pop(key, None)
+                        name = existing.name
+                    self.contact_repo.upsert(
+                        org_id=org_id,
+                        xero_contact_id=xero_contact_id,
+                        xero_tenant_id=tenant_id,
+                        name=name,
+                        **fields,
+                    )
+                    self.db.flush()
                 result.contacts_synced += 1
             except Exception as e:
                 logger.warning(
@@ -302,54 +313,58 @@ class XeroSyncService:
                 xero_invoice_id = str(xi.invoice_id)
                 seen_invoice_ids.add(xero_invoice_id)
                 xero_contact_id = str(xi.contact.contact_id) if xi.contact and xi.contact.contact_id else None
-                contact = self.contact_repo.get_by_xero_id(xero_contact_id, org_id) if xero_contact_id else None
+                # The invoice and its line items in one savepoint: saved whole or not at all, and
+                # a record the database rejects doesn't fail the rest of the sync.
+                with self.db.begin_nested():
+                    contact = self.contact_repo.get_by_xero_id(xero_contact_id, org_id) if xero_contact_id else None
 
-                inv = self.invoice_repo.upsert_invoice(
-                    org_id=org_id,
-                    xero_invoice_id=xero_invoice_id,
-                    xero_tenant_id=tenant_id,
-                    contact_id=contact.id if contact else None,
-                    xero_contact_id=xero_contact_id,
-                    invoice_number=xi.invoice_number,
-                    reference=xi.reference,
-                    invoice_type=str(xi.type) if xi.type else None,
-                    status=str(xi.status) if xi.status else None,
-                    sub_total=xi.sub_total,
-                    total_tax=xi.total_tax,
-                    total=xi.total,
-                    amount_due=xi.amount_due,
-                    amount_paid=xi.amount_paid,
-                    currency_code=xi.currency_code.value if xi.currency_code else "NZD",
-                    date=xi.date,
-                    due_date=xi.due_date,
-                    fully_paid_on_date=xi.fully_paid_on_date,
-                    xero_updated_at=xi.updated_date_utc,
-                )
-
-                # Replace line items (idempotent — delete all then recreate)
-                line_items = []
-                for li in xi.line_items or []:
-                    tracking = None
-                    if li.tracking:
-                        tracking = [{"name": t.name, "option": t.option} for t in li.tracking]
-
-                    line_items.append(
-                        {
-                            "xero_line_item_id": str(li.line_item_id) if li.line_item_id else None,
-                            "description": li.description,
-                            "item_code": li.item_code,
-                            "quantity": li.quantity,
-                            "unit_amount": li.unit_amount,
-                            "line_amount": li.line_amount,
-                            "account_code": li.account_code,
-                            "tax_type": li.tax_type,
-                            "tax_amount": li.tax_amount,
-                            "discount_rate": li.discount_rate,
-                            "tracking": tracking,
-                        }
+                    inv = self.invoice_repo.upsert_invoice(
+                        org_id=org_id,
+                        xero_invoice_id=xero_invoice_id,
+                        xero_tenant_id=tenant_id,
+                        contact_id=contact.id if contact else None,
+                        xero_contact_id=xero_contact_id,
+                        invoice_number=xi.invoice_number,
+                        reference=xi.reference,
+                        invoice_type=str(xi.type) if xi.type else None,
+                        status=str(xi.status) if xi.status else None,
+                        sub_total=xi.sub_total,
+                        total_tax=xi.total_tax,
+                        total=xi.total,
+                        amount_due=xi.amount_due,
+                        amount_paid=xi.amount_paid,
+                        currency_code=xi.currency_code.value if xi.currency_code else "NZD",
+                        date=xi.date,
+                        due_date=xi.due_date,
+                        fully_paid_on_date=xi.fully_paid_on_date,
+                        xero_updated_at=xi.updated_date_utc,
                     )
 
-                self.invoice_repo.replace_line_items(inv.id, org_id, line_items)
+                    # Replace line items (idempotent — delete all then recreate)
+                    line_items = []
+                    for li in xi.line_items or []:
+                        tracking = None
+                        if li.tracking:
+                            tracking = [{"name": t.name, "option": t.option} for t in li.tracking]
+
+                        line_items.append(
+                            {
+                                "xero_line_item_id": str(li.line_item_id) if li.line_item_id else None,
+                                "description": li.description,
+                                "item_code": li.item_code,
+                                "quantity": li.quantity,
+                                "unit_amount": li.unit_amount,
+                                "line_amount": li.line_amount,
+                                "account_code": li.account_code,
+                                "tax_type": li.tax_type,
+                                "tax_amount": li.tax_amount,
+                                "discount_rate": li.discount_rate,
+                                "tracking": tracking,
+                            }
+                        )
+
+                    self.invoice_repo.replace_line_items(inv.id, org_id, line_items)
+                    self.db.flush()
                 result.invoices_synced += 1
 
             except Exception as e:
@@ -378,11 +393,13 @@ class XeroSyncService:
     # Finalise job record
     # ------------------------------------------------------------------
 
-    def _finalise_job(self, job_id: UUID, org_id: UUID, result: SyncResult) -> None:
+    def _finalise_job(self, job_id: UUID, org_id: UUID, result: SyncResult, *, started_at: datetime) -> None:
         status = "failed"
         if result.success:
             self.sync_job_repo.mark_completed(job_id, result.contacts_synced, result.invoices_synced)
-            self.tenant_repo.update_last_sync(org_id, datetime.now(UTC))
+            # Resume from before this sync fetched anything: a Xero edit made while it ran must be
+            # in the next incremental sync, not skipped until somebody runs a full one.
+            self.tenant_repo.update_last_sync(org_id, started_at - RESUME_OVERLAP)
             status = "completed"
         elif result.partial:
             self.sync_job_repo.mark_partial(
@@ -392,7 +409,8 @@ class XeroSyncService:
                 error_message=f"{len(result.errors)} error(s) during sync",
                 error_details={"errors": result.errors},
             )
-            self.tenant_repo.update_last_sync(org_id, datetime.now(UTC))
+            # The resume point stays put, so the records that failed are retried next time
+            # instead of being skipped until somebody edits them in Xero again.
             status = "partial"
         else:
             self.sync_job_repo.mark_failed(
