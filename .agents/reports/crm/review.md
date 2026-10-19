@@ -260,3 +260,41 @@ Round 1's prompt also overstated the red-on-main evidence: one of the three
 After the changes, the bug tests in those classes were re-run against main's app files: 7
 red, 3 controls green.
 Round 2 (Codex) re-graded the three: **valid**, no findings. It confirmed the other 21 were unchanged.
+
+## Follow-up review, 2026-10-19 (of MR !539)
+
+!539 was a sound review: nine real bugs, each fixed red-first, a route-by-route auth and
+org-scoping matrix confirmed by an independent tenant audit, and tests graded valid. This
+follow-up looked where it was thin: `xero_sync_service.py` (the pull), the FIFO matching in
+`sales_traceability_service.py`, and the OAuth refresh path (32-41% covered). It also
+re-scanned every CRM template for bindings into empty initial state (!538 and F8 were the
+same bug twice). No other template has one.
+
+Fixed (tests in `tests/test_xero_sync_service.py`, each failing on `main`):
+
+- **S1: incremental syncs lost Xero edits made while a sync ran.** The resume point was the
+  sync's finish time, so a record edited in Xero after it was fetched, but before the sync
+  finished, was never pulled by a later incremental sync. Only a full sync recovered it, and
+  day-to-day syncs (manual, and after each invoice create or authorise) are incremental. The
+  resume point is now the sync's start, less a 5-minute margin for clock skew. Re-pulling is
+  idempotent.
+- **S2: a partial sync skipped the records that failed.** It still moved the resume point
+  past them. It now leaves the resume point alone, so failed records are retried.
+- **S3: one record the database rejected sank the whole sync.** A NUL byte in a contact's
+  text, for example. With no savepoint, the session was poisoned: every later contact
+  failed, and so did the entire invoice sync. Each contact, and each invoice with its line
+  items, now saves in its own savepoint.
+
+Checked and sound: FIFO allocation is reversible and all-or-nothing. `assign_line` consumes
+before checking the batch's product, but the route rolls back on that error. Voids and
+pre-go-live sales are reversed.
+
+Left open:
+
+- **S4 (Low): token-refresh race.** Two requests refreshing at once are handled when the
+  winner has already saved its rotated token. If the loser is rejected first, it marks the
+  connection invalid even though the winner succeeds. Fix with a row lock (`SELECT … FOR
+  UPDATE`) on the token during refresh. Rare: it needs two Xero calls within the same
+  refresh window.
+- **S5 (Product decision): credit notes (`ACCRECCREDIT`) aren't matched**, so returned
+  goods never go back into stock.
