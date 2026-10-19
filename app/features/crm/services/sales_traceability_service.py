@@ -183,7 +183,7 @@ class SalesTraceabilityService:
             product_name=match.biz_e_product_name,
             quantity=Decimal(row["quantity_consumed"]),
             unit=row["unit"],
-            presold=_is_presold(self.db, item_id, invoice.date),
+            presold=_is_presold(self.db, org_id, item_id, invoice.date),
         )
 
     @staticmethod
@@ -281,7 +281,7 @@ class SalesTraceabilityService:
             row = self.inventory.consume_final_product_lot(
                 org_id, item_id, qty, reference=reference, commit=False, site_id=site_id
             )
-            item = self.db.get(InventoryItem, item_id)
+            item = _own_row(self.db, InventoryItem, org_id, item_id)
             if item is None or item.name != match.biz_e_product_name:
                 raise ValueError(f"That batch isn't {match.biz_e_product_name}")
             allocation = self._new_allocation(org_id, invoice, line_key, match, row)
@@ -357,7 +357,7 @@ class SalesTraceabilityService:
                     "batches": [],
                 },
             )
-            item = self.db.get(InventoryItem, a.inventory_item_id)
+            item = _own_row(self.db, InventoryItem, org_id, a.inventory_item_id)
             entry["presold"] = entry["presold"] or bool(a.presold)
             entry["batches"].append(
                 {
@@ -728,7 +728,7 @@ def _made_on(db, item) -> date | None:
     if step_id is not None:
         from app.core.db.models.execution_step import ExecutionStep
 
-        step = db.get(ExecutionStep, step_id)
+        step = _own_row(db, ExecutionStep, item.org_id, step_id)
         if step is not None and step.completed_at is not None:
             return step.completed_at.date()
     bottled = (getattr(item, "extra_data", None) or {}).get("bottled_on")
@@ -743,11 +743,22 @@ def _made_on(db, item) -> date | None:
     return created.date() if created else None
 
 
-def _is_presold(db, item_id: UUID, invoice_date: date | None) -> bool:
+def _own_row(db, model, org_id: UUID, row_id: UUID):
+    """``db.get`` that only ever returns ``org_id``'s own row, else None.
+
+    ``Session.get()`` can answer from the identity map without a query, so neither the global
+    tenant filter nor a WHERE clause applies; and with no tenant context that filter fails open.
+    Checking the row's own ``org_id`` closes both.
+    """
+    row = db.get(model, row_id)
+    return row if row is not None and row.org_id == org_id else None
+
+
+def _is_presold(db, org_id: UUID, item_id: UUID, invoice_date: date | None) -> bool:
     """A sale filled from a batch made after the invoice date (plan 1.1)."""
     if invoice_date is None:
         return False
-    item = db.get(InventoryItem, item_id)
+    item = _own_row(db, InventoryItem, org_id, item_id)
     made = _made_on(db, item) if item is not None else None
     return made is not None and made > invoice_date
 

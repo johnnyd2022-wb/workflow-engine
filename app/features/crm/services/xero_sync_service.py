@@ -396,7 +396,7 @@ class XeroSyncService:
     def _finalise_job(self, job_id: UUID, org_id: UUID, result: SyncResult, *, started_at: datetime) -> None:
         status = "failed"
         if result.success:
-            self.sync_job_repo.mark_completed(job_id, result.contacts_synced, result.invoices_synced)
+            self.sync_job_repo.mark_completed(job_id, org_id, result.contacts_synced, result.invoices_synced)
             # Resume from before this sync fetched anything: a Xero edit made while it ran must be
             # in the next incremental sync, not skipped until somebody runs a full one.
             self.tenant_repo.update_last_sync(org_id, started_at - RESUME_OVERLAP)
@@ -404,6 +404,7 @@ class XeroSyncService:
         elif result.partial:
             self.sync_job_repo.mark_partial(
                 job_id,
+                org_id,
                 result.contacts_synced,
                 result.invoices_synced,
                 error_message=f"{len(result.errors)} error(s) during sync",
@@ -415,6 +416,7 @@ class XeroSyncService:
         else:
             self.sync_job_repo.mark_failed(
                 job_id,
+                org_id,
                 error_message=result.errors[0] if result.errors else "Unknown error",
                 error_details={"errors": result.errors},
             )

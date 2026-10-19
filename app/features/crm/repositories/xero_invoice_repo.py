@@ -55,9 +55,9 @@ class XeroInvoiceRepository:
         return inv
 
     def replace_line_items(self, invoice_id: UUID, org_id: UUID, line_items: list[dict]) -> None:
-        self.db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.invoice_id == invoice_id).delete(
-            synchronize_session=False
-        )
+        self.db.query(XeroInvoiceLineItem).filter(
+            XeroInvoiceLineItem.invoice_id == invoice_id, XeroInvoiceLineItem.org_id == org_id
+        ).delete(synchronize_session=False)
 
         for item in line_items:
             li = XeroInvoiceLineItem(
@@ -147,8 +147,12 @@ class XeroInvoiceRepository:
         )
         return rows, total
 
-    def get_line_items(self, invoice_id: UUID) -> list[XeroInvoiceLineItem]:
-        return self.db.query(XeroInvoiceLineItem).filter(XeroInvoiceLineItem.invoice_id == invoice_id).all()
+    def get_line_items(self, invoice_id: UUID, org_id: UUID) -> list[XeroInvoiceLineItem]:
+        return (
+            self.db.query(XeroInvoiceLineItem)
+            .filter(XeroInvoiceLineItem.invoice_id == invoice_id, XeroInvoiceLineItem.org_id == org_id)
+            .all()
+        )
 
     def line_item_options_for_contact(self, contact_id: UUID, org_id: UUID) -> list[dict]:
         """Return distinct line item description/code combinations for a contact."""
