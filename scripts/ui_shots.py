@@ -53,7 +53,18 @@ REPO = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get("UI_SHOTS_HOME", Path.home() / ".cache" / "workflow-engine-ui-shots"))
 STATE = HOME / "state.json"
 ORG_PREFIX = "UI Shots "
-SEED_KINDS = ("stock", "lineage", "compliance", "production", "sales", "planner", "board", "contracts", "stocktake")
+SEED_KINDS = (
+    "stock",
+    "lineage",
+    "compliance",
+    "production",
+    "sales",
+    "planner",
+    "board",
+    "contracts",
+    "stocktake",
+    "suppliers",
+)
 
 
 def say(*parts) -> None:
@@ -404,6 +415,80 @@ def _seed_sales(db, org_id, inv) -> None:
                 status=status,
                 priority=priority,
                 due_date=today + timedelta(days=due),
+            )
+        )
+    db.commit()
+
+
+def _seed_suppliers(db, org_id, inv) -> None:
+    """Supplier records for the names `stock` puts on its lines, some with every detail and some
+    missing a phone, email or address, plus one with no stock yet. Corticeira Imports is left
+    off on purpose, so "Import from inventory" has a name to add. Seed after `stock`."""
+    from app.core.db.models.supplier import Supplier
+
+    rows = [
+        (
+            "Davis Trading",
+            "Priya Shah",
+            "04 384 2210",
+            "orders@davistrading.co.nz",
+            "12 Kingsford Smith St, Rongotai, Wellington 6022",
+            "Botanicals by the kilo. Order by Tuesday for Thursday delivery.",
+        ),
+        (
+            "Moore Wilson",
+            None,
+            "04 384 9906",
+            None,
+            "Corner Tory and College St, Te Aro, Wellington 6011",
+            "Cash-and-carry. Trade card under the company name.",
+        ),
+        (
+            "Wairarapa Foragers",
+            "Hemi Walker",
+            "027 455 0193",
+            "hemi@wairarapaforagers.nz",
+            None,
+            "Kawakawa and lemon myrtle in season. Text before you visit.",
+        ),
+        (
+            "Pure Spirits NZ",
+            "Accounts team",
+            "09 270 4410",
+            "trade@purespirits.co.nz",
+            "48 Kerwyn Ave, East Tamaki, Auckland 2013",
+            "Neutral spirit in 1000 L IBCs. Excise paid on dispatch.",
+        ),
+        (
+            "Glassworks Pacific",
+            "Daniel Ng",
+            None,
+            "daniel.ng@glassworkspacific.com",
+            "Unit 4, 9 Mahunga Dr, Mangere Bridge, Auckland 2022",
+            None,
+        ),
+        ("Print House Wellington", None, None, None, None, None),
+        (
+            "Opal Packaging",
+            "Sales desk",
+            "0800 676 251",
+            "sales@opalpackaging.co.nz",
+            "1 Opal Rd, Penrose, Auckland 1061",
+            "Cartons on a 10-day lead time.",
+        ),
+        (
+            "Southern Hops Ltd",
+            "Kate Moreau",
+            "03 545 1288",
+            "kate@southernhops.co.nz",
+            "220 Main Rd, Riwaka, Motueka 7198",
+            "Trial order for a hopped gin. Nothing bought yet.",
+        ),
+    ]
+    for name, contact, phone, email, address, notes in rows:
+        db.add(
+            Supplier(
+                org_id=org_id, name=name, contact_name=contact, phone=phone, email=email, address=address, notes=notes
             )
         )
     db.commit()
@@ -818,6 +903,7 @@ def cmd_seed(args) -> int:
             "planner": _seed_planner,
             "board": _seed_board,
             "contracts": _seed_contracts,
+            "suppliers": _seed_suppliers,
         }[kind](db, org.id, inv)
         say(f"seeded {kind}")
     say(f"org {org.name!r}, sign-in {user.email}")
