@@ -260,12 +260,14 @@ edit/delete/reconcile (removed — `loadCore2Overview()` already refreshes metri
   pagination *endpoint capability* is in place and tested.
 - **`processes_min` is bounded at `HUB_PROCESSES_MIN_CAP`** — every distinct process
   behind the ≤20 active executions is included first (so the picker can never hide a live
-  batch), then newest processes fill the remainder up to the cap.
+  batch), then newest processes fill the remainder up to the cap. A deliberate limit, built
+  as described in `app/core/backend/backend.py`; no outstanding action.
 - **`throughput_7d` is restricted to the `processes_min` set** — its only consumer is the
   active-batches graph's per-process 7-day count, which can only address a process that is
   in the picker. `completed_7d` (the scalar the Workflows card shows) is still summed over
   every process. This keeps the payload bounded on an org with a large recent
-  recipe/SKU catalogue.
+  recipe/SKU catalogue. A deliberate limit, built as described and pinned by
+  `test_throughput_7d_is_bounded_to_the_picker`; no outstanding action.
 - **Paginated `/api/core/inventory` page sizes were not uniform**: the route dropped
   zero-quantity rows *after* the DB page was fetched, so a page could return fewer than
   `limit` display rows while `has_more` was true. `next_cursor` correctly pointed at the
