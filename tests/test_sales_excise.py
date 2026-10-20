@@ -241,3 +241,8 @@ def test_another_orgs_sales_are_never_counted(world, db, flask_app):  # noqa: F8
         clear_org_synthetic_data(db, other.id)
         db.query(Organisation).filter(Organisation.id == other.id).delete(synchronize_session=False)
         db.commit()
+
+
+def test_final_product_suffix_is_left_out_of_the_label():
+    assert sales_excise._display_name("Wildflower - final product") == "Wildflower"
+    assert sales_excise._display_name("Wildflower") == "Wildflower"

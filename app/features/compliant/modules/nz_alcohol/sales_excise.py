@@ -62,6 +62,12 @@ def parse_month(value: str) -> date:
         raise ValueError("month must look like 2026-09") from None
 
 
+def _display_name(product: str) -> str:
+    """'Wildflower - final product' -> 'Wildflower': the suffix is how outputs are named, not the product."""
+    marker = " - final product"
+    return product[: -len(marker)] if product.lower().endswith(marker) else product
+
+
 def _abv_label(abv: Decimal | None) -> str:
     if abv is None:
         return "ABV unknown"
@@ -168,7 +174,7 @@ def _report(ctx: _Context, start: date, lines, unmapped, today: date) -> dict:
                 totals[key] += value
         out_rows.append(
             {
-                "label": f"{product} - {_abv_label(abv)}",
+                "label": f"{_display_name(product)} - {_abv_label(abv)}",
                 "product": product,
                 "abv_percent": _s(abv) if abv is not None else None,
                 "units": _s(row["units"]),
