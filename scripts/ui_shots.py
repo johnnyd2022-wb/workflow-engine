@@ -571,12 +571,22 @@ def _seed_excise(db, org_id, inv) -> None:
     """Sales -> Excise: the lineage gin and a limoncello set up for excise (pack size, ABV,
     Customs product type), mapped from Xero lines across the sales seed's months, with one
     unmapped line so "Needs attention" shows."""
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.features.compliant.models import ComplianceProfile
     from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+    from app.features.compliant.modules.nz_alcohol import excise
     from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.sales_fifo_allocation import SalesFifoAllocation
     from app.features.crm.models.xero_invoice import XeroInvoice
     from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
 
     gin, limoncello = "Whistlebird Dry Gin 700 mL", "Whistlebird Limoncello 500 mL"
+    lot = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.name == gin)
+        .order_by(InventoryItem.created_at.asc())
+        .first()
+    )
     for name, ml, abv, category in ((gin, 700, 42, "gin"), (limoncello, 500, 25, "liqueur")):
         db.add(
             AlcoholProductProfile(
@@ -611,7 +621,36 @@ def _seed_excise(db, org_id, inv) -> None:
                     quantity=qty,
                 )
             )
+        if lot is not None:  # the gin line came from a batch, so Customs counts it as removed
+            db.add(
+                SalesFifoAllocation(
+                    org_id=org_id,
+                    xero_invoice_id=invoice.xero_invoice_id,
+                    xero_line_key="X1",
+                    inventory_item_id=lot.id,
+                    product_name=gin,
+                    quantity=Decimal(48 + number * 18),
+                    unit=lot.unit,
+                )
+            )
     db.commit()
+
+    # Excise reminders on from four months back, the months before that lodged: a backlog of two.
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is not None:
+        today = date.today()
+        serial = today.year * 12 + today.month - 1 - 4
+        profile.settings = {
+            **(profile.settings or {}),
+            "excise_frequency": "monthly",
+            "excise_tracking_from": date(serial // 12, serial % 12 + 1, 1).isoformat(),
+        }
+        db.commit()
+        for back, reference in ((5, "EX-25-0811"), (4, "EX-25-0912")):
+            serial = today.year * 12 + today.month - 1 - back
+            start = date(serial // 12, serial % 12 + 1, 1)
+            excise.lodge(db, org_id, start, "monthly", start + timedelta(days=45), reference, None)
+        db.commit()
 
 
 def _seed_production(db, org_id, inv) -> None:
@@ -1057,6 +1096,8 @@ def _boot():
 
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(str(REPO / "app/tls/app_cert.pem"), str(REPO / "app/tls/app_cert.key"))
+    # As in tests/e2e/conftest.py: TLS 1.3 closes from the dev server fail random stylesheets.
+    context.maximum_version = ssl.TLSVersion.TLSv1_2
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
