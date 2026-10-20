@@ -2,7 +2,7 @@
 
 import calendar
 import csv
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
 from uuid import UUID
@@ -908,6 +908,7 @@ def list_excise_periods():
         rows.append(
             {
                 "period_start": s0.isoformat(),
+                "period_end": (e0 - timedelta(days=1)).isoformat(),
                 "label": excise.period_label(s0, e0),
                 "due": excise.entry_due(e0).isoformat(),
                 "open": date.today() < e0,

@@ -161,7 +161,7 @@ def run_excise_check(org_id: UUID, session: Session) -> CheckResult:
         data={
             "system_finding": {
                 "category": "Customs excise" + (" (overdue)" if overdue else ""),
-                "action": {"href": alert["href"], "label": "Open excise"},
+                "action": {"href": alert["href"], "label": alert["action_label"]},
                 "details": [alert],
             },
             "system_alerts": [alert],

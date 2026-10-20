@@ -49,6 +49,7 @@ FREQUENCIES = ("monthly", "six_monthly", "twelve_monthly")
 ABV_PROMPT_LABEL = "ABV (%)"
 _Q4 = Decimal("0.0001")
 _Q2 = Decimal("0.01")
+_Q3 = Decimal("0.001")  # Customs entry quantities are to three decimal places
 
 
 # --- periods ------------------------------------------------------------------------------
@@ -305,12 +306,15 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
                 "unit": "L" if normalize_unit(r.item.unit) in ("l", "ml") else r.item.unit,
                 "litres": Decimal("0"),
                 "lal": Decimal("0"),
+                "levy_cents": Decimal("0"),
                 "removals": [],
             },
         )
         line["units"] += r.quantity if is_count_unit(r.item.unit) else litres
         line["litres"] += litres
         line["lal"] += lal
+        levy = excise_tariff.levy_rate(abv, rate_date)
+        line["levy_cents"] += litres * levy[1] if levy else 0
         line["removals"].append(
             {
                 "kind": r.kind,
@@ -347,8 +351,11 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
                 "duty": _s(duty) if duty is not None else None,
             }
         )
+    for line in out_lines:
+        line.pop("levy_cents", None)
     return {
         "lines": out_lines,
+        "entry": entry_lines(lines, rates, rate_date),
         "total_lal": _s(total_lal),
         "total_duty": _s(total_duty.quantize(_Q2)),
         "problems": list(problems.values())
@@ -357,6 +364,64 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
             for t in sorted(missing_rates)
         ],
         "returns": returns,
+    }
+
+
+def entry_lines(lines: dict, rates: list[ExciseRate], rate_date: date) -> dict:
+    """The period as Customs' Trade Single Window entry asks for it.
+
+    One line per product under its excise item, in TSW column order: litres (supplementary
+    quantity), LAL (statistical quantity), the rate and its basis, duty, alcohol levy and GST
+    on the levy. Each line is rounded on its own, as Customs does: Whistlebird's lodged
+    September 2026 entry (Wildflower, Solstice, Green Gold) came to duty 2244.10 + levy
+    18.21 + GST 2.73 = 2265.04, and merging the two gins into one line gives a levy of 18.20.
+    GST is charged on the levy only.
+    """
+    by_item = {
+        key: {
+            "products": [key[1]],
+            "litres": line["litres"],
+            "lal": line["lal"],
+            "levy_cents": line.get("levy_cents") or 0,
+        }
+        for key, line in sorted(lines.items())
+    }
+    out = []
+    totals = {"duty": Decimal("0"), "levy": Decimal("0"), "gst": Decimal("0")}
+    complete = True
+    for number, ((tariff, _product), item) in enumerate(by_item.items(), start=1):
+        litres = item["litres"].quantize(_Q3, ROUND_HALF_UP)
+        lal = item["lal"].quantize(_Q3, ROUND_HALF_UP)
+        rate = resolve_rate(rates, None if tariff == "—" else tariff, rate_date)
+        duty = duty_for(rate, litres, lal)
+        levy = (item["levy_cents"] / 100).quantize(_Q2, ROUND_HALF_UP)
+        gst = (levy * excise_tariff.GST_RATE).quantize(_Q2, ROUND_HALF_UP)
+        complete = complete and duty is not None and tariff != "—"
+        totals["duty"] += duty or 0
+        totals["levy"] += levy
+        totals["gst"] += gst
+        out.append(
+            {
+                "line": number,
+                "excise_item": tariff,
+                "description": ", ".join(item["products"]),
+                "supplementary_litres": f"{litres:f}",
+                "statistical_lal": f"{lal:f}",
+                "rate": _s(rate[0]) if rate else None,
+                "basis": rate[1] if rate else None,
+                "duty": f"{duty:f}" if duty is not None else None,
+                "levy": f"{levy:f}",
+                "gst_on_levy": f"{gst:f}",
+                "total": f"{(duty or 0) + levy + gst:f}" if duty is not None else None,
+            }
+        )
+    return {
+        "lines": out,
+        "complete": complete,
+        "total_duty": f"{totals['duty']:f}",
+        "total_levy": f"{totals['levy']:f}",
+        "total_gst": f"{totals['gst']:f}",
+        "total": f"{totals['duty'] + totals['levy'] + totals['gst']:f}",
     }
 
 
@@ -427,7 +492,9 @@ def settings_for(profile) -> dict:
     settings = (getattr(profile, "settings", None) or {}) if profile is not None else {}
     frequency = settings.get("excise_frequency") if settings.get("excise_frequency") in FREQUENCIES else "monthly"
     tracking_from = settings.get("excise_tracking_from")
-    return {"frequency": frequency, "tracking_from": tracking_from}
+    created = getattr(profile, "created_at", None)
+    reminders_from = tracking_from or (created.date().isoformat() if created is not None else None)
+    return {"frequency": frequency, "tracking_from": tracking_from, "reminders_from": reminders_from}
 
 
 def draft(session: Session, org_id: UUID, start: date, frequency: str, today: date | None = None) -> dict:
@@ -471,6 +538,7 @@ def draft(session: Session, org_id: UUID, start: date, frequency: str, today: da
             "status": "draft",
             "adjustments": adjustments,
             "legacy_unavailable": True,
+            "entry": None,
             "complete_lodgement": False,
             "nil_return": None,
             "total_lal": None,
@@ -537,7 +605,9 @@ def lodge(
         raise ValueError(f"{current['label']} is already recorded as lodged.")
     if current["open"]:
         raise ValueError(f"{current['label']} hasn't finished yet.")
-    snapshot = {k: current[k] for k in ("lines", "total_lal", "total_duty", "problems", "returns", "adjustments")}
+    snapshot = {
+        k: current[k] for k in ("lines", "entry", "total_lal", "total_duty", "problems", "returns", "adjustments")
+    }
     record = ExciseLodgement(
         org_id=org_id,
         period_start=date.fromisoformat(current["period_start"]),
@@ -554,44 +624,57 @@ def lodge(
 
 
 def reminder(session: Session, org_id: UUID, profile, today: date | None = None) -> dict | None:
-    """The lodgement alert for the latest finished period not yet recorded as lodged.
+    """The monthly system check: the latest finished period not yet recorded as lodged.
 
-    Only once excise tracking is switched on (``excise_tracking_from``), so turning the
-    module on doesn't flood an org with years of unlodged months.
+    On from the period the NZ Alcohol module was switched on (or from "Remind me from" when
+    set), so a new org is reminded about the month it is in, not years of history. Only the
+    latest finished period is ever raised. One click opens the figures: Sales -> Excise for
+    that month when lodging monthly, else the Customs page on that period.
     """
     cfg = settings_for(profile)
-    if not cfg["tracking_from"]:
-        return None
     today = today or date.today()
     start, _end = previous_period(period_for(today, cfg["frequency"])[0], cfg["frequency"])
-    tracking = date.fromisoformat(cfg["tracking_from"])
-    if start < period_for(tracking, cfg["frequency"])[0]:
+    if not cfg["reminders_from"]:
+        return None
+    since = date.fromisoformat(cfg["reminders_from"])
+    if start < period_for(since, cfg["frequency"])[0]:
         return None
     current = draft(session, org_id, start, cfg["frequency"], today=today)
     if current["status"] == "lodged":
         return None
     due = date.fromisoformat(current["due"])
+    customs_href = f"/compliant/nz-alcohol/customs?period={current['period_start']}"
     if current.get("legacy_unavailable"):
         return {
             "id": f"excise-lodgement-{current['period_start']}",
             "title": f"Review per-CCA excise for {current['label']}",
             "description": "Multiple-site removals need a complete entry for each source CCA. The legacy draft cannot be lodged.",
             "due_date": due.isoformat(),
-            "href": "/compliant/nz-alcohol/customs",
+            "href": customs_href,
             "action_label": "Review CCA movements",
             "overdue": today > due,
         }
     nil = not current["lines"] and not current["adjustments"]
-    what = "nil return" if nil else f"entry: {current['total_lal']} LAL"
+    entry = current.get("entry") or {}
+    if nil:
+        what = "nil return"
+    elif entry.get("complete"):
+        what = f"entry: est. ${Decimal(entry['total']):,.2f} ({current['total_lal']} LAL)"
+    else:
+        what = f"entry: {current['total_lal']} LAL"
+    from app.utils.config_loader import config
+
+    # Sales -> Excise shows one month and lives in the Sales module; otherwise lodge from Customs.
+    monthly = cfg["frequency"] == "monthly" and bool(getattr(config, "crm_enabled", False))
     return {
         "id": f"excise-lodgement-{current['period_start']}",
         "title": f"Excise {'nil return' if nil else 'entry'} for {current['label']} due {due.strftime('%-d %b %Y')}",
         "description": (
             f"{'Overdue: ' if today > due else ''}Lodge the {current['label']} {what} with Customs, then record it "
-            "as lodged here."
+            "as lodged."
         ),
         "due_date": due.isoformat(),
-        "href": "/compliant/nz-alcohol/customs",
-        "action_label": "Open excise",
+        "href": f"/crm/excise?month={current['period_start'][:7]}" if monthly else customs_href,
+        "action_label": "See the figures",
         "overdue": today > due,
     }

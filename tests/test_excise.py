@@ -232,7 +232,11 @@ def test_nil_return_and_reminder(world):
     from app.features.compliant.service import ComplianceService
 
     profile = ComplianceService(db).get_profile(org.id)
-    assert excise.reminder(db, org.id, profile, today=date(2026, 9, 5)) is None  # tracking not switched on
+    # On by default from the month the module was switched on (here: today), so August 2026
+    # isn't raised for an org that started using it later.
+    assert excise.reminder(db, org.id, profile, today=date(2026, 9, 5)) is None or profile.created_at.date() <= date(
+        2026, 8, 31
+    )
 
     ok = client.put(
         "/api/compliant/nz-alcohol/excise/settings", json={"frequency": "monthly", "tracking_from": "2026-08-01"}
@@ -243,6 +247,7 @@ def test_nil_return_and_reminder(world):
     alert = excise.reminder(db, org.id, profile, today=date(2026, 9, 5))
     assert alert["title"] == "Excise nil return for August 2026 due 21 Sep 2026"
     assert alert["due_date"] == "2026-09-21" and alert["overdue"] is False
+    assert alert["href"] == "/crm/excise?month=2026-08" and alert["action_label"] == "See the figures"
     assert excise.reminder(db, org.id, profile, today=date(2026, 9, 22))["overdue"] is True
 
     lodged = client.post(
@@ -260,7 +265,11 @@ def test_main_configuration_save_keeps_excise_settings(world):
     )
     client.put("/api/compliant/profile", json={"enabled": True, "settings": {"alcohol_product_types": ["spirits"]}})
     periods = client.get("/api/compliant/nz-alcohol/excise/periods").get_json()
-    assert periods["settings"] == {"frequency": "six_monthly", "tracking_from": "2026-07-01"}
+    assert periods["settings"] == {
+        "frequency": "six_monthly",
+        "tracking_from": "2026-07-01",
+        "reminders_from": "2026-07-01",
+    }
 
 
 def test_move_endpoint_and_product_setup(world):
@@ -296,3 +305,74 @@ def test_move_endpoint_and_product_setup(world):
         ).status_code
         == 409
     )
+
+
+def test_reminder_is_on_by_default_from_when_the_module_was_switched_on(world):
+    from datetime import UTC, datetime
+
+    from app.features.compliant.service import ComplianceService
+
+    db, org = world["db"], world["org"]
+    profile = ComplianceService(db).get_profile(org.id)
+    profile.created_at = datetime(2026, 7, 15, tzinfo=UTC)
+    db.commit()
+    alert = excise.reminder(db, org.id, profile, today=date(2026, 9, 5))
+    assert alert is not None and alert["title"] == "Excise nil return for August 2026 due 21 Sep 2026"
+    # Before the month it was switched on: not raised.
+    assert excise.reminder(db, org.id, profile, today=date(2026, 7, 20)) is None
+
+
+def test_entry_lines_follow_trade_single_window_and_match_a_lodged_entry(world):
+    """Whistlebird's September 2026 entry as Customs worked it: 2244.10 + 18.21 + 2.73 = 2265.04."""
+    db, org = world["db"], world["org"]
+    profile = db.query(AlcoholProductProfile).filter_by(org_id=org.id, inventory_name=GIN).one()
+    profile.customs_product_code = None
+    profile.excise_category = "gin"
+    for name, ml, category in (("Solstice", "700", "gin"), ("Green Gold", "500", "liqueur")):
+        db.add(
+            AlcoholProductProfile(
+                org_id=org.id,
+                inventory_name=name,
+                product_type="spirits",
+                pack_volume_ml=Decimal(ml),
+                excise_category=category,
+            )
+        )
+    db.commit()
+    world["sell"](world["lot"]("VAT44", 100, abv="44"), "64", date(2026, 9, 3))
+    world["sell"](world["lot"]("VAT45", 100, abv="40", name="Solstice"), "21", date(2026, 9, 4))
+    world["sell"](world["lot"]("GG01", 100, abv="25", name="Green Gold"), "48", date(2026, 9, 5))
+    entry = excise.draft(db, org.id, date(2026, 9, 1), "monthly", today=date(2026, 10, 5))["entry"]
+    # One line per product, each rounded on its own: merging the two gins gives a levy of 18.20.
+    _first, _second, third = entry["lines"]
+    assert [(line["line"], line["excise_item"]) for line in entry["lines"]] == [
+        (1, "99.45.35A"),
+        (2, "99.45.35A"),
+        (3, "99.50.85A"),
+    ]
+    assert (third["supplementary_litres"], third["statistical_lal"], third["levy"]) == ("24.000", "6.000", "5.23")
+    assert (entry["total_duty"], entry["total_levy"], entry["total_gst"], entry["total"]) == (
+        "2244.10",
+        "18.21",
+        "2.73",
+        "2265.04",
+    )
+
+
+def test_a_lodged_period_keeps_its_entry(world):
+    world["sell"](world["lot"]("VAT44", 50), "12", date(2026, 8, 10))
+    db, org = world["db"], world["org"]
+    profile = db.query(AlcoholProductProfile).filter_by(org_id=org.id, inventory_name=GIN).one()
+    profile.customs_product_code = None
+    profile.excise_category = "gin"
+    db.commit()
+    excise.lodge(db, org.id, date(2026, 8, 1), "monthly", date(2026, 9, 10), "EX-1", None, today=date(2026, 9, 10))
+    db.commit()
+    d = excise.draft(db, org.id, date(2026, 8, 1), "monthly")
+    assert d["status"] == "lodged" and d["entry"]["total"] == "264.64"  # 3.696 x 71.034 + levy 1.83 + GST 0.27
+
+
+def test_periods_say_when_reminders_start(world):
+    body = world["client"].get("/api/compliant/nz-alcohol/excise/periods").get_json()
+    assert body["settings"]["reminders_from"]
+    assert all(p["period_end"] >= p["period_start"] for p in body["periods"])
