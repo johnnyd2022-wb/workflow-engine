@@ -6,10 +6,12 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.backend.event_writer import EventWriter
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.step import Step
 from app.core.utils.time import utc_now
 from app.features.crm.repositories.crm_task_repo import CRMNoteRepository, CRMTaskRepository
 from app.features.crm.repositories.product_mapping_repo import ProductMappingRepository
@@ -1081,6 +1083,40 @@ class CRMService:
             )
         return options
 
+    def _require_known_source_outputs(self, org_id: UUID, output_ids: set[UUID]) -> None:
+        """Refuse a ``biz_e_source_output_id`` that is not one of this organisation's product outputs.
+
+        It is ``steps.outputs[].id`` inside JSONB with no foreign key, so nothing in the schema
+        stops a mapping naming another tenant's output, or one that exists nowhere (security audit
+        F2). An output is the organisation's own if one of its workflow steps declares it, or stock
+        it holds carries it: the Configuration picker lists the latter, and stock outlives edits to
+        the recipe that made it.
+        """
+        if not output_ids:
+            return
+        held = {
+            output_id
+            for (output_id,) in self.db.query(InventoryItem.source_output_id).filter(
+                InventoryItem.org_id == org_id, InventoryItem.source_output_id.in_(output_ids)
+            )
+        }
+        unverified = output_ids - held
+        if not unverified:
+            return
+        declared = {
+            str(output.get("id"))
+            for (outputs,) in self.db.query(Step.outputs).filter(
+                Step.org_id == org_id,
+                or_(*(Step.outputs.contains([{"id": str(output_id)}]) for output_id in unverified)),
+            )
+            for output in outputs or []
+            if isinstance(output, dict)
+        }
+        for output_id in sorted(unverified, key=str):
+            if str(output_id) not in declared:
+                self._log_access_denied(org_id=org_id, ref_kind="biz_e_source_output_id", ref_id=output_id)
+                raise ValueError("biz_e_source_output_id is not a product output in this organisation")
+
     def create_mapping(self, org_id: UUID, data: dict, user_id: UUID | None) -> dict:
         return self.create_mappings(org_id, [data], user_id)[0]
 
@@ -1094,6 +1130,9 @@ class CRMService:
             raise ValueError("A maximum of 50 mappings may be saved at once")
 
         prepared = [_prepare_mapping_data(data) for data in mappings_data]
+        self._require_known_source_outputs(
+            org_id, {data["biz_e_source_output_id"] for data in prepared if data["biz_e_source_output_id"]}
+        )
         keys = {
             (data["biz_e_product_name"].casefold(), data["xero_description_pattern"].casefold()) for data in prepared
         }
@@ -1152,9 +1191,11 @@ class CRMService:
         if "units_per_line" in updates:
             updates["units_per_line"] = _parse_units_per_line(updates["units_per_line"])
         if "biz_e_source_output_id" in updates:
-            updates["biz_e_source_output_id"] = (
-                UUID(updates["biz_e_source_output_id"]) if updates["biz_e_source_output_id"] else None
-            )
+            updates["biz_e_source_output_id"] = _parse_source_output_id(updates["biz_e_source_output_id"])
+            # Only a changed id is looked up: resending the current one (whose recipe and stock may
+            # since be gone) must not block an unrelated edit.
+            if updates["biz_e_source_output_id"] and updates["biz_e_source_output_id"] != m.biz_e_source_output_id:
+                self._require_known_source_outputs(org_id, {updates["biz_e_source_output_id"]})
         self.mapping_repo.update(m, **updates)
         after = _mapping_event_snapshot(m)
         self._emit_event(
@@ -1254,6 +1295,13 @@ def _parse_units_per_line(value) -> int:
     return units
 
 
+def _parse_source_output_id(value: Any) -> UUID | None:
+    try:
+        return UUID(str(value)) if value else None
+    except (TypeError, ValueError) as exc:
+        raise ValueError("biz_e_source_output_id must be a valid UUID") from exc
+
+
 def _prepare_mapping_data(data: dict) -> dict:
     if not isinstance(data, dict):
         raise ValueError("Each mapping must be an object")
@@ -1268,11 +1316,7 @@ def _prepare_mapping_data(data: dict) -> dict:
     if match_type not in {"exact", "contains", "alias"}:
         raise ValueError("match_type must be exact, contains, or alias")
 
-    source_output_id = data.get("biz_e_source_output_id")
-    try:
-        source_output_id = UUID(str(source_output_id)) if source_output_id else None
-    except (TypeError, ValueError) as exc:
-        raise ValueError("biz_e_source_output_id must be a valid UUID") from exc
+    source_output_id = _parse_source_output_id(data.get("biz_e_source_output_id"))
     notes = data.get("notes")
     return {
         "units_per_line": _parse_units_per_line(data.get("units_per_line", 1)),

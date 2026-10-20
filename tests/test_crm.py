@@ -1175,6 +1175,208 @@ class TestProductMappingAPI:
         assert del_resp.status_code in (200, 204)
 
 
+def _declared_product_output(db, org_id):
+    """A product output declared by a workflow step in ``org_id``; returns (output_id, step)."""
+    from app.core.db.repositories.process_repo import ProcessRepository
+    from tests.factories import ProcessFactory
+
+    process = ProcessFactory(org_id=org_id, name=f"Mapping Process {uuid4()}")
+    db.commit()
+    output_id = uuid4()
+    step = ProcessRepository(db).add_step(
+        process_id=process.id,
+        org_id=org_id,
+        step_number=1,
+        position=1000,
+        name="Bottle",
+        outputs=[{"id": str(output_id), "name": "Gin", "quantity": 1, "unit": "bottle"}],
+    )
+    db.commit()
+    return output_id, step
+
+
+def _stock_of_output(db, org_id, step, output_id):
+    """Final-product stock in ``org_id`` produced by an execution of ``step`` and carrying ``output_id``."""
+    from app.core.db.models.execution_step import ExecutionStep
+    from tests.factories import ExecutionFactory, InventoryItemFactory
+
+    execution = ExecutionFactory(org_id=org_id, process_id=step.process_id)
+    db.commit()
+    execution_step = db.query(ExecutionStep).filter(ExecutionStep.execution_id == execution.id).one()
+    item = InventoryItemFactory(
+        org_id=org_id,
+        name="Gin",
+        unit="bottle",
+        inventory_type="final_product",
+        source_execution_id=execution.id,
+        source_execution_step_id=execution_step.id,
+        source_output_id=output_id,
+    )
+    db.commit()
+    return item
+
+
+class TestProductMappingSourceOutput:
+    """``biz_e_source_output_id`` names a product output (``steps.outputs[].id`` in JSONB, no FK),
+    and matching later trusts it to find the caller's stock. Security audit F2
+    (``.agents/reports/crm/security-tenant-audit.md``): it accepted any well-formed UUID, so a
+    mapping could point at another tenant's output, or at nothing, and matching silently found no stock."""
+
+    @pytest.fixture()
+    def other_org(self, db):
+        from sqlalchemy import delete
+
+        from app.core.db import engine
+
+        org_b = OrganisationRepository(db).create_org(f"Mapping Org B {uuid4()}")
+        db.commit()
+        org_b_id = org_b.id
+        yield org_b
+        from tests.dag_traversal_helpers import clear_org_synthetic_data
+
+        clear_org_synthetic_data(db, org_b_id)
+        with engine.begin() as conn:
+            conn.execute(delete(Organisation).where(Organisation.id == org_b_id))
+
+    @pytest.fixture(autouse=True)
+    def purge_catalogue(self, db, org):
+        from tests.dag_traversal_helpers import clear_org_synthetic_data
+
+        org_id = org.id  # read now: a request in the test can leave ``org`` detached by teardown
+        yield
+        db.rollback()
+        clear_org_synthetic_data(db, org_id)
+
+    @staticmethod
+    def _payload(output_id, **extra):
+        return {
+            "biz_e_product_name": f"Mapped {uuid4()}",
+            "xero_description_pattern": f"Pattern {uuid4()}",
+            "match_type": "exact",
+            "biz_e_source_output_id": None if output_id is None else str(output_id),
+            **extra,
+        }
+
+    @staticmethod
+    def _saved_outputs(db, org_id):
+        """The output id of every mapping saved for ``org_id``, read as columns so the rows are fresh."""
+        from app.features.crm.models.product_mapping import ProductMapping
+
+        rows = db.query(ProductMapping.biz_e_source_output_id).filter(ProductMapping.org_id == org_id).all()
+        return [None if output is None else str(output) for (output,) in rows]
+
+    def test_a_mapping_cannot_point_at_another_organisations_output(self, app_client, db, org, other_org):
+        foreign_output, _ = _declared_product_output(db, other_org.id)
+
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(foreign_output))
+
+        assert resp.status_code == 400, resp.data
+        assert "biz_e_source_output_id" in json.loads(resp.data)["error"]
+        assert self._saved_outputs(db, org.id) == []
+
+    def test_a_mapping_cannot_point_at_an_output_that_exists_nowhere(self, app_client, db, org):
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(uuid4()))
+
+        assert resp.status_code == 400, resp.data
+        assert self._saved_outputs(db, org.id) == []
+
+    def test_a_mapping_can_point_at_an_output_the_organisation_declares(self, app_client, db, org):
+        """[CONTROL] the check does not refuse the caller's own outputs."""
+        own_output, _ = _declared_product_output(db, org.id)
+
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(own_output))
+
+        assert resp.status_code == 201, resp.data
+        assert json.loads(resp.data)["product_mapping"]["biz_e_source_output_id"] == str(own_output)
+
+    def test_every_product_the_picker_offers_can_be_mapped(self, app_client, db, org):
+        """[CONTROL] stock outlives edits to its recipe: the Configuration picker lists ids from the
+        caller's final-product stock, so one whose step no longer declares it must still be accepted."""
+        output_id, step = _declared_product_output(db, org.id)
+        _stock_of_output(db, org.id, step, output_id)
+        step.outputs = []
+        db.commit()
+        offered = [
+            p["source_output_id"] for p in json.loads(app_client.get("/api/crm/final-products").data)["final_products"]
+        ]
+        assert offered == [str(output_id)]
+
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(offered[0]))
+
+        assert resp.status_code == 201, resp.data
+
+    def test_a_mapping_without_an_output_is_still_allowed(self, app_client):
+        """[CONTROL] the output is optional; matching then falls back to the product name."""
+        resp = app_client.post("/api/crm/product-mappings", json=self._payload(None))
+
+        assert resp.status_code == 201, resp.data
+
+    def test_one_foreign_output_refuses_the_whole_bulk_save(self, app_client, db, org, other_org):
+        own_output, _ = _declared_product_output(db, org.id)
+        foreign_output, _ = _declared_product_output(db, other_org.id)
+
+        resp = app_client.post(
+            "/api/crm/product-mappings/bulk",
+            json={"mappings": [self._payload(own_output), self._payload(foreign_output)]},
+        )
+
+        assert resp.status_code == 400, resp.data
+        assert self._saved_outputs(db, org.id) == []
+
+    def test_an_update_cannot_repoint_a_mapping_at_another_organisations_output(self, app_client, db, org, other_org):
+        own_output, _ = _declared_product_output(db, org.id)
+        foreign_output, _ = _declared_product_output(db, other_org.id)
+        created = json.loads(app_client.post("/api/crm/product-mappings", json=self._payload(own_output)).data)[
+            "product_mapping"
+        ]
+
+        resp = app_client.put(
+            f"/api/crm/product-mappings/{created['id']}", json={"biz_e_source_output_id": str(foreign_output)}
+        )
+
+        assert resp.status_code == 400, resp.data
+        assert self._saved_outputs(db, org.id) == [str(own_output)]
+
+    def test_an_update_can_still_clear_the_output(self, app_client, db, org):
+        """[CONTROL] unlinking a product is not a lookup, so it must not need one."""
+        own_output, _ = _declared_product_output(db, org.id)
+        created = json.loads(app_client.post("/api/crm/product-mappings", json=self._payload(own_output)).data)[
+            "product_mapping"
+        ]
+
+        resp = app_client.put(f"/api/crm/product-mappings/{created['id']}", json={"biz_e_source_output_id": None})
+
+        assert resp.status_code == 200, resp.data
+        assert self._saved_outputs(db, org.id) == [None]
+
+    def test_an_unrelated_edit_may_resend_an_output_that_has_gone_stale(self, app_client, db, org):
+        """[CONTROL] only a CHANGED id is looked up: its recipe and stock may be gone since the
+        mapping was made, and resending it must not block editing the mapping's notes."""
+        own_output, step = _declared_product_output(db, org.id)
+        created = json.loads(app_client.post("/api/crm/product-mappings", json=self._payload(own_output)).data)[
+            "product_mapping"
+        ]
+        step.outputs = []
+        db.commit()
+
+        resp = app_client.put(
+            f"/api/crm/product-mappings/{created['id']}",
+            json={"biz_e_source_output_id": str(own_output), "notes": "renamed"},
+        )
+
+        assert resp.status_code == 200, resp.data
+        assert json.loads(resp.data)["product_mapping"]["notes"] == "renamed"
+
+    def test_an_update_with_a_malformed_output_id_is_a_400_not_a_500(self, app_client, db, org):
+        created = json.loads(app_client.post("/api/crm/product-mappings", json=self._payload(None)).data)[
+            "product_mapping"
+        ]
+
+        resp = app_client.put(f"/api/crm/product-mappings/{created['id']}", json={"biz_e_source_output_id": "nope"})
+
+        assert resp.status_code == 400, resp.data
+
+
 class TestCRMAnalyticsAPI:
     def test_monthly_sales_empty(self, app_client):
         resp = app_client.get("/api/crm/analytics/monthly-sales?months=3")
