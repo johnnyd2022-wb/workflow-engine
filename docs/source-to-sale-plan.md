@@ -593,6 +593,22 @@ records, not from people typing figures in.
   - Done when: a Customs officer's count can be recorded during the visit, and every
     variance ends in an explained adjustment that ties back to a lodged period.
 
+- [x] **2.7 Excise from sales (Sales → Excise).** *High · M* (!543)
+  - Problem: the founder wants to see, for any month, what was sold and roughly what
+    duty that carries, without building the lodgement draft or a spreadsheet.
+  - Solution: Sales → Excise, only for orgs on the NZ Alcohol module. One row per product
+    and strength ("Wildflower - 44%"): quantity sold, supplementary quantity (litres),
+    litres of alcohol, estimated excise duty, then estimated alcohol levy and GST on them.
+    - Rates come from a built-in Customs guide (`excise_tariff.py`: Part A excise items,
+      the five rate bands per LAL or per litre, the Pae Ora alcohol levy classes), indexed
+      each 1 July. A product's **product type** on Customs setup picks its item by ABV;
+      a rate typed for a tariff item still overrides it. The lodgement draft uses the
+      same resolver, so the two pages agree.
+    - Sales come through `crm/services/sales_sources.py`, which is source-agnostic: Xero
+      today; MYOB or Hnry is one class and one registry entry.
+  - Not a lodgement figure: duty is charged on removals, not sales. The page says so and
+    links to Customs.
+
 ---
 
 ## Phase 3: Sales that feed compliance
