@@ -36,7 +36,11 @@ Observed in `00-before` (laptop, phone, dark):
 Searched and didn't find: a screen-level description of Ekos's or Gusto's filing pages (vendor
 pages only describe outcomes).
 
-## Three directions to choose from
+## Three directions, and the pick
+
+**Chosen (21 Oct 2026): Style 1 (Entry) on a laptop or wider, Style 3's phone layout below 720px.** On a phone the four figures read as a list in entry order rather than a 2×2 grid of tiles with no reading order, and lodged periods show their LAL in the period chips. Style 2 lost because the period dropdown hides the backlog; Style 3's rail lost at desktop width to the entry sheet, which is quicker to copy from.
+
+### The three as presented
 
 | | Style 1: Entry | Style 2: Steps | Style 3: Timeline |
 |---|---|---|---|
@@ -90,8 +94,8 @@ All three share:
   - lands on the oldest unlodged period with the entry;
   - recording as lodged locks the period;
   - a `?period=` link opens that period;
-  - CONCEPT ONLY: each style at phone, laptop and wall width with no sideways scroll and every region present.
-- Screenshots, every pass for all three styles:
+  - at phone, laptop and wall width: no sideways scroll, every region present, tiles when wide and the figures list on a phone.
+- Screenshots, every pass for all three styles (then pass 10 on the chosen layout):
   - laptop, full page, phone, wall (1920×1080) and dark;
   - a lodged period, setup open, the breakdown open;
   - arriving by the sub-nav, and after recording as lodged.

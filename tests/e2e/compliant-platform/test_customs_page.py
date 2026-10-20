@@ -110,7 +110,7 @@ def _open(browser, app_url, user, viewport=None, query=""):
 
 
 def test_lands_on_the_oldest_unlodged_period_with_the_customs_entry(browser, app_url, excise_org):
-    page = _open(browser, app_url, excise_org, query="?style=1")
+    page = _open(browser, app_url, excise_org)
     label = _months_back(2).strftime("%B %Y")
     expect(page.locator(".customs-entry-head h3")).to_have_text(label)
     expect(page.locator(".customs-entry-head .customs-status")).to_contain_text("Overdue")
@@ -127,7 +127,7 @@ def test_lands_on_the_oldest_unlodged_period_with_the_customs_entry(browser, app
 
 
 def test_recording_a_period_as_lodged_locks_it(browser, app_url, excise_org):
-    page = _open(browser, app_url, excise_org, query="?style=1")
+    page = _open(browser, app_url, excise_org)
     page.locator("#excise-entry-ref").fill("EX-E2E-1")
     page.get_by_role("button", name="Record as lodged").click()
     expect(page.locator(".customs-entry-head .customs-status--lodged")).to_be_visible()
@@ -139,24 +139,31 @@ def test_recording_a_period_as_lodged_locks_it(browser, app_url, excise_org):
 
 def test_a_period_link_opens_that_period(browser, app_url, excise_org):
     start = _months_back(1)
-    page = _open(browser, app_url, excise_org, query=f"?style=1&period={start.isoformat()}")
+    page = _open(browser, app_url, excise_org, query=f"?period={start.isoformat()}")
     expect(page.locator(".customs-entry-head h3")).to_have_text(start.strftime("%B %Y"))
     page.context.close()
 
 
-# CONCEPT ONLY: the three page styles at each width; deleted with the losing styles.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize(
-    "viewport",
-    [{"width": 390, "height": 844}, {"width": 1440, "height": 900}, {"width": 1920, "height": 1080}],
+    ("viewport", "figures"),
+    [
+        ({"width": 390, "height": 844}, ".customs-summary"),
+        ({"width": 1440, "height": 900}, ".customs-tiles"),
+        ({"width": 1920, "height": 1080}, ".customs-tiles"),
+    ],
     ids=["phone", "laptop", "wall"],
 )
-def test_concept_styles_fit_without_sideways_scroll(browser, app_url, excise_org, style, viewport):
-    page = _open(browser, app_url, excise_org, viewport=viewport, query=f"?style={style}")
-    expect(page.locator(f'[data-customs-style="{style}"]')).to_have_count(1)
+def test_fits_each_width_with_the_figures_laid_out_for_it(browser, app_url, excise_org, viewport, figures):
+    """Tiles to copy from on a laptop; on a phone the same four figures read as a list."""
+    page = _open(browser, app_url, excise_org, viewport=viewport)
+    other = ".customs-tiles" if figures == ".customs-summary" else ".customs-summary"
+    expect(page.locator(figures)).to_be_visible()
+    expect(page.locator(other)).to_be_hidden()
+    expect(page.locator(figures)).to_contain_text("Total to pay Customs")
     for region in ("[data-excise-periods]", "[data-excise-draft]", ".customs-more", "[data-record-target]"):
         expect(page.locator(region)).to_have_count(1)
     expect(page.get_by_role("button", name="Record as lodged")).to_be_visible()
     overflow = page.evaluate("() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth")
-    assert overflow <= 1, f"style {style} scrolls sideways by {overflow}px at {viewport['width']}px"
+    assert overflow <= 1, f"scrolls sideways by {overflow}px at {viewport['width']}px"
+    assert_clean_page(page)
     page.context.close()

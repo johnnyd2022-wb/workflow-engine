@@ -10,11 +10,6 @@
 #page-content .customs-excise { display: flex; flex-direction: column; gap: 18px; padding: 24px; }
 #page-content .customs-more { display: flex; flex-direction: column; gap: 12px; }
 
-/* CONCEPT ONLY: the style switch. */
-#page-content .customs-style-pick { display: inline-flex; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 999px; padding: 3px; background: var(--ui-surface, #fff); }
-#page-content .customs-style-pick button { background: transparent; color: var(--ui-text-muted, #64748b); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; }
-#page-content .customs-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #0f766e); }
-
 /* Periods */
 #page-content .customs-page .excise-periods { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
 #page-content .customs-page .excise-period { flex: 1 0 8.5rem; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 8.5rem; padding: 10px 14px; border-radius: var(--ui-radius-md, 10px); border: 1px solid var(--ui-border, #e2e8f0); background: var(--ui-surface, #fff); color: var(--ui-text, #172033); font-weight: 600; text-align: left; box-shadow: none; }
@@ -22,7 +17,7 @@
 #page-content .customs-page .excise-period:focus-visible { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: 2px; }
 #page-content .customs-page .excise-period strong { font-size: 14px; }
 #page-content .customs-page .excise-period span { font-size: 12px; font-weight: 500; color: var(--ui-text-muted, #64748b); }
-#page-content .customs-page .excise-period em { font-style: normal; font-size: 12px; color: var(--ui-text-muted, #64748b); }
+#page-content .customs-page .excise-period em { display: none; font-style: normal; font-size: 12px; color: var(--ui-text-muted, #64748b); }
 #page-content .customs-page .excise-period--overdue span { color: #b42318; font-weight: 600; }
 #page-content .customs-page .excise-period--due span { color: #8a5a00; font-weight: 600; }
 #page-content .customs-page .excise-period--lodged span { color: #17603f; }
@@ -53,7 +48,7 @@ html[data-spa-theme="dark"] #page-content .customs-attention { background: rgba(
 #page-content .customs-link { background: none; color: var(--ui-accent-strong, #0f766e); padding: 0; font-weight: 600; text-decoration: underline; }
 #page-content .customs-link:hover { background: none; }
 
-/* Four figures (Style 1 tiles) */
+/* Four figures: tiles when there is room, a list on a phone */
 #page-content .customs-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 #page-content .customs-tile { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: var(--ui-radius-md, 10px); border: 1px solid var(--ui-border, #e2e8f0); background: var(--ui-surface, #fff); }
 #page-content .customs-tile--total { border-color: var(--ui-accent, #0d9488); background: var(--ui-accent-soft, #f0fdfa); }
@@ -64,8 +59,8 @@ html[data-spa-theme="dark"] #page-content .customs-tile--total { background: rgb
 #page-content .customs-copy { background: transparent; color: var(--ui-text-muted, #64748b); border: 1px solid var(--ui-border, #e2e8f0); border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; opacity: .8; }
 #page-content .customs-copy:hover { background: var(--ui-surface-subtle, #f8fafc); color: var(--ui-text, #172033); opacity: 1; }
 
-/* Summary list (Styles 2 and 3) */
-#page-content .customs-summary { margin: 0; display: flex; flex-direction: column; border-top: 1px solid var(--ui-border, #e2e8f0); }
+/* Summary list (phone) */
+#page-content .customs-summary { margin: 0; display: none; flex-direction: column; border-top: 1px solid var(--ui-border, #e2e8f0); }
 #page-content .customs-summary__row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--ui-border, #e2e8f0); }
 #page-content .customs-summary dt { color: var(--ui-text-muted, #64748b); font-size: 14px; }
 #page-content .customs-summary dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ui-text, #172033); }
@@ -131,40 +126,14 @@ html[data-spa-theme="dark"] #page-content .customs-tile--total { background: rgb
 #page-content .customs-add-record form fieldset { border: 1px solid var(--ui-border, #e2e8f0); border-radius: var(--ui-radius-md, 10px); padding: 12px; }
 #page-content .customs-add-record form > button[type="submit"] { justify-self: start; }
 
-/* CONCEPT ONLY — Style 2: a task list. The period is a select; each step carries its own state. */
-#page-content [data-customs-style="2"] .excise-periods { overflow: visible; }
-#page-content .customs-period-select { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--ui-text-muted, #64748b); }
-#page-content .customs-page #excise-period-select { width: auto; min-width: 20rem; min-height: 40px; margin: 0; }
-#page-content .customs-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-#page-content .customs-step { display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 16px 0; border-top: 1px solid var(--ui-border, #e2e8f0); }
-#page-content .customs-step__marker { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; border: 1.5px solid var(--ui-border, #cbd5e1); font-size: 13px; font-weight: 700; color: var(--ui-text-muted, #64748b); }
-#page-content .customs-step--done .customs-step__marker { background: var(--ui-accent, #0d9488); border-color: var(--ui-accent, #0d9488); color: #fff; }
-#page-content .customs-step--current .customs-step__marker { border-color: var(--ui-accent, #0d9488); color: var(--ui-accent-strong, #0f766e); }
-#page-content .customs-step__body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-#page-content .customs-step__body h4 { margin: 3px 0 0; font-size: 15px; color: var(--ui-text, #172033); }
-#page-content .customs-step__state { font-size: 12px; font-weight: 600; color: var(--ui-text-muted, #64748b); margin-top: -8px; }
-#page-content .customs-step--done .customs-step__state { color: #17603f; }
-#page-content .customs-step--current .customs-step__state { color: var(--ui-accent-strong, #0f766e); }
-
-/* CONCEPT ONLY — Style 3: a timeline. Periods form a rail beside the selected period. */
-#page-content [data-customs-style="3"] .customs-entry-table th:first-child, #page-content [data-customs-style="3"] .customs-entry-table td:first-child { display: none; }
-#page-content [data-customs-style="3"] .customs-entry-table th, #page-content [data-customs-style="3"] .customs-entry-table td { padding-left: 10px; padding-right: 10px; }
-@media (min-width: 900px) {
-  #page-content [data-customs-style="3"] .customs-excise { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 24px; align-items: start; }
-  #page-content [data-customs-style="3"] .excise-periods { flex-direction: column; overflow: visible; padding: 0; gap: 0; border-left: 2px solid var(--ui-border, #e2e8f0); }
-  #page-content [data-customs-style="3"] .excise-period { flex: 0 0 auto; min-width: 0; width: 100%; border: 0; border-radius: 0 var(--ui-radius-md, 10px) var(--ui-radius-md, 10px) 0; margin-left: -2px; border-left: 2px solid transparent; padding: 9px 14px; }
-  #page-content [data-customs-style="3"] .excise-period--active { border-left-color: var(--ui-accent, #0d9488); }
-  #page-content [data-customs-style="3"] .excise-period--overdue { border-left-color: #f04438; }
-}
-
 @media (max-width: 720px) {
   #page-content .customs-excise { padding: 16px; }
-  #page-content .customs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #page-content .customs-tile__value { font-size: 18px; }
+  /* The phone reads the figures as a list in entry order, and each period's lodged LAL with its chip. */
+  #page-content .customs-tiles { display: none; }
+  #page-content .customs-summary { display: flex; }
+  #page-content .customs-page .excise-period em { display: block; }
   #page-content .customs-page .excise-product { grid-template-columns: 1fr 1fr; }
   #page-content .customs-page .excise-product strong { grid-column: 1 / -1; }
-  #page-content .customs-page #excise-period-select { min-width: 0; width: 100%; }
-  #page-content .customs-period-select { display: flex; flex-direction: column; align-items: stretch; width: 100%; }
   /* Entry lines become cards. */
   #page-content .customs-table-wrap { border: 0; overflow: visible; }
   #page-content .customs-entry-table, #page-content .customs-entry-table tbody { display: block; }
@@ -178,6 +147,4 @@ html[data-spa-theme="dark"] #page-content .customs-tile--total { background: rgb
   #page-content .customs-entry-table td:nth-child(3) { grid-column: 1 / -1; min-width: 0; }
   #page-content .customs-lodge input, #page-content .customs-lodge #excise-lodged-on, #page-content .customs-lodge .workspace-button { flex: 1 1 100%; }
   #page-content .customs-add-record form { grid-template-columns: 1fr; }
-  #page-content .customs-style-pick { order: 2; }
 }
-html[data-spa-theme="dark"] #page-content .customs-step--done .customs-step__state { color: #47cd89; }

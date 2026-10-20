@@ -44,27 +44,6 @@
 
   var state = { period: null, periods: [], draft: null, frequency: 'monthly', remindersFrom: null };
 
-  // CONCEPT ONLY: three page styles behind one switch; removed once one is picked.
-  function readStyle() {
-    var q = new URLSearchParams(window.location.search).get('style');
-    if (q === '1' || q === '2' || q === '3') return q;
-    try { var s = window.localStorage.getItem('customs.style'); if (s === '1' || s === '2' || s === '3') return s; } catch (_) {}
-    return '1';
-  }
-  function setStyle(style) {
-    page.setAttribute('data-customs-style', style);
-    try { window.localStorage.setItem('customs.style', style); } catch (_) {}
-    page.querySelectorAll('[data-customs-style-pick] [data-style]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-style') === style)); });
-    renderPeriods();
-    if (state.draft) renderDraft(state.draft);
-  }
-  function style() { return page.getAttribute('data-customs-style') || '1'; }
-  page.querySelectorAll('[data-customs-style-pick] [data-style]').forEach(function (b) {
-    b.addEventListener('click', function () { setStyle(b.getAttribute('data-style')); });
-  });
-  page.setAttribute('data-customs-style', readStyle());
-  page.querySelectorAll('[data-customs-style-pick] [data-style]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-style') === style())); });
-
   // A period's status in words: never colour alone.
   function periodStatus(p) {
     if (p.status === 'lodged') return { key: 'lodged', text: p.nil_return ? 'Nil return lodged ' + shortDate(p.lodged_on) : 'Lodged ' + shortDate(p.lodged_on) };
@@ -81,27 +60,14 @@
     var wrap = root.querySelector('[data-excise-periods]');
     wrap.replaceChildren();
     if (!state.periods.length) return;
-    if (style() === '2') {
-      var label = el('label', { className: 'customs-period-select' });
-      var sel = el('select', { id: 'excise-period-select', 'aria-label': 'Lodgement period' });
-      state.periods.forEach(function (p) {
-        var st = periodStatus(p);
-        var opt = el('option', { value: p.period_start, text: p.label + ' — ' + st.text });
-        if (p.period_start === state.period) opt.selected = true;
-        sel.append(opt);
-      });
-      sel.addEventListener('change', function () { loadDraft(sel.value); });
-      label.append(el('span', { text: 'Period' }), sel);
-      wrap.append(label);
-      return;
-    }
     var earlier = state.periods.filter(function (p) { return periodStatus(p).key === 'untracked' && p.period_start !== state.period; });
     state.periods.forEach(function (p) {
       var st = periodStatus(p);
       if (!state.showEarlier && earlier.indexOf(p) !== -1) return;
       var chip = el('button', { type: 'button', role: 'listitem', className: 'excise-period excise-period--' + st.key + (p.period_start === state.period ? ' excise-period--active' : ''), 'data-period': p.period_start, 'data-period-status': st.key, 'aria-current': p.period_start === state.period ? 'true' : 'false' });
       chip.append(el('strong', { text: p.label }), el('span', { text: st.short || st.text }));
-      if (style() === '3' && p.status === 'lodged' && p.total_lal) chip.append(el('em', { text: num(p.total_lal, 3) + ' LAL' }));
+      // The lodged figure shows on the phone's list; wider screens have room for the entry beside it.
+      if (p.status === 'lodged' && p.total_lal) chip.append(el('em', { text: num(p.total_lal, 3) + ' LAL' }));
       chip.addEventListener('click', function () { loadDraft(p.period_start); });
       wrap.append(chip);
     });
@@ -113,7 +79,8 @@
       wrap.append(more);
     }
     var active = wrap.querySelector('.excise-period--active');
-    if (active && style() !== '3') {
+    // Wide screens scroll the chips to the selected period; the phone's list stays newest first.
+    if (active && window.matchMedia('(min-width: 721px)').matches) {
       var right = active.offsetLeft - wrap.offsetLeft + active.offsetWidth;
       wrap.scrollLeft = right > wrap.clientWidth ? right - wrap.clientWidth + 24 : 0;
     }
@@ -150,7 +117,7 @@
     renderDraft(data.draft);
   }
 
-  // --- the pieces each style is built from ----------------------------------------------
+  // --- the pieces the entry is built from ----------------------------------------------
 
   function headPiece(d) {
     var st = d.status === 'lodged' ? periodStatus({ status: 'lodged', lodged_on: d.lodged_on, nil_return: d.nil_return }) : periodStatus({ open: d.open, due: d.due, status: d.status });
@@ -326,40 +293,11 @@
     return form;
   }
 
-  function step(n, title, done, kids, current) {
-    var li = el('li', { className: 'customs-step' + (done ? ' customs-step--done' : '') + (current ? ' customs-step--current' : '') });
-    var marker = el('span', { className: 'customs-step__marker', 'aria-hidden': 'true', text: done ? '✓' : String(n) });
-    var body = el('div', { className: 'customs-step__body' });
-    body.append(el('h4', { text: title }), el('span', { className: 'customs-step__state', text: done ? 'Done' : (current ? 'Next' : 'To do') }));
-    kids.forEach(function (k) { if (k) body.append(k); });
-    li.append(marker, body);
-    return li;
-  }
-
   function renderDraft(d) {
     var wrap = root.querySelector('[data-excise-draft]');
     wrap.replaceChildren();
-    var s = style();
-    if (s === '2') {
-      // Style 2: a task list, GOV.UK style, ending on "Record it as lodged".
-      var lodged = d.status === 'lodged';
-      var setupOk = !(d.problems || []).length && !d.legacy_unavailable;
-      wrap.append(headPiece(d));
-      var ol = el('ol', { className: 'customs-steps' });
-      ol.append(step(1, 'Check every product is set up', setupOk, [setupOk ? el('p', { className: 'excise-hint', text: 'Pack sizes, strengths and product types are all in place.' }) : problemsPiece(d)], !setupOk && !lodged));
-      ol.append(step(2, 'Check the figures', lodged, [summaryListPiece(d), entryTablePiece(d), breakdownPiece(d)], setupOk && !lodged && !d.open));
-      ol.append(step(3, 'Lodge the entry in Trade Single Window', lodged, [el('p', { className: 'excise-hint', text: d.open ? 'Once the period ends.' : 'Enter one line per excise item above, then pay by the last working day of the month after the period.' }), linksPiece(d)], false));
-      ol.append(step(4, 'Record it as lodged here', lodged, [lodgePiece(d) || (lodged ? el('p', { className: 'excise-hint', text: 'Lodged ' + fmtDate(d.lodged_on) + (d.entry_reference ? ', entry ' + d.entry_reference : '') + '.' }) : null)], false));
-      wrap.append(ol);
-      return;
-    }
-    if (s === '3') {
-      // Style 3: the period list leads (a rail); the selected period reads as a statement.
-      [headPiece(d), problemsPiece(d), summaryListPiece(d), entryTablePiece(d), lodgePiece(d), linksPiece(d), breakdownPiece(d)].forEach(function (p) { if (p) wrap.append(p); });
-      return;
-    }
-    // Style 1: the entry sheet — four figures to copy, the lines, then record it.
-    [headPiece(d), problemsPiece(d), tilesPiece(d), entryTablePiece(d), lodgePiece(d), linksPiece(d), breakdownPiece(d)].forEach(function (p) { if (p) wrap.append(p); });
+    // The entry sheet: the four figures to copy (tiles when wide, a list on a phone), the lines, then record it.
+    [headPiece(d), problemsPiece(d), tilesPiece(d), summaryListPiece(d), entryTablePiece(d), lodgePiece(d), linksPiece(d), breakdownPiece(d)].forEach(function (p) { if (p) wrap.append(p); });
   }
 
   var categories = null;

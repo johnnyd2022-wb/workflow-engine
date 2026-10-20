@@ -3,19 +3,13 @@
 {% block body_class %}compliant-page{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
 {% block content %}
-<main class="max-content workspace-overview workspace-page customs-page" data-compliant-root data-compliant-surface="customs" data-customs-style="1" aria-busy="true">
+<main class="max-content workspace-overview workspace-page customs-page" data-compliant-root data-compliant-surface="customs" aria-busy="true">
   <header class="workspace-header">
     <div>
       <h1>Customs</h1>
       <p class="workspace-caption">Lodge each excise entry on time, and keep the records Customs can ask to see.</p>
     </div>
     <div class="workspace-header__actions">
-      {# CONCEPT ONLY: style switch, removed once a style is picked. #}
-      <div class="customs-style-pick" role="group" aria-label="Page style (concept)" data-customs-style-pick>
-        <button type="button" data-style="1" aria-pressed="true">Entry</button>
-        <button type="button" data-style="2" aria-pressed="false">Steps</button>
-        <button type="button" data-style="3" aria-pressed="false">Timeline</button>
-      </div>
       <a class="workspace-button" href="/compliant/nz-alcohol/premises">Licences and licensed areas</a>
     </div>
   </header>
