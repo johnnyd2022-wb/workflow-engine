@@ -53,7 +53,7 @@
               <span class="ex-figure__sub" x-text="`+ ${money(report.totals.levy)} estimated alcohol levy`"></span></div>
             <div class="ex-figure ex-figure--total"><span class="ex-figure__label">Estimated total to Customs</span>
               <span class="ex-figure__value" x-text="money(report.totals.customs)"></span>
-              <span class="ex-figure__sub" x-text="`plus an estimated ${money(report.totals.gst)} GST on it`"></span></div>
+              <span class="ex-figure__sub" x-text="`duty, levy and ${money(report.totals.gst)} GST on the levy`"></span></div>
           </div>
 
           <div class="crm-card ex-table-card">
@@ -94,7 +94,7 @@
                     <td class="ex-num" x-text="money(report.totals.levy)"></td>
                   </tr>
                   <tr class="ex-sub">
-                    <th scope="row" colspan="4">Estimated GST on duty and levy (15%)</th>
+                    <th scope="row" colspan="4">Estimated GST on the levy (15%)</th>
                     <td class="ex-num" x-text="money(report.totals.gst)"></td>
                   </tr>
                 </tfoot>

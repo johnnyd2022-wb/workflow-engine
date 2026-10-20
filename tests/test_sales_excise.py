@@ -130,14 +130,14 @@ def test_worked_example_50_bottles_of_700ml_at_44_percent(world):
     assert row["tariff_item"] == "99.45.35A" and row["rate"] == "71.034" and row["basis"] == "per_lal"
     assert row["duty"] == "1093.92"  # 15.4 x $71.034 = 1093.9236
     assert row["levy"] == "7.63"  # 35 L x 21.8047 cents
-    assert row["gst"] == "165.23"  # 15% of (1093.92 + 7.63)
+    assert row["gst"] == "1.14"  # 15% of the levy; Customs charges no GST on the duty
     assert r["totals"] == {
         "litres": "35",
         "lal": "15.4",
         "duty": "1093.92",
         "levy": "7.63",
-        "customs": "1101.55",
-        "gst": "165.23",
+        "customs": "1102.69",  # duty + levy + GST on the levy
+        "gst": "1.14",
     }
     assert r["complete"] is True and r["problems"] == [] and r["unmapped"]["count"] == 0
 
@@ -211,7 +211,7 @@ def test_months_run_from_the_first_sale_to_now_newest_first(world):
     world["sell"]([("Tasting fee", 1)], date(2026, 9, 2))
     months = sales_excise.months(world["db"], world["org"].id, today=TODAY)
     assert [m["month"] for m in months] == ["2026-10", "2026-09", "2026-08"]
-    assert months[0]["complete"] is False and months[2]["lal"] == "15.4" and months[2]["customs"] == "1101.55"
+    assert months[0]["complete"] is False and months[2]["lal"] == "15.4" and months[2]["customs"] == "1102.69"
     assert months[1]["needs_attention"] is True and months[2]["needs_attention"] is False
 
 
@@ -246,3 +246,28 @@ def test_another_orgs_sales_are_never_counted(world, db, flask_app):  # noqa: F8
 def test_final_product_suffix_is_left_out_of_the_label():
     assert sales_excise._display_name("Wildflower - final product") == "Wildflower"
     assert sales_excise._display_name("Wildflower") == "Wildflower"
+
+
+def test_matches_whistlebirds_lodged_september_2026_entry(world):
+    """Customs' figures for the real entry: duty 2244.10, levy 18.21, GST 2.73, total 2265.04."""
+    db, org = world["db"], world["org"]
+    for name, pattern, ml, abv in (
+        ("Solstice", "Solstice 700ml", 700, 40),
+        ("Green Gold", "Green Gold 500ml", 500, 25),
+    ):
+        db.add(
+            AlcoholProductProfile(
+                org_id=org.id,
+                inventory_name=name,
+                product_type="spirits",
+                pack_volume_ml=Decimal(ml),
+                abv_percent=Decimal(abv),
+                excise_category="gin" if name == "Solstice" else "liqueur",
+            )
+        )
+        db.add(ProductMapping(org_id=org.id, biz_e_product_name=name, xero_description_pattern=pattern))
+    db.commit()
+    world["sell"]([("Wildflower Gin 700ml", 64), ("Solstice 700ml", 21), ("Green Gold 500ml", 48)], date(2026, 9, 1))
+    totals = _report(world)["totals"]
+    assert totals["lal"] == "31.592"
+    assert (totals["duty"], totals["levy"], totals["gst"], totals["customs"]) == ("2244.10", "18.21", "2.73", "2265.04")

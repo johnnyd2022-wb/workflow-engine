@@ -6,7 +6,7 @@ One row per product and strength ("Wildflower - 44%"):
     litres of alcohol (LAL)    = litres x ABV                   35 x 0.44   = 15.4
     excise duty                = LAL (or litres) x rate         15.4 x $71.034
     alcohol levy               = litres x levy cents / 100
-    GST on duty and levy       = 15% of the two
+    GST                        = 15% of the levy (Customs charges none on the duty)
 
 ABV comes from the batch each sale was matched to, else the product's fallback ABV, so a
 month with two batches at different strengths shows two rows. Rates are the ones in force
@@ -154,8 +154,7 @@ def _report(ctx: _Context, start: date, lines, unmapped, today: date) -> dict:
         levy = (
             (litres * levy_class[1] / 100).quantize(_Q2, ROUND_HALF_UP) if levy_class and litres is not None else None
         )
-        gst = ((duty or 0) + (levy or 0)) * excise_tariff.GST_RATE if duty is not None or levy is not None else None
-        gst = gst.quantize(_Q2, ROUND_HALF_UP) if gst is not None else None
+        gst = (levy * excise_tariff.GST_RATE).quantize(_Q2, ROUND_HALF_UP) if levy is not None else None
 
         if profile is None:
             problem(product, "Not set up as an excise product", "customs")
@@ -169,7 +168,7 @@ def _report(ctx: _Context, start: date, lines, unmapped, today: date) -> dict:
             if tariff and rate is None and lal is not None:
                 problem(product, f"No duty rate for {tariff} in {start.strftime('%B %Y')}", "customs")
 
-        for key, value in (("litres", litres), ("lal", lal), ("duty", duty), ("levy", levy), ("gst", gst)):
+        for key, value in (("litres", litres), ("lal", lal), ("duty", duty), ("levy", levy)):
             if value is not None:
                 totals[key] += value
         out_rows.append(
@@ -194,7 +193,9 @@ def _report(ctx: _Context, start: date, lines, unmapped, today: date) -> dict:
         )
 
     end = next_month(start)
-    customs_total = totals["duty"] + totals["levy"]
+    # GST on the entry's levy total, as Customs works it out (not the sum of rounded row GST).
+    totals["gst"] = (totals["levy"] * excise_tariff.GST_RATE).quantize(_Q2, ROUND_HALF_UP)
+    customs_total = totals["duty"] + totals["levy"] + totals["gst"]
     return {
         "month": start.strftime("%Y-%m"),
         "label": start.strftime("%B %Y"),

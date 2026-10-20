@@ -17,9 +17,9 @@ for the per-LAL bands:
 At 1.15% or less a drink isn't dutiable.
 
 Customs also collects the Pae Ora (Healthy Futures) alcohol levy with each entry, in
-cents per litre of drink by ABV class (``LEVY``). GST isn't charged on the Customs entry
-for goods made here, but duty and levy become part of the sale price, so the GST on them
-is shown as its own estimate (``GST_RATE``).
+cents per litre of drink by ABV class (``LEVY``), and GST on the levy (``GST_RATE``). The
+excise duty itself carries no GST on the entry. Checked against Whistlebird's lodged
+September 2026 entry: duty $2,244.10 + levy $18.21 + GST $2.73 (15% of the levy) = $2,265.04.
 
 An org can still type its own rate for a tariff item on the Customs page; that wins over
 this guide (see ``excise.resolve_rate``). This is a guide for estimates and drafts, not
