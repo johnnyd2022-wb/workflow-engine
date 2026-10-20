@@ -59,6 +59,8 @@ def test_initial_core_load_makes_one_overview_call_and_no_heavy_lists(logged_in_
 
 def _show(page, tab):
     """Open a /core panel in place, as a ?tab= link does once the page is up."""
+    # After a boosted swap the hub's scripts run a moment after its markup appears.
+    page.wait_for_function("() => typeof setCore2MainTab === 'function'")
     page.evaluate("tab => setCore2MainTab(tab, { historyMode: 'push' })", tab)
     page.wait_for_function(
         'tab => { const e = document.querySelector(`[data-core2-tab-panel="${tab}"]`); return e && !e.hidden; }',
