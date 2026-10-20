@@ -107,6 +107,7 @@ PAGES: tuple[Page, ...] = (
     Page("/crm/tasks", "sales", "tasks", "Sales tasks", None, "crm"),
     Page("/crm/matching", "sales", "matching", "Batch matching", None, "crm"),
     Page("/crm/analytics", "sales", "analytics", "Analytics", None, "crm"),
+    Page("/crm/excise", "sales", "excise", "Excise", None, "crm"),
     Page("/core/settings", "settings", "account", "My account", None, None),
     Page("/core/people", "settings", "people", "People and roles", None, None),
     Page("/core/sites", "settings", "sites", "Sites", None, None),
@@ -182,6 +183,8 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("tasks", "Tasks", "/crm/tasks", ("sales.view",)),
         Tab("matching", "Batch matching", "/crm/matching", ("sales.view",)),
         Tab("analytics", "Analytics", "/crm/analytics", ("sales.view",)),
+        # Only for NZ Alcohol orgs: monthly LAL and duty estimate from sales.
+        Tab("excise", "Excise", "/crm/excise", ("sales.view",), when="nz_alcohol"),
         # Secondary workspace action; plan 2.5 moves Xero into Settings > Integrations.
         Tab("configuration", "Configuration", "/crm/configuration", ("sales.manage",)),
     ),
@@ -203,5 +206,5 @@ WORKSPACE_TAB_GROUPS = {
         ("customs",),
         ("licensing",),
     ),
-    "sales": (("overview", "configuration"), ("customers",), ("tasks",), ("analytics", "matching")),
+    "sales": (("overview", "configuration", "excise"), ("customers",), ("tasks",), ("analytics", "matching")),
 }

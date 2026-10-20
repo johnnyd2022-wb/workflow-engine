@@ -18,6 +18,7 @@ from app.core.security.permissions import requires_auth, requires_role
 from app.core.utils.log_action import log_action
 from app.features.compliant import record_files as record_files_module
 from app.features.compliant.models import ComplianceRecord, ComplianceReport
+from app.features.compliant.modules.nz_alcohol import excise_tariff
 from app.features.compliant.modules.nz_alcohol.catalogue import capture_requirements, framework_by_slug
 from app.features.compliant.modules.nz_alcohol.national_programmes import GUIDANCE
 from app.features.compliant.modules.nz_alcohol.np3_audit import evidence_playbook, np3_log_template
@@ -1035,6 +1036,18 @@ def add_excise_rate():
     return list_excise_rates()
 
 
+@api_bp.route("/api/compliant/nz-alcohol/excise/categories", methods=["GET"])
+@requires_auth
+def list_excise_categories():
+    """The built-in Customs guide: product types, their excise items and today's rates."""
+    return jsonify(
+        {
+            "categories": excise_tariff.catalogue(date.today()),
+            "source": excise_tariff.SOURCE,
+        }
+    ), 200
+
+
 @api_bp.route("/api/compliant/nz-alcohol/excise/products", methods=["GET"])
 @requires_auth
 def list_excise_products():
@@ -1055,6 +1068,7 @@ def list_excise_products():
                 if p is not None and p.pack_volume_ml
                 else None,
                 "tariff_item": p.customs_product_code if p is not None else None,
+                "excise_category": p.excise_category if p is not None else None,
                 "abv_fallback": f"{Decimal(str(p.abv_percent)).normalize():f}"
                 if p is not None and p.abv_percent is not None
                 else None,
@@ -1082,6 +1096,9 @@ def save_excise_product():
     if abv is not None and not (0 <= abv <= 100):
         return jsonify({"error": "ABV must be between 0 and 100"}), 400
     tariff = str(data.get("tariff_item") or "").strip()[:100] or None
+    category = str(data.get("excise_category") or "").strip() or None
+    if category is not None and excise_tariff.category(category) is None:
+        return jsonify({"error": "Unknown product type"}), 400
     profile = (
         db_session.query(AlcoholProductProfile)
         .filter(AlcoholProductProfile.org_id == _org_id(), AlcoholProductProfile.inventory_name == name)
@@ -1095,6 +1112,7 @@ def save_excise_product():
     profile.pack_volume_ml = volume
     profile.abv_percent = abv
     profile.customs_product_code = tariff
+    profile.excise_category = category
     profile.is_active = True
     db_session.commit()
     return list_excise_products()

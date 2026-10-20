@@ -1,0 +1,133 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Excise · Sales{% endblock %}
+{% block body_class %}crm-page{% endblock %}
+
+{% block head_extras %}
+  <link rel="stylesheet" href="/crm/static/css/crm.css">
+{% endblock %}
+
+{% block content %}
+<div class="max-content crm-root ex-root" x-data="crmExcise()" x-init="init()">
+  {% set crm_heading = "Excise" %}
+  {% include "crm/_crm_banner.html" %}
+  <p class="ex-lede">What you sold each month, its litres of alcohol, and an estimate of the duty and levy on it.</p>
+
+  <div x-show="error" class="crm-error-banner" x-cloak><span x-text="error"></span></div>
+
+  <div x-show="loading" class="crm-card ex-empty">Loading…</div>
+
+  <div x-show="!loading && !months.length && !error" class="crm-card ex-empty" x-cloak>
+    <strong>No sales yet.</strong>
+    <span>Connect Xero and sync your invoices; each month you've sold in appears here.</span>
+    <a class="crm-btn crm-btn--secondary crm-btn--sm" href="/core/integrations">Connect accounting</a>
+  </div>
+
+  <template x-if="months.length">
+    <div>
+      <nav class="ex-months" aria-label="Months">
+        <template x-for="m in months" :key="m.month">
+          <button type="button" class="ex-month" :data-month="m.month"
+                  :class="{ 'ex-month--on': selected === m.month }"
+                  :aria-pressed="selected === m.month ? 'true' : 'false'"
+                  @click="select(m.month)">
+            <span class="ex-month__name" x-text="shortMonth(m)"></span>
+            <span class="ex-month__lal" x-text="m.complete ? `${num(m.lal, 1)} LAL` : 'so far'"></span>
+            <span class="ex-month__dot" x-show="m.needs_attention" aria-label="needs attention"></span>
+          </button>
+        </template>
+      </nav>
+
+      <template x-if="report">
+        <section class="ex-report" :class="{ 'ex-report--busy': loadingMonth }" aria-live="polite">
+          <header class="ex-report__head">
+            <h2 x-text="report.label + (report.complete ? '' : ' so far')"></h2>
+            <span class="ex-badge">Estimate</span>
+          </header>
+
+          <div class="ex-figures">
+            <div class="ex-figure"><span class="ex-figure__label">Litres of alcohol</span>
+              <span class="ex-figure__value" x-text="`${num(report.totals.lal, 2)} LAL`"></span>
+              <span class="ex-figure__sub" x-text="`from ${num(report.totals.litres, 2)} L sold`"></span></div>
+            <div class="ex-figure"><span class="ex-figure__label">Estimated excise duty</span>
+              <span class="ex-figure__value" x-text="money(report.totals.duty)"></span>
+              <span class="ex-figure__sub" x-text="`+ ${money(report.totals.levy)} estimated alcohol levy`"></span></div>
+            <div class="ex-figure ex-figure--total"><span class="ex-figure__label">Estimated total to Customs</span>
+              <span class="ex-figure__value" x-text="money(report.totals.customs)"></span>
+              <span class="ex-figure__sub" x-text="`duty, levy and ${money(report.totals.gst)} GST on the levy`"></span></div>
+          </div>
+
+          <div class="crm-card ex-table-card">
+            <div x-show="!report.rows.length" class="ex-empty ex-empty--flat">No product sales recorded this month.</div>
+            <div class="crm-table-wrap" x-show="report.rows.length">
+              <table class="crm-table ex-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Product</th>
+                    <th scope="col" class="ex-num">Quantity sold</th>
+                    <th scope="col" class="ex-num"><abbr title="Litres of drink: quantity sold × pack volume">Supplementary qty</abbr></th>
+                    <th scope="col" class="ex-num"><abbr title="Litres of alcohol: supplementary quantity × ABV">LAL</abbr></th>
+                    <th scope="col" class="ex-num">Est. excise duty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="row in report.rows" :key="row.label">
+                    <tr :title="rateNote(row)">
+                      <td><span class="col-name" x-text="row.label"></span>
+                        <span class="ex-rate" x-text="rateNote(row)"></span></td>
+                      <td class="ex-num" data-label="Quantity sold" x-text="units(row)"></td>
+                      <td class="ex-num" data-label="Supplementary qty" x-text="row.supplementary_litres == null ? '—' : `${num(row.supplementary_litres, 3)} L`"></td>
+                      <td class="ex-num" data-label="LAL" x-text="num(row.lal, 3)"></td>
+                      <td class="ex-num" data-label="Est. excise duty" x-text="money(row.duty)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+                <tfoot>
+                  <tr class="ex-total">
+                    <th scope="row">Total</th>
+                    <td class="ex-gap"></td>
+                    <td class="ex-num" data-label="Supplementary qty" x-text="`${num(report.totals.litres, 3)} L`"></td>
+                    <td class="ex-num" data-label="LAL" x-text="num(report.totals.lal, 3)"></td>
+                    <td class="ex-num" data-label="Est. excise duty" x-text="money(report.totals.duty)"></td>
+                  </tr>
+                  <tr class="ex-sub">
+                    <th scope="row" colspan="4">Estimated alcohol levy</th>
+                    <td class="ex-num" x-text="money(report.totals.levy)"></td>
+                  </tr>
+                  <tr class="ex-sub">
+                    <th scope="row" colspan="4">Estimated GST on the levy (15%)</th>
+                    <td class="ex-num" x-text="money(report.totals.gst)"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div class="crm-card ex-attention" x-show="report.problems.length || report.unmapped.count" x-cloak>
+            <h3>Needs attention</h3>
+            <ul>
+              <template x-for="p in report.problems" :key="p.product + p.reason">
+                <li><span><strong x-text="p.product"></strong> · <span x-text="p.reason"></span></span>
+                  <a :href="fixLink(p)">Fix in Customs setup</a></li>
+              </template>
+              <li x-show="report.unmapped.count">
+                <span x-text="`${report.unmapped.count} invoice line${report.unmapped.count === 1 ? '' : 's'} not linked to a product, so not counted`"></span>
+                <a href="/crm/configuration">Map products</a></li>
+            </ul>
+          </div>
+
+          <p class="ex-foot">
+            An estimate from <span x-text="sources.join(' and ') || 'your'"></span> sales, using Customs rates in force on the 1st of the month.
+            Duty is charged on alcohol removed from your licensed area, which can differ from sales; lodge from
+            <a href="/compliant/nz-alcohol/customs">Compliance → Customs</a>.
+            <template x-if="ratesSource">
+              <span>Rates: <a :href="ratesSource.excise.url" target="_blank" rel="noopener">excise</a> and
+                <a :href="ratesSource.levy.url" target="_blank" rel="noopener">alcohol levy</a>, checked
+                <span x-text="ratesSource.excise.checked"></span>.</span>
+            </template>
+          </p>
+        </section>
+      </template>
+    </div>
+  </template>
+</div>
+{% endblock %}

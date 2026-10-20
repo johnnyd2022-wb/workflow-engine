@@ -65,6 +65,7 @@ SEED_KINDS = (
     "stocktake",
     "customers",
     "suppliers",
+    "excise",
 )
 
 
@@ -566,6 +567,53 @@ def _seed_compliance(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_excise(db, org_id, inv) -> None:
+    """Sales -> Excise: the lineage gin and a limoncello set up for excise (pack size, ABV,
+    Customs product type), mapped from Xero lines across the sales seed's months, with one
+    unmapped line so "Needs attention" shows."""
+    from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
+    from app.features.crm.models.product_mapping import ProductMapping
+    from app.features.crm.models.xero_invoice import XeroInvoice
+    from app.features.crm.models.xero_invoice_line_item import XeroInvoiceLineItem
+
+    gin, limoncello = "Whistlebird Dry Gin 700 mL", "Whistlebird Limoncello 500 mL"
+    for name, ml, abv, category in ((gin, 700, 42, "gin"), (limoncello, 500, 25, "liqueur")):
+        db.add(
+            AlcoholProductProfile(
+                org_id=org_id,
+                inventory_name=name,
+                product_type="spirits",
+                pack_volume_ml=Decimal(ml),
+                abv_percent=Decimal(abv),
+                excise_category=category,
+            )
+        )
+        db.add(ProductMapping(org_id=org_id, biz_e_product_name=name, xero_description_pattern=name))
+    older = (
+        db.query(XeroInvoice)
+        .filter(XeroInvoice.org_id == org_id, XeroInvoice.invoice_number.like("INV-102%"))
+        .order_by(XeroInvoice.date.desc())
+        .all()
+    )
+    if not older:
+        raise ValueError("excise requires the lineage and sales seeds")
+    for number, invoice in enumerate(older):
+        lines = [(gin, 48 + number * 18), (limoncello, 12 + number * 6)]
+        if number == 0:
+            lines.append(("Distillery tour and tasting", 1))
+        for position, (description, qty) in enumerate(lines, start=1):
+            db.add(
+                XeroInvoiceLineItem(
+                    org_id=org_id,
+                    invoice_id=invoice.id,
+                    xero_line_item_id=f"X{position}",
+                    description=description,
+                    quantity=qty,
+                )
+            )
+    db.commit()
+
+
 def _seed_production(db, org_id, inv) -> None:
     """A working week on the floor: three product workflows with seven batches under way, at
     different steps and ages, one of them not yet started. For pages that show what is in
@@ -939,6 +987,7 @@ def cmd_seed(args) -> int:
             "compliance": _seed_compliance,
             "production": _seed_production,
             "sales": _seed_sales,
+            "excise": _seed_excise,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "board": _seed_board,

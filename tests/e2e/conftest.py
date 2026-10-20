@@ -192,6 +192,11 @@ def app_url(e2e_preconditions) -> str:
 
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ssl_context.load_cert_chain(str(CERT_FILE), str(KEY_FILE))
+    # The werkzeug dev server closes TLS 1.3 connections with session tickets still unread,
+    # which Chromium sees as a reset; it retries, then fails a random stylesheet with
+    # net::ERR_TOO_MANY_RETRIES and the page reports unclean. TLS 1.2 has no such tickets.
+    # Production runs gunicorn behind its own TLS, so this only concerns the test server.
+    ssl_context.maximum_version = ssl.TLSVersion.TLSv1_2
 
     port = _free_port()
     server = make_server(BIND_HOST, port, app, threaded=True, ssl_context=ssl_context)

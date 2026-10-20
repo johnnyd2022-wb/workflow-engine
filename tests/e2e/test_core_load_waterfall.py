@@ -51,26 +51,46 @@ def test_initial_core_load_makes_one_overview_call_and_no_heavy_lists(logged_in_
     assert calls.count("system-findings") <= 1, calls
 
 
+# /core lost its in-page tab buttons in 51fd6dc6 (Inventory and Workflows are their own
+# pages in the Production sub-nav). Its panels remain, opened by `?tab=` links (e.g. the
+# stock-integrity check's "/core?tab=inventory") and by Back/Forward through
+# setCore2MainTab, so the lazy-load contract below is driven the same way.
+
+
+def _show(page, tab):
+    """Open a /core panel in place, as a ?tab= link does once the page is up."""
+    page.evaluate("tab => setCore2MainTab(tab, { historyMode: 'push' })", tab)
+    page.wait_for_function(
+        'tab => { const e = document.querySelector(`[data-core2-tab-panel="${tab}"]`); return e && !e.hidden; }',
+        arg=tab,
+    )
+
+
+def _inventory_calls(calls):
+    return sum(1 for c in calls if c == "inventory" or c.startswith("inventory?"))
+
+
+def _execution_calls(calls):
+    return sum(1 for c in calls if c == "executions" or c.startswith("executions?"))
+
+
 def test_inventory_tab_loads_on_open_and_not_again(logged_in_page):
     page = logged_in_page
     calls = _core_api_calls(page)
 
     page.goto("/core")
     _wait(page)
-    base_inv = sum(1 for c in calls if c == "inventory" or c.startswith("inventory?"))
-    assert base_inv == 0
+    assert _inventory_calls(calls) == 0
 
-    page.click('[data-core2-tab-target="inventory"]')
+    _show(page, "inventory")
     _wait(page)
-    after_open = sum(1 for c in calls if c == "inventory" or c.startswith("inventory?"))
-    assert after_open == 1, calls
+    assert _inventory_calls(calls) == 1, calls
 
-    # leave and come back -- the tab is already loaded, no second fetch
-    page.click('[data-core2-tab-target="overview"]')
+    # leave and come back -- the panel is already loaded, no second fetch
+    _show(page, "overview")
+    _show(page, "inventory")
     _wait(page)
-    page.click('[data-core2-tab-target="inventory"]')
-    _wait(page)
-    assert sum(1 for c in calls if c == "inventory" or c.startswith("inventory?")) == 1, calls
+    assert _inventory_calls(calls) == 1, calls
 
 
 def test_workflows_tab_defers_execution_history_until_opened(logged_in_page):
@@ -79,34 +99,25 @@ def test_workflows_tab_defers_execution_history_until_opened(logged_in_page):
 
     page.goto("/core")
     _wait(page)
-    assert not any(c == "executions" or c.startswith("executions?") for c in calls), calls
+    assert _execution_calls(calls) == 0, calls
 
-    page.click('[data-core2-tab-target="workflows"]')
+    _show(page, "workflows")
     _wait(page)
-    assert sum(1 for c in calls if c == "executions" or c.startswith("executions?")) == 1, calls
+    assert _execution_calls(calls) == 1, calls
 
 
 def test_core_tabs_follow_browser_back_and_forward_without_reloading_data(logged_in_page):
-    """A tab is a navigable Core view, not a state change the browser loses.
+    """A panel is a navigable Core view, not a state change the browser loses.
 
-    The initial load remains compact; moving Back/Forward between already-opened tabs
-    only switches panels and must reuse their cached data.
+    Moving Back/Forward between already-opened panels only switches them and reuses
+    their cached data.
     """
     page = logged_in_page
     calls = _core_api_calls(page)
 
-    page.goto("/core")
+    page.goto("/core?tab=inventory")
     _wait(page)
-    page.click('[data-core2-tab-target="inventory"]')
-    page.wait_for_function(
-        "() => { const e = document.querySelector('[data-core2-tab-panel=\"inventory\"]'); return e && !e.hidden; }"
-    )
-    assert "tab=inventory" in page.url
-
-    page.click('[data-core2-tab-target="workflows"]')
-    page.wait_for_function(
-        "() => { const e = document.querySelector('[data-core2-tab-panel=\"workflows\"]'); return e && !e.hidden; }"
-    )
+    _show(page, "workflows")
     assert "tab=workflows" in page.url
 
     page.go_back()
@@ -120,17 +131,11 @@ def test_core_tabs_follow_browser_back_and_forward_without_reloading_data(logged
         "() => { const e = document.querySelector('[data-core2-tab-panel=\"workflows\"]'); return e && !e.hidden; }"
     )
     assert "tab=workflows" in page.url
-    assert sum(1 for c in calls if c == "inventory" or c.startswith("inventory?")) == 1, calls
-    assert sum(1 for c in calls if c == "executions" or c.startswith("executions?")) == 1, calls
+    assert _inventory_calls(calls) == 1, calls
+    assert _execution_calls(calls) == 1, calls
 
 
-@pytest.mark.parametrize(
-    ("tab", "loaded_calls"),
-    [
-        ("inventory", lambda calls: sum(1 for c in calls if c == "inventory" or c.startswith("inventory?"))),
-        ("workflows", lambda calls: sum(1 for c in calls if c == "executions" or c.startswith("executions?"))),
-    ],
-)
+@pytest.mark.parametrize(("tab", "loaded_calls"), [("inventory", _inventory_calls), ("workflows", _execution_calls)])
 def test_core_detail_tabs_reload_after_boosted_return(logged_in_page, tab, loaded_calls):
     """A swapped-in Core panel must not inherit the old panel's lazy-load cache."""
     page = logged_in_page
@@ -141,9 +146,9 @@ def test_core_detail_tabs_reload_after_boosted_return(logged_in_page, tab, loade
     _wait(page)
 
     page.locator('a.nav-link[href="/core"]').click()
-    page.wait_for_selector(f'[data-core2-tab-target="{tab}"]')
+    page.wait_for_selector(f'[data-core2-tab-panel="{tab}"]', state="attached")
     _wait(page)
-    page.click(f'[data-core2-tab-target="{tab}"]')
+    _show(page, tab)
     _wait(page)
     first_load_count = loaded_calls(calls)
     assert first_load_count == 1, calls
@@ -152,53 +157,29 @@ def test_core_detail_tabs_reload_after_boosted_return(logged_in_page, tab, loade
     page.wait_for_selector("[data-dashboard-root]")
     _wait(page)
     page.locator('a.nav-link[href="/core"]').click()
-    page.wait_for_selector(f'[data-core2-tab-target="{tab}"]')
+    page.wait_for_selector(f'[data-core2-tab-panel="{tab}"]', state="attached")
     _wait(page)
-    page.click(f'[data-core2-tab-target="{tab}"]')
+    _show(page, tab)
     _wait(page)
 
     assert loaded_calls(calls) == first_load_count + 1, calls
 
 
 def test_core_overview_is_deterministic_and_traceability_is_on_inventory_tab(logged_in_page):
-    """A plain /core is an operational landing page, not the last browser's tab state."""
+    """A plain /core is an operational landing page, not the last browser's panel state."""
     page = logged_in_page
     page.goto("/core?tab=inventory")
     _wait(page)
+    assert page.locator('[data-core2-tab-panel="inventory"]').is_visible()
+    assert page.locator("#core2-inv-summary-traceable").is_visible()
     page.evaluate("localStorage.setItem('core2.mainTab', 'workflows')")
 
     page.goto("/core")
     _wait(page)
     assert page.url.endswith("/core")
-    assert page.locator('[data-core2-tab-target="overview"]').get_attribute("aria-selected") == "true"
     assert page.locator('[data-core2-tab-panel="overview"]').is_visible()
     assert page.locator('[data-core2-tab-panel="inventory"]').is_hidden()
-
-    page.locator('[data-core2-tab-target="inventory"]').click()
-    assert page.locator('[data-core2-tab-panel="inventory"]').is_visible()
-    assert page.locator("#core2-inv-summary-traceable").is_visible()
-
-
-def test_core_tabs_are_keyboard_navigable(logged_in_page):
-    """Tabs use the standard roving-tabindex keyboard contract."""
-    page = logged_in_page
-    page.goto("/core")
-    _wait(page)
-
-    overview = page.locator("#core2-tab-overview")
-    overview.focus()
-    overview.press("ArrowRight")
-    page.wait_for_function(
-        "() => { const e = document.querySelector('[data-core2-tab-panel=\"inventory\"]'); return e && !e.hidden; }"
-    )
-    assert page.locator("#core2-tab-inventory").evaluate("node => document.activeElement === node")
-    assert page.locator("#core2-tab-inventory").get_attribute("tabindex") == "0"
-
-    page.locator("#core2-tab-inventory").press("End")
-    page.wait_for_function(
-        "() => { const e = document.querySelector('[data-core2-tab-panel=\"tasks\"]'); return e && !e.hidden; }"
-    )
-    assert page.locator("#core2-tab-tasks").evaluate("node => document.activeElement === node")
+    assert page.locator('[data-core2-tab-panel="workflows"]').is_hidden()
 
 
 def test_auth_me_is_fetched_once_per_page(logged_in_page):
@@ -232,9 +213,9 @@ def test_executions_live_loads_bounded_production_lists(logged_in_page):
 
 def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page):
     """core2.html's scripts travel inside #page-content on a boosted response (base_spa.html) and
-    htmx re-runs them on every visit. If they did not, the tab buttons would have no handlers --
-    the page looks fine but every click is dead until a hard refresh -- and Overview would never
-    (re)load. Bounce a few times and prove the tabs still respond and the overview call fires."""
+    htmx re-runs them on every visit. If they did not, the panels would never switch -- the page
+    looks fine but nothing responds until a hard refresh -- and Overview would never (re)load.
+    Bounce a few times and prove the panels still respond and the overview call fires."""
     page = logged_in_page
     page.goto("/core/dashboard")
     page.wait_for_selector("[data-dashboard-root]")
@@ -243,7 +224,7 @@ def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page
 
     for i in range(3):
         page.locator('a.nav-link[href="/core"]').click()
-        page.wait_for_selector('[data-core2-tab-target="inventory"]')
+        page.wait_for_selector('[data-core2-tab-panel="inventory"]', state="attached")
         # The hub's scripts run when the swap settles, a moment after its markup appears.
         for _ in range(100):
             if calls.count("hub/overview") >= i + 1:
@@ -252,14 +233,8 @@ def test_core_hub_stays_interactive_after_boosted_navigation_back(logged_in_page
         _wait(page)
         assert calls.count("hub/overview") == i + 1, ("overview not re-fetched on return", calls)
 
-        page.click('[data-core2-tab-target="inventory"]')
-        page.wait_for_function(
-            "() => { const e = document.querySelector('[data-core2-tab-panel=\"inventory\"]'); return e && !e.hidden; }"
-        )
-        page.click('[data-core2-tab-target="overview"]')
-        page.wait_for_function(
-            "() => { const e = document.querySelector('[data-core2-tab-panel=\"overview\"]'); return e && !e.hidden; }"
-        )
+        _show(page, "inventory")
+        _show(page, "overview")
 
         page.locator('a.nav-link[href="/core/dashboard"]').click()
         page.wait_for_selector("[data-dashboard-root]")

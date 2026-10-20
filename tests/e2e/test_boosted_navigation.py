@@ -66,8 +66,13 @@ _BOOSTED_CLICK_JS = """(path) => {
 def _compliant_subscription(e2e_user):
     from app.core.db import db_session
     from app.core.db.repositories.feature_subscription_repo import FeatureSubscriptionRepository
+    from app.features.compliant.service import ComplianceService
 
     FeatureSubscriptionRepository(db_session()).grant(e2e_user["org_id"], "compliant")
+    # Sales -> Excise is only for orgs running the NZ Alcohol module.
+    ComplianceService(db_session()).upsert_profile(
+        e2e_user["org_id"], {"enabled": True, "industry_module": "nz_alcohol"}
+    )
     db_session().commit()
 
 

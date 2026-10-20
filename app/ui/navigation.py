@@ -89,7 +89,7 @@ def breadcrumbs(path: str, leaf: str | None = None, extra: list[dict] | None = N
 
 
 def _conditions() -> dict[str, bool]:
-    """Setup-dependent tabs, read once per request (compliance pages only)."""
+    """Setup-dependent tabs, read once per request (compliance and sales pages only)."""
     # Cached on the request's own environ: `g` can outlive a request when an app context is reused.
     cached = request.environ.get("bize.nav_conditions")
     if cached is not None:
@@ -98,7 +98,7 @@ def _conditions() -> dict[str, bool]:
 
     from app.core.db import db_session
     from app.features.compliant.routes.page_routes import _food_safety_programme
-    from app.features.compliant.service import ComplianceService
+    from app.features.compliant.service import ComplianceService, nz_alcohol_active
 
     org_id = getattr(g, "org_id", None)
     settings: dict = {}
@@ -110,6 +110,7 @@ def _conditions() -> dict[str, bool]:
         "food_safety": programme != "none",
         "licensing": bool(settings.get("liquor_licence_types")),
         "programme": programme,
+        "nz_alcohol": nz_alcohol_active(db_session(), org_id) if org_id else False,
     }
     request.environ["bize.nav_conditions"] = conditions
     return conditions
@@ -163,7 +164,12 @@ def _workspace_links(section: str | None, key: str | None, user, conditions: dic
             "food_safety": tab.when == "food_safety",
         }
         for tab in all_tabs
-        if tab.key not in primary_keys and tab.key in related and tab.path != request.path and _permitted(tab, user)
+        if tab.key not in primary_keys
+        and tab.key in related
+        and tab.path != request.path
+        and _permitted(tab, user)
+        # Module-gated links aren't in the page at all for orgs without the module.
+        and not (tab.when == "nz_alcohol" and _hidden(tab, conditions))
     ]
     if section == "production" and primary == "overview" and has_permission(user, "production.view"):
         links.append({"key": "tasks", "label": "Production tasks", "href": "/core/tasks", "hidden": False})
@@ -197,7 +203,7 @@ def nav_context() -> dict:
     if request.path == "/core" and request.args.get("tab") in {"inventory", "workflows"}:
         tab_key = request.args["tab"]
     tabs = section_tabs(section, user) if user is not None else []
-    conditions = _conditions() if section == "compliance" and user is not None else {}
+    conditions = _conditions() if section in ("compliance", "sales") and user is not None else {}
     primary_key = _primary_key(section, tab_key, tabs)
     items = []
     for tab in tabs:

@@ -32,7 +32,8 @@ def test_dashboard_page_renders_for_logged_in_user(admin_page):
     response = page.goto("/compliant/nz-alcohol")
     assert response is not None and response.status == 200
     expect(page.locator('link[href="/compliant/static/compliant.css"]')).to_have_count(1)
-    expect(page.locator('script[src="/compliant/static/compliant.js"]')).to_have_count(1)
+    # The overview's own script since the Compliance overview redesign (61928a7b).
+    expect(page.locator('script[src="/compliant/static/compliance-overview.js"]')).to_have_count(1)
     expect(page.locator("[data-compliant-root]")).to_be_visible()
     expect(page.get_by_role("heading", name="Compliance", exact=True)).to_be_visible()
     expect(page.get_by_role("tab", name="Customs")).to_be_visible()

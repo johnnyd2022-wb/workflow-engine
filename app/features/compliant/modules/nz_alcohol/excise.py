@@ -15,7 +15,10 @@ raise with Customs; it's never claimed automatically.
 Each removal's litres of alcohol (LAL) = litres x ABV. ABV comes from the batch (its
 final-step "ABV (%)" field, or the ABV counted at go-live), falling back to the product
 profile. Litres come from the pack volume for counted goods (700 mL bottles) or the unit
-itself (mL, L). Duty = LAL x the rate in force at the start of the period.
+itself (mL, L). Duty uses the rate in force at the start of the period: the org's own rate
+for the product's tariff item, else the built-in Customs guide for its product type
+(``excise_tariff``). Most bands are LAL x rate; some (beer under 2.5%, wine, drinks of
+6-14%) are litres of drink x rate.
 
 A lodged period is locked as a snapshot. A removal recorded after that (a late invoice,
 a correction) is carried into the next open period as an adjustment naming the period it
@@ -40,6 +43,7 @@ from app.core.db.models.stock_location import StockLocation, StockTransfer
 from app.core.utils.unit_conversion import is_count_unit, normalize_unit
 from app.features.compliant.models.alcohol_product_profile import AlcoholProductProfile
 from app.features.compliant.models.excise import ExciseLodgement, ExciseRate
+from app.features.compliant.modules.nz_alcohol import excise_tariff
 
 FREQUENCIES = ("monthly", "six_monthly", "twelve_monthly")
 ABV_PROMPT_LABEL = "ABV (%)"
@@ -227,6 +231,31 @@ def _rate_for(rates: list[ExciseRate], tariff_item: str | None, on: date) -> Exc
     return max(candidates, key=lambda r: r.effective_from) if candidates else None
 
 
+def tariff_item_for(profile: AlcoholProductProfile | None, abv: Decimal | None) -> str | None:
+    """The tariff item a product is entered under: the one typed on the profile, else its product type's band."""
+    if profile is None:
+        return None
+    if profile.customs_product_code:
+        return profile.customs_product_code
+    band = excise_tariff.classify(getattr(profile, "excise_category", None), abv)
+    return band.item if band else None
+
+
+def resolve_rate(rates: list[ExciseRate], tariff_item: str | None, on: date) -> tuple[Decimal, str] | None:
+    """(rate, basis) for a tariff item on a date: the org's own rate first, then the built-in guide."""
+    own = _rate_for(rates, tariff_item, on)
+    if own is not None:
+        return Decimal(str(own.rate_per_lal)), excise_tariff.PER_LAL
+    return excise_tariff.rate_for_item(tariff_item, on)
+
+
+def duty_for(rate: tuple[Decimal, str] | None, litres: Decimal, lal: Decimal) -> Decimal | None:
+    if rate is None:
+        return None
+    base = lal if rate[1] == excise_tariff.PER_LAL else litres
+    return (base * rate[0]).quantize(_Q2, ROUND_HALF_UP)
+
+
 def _base_name(name: str) -> str:
     """Library stock of a product is excised as that product."""
     marker = " - "
@@ -266,7 +295,7 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
             entry["removals"] += 1
             continue
         lal = litres * abv / 100
-        tariff = profile.customs_product_code or "—"
+        tariff = tariff_item_for(profile, abv) or "—"
         line = lines.setdefault(
             (tariff, product),
             {
@@ -299,9 +328,9 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
     total_duty = Decimal("0")
     missing_rates = set()
     for (tariff, _product), line in sorted(lines.items()):
-        rate = _rate_for(rates, None if tariff == "—" else tariff, rate_date)
+        rate = resolve_rate(rates, None if tariff == "—" else tariff, rate_date)
         lal = line["lal"].quantize(_Q4, ROUND_HALF_UP)
-        duty = (lal * Decimal(str(rate.rate_per_lal))).quantize(_Q2, ROUND_HALF_UP) if rate else None
+        duty = duty_for(rate, line["litres"].quantize(_Q4, ROUND_HALF_UP), lal)
         if rate is None:
             missing_rates.add(tariff)
         total_lal += lal
@@ -312,7 +341,9 @@ def compute_lines(session: Session, org_id: UUID, removals: list[Removal], rate_
                 "units": _s(line["units"]),
                 "litres": _s(line["litres"].quantize(_Q4, ROUND_HALF_UP)),
                 "lal": _s(lal),
-                "rate_per_lal": _s(rate.rate_per_lal) if rate else None,
+                "rate_per_lal": _s(rate[0]) if rate and rate[1] == excise_tariff.PER_LAL else None,
+                "rate": _s(rate[0]) if rate else None,
+                "basis": rate[1] if rate else None,
                 "duty": _s(duty) if duty is not None else None,
             }
         )
@@ -360,10 +391,8 @@ def measure(session: Session, org_id: UUID, pairs: list, on: date) -> list[dict]
         litres = _litres(abs(qty), item.unit, profile)
         abv = _lot_abv(session, item, profile)
         lal = (litres * abv / 100).quantize(_Q4, ROUND_HALF_UP) if litres is not None and abv is not None else None
-        rate = _rate_for(rates, profile.customs_product_code if profile else None, on) if profile else None
-        duty = (
-            (lal * Decimal(str(rate.rate_per_lal))).quantize(_Q2, ROUND_HALF_UP) if lal is not None and rate else None
-        )
+        rate = resolve_rate(rates, tariff_item_for(profile, abv), on) if profile else None
+        duty = duty_for(rate, litres.quantize(_Q4, ROUND_HALF_UP), lal) if lal is not None else None
         sign = -1 if qty < 0 else 1
         out.append(
             {

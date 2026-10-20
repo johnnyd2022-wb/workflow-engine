@@ -635,6 +635,50 @@ def assign_task_lane(task_id: str):
 
 
 # ------------------------------------------------------------------
+# Excise from sales (NZ Alcohol orgs only)
+# ------------------------------------------------------------------
+
+
+def _excise_guard():
+    from app.features.compliant.service import nz_alcohol_active
+
+    if not nz_alcohol_active(db_session(), g.org_id):
+        return jsonify({"error": "Not found"}), 404
+    return None
+
+
+@api_bp.route("/api/crm/excise/months", methods=["GET"])
+@requires_auth
+def excise_months():
+    from app.features.compliant.modules.nz_alcohol import sales_excise
+
+    if (denied := _excise_guard()) is not None:
+        return denied
+    org_id = UUID(g.org_id)
+    return jsonify(
+        {
+            "months": sales_excise.months(db_session(), org_id),
+            "sources": sales_excise._sources(db_session(), org_id),
+            "rates_source": sales_excise.rates_source(),
+        }
+    ), 200
+
+
+@api_bp.route("/api/crm/excise", methods=["GET"])
+@requires_auth
+def excise_month():
+    from app.features.compliant.modules.nz_alcohol import sales_excise
+
+    if (denied := _excise_guard()) is not None:
+        return denied
+    try:
+        start = sales_excise.parse_month(request.args.get("month") or date.today().strftime("%Y-%m"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"report": sales_excise.month_report(db_session(), UUID(g.org_id), start)}), 200
+
+
+# ------------------------------------------------------------------
 # Analytics
 # ------------------------------------------------------------------
 

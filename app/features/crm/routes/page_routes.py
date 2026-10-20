@@ -1,6 +1,6 @@
 """CRM page routes — serve HTML SPA pages."""
 
-from flask import Blueprint, render_template
+from flask import Blueprint, abort, g, render_template
 
 from app.core.security.permissions import requires_auth
 from app.observability import get_logger
@@ -51,3 +51,14 @@ def crm_configuration():
 def crm_matching():
     """Sales-to-batch matching: hybrid review and manual assignment (plan 1.1)."""
     return render_template("crm/matching.html", active_page="crm")
+
+
+@page_bp.route("/crm/excise", methods=["GET"])
+@requires_auth
+def crm_excise():
+    from app.core.db import db_session
+    from app.features.compliant.service import nz_alcohol_active
+
+    if not nz_alcohol_active(db_session(), getattr(g, "org_id", None)):
+        abort(404)
+    return render_template("crm/excise.html", active_page="crm", crm_heading="Excise")
