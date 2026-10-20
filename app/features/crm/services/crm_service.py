@@ -1346,7 +1346,7 @@ def _serialise_invoice(inv, with_line_items: bool = False, db=None) -> dict:
     if with_line_items and db:
         from app.features.crm.repositories.xero_invoice_repo import XeroInvoiceRepository
 
-        line_items = XeroInvoiceRepository(db).get_line_items(inv.id)
+        line_items = XeroInvoiceRepository(db).get_line_items(inv.id, inv.org_id)
         result["line_items"] = [_serialise_line_item(li) for li in line_items]
     return result
 
@@ -1382,7 +1382,7 @@ def _serialise_task(t, db=None) -> dict:
     if db is not None and getattr(t, "contact_id", None):
         from app.features.crm.models.xero_contact import XeroContact
 
-        customer = db.query(XeroContact).filter(XeroContact.id == t.contact_id).first()
+        customer = db.query(XeroContact).filter(XeroContact.id == t.contact_id, XeroContact.org_id == t.org_id).first()
     return {
         "id": str(t.id),
         "contact_id": str(t.contact_id) if t.contact_id else None,

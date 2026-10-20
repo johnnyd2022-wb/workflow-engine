@@ -28,10 +28,11 @@ class XeroSyncJobRepository:
     def mark_completed(
         self,
         job_id: UUID,
+        org_id: UUID,
         contacts_synced: int = 0,
         invoices_synced: int = 0,
     ) -> None:
-        self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id).update(
+        self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id, XeroSyncJob.org_id == org_id).update(
             {
                 "status": "completed",
                 "completed_at": utc_now(),
@@ -41,8 +42,8 @@ class XeroSyncJobRepository:
             }
         )
 
-    def mark_failed(self, job_id: UUID, error_message: str, error_details: dict | None = None) -> None:
-        self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id).update(
+    def mark_failed(self, job_id: UUID, org_id: UUID, error_message: str, error_details: dict | None = None) -> None:
+        self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id, XeroSyncJob.org_id == org_id).update(
             {
                 "status": "failed",
                 "completed_at": utc_now(),
@@ -55,12 +56,13 @@ class XeroSyncJobRepository:
     def mark_partial(
         self,
         job_id: UUID,
+        org_id: UUID,
         contacts_synced: int,
         invoices_synced: int,
         error_message: str,
         error_details: dict | None = None,
     ) -> None:
-        self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id).update(
+        self.db.query(XeroSyncJob).filter(XeroSyncJob.id == job_id, XeroSyncJob.org_id == org_id).update(
             {
                 "status": "partial",
                 "completed_at": utc_now(),
