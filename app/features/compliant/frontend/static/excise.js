@@ -27,6 +27,10 @@
     return n;
   }
   function fmtDate(iso) { if (!iso) return '—'; var d = new Date(iso + 'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  function rateText(l) {
+    if (!l.rate) return 'no rate';
+    return '$' + l.rate + (l.basis === 'per_litre' ? ' per litre' : ' per LAL');
+  }
   function money(v) { return v == null ? '—' : '$' + Number(v).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   var errorEl = document.querySelector('[data-compliant-error]');
   function fail(msg) { if (msg) console.error('[excise]', msg); if (errorEl) { errorEl.textContent = msg; errorEl.hidden = !msg; } }
@@ -90,7 +94,7 @@
       var body = el('tbody');
       (d.lines || []).forEach(function (l) {
         var row = el('tr');
-        [l.tariff_item, l.product, l.units + ' ' + l.unit, l.litres, l.lal, l.rate_per_lal ? money(l.rate_per_lal) : 'no rate', money(l.duty)].forEach(function (v) { row.append(el('td', { text: v })); });
+        [l.tariff_item, l.product, l.units + ' ' + l.unit, l.litres, l.lal, rateText(l), money(l.duty)].forEach(function (v) { row.append(el('td', { text: v })); });
         body.append(row);
         var detail = el('tr', { className: 'excise-detail' });
         var cell = el('td', { colspan: '7' });
@@ -133,7 +137,21 @@
     }
   }
 
+  var categories = null;
+  function categorySelect(id, name, value) {
+    var sel = el('select', { name: 'excise_category', id: id + '-type', 'aria-label': 'Product type for ' + name });
+    sel.append(el('option', { value: '', text: 'Product type…' }));
+    var groups = {};
+    (categories || []).forEach(function (c) {
+      if (!groups[c.group]) { groups[c.group] = el('optgroup', { label: c.group }); sel.append(groups[c.group]); }
+      groups[c.group].append(el('option', { value: c.key, text: c.label }));
+    });
+    sel.value = value || '';
+    return sel;
+  }
+
   async function loadProducts() {
+    if (categories === null) categories = (await api('GET', '/api/compliant/nz-alcohol/excise/categories')).categories;
     var data = await api('GET', '/api/compliant/nz-alcohol/excise/products');
     var wrap = root.querySelector('[data-excise-products]'); wrap.replaceChildren();
     if (!data.products.length) { wrap.append(el('p', { className: 'excise-hint', text: 'Add a workflow first; its final output appears here.' })); return; }
@@ -141,13 +159,14 @@
       var f = el('form', { className: 'excise-inline-form excise-product' });
       var id = 'excise-p-' + p.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
       var vol = el('input', { name: 'pack_volume_ml', id: id + '-vol', type: 'number', min: '1', step: '1', placeholder: 'mL per ' + (p.unit || 'unit'), 'aria-label': 'Pack volume for ' + p.name });
-      var tar = el('input', { name: 'tariff_item', id: id + '-tariff', placeholder: 'Tariff item', maxlength: '100', 'aria-label': 'Tariff item for ' + p.name });
+      var type = categorySelect(id, p.name, p.excise_category);
+      var tar = el('input', { name: 'tariff_item', id: id + '-tariff', placeholder: 'Tariff item (override)', maxlength: '100', 'aria-label': 'Tariff item override for ' + p.name });
       var abv = el('input', { name: 'abv_fallback', id: id + '-abv', type: 'number', min: '0', max: '100', step: '0.1', placeholder: 'ABV fallback %', 'aria-label': 'Fallback ABV for ' + p.name });
       vol.value = p.pack_volume_ml || ''; tar.value = p.tariff_item || ''; abv.value = p.abv_fallback || '';
-      f.append(el('strong', { text: p.name }), vol, tar, abv, el('button', { type: 'submit', text: 'Save' }));
+      f.append(el('strong', { text: p.name }), type, vol, abv, tar, el('button', { type: 'submit', text: 'Save' }));
       f.addEventListener('submit', async function (e) {
         e.preventDefault(); fail('');
-        try { await api('PUT', '/api/compliant/nz-alcohol/excise/products', { name: p.name, pack_volume_ml: vol.value, tariff_item: tar.value, abv_fallback: abv.value }); await loadProducts(); if (state.period) await loadDraft(state.period); }
+        try { await api('PUT', '/api/compliant/nz-alcohol/excise/products', { name: p.name, excise_category: type.value, pack_volume_ml: vol.value, tariff_item: tar.value, abv_fallback: abv.value }); await loadProducts(); if (state.period) await loadDraft(state.period); }
         catch (err) { fail(err.message); }
       });
       wrap.append(f);
@@ -157,7 +176,7 @@
   async function loadRates() {
     var data = await api('GET', '/api/compliant/nz-alcohol/excise/rates');
     var wrap = root.querySelector('[data-excise-rates]'); wrap.replaceChildren();
-    if (!data.rates.length) { wrap.append(el('p', { className: 'excise-hint', text: 'No rates yet. Duty shows as "no rate" until you add one.' })); return; }
+    if (!data.rates.length) { wrap.append(el('p', { className: 'excise-hint', text: 'No overrides: every product uses the built-in rate for its type.' })); return; }
     var ul = el('ul');
     data.rates.forEach(function (r) { ul.append(el('li', { text: r.tariff_item + ': ' + money(r.rate_per_lal) + ' per LAL from ' + fmtDate(r.effective_from) })); });
     wrap.append(ul);

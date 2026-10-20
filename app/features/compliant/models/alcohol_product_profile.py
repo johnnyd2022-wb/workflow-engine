@@ -25,6 +25,8 @@ class AlcoholProductProfile(Base):
     # Pack size for litres of alcohol, e.g. 700 for a 700 mL bottle.
     pack_volume_ml = Column(Numeric(10, 2), nullable=True)
     customs_product_code = Column(String(100), nullable=True)
+    # Product type in the built-in Customs guide (excise_tariff.CATEGORIES), e.g. "gin".
+    excise_category = Column(String(40), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)

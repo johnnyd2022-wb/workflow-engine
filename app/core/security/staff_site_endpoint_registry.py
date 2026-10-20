@@ -39,6 +39,7 @@ ENDPOINT_COVERAGE = {
     ("compliant.compliant_api.get_report", "GET"): "blocked",
     ("compliant.compliant_api.list_alcohol_products", "GET"): "blocked",
     ("compliant.compliant_api.list_excise_periods", "GET"): "blocked",
+    ("compliant.compliant_api.list_excise_categories", "GET"): "blocked",
     ("compliant.compliant_api.list_excise_products", "GET"): "blocked",
     ("compliant.compliant_api.list_excise_rates", "GET"): "blocked",
     ("compliant.compliant_api.list_records", "GET"): "blocked",
