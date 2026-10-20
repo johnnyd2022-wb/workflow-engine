@@ -1269,6 +1269,7 @@
 .ex-attention ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .ex-attention li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: .86rem; }
 .ex-attention a, .ex-foot a { color: var(--crm-teal); }
+.ex-lodge-link { display: inline-flex; margin: 0 0 12px; }
 .ex-foot { font-size: .78rem; color: var(--text-secondary, #6b7280); line-height: 1.5; max-width: 72ch; }
 @media (max-width: 720px) {
   .ex-figures { grid-template-columns: 1fr; }

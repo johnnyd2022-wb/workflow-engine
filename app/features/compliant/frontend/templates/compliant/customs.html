@@ -1,97 +1,121 @@
 {% extends "shared/base_spa.html" %}
 {% block title %}Customs — NZ Alcohol{% endblock %}
 {% block body_class %}compliant-page{% endblock %}
-{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css">{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
 {% block content %}
-<main class="compliant-shell" data-compliant-root data-compliant-surface="customs" aria-busy="true">
-  <header class="compliant-hero compliant-hero--compact"><div><p class="compliant-eyebrow">NZ ALCOHOL / CUSTOMS</p><h1>Customs alcohol reconciliation.</h1><p>Map products to their Customs classification and record the alcohol excise record-keeping evidence Customs requires. NP3 food-safety evidence is recorded per check in its own workspace.</p></div></header>
-  <p class="compliant-error" data-compliant-error hidden></p>
-  <p><a href="/compliant/nz-alcohol/premises">Customs licences and licensed areas</a></p>
-  <section class="compliant-record-panel cca-period-review" data-cca-period-review aria-labelledby="cca-period-title">
-    <div><p class="compliant-eyebrow">SOURCE CCA REVIEW</p><h2 id="cca-period-title">Movements by licensed area</h2><p>Review recorded transfers and producer excise due for one licence. This is an incomplete accounting view: it cannot establish a nil return, a total duty amount, payment, or lodgement.</p></div>
-    <form class="cca-period-form" data-cca-period-form>
-      <label>Source CCA <select name="licence_id" required aria-label="Source CCA licence"></select></label>
-      <label>From <input name="start" type="date" required></label>
-      <label>Until (exclusive) <input name="end" type="date" required></label>
-      <button type="submit">Review movements</button>
-    </form>
-    <div data-cca-period-results aria-live="polite"></div>
-  </section>
-  <section class="compliant-record-panel excise-panel" data-excise-root aria-labelledby="excise-title">
-    <div class="excise-head">
-      <div>
-        <p class="compliant-eyebrow">EXCISE</p>
-        <h2 id="excise-title">Excise from what left the licensed area</h2>
-        <p>Each period is built from sales shipped from your licensed area and stock moved out of it. Check the draft, lodge it with Customs, then record it as lodged here. This is a draft to check, not tax advice.</p>
-      </div>
-      <form class="excise-settings" data-excise-settings>
-        <label>Lodge <select name="frequency" id="excise-frequency"><option value="monthly">Monthly</option><option value="six_monthly">Six-monthly</option><option value="twelve_monthly">Twelve-monthly</option></select></label>
-        <label>Remind me from <input type="date" name="tracking_from" id="excise-tracking-from"></label>
-        <button type="submit">Save</button>
-      </form>
+<main class="max-content workspace-overview workspace-page customs-page" data-compliant-root data-compliant-surface="customs" aria-busy="true">
+  <header class="workspace-header">
+    <div>
+      <h1>Customs</h1>
+      <p class="workspace-caption">Lodge each excise entry on time, and keep the records Customs can ask to see.</p>
     </div>
+    <div class="workspace-header__actions">
+      <a class="workspace-button" href="/compliant/nz-alcohol/premises">Licences and licensed areas</a>
+    </div>
+  </header>
+  <p class="compliant-error" data-compliant-error hidden></p>
 
-    <div class="excise-periods" data-excise-periods role="list" aria-label="Lodgement periods"></div>
+  <div class="customs-layout">
+    <section class="workspace-card customs-excise excise-panel" data-excise-root aria-labelledby="excise-title">
+      <h2 id="excise-title" class="customs-visually-hidden">Excise entries</h2>
+      <div class="excise-periods" data-excise-periods role="list" aria-label="Lodgement periods"></div>
+      <div class="excise-draft" data-excise-draft aria-live="polite"><p class="workspace-caption">Loading excise…</p></div>
+    </section>
 
-    <div class="excise-draft" data-excise-draft aria-live="polite"></div>
-
-    <details class="excise-setup">
-      <summary>Products, pack sizes and duty rates</summary>
-      <div class="excise-setup-grid">
-        <div>
-          <h3>Excise products</h3>
-          <p class="excise-hint">Each workflow's final output. ABV comes from each batch's final step; the fallback is used only when a batch has none.</p>
-          <div data-excise-products></div>
+    <div class="customs-more">
+      <details class="workspace-card customs-fold excise-setup" data-excise-setup>
+        <summary><span class="customs-fold__title">Products and rates</span><span class="customs-fold__hint">Pack size, ABV and product type for each product; rates come from Customs' table</span></summary>
+        <div class="excise-setup-grid">
+          <div>
+            <h3>Excise products</h3>
+            <p class="excise-hint">Each workflow's final output. ABV comes from each batch's final step; the fallback is used only when a batch has none.</p>
+            <div data-excise-products></div>
+          </div>
+          <div>
+            <h3>Rate overrides</h3>
+            <p class="excise-hint">Built-in Customs rates apply from each product's type. Add a rate here only to override a tariff item (per litre of alcohol, from its start date).</p>
+            <div data-excise-rates></div>
+            <form class="excise-inline-form" data-excise-rate-form>
+              <input name="tariff_item" id="excise-rate-tariff" placeholder="Tariff item" required maxlength="100" aria-label="Tariff item">
+              <input name="rate_per_lal" id="excise-rate-value" type="number" min="0" step="0.0001" placeholder="$ per LAL" required aria-label="Rate per litre of alcohol">
+              <input name="effective_from" id="excise-rate-from" type="date" required aria-label="Effective from">
+              <button type="submit" class="workspace-button">Add rate</button>
+            </form>
+          </div>
         </div>
-        <div>
-          <h3>Duty rates</h3>
-          <p class="excise-hint">Built-in Customs rates apply from each product's type. Add a rate here only to override a tariff item (per litre of alcohol, from its start date).</p>
-          <div data-excise-rates></div>
-          <form class="excise-inline-form" data-excise-rate-form>
-            <input name="tariff_item" id="excise-rate-tariff" placeholder="Tariff item" required maxlength="100" aria-label="Tariff item">
-            <input name="rate_per_lal" id="excise-rate-value" type="number" min="0" step="0.0001" placeholder="$ per LAL" required aria-label="Rate per litre of alcohol">
-            <input name="effective_from" id="excise-rate-from" type="date" required aria-label="Effective from">
-            <button type="submit">Add rate</button>
-          </form>
-        </div>
-      </div>
-    </details>
+      </details>
 
-    <details class="excise-setup">
-      <summary>Stock outside the licensed area</summary>
-      <p class="excise-hint">Stock you move out (a sales rep's car, an event, a shop) counts as removed on the day it leaves. Create a place, then move stock to it from here.</p>
-      <div data-excise-locations></div>
-      <form class="excise-inline-form" data-excise-location-form>
-        <input name="name" id="excise-location-name" placeholder="e.g. Sam's car" required maxlength="120" aria-label="Location name">
-        <label class="excise-check"><input type="checkbox" name="inside_licensed_area" id="excise-location-inside"> Inside the licensed area</label>
-        <button type="submit">Add place</button>
-      </form>
-      <form class="excise-inline-form" data-excise-move-form>
-        <select name="item_id" id="excise-move-item" required aria-label="Stock to move"></select>
-        <input name="quantity" id="excise-move-qty" type="number" min="1" step="1" placeholder="Quantity" required aria-label="Quantity">
-        <select name="to_location_id" id="excise-move-to" aria-label="Move to"></select>
-        <input name="occurred_on" id="excise-move-date" type="date" aria-label="Moved on">
-        <button type="submit">Move stock</button>
-      </form>
-    </details>
-  </section>
-  <section id="customs-records" class="compliant-record-panel" data-record-target>
-    <div><p class="compliant-eyebrow">CUSTOMS RECORDS</p><h2 data-evidence-control-heading>Record evidence for a Customs control.</h2><p data-evidence-control-summary>Select the relevant Customs control. Reuse a Production record when it already proves the work.</p><p data-capture-guidance></p></div>
-    <form data-record-form>
-      <input type="hidden" name="framework_slug" value="customs-alcohol">
-      <label>Control <select name="control_id" required data-control-select></select></label>
-      <label>Record type <select name="record_type"><option value="attestation">Attestation</option><option value="reading">Reading / sample</option><option value="lodgement">Lodgement</option><option value="competency">Training / competency</option><option value="incident">Incident / corrective action</option></select></label><label>Status <select name="status"><option value="complete">Complete</option><option value="open">Open</option><option value="failed">Failed</option></select></label>
-      <label class="span-2">Title <input name="title" required maxlength="255" placeholder="What does this record prove?"></label><label>Period start <input name="period_start" type="date"></label><label>Period end <input name="period_end" type="date"></label><label>Due date <input name="due_date" type="date"></label><label>Review again <select name="review_interval_months"><option value="">No recurring review</option><option value="1">Every month</option><option value="3">Every 3 months</option><option value="6">Every 6 months</option><option value="12">Every year</option></select></label>
-      <label>Measured value <input name="measured_value" type="number" step="0.0001"></label><label>Limit <input name="limit_value" type="number" step="0.0001"></label><label data-declared-lal-field hidden>Declared LAL <input name="declared_litres_of_alcohol" type="number" min="0" step="0.0001" placeholder="Filed litres of alcohol"></label>
-      <label class="span-2">Evidence reference <input name="evidence_reference" maxlength="1024" placeholder="File location, certificate number, or signed record reference"></label>
-      <fieldset class="span-2"><legend>Production records</legend><p>Select the executions, movements, steps, or files that prove this record.</p>
-        <div class="core-source-search"><label>Type <select data-core-source-kind><option value="file">Evidence files</option><option value="execution-step">Completed steps</option><option value="execution">Executions</option><option value="movement">Inventory movements</option></select></label><label>Find by name <input type="search" data-core-source-query maxlength="100" placeholder="Search Production records"></label><button type="button" data-core-source-search>Find records</button></div>
-        <div data-core-source-picker class="core-source-picker"></div><button type="button" data-core-source-more hidden>Show more records</button><div data-core-source-selected class="core-source-selected" aria-live="polite"></div>
-      </fieldset>
-      <button type="submit">Add evidence record</button>
-    </form>
-  </section>
-  <section class="compliant-recent"><h2>Recent records</h2><div data-recent-records>No records yet.</div></section>
+      <details class="workspace-card customs-fold excise-setup">
+        <summary><span class="customs-fold__title">Stock outside the licensed area</span><span class="customs-fold__hint">A rep's car, an event, a shop: moving stock there is a removal</span></summary>
+        <div data-excise-locations></div>
+        <form class="excise-inline-form" data-excise-location-form>
+          <input name="name" id="excise-location-name" placeholder="e.g. Sam's car" required maxlength="120" aria-label="Location name">
+          <label class="excise-check"><input type="checkbox" name="inside_licensed_area" id="excise-location-inside"> Inside the licensed area</label>
+          <button type="submit" class="workspace-button">Add place</button>
+        </form>
+        <form class="excise-inline-form" data-excise-move-form>
+          <select name="item_id" id="excise-move-item" required aria-label="Stock to move"></select>
+          <input name="quantity" id="excise-move-qty" type="number" min="1" step="1" placeholder="Quantity" required aria-label="Quantity">
+          <select name="to_location_id" id="excise-move-to" aria-label="Move to"></select>
+          <input name="occurred_on" id="excise-move-date" type="date" aria-label="Moved on">
+          <button type="submit" class="workspace-button">Move stock</button>
+        </form>
+      </details>
+
+      <details class="workspace-card customs-fold excise-setup">
+        <summary><span class="customs-fold__title">Lodging and reminders</span><span class="customs-fold__hint" data-excise-settings-hint>How often you lodge, and from when we remind you</span></summary>
+        <form class="excise-settings" data-excise-settings>
+          <label>Lodge <select name="frequency" id="excise-frequency"><option value="monthly">Monthly</option><option value="six_monthly">Six-monthly</option><option value="twelve_monthly">Twelve-monthly</option></select></label>
+          <label>Remind me from <input type="date" name="tracking_from" id="excise-tracking-from"></label>
+          <button type="submit" class="workspace-button">Save</button>
+        </form>
+        <p class="excise-hint">With no date, reminders start from the month the NZ Alcohol module was switched on.</p>
+      </details>
+
+      <details class="workspace-card customs-fold cca-period-review" data-cca-period-review>
+        <summary><span class="customs-fold__title" id="cca-period-title">Movements by licensed area</span><span class="customs-fold__hint">For more than one site: transfers and excise due for one licence</span></summary>
+        <p class="excise-hint">An incomplete accounting view: it cannot establish a nil return, a total duty amount, payment, or lodgement.</p>
+        <form class="cca-period-form" data-cca-period-form>
+          <label>Source CCA <select name="licence_id" required aria-label="Source CCA licence"></select></label>
+          <label>From <input name="start" type="date" required></label>
+          <label>Until (exclusive) <input name="end" type="date" required></label>
+          <button type="submit" class="workspace-button">Review movements</button>
+        </form>
+        <div data-cca-period-results aria-live="polite"></div>
+      </details>
+
+      <section id="customs-records" class="workspace-card customs-records" data-record-target aria-labelledby="customs-records-title">
+        <div class="customs-records__head">
+          <div>
+            <h2 id="customs-records-title">Records for Customs</h2>
+            <p class="workspace-caption">Product mapping, lodgements, stock checks: what Customs can ask to see.</p>
+          </div>
+        </div>
+        <div class="compliant-recent"><div data-recent-records>No records yet.</div></div>
+        <details class="customs-add-record" data-add-record>
+          <summary class="workspace-button">Add a record</summary>
+          <div class="customs-add-record__body">
+            <h3 data-evidence-control-heading>Record evidence for a Customs control.</h3>
+            <p class="excise-hint" data-evidence-control-summary></p>
+            <p data-capture-guidance class="excise-hint"></p>
+            <form data-record-form>
+              <input type="hidden" name="framework_slug" value="customs-alcohol">
+              <label>Control <select name="control_id" required data-control-select></select></label>
+              <label>Record type <select name="record_type"><option value="attestation">Attestation</option><option value="reading">Reading / sample</option><option value="lodgement">Lodgement</option><option value="competency">Training / competency</option><option value="incident">Incident / corrective action</option></select></label><label>Status <select name="status"><option value="complete">Complete</option><option value="open">Open</option><option value="failed">Failed</option></select></label>
+              <label class="span-2">Title <input name="title" required maxlength="255" placeholder="What does this record prove?"></label><label>Period start <input name="period_start" type="date"></label><label>Period end <input name="period_end" type="date"></label><label>Due date <input name="due_date" type="date"></label><label>Review again <select name="review_interval_months"><option value="">No recurring review</option><option value="1">Every month</option><option value="3">Every 3 months</option><option value="6">Every 6 months</option><option value="12">Every year</option></select></label>
+              <label>Measured value <input name="measured_value" type="number" step="0.0001"></label><label>Limit <input name="limit_value" type="number" step="0.0001"></label><label data-declared-lal-field hidden>Declared LAL <input name="declared_litres_of_alcohol" type="number" min="0" step="0.0001" placeholder="Filed litres of alcohol"></label>
+              <label class="span-2">Evidence reference <input name="evidence_reference" maxlength="1024" placeholder="File location, certificate number, or signed record reference"></label>
+              <fieldset class="span-2"><legend>Production records</legend><p>Select the executions, movements, steps, or files that prove this record.</p>
+                <div class="core-source-search"><label>Type <select data-core-source-kind><option value="file">Evidence files</option><option value="execution-step">Completed steps</option><option value="execution">Executions</option><option value="movement">Inventory movements</option></select></label><label>Find by name <input type="search" data-core-source-query maxlength="100" placeholder="Search Production records"></label><button type="button" data-core-source-search>Find records</button></div>
+                <div data-core-source-picker class="core-source-picker"></div><button type="button" data-core-source-more hidden>Show more records</button><div data-core-source-selected class="core-source-selected" aria-live="polite"></div>
+              </fieldset>
+              <button type="submit" class="workspace-button workspace-button--primary">Add evidence record</button>
+            </form>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
 </main>
 {% endblock %}
 {% block scripts %}<script src="/compliant/static/compliant.js"></script><script src="/compliant/static/excise.js"></script><script src="/compliant/static/cca-period-review.js"></script>{% endblock %}
