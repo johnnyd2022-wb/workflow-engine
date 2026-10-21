@@ -1,60 +1,87 @@
+// NP1/NP2/NP3 food safety register (plan 2.4b): am I ready for my verifier, and what do I
+// record next? The server works out every state; this page lays it out. A check that sits in
+// two sections is one check: counts, filters and searches use each check once.
 (function () {
   'use strict';
 
+  function init() {
   var root = document.querySelector('[data-np3-audit-root]');
-  if (!root) return;
-  // NP1, NP2 and NP3 share this workspace (plan 2.4b).
+  if (!root || root.dataset.bound === '1') return;
+  root.dataset.bound = '1';
   var NP = root.dataset.programmeShort || 'NP3';
+  var CHECK = '/compliant/nz-alcohol/np3-audit/check/';
 
   var error = root.querySelector('[data-np3-error]');
-  var date = root.querySelector('[data-np3-date]');
-  var tabs = root.querySelector('[data-np3-category-tabs]');
-  var categoryRoot = root.querySelector('[data-np3-categories]');
-  var activeCategoryHeading = root.querySelector('[data-np3-active-category]');
-  var healthCards = root.querySelector('[data-np3-health-cards]');
-  var healthProgress = root.querySelector('[data-np3-health-progress]');
+  var facts = root.querySelector('[data-np3-health-cards]');
+  var coreLine = root.querySelector('[data-np3-core-stats]');
+  var sections = root.querySelector('[data-np3-category-tabs]');
+  var listRoot = root.querySelector('[data-np3-categories]');
+  var heading = root.querySelector('[data-np3-active-category]');
+  var countLine = root.querySelector('[data-np3-register-count]');
   var queue = root.querySelector('[data-np3-work-queue]');
   var queueItems = root.querySelector('[data-np3-work-queue-items]');
-  var checkSearch = root.querySelector('[data-np3-check-search]');
+  var packCards = root.querySelector('[data-np3-pack-cards]');
+  var search = root.querySelector('[data-np3-check-search]');
   var prep = root.querySelector('[data-np3-preparation]');
-  var coreStats = root.querySelector('[data-np3-core-stats]');
-  var audit;
-  var activeCategory;
-  var activeFilter = 'all';
-  var searchQuery = '';
-  var initialFilter = new URLSearchParams(window.location.search).get('filter');
-  if (['ok', 'attention', 'overdue', 'due-soon', 'remediation'].includes(initialFilter)) activeFilter = initialFilter;
 
-  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-  function text(tag, value, className) {
-    var node = document.createElement(tag);
-    node.textContent = value;
-    if (className) node.className = className;
-    return node;
+  var audit = null;
+  var unique = [];
+  var activeCategory = null;
+  var activeFilter = 'all';
+  var query = '';
+  var FILTERS = ['ok', 'attention', 'overdue', 'due-soon', 'remediation'];
+  var wanted = new URLSearchParams(window.location.search).get('filter');
+  if (FILTERS.indexOf(wanted) !== -1) activeFilter = wanted;
+
+  // CONCEPT ONLY: three page styles behind one switch; removed once one is picked.
+  function readStyle() {
+    var q = new URLSearchParams(window.location.search).get('style');
+    if (q === '1' || q === '2' || q === '3') return q;
+    try { var s = window.localStorage.getItem('np3.style'); if (s === '1' || s === '2' || s === '3') return s; } catch (_) {}
+    return '1';
+  }
+  function style() { return root.getAttribute('data-np3-style') || '1'; }
+  function setStyle(s) {
+    root.setAttribute('data-np3-style', s);
+    try { window.localStorage.setItem('np3.style', s); } catch (_) {}
+    root.querySelectorAll('[data-np3-style-pick] [data-style]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-style') === s)); });
+    render();
+  }
+  root.querySelectorAll('[data-np3-style-pick] [data-style]').forEach(function (b) {
+    b.addEventListener('click', function () { setStyle(b.getAttribute('data-style')); });
+  });
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (attrs[k] == null) return;
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'className') n.className = attrs[k];
+      else n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (k) { if (k) n.append(k); });
+    return n;
   }
   function showError(message) { error.textContent = message || ''; error.hidden = !message; }
-  function stateLabel(row) {
-    if (row.state === 'ready') return 'Evidence ready';
-    if (row.state === 'attention') return 'Needs attention';
-    return 'Needs evidence';
+  function today() { var d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+  function asDate(iso) { return iso ? new Date(String(iso).slice(0, 10) + 'T00:00:00') : null; }
+  function shortDate(iso) {
+    var d = asDate(iso);
+    if (!d || isNaN(d)) return '';
+    var opts = { day: 'numeric', month: 'short' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    return d.toLocaleDateString('en-NZ', opts);
   }
-  function stateClass(row) {
-    if (row.state === 'ready') return 'ready';
-    if (row.state === 'attention') return 'attention';
-    return 'setup';
-  }
-  function isOverdue(row) {
-    return Boolean(row.review_due_date) && new Date(row.review_due_date + 'T00:00:00') < new Date(new Date().toDateString());
-  }
+  function plural(n, word, many) { return n + ' ' + (n === 1 ? word : (many || word + 's')); }
+
+  function isOverdue(row) { var d = asDate(row.review_due_date); return !!d && d < today(); }
   function isDueSoon(row) {
-    if (!row.review_due_date || isOverdue(row)) return false;
-    var due = new Date(row.review_due_date + 'T00:00:00');
-    var limit = new Date();
-    limit.setDate(limit.getDate() + 30);
-    return due <= limit;
+    var d = asDate(row.review_due_date);
+    if (!d || d < today()) return false;
+    var limit = today(); limit.setDate(limit.getDate() + 30);
+    return d <= limit;
   }
   function matchesFilter(row) {
-    if (activeFilter === 'all') return true;
     if (activeFilter === 'ok') return row.state === 'ready';
     if (activeFilter === 'attention') return row.state === 'attention' || row.state === 'missing';
     if (activeFilter === 'overdue') return isOverdue(row);
@@ -63,248 +90,240 @@
     return true;
   }
   function matchesSearch(row) {
-    if (!searchQuery) return true;
-    return [row.topic, row.control_title, row.control_id].some(function (value) {
-      return String(value || '').toLowerCase().includes(searchQuery);
+    if (!query) return true;
+    return [row.topic, row.control_title, row.control_id, row.requirement_summary].some(function (v) {
+      return String(v || '').toLowerCase().indexOf(query) !== -1;
     });
   }
-  function checkUrl(row) { return '/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(row.control_id); }
-  function guidance(row) {
-    var plan = row.evidence_playbook || {};
-    var details = document.createElement('details');
-    details.className = 'np3-evidence-options';
-    details.appendChild(text('summary', 'Show guidance and evidence options'));
-    var body = document.createElement('div');
-    body.className = 'np3-evidence-options__body';
-    body.appendChild(text('p', 'The official guidance is mapped to “' + (plan.section || row.source_reference || NP + ' guidance') + '”.'));
-    var link = document.createElement('a');
-    link.className = 'np3-inline-link';
-    link.href = row.guidance_url;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.textContent = 'Open the official ' + NP + ' section ↗';
-    body.appendChild(link);
-    if ((plan.proof || []).length) {
-      var list = document.createElement('ul');
-      (plan.proof || []).forEach(function (proof) { list.appendChild(text('li', proof)); });
-      body.appendChild(list);
+  // One status in words for a check, worst first: what a verifier would pick up on.
+  function status(row) {
+    if (row.open_remediation) return { key: 'bad', text: 'Follow-up open' };
+    if (isOverdue(row)) return { key: 'bad', text: 'Overdue' };
+    if (row.state === 'missing') return { key: 'warn', text: 'Needs evidence' };
+    if (row.state === 'attention') return { key: 'warn', text: row.guidance_update_required ? 'Guidance changed' : 'Needs attention' };
+    if (isDueSoon(row)) return { key: 'warn', text: 'Due ' + shortDate(row.review_due_date) };
+    return { key: 'good', text: 'Ready' };
+  }
+  function lastRecorded(row) {
+    var dates = (row.history || []).map(function (h) { return h.created_at; }).filter(Boolean).sort();
+    return dates.length ? dates[dates.length - 1] : row.latest_recorded_at || null;
+  }
+
+  // Twelve months of a check's records, oldest first: recorded, missed (its review had fallen
+  // due and nothing came in), or nothing expected. Built from the rows' own history.
+  function strip(row, months) {
+    var now = new Date();
+    var recorded = {};
+    (row.history || []).forEach(function (h) { if (h.created_at) recorded[String(h.created_at).slice(0, 7)] = (recorded[String(h.created_at).slice(0, 7)] || 0) + 1; });
+    var due = row.review_due_date ? String(row.review_due_date).slice(0, 7) : null;
+    var cells = [];
+    for (var i = months - 1; i >= 0; i -= 1) {
+      var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      var state = recorded[key] ? 'done' : (due && key >= due && isOverdue(row) ? 'missed' : 'none');
+      var label = d.toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' }) + ': ' + (state === 'done' ? plural(recorded[key], 'record') : state === 'missed' ? 'review overdue' : 'nothing due');
+      cells.push(el('span', { className: 'np3-strip__cell np3-strip__cell--' + state, title: label }));
     }
-    if ((plan.reference_notes || []).length) {
-      body.appendChild(text('p', 'Important guidance notes:'));
-      var notes = document.createElement('ul');
-      (plan.reference_notes || []).forEach(function (note) { notes.appendChild(text('li', note)); });
-      body.appendChild(notes);
-    }
-    details.appendChild(body);
-    return details;
+    return el('span', { className: 'np3-strip', role: 'img', 'aria-label': 'Last ' + months + ' months of records' }, cells);
   }
-  function topic(row) {
-    var details = document.createElement('details');
-    details.className = 'np3-topic np3-topic--' + stateClass(row);
-    var heading = document.createElement('summary');
-    var copy = document.createElement('span');
-    copy.appendChild(text('strong', row.topic || row.control_title || NP + ' check'));
-    copy.appendChild(text('span', row.requirement_summary || row.summary || '', 'np3-topic-action'));
-    heading.appendChild(copy);
-    heading.appendChild(text('span', stateLabel(row), 'np3-state'));
-    details.appendChild(heading);
-    var detail = document.createElement('div');
-    detail.className = 'np3-topic__detail';
-    detail.appendChild(text('p', row.requirement_summary || 'Review this ' + NP + ' requirement and its evidence.'));
-    detail.appendChild(text('p', 'MPI section: ' + (row.source_reference || (row.evidence_playbook || {}).section || 'National Programme 3 guidance'), 'np3-guidance-reference'));
-    if (row.guidance_update) detail.appendChild(text('p', row.guidance_update, 'np3-guidance-alert'));
-    detail.appendChild(guidance(row));
-    var open = document.createElement('a');
-    open.className = 'np3-download np3-open-check';
-    open.href = checkUrl(row);
-    open.setAttribute('hx-boost', 'false');
-    open.textContent = 'Open full check, register and history';
-    detail.appendChild(open);
-    details.appendChild(detail);
-    return details;
+
+  function checkRow(row) {
+    var st = status(row);
+    var link = el('a', { className: 'np3-check np3-check--' + st.key, href: CHECK + encodeURIComponent(row.control_id), 'data-control-id': row.control_id });
+    var main = el('span', { className: 'np3-check__main' }, [
+      el('strong', { className: 'np3-check__title', text: row.topic || row.control_title || NP + ' check' }),
+      el('span', { className: 'np3-check__summary', text: row.requirement_summary || '' }),
+    ]);
+    var last = lastRecorded(row);
+    var fromCore = !last && Number(row.derived_evidence_count || 0) > 0;
+    var meta = el('span', { className: 'np3-check__meta', text: last ? 'Last ' + shortDate(last) + (row.review_due_date ? ' · next ' + shortDate(row.review_due_date) : '') : fromCore ? 'Shown by Production records' : 'Nothing recorded yet' });
+    link.append(main, strip(row, 12), meta, el('span', { className: 'np3-tag np3-tag--' + st.key, text: st.text }));
+    return link;
   }
-  function renderTabs(rowsByCategory) {
-    clear(tabs);
-    (audit.categories || []).forEach(function (category, index) {
-      var rows = rowsByCategory[category.key] || [];
-      var button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'np3-category-tab' + (category.key === activeCategory ? ' is-active' : '');
-      button.setAttribute('role', 'tab');
-      button.setAttribute('aria-selected', category.key === activeCategory ? 'true' : 'false');
-      button.setAttribute('aria-controls', 'np3-category-panel');
-      button.id = 'np3-category-tab-' + index;
-      button.appendChild(text('strong', category.title));
-      var outstanding = rows.filter(function (row) { return row.state !== 'ready'; }).length;
-      button.appendChild(text(
-        'span',
-        outstanding ? outstanding + ' require evidence' : 'All evidence ready',
-        outstanding ? 'np3-category-tab__evidence-needed' : 'np3-category-tab__evidence-ready'
-      ));
-      button.addEventListener('click', function () {
-        activeCategory = category.key;
-        searchQuery = '';
-        if (checkSearch) checkSearch.value = '';
-        render();
-      });
-      tabs.appendChild(button);
-    });
-  }
-  function renderCategory(rowsByCategory) {
-    clear(categoryRoot);
-    var category = (audit.categories || []).filter(function (item) { return item.key === activeCategory; })[0];
-    if (!category) return;
-    var searching = Boolean(searchQuery);
-    var allRows = searching || activeFilter !== 'all' ? (audit.rows || []) : (rowsByCategory[category.key] || []);
-    var matchingRows = allRows.filter(matchesSearch);
-    var visibleRows = matchingRows.filter(matchesFilter);
-    activeCategoryHeading.textContent = searching ? 'Search results' : activeFilter !== 'all' ? 'Checks matching this health view' : category.title;
-    var section = document.createElement('section');
-    section.className = 'np3-category';
-    section.id = 'np3-category-panel';
-    section.setAttribute('role', 'tabpanel');
-    section.setAttribute('aria-labelledby', 'np3-category-tab-' + (audit.categories || []).indexOf(category));
-    var countText = searching
-      ? visibleRows.length + ' of ' + matchingRows.length + ' matching check' + (matchingRows.length === 1 ? '' : 's')
-      : visibleRows.length + ' of ' + allRows.length + ' verification check' + (allRows.length === 1 ? '' : 's') + (activeFilter === 'all' ? '' : ' matching this health view');
-    section.appendChild(text('p', countText, 'np3-category-count'));
-    var list = document.createElement('div');
-    list.className = 'np3-topic-list';
-    if (visibleRows.length) visibleRows.forEach(function (row) { list.appendChild(topic(row)); });
-    else list.appendChild(text('p', searching ? 'No ' + NP + ' checks match this search.' : 'No checks in this section match the selected health view. Choose another status above to see the full register.'));
-    section.appendChild(list);
-    categoryRoot.appendChild(section);
-  }
-  function healthCard(key, number, label) {
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'np3-health-card np3-health-card--' + key + (activeFilter === key ? ' is-active' : '');
-    button.appendChild(text('strong', String(number)));
-    button.appendChild(text('span', label));
-    button.addEventListener('click', function () { activeFilter = activeFilter === key ? 'all' : key; render(); });
-    return button;
-  }
-  function renderHealth() {
-    clear(healthCards);
-    var health = audit.health || {};
-    var ready = Number(health.ok || 0);
-    var needsAttention = Number(health.needs_attention || 0);
-    var total = ready + needsAttention;
+
+  function renderFacts() {
+    facts.replaceChildren();
+    var h = audit.health || {};
+    var ready = Number(h.ok || 0), total = ready + Number(h.needs_attention || 0);
     var percent = total ? Math.round((ready / total) * 100) : 0;
-    if (healthProgress) {
-      clear(healthProgress);
-      var score = text('strong', percent + '%', 'np3-health-progress__score');
-      var track = document.createElement('div');
-      track.className = 'np3-health-progress__track';
-      track.setAttribute('role', 'progressbar');
-      track.setAttribute('aria-label', NP + ' evidence readiness');
-      track.setAttribute('aria-valuemin', '0');
-      track.setAttribute('aria-valuemax', '100');
-      track.setAttribute('aria-valuenow', String(percent));
-      var fill = document.createElement('span');
-      fill.style.width = percent + '%';
-      track.appendChild(fill);
-      var counts = document.createElement('div');
-      counts.className = 'np3-health-progress__counts';
-      counts.appendChild(text('span', ready + ' ready'));
-      counts.appendChild(text('span', total + ' total'));
-      healthProgress.appendChild(score);
-      healthProgress.appendChild(track);
-      healthProgress.appendChild(counts);
-    }
-    healthCards.appendChild(healthCard('ok', ready, 'Evidence ready'));
-    healthCards.appendChild(healthCard('attention', needsAttention, 'Needs attention'));
-    healthCards.appendChild(healthCard('overdue', health.overdue || 0, 'Overdue review'));
-    healthCards.appendChild(healthCard('due-soon', health.due_soon || 0, 'Due soon'));
-    healthCards.appendChild(healthCard('remediation', health.open_remediation || 0, 'Open remediation'));
-  }
-  // Shows the few steps worth doing first, prepared server-side as `guided_steps`. The
-  // full list lives in the category tabs and health filters, so it is not repeated here.
-  function openRegisterView(step) {
-    activeFilter = step.filter || 'all';
-    if (step.category_key) activeCategory = step.category_key;
-    searchQuery = '';
-    if (checkSearch) checkSearch.value = '';
-    render();
-    categoryRoot.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-  function renderQueue() {
-    clear(queueItems);
-    var steps = audit.guided_steps || [];
-    queue.hidden = !steps.length;
-    steps.forEach(function (step) {
-      var opensCheck = step.opens === 'check';
-      var item;
-      if (opensCheck) {
-        item = document.createElement('a');
-        item.href = '/compliant/nz-alcohol/np3-audit/check/' + encodeURIComponent(step.control_id);
-        item.setAttribute('hx-boost', 'false');
-      } else {
-        item = document.createElement('button');
-        item.type = 'button';
-        item.addEventListener('click', function () { openRegisterView(step); });
-      }
-      item.className = 'np3-work-queue__item np3-work-queue__item--' + (step.severity || 'attention');
-      item.appendChild(text('strong', step.title));
-      item.appendChild(text('span', step.description));
-      item.appendChild(text('small', opensCheck ? 'Open check →' : 'Show in register →'));
-      queueItems.appendChild(item);
+    var items = [
+      ['ok', 'Ready', ready + ' of ' + total, percent + '% of checks have current proof', 'good'],
+      ['attention', 'Needs evidence', String(h.needs_attention || 0), 'Missing or out-of-date proof', (h.needs_attention ? 'warn' : '')],
+      ['overdue', 'Overdue reviews', String(h.overdue || 0), 'Past their review date', (h.overdue ? 'bad' : '')],
+      ['due-soon', 'Due in 30 days', String(h.due_soon || 0), 'Reviews coming up', ''],
+      ['remediation', 'Follow-ups open', String(h.open_remediation || 0), 'Logged issues not closed', (h.open_remediation ? 'bad' : '')],
+    ];
+    items.forEach(function (f) {
+      var b = el('button', { type: 'button', className: 'np3-fact' + (f[4] ? ' np3-fact--' + f[4] : '') + (activeFilter === f[0] ? ' is-active' : ''), 'aria-pressed': String(activeFilter === f[0]), 'data-np3-filter': f[0] }, [
+        el('span', { className: 'np3-fact__label', text: f[1] }),
+        el('strong', { className: 'np3-fact__value', text: f[2] }),
+        el('span', { className: 'np3-fact__note', text: f[3] }),
+      ]);
+      b.addEventListener('click', function () { activeFilter = activeFilter === f[0] ? 'all' : f[0]; render(); });
+      facts.append(b);
     });
   }
-  function renderCoreStats() {
-    clear(coreStats);
+
+  function renderCore() {
     var stats = audit.core_evidence || {};
     var live = stats.live_np3_evidence || {};
-    var data = [
-      [live.dag_traced_final_products || 0, 'traceable product batches', '/core/inventory/live'],
-      [stats.completed_core_steps_with_captured_data || 0, 'completed execution records', '/core/executions/live'],
-      [stats.active_core_evidence_files || 0, 'active files attached to executions', '/core/executions/live'],
-      [live.supplier_identified_materials || 0, 'material records with supplier', '/core/inventory/live']
-    ];
-    data.forEach(function (item) {
-      var stat = document.createElement('a');
-      stat.href = item[2];
-      stat.setAttribute('hx-boost', 'false');
-      stat.appendChild(text('strong', String(item[0])));
-      stat.appendChild(text('span', item[1]));
-      coreStats.appendChild(stat);
+    coreLine.replaceChildren(
+      document.createTextNode('From Production: '),
+      el('a', { href: '/core/inventory/live', text: plural(live.dag_traced_final_products || 0, 'traceable batch', 'traceable batches') }),
+      document.createTextNode(' · '),
+      el('a', { href: '/core/executions/live', text: plural(stats.completed_core_steps_with_captured_data || 0, 'production record') }),
+      document.createTextNode(' · '),
+      el('a', { href: '/core/inventory/live', text: plural(live.supplier_identified_materials || 0, 'material') + ' with a supplier' })
+    );
+  }
+
+  function renderQueue() {
+    queueItems.replaceChildren();
+    var steps = (audit.guided_steps || []).slice();
+    var urgent = unique.filter(function (r) { var k = status(r).text; return k === 'Follow-up open' || k === 'Overdue'; })
+      .concat(unique.filter(function (r) { return r.state === 'missing'; }));
+    var shown = 0;
+    steps.forEach(function (step) {
+      var item = el('li', { className: 'np3-next__item np3-next__item--' + (step.severity || 'attention') });
+      var action;
+      if (step.opens === 'check') action = el('a', { href: CHECK + encodeURIComponent(step.control_id), text: 'Open check' });
+      else {
+        action = el('button', { type: 'button', className: 'np3-link', text: 'Show them' });
+        action.addEventListener('click', function () { activeFilter = step.filter || 'all'; if (step.category_key) activeCategory = step.category_key; query = ''; search.value = ''; render(); listRoot.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      }
+      item.append(el('div', {}, [el('strong', { text: step.title }), el('span', { text: step.description })]), action);
+      queueItems.append(item);
+      shown += 1;
+    });
+    urgent.forEach(function (row) {
+      if (shown >= 5 || steps.some(function (s) { return s.control_id === row.control_id; })) return;
+      var st = status(row);
+      queueItems.append(el('li', { className: 'np3-next__item np3-next__item--' + (st.key === 'bad' ? 'high' : 'attention') }, [
+        el('div', {}, [el('strong', { text: row.topic }), el('span', { text: st.text === 'Needs evidence' ? 'No proof recorded for this check yet.' : st.text + (row.review_due_date ? ' since ' + shortDate(row.review_due_date) : '') + '.' })]),
+        el('a', { href: CHECK + encodeURIComponent(row.control_id), text: 'Open check' }),
+      ]));
+      shown += 1;
+    });
+    queue.hidden = !shown;
+  }
+
+  // The five topics a verifier always covers (MPI NP3 guidance), each with its own checks.
+  var MANDATORY = [
+    ['Competency and training', ['staff-competency']],
+    ['Cleaning', ['cleaning-and-hygiene', 'food-contact-equipment-cleaning', 'cleaning-chemicals-food-safe']],
+    ['Personal hygiene and health', ['personal-hygiene', 'health-and-sickness']],
+    ['Sourcing and tracing', ['suppliers-and-purchasing', 'receiving-food', 'trace-and-recall']],
+    ['Process controls', ['time-temperature-processing', 'storage-stock-rotation', 'calibration', 'cross-contamination']],
+  ];
+  function renderPack() {
+    packCards.replaceChildren();
+    var byId = {};
+    unique.forEach(function (r) { byId[r.control_id] = r; });
+    MANDATORY.forEach(function (topic) {
+      var rows = topic[1].map(function (id) { return byId[id]; }).filter(Boolean);
+      if (!rows.length) return;
+      var ready = rows.filter(function (r) { return status(r).key === 'good'; }).length;
+      var card = el('article', { className: 'np3-pack__card' + (ready === rows.length ? ' np3-pack__card--ready' : '') });
+      card.append(el('div', { className: 'np3-pack__head' }, [
+        el('h3', { text: topic[0] }),
+        el('span', { className: 'np3-tag np3-tag--' + (ready === rows.length ? 'good' : 'warn'), text: ready + ' of ' + rows.length + ' ready' }),
+      ]));
+      var proof = ((rows[0].evidence_playbook || {}).proof || []).slice(0, 3);
+      if (proof.length) {
+        card.append(el('p', { className: 'np3-pack__label', text: 'Be ready to show' }));
+        card.append(el('ul', { className: 'np3-pack__proof' }, proof.map(function (p) { return el('li', { text: p }); })));
+      }
+      card.append(el('ul', { className: 'np3-pack__checks' }, rows.map(function (r) {
+        var st = status(r);
+        return el('li', {}, [el('a', { href: CHECK + encodeURIComponent(r.control_id), text: r.topic }), el('span', { className: 'np3-tag np3-tag--' + st.key, text: st.text })]);
+      })));
+      packCards.append(card);
     });
   }
-  function renderPrep() {
-    clear(prep);
-    (audit.preparation_items || []).forEach(function (item) { prep.appendChild(text('li', item)); });
+
+  function renderSections(byCategory) {
+    sections.replaceChildren();
+    (audit.categories || []).forEach(function (category, index) {
+      var rows = byCategory[category.key] || [];
+      var todo = rows.filter(function (r) { return status(r).key !== 'good'; }).length;
+      var active = category.key === activeCategory && !query && activeFilter === 'all';
+      var b = el('button', { type: 'button', role: 'tab', id: 'np3-category-tab-' + index, className: 'np3-section-tab' + (active ? ' is-active' : ''), 'aria-selected': String(active), 'aria-controls': 'np3-category-panel' }, [
+        el('strong', { text: category.title }),
+        el('span', { className: todo ? 'np3-section-tab__todo' : 'np3-section-tab__done', text: todo ? todo + ' to do' : 'All ready' }),
+      ]);
+      b.addEventListener('click', function () { activeCategory = category.key; activeFilter = 'all'; query = ''; search.value = ''; render(); });
+      sections.append(b);
+    });
   }
-  if (checkSearch) checkSearch.addEventListener('input', function (event) {
-    searchQuery = String(event.currentTarget.value || '').trim().toLowerCase();
-    render();
-  });
+
+  function renderList(byCategory) {
+    listRoot.replaceChildren();
+    var category = (audit.categories || []).find(function (c) { return c.key === activeCategory; });
+    var narrowing = !!query || activeFilter !== 'all';
+    var panel = el('div', { id: 'np3-category-panel', role: 'tabpanel' });
+    function list(rows) { return el('div', { className: 'np3-check-list' }, rows.map(checkRow)); }
+    if (narrowing) {
+      var rows = unique.filter(matchesSearch).filter(matchesFilter);
+      var label = activeFilter !== 'all' ? (facts.querySelector('[data-np3-filter="' + activeFilter + '"] .np3-fact__label') || {}).textContent : '';
+      heading.textContent = query ? 'Search results' : label || 'Matching checks';
+      countLine.textContent = plural(rows.length, 'check') + (query ? ' match "' + search.value.trim() + '"' : '') + '.';
+      panel.append(rows.length ? list(rows) : el('p', { className: 'np3-empty', text: query ? 'No ' + NP + ' checks match this search.' : 'Nothing here right now.' }));
+      if (activeFilter !== 'all') {
+        var clear = el('button', { type: 'button', className: 'np3-link', text: 'Show every check' });
+        clear.addEventListener('click', function () { activeFilter = 'all'; render(); });
+        panel.append(clear);
+      }
+    } else if (style() === '2') {
+      // Rhythm: every section at once, each check with its year of records.
+      heading.textContent = 'Every check, month by month';
+      countLine.textContent = plural(unique.length, 'check') + ' · each square is a month: recorded, review overdue, or nothing due.';
+      (audit.categories || []).forEach(function (c) {
+        var rows = byCategory[c.key] || [];
+        if (!rows.length) return;
+        panel.append(el('h3', { className: 'np3-group-title', text: c.title }), list(rows));
+      });
+    } else {
+      var rowsIn = byCategory[category.key] || [];
+      heading.textContent = category.title;
+      var todo = rowsIn.filter(function (r) { return status(r).key !== 'good'; }).length;
+      countLine.textContent = plural(rowsIn.length, 'check') + (todo ? ' · ' + todo + ' to do' : ' · all ready');
+      panel.append(list(rowsIn));
+    }
+    listRoot.append(panel);
+  }
+
   function render() {
     if (!audit) return;
-    // Kept as a named mapping because category selection must never require the user to
-    // scroll through every NP3 topic to find their next action.
-    var rowsByCategory = {};
-    (audit.categories || []).forEach(function (category) { rowsByCategory[category.key] = []; });
+    var byCategory = {};
+    var seen = {};
+    unique = [];
+    (audit.categories || []).forEach(function (c) { byCategory[c.key] = []; });
     (audit.rows || []).forEach(function (row) {
-      if (!rowsByCategory[row.category_key]) rowsByCategory[row.category_key] = [];
-      rowsByCategory[row.category_key].push(row);
+      (byCategory[row.category_key] = byCategory[row.category_key] || []).push(row);
+      if (!seen[row.control_id]) { seen[row.control_id] = true; unique.push(row); }
     });
-    if (!activeCategory || !rowsByCategory[activeCategory]) activeCategory = (audit.categories || [])[0] && audit.categories[0].key;
-    renderHealth();
-    renderTabs(rowsByCategory);
+    if (!activeCategory || !byCategory[activeCategory]) activeCategory = (audit.categories || [])[0] && audit.categories[0].key;
+    renderFacts();
+    renderCore();
     renderQueue();
-    renderCategory(rowsByCategory);
-    renderCoreStats();
-    renderPrep();
-    date.textContent = audit.verification && audit.verification.date
-      ? 'Verification visit booked: ' + audit.verification.date
-      : 'No verification visit booked. Add one in Configuration when your verifier confirms it.';
+    renderPack();
+    renderSections(byCategory);
+    renderList(byCategory);
+    prep.replaceChildren.apply(prep, (audit.preparation_items || []).map(function (t) { return el('li', { text: t }); }));
     root.setAttribute('aria-busy', 'false');
   }
-  fetch('/api/compliant/np3-audit').then(function (response) {
-    if (!response.ok) throw new Error('Could not load the ' + NP + ' audit register');
+
+  search.addEventListener('input', function () { query = search.value.trim().toLowerCase(); render(); });
+  setStyle(readStyle());
+  fetch('/api/compliant/np3-audit', { credentials: 'include', headers: { Accept: 'application/json' } }).then(function (response) {
+    if (!response.ok) throw new Error('Could not load the ' + NP + ' register');
     return response.json();
   }).then(function (data) { audit = data; render(); }).catch(function (err) {
     root.setAttribute('aria-busy', 'false');
-    showError(err.message || 'Could not load the ' + NP + ' audit register');
+    showError(err.message || 'Could not load the ' + NP + ' register');
   });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  document.addEventListener('htmx:afterSwap', init);
 }());
