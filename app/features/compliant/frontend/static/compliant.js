@@ -51,7 +51,7 @@
     clear(controlSelect);
     var framework = customsFramework();
     if (!framework) return;
-    framework.controls.forEach(function (control) { controlSelect.appendChild(option(control.control_id, control.control_id.replace(/-/g, ' '))); });
+    framework.controls.forEach(function (control) { controlSelect.appendChild(option(control.control_id, controlName(control.control_id))); });
     controlSelect.onchange = renderCaptureGuidance;
     renderCaptureGuidance();
   }
@@ -201,11 +201,91 @@
       root.querySelector('[data-core-source-more]').hidden = !result.has_more;
     } catch (err) { showError(err.message); }
   }
+  // Plain names for Customs' five controls: what each one proves, not its catalogue id.
+  var CONTROL_NAMES = {
+    'product-mapping': 'Products mapped to Customs items',
+    'period-lodgement': "Each period's entry lodged",
+    'reconciliation': 'Stock reconciled each period',
+    'movement-evidence': 'Movement evidence kept',
+    'record-retention': 'Records kept 7 years, in NZ',
+  };
+  var RECORD_TYPES = { attestation: 'Attestation', reading: 'Reading', lodgement: 'Lodgement', competency: 'Training', incident: 'Incident' };
+  function controlName(id) { return CONTROL_NAMES[id] || String(id || '').replace(/-/g, ' '); }
+  function node(tag, className, text) { var n = document.createElement(tag); if (className) n.className = className; if (text != null) n.textContent = text; return n; }
+  function niceDate(iso) {
+    if (!iso) return '';
+    var d = new Date(String(iso).length > 10 ? iso : iso + 'T00:00:00');
+    return isNaN(d) ? iso : d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function periodText(record) {
+    if (!record.period_start) return '';
+    var start = new Date(record.period_start + 'T00:00:00'); var end = record.period_end ? new Date(record.period_end + 'T00:00:00') : null;
+    if (end && start.getDate() === 1 && start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+      return start.toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' });
+    }
+    return niceDate(record.period_start) + (end ? ' – ' + niceDate(record.period_end) : '');
+  }
   function renderRecords(records) {
     var target = root.querySelector('[data-recent-records]'); clear(target);
+    state.records = records;
+    if (target.dataset.recordsLayout === 'cards') renderControls();
     if (!records.length) { target.textContent = 'No records yet.'; return; }
+    if (target.dataset.recordsLayout === 'cards') {
+      // Cards: what the record proves, for which period, and the reference Customs would ask for.
+      records.slice(0, 6).forEach(function (record) {
+        var card = node('article', 'customs-record');
+        var head = node('div', 'customs-record__head');
+        head.appendChild(node('strong', 'customs-record__title', record.title));
+        head.appendChild(node('span', 'customs-chip customs-chip--' + record.status, record.status === 'complete' ? 'Complete' : record.status.charAt(0).toUpperCase() + record.status.slice(1)));
+        card.appendChild(head);
+        var meta = [controlName(record.control_id), RECORD_TYPES[record.record_type] || record.record_type, periodText(record)].filter(Boolean).join(' · ');
+        card.appendChild(node('p', 'customs-record__meta', meta));
+        var foot = [];
+        if (record.evidence_reference) foot.push('Ref ' + record.evidence_reference);
+        if ((record.source_refs || []).length) foot.push((record.source_refs.length === 1 ? '1 production record' : record.source_refs.length + ' production records') + ' linked');
+        foot.push('Added ' + niceDate(record.created_at));
+        card.appendChild(node('p', 'customs-record__foot', foot.join(' · ')));
+        target.appendChild(card);
+      });
+      if (records.length > 6) target.appendChild(node('p', 'customs-record__more', (records.length - 6) + ' older records kept'));
+      return;
+    }
     var table = document.createElement('table'); var head = document.createElement('thead'); var row = document.createElement('tr'); ['Framework', 'Control', 'Record', 'Status', 'Evidence'].forEach(function (label) { var th = document.createElement('th'); th.textContent = label; row.appendChild(th); }); head.appendChild(row); table.appendChild(head);
     var body = document.createElement('tbody'); records.forEach(function (record) { var tr = document.createElement('tr'); [record.framework_slug, record.control_id, record.title, record.status, record.evidence_reference || '—'].forEach(function (value) { var td = document.createElement('td'); td.textContent = value; tr.appendChild(td); }); body.appendChild(tr); }); table.appendChild(body); target.appendChild(table);
+  }
+  // One card per Customs control: is there current proof, the latest of it, and one way to add more.
+  function renderControls() {
+    var target = root.querySelector('[data-customs-controls]');
+    var framework = state.overview && customsFramework();
+    if (!target || !framework) return;
+    clear(target);
+    var records = state.records || [];
+    var needing = 0;
+    framework.controls.forEach(function (control) {
+      var current = control.state === 'compliant';
+      if (!current) needing += 1;
+      var latest = records.find(function (r) { return r.control_id === control.control_id; });
+      var card = node('article', 'customs-control customs-control--' + (current ? 'current' : control.state));
+      var head = node('div', 'customs-control__head');
+      head.appendChild(node('strong', 'customs-control__name', controlName(control.control_id)));
+      head.appendChild(node('span', 'customs-chip customs-chip--' + (current ? 'complete' : control.state === 'attention' ? 'failed' : 'open'), current ? 'Current' : control.state === 'attention' ? 'Needs attention' : 'Needs evidence'));
+      card.appendChild(head);
+      card.appendChild(node('p', 'customs-control__reason', current ? (latest ? 'Latest: ' + latest.title + (latest.evidence_reference ? ' · ' + latest.evidence_reference : '') : control.reason) : control.reason || control.description));
+      var add = node('button', 'customs-control__add', 'Add evidence');
+      add.type = 'button';
+      add.setAttribute('aria-label', 'Add evidence for ' + controlName(control.control_id));
+      add.addEventListener('click', function () {
+        var adder = root.querySelector('[data-add-record]');
+        if (adder) adder.open = true;
+        selectControl(control.control_id);
+        var form = root.querySelector('[data-record-form]');
+        if (form) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); form.title.focus({ preventScroll: true }); }
+      });
+      card.appendChild(add);
+      target.appendChild(card);
+    });
+    var hint = root.querySelector('[data-customs-records-hint]');
+    if (hint) hint.textContent = framework.controls.length + ' checks · ' + (needing ? needing + ' need evidence' : 'all current') + ' · ' + records.length + ' record' + (records.length === 1 ? '' : 's');
   }
   function renderProducts(products) {
     var target = root.querySelector('[data-alcohol-products]'); if (!target) return; clear(target);
@@ -292,5 +372,7 @@
     catch (err) { showError(err.message); }
     finally { setSubmitting(form, false); }
   });
+  // Lodging an entry saves its own record: show it.
+  root.addEventListener('customs:lodged', function () { load(); });
   load();
 })();
