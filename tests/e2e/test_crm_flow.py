@@ -14,10 +14,11 @@ invoices). Tracked in the spec.
 
 Cross-tenant probes below cover the CRM objects that ARE creatable without a live Xero
 connection — notes, tasks, product mappings — the same way test_tenant_isolation.py
-covers inventory. Customers/invoices/sync-jobs are Xero-sourced only and stay out of
-E2E scope for the reason above; their org-scoping is covered at the unit level
+covers inventory. Customers and invoices need a faked Xero, which a live-server test cannot
+have, so their browser flows run in-process in test_crm_contact_sync_ui.py and
+test_crm_invoice_ui.py; their org-scoping is covered at the unit level
 (tests/test_crm.py: test_org_isolation, test_note_org_isolation,
-test_list_tasks_org_isolation) instead.
+test_list_tasks_org_isolation).
 """
 
 import uuid

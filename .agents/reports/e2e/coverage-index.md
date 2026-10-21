@@ -75,7 +75,9 @@ before writing tests rather than re-deriving this by hand. Legend:
 | Pages render clean | ✅ | test_pages_render |
 | Xero auth redirect well-formed (state/CSRF) | ✅ | test_crm_flow |
 | Customers API auth-gated + org-scoped | ✅ | test_crm_flow |
-| Customer / invoice CRUD | 🟡 unit-covered (`tests/test_crm.py::TestCRMInvoiceCreation`); no e2e browser flow yet |
+| Add / edit a customer, send it to Xero | ✅ | test_crm_contact_sync_ui |
+| New Invoice form: draft, authorised, no-line check, Xero refusal and Xero unreachable | ✅ | test_crm_invoice_ui |
+| Authorise an existing draft; invoice PDF and view-in-Xero links | 🟡 route-level failure paths only (unknown invoice, Xero refusing or unreachable: `test_crm_flow`, `tests/test_crm.py`); no route happy path and no browser flow |
 | **Cross-cutting** | | |
 | Security headers, cookie flags, CSRF rejection | ✅ | test_security_headers |
 | 21 authenticated pages render clean | ✅ | test_pages_render |
@@ -92,12 +94,26 @@ before writing tests rather than re-deriving this by hand. Legend:
   scan could never decode (read from the code on 2026-10-13, not reproduced in a browser).
   A test needs a stubbed `BarcodeDetector`; whether the fallback should be vendored or the CSP
   widened is a product and security call.
-- **CRM customer / invoice CRUD (e2e)** — customers are sourced from Xero sync, not a
-  create endpoint, so the only write path is invoice creation. Now covered at the
-  unit/service level (`tests/test_crm.py::TestCRMInvoiceCreation`, stubbing
-  `XeroAPIClient.create_invoice` — never touches a real tenant), including the
-  cross-tenant case. A browser-driven e2e flow through `test_crm_flow.py` remains
-  deferred; this row tracks that narrower gap now.
+- **CRM invoice row actions (e2e)** — the New Invoice form and customer create/edit are now
+  driven in a browser against a faked Xero (`test_crm_invoice_ui.py`,
+  `test_crm_contact_sync_ui.py`); the invoice tests also fail if the app builds a Xero API
+  client for a call the fake does not answer. Still without a browser flow: the **Authorise** button on an
+  existing draft row, and the invoice PDF and view-in-Xero links. At route level only the
+  failure paths are pinned (an unknown invoice, Xero refusing or being unreachable); the
+  client-level happy paths are in `tests/test_xero_api_client.py` (authorise, online invoice
+  URL, PDF), so what has no test is each route's happy path. A browser would add the button
+  state and the message shown, as `test_crm_invoice_ui.py` does for the form. (Narrowed on
+  2026-10-21 by findings-sweep from "CRM customer / invoice CRUD"; that text said customers
+  are Xero-sourced only, which stopped being true when Biz-E-made customers shipped.)
+- **Contact-sync browser tests reach api.xero.com** — `test_crm_contact_sync_ui.py` fakes
+  Xero's contact calls, but opening a customer's page also asks Xero for its payment terms
+  (`XeroAPIClient.get_contact_payment_terms`, from `CRMService.suggest_invoice_due_date`), which
+  its `FakeXero` does not answer. The app swallows the failure, so the tests pass, but each run
+  makes real HTTPS requests with a placeholder token (6 DNS lookups across its 5 tests, measured
+  2026-10-21) and on a host with no egress a connect can stall the browser's route handler.
+  `FakeXero` (`tests/test_crm_contact_sync.py`) is shared with unit tests, so the fix is to
+  fake that call there; `test_crm_invoice_ui.py` already does, and fails if anything else slips
+  through.
 - **Full process-wizard click-through** — the wizard is many SPA fragments. Creation is
   driven through the real browser session's API (exercising auth, CSRF, org-scope, and
   the business logic) and verified in the UI; clicking every fragment is a higher-
