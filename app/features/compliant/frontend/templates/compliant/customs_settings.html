@@ -1,0 +1,77 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Customs settings — NZ Alcohol{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
+{% block content %}
+<main class="max-content workspace-overview workspace-page customs-page customs-settings-page" data-customs-settings-root data-compliant-root aria-busy="true">
+  {% set customs_caption = "What each product is to Customs, how often you lodge, and how often you count." %}
+  {% include "compliant/_customs_header.html" %}
+
+  <div class="customs-stack">
+    <section class="workspace-card customs-card" id="products" aria-labelledby="customs-products-title">
+      <div class="customs-card__head">
+        <div>
+          <h2 id="customs-products-title">Products</h2>
+          <p class="workspace-caption" data-products-summary>Each workflow's final product: its Customs product type, pack size and strength.</p>
+        </div>
+      </div>
+      <div class="customs-products" data-excise-products><p class="excise-hint">Loading products…</p></div>
+      <p class="excise-hint">ABV comes from each batch's final step; the fallback is used only when a batch has none. A tariff item override replaces the built-in rate for that product.</p>
+    </section>
+
+    <section class="workspace-card customs-card" id="rates" aria-labelledby="customs-rates-title">
+      <div class="customs-card__head">
+        <div>
+          <h2 id="customs-rates-title">Duty rates</h2>
+          <p class="workspace-caption" data-rates-source>Built in from Customs' duties table and updated every 1 July.</p>
+        </div>
+      </div>
+      <div data-builtin-rates></div>
+      <details class="customs-inline-details">
+        <summary>Override a rate</summary>
+        <p class="excise-hint">Only for a tariff item Customs has given you a different rate for. Per litre of alcohol, from its start date.</p>
+        <div data-excise-rates></div>
+        <form class="excise-inline-form" data-excise-rate-form hx-boost="false">
+          <input name="tariff_item" id="excise-rate-tariff" placeholder="Tariff item" required maxlength="100" aria-label="Tariff item">
+          <input name="rate_per_lal" id="excise-rate-value" type="number" min="0" step="0.0001" placeholder="$ per LAL" required aria-label="Rate per litre of alcohol">
+          <input name="effective_from" id="excise-rate-from" type="date" required aria-label="Effective from">
+          <button type="submit" class="workspace-button">Add rate</button>
+        </form>
+      </details>
+    </section>
+
+    <section class="workspace-card customs-card" id="lodging" aria-labelledby="customs-lodging-title">
+      <div class="customs-card__head">
+        <div>
+          <h2 id="customs-lodging-title">Lodging</h2>
+          <p class="workspace-caption">How often you lodge with Customs, and from when the monthly system check reminds you.</p>
+        </div>
+      </div>
+      <form class="excise-settings" data-excise-settings hx-boost="false">
+        <label>Lodge <select name="frequency" id="excise-frequency"><option value="monthly">Monthly</option><option value="six_monthly">Six-monthly</option><option value="twelve_monthly">Yearly</option></select></label>
+        <label>Remind me from <input type="date" name="tracking_from" id="excise-tracking-from"></label>
+        <button type="submit" class="workspace-button">Save</button>
+      </form>
+      <p class="customs-note" data-lodging-eligibility></p>
+      <p class="excise-hint">With no date, reminders start from the month the NZ Alcohol module was switched on. Changing how often you lodge needs Customs' approval first.</p>
+    </section>
+
+    <section class="workspace-card customs-card" id="stocktake" aria-labelledby="customs-stocktake-title">
+      <div class="customs-card__head">
+        <div>
+          <h2 id="customs-stocktake-title">Stocktake</h2>
+          <p class="workspace-caption">How often you count. Compliance raises a system check before each one is due.</p>
+        </div>
+      </div>
+      <form class="excise-settings" data-stocktake-settings hx-boost="false">
+        <label>Count <select name="frequency" id="customs-stocktake-frequency"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="six_monthly">Six-monthly</option><option value="annual">Yearly</option></select></label>
+        <label>Bulk tolerance (%) <input type="number" name="bulk_tolerance_percent" id="customs-stocktake-tolerance" min="0" max="5" step="0.1"></label>
+        <button type="submit" class="workspace-button">Save</button>
+      </form>
+      <p class="customs-note" data-stocktake-next></p>
+      <p class="excise-hint">Bottles must match exactly. Bulk liquid within the tolerance counts as matching. Customs expects at least one stocktake a year.</p>
+    </section>
+  </div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/customs-common.js"></script><script src="/compliant/static/customs-settings.js"></script>{% endblock %}

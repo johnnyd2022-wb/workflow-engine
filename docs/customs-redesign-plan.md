@@ -99,3 +99,107 @@ All three share:
   - laptop, full page, phone, wall (1920×1080) and dark;
   - a lodged period, setup open, the breakdown open;
   - arriving by the sub-nav, and after recording as lodged.
+
+---
+
+# Customs v2: the entry page alone, with Stock and Settings beside it
+
+October 2026, after !544. The founder asked for:
+- the entry page to be the entry and nothing else, with three months in the selector by default;
+- units sold in the entry;
+- the real Trade Single Window link;
+- Records for Customs folded at the bottom as cards;
+- setup moved to a Customs settings page and a stock page that explains what a stocktake found.
+
+## What was wrong (`00-before`)
+
+- Four setup disclosures and a data-heavy Records table (Framework · Control · Record ·
+  Status · Evidence, showing catalogue ids such as `customs-alcohol` and `period-lodgement`)
+  took more of the page than the entry did.
+- Seven period chips plus an "earlier months" chip, all at once.
+- The entry lines had litres and LAL but not the units sold that people count by.
+- Nothing on the page said what the business owes over the year, whether the stocktake was
+  due, or what to claim back.
+- "Add a place" submitted as a page load: the shell's boosted navigation took the form.
+
+## What the research changes
+
+NZ rules, from the Customs and Excise Act 2018, the Regulations 1996 and customs.govt.nz:
+
+| Rule | What it changes here |
+|---|---|
+| Duty is owed on goods used inside the CCA (tastings, samples) and on goods destroyed, lost or stolen, not only on sales (Act Sch 3 cl 3; Customs "excise entries") | The Stock page sorts each stocktake difference into **On the excise entry**, **Claim a remission** or **No duty** |
+| No allowance for evaporation or wastage; relief only by remission (NZCS 277); damaged goods can be self-remitted if authorised | Breakages show as remissions to claim, on Stock and in the Desk rail |
+| Goods that can't be accounted for are charged as removed (s 138); Customs stocktakes have led to prosecution | The stocktake card leads Stock: last count, next due, open differences and the duty they would carry |
+| Nil returns are mandatory (Nil Returns Rules 2024) | An empty month says so and offers "Record nil return as lodged" |
+| Late payment: 1% the day after it's due, 4% more after 7 days (s 159) | An overdue period states it |
+| Six-monthly lodging is allowed up to $100k duty a year and twelve-monthly up to $50k, after 6 months of monthly lodging | Settings and the Desk rail show the last 12 months' duty against those limits |
+| TSW has a separate Duty credit field | Returned stock points to it |
+| Library or reference stock is duty-unpaid while it is inside the CCA | Stock lists library stock with that note |
+
+Comparable products and patterns:
+- **Breww's NZ excise report** keeps duty credit separate.
+- **InnoVint** maps loss reasons to report lines.
+- **Katana and Lightspeed** stock counts: count, review, a reason per line.
+- **Stripe Tax filings** give a period overview.
+- **Linear cycles** show periods as rows.
+- **GOV.UK summary list and summary card** set out the settings and check cards.
+
+Searched and didn't find:
+- a Customs rule on stocktake frequency (the licence-holder guide PDF returned 404);
+- a TSW amendment procedure;
+- any rule on library stock beyond the CCA's general rules.
+
+## The pages
+
+- **Excise entry** (`/compliant/nz-alcohol/customs`):
+  - three period boxes, then Earlier;
+  - the entry sheet with Units sold;
+  - Record as lodged;
+  - TSW sign-in and the month's sales;
+  - the breakdown;
+  - "where things stand" (to lodge, this period so far, 12-month duty, stocktake);
+  - Records for Customs, folded, as one card per check plus the latest records.
+- **Stock** (`/customs/stock`):
+  - the stocktake and what it found;
+  - where stock sits inside or outside the licensed area;
+  - library stock;
+  - moving stock and adding places;
+  - the per-CCA review for multi-site orgs.
+  - It reuses the existing stocktake (`/core/stocktake` counts) and the stock-location model; no new tables.
+- **Settings** (`/customs/settings`):
+  - products, unfinished first, with problems on the entry linking to the row;
+  - the built-in rates in force, with their source;
+  - lodging frequency and eligibility;
+  - stocktake frequency (the stocktake system check).
+
+## The pick
+
+**Chosen (21 Oct 2026): Style 1, Entry sheet.** Four facts above the period boxes and the entry sheet; on a phone the figures read as a list.
+- Desk lost because its rail narrows the entry table, the thing people copy from.
+- Ledger lost because the entry opened inside a row has less room, and history is less often needed than this month's entry.
+- What only Desk showed (lodging eligibility, remissions to claim) is on Settings and Stock.
+
+## Three directions for the entry page (as presented)
+
+| | Style 1: Entry sheet | Style 2: Desk | Style 3: Ledger |
+|---|---|---|---|
+| Idea | A strip of four facts, the three period boxes, then the entry sheet full width | The entry on the left; a "where things stand" rail with the year's duty, stocktake, lodging eligibility and remissions | Periods as rows (month, status, LAL, total); the selected row opens in place |
+| Taken from | Breww NZ entry, Stripe Tax overview | Stripe Tax overview, Linear's side panels | Linear cycles, InnoVint per-period report |
+| Best at | Copying one month into TSW | Seeing the whole Customs position while lodging | History at a glance |
+| Gives up | Lodging eligibility and remissions are on other pages | A narrower entry table; on a phone the rail goes below | Less room for the entry inside a row |
+
+## Changes to data (stated, not hidden in the redesign)
+
+- Entry lines carry `units` and `unit`. Periods lodged before this show "—".
+- Recording a period as lodged also files a `period-lodgement` record (the period, the entry
+  reference or "Nil return", the totals in `details`, no due date).
+- New `GET /api/compliant/nz-alcohol/excise/position`. The periods API adds each lodged period's total.
+
+## Bugs fixed on the way
+
+- A stocktake "broken" reason committed its wastage record mid-resolution, so a later
+  invalid reason left the breakage saved and the line open.
+- Stocktake breakage and surplus wrote quantities without a movement or event, so the
+  nightly stock check flagged every lot a stocktake had adjusted.
+- "Add a place", and every other scripted form on the Customs page, submitted as a boosted page load.

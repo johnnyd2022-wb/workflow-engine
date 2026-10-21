@@ -40,13 +40,15 @@ def test_dashboard_page_renders_for_logged_in_user(admin_page):
 
     response = page.goto("/compliant/nz-alcohol/customs")
     assert response is not None and response.status == 200
-    # The evidence form sits behind "Add a record" since the Customs redesign; the entry leads.
+    # Records for Customs are folded at the bottom of the entry page, the form behind "Add a record".
     expect(page.locator("[data-record-form]")).to_be_hidden()
+    page.locator("[data-customs-records] > summary").click()
     page.locator("[data-add-record] > summary").click()
     expect(page.locator("[data-record-form]")).to_be_visible()
-    # Product classification is in the "Products and rates" disclosure.
-    page.get_by_text("Products and rates", exact=True).click()
-    expect(page.get_by_role("heading", name="Excise products", exact=True)).to_be_visible()
+    # Product classification moved to Customs -> Settings.
+    page.locator('.customs-views a[href="/compliant/nz-alcohol/customs/settings"]').click()
+    expect(page.get_by_role("heading", name="Products", exact=True)).to_be_visible()
+    page.locator("[data-excise-rate-form]").locator("xpath=ancestor::details").locator("summary").click()
     expect(page.get_by_role("textbox", name="Tariff item", exact=True)).to_be_visible()
 
     assert_clean_page(page)

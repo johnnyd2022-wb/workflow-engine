@@ -1,6 +1,6 @@
 """Plan item 2.1: excise per period from removals out of the licensed area."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -351,6 +351,12 @@ def test_entry_lines_follow_trade_single_window_and_match_a_lodged_entry(world):
         (3, "99.50.85A"),
     ]
     assert (third["supplementary_litres"], third["statistical_lal"], third["levy"]) == ("24.000", "6.000", "5.23")
+    # Units sold sit beside the litres, as counted off the invoices.
+    assert {line["description"]: (line["units"], line["unit"]) for line in entry["lines"]} == {
+        GIN: ("64", "bottles"),
+        "Solstice": ("21", "bottles"),
+        "Green Gold": ("48", "bottles"),
+    }
     assert (entry["total_duty"], entry["total_levy"], entry["total_gst"], entry["total"]) == (
         "2244.10",
         "18.21",
@@ -376,3 +382,60 @@ def test_periods_say_when_reminders_start(world):
     body = world["client"].get("/api/compliant/nz-alcohol/excise/periods").get_json()
     assert body["settings"]["reminders_from"]
     assert all(p["period_end"] >= p["period_start"] for p in body["periods"])
+
+
+def test_lodging_records_the_evidence_for_the_lodgement_control(world):
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+
+    db, org = world["db"], world["org"]
+    world["sell"](world["lot"]("VAT44", 50), "12", date(2026, 8, 10))
+    lodgement = excise.lodge(
+        db, org.id, date(2026, 8, 1), "monthly", date(2026, 9, 10), "EX-2026-08", None, today=date(2026, 9, 10)
+    )
+    db.commit()
+    (record,) = db.query(ComplianceRecord).filter_by(org_id=org.id, control_id="period-lodgement").all()
+    assert record.framework_slug == "customs-alcohol" and record.record_type == "lodgement"
+    assert record.status == "complete" and record.due_date is None  # never "overdue" in the register
+    assert (record.period_start, record.period_end) == (date(2026, 8, 1), date(2026, 8, 31))
+    assert record.evidence_reference == "EX-2026-08" and record.title == "Excise entry lodged for August 2026"
+    assert record.details["excise_lodgement_id"] == str(lodgement.id) and record.details["total_lal"] == "3.696"
+    # The Customs register now shows the lodgement control as current.
+    customs = next(
+        f
+        for f in world["client"].get("/api/compliant/overview").get_json()["frameworks"]
+        if f["slug"] == "customs-alcohol"
+    )
+    assert next(c for c in customs["controls"] if c["control_id"] == "period-lodgement")["state"] == "compliant"
+
+
+def test_a_nil_return_is_recorded_as_one(world):
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+
+    db, org = world["db"], world["org"]
+    excise.lodge(db, org.id, date(2026, 8, 1), "monthly", date(2026, 9, 10), None, None, today=date(2026, 9, 10))
+    db.commit()
+    record = db.query(ComplianceRecord).filter_by(org_id=org.id, control_id="period-lodgement").one()
+    assert record.title == "Excise nil return lodged for August 2026" and record.evidence_reference == "Nil return"
+
+
+def test_position_sums_the_year_against_customs_thresholds(world):
+    db, org, client = world["db"], world["org"], world["client"]
+    today = date.today()
+    last_month = excise.previous_period(excise.period_for(today, "monthly")[0], "monthly")[0]
+    world["sell"](world["lot"]("VAT44", 50), "12", last_month + timedelta(days=4))
+    client.put(
+        "/api/compliant/nz-alcohol/excise/settings",
+        json={"frequency": "monthly", "tracking_from": last_month.isoformat()},
+    )
+    body = client.get("/api/compliant/nz-alcohol/excise/position").get_json()
+    expected = excise.draft(db, org.id, last_month, "monthly", today=today)["entry"]["total_duty"]
+    assert body["year"]["duty"] == expected and body["year"]["lodged_duty"] == "0.00"
+    assert body["year"]["six_monthly_allowed"] is True and body["year"]["twelve_monthly_allowed"] is True
+    assert body["this_period"]["period_start"] == excise.period_for(today, "monthly")[0].isoformat()
+    assert body["unlodged_periods"] == 1 and body["setup"] == {"products": 1, "incomplete": []}
+    assert body["stocktake"]["frequency"] == "annual" and body["remissions"] == []
+    # Lodging moves the month from the estimate into what was lodged.
+    excise.lodge(db, org.id, last_month, "monthly", today, "EX-9", None, today=today)
+    db.commit()
+    after = client.get("/api/compliant/nz-alcohol/excise/position").get_json()["year"]
+    assert after["lodged_duty"] == expected and after["estimated_duty"] == "0.00" and after["lodged_periods"] == 1

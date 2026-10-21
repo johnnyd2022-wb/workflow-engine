@@ -47,6 +47,7 @@ from sqlalchemy import func
 
 from app.core.db import db_session
 from app.core.db.models.inventory_item import InventoryItem, InventoryType
+from app.core.db.models.inventory_movement import InventoryMovement, InventoryMovementType
 from app.core.db.models.inventory_wastage import InventoryWastage
 from app.core.db.models.organisation import Organisation
 from app.core.db.models.stock_location import StockLocation
@@ -386,17 +387,30 @@ def resolve_line(session, org_id: UUID, line: StocktakeLine, parts: list[dict], 
             res.dutiable = True
             res.raise_with_customs = reason == "unexplained_loss"
         elif reason == "broken":
-            WastageRepository(session).create_wastage_record(
+            wastage = WastageRepository(session).create_wastage_record(
                 org_id=org_id,
                 inventory_item_id=item.id,
                 quantity_wasted=_s(qty),
                 unit=item.unit,
                 reason=note or "Broken or damaged (found at stocktake); remission may apply",
                 recorded_by=getattr(g, "user_email", None) or getattr(g, "username", None),
+                commit=False,
             )
             with allow_inventory_quantity_write(InventoryQuantityWriteReason.WASTAGE_RECORD):
                 item.quantity = coerce_stored_quantity(_d(item.quantity) - qty)
                 session.flush()
+            # The movement is what the nightly stock check counts as wasted.
+            session.add(
+                InventoryMovement(
+                    org_id=org_id,
+                    inventory_item_id=item.id,
+                    source_wastage_id=wastage.id,
+                    movement_type=InventoryMovementType.WASTAGE.value,
+                    quantity=coerce_stored_quantity(-qty),
+                    unit=item.unit,
+                    movement_metadata={"wastage_record_id": str(wastage.id), "stocktake_line_id": str(line.id)},
+                )
+            )
             res.raise_with_customs = True  # claim remission
         elif reason == "investigating":
             investigating = True
@@ -420,9 +434,8 @@ def resolve_line(session, org_id: UUID, line: StocktakeLine, parts: list[dict], 
             res.location_id = loc_id
             res.raise_with_customs = True  # possible credit if duty was paid when it left
         else:  # removal_not_happened | under_recorded | unexplained_gain
-            with allow_inventory_quantity_write(InventoryQuantityWriteReason.MANUAL_API_UPDATE):
-                item.quantity = coerce_stored_quantity(_d(item.quantity) + qty)
-                session.flush()
+            # Through the repository so the change is an event the nightly stock check counts.
+            repo.set_inventory_item_quantity(item.id, org_id, _s(_d(item.quantity) + qty), commit=False)
             res.raise_with_customs = reason in ("removal_not_happened", "unexplained_gain")
         session.add(res)
         records.append(res)

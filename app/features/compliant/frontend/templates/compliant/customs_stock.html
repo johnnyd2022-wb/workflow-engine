@@ -1,0 +1,75 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Customs stock — NZ Alcohol{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
+{% block content %}
+<main class="max-content workspace-overview workspace-page customs-page customs-stock-page" data-customs-stock-root data-compliant-root aria-busy="true">
+  {% set customs_caption = "What's in the licensed area, what has left it, and what the last count could not account for." %}
+  {% include "compliant/_customs_header.html" %}
+
+  <div class="customs-stack">
+    <section class="workspace-card customs-card" id="stocktake" aria-labelledby="customs-stocktake-title">
+      <div class="customs-card__head">
+        <div>
+          <h2 id="customs-stocktake-title">Stocktake</h2>
+          <p class="workspace-caption">Count what's on hand and give every difference a reason. Stock Customs can't see accounted for is charged as if it had been removed.</p>
+        </div>
+        <div class="customs-card__actions">
+          <button type="button" class="workspace-button" data-stock-start="customs_visit">Inspector is here</button>
+          <button type="button" class="workspace-button workspace-button--primary" data-stock-start="scheduled">Start a stocktake</button>
+        </div>
+      </div>
+      <div class="customs-facts" data-stocktake-facts></div>
+      <div data-stocktake-outcome><p class="excise-hint">Loading the last stocktake…</p></div>
+    </section>
+
+    <section class="workspace-card customs-card" id="places" aria-labelledby="customs-places-title">
+      <div class="customs-card__head">
+        <div>
+          <h2 id="customs-places-title">Where the stock is</h2>
+          <p class="workspace-caption">Inside the licensed area, stock is duty unpaid. Moving it anywhere outside (a rep's car, an event, a shop) is a removal on that month's entry.</p>
+        </div>
+      </div>
+      <div class="customs-places" data-stock-places><p class="excise-hint">Loading stock…</p></div>
+      <div class="customs-split">
+        <form class="customs-move" data-excise-move-form aria-labelledby="customs-move-title" hx-boost="false">
+          <h3 id="customs-move-title">Move stock</h3>
+          <label class="customs-field"><span class="customs-field__label">Stock</span><select name="item_id" id="excise-move-item" required aria-label="Stock to move"></select></label>
+          <div class="customs-move__row">
+            <label class="customs-field"><span class="customs-field__label">Quantity</span><input name="quantity" id="excise-move-qty" type="number" min="1" step="1" required aria-label="Quantity"></label>
+            <label class="customs-field"><span class="customs-field__label">To</span><select name="to_location_id" id="excise-move-to" aria-label="Move to"></select></label>
+            <label class="customs-field"><span class="customs-field__label">On</span><input name="occurred_on" id="excise-move-date" type="date" aria-label="Moved on"></label>
+          </div>
+          <button type="submit" class="workspace-button">Move stock</button>
+          <p class="excise-hint" data-move-result aria-live="polite"></p>
+        </form>
+        <form class="customs-move" data-excise-location-form aria-labelledby="customs-place-title" hx-boost="false">
+          <h3 id="customs-place-title">Add a place</h3>
+          <label class="customs-field"><span class="customs-field__label">Name</span><input name="name" id="excise-location-name" placeholder="e.g. Sam's car" required maxlength="120" aria-label="Place name"></label>
+          <label class="excise-check"><input type="checkbox" name="inside_licensed_area" id="excise-location-inside"> Inside the licensed area</label>
+          <button type="submit" class="workspace-button">Add place</button>
+        </form>
+      </div>
+    </section>
+
+    {% if multiple_sites %}
+    <section class="workspace-card customs-card cca-period-review" data-cca-period-review aria-labelledby="cca-period-title">
+      <div class="customs-card__head">
+        <div>
+          <h2 id="cca-period-title">Between licensed areas</h2>
+          <p class="workspace-caption">Transfers between your sites and the excise due for one licence. An incomplete accounting view: it can't establish a nil return, a total duty amount, payment or lodgement.</p>
+        </div>
+      </div>
+      <form class="cca-period-form excise-settings" data-cca-period-form hx-boost="false">
+        <label>Source CCA <select name="licence_id" required aria-label="Source CCA licence"></select></label>
+        <label>From <input name="start" type="date" required></label>
+        <label>Until (exclusive) <input name="end" type="date" required></label>
+        <button type="submit" class="workspace-button">Review movements</button>
+      </form>
+      <div data-cca-period-results aria-live="polite"></div>
+    </section>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/customs-common.js"></script><script src="/compliant/static/customs-stock.js"></script>{% if multiple_sites %}<script src="/compliant/static/cca-period-review.js"></script>{% endif %}{% endblock %}

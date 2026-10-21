@@ -25,8 +25,11 @@ class WastageRepository:
         recorded_by: str | None = None,
         recorded_at: datetime | None = None,
         causation_id: UUID | None = None,
+        commit: bool = True,
     ) -> InventoryWastage:
         """Create a wastage record. Caller must deduct from inventory item quantity.
+
+        commit=False leaves the transaction open for a caller that writes more in the same unit.
 
         causation_id: pass the execution.step_completed event id when called from
         within a step completion so the causal chain is preserved.
@@ -69,7 +72,8 @@ class WastageRepository:
                 causation_id=causation_id,
             )
 
-            self.db.commit()
+            if commit:
+                self.db.commit()
             return record
 
     def list_wastage_records(

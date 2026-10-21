@@ -70,7 +70,29 @@ def nz_alcohol_customs_workspace():
     NP3 food-safety evidence is recorded per check in its own workspace (np3_check.html) and
     does not use this generic record form.
     """
-    return render_template("compliant/customs.html", **_nz_alcohol_template_context())
+    return render_template("compliant/customs.html", **_nz_alcohol_template_context(customs_view="entry"))
+
+
+@page_bp.route("/compliant/nz-alcohol/customs/stock", methods=["GET"])
+@requires_auth
+def nz_alcohol_customs_stock():
+    """Customs stock: the licensed area, stock outside it, the stocktake and what it explained."""
+    from app.core.db.models.organisation import Organisation
+
+    org = db_session().get(Organisation, UUID(g.org_id))
+    return render_template(
+        "compliant/customs_stock.html",
+        **_nz_alcohol_template_context(
+            customs_view="stock", multiple_sites=bool(org is not None and org.multiple_sites_enabled)
+        ),
+    )
+
+
+@page_bp.route("/compliant/nz-alcohol/customs/settings", methods=["GET"])
+@requires_auth
+def nz_alcohol_customs_settings():
+    """Customs settings: products and rates, how often to lodge, and how often to count."""
+    return render_template("compliant/customs_settings.html", **_nz_alcohol_template_context(customs_view="settings"))
 
 
 @page_bp.route("/compliant/nz-alcohol/np3-audit", methods=["GET"])

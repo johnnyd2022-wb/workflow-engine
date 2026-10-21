@@ -380,6 +380,8 @@ def entry_lines(lines: dict, rates: list[ExciseRate], rate_date: date) -> dict:
     by_item = {
         key: {
             "products": [key[1]],
+            "units": line["units"],
+            "unit": line["unit"],
             "litres": line["litres"],
             "lal": line["lal"],
             "levy_cents": line.get("levy_cents") or 0,
@@ -405,6 +407,8 @@ def entry_lines(lines: dict, rates: list[ExciseRate], rate_date: date) -> dict:
                 "line": number,
                 "excise_item": tariff,
                 "description": ", ".join(item["products"]),
+                "units": _s(item["units"]),
+                "unit": item["unit"],
                 "supplementary_litres": f"{litres:f}",
                 "statistical_lal": f"{lal:f}",
                 "rate": _s(rate[0]) if rate else None,
@@ -620,7 +624,175 @@ def lodge(
     )
     session.add(record)
     session.flush()
+    _record_lodgement_evidence(session, record, current, user_id)
     return record
+
+
+def _record_lodgement_evidence(session: Session, lodgement: ExciseLodgement, current: dict, user_id) -> None:
+    """Lodging is itself the proof for Customs' "each period lodged" control."""
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+
+    entry = current.get("entry") or {}
+    totals = {k: entry.get(k) for k in ("total_duty", "total_levy", "total_gst", "total")}
+    session.add(
+        ComplianceRecord(
+            org_id=lodgement.org_id,
+            framework_slug="customs-alcohol",
+            control_id="period-lodgement",
+            record_type="lodgement",
+            status="complete",
+            title=f"Excise {'nil return' if lodgement.nil_return else 'entry'} lodged for {current['label']}",
+            period_start=lodgement.period_start,
+            period_end=lodgement.period_end,
+            evidence_reference=lodgement.entry_reference or ("Nil return" if lodgement.nil_return else None),
+            source_refs=[],
+            details={
+                "excise_lodgement_id": str(lodgement.id),
+                "lodged_on": lodgement.lodged_on.isoformat(),
+                "total_lal": current.get("total_lal"),
+                **totals,
+            },
+            created_by_user_id=user_id,
+        )
+    )
+    session.flush()
+
+
+# Customs lets a licensee lodge less often once the yearly duty is low enough, after at least
+# six months of monthly entries (customs.govt.nz, "Entry lodgement timing").
+SIX_MONTHLY_LIMIT = Decimal("100000")
+TWELVE_MONTHLY_LIMIT = Decimal("50000")
+MONTHLY_FIRST_MONTHS = 6
+
+
+def position(session: Session, org_id: UUID, profile, today: date | None = None) -> dict:
+    """Where the org stands with Customs right now, for the Customs pages' summary.
+
+    The duty over the last twelve months (lodged entries plus estimates for finished periods
+    not yet lodged) against Customs' thresholds for six- and twelve-monthly lodging; the
+    period in progress; the stocktake; breakages to claim a remission for; and product setup.
+    """
+    from app.core.backend import stocktake
+    from app.core.db.models.inventory_item import InventoryItem
+    from app.core.db.models.stocktake import Stocktake, StocktakeLine, StocktakeResolution
+
+    today = today or date.today()
+    cfg = settings_for(profile)
+    frequency = cfg["frequency"]
+    year_ago = _months_before(today, 12)
+    lodged_duty = estimated_duty = Decimal("0")
+    lodged_count = unlodged = overdue = 0
+    lodgements = {
+        lg.period_start: lg
+        for lg in session.query(ExciseLodgement).filter(
+            ExciseLodgement.org_id == org_id, ExciseLodgement.period_start >= year_ago
+        )
+    }
+    for lg in lodgements.values():
+        snap = lg.snapshot or {}
+        lodged_duty += Decimal(str((snap.get("entry") or {}).get("total_duty") or snap.get("total_duty") or 0))
+        lodged_count += 1
+    start = period_for(today, frequency)[0]
+    current = draft(session, org_id, start, frequency, today=today)
+    since = date.fromisoformat(cfg["reminders_from"]) if cfg["reminders_from"] else None
+    p_start = start
+    while True:
+        p_start, p_end = previous_period(p_start, frequency)
+        if p_start < year_ago:
+            break
+        if p_start in lodgements:
+            continue
+        d = draft(session, org_id, p_start, frequency, today=today)
+        estimated_duty += Decimal(str((d.get("entry") or {}).get("total_duty") or d.get("total_duty") or 0))
+        if since is None or p_end > since:
+            unlodged += 1
+            overdue += today > date.fromisoformat(d["due"])
+    year_duty = lodged_duty + estimated_duty
+    created = getattr(profile, "created_at", None)
+    monthly_until = _months_after(created.date(), MONTHLY_FIRST_MONTHS) if created is not None else None
+
+    plan = stocktake.schedule(session, org_id, (getattr(profile, "settings", None) or {}), today)
+    variances = stocktake.open_variances(session, org_id, today)
+    remission_rows = (
+        session.query(StocktakeResolution, StocktakeLine, Stocktake, InventoryItem)
+        .join(StocktakeLine, StocktakeLine.id == StocktakeResolution.line_id)
+        .join(Stocktake, Stocktake.id == StocktakeLine.stocktake_id)
+        .join(InventoryItem, InventoryItem.id == StocktakeLine.inventory_item_id)
+        .filter(
+            StocktakeResolution.org_id == org_id,
+            StocktakeResolution.reason == "broken",
+            StocktakeResolution.occurred_on >= year_ago,
+        )
+        .order_by(StocktakeResolution.occurred_on.desc())
+        .all()
+    )
+    remission_measures = measure(session, org_id, [(row[3], row[0].quantity) for row in remission_rows], today)
+    remissions = [
+        {
+            "product": _base_name(item.name),
+            "quantity": _s(res.quantity),
+            "unit": item.unit,
+            "date": res.occurred_on.isoformat(),
+            "lal": m["lal"],
+            "duty": m["duty"],
+            "stocktake_id": str(st.id),
+        }
+        for (res, _line, st, item), m in zip(remission_rows, remission_measures, strict=True)
+    ]
+
+    profiles = session.query(AlcoholProductProfile).filter(AlcoholProductProfile.org_id == org_id).all()
+    active = [p for p in profiles if p.is_active]
+    incomplete = [
+        p.inventory_name for p in active if not p.pack_volume_ml or not (p.excise_category or p.customs_product_code)
+    ]
+    entry = current.get("entry") or {}
+    return {
+        "today": today.isoformat(),
+        "frequency": frequency,
+        "this_period": {
+            "period_start": current["period_start"],
+            "label": current["label"],
+            "total_lal": current.get("total_lal"),
+            "estimate": entry.get("total") if entry.get("complete") else None,
+            "due": current["due"],
+        },
+        "unlodged_periods": unlodged,
+        "overdue_periods": overdue,
+        "year": {
+            "from": year_ago.isoformat(),
+            "duty": _money(year_duty),
+            "lodged_duty": _money(lodged_duty),
+            "estimated_duty": _money(estimated_duty),
+            "lodged_periods": lodged_count,
+            "six_monthly_allowed": year_duty <= SIX_MONTHLY_LIMIT,
+            "twelve_monthly_allowed": year_duty <= TWELVE_MONTHLY_LIMIT,
+            "six_monthly_limit": _money(SIX_MONTHLY_LIMIT),
+            "twelve_monthly_limit": _money(TWELVE_MONTHLY_LIMIT),
+            "monthly_until": monthly_until.isoformat() if monthly_until else None,
+        },
+        "stocktake": {
+            **plan,
+            "open_differences": len(variances),
+            # "cost" is the module's money figure for the difference: excise duty here.
+            "open_duty": _money(sum((abs(Decimal(v["cost"])) for v in variances if v.get("cost")), Decimal("0"))),
+        },
+        "remissions": remissions,
+        "setup": {"products": len(active), "incomplete": incomplete},
+    }
+
+
+def _money(value: Decimal) -> str:
+    return f"{Decimal(value).quantize(_Q2, ROUND_HALF_UP):f}"
+
+
+def _months_before(day: date, months: int) -> date:
+    serial = day.year * 12 + day.month - 1 - months
+    return date(serial // 12, serial % 12 + 1, 1)
+
+
+def _months_after(day: date, months: int) -> date:
+    serial = day.year * 12 + day.month - 1 + months
+    return date(serial // 12, serial % 12 + 1, min(day.day, 28))
 
 
 def reminder(session: Session, org_id: UUID, profile, today: date | None = None) -> dict | None:
