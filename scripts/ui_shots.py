@@ -651,6 +651,70 @@ def _seed_excise(db, org_id, inv) -> None:
             start = date(serial // 12, serial % 12 + 1, 1)
             excise.lodge(db, org_id, start, "monthly", start + timedelta(days=45), reference, None)
         db.commit()
+    stocked = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.name == gin, InventoryItem.quantity > 20)
+        .order_by(InventoryItem.quantity.desc())
+        .first()
+    )
+    if stocked is not None:
+        _seed_customs_stock(db, org_id, stocked)
+
+
+def _seed_customs_stock(db, org_id, lot) -> None:
+    """Customs -> Stock: a rep's car outside the licensed area with gin in it, library stock
+    kept back from the batch, and a finished stocktake whose differences were a tasting
+    (on the entry), a dropped bottle (a remission) and bottles found in the car."""
+    from datetime import UTC, datetime
+
+    from flask import Flask
+
+    from app.core.backend import stocktake
+    from app.core.db.models.inventory_item import InventoryItem, InventoryType
+    from app.core.db.models.stock_location import StockLocation
+    from app.core.db.models.stocktake import StocktakeLine
+    from app.core.db.repositories.inventory_repo import InventoryRepository
+
+    repo = InventoryRepository(db)
+    today = date.today()
+    car = StockLocation(org_id=org_id, name="Sam's car", inside_licensed_area=False)
+    db.add(car)
+    db.commit()
+    abv = (lot.extra_data or {}).get("abv_percent")
+    repo.create_inventory_item(
+        org_id=org_id,
+        name=f"{lot.name} - Library stock",
+        quantity="1400",
+        unit="mL",
+        inventory_type=InventoryType.FINAL_PRODUCT.value,
+        supplier_batch_number=lot.supplier_batch_number,
+        extra_data={"library_stock": True, **({"abv_percent": abv} if abv else {})},
+    )
+    repo.move_lot(org_id, lot.id, "6", car.id, today - timedelta(days=12), "Tasting run, Wellington", None)
+    db.commit()
+    if Decimal(str(db.get(InventoryItem, lot.id).quantity)) < 12:
+        return
+    # resolve_line reads the signed-in user from flask.g for the wastage record.
+    with Flask(__name__).app_context():
+        counted_on = today - timedelta(days=9)
+        st = stocktake.start_stocktake(db, org_id, counted_on, "scheduled", None, None)
+        db.flush()
+        for line in db.query(StocktakeLine).filter(StocktakeLine.stocktake_id == st.id).all():
+            item = db.get(InventoryItem, line.inventory_item_id)
+            on_hand = Decimal(str(item.quantity))
+            if item.id == lot.id:
+                stocktake.record_count(db, line, str(on_hand - 5))
+                parts = [
+                    {"reason": "removed_unrecorded", "quantity": "2", "note": "Cellar door tasting"},
+                    {"reason": "broken", "quantity": "1", "note": "Dropped on the bottling line"},
+                    {"reason": "found_elsewhere", "quantity": "2", "location_id": str(car.id)},
+                ]
+                stocktake.resolve_line(db, org_id, line, parts, None, counted_on)
+            else:
+                stocktake.record_count(db, line, str(on_hand))
+        st.status = "done"
+        st.completed_at = datetime.combine(counted_on, datetime.min.time(), tzinfo=UTC)
+        db.commit()
 
 
 def _seed_production(db, org_id, inv) -> None:
@@ -1064,6 +1128,27 @@ def cmd_purge(_args) -> int:
         if not org.name.startswith(ORG_PREFIX):
             say(f"refusing to purge {org.name!r}: not an org this script created")
             return 2
+        # Lots at a place reference it, and purge_org can't order that cycle: detach them first.
+        from sqlalchemy import String, func
+
+        from app.core.db.models.inventory_item import InventoryItem
+
+        # A throwaway org: rename them so detaching can't collide on (name, batch, place).
+        placed = InventoryItem.org_id == org_id, InventoryItem.location_id.isnot(None)
+        db.query(InventoryItem).filter(*placed).update(
+            {InventoryItem.name: InventoryItem.name + " @" + func.cast(InventoryItem.id, String)},
+            synchronize_session=False,
+        )
+        db.query(InventoryItem).filter(InventoryItem.org_id == org_id).update(
+            {InventoryItem.location_id: None}, synchronize_session=False
+        )
+        # A stocktake's breakage is a wastage record plus its movement: clear those first too.
+        from app.core.db.models.inventory_movement import InventoryMovement
+        from app.core.db.models.inventory_wastage import InventoryWastage
+
+        db.query(InventoryMovement).filter(InventoryMovement.org_id == org_id).delete(synchronize_session=False)
+        db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
+        db.commit()
         purge_org(db, org_id, user_id)
         db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
