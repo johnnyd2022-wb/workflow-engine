@@ -1,0 +1,24 @@
+{# The Customs pages share one header: what the area is for, and its three views. #}
+<header class="workspace-header customs-header">
+  <div>
+    <h1>Customs</h1>
+    <p class="workspace-caption">{{ customs_caption }}</p>
+  </div>
+  <div class="workspace-header__actions">
+    {% if customs_view == 'entry' %}
+      {# CONCEPT ONLY: style switch, removed once a style is picked. #}
+      <div class="customs-style-pick" role="group" aria-label="Page style (concept)" data-customs-style-pick>
+        <button type="button" data-style="1" aria-pressed="true">Entry sheet</button>
+        <button type="button" data-style="2" aria-pressed="false">Desk</button>
+        <button type="button" data-style="3" aria-pressed="false">Ledger</button>
+      </div>
+    {% endif %}
+    <a class="workspace-button" href="/compliant/nz-alcohol/premises">Licences and licensed areas</a>
+  </div>
+</header>
+<nav class="customs-views" aria-label="Customs">
+  <a href="/compliant/nz-alcohol/customs"{% if customs_view == 'entry' %} aria-current="page"{% endif %}>Excise entry</a>
+  <a href="/compliant/nz-alcohol/customs/stock"{% if customs_view == 'stock' %} aria-current="page"{% endif %}>Stock</a>
+  <a href="/compliant/nz-alcohol/customs/settings"{% if customs_view == 'settings' %} aria-current="page"{% endif %}>Settings</a>
+</nav>
+<p class="compliant-error" data-compliant-error hidden></p>
