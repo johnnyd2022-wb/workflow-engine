@@ -3,7 +3,7 @@
 {% block body_class %}compliant-page{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
 {% block content %}
-<main class="max-content workspace-overview workspace-page customs-page" data-compliant-root data-compliant-surface="customs" data-customs-style="1" aria-busy="true">
+<main class="max-content workspace-overview workspace-page customs-page" data-compliant-root data-compliant-surface="customs" aria-busy="true">
   {% set customs_caption = "This period's excise entry, ready to copy into Trade Single Window, and the records Customs can ask to see." %}
   {% include "compliant/_customs_header.html" %}
 
@@ -14,7 +14,7 @@
       <div class="excise-draft" data-excise-draft aria-live="polite"><p class="workspace-caption">Loading excise…</p></div>
     </section>
 
-    {# Where things stand: a strip above the entry (Style 1), a rail beside it (Style 2), one line (Style 3). #}
+    {# Where things stand: four facts above the entry. #}
     <aside class="customs-position" data-customs-position aria-label="Where things stand with Customs"></aside>
   </div>
 

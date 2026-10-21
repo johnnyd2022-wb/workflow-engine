@@ -216,21 +216,22 @@ def test_stock_moves_out_of_the_licensed_area_as_a_removal(browser, app_url, exc
     page.context.close()
 
 
-# CONCEPT ONLY: the three entry-page styles at each width; deleted with the losing styles.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize(
     "viewport",
     [{"width": 390, "height": 844}, {"width": 1440, "height": 900}, {"width": 1920, "height": 1080}],
     ids=["phone", "laptop", "wall"],
 )
-def test_concept_styles_fit_without_sideways_scroll(browser, app_url, excise_org, style, viewport):
-    page = _open(browser, app_url, excise_org, viewport=viewport, query=f"?style={style}")
-    expect(page.locator(f'[data-customs-style="{style}"]')).to_have_count(1)
+def test_the_entry_page_fits_each_width(browser, app_url, excise_org, viewport):
+    """Tiles to copy from on a laptop; on a phone the same four figures read as a list."""
+    page = _open(browser, app_url, excise_org, viewport=viewport)
+    phone = viewport["width"] < 721
+    expect(page.locator(".customs-summary" if phone else ".customs-tiles")).to_be_visible()
+    expect(page.locator(".customs-tiles" if phone else ".customs-summary")).to_be_hidden()
     for region in ("[data-excise-periods]", "[data-excise-draft]", "[data-customs-position]", "[data-customs-records]"):
         expect(page.locator(region)).to_have_count(1)
     expect(page.get_by_role("button", name="Record as lodged")).to_be_visible()
     overflow = page.evaluate("() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth")
-    assert overflow <= 1, f"style {style} scrolls sideways by {overflow}px at {viewport['width']}px"
+    assert overflow <= 1, f"scrolls sideways by {overflow}px at {viewport['width']}px"
     page.context.close()
 
 

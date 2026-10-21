@@ -7,7 +7,6 @@
 
   var TSW_LOGIN = 'https://www.tsw.govt.nz/external/application/login/app.html';
   var SETTINGS = '/compliant/nz-alcohol/customs/settings';
-  var STOCK = '/compliant/nz-alcohol/customs/stock';
   var WINDOW = 3; // periods shown before "Earlier": the current one and the two before it
 
   // The SPA shell can swap page content in with HTMX, replacing this section after the
@@ -25,25 +24,6 @@
   var positionEl = page.querySelector('[data-customs-position]');
 
   var state = { period: null, periods: [], draft: null, frequency: 'monthly', remindersFrom: null, showAll: false, showUntracked: false, position: null };
-
-  // CONCEPT ONLY: three page styles behind one switch; removed once one is picked.
-  function readStyle() {
-    var q = new URLSearchParams(window.location.search).get('style');
-    if (q === '1' || q === '2' || q === '3') return q;
-    try { var s = window.localStorage.getItem('customs.style.v2'); if (s === '1' || s === '2' || s === '3') return s; } catch (_) {}
-    return '1';
-  }
-  function style() { return page.getAttribute('data-customs-style') || '1'; }
-  function setStyle(s) {
-    page.setAttribute('data-customs-style', s);
-    try { window.localStorage.setItem('customs.style.v2', s); } catch (_) {}
-    page.querySelectorAll('[data-customs-style-pick] [data-style]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-style') === s)); });
-    renderPeriods();
-  }
-  page.querySelectorAll('[data-customs-style-pick] [data-style]').forEach(function (b) {
-    b.addEventListener('click', function () { setStyle(b.getAttribute('data-style')); });
-  });
-  setStyle(readStyle());
 
   function rateText(l) {
     if (!l.rate) return 'no rate';
@@ -71,9 +51,6 @@
     var active = p.period_start === state.period;
     var chip = el('button', { type: 'button', role: 'listitem', className: 'excise-period excise-period--' + st.key + (active ? ' excise-period--active' : ''), 'data-period': p.period_start, 'data-period-status': st.key, 'aria-current': active ? 'true' : 'false' });
     chip.append(el('strong', { className: 'excise-period__label', text: shortLabel(p) }), el('span', { className: 'excise-period__status', text: st.short || st.text }));
-    // The Ledger shows each period's figures in its row; the boxes leave them to the entry.
-    chip.append(el('em', { className: 'excise-period__lal', text: p.status === 'lodged' && p.total_lal != null ? num(p.total_lal, 3) + ' LAL' : '' }));
-    chip.append(el('em', { className: 'excise-period__total', text: p.status === 'lodged' && p.total != null ? money(p.total) : '' }));
     chip.addEventListener('click', function () { loadDraft(p.period_start); });
     return chip;
   }
@@ -110,10 +87,6 @@
       more.addEventListener('click', function () { state.showAll = !state.showAll; renderPeriods(); });
       periodsEl.append(more);
     }
-    // The Ledger opens the selected row in place; the other styles keep the entry below the periods.
-    var active = periodsEl.querySelector('.excise-period--active');
-    if (style() === '3' && active) active.after(draftEl);
-    else if (draftEl.previousElementSibling !== periodsEl) periodsEl.after(draftEl);
   }
 
   async function loadPeriods() {
@@ -368,31 +341,7 @@
     var facts = el('div', { className: 'customs-position__facts' }, [lodgeFact, periodFact, yearFact, stockFact]);
     if ((setup.incomplete || []).length) facts.append(U.fact('Setup', U.plural(setup.incomplete.length, 'product') + ' to finish', setup.incomplete.slice(0, 2).join(', '), 'warn'));
 
-    // One sentence for the Ledger: the same facts, read in a breath.
-    var bits = [toLodge ? U.plural(toLodge, 'entry', 'entries') + ' to lodge' + (p.overdue_periods ? ' (' + p.overdue_periods + ' overdue)' : '') : 'Every entry lodged'];
-    bits.push(U.wholeMoney(y.duty) + ' duty in the last 12 months');
-    bits.push(st.open_differences ? U.plural(st.open_differences, 'stocktake difference') + ' open' : (st.next_due ? 'stocktake ' + (st.overdue ? 'overdue' : 'due ' + U.dayMonth(st.next_due)) : 'no stocktake scheduled'));
-    var line = el('p', { className: 'customs-position__line', text: bits.join(' · ') + '.' });
-
-    var more = el('div', { className: 'customs-position__more' });
-    var cadence = el('div', { className: 'customs-position__block' }, [el('h3', { text: 'How often you lodge' })]);
-    var freqName = { monthly: 'monthly', six_monthly: 'six-monthly', twelve_monthly: 'yearly' }[p.frequency] || 'monthly';
-    var allowed = y.twelve_monthly_allowed ? 'yearly' : (y.six_monthly_allowed ? 'six-monthly' : null);
-    var cadenceText = 'You lodge ' + freqName + '.';
-    if (allowed && p.frequency === 'monthly') cadenceText += ' At ' + U.wholeMoney(y.duty) + ' a year you could ask Customs to lodge ' + allowed + ' (up to ' + U.wholeMoney(allowed === 'yearly' ? y.twelve_monthly_limit : y.six_monthly_limit) + ')' + (y.monthly_until && y.monthly_until > U.todayIso() ? ' once you have lodged monthly until ' + fmtDate(y.monthly_until) : '') + '.';
-    cadence.append(el('p', { className: 'excise-hint', text: cadenceText }), el('a', { href: SETTINGS + '#lodging', text: 'Lodging settings' }));
-    more.append(cadence);
-    var rem = el('div', { className: 'customs-position__block' }, [el('h3', { text: 'Remissions to claim' })]);
-    if ((p.remissions || []).length) {
-      var ul = el('ul', { className: 'customs-position__list' });
-      p.remissions.slice(0, 4).forEach(function (r) { ul.append(el('li', { text: U.amount(r.quantity, r.unit) + ' ' + r.product + ' broken ' + U.dayMonth(r.date) + (r.duty ? ' · ' + money(Math.abs(r.duty)) : '') })); });
-      rem.append(ul, el('p', { className: 'excise-hint', text: 'Broken or damaged stock is dutiable unless Customs remits it (form NZCS 277).' }));
-    } else {
-      rem.append(el('p', { className: 'excise-hint', text: 'None: no breakage recorded at a stocktake in the last 12 months.' }));
-    }
-    rem.append(el('a', { href: STOCK, text: 'Stock and stocktake' }));
-    more.append(rem);
-    positionEl.append(line, facts, more);
+    positionEl.append(facts);
   }
 
   async function loadPosition() {

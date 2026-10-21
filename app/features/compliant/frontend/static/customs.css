@@ -17,17 +17,11 @@
 #page-content .customs-views a[aria-current="page"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #0f766e); }
 html[data-spa-theme="dark"] #page-content .customs-views a[aria-current="page"] { background: rgba(45, 212, 191, .14); color: #5eead4; }
 
-/* CONCEPT ONLY: the style switch. */
-#page-content .customs-style-pick { display: inline-flex; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 999px; padding: 3px; background: var(--ui-surface, #fff); }
-#page-content .customs-style-pick button { background: transparent; color: var(--ui-text-muted, #64748b); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; box-shadow: none; }
-#page-content .customs-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #0f766e); }
-
 /* Layout: the entry, and where things stand */
 #page-content .customs-layout { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }
 #page-content .customs-excise { display: flex; flex-direction: column; gap: 20px; padding: 28px; }
 #page-content .customs-position { order: -1; }
 #page-content .customs-position:empty { display: none; }
-#page-content .customs-position__line, #page-content .customs-position__more { display: none; }
 #page-content .customs-position__facts, #page-content .customs-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 12px; }
 #page-content .customs-fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 14px 16px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: var(--ui-radius-md, 10px); background: var(--ui-surface, #fff); }
 #page-content .customs-fact__label { font-size: 12px; font-weight: 600; color: var(--ui-text-muted, #64748b); }
@@ -39,9 +33,6 @@ html[data-spa-theme="dark"] #page-content .customs-views a[aria-current="page"] 
 html[data-spa-theme="dark"] #page-content .customs-fact--bad .customs-fact__value { color: #f97066; }
 html[data-spa-theme="dark"] #page-content .customs-fact--warn .customs-fact__value { color: #fdb022; }
 html[data-spa-theme="dark"] #page-content .customs-fact--good .customs-fact__value { color: #47cd89; }
-#page-content .customs-position__block h3 { margin: 0 0 6px; font-size: 14px; }
-#page-content .customs-position__block a { font-size: 13px; font-weight: 600; color: var(--ui-accent-strong, #0f766e); }
-#page-content .customs-position__list { margin: 0 0 6px; padding-left: 18px; font-size: 13px; color: var(--ui-text, #172033); }
 
 /* Periods: the last three, then "Earlier" */
 #page-content .customs-page .excise-periods { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 10px; }
@@ -50,7 +41,6 @@ html[data-spa-theme="dark"] #page-content .customs-fact--good .customs-fact__val
 #page-content .customs-page .excise-period:focus-visible { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: 2px; }
 #page-content .customs-page .excise-period strong { font-size: 15px; }
 #page-content .customs-page .excise-period span { font-size: 12px; font-weight: 500; color: var(--ui-text-muted, #64748b); }
-#page-content .customs-page .excise-period em { display: none; font-style: normal; font-size: 12px; color: var(--ui-text-muted, #64748b); font-variant-numeric: tabular-nums; }
 #page-content .customs-page .excise-period--overdue span, #page-content .customs-page .excise-period .excise-period__waiting { color: #b42318; font-weight: 600; }
 #page-content .customs-page .excise-period--due span { color: #8a5a00; font-weight: 600; }
 #page-content .customs-page .excise-period--lodged span { color: #17603f; }
@@ -231,41 +221,6 @@ html[data-spa-theme="dark"] #page-content .customs-bucket__list em { color: #fdb
 #page-content .customs-move__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 #page-content .customs-move .workspace-button { align-self: flex-start; }
 
-/* CONCEPT ONLY — Style 2: Desk. The entry on the left, where things stand in a rail beside it. */
-@media (min-width: 1100px) {
-  #page-content [data-customs-style="2"] .customs-layout { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; align-items: start; gap: 20px; }
-  #page-content [data-customs-style="2"] .customs-position { order: 0; position: sticky; top: 76px; }
-}
-#page-content [data-customs-style="2"] .customs-position { display: flex; flex-direction: column; gap: 16px; padding: 22px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); }
-#page-content [data-customs-style="2"] .customs-position__facts { grid-template-columns: 1fr; gap: 0; }
-#page-content [data-customs-style="2"] .customs-fact { padding: 12px 0; border: 0; border-bottom: 1px solid var(--ui-border, #e2e8f0); border-radius: 0; background: transparent; }
-#page-content [data-customs-style="2"] .customs-position__more { display: flex; flex-direction: column; gap: 16px; }
-#page-content [data-customs-style="2"] .customs-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (min-width: 1100px) {
-  /* The entry column is narrower beside the rail: the line number goes, the cells tighten. */
-  #page-content [data-customs-style="2"] .customs-entry-table th:first-child, #page-content [data-customs-style="2"] .customs-entry-table td:first-child { display: none; }
-  #page-content [data-customs-style="2"] .customs-entry-table { font-size: 12px; }
-  #page-content [data-customs-style="2"] .customs-entry-table th, #page-content [data-customs-style="2"] .customs-entry-table td { padding-left: 7px; padding-right: 7px; }
-  #page-content [data-customs-style="2"] .customs-entry-table th { font-size: 10px; letter-spacing: .02em; }
-  #page-content [data-customs-style="2"] .customs-entry-table td.desc { min-width: 7rem; }
-}
-@media (max-width: 1099px) {
-  #page-content [data-customs-style="2"] .customs-position { order: 1; }
-}
-
-/* CONCEPT ONLY — Style 3: Ledger. Periods are rows; the selected one opens in place. */
-#page-content [data-customs-style="3"] .customs-position__facts { display: none; }
-#page-content [data-customs-style="3"] .customs-position__line { display: block; margin: 0; padding: 14px 18px; border-radius: var(--ui-radius-md, 10px); background: var(--ui-surface-subtle, #f1f5f9); font-size: 14px; color: var(--ui-text, #172033); }
-#page-content [data-customs-style="3"] .excise-periods { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--ui-border, #e2e8f0); border-radius: var(--ui-radius-md, 10px); overflow: hidden; }
-#page-content [data-customs-style="3"] .excise-period { display: grid; grid-template-columns: minmax(7rem, 1.2fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 12px; width: 100%; border: 0; border-bottom: 1px solid var(--ui-border, #e2e8f0); border-radius: 0; padding: 14px 18px; }
-#page-content [data-customs-style="3"] .excise-period em { display: block; text-align: right; }
-#page-content [data-customs-style="3"] .excise-period--more { grid-template-columns: auto 1fr; border-style: solid; }
-#page-content [data-customs-style="3"] .excise-period--active { border-bottom: 0; }
-#page-content [data-customs-style="3"] .excise-periods > :last-child, #page-content [data-customs-style="3"] .excise-periods > .excise-draft:last-child { border-bottom: 0; }
-#page-content [data-customs-style="3"] .excise-periods > .excise-draft { padding: 4px 18px 22px; border-bottom: 1px solid var(--ui-border, #e2e8f0); background: var(--ui-surface, #fff); }
-#page-content [data-customs-style="3"] .customs-excise { padding: 24px; }
-#page-content [data-customs-style="3"] .customs-entry-head h3 { display: none; }
-
 @media (max-width: 900px) {
   #page-content .customs-product { grid-template-columns: 1fr; }
   #page-content .customs-product__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -301,9 +256,4 @@ html[data-spa-theme="dark"] #page-content .customs-bucket__list em { color: #fdb
   #page-content .customs-move__row .customs-field:first-child { grid-column: 1 / -1; }
   #page-content .customs-records__summary { padding: 16px 18px; }
   #page-content .customs-records__body { padding: 0 18px 18px; }
-  /* CONCEPT ONLY — the Ledger's rows stack their figures on a phone. */
-  #page-content [data-customs-style="3"] .excise-period { grid-template-columns: 1fr auto; gap: 2px 10px; padding: 12px 14px; }
-  #page-content [data-customs-style="3"] .excise-period em { text-align: left; }
-  #page-content [data-customs-style="3"] .excise-periods > .excise-draft { padding: 4px 14px 18px; }
-  #page-content [data-customs-style="3"] .customs-excise { padding: 14px; }
 }

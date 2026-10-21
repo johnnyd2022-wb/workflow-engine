@@ -173,7 +173,14 @@ Searched and didn't find:
   - lodging frequency and eligibility;
   - stocktake frequency (the stocktake system check).
 
-## Three directions for the entry page
+## The pick
+
+**Chosen (21 Oct 2026): Style 1, Entry sheet.** Four facts above the period boxes and the entry sheet; on a phone the figures read as a list.
+- Desk lost because its rail narrows the entry table, the thing people copy from.
+- Ledger lost because the entry opened inside a row has less room, and history is less often needed than this month's entry.
+- What only Desk showed (lodging eligibility, remissions to claim) is on Settings and Stock.
+
+## Three directions for the entry page (as presented)
 
 | | Style 1: Entry sheet | Style 2: Desk | Style 3: Ledger |
 |---|---|---|---|
