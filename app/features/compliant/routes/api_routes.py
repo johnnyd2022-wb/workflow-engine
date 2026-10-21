@@ -916,10 +916,21 @@ def list_excise_periods():
                 "lodged_on": rec.lodged_on.isoformat() if rec else None,
                 "nil_return": bool(rec.nil_return) if rec else None,
                 "total_lal": (rec.snapshot or {}).get("total_lal") if rec else None,
+                "total": ((rec.snapshot or {}).get("entry") or {}).get("total") if rec else None,
             }
         )
         start = excise.previous_period(s0, cfg["frequency"])[0]
     return jsonify({"settings": cfg, "periods": rows}), 200
+
+
+@api_bp.route("/api/compliant/nz-alcohol/excise/position", methods=["GET"])
+@requires_auth
+def get_excise_position():
+    """Where the org stands with Customs: the year's duty, this period, stocktake, remissions, setup."""
+    from app.features.compliant.modules.nz_alcohol import excise
+
+    profile = _service().get_profile(_org_id())
+    return jsonify(excise.position(db_session, _org_id(), profile)), 200
 
 
 @api_bp.route("/api/compliant/nz-alcohol/excise/settings", methods=["PUT"])
