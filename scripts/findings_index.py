@@ -138,6 +138,12 @@ EXCLUDE_GLOBS = (
     # swept three descriptive convention bullets ("href is always a same-origin path",
     # etc.) as P0 security findings in the first real sweep of this file.
     "!docs/compliant-core-contract.md",
+    # A page-design plan is a record of what a redesign decided and shipped. Its "Review
+    # round: figures band, trend beside follow-ups" heading names the CRM task feature
+    # ("follow-ups" is the product's own noun for tasks), so `\bfollow[- ]?ups?\b` opened a
+    # section and five bullets describing the shipped Board ("New task opens the Tasks page",
+    # "Due dates read '2 days overdue'") were swept in as open follow-ups.
+    "!docs/sales-redesign-plan.md",
 )
 
 # ---------------------------------------------------------------------------
@@ -254,13 +260,28 @@ RESOLVED_MARKERS = re.compile(
 # down" is active third person ("this section closes it"). Deliberately not matched: the
 # imperative "pin down before build" and the passive "to be pinned down" (both still owe
 # work), and "never pins down X" is negated below.
+#
+# Three more cues, each found in a real sweep (2026-10-20), each saying in the title that the
+# bullets below are not open defects. "Checks and positive findings" lists what a review
+# confirmed is right (8 items, two of them P0 on a "csrf"/"secret" keyword hit). "Non-goals /
+# explicitly deferred" lists what a design chose NOT to build -- `\bdeferred\b` opened it, but
+# a declared non-goal is not owed work (3 items). "Findings and corrections" is a review pass
+# that records each finding together with the correction it then confirmed (8 items).
+# Unlike the cues above, these three are anchored to the WHOLE title: a phrase that merely
+# appears inside a heading ("Findings and corrections: two still open", "Positive findings and
+# open gaps", "Follow-ups (non-goals excluded)") says nothing about the bullets under it, and
+# closing on it would hide owed work. Deliberately NOT matched: "Findings handed back for
+# correction" (still owed) and a bare "corrections".
 _NOTHING_LEFT = r"(?:a|an|further|additional|other|remaining)\s+"
 CLOSED_HEADING_RE = re.compile(
     r"\b(?:fix(?:ed|es)|closed|resolved)\b|\bnot\s+(?:a\s+)?gaps?\b|\bno\s+gaps?\s+found\b"
     r"|\bpins\s+down\b"
     r"|\balready (?:done|fixed|handled)\b"
     r"|\b(?:not|no)\s+(?:" + _NOTHING_LEFT + r")?findings?\b"
-    r"|\bno\s+(?:" + _NOTHING_LEFT + r")?issues?\b",
+    r"|\bno\s+(?:" + _NOTHING_LEFT + r")?issues?\b"
+    r"|^(?:checks\s+and\s+)?positive\s+findings?:?$"
+    r"|^(?:explicit(?:ly)?\s+)?non[- ]?goals?(?:\s*/\s*(?:explicitly\s+)?(?:deferred|out of scope))?:?$"
+    r"|^findings?\s+(?:and|&)\s+corrections?:?$",
     re.I,
 )
 # Negated phrasing this repo actually uses -- "not closed this pass", "not fixed" -- must
@@ -317,6 +338,17 @@ HANDOFF_RE = re.compile(r"(?:(?:→|->)|\broute:)\s*\*\*(?P<skill>[a-z][\w -]*)\
 # this repo bold the verdict, and without this the word never reaches `[a-z-]+`, so the
 # whole report (already-closed findings included) gets rescanned as open forever.
 VERDICT_RE = re.compile(r"^\s*(?:##\s*)?verdict:\s*\**(?P<verdict>[a-z-]+)", re.I | re.M)
+# A verdict that LEADS with emphasis -- page-design's reviews write one per section, e.g.
+# `**Verdict: clean. No unresolved actionable findings.**` then, later, `**Verdict: valid.**`
+# for each test update. These are section verdicts, not a header, so "first one wins" (right
+# for the plain header above) would let a clean first section close a report whose later
+# section says `**Verdict: invalid.**`. So the report counts as closed only when there is such
+# a bold-lead verdict AND *every* mention of "verdict" anywhere in the file -- however it is
+# spelled (`**Verdict:** invalid`, `**VERDICT -- invalid**`, `> **Verdict**: invalid`, mid-line,
+# in a heading) -- is followed by a closed word. Anything that reads otherwise (a word that is
+# not a closed verdict, e.g. prose "no verdict yet") keeps the report open: the safe direction.
+BOLD_VERDICT_RE = re.compile(r"^\s*\*+verdict\b", re.I | re.M)
+ANY_VERDICT_RE = re.compile(r"\bverdict\b\W*(?P<word>[a-z-]+)?", re.I)
 # `within-budget` is perf-guardrails' own spelling of "closed, nothing owed" (its reports
 # restate it as a plain `patched` in the trailing footer -- see the comment above `verdict`
 # in `parse_doc`, which explains why the header word, not the footer's, is authoritative).
@@ -693,6 +725,10 @@ def parse_doc(path: Path) -> list[Item]:
     verdict = VERDICT_RE.search(text)
     if verdict and verdict.group("verdict").lower() in VERDICT_CLOSED:
         return []
+    if not verdict and BOLD_VERDICT_RE.search(text):
+        mentions = [(m.group("word") or "").lower() for m in ANY_VERDICT_RE.finditer(text)]
+        if all(word in VERDICT_CLOSED for word in mentions):
+            return []
 
     lines = text.splitlines()
     items: list[Item] = []

@@ -1015,7 +1015,10 @@ def update_mapping(mapping_id: str):
     mapping_uuid = _uuid_or_none(mapping_id)
     if mapping_uuid is None:
         return jsonify({"error": "Invalid mapping ID"}), 400
-    mapping = _crm_service().update_mapping(mapping_uuid, org_id, data)
+    try:
+        mapping = _crm_service().update_mapping(mapping_uuid, org_id, data)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     if not mapping:
         return jsonify({"error": "Mapping not found"}), 404
     return jsonify({"product_mapping": mapping}), 200

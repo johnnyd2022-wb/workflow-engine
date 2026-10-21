@@ -379,3 +379,48 @@ class TestSalesTraceability:
         db.rollback()
         db.refresh(theirs)
         assert Decimal(str(theirs.quantity)) == Decimal("10")
+
+
+class TestMappingSourceOutputs:
+    """F2's ownership check reads steps and stock; with no tenant context only its own ``org_id``
+    predicates keep another tenant's output from counting as the caller's."""
+
+    @staticmethod
+    def _map(db, org_id, output_id):
+        from app.features.crm.services.crm_service import CRMService
+
+        return CRMService(db).create_mapping(
+            org_id,
+            {
+                "biz_e_product_name": f"Mapped {uuid4()}",
+                "xero_description_pattern": f"Pattern {uuid4()}",
+                "biz_e_source_output_id": str(output_id),
+            },
+            None,
+        )
+
+    def test_another_orgs_output_is_not_this_orgs_product(self, db, org, other_org):
+        """Declared by their step and carried by their stock, so both lookups are tempted."""
+        output_id, step = crm_fixtures._declared_product_output(db, other_org.id)
+        crm_fixtures._stock_of_output(db, other_org.id, step, output_id)
+
+        with pytest.raises(ValueError, match="not a product output in this organisation"):
+            self._map(db, org.id, output_id)
+
+        assert db.query(ProductMapping).filter(ProductMapping.org_id == org.id).count() == 0
+
+    def test_another_orgs_stock_alone_is_not_this_orgs_product(self, db, org, other_org):
+        """Their step stops declaring it, leaving only stock to vouch for the id."""
+        output_id, step = crm_fixtures._declared_product_output(db, other_org.id)
+        crm_fixtures._stock_of_output(db, other_org.id, step, output_id)
+        step.outputs = []
+        db.commit()
+
+        with pytest.raises(ValueError, match="not a product output in this organisation"):
+            self._map(db, org.id, output_id)
+
+    def test_the_owning_orgs_output_is_accepted(self, db, org):
+        """[CONTROL]"""
+        output_id, _ = crm_fixtures._declared_product_output(db, org.id)
+
+        assert self._map(db, org.id, output_id)["biz_e_source_output_id"] == str(output_id)

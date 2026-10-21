@@ -1652,3 +1652,236 @@ def test_findings_sweep_closure_mr_is_not_re_indexed_from_its_own_writeup(monkey
     assert [i.source_ref for i in items] == ["!226"], (
         f"only the non-closure MR should contribute items, got {[(i.source_ref, i.title) for i in items]}"
     )
+
+
+# --- page-design review reports: sections that record what is right, or already corrected ---
+
+
+def test_positive_findings_heading_does_not_open_a_section(tmp_path, monkeypatch):
+    """'## Checks and positive findings' lists what a review confirmed is correct ("Dynamic
+    values use `textContent`", "no mutation/CSRF omission here"). `\\bfindings?\\b` opened it,
+    and a "csrf" keyword then ranked the confirmations as P0 security work."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Checks and positive findings
+
+- Dynamic values use `textContent` and DOM node creation; no dynamic innerHTML was found.
+- The only new request is a same-origin read-only GET, so there is no CSRF omission here.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_a_plain_findings_heading_next_to_positive_findings_still_opens(tmp_path, monkeypatch):
+    """Contrast: the cue is 'positive', not the surrounding report."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Positive findings
+- The export endpoint validates every field before it writes anything to the database.
+
+## Findings
+- The export endpoint has no rate limit and could be abused for a denial of service.
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "no rate limit" in items[0].detail
+
+
+def test_non_goals_heading_does_not_open_a_section(tmp_path, monkeypatch):
+    """'## Non-goals / explicitly deferred' (docs/live-sync-architecture.md) lists what the
+    design chose not to build. `\\bdeferred\\b` opened it; a declared non-goal is not owed."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "docs/x.md",
+        """## Non-goals / explicitly deferred
+
+- SSE/WebSocket transport is designed for but not built now, since it needs an ASGI server.
+- A Redis/broker fan-out: the polled Postgres feed is sufficient at the stated scale.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_deferred_heading_without_non_goals_still_opens_a_section(tmp_path, monkeypatch):
+    """Contrast: a design doc's 'Deliberately deferred' call-outs are real deferred work."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "docs/x.md",
+        """### Deliberately deferred
+
+- Index necessity is unproven at scale; recalibrate with production-shaped volume.
+""",
+    )
+    assert len(fi.parse_doc(path)) == 1
+
+
+def test_findings_and_corrections_heading_does_not_open_a_section(tmp_path, monkeypatch):
+    """'## Findings and corrections' (settings-review.md) records each finding together with
+    the correction the re-review then confirmed; the bullets are confirmations, not debt."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## Findings and corrections
+
+1. **Boosted arrival does not run the dedicated initializer.** Move it into content.
+
+Re-review confirmed the corrections:
+
+- Dedicated account code is now extracted to a controller registered through the page lifecycle.
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "Findings and corrections needed",
+        "Findings & corrections required",
+        "Findings handed back for correction",
+        "Findings and corrections: two still open",
+        "Findings and corrections (pending founder)",
+        "Positive findings and open gaps",
+        "Follow-ups (non-goals excluded)",
+        "Open follow-ups and non-goals",
+        "Open gaps and positive findings",
+        "Negative and positive findings",
+        "Outstanding positive findings",
+    ],
+)
+def test_a_heading_that_only_contains_a_closing_phrase_keeps_its_section_open(tmp_path, monkeypatch, heading):
+    """Contrast: the closing cues match the WHOLE title. The same words inside a longer heading
+    that says work is still owed ("two still open", "pending", "and open gaps") say nothing
+    about the bullets under it, and must stay on the worklist."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        f"""## {heading}
+
+- The invoice export does not scope its query to the caller's organisation.
+""",
+    )
+    assert len(fi.parse_doc(path)) == 1
+
+
+def test_leading_bold_verdict_closes_a_report(tmp_path, monkeypatch):
+    """page-design reviews open with '**Verdict: clean. No unresolved actionable findings.**'.
+    `verdict:` only matched at line start, so the report was never read as closed and its
+    later 'independent follow-up' logs ("Restored exact dashboard: **1 passed**") were indexed."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """# Compliance review
+
+## HTML and JavaScript
+
+**Verdict: clean. No unresolved actionable findings.**
+
+## Static module-title test update — independent follow-up
+
+- Restored exact dashboard: **1 passed**, `/tmp/compliance-515-evaluator-title-restored.log`
+""",
+    )
+    assert fi.parse_doc(path) == []
+
+
+def test_a_clean_bold_section_verdict_does_not_close_a_report_with_an_invalid_one(tmp_path, monkeypatch):
+    """page-design reviews write a bold verdict per section. A clean first section must not
+    close a report whose later section says `**Verdict: invalid.**` and lists the finding
+    (the "first verdict wins" rule is for a plain header, not for section verdicts)."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """## HTML and JavaScript
+
+**Verdict: clean. No unresolved actionable findings.**
+
+## Test evaluation
+
+**Verdict: invalid.**
+
+### Findings
+- `test_export_is_scoped` is a tautology: it asserts the fixture it just created.
+""",
+    )
+    items = fi.parse_doc(path)
+    assert len(items) == 1
+    assert "tautology" in items[0].detail
+
+
+@pytest.mark.parametrize(
+    "later_verdict",
+    [
+        "**Verdict: invalid.**",
+        "**Verdict:** invalid",
+        "- **Verdict: invalid**",
+        "### Verdict: invalid",
+        "**VERDICT \u2014 invalid**",
+        "**Verdict**: invalid",
+        "> **Verdict: invalid**",
+        "**Verdict:** `findings-open`",
+        "Scope added: the export test. **Verdict: invalid.** Its assertion is a tautology.",
+    ],
+)
+def test_no_spelling_of_a_later_open_verdict_slips_past_a_clean_bold_one(tmp_path, monkeypatch, later_verdict):
+    """The all-verdicts-closed check must see a verdict however it is written -- colon inside
+    the bold, a dash, a quote, a list marker, a heading, mid-paragraph -- not only the
+    `**Verdict: word**` shape it first learned to close on."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        f"""**Verdict: clean. No unresolved actionable findings.**
+
+## Test evaluation
+
+{later_verdict}
+
+### Findings
+- `test_export_is_scoped` is a tautology: it asserts the fixture it just created.
+""",
+    )
+    assert len(fi.parse_doc(path)) == 1
+
+
+def test_leading_bold_findings_open_verdict_does_not_close_a_report(tmp_path, monkeypatch):
+    """Contrast: only a closed verdict word closes; bold alone is not a verdict."""
+    path = write_doc(
+        tmp_path,
+        monkeypatch,
+        "reports/x.md",
+        """**Verdict: findings-open**
+
+## Findings
+- The export endpoint has no rate limit and could be abused for a denial of service.
+""",
+    )
+    assert len(fi.parse_doc(path)) == 1
+
+
+def test_sales_redesign_plan_is_excluded_but_review_docs_are_not():
+    """docs/sales-redesign-plan.md's 'Review round: figures band, trend beside follow-ups'
+    names the CRM task feature, so `\\bfollow[- ]?ups?\\b` swept five bullets describing the
+    shipped Board as open follow-ups. Narrowness guard: other design docs are still scanned."""
+    import shutil
+
+    if not shutil.which("rg"):
+        pytest.skip("ripgrep not installed")
+
+    docs = fi.find_candidate_docs()
+    assert docs is not None, "find_candidate_docs could not run"
+    rel = {p.relative_to(fi.REPO_ROOT).as_posix() for p in docs}
+
+    assert "docs/sales-redesign-plan.md" not in rel
+    assert "docs/core-load-performance-design.md" in rel
