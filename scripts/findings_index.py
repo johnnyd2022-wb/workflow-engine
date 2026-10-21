@@ -1076,6 +1076,62 @@ def merged_mr_closures(since_days: int) -> tuple[dict[str, str], list[str]]:
     return closures, seen
 
 
+def merged_commit_closures(ref: str = "origin/main") -> dict[str, str]:
+    """Map item-id -> "commit <sha>" for every `Findings-Index:` trailer reachable from ``ref``.
+
+    The second source of merge closures, beside the MR descriptions. The index is a
+    gitignored per-worktree file and the daily run starts in a fresh worktree, so nothing
+    remembers what already shipped, and the MR window (`merged_lookback_days`) forgets
+    after two days: an item fixed last week, whose audit-report bullet nobody edited,
+    would be listed as outstanding in every run from then on. Commit history is
+    permanent, local, and needs no glab.
+
+    Only ``ref`` counts, never HEAD. A trailer on this run's own unmerged commit is a
+    claim about a merge that has not happened, and `done` is reserved for the merge.
+    A missing ref (no remote, a bare checkout) is "no evidence", not an error.
+
+    History never ages out and a revert does not remove a trailer, so `sweep()` applies
+    these closures to an item only when it first sees it, never to a record it already
+    holds. A human who reopens or `wont-fix`es an item (or a fix that was reverted) is not
+    overridden on the next sweep; only a worktree with no memory of the item takes history
+    at its word. The trailer therefore belongs on the commit that fixes the item, and only
+    for items that commit really fixes.
+    """
+    try:
+        proc = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(REPO_ROOT),
+                "log",
+                ref,
+                "--regexp-ignore-case",
+                "--grep=^[[:space:]]*Findings-Index:",
+                "--format=%H%x1f%B%x1e",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    if proc.returncode != 0:
+        return {}
+
+    closures: dict[str, str] = {}
+    for entry in proc.stdout.split("\x1e"):
+        sha, _, body = entry.strip().partition("\x1f")
+        if not sha:
+            continue
+        for match in TRAILER_RE.finditer(body):
+            for raw_id in match.group("ids").split(","):
+                item_id = raw_id.strip().lower()
+                if item_id:
+                    closures.setdefault(item_id, f"commit {sha[:8]}")  # newest commit first
+    return closures
+
+
 # ---------------------------------------------------------------------------
 # human-recorded suppression, read from finding_history.py
 # ---------------------------------------------------------------------------
@@ -1310,6 +1366,9 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
     for item in [*(i for p in (docs or []) for i in parse_doc(p)), *(markers or [])]:
         found.setdefault(item.id, item)
 
+    # History is local, so it is read even under --no-remote. It only ever closes an item
+    # at birth (step 2), never one the store already holds: see merged_commit_closures.
+    history_closures = merged_commit_closures()
     closures: dict[str, str] = {}
     merged_seen: list[str] = []
     if not skip_remote:
@@ -1324,6 +1383,9 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         "new": 0,
         "reopened": 0,
         "closed_by_merge": 0,
+        # Items first seen already shipped: this worktree never held them, so closing them
+        # is not news. Kept apart from closed_by_merge, which means "merged since last seen".
+        "already_shipped": 0,
         "gone": 0,
         "suppressed": 0,
         "unchanged": 0,
@@ -1351,8 +1413,17 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
     for item_id, item in found.items():
         record = records.get(item_id)
         if record is None:
-            records[item_id] = item.to_new_record()
-            stats["new"] += 1
+            record = records[item_id] = item.to_new_record()
+            # The store is per-worktree and the daily run starts with it empty, so step 1
+            # never sees a record for something that shipped before this worktree existed.
+            # Close it at birth, or yesterday's merged fix is listed as today's new work.
+            ref = closures.get(item_id) or history_closures.get(item_id)  # the MR's "!N" is the better pointer
+            if ref:
+                record["mr"] = ref
+                _note(record, "done", f"merged in {ref}", explicit=True)
+                stats["already_shipped"] += 1
+            else:
+                stats["new"] += 1
             continue
 
         record["last_seen"] = today()
@@ -1528,7 +1599,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     stats, budget = result["stats"], result["budget"]
     print(f"swept {result['total']} tracked item(s), {result['open']} open")
     print(
-        "  new {new}, reopened {reopened}, closed-by-merge {closed_by_merge}, "
+        "  new {new}, reopened {reopened}, closed-by-merge {closed_by_merge}, already-shipped {already_shipped}, "
         "gone {gone}, suppressed {suppressed}, unchanged {unchanged}".format(**stats)
     )
     unscanned = [name for name, ok in result["sources_scanned"].items() if not ok]
