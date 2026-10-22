@@ -105,8 +105,13 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.js"
     ).read_text(encoding="utf-8")
     assert "data-evidence-control-heading" not in dashboard
-    assert "data-evidence-control-heading" in customs_workspace
-    assert "review_interval_months" in customs_workspace
+    # Customs evidence is recorded per check on Customs -> Records, with a form tailored to it.
+    records_script = (
+        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "customs-records.js"
+    ).read_text(encoding="utf-8")
+    assert "data-record-form" not in customs_workspace and "data-customs-records-link" in customs_workspace
+    assert "evidenceForm(control" in records_script and "control.capture" in records_script
+    assert "review_interval_months" in records_script
     assert "evidence_coverage" in dashboard_script
     assert "compliant-framework-summary" in dashboard_script
     assert "summary_health" in dashboard_script

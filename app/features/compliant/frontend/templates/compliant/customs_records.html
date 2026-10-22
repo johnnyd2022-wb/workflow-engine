@@ -1,0 +1,45 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Records for Customs — NZ Alcohol{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
+{% block content %}
+<main class="max-content workspace-overview workspace-page customs-page customs-records-page" data-customs-records-root data-records-style="1" data-compliant-root aria-busy="true">
+  {% set customs_caption = "What Customs can ask to see, whether the proof is current, and adding more." %}
+  {% include "compliant/_customs_header.html" %}
+
+  {# CONCEPT ONLY: style switch, removed once a style is picked. #}
+  <div class="customs-style-pick" role="group" aria-label="Records layout (concept)" data-records-style-pick>
+    <button type="button" data-style="1" aria-pressed="true">Checks and a page each</button>
+    <button type="button" data-style="2" aria-pressed="false">Checklist and a sheet</button>
+    <button type="button" data-style="3" aria-pressed="false">Timeline</button>
+  </div>
+
+  <section class="workspace-card customs-card customs-rec" aria-labelledby="customs-rec-title">
+    <div class="customs-card__head">
+      <div>
+        <h2 id="customs-rec-title">Records for Customs</h2>
+        <p class="workspace-caption" data-records-summary>Loading…</p>
+      </div>
+      <div class="customs-card__actions">
+        <button type="button" class="workspace-button workspace-button--primary" data-records-add>Record evidence</button>
+      </div>
+    </div>
+    <div class="customs-rec__chips" data-records-chips role="group" aria-label="Show records for"></div>
+    <div class="customs-rec__list" data-records-checks></div>
+    <div class="customs-rec__feed" data-records-feed aria-live="polite"></div>
+  </section>
+
+  {# Style 2's sheet and Style 3's "Record evidence" open the same check view here. #}
+  <div class="customs-sheet" data-records-sheet hidden>
+    <div class="customs-sheet__backdrop" data-records-sheet-close></div>
+    <aside class="customs-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="customs-sheet-title">
+      <div class="customs-sheet__head">
+        <h2 id="customs-sheet-title" data-records-sheet-title>Record evidence</h2>
+        <button type="button" class="customs-sheet__close" data-records-sheet-close aria-label="Close">Done</button>
+      </div>
+      <div class="customs-sheet__body" data-records-sheet-body></div>
+    </aside>
+  </div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/customs-common.js"></script><script src="/compliant/static/customs-records.js"></script>{% endblock %}

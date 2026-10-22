@@ -40,11 +40,10 @@ def test_dashboard_page_renders_for_logged_in_user(admin_page):
 
     response = page.goto("/compliant/nz-alcohol/customs")
     assert response is not None and response.status == 200
-    # Records for Customs are folded at the bottom of the entry page, the form behind "Add a record".
-    expect(page.locator("[data-record-form]")).to_be_hidden()
-    page.locator("[data-customs-records] > summary").click()
-    page.locator("[data-add-record] > summary").click()
-    expect(page.locator("[data-record-form]")).to_be_visible()
+    # Records for Customs have their own view (each check has its own page and form).
+    page.locator("[data-customs-records-link]").click()
+    expect(page.get_by_role("heading", name="Records for Customs", exact=True)).to_be_visible()
+    expect(page.locator("[data-customs-records-root]")).to_have_attribute("aria-busy", "false")
     # Product classification moved to Customs -> Settings.
     page.locator('.customs-views a[href="/compliant/nz-alcohol/customs/settings"]').click()
     expect(page.get_by_role("heading", name="Products", exact=True)).to_be_visible()

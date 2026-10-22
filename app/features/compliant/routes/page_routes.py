@@ -59,7 +59,7 @@ def nz_alcohol_dashboard():
 def legacy_nz_alcohol_evidence():
     """Historic URL: NP3 evidence now lives per-check, so this page is Customs-only."""
     query = f"?{request.query_string.decode()}" if request.query_string else ""
-    return redirect(f"/compliant/nz-alcohol/customs{query}", code=302)
+    return redirect(f"/compliant/nz-alcohol/customs/records{query}", code=302)
 
 
 @page_bp.route("/compliant/nz-alcohol/customs", methods=["GET"])
@@ -85,6 +85,28 @@ def nz_alcohol_customs_stock():
         **_nz_alcohol_template_context(
             customs_view="stock", multiple_sites=bool(org is not None and org.multiple_sites_enabled)
         ),
+    )
+
+
+@page_bp.route("/compliant/nz-alcohol/customs/records", methods=["GET"])
+@requires_auth
+def nz_alcohol_customs_records():
+    """Records for Customs: each thing Customs can ask to see, its proof, and adding more."""
+    return render_template("compliant/customs_records.html", **_nz_alcohol_template_context(customs_view="records"))
+
+
+@page_bp.route("/compliant/nz-alcohol/customs/records/<control_id>", methods=["GET"])
+@requires_auth
+def nz_alcohol_customs_record_check(control_id: str):
+    """One Customs check: what Customs asks to see, the evidence we have, adding more, history."""
+    from app.features.compliant.modules.nz_alcohol.catalogue import NZ_ALCOHOL_FRAMEWORKS
+
+    customs = next(f for f in NZ_ALCOHOL_FRAMEWORKS if f["slug"] == "customs-alcohol")
+    if control_id not in dict(customs["controls"]):
+        return redirect("/compliant/nz-alcohol/customs/records", code=302)
+    return render_template(
+        "compliant/customs_record_check.html",
+        **_nz_alcohol_template_context(customs_view="records", control_id=control_id),
     )
 
 
