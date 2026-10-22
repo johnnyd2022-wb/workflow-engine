@@ -823,6 +823,75 @@ def _seed_excise(db, org_id, inv) -> None:
     )
     if stocked is not None:
         _seed_customs_stock(db, org_id, stocked)
+    _seed_customs_records(db, org_id)
+
+
+def _seed_customs_records(db, org_id) -> None:
+    """Records for Customs beyond the lodgements: a monthly reconciliation, the retention
+    attestation, and a movement record still open."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.user import User
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+
+    user = db.query(User).filter(User.org_id == org_id).first()
+    today = date.today()
+    serial = today.year * 12 + today.month - 1 - 5
+    start = date(serial // 12, serial % 12 + 1, 1)
+    end = date(start.year + (start.month == 12), start.month % 12 + 1, 1) - timedelta(days=1)
+    rows = (
+        (
+            "reconciliation",
+            "reading",
+            "complete",
+            f"Stock reconciled: {start:%B %Y}",
+            (start, end),
+            "Drive / Customs / Reconciliations",
+            {"declared_litres_of_alcohol": "35.280"},
+            40,
+        ),
+        (
+            "record-retention",
+            "attestation",
+            "complete",
+            "Records kept 7 years, backed up in NZ",
+            (None, None),
+            "Google Workspace (NZ) and nightly backup",
+            {},
+            60,
+        ),
+        (
+            "movement-evidence",
+            "attestation",
+            "open",
+            "Delivery dockets for Sam's car transfers",
+            (None, None),
+            None,
+            {},
+            6,
+        ),
+    )
+    for control, kind, status, title, period, ref, details, back in rows:
+        at = datetime.combine(today - timedelta(days=back), datetime.min.time(), tzinfo=UTC).replace(hour=10)
+        db.add(
+            ComplianceRecord(
+                org_id=org_id,
+                framework_slug="customs-alcohol",
+                control_id=control,
+                record_type=kind,
+                status=status,
+                title=title,
+                period_start=period[0],
+                period_end=period[1],
+                evidence_reference=ref,
+                source_refs=[],
+                details=details,
+                created_by_user_id=user.id if user else None,
+                created_at=at,
+                updated_at=at,
+            )
+        )
+    db.commit()
 
 
 def _seed_customs_stock(db, org_id, lot) -> None:
