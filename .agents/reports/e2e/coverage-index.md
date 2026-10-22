@@ -77,7 +77,9 @@ before writing tests rather than re-deriving this by hand. Legend:
 | Customers API auth-gated + org-scoped | ✅ | test_crm_flow |
 | Add / edit a customer, send it to Xero | ✅ | test_crm_contact_sync_ui |
 | New Invoice form: draft, authorised, no-line check, Xero refusal and Xero unreachable | ✅ | test_crm_invoice_ui |
-| Authorise an existing draft; invoice PDF and view-in-Xero links | 🟡 route-level failure paths only (unknown invoice, Xero refusing or unreachable: `test_crm_flow`, `tests/test_crm.py`); no route happy path and no browser flow |
+| Invoice row: Authorise a draft (and not an authorised row), Authorise failing | ✅ | test_crm_invoice_ui |
+| Invoice row: View opens the online invoice in a `noopener,noreferrer` tab; View failing opens nothing | ✅ | test_crm_invoice_ui |
+| Invoice row: Download saves `<number>.pdf`; a draft is told to authorise first | ✅ | test_crm_invoice_ui |
 | **Cross-cutting** | | |
 | Security headers, cookie flags, CSRF rejection | ✅ | test_security_headers |
 | 21 authenticated pages render clean | ✅ | test_pages_render |
@@ -94,17 +96,6 @@ before writing tests rather than re-deriving this by hand. Legend:
   scan could never decode (read from the code on 2026-10-13, not reproduced in a browser).
   A test needs a stubbed `BarcodeDetector`; whether the fallback should be vendored or the CSP
   widened is a product and security call.
-- **CRM invoice row actions (e2e)** — the New Invoice form and customer create/edit are now
-  driven in a browser against a faked Xero (`test_crm_invoice_ui.py`,
-  `test_crm_contact_sync_ui.py`); the invoice tests also fail if the app builds a Xero API
-  client for a call the fake does not answer. Still without a browser flow: the **Authorise** button on an
-  existing draft row, and the invoice PDF and view-in-Xero links. At route level only the
-  failure paths are pinned (an unknown invoice, Xero refusing or being unreachable); the
-  client-level happy paths are in `tests/test_xero_api_client.py` (authorise, online invoice
-  URL, PDF), so what has no test is each route's happy path. A browser would add the button
-  state and the message shown, as `test_crm_invoice_ui.py` does for the form. (Narrowed on
-  2026-10-21 by findings-sweep from "CRM customer / invoice CRUD"; that text said customers
-  are Xero-sourced only, which stopped being true when Biz-E-made customers shipped.)
 - **Full process-wizard click-through** — the wizard is many SPA fragments. Creation is
   driven through the real browser session's API (exercising auth, CSRF, org-scope, and
   the business logic) and verified in the UI; clicking every fragment is a higher-

@@ -1,11 +1,12 @@
-"""Raising an invoice from a customer's page: the New Invoice form, in a browser.
+"""Raising an invoice from a customer's page, and acting on its row: in a browser.
 
-Closes the "Customer / invoice CRUD (e2e)" deferral in .agents/reports/e2e/coverage-index.md.
-Customers made in Biz-E are covered by test_crm_contact_sync_ui.py; this covers the other
-write path, the form that sends an invoice to Xero. tests/test_crm.py::TestCRMInvoiceCreation
-covers the service. What only a browser shows is the form itself: that what a person types
-is what reaches Xero, that choosing Authorised really sends AUTHORISED, and that a refusal
-is read out rather than swallowed.
+Closes the "Customer / invoice CRUD (e2e)" and "CRM invoice row actions (e2e)" deferrals in
+.agents/reports/e2e/coverage-index.md. Customers made in Biz-E are covered by
+test_crm_contact_sync_ui.py; this covers the other write path, the form that sends an invoice
+to Xero. tests/test_crm.py::TestCRMInvoiceCreation covers the service. What only a browser
+shows is the form itself: that what a person types is what reaches Xero, that choosing
+Authorised really sends AUTHORISED, and that a refusal is read out rather than swallowed. The
+same goes for the row's own buttons: Authorise on a draft, View, and Download.
 
 Same harness as test_crm_contact_sync_ui.py: Playwright routes every request into the Flask
 test client, and Xero is faked at the XeroAPIClient boundary. Opening the form also asks Xero
@@ -17,6 +18,7 @@ api.xero.com, even with a placeholder token.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -31,6 +33,10 @@ from tests.test_crm_contact_sync import _connect, _xero_contact
 from tests.test_xero_sync_service import _xero_invoice
 
 pytestmark = pytest.mark.e2e
+
+# `.example` is reserved, so a link that did get followed could not reach a real host.
+ONLINE_INVOICE_URL = "https://invoices.xero.example/{}"
+INVOICE_PDF = b"%PDF-1.4\n% a stand-in for the invoice Xero would render\n%%EOF\n"
 
 db = crm_fixtures.db
 org = crm_fixtures.org
@@ -49,7 +55,13 @@ class FakeXeroInvoices:
 
     def __init__(self):
         self.created: list[dict] = []
+        self.xero_ids: list[str] = []  # Xero's id for each invoice created, in order
         self.fail_with: Exception | None = None
+        # What a row's Authorise, View and Download ask Xero for, and a failure for all three.
+        self.authorised: list[str] = []
+        self.viewed: list[str] = []
+        self.downloaded: list[str] = []
+        self.fail_row_action_with: Exception | None = None
         self.unfaked: list[str] = []
         self._xero_invoices: list[SimpleNamespace] = []
 
@@ -61,6 +73,7 @@ class FakeXeroInvoices:
                 raise fake.fail_with
             fake.created.append(sent)
             invoice = _xero_invoice(f"xero-inv-{uuid4()}", f"INV-{len(fake.created):04d}")
+            fake.xero_ids.append(invoice.invoice_id)
             total = sum(line["quantity"] * line["unit_amount"] for line in sent["line_items"])
             invoice.contact = SimpleNamespace(contact_id=sent["contact_xero_id"])
             invoice.status = sent["status"]
@@ -86,6 +99,27 @@ class FakeXeroInvoices:
             fake._xero_invoices.append(invoice)
             return invoice
 
+        def authorise_invoice(_client, *, xero_invoice_id):
+            if fake.fail_row_action_with:
+                raise fake.fail_row_action_with
+            fake.authorised.append(xero_invoice_id)
+            # The sync the app runs straight afterwards pulls this same invoice back.
+            invoice = next(i for i in fake._xero_invoices if i.invoice_id == xero_invoice_id)
+            invoice.status = "AUTHORISED"
+            return invoice
+
+        def get_online_invoice_url(_client, *, xero_invoice_id):
+            if fake.fail_row_action_with:
+                raise fake.fail_row_action_with
+            fake.viewed.append(xero_invoice_id)
+            return ONLINE_INVOICE_URL.format(xero_invoice_id)
+
+        def get_invoice_pdf(_client, *, xero_invoice_id):
+            if fake.fail_row_action_with:
+                raise fake.fail_row_action_with
+            fake.downloaded.append(xero_invoice_id)
+            return INVOICE_PDF
+
         def unfaked(_client):
             # The app swallows a failed Xero call, so raising here would pass unseen.
             # Recording it is what lets the fixture fail the test afterwards.
@@ -94,6 +128,9 @@ class FakeXeroInvoices:
 
         xero_client = xero_api_client_module.XeroAPIClient
         monkeypatch.setattr(xero_client, "create_invoice", create_invoice)
+        monkeypatch.setattr(xero_client, "authorise_invoice", authorise_invoice)
+        monkeypatch.setattr(xero_client, "get_online_invoice_url", get_online_invoice_url)
+        monkeypatch.setattr(xero_client, "get_invoice_pdf", get_invoice_pdf)
         monkeypatch.setattr(xero_client, "get_all_contacts", lambda self, **kw: [])
         monkeypatch.setattr(xero_client, "get_all_invoices", lambda self, **kw: list(fake._xero_invoices))
         monkeypatch.setattr(xero_client, "get_contact_payment_terms", lambda self, contact_xero_id: None)
@@ -142,7 +179,7 @@ def _click_and_read_the_alert(page, button):
     return raised.value.message
 
 
-def test_a_draft_invoice_reaches_xero_as_typed_and_is_listed(sales_page, db, org, xero_invoices):
+def test_a_draft_invoice_reaches_xero_as_typed_and_is_listed(xero_invoices, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
     contact = _xero_contact(db, org.id, name="Harbour Spirits Co.")
@@ -165,7 +202,7 @@ def test_a_draft_invoice_reaches_xero_as_typed_and_is_listed(sales_page, db, org
     ]
 
 
-def test_choosing_authorised_sends_it_authorised(sales_page, db, org, xero_invoices):
+def test_choosing_authorised_sends_it_authorised(xero_invoices, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
     contact = _xero_contact(db, org.id, name="Harbour Spirits Co.")
@@ -184,7 +221,7 @@ def test_choosing_authorised_sends_it_authorised(sales_page, db, org, xero_invoi
     assert [sent["status"] for sent in xero_invoices.created] == ["AUTHORISED"]
 
 
-def test_a_form_with_no_line_is_stopped_before_it_reaches_xero(sales_page, db, org, xero_invoices):
+def test_a_form_with_no_line_is_stopped_before_it_reaches_xero(xero_invoices, sales_page, db, org):
     """[CONTROL] the form's own check: nothing is sent, and the person is told why."""
     page = sales_page
     _connect(db, org.id)
@@ -203,7 +240,7 @@ def test_a_form_with_no_line_is_stopped_before_it_reaches_xero(sales_page, db, o
     assert xero_invoices.created == []
 
 
-def test_a_xero_failure_is_read_out_and_keeps_what_was_typed(sales_page, db, org, xero_invoices):
+def test_a_xero_failure_is_read_out_and_keeps_what_was_typed(xero_invoices, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
     contact = _xero_contact(db, org.id, name="Harbour Spirits Co.")
@@ -223,7 +260,7 @@ def test_a_xero_failure_is_read_out_and_keeps_what_was_typed(sales_page, db, org
     expect(page.locator(".crm-invoice-row")).to_have_count(0)
 
 
-def test_a_xero_refusal_is_read_out_in_xeros_words(sales_page, db, org, xero_invoices):
+def test_a_xero_refusal_is_read_out_in_xeros_words(xero_invoices, sales_page, db, org):
     """Xero turning the invoice down (not unreachable) says why, and the form stays open."""
     page = sales_page
     _connect(db, org.id)
@@ -237,3 +274,123 @@ def test_a_xero_refusal_is_read_out_in_xeros_words(sales_page, db, org, xero_inv
     assert told == "Xero refused this: Account code '999' is not a valid code"
     expect(form).to_be_visible()
     assert xero_invoices.created == []
+
+
+# --- the row's own buttons: Authorise, View, Download -------------------------------------
+
+
+def _a_listed_invoice(page, db, org, status):
+    """Raise an invoice through the form, so the row under test is one the page itself listed."""
+    _connect(db, org.id)
+    contact = _xero_contact(db, org.id, name="Harbour Spirits Co.")
+    form = _open_the_invoice_form(page, contact)
+    _fill_the_line(form, "Botanical gin, 700ml case", "2", "75")
+    if status == "AUTHORISED":
+        form.locator("select.crm-form-select").first.select_option("AUTHORISED")
+        form.get_by_role("button", name="Create & Authorise").click()
+    else:
+        form.get_by_role("button", name="Create Draft").click()
+    expect(form).to_be_hidden()
+    row = page.locator(".crm-invoice-row").filter(has_text="INV-0001")
+    expect(row.locator(".crm-badge")).to_have_text(status)
+    return row
+
+
+def _open_the_row(row):
+    # View and Download live in the row's accordion; the number is part of the header that opens it.
+    row.locator(".crm-invoice-number").click()
+
+
+def _record_window_opens(page):
+    """Replace window.open with a recorder, so a link the page opens is read, never followed."""
+    page.evaluate("() => { window.__opened = []; window.open = (...args) => { window.__opened.push(args); } }")
+
+
+def test_authorising_a_draft_row_asks_xero_and_marks_it_authorised(xero_invoices, sales_page, db, org):
+    row = _a_listed_invoice(sales_page, db, org, "DRAFT")
+    authorise = row.get_by_role("button", name="Authorise", exact=True)
+    expect(authorise).to_be_visible()
+
+    authorise.click()
+
+    expect(row.locator(".crm-badge")).to_have_text("AUTHORISED")
+    # Nothing left to authorise: no button at all, not even the "Authorising…" one.
+    expect(row.get_by_role("button", name=re.compile(r"^Authoris"))).to_have_count(0)
+    assert xero_invoices.authorised == xero_invoices.xero_ids
+
+
+def test_an_authorised_row_offers_no_authorise_button(xero_invoices, sales_page, db, org):
+    """[CONTROL] the button shows for a draft because it is a draft, not for every row."""
+    row = _a_listed_invoice(sales_page, db, org, "AUTHORISED")
+
+    expect(row.get_by_role("button", name=re.compile(r"^Authoris"))).to_have_count(0)
+
+
+def test_a_failed_authorise_is_read_out_and_leaves_the_row_a_draft(xero_invoices, sales_page, db, org):
+    page = sales_page
+    row = _a_listed_invoice(page, db, org, "DRAFT")
+    xero_invoices.fail_row_action_with = RuntimeError("no usable reply")
+    authorise = row.get_by_role("button", name="Authorise", exact=True)
+
+    told = _click_and_read_the_alert(page, authorise)
+
+    assert told == "Xero could not be reached. Try again in a moment."
+    expect(row.locator(".crm-badge")).to_have_text("DRAFT")
+    expect(authorise).to_be_enabled()  # ready for a retry (while sending it reads "Authorising…")
+    assert xero_invoices.authorised == []
+
+
+def test_view_opens_the_online_invoice_in_a_tab_that_cannot_reach_back(xero_invoices, sales_page, db, org):
+    page = sales_page
+    row = _a_listed_invoice(page, db, org, "AUTHORISED")
+    _open_the_row(row)
+    _record_window_opens(page)
+
+    row.get_by_role("button", name="View", exact=True).click()
+
+    page.wait_for_function("() => window.__opened.length > 0")
+    (xero_id,) = xero_invoices.xero_ids
+    assert xero_invoices.viewed == [xero_id]
+    # noopener and noreferrer: Xero's page gets no handle on this one and no URL to it.
+    assert page.evaluate("() => window.__opened") == [
+        [ONLINE_INVOICE_URL.format(xero_id), "_blank", "noopener,noreferrer"]
+    ]
+
+
+def test_a_view_xero_cannot_answer_opens_nothing_and_says_so(xero_invoices, sales_page, db, org):
+    page = sales_page
+    row = _a_listed_invoice(page, db, org, "AUTHORISED")
+    _open_the_row(row)
+    _record_window_opens(page)
+    xero_invoices.fail_row_action_with = RuntimeError("no usable reply")
+
+    told = _click_and_read_the_alert(page, row.get_by_role("button", name="View", exact=True))
+
+    assert told == "Xero could not be reached. Try again in a moment."
+    assert page.evaluate("() => window.__opened") == []
+
+
+def test_download_saves_the_invoices_pdf_under_its_number(xero_invoices, sales_page, db, org):
+    page = sales_page
+    row = _a_listed_invoice(page, db, org, "AUTHORISED")
+    _open_the_row(row)
+
+    with page.expect_download() as downloading:
+        row.get_by_role("button", name="Download", exact=True).click()
+
+    download = downloading.value
+    assert download.suggested_filename == "INV-0001.pdf"
+    assert Path(download.path()).read_bytes() == INVOICE_PDF
+    assert xero_invoices.downloaded == xero_invoices.xero_ids
+
+
+def test_download_of_a_draft_says_to_authorise_first(xero_invoices, sales_page, db, org):
+    """Xero renders no PDF for a draft, so the page says what to do instead of saving nothing."""
+    page = sales_page
+    row = _a_listed_invoice(page, db, org, "DRAFT")
+    _open_the_row(row)
+
+    told = _click_and_read_the_alert(page, row.get_by_role("button", name="Download", exact=True))
+
+    assert told == "Xero does not provide PDFs for draft invoices. Authorise the invoice, then download."
+    assert xero_invoices.downloaded == []
