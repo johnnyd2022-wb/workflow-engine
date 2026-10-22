@@ -31,12 +31,19 @@ user = crm_fixtures.user
 
 
 class FakeXero:
-    """Stands in for Xero's contacts API."""
+    """Stands in for Xero's contacts API.
+
+    It answers the contact calls the sync makes and nothing else. The app swallows a failed
+    Xero call, so a call this fake does not answer would pass unseen while making a real
+    request with a placeholder token. `unfaked` records each one so the `xero` fixtures can
+    fail the test afterwards.
+    """
 
     def __init__(self):
         self.created: list[tuple[dict, str | None]] = []
         self.updated: list[tuple[str, dict]] = []
         self.fail_with: Exception | None = None
+        self.unfaked: list[str] = []
 
     def install(self, monkeypatch):
         fake = self
@@ -53,14 +60,29 @@ class FakeXero:
             fake.updated.append((contact_xero_id, dict(fields)))
             return SimpleNamespace(contact_id=contact_xero_id, updated_date_utc=datetime.now(UTC))
 
+        def get_contact_payment_terms(_client, _contact_xero_id):
+            # Opening a customer's page asks for these (CRMService.suggest_invoice_due_date);
+            # a contact with none set gets no suggested due date.
+            return None
+
+        def unfaked(_client):
+            fake.unfaked.append("a Xero API client was built for a call the fake does not answer")
+            raise AssertionError(fake.unfaked[-1])
+
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "create_contact", create_contact)
         monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "update_contact", update_contact)
+        monkeypatch.setattr(
+            xero_api_client_module.XeroAPIClient, "get_contact_payment_terms", get_contact_payment_terms
+        )
+        monkeypatch.setattr(xero_api_client_module.XeroAPIClient, "_get_api_client", unfaked)
         return self
 
 
 @pytest.fixture()
 def xero(monkeypatch):
-    return FakeXero().install(monkeypatch)
+    fake = FakeXero().install(monkeypatch)
+    yield fake
+    assert fake.unfaked == [], "the app reached for Xero somewhere this test did not fake"
 
 
 def _connect(db, org_id, scopes="openid accounting.contacts accounting.invoices offline_access"):

@@ -33,7 +33,7 @@ def _open(page, query=""):
     expect(page.locator(".customers-results")).to_contain_text("2 customers")
 
 
-def test_filters_order_and_clear_use_the_server_query(sales_page, contacts, xero):
+def test_filters_order_and_clear_use_the_server_query(xero, sales_page, contacts):
     page = sales_page
     _open(page)
     links = page.locator("tbody .customers-name")
@@ -59,7 +59,7 @@ def test_filters_order_and_clear_use_the_server_query(sales_page, contacts, xero
     )
 
 
-def test_customer_links_and_preview_work_with_keyboard(sales_page, contacts, xero):
+def test_customer_links_and_preview_work_with_keyboard(xero, sales_page, contacts):
     page = sales_page
     complete, _ = contacts
     _open(page)
@@ -87,7 +87,7 @@ def test_customer_links_and_preview_work_with_keyboard(sales_page, contacts, xer
     expect(page.locator("[data-contact-details]")).to_be_visible()
 
 
-def test_failure_is_not_an_empty_directory_and_retry_restores_rows(sales_page, contacts, xero):
+def test_failure_is_not_an_empty_directory_and_retry_restores_rows(xero, sales_page, contacts):
     page = sales_page
 
     def unavailable(route):
@@ -103,7 +103,7 @@ def test_failure_is_not_an_empty_directory_and_retry_restores_rows(sales_page, c
     expect(page.get_by_role("alert")).to_be_hidden()
 
 
-def test_pagination_keeps_filters_and_shows_the_requested_page(sales_page, contacts, xero):
+def test_pagination_keeps_filters_and_shows_the_requested_page(xero, sales_page, contacts):
     page = sales_page
     requests = []
 
@@ -142,7 +142,7 @@ def test_pagination_keeps_filters_and_shows_the_requested_page(sales_page, conta
 
 
 @pytest.mark.parametrize("width", [390, 1024, 1440, 1920])
-def test_directory_and_drawer_work_at_every_width_despite_old_preview_choices(sales_page, contacts, xero, width):
+def test_directory_and_drawer_work_at_every_width_despite_old_preview_choices(xero, sales_page, contacts, width):
     page = sales_page
     page.set_viewport_size({"width": width, "height": 900})
     page.goto("https://crm.test/crm/customers")
@@ -188,7 +188,7 @@ def test_directory_and_drawer_work_at_every_width_despite_old_preview_choices(sa
         assert (light + 0.05) / (dark + 0.05) >= 4.5, colors
 
 
-def test_directory_search_survives_a_boosted_round_trip(sales_page, contacts, xero):
+def test_directory_search_survives_a_boosted_round_trip(xero, sales_page, contacts):
     page = sales_page
     _open(page)
     tabs = page.get_by_role("navigation", name="Sales sections", exact=True)

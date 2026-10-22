@@ -105,15 +105,6 @@ before writing tests rather than re-deriving this by hand. Legend:
   state and the message shown, as `test_crm_invoice_ui.py` does for the form. (Narrowed on
   2026-10-21 by findings-sweep from "CRM customer / invoice CRUD"; that text said customers
   are Xero-sourced only, which stopped being true when Biz-E-made customers shipped.)
-- **Contact-sync browser tests reach api.xero.com** — `test_crm_contact_sync_ui.py` fakes
-  Xero's contact calls, but opening a customer's page also asks Xero for its payment terms
-  (`XeroAPIClient.get_contact_payment_terms`, from `CRMService.suggest_invoice_due_date`), which
-  its `FakeXero` does not answer. The app swallows the failure, so the tests pass, but each run
-  makes real HTTPS requests with a placeholder token (6 DNS lookups across its 5 tests, measured
-  2026-10-21) and on a host with no egress a connect can stall the browser's route handler.
-  `FakeXero` (`tests/test_crm_contact_sync.py`) is shared with unit tests, so the fix is to
-  fake that call there; `test_crm_invoice_ui.py` already does, and fails if anything else slips
-  through.
 - **Full process-wizard click-through** — the wizard is many SPA fragments. Creation is
   driven through the real browser session's API (exercising auth, CSRF, org-scope, and
   the business logic) and verified in the UI; clicking every fragment is a higher-
