@@ -1,6 +1,8 @@
-// NP1/NP2/NP3 food safety register (plan 2.4b): am I ready for my verifier, and what do I
-// record next? The server works out every state; this page lays it out. A check that sits in
-// two sections is one check: counts, filters and searches use each check once.
+// NP1/NP2/NP3 food safety (plan 2.4b): am I ready for my verifier, and what do I record next?
+// One script for both views: Summary (readiness, verification, what needs doing) and Checks
+// (every check by section, with search and readiness filters). The server works out every
+// state. A check that sits in two sections is one check: counts, filters and searches use
+// each check once.
 (function () {
   'use strict';
 
@@ -9,47 +11,30 @@
   if (!root || root.dataset.bound === '1') return;
   root.dataset.bound = '1';
   var NP = root.dataset.programmeShort || 'NP3';
+  var VIEW = root.dataset.np3View || 'summary';
   var CHECK = '/compliant/nz-alcohol/np3-audit/check/';
+  var CHECKS = '/compliant/nz-alcohol/food-safety/checks';
 
   var error = root.querySelector('[data-np3-error]');
   var facts = root.querySelector('[data-np3-health-cards]');
   var coreLine = root.querySelector('[data-np3-core-stats]');
+  var queue = root.querySelector('[data-np3-work-queue]');
+  var queueItems = root.querySelector('[data-np3-work-queue-items]');
+  var prep = root.querySelector('[data-np3-preparation]');
+  var filters = root.querySelector('[data-np3-filters]');
   var sections = root.querySelector('[data-np3-category-tabs]');
   var listRoot = root.querySelector('[data-np3-categories]');
   var heading = root.querySelector('[data-np3-active-category]');
   var countLine = root.querySelector('[data-np3-register-count]');
-  var queue = root.querySelector('[data-np3-work-queue]');
-  var queueItems = root.querySelector('[data-np3-work-queue-items]');
-  var packCards = root.querySelector('[data-np3-pack-cards]');
   var search = root.querySelector('[data-np3-check-search]');
-  var prep = root.querySelector('[data-np3-preparation]');
 
   var audit = null;
   var unique = [];
-  var activeCategory = null;
-  var activeFilter = 'all';
-  var query = '';
+  var params = new URLSearchParams(window.location.search);
   var FILTERS = ['ok', 'attention', 'overdue', 'due-soon', 'remediation'];
-  var wanted = new URLSearchParams(window.location.search).get('filter');
-  if (FILTERS.indexOf(wanted) !== -1) activeFilter = wanted;
-
-  // CONCEPT ONLY: three page styles behind one switch; removed once one is picked.
-  function readStyle() {
-    var q = new URLSearchParams(window.location.search).get('style');
-    if (q === '1' || q === '2' || q === '3') return q;
-    try { var s = window.localStorage.getItem('np3.style'); if (s === '1' || s === '2' || s === '3') return s; } catch (_) {}
-    return '1';
-  }
-  function style() { return root.getAttribute('data-np3-style') || '1'; }
-  function setStyle(s) {
-    root.setAttribute('data-np3-style', s);
-    try { window.localStorage.setItem('np3.style', s); } catch (_) {}
-    root.querySelectorAll('[data-np3-style-pick] [data-style]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-style') === s)); });
-    render();
-  }
-  root.querySelectorAll('[data-np3-style-pick] [data-style]').forEach(function (b) {
-    b.addEventListener('click', function () { setStyle(b.getAttribute('data-style')); });
-  });
+  var activeFilter = FILTERS.indexOf(params.get('filter')) !== -1 ? params.get('filter') : 'all';
+  var activeCategory = params.get('section');
+  var query = '';
 
   function el(tag, attrs, kids) {
     var n = document.createElement(tag);
@@ -81,12 +66,12 @@
     var limit = today(); limit.setDate(limit.getDate() + 30);
     return d <= limit;
   }
-  function matchesFilter(row) {
-    if (activeFilter === 'ok') return row.state === 'ready';
-    if (activeFilter === 'attention') return row.state === 'attention' || row.state === 'missing';
-    if (activeFilter === 'overdue') return isOverdue(row);
-    if (activeFilter === 'due-soon') return isDueSoon(row);
-    if (activeFilter === 'remediation') return Boolean(row.open_remediation);
+  function matchesFilter(row, filter) {
+    if (filter === 'ok') return row.state === 'ready';
+    if (filter === 'attention') return row.state === 'attention' || row.state === 'missing';
+    if (filter === 'overdue') return isOverdue(row);
+    if (filter === 'due-soon') return isDueSoon(row);
+    if (filter === 'remediation') return Boolean(row.open_remediation);
     return true;
   }
   function matchesSearch(row) {
@@ -109,58 +94,29 @@
     return dates.length ? dates[dates.length - 1] : row.latest_recorded_at || null;
   }
 
-  // Twelve months of a check's records, oldest first: recorded, missed (its review had fallen
-  // due and nothing came in), or nothing expected. Built from the rows' own history.
-  function strip(row, months) {
-    var now = new Date();
-    var recorded = {};
-    (row.history || []).forEach(function (h) { if (h.created_at) recorded[String(h.created_at).slice(0, 7)] = (recorded[String(h.created_at).slice(0, 7)] || 0) + 1; });
-    var due = row.review_due_date ? String(row.review_due_date).slice(0, 7) : null;
-    var cells = [];
-    for (var i = months - 1; i >= 0; i -= 1) {
-      var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-      var state = recorded[key] ? 'done' : (due && key >= due && isOverdue(row) ? 'missed' : 'none');
-      var label = d.toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' }) + ': ' + (state === 'done' ? plural(recorded[key], 'record') : state === 'missed' ? 'review overdue' : 'nothing due');
-      cells.push(el('span', { className: 'np3-strip__cell np3-strip__cell--' + state, title: label }));
-    }
-    return el('span', { className: 'np3-strip', role: 'img', 'aria-label': 'Last ' + months + ' months of records' }, cells);
-  }
-
-  function checkRow(row) {
-    var st = status(row);
-    var link = el('a', { className: 'np3-check np3-check--' + st.key, href: CHECK + encodeURIComponent(row.control_id), 'data-control-id': row.control_id });
-    var main = el('span', { className: 'np3-check__main' }, [
-      el('strong', { className: 'np3-check__title', text: row.topic || row.control_title || NP + ' check' }),
-      el('span', { className: 'np3-check__summary', text: row.requirement_summary || '' }),
-    ]);
-    var last = lastRecorded(row);
-    var fromCore = !last && Number(row.derived_evidence_count || 0) > 0;
-    var meta = el('span', { className: 'np3-check__meta', text: last ? 'Last ' + shortDate(last) + (row.review_due_date ? ' · next ' + shortDate(row.review_due_date) : '') : fromCore ? 'Shown by Production records' : 'Nothing recorded yet' });
-    link.append(main, strip(row, 12), meta, el('span', { className: 'np3-tag np3-tag--' + st.key, text: st.text }));
-    return link;
+  // The five readiness figures. On Summary each one opens Checks filtered to it; on Checks they
+  // are the filter row.
+  function readiness() {
+    var h = audit.health || {};
+    var ready = Number(h.ok || 0), total = ready + Number(h.needs_attention || 0);
+    var percent = total ? Math.round((ready / total) * 100) : 0;
+    return [
+      ['ok', 'Ready', ready + ' of ' + total, percent + '% of checks have current proof', 'good', ready],
+      ['attention', 'Needs evidence', String(h.needs_attention || 0), 'Missing or out-of-date proof', h.needs_attention ? 'warn' : '', Number(h.needs_attention || 0)],
+      ['overdue', 'Overdue reviews', String(h.overdue || 0), 'Past their review date', h.overdue ? 'bad' : '', Number(h.overdue || 0)],
+      ['due-soon', 'Due in 30 days', String(h.due_soon || 0), 'Reviews coming up', '', Number(h.due_soon || 0)],
+      ['remediation', 'Follow-ups open', String(h.open_remediation || 0), 'Logged issues not closed', h.open_remediation ? 'bad' : '', Number(h.open_remediation || 0)],
+    ];
   }
 
   function renderFacts() {
     facts.replaceChildren();
-    var h = audit.health || {};
-    var ready = Number(h.ok || 0), total = ready + Number(h.needs_attention || 0);
-    var percent = total ? Math.round((ready / total) * 100) : 0;
-    var items = [
-      ['ok', 'Ready', ready + ' of ' + total, percent + '% of checks have current proof', 'good'],
-      ['attention', 'Needs evidence', String(h.needs_attention || 0), 'Missing or out-of-date proof', (h.needs_attention ? 'warn' : '')],
-      ['overdue', 'Overdue reviews', String(h.overdue || 0), 'Past their review date', (h.overdue ? 'bad' : '')],
-      ['due-soon', 'Due in 30 days', String(h.due_soon || 0), 'Reviews coming up', ''],
-      ['remediation', 'Follow-ups open', String(h.open_remediation || 0), 'Logged issues not closed', (h.open_remediation ? 'bad' : '')],
-    ];
-    items.forEach(function (f) {
-      var b = el('button', { type: 'button', className: 'np3-fact' + (f[4] ? ' np3-fact--' + f[4] : '') + (activeFilter === f[0] ? ' is-active' : ''), 'aria-pressed': String(activeFilter === f[0]), 'data-np3-filter': f[0] }, [
+    readiness().forEach(function (f) {
+      facts.append(el('a', { className: 'np3-fact' + (f[4] ? ' np3-fact--' + f[4] : ''), href: CHECKS + '?filter=' + f[0], 'data-np3-filter': f[0] }, [
         el('span', { className: 'np3-fact__label', text: f[1] }),
         el('strong', { className: 'np3-fact__value', text: f[2] }),
         el('span', { className: 'np3-fact__note', text: f[3] }),
-      ]);
-      b.addEventListener('click', function () { activeFilter = activeFilter === f[0] ? 'all' : f[0]; render(); });
-      facts.append(b);
+      ]));
     });
   }
 
@@ -179,20 +135,18 @@
 
   function renderQueue() {
     queueItems.replaceChildren();
-    var steps = (audit.guided_steps || []).slice();
+    var steps = audit.guided_steps || [];
     var urgent = unique.filter(function (r) { var k = status(r).text; return k === 'Follow-up open' || k === 'Overdue'; })
       .concat(unique.filter(function (r) { return r.state === 'missing'; }));
     var shown = 0;
     steps.forEach(function (step) {
-      var item = el('li', { className: 'np3-next__item np3-next__item--' + (step.severity || 'attention') });
-      var action;
-      if (step.opens === 'check') action = el('a', { href: CHECK + encodeURIComponent(step.control_id), text: 'Open check' });
-      else {
-        action = el('button', { type: 'button', className: 'np3-link', text: 'Show them' });
-        action.addEventListener('click', function () { activeFilter = step.filter || 'all'; if (step.category_key) activeCategory = step.category_key; query = ''; search.value = ''; render(); listRoot.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
-      }
-      item.append(el('div', {}, [el('strong', { text: step.title }), el('span', { text: step.description })]), action);
-      queueItems.append(item);
+      var href = step.opens === 'check'
+        ? CHECK + encodeURIComponent(step.control_id)
+        : CHECKS + '?filter=' + encodeURIComponent(step.filter || 'all') + (step.category_key ? '&section=' + encodeURIComponent(step.category_key) : '');
+      queueItems.append(el('li', { className: 'np3-next__item np3-next__item--' + (step.severity || 'attention') }, [
+        el('div', {}, [el('strong', { text: step.title }), el('span', { text: step.description })]),
+        el('a', { href: href, text: step.opens === 'check' ? 'Open check' : 'Show them' }),
+      ]));
       shown += 1;
     });
     urgent.forEach(function (row) {
@@ -207,114 +161,105 @@
     queue.hidden = !shown;
   }
 
-  // The five topics a verifier always covers (MPI NP3 guidance), each with its own checks.
-  var MANDATORY = [
-    ['Competency and training', ['staff-competency']],
-    ['Cleaning', ['cleaning-and-hygiene', 'food-contact-equipment-cleaning', 'cleaning-chemicals-food-safe']],
-    ['Personal hygiene and health', ['personal-hygiene', 'health-and-sickness']],
-    ['Sourcing and tracing', ['suppliers-and-purchasing', 'receiving-food', 'trace-and-recall']],
-    ['Process controls', ['time-temperature-processing', 'storage-stock-rotation', 'calibration', 'cross-contamination']],
-  ];
-  function renderPack() {
-    packCards.replaceChildren();
-    var byId = {};
-    unique.forEach(function (r) { byId[r.control_id] = r; });
-    MANDATORY.forEach(function (topic) {
-      var rows = topic[1].map(function (id) { return byId[id]; }).filter(Boolean);
-      if (!rows.length) return;
-      var ready = rows.filter(function (r) { return status(r).key === 'good'; }).length;
-      var card = el('article', { className: 'np3-pack__card' + (ready === rows.length ? ' np3-pack__card--ready' : '') });
-      card.append(el('div', { className: 'np3-pack__head' }, [
-        el('h3', { text: topic[0] }),
-        el('span', { className: 'np3-tag np3-tag--' + (ready === rows.length ? 'good' : 'warn'), text: ready + ' of ' + rows.length + ' ready' }),
-      ]));
-      var proof = ((rows[0].evidence_playbook || {}).proof || []).slice(0, 3);
-      if (proof.length) {
-        card.append(el('p', { className: 'np3-pack__label', text: 'Be ready to show' }));
-        card.append(el('ul', { className: 'np3-pack__proof' }, proof.map(function (p) { return el('li', { text: p }); })));
-      }
-      card.append(el('ul', { className: 'np3-pack__checks' }, rows.map(function (r) {
-        var st = status(r);
-        return el('li', {}, [el('a', { href: CHECK + encodeURIComponent(r.control_id), text: r.topic }), el('span', { className: 'np3-tag np3-tag--' + st.key, text: st.text })]);
-      })));
-      packCards.append(card);
+  function checkRow(row) {
+    var st = status(row);
+    var link = el('a', { className: 'np3-check np3-check--' + st.key, href: CHECK + encodeURIComponent(row.control_id), 'data-control-id': row.control_id });
+    var last = lastRecorded(row);
+    var fromCore = !last && Number(row.derived_evidence_count || 0) > 0;
+    link.append(
+      el('span', { className: 'np3-check__main' }, [
+        el('strong', { className: 'np3-check__title', text: row.topic || row.control_title || NP + ' check' }),
+        el('span', { className: 'np3-check__summary', text: row.requirement_summary || '' }),
+      ]),
+      el('span', { className: 'np3-check__meta', text: last ? 'Last ' + shortDate(last) + (row.review_due_date ? ' · next ' + shortDate(row.review_due_date) : '') : fromCore ? 'Shown by Production records' : 'Nothing recorded yet' }),
+      el('span', { className: 'np3-tag np3-tag--' + st.key, text: st.text })
+    );
+    return link;
+  }
+
+  function setUrl() {
+    var q = new URLSearchParams();
+    if (activeFilter !== 'all') q.set('filter', activeFilter);
+    else if (activeCategory) q.set('section', activeCategory);
+    history.replaceState(null, '', window.location.pathname + (q.toString() ? '?' + q.toString() : ''));
+  }
+
+  function renderFilters() {
+    filters.replaceChildren();
+    var options = [['all', 'All checks', unique.length, '']].concat(readiness().map(function (f) {
+      return [f[0], f[1], unique.filter(function (r) { return matchesFilter(r, f[0]); }).length, f[4]];
+    }));
+    options.forEach(function (f) {
+      var on = activeFilter === f[0];
+      var b = el('button', { type: 'button', className: 'np3-chip' + (f[3] ? ' np3-chip--' + f[3] : '') + (on ? ' is-active' : ''), 'aria-pressed': String(on), 'data-np3-filter': f[0] }, [
+        el('span', { text: f[1] }), el('strong', { text: String(f[2]) }),
+      ]);
+      b.addEventListener('click', function () { activeFilter = f[0]; query = ''; search.value = ''; setUrl(); renderChecks(); });
+      filters.append(b);
     });
   }
 
-  function renderSections(byCategory) {
+  function renderChecks() {
+    var byCategory = {};
+    (audit.categories || []).forEach(function (c) { byCategory[c.key] = []; });
+    (audit.rows || []).forEach(function (row) { (byCategory[row.category_key] = byCategory[row.category_key] || []).push(row); });
+    if (!activeCategory || !byCategory[activeCategory]) activeCategory = (audit.categories || [])[0] && audit.categories[0].key;
+    renderFilters();
+    var narrowing = !!query || activeFilter !== 'all';
+    sections.hidden = narrowing;
     sections.replaceChildren();
     (audit.categories || []).forEach(function (category, index) {
       var rows = byCategory[category.key] || [];
       var todo = rows.filter(function (r) { return status(r).key !== 'good'; }).length;
-      var active = category.key === activeCategory && !query && activeFilter === 'all';
+      var active = category.key === activeCategory;
       var b = el('button', { type: 'button', role: 'tab', id: 'np3-category-tab-' + index, className: 'np3-section-tab' + (active ? ' is-active' : ''), 'aria-selected': String(active), 'aria-controls': 'np3-category-panel' }, [
         el('strong', { text: category.title }),
         el('span', { className: todo ? 'np3-section-tab__todo' : 'np3-section-tab__done', text: todo ? todo + ' to do' : 'All ready' }),
       ]);
-      b.addEventListener('click', function () { activeCategory = category.key; activeFilter = 'all'; query = ''; search.value = ''; render(); });
+      b.addEventListener('click', function () { activeCategory = category.key; setUrl(); renderChecks(); });
       sections.append(b);
     });
-  }
-
-  function renderList(byCategory) {
     listRoot.replaceChildren();
-    var category = (audit.categories || []).find(function (c) { return c.key === activeCategory; });
-    var narrowing = !!query || activeFilter !== 'all';
     var panel = el('div', { id: 'np3-category-panel', role: 'tabpanel' });
-    function list(rows) { return el('div', { className: 'np3-check-list' }, rows.map(checkRow)); }
+    var rows;
     if (narrowing) {
-      var rows = unique.filter(matchesSearch).filter(matchesFilter);
-      var label = activeFilter !== 'all' ? (facts.querySelector('[data-np3-filter="' + activeFilter + '"] .np3-fact__label') || {}).textContent : '';
+      rows = unique.filter(matchesSearch).filter(function (r) { return matchesFilter(r, activeFilter); });
+      var label = (readiness().find(function (f) { return f[0] === activeFilter; }) || [])[1];
       heading.textContent = query ? 'Search results' : label || 'Matching checks';
       countLine.textContent = plural(rows.length, 'check') + (query ? ' match "' + search.value.trim() + '"' : '') + '.';
-      panel.append(rows.length ? list(rows) : el('p', { className: 'np3-empty', text: query ? 'No ' + NP + ' checks match this search.' : 'Nothing here right now.' }));
-      if (activeFilter !== 'all') {
-        var clear = el('button', { type: 'button', className: 'np3-link', text: 'Show every check' });
-        clear.addEventListener('click', function () { activeFilter = 'all'; render(); });
-        panel.append(clear);
-      }
-    } else if (style() === '2') {
-      // Rhythm: every section at once, each check with its year of records.
-      heading.textContent = 'Every check, month by month';
-      countLine.textContent = plural(unique.length, 'check') + ' · each square is a month: recorded, review overdue, or nothing due.';
-      (audit.categories || []).forEach(function (c) {
-        var rows = byCategory[c.key] || [];
-        if (!rows.length) return;
-        panel.append(el('h3', { className: 'np3-group-title', text: c.title }), list(rows));
-      });
     } else {
-      var rowsIn = byCategory[category.key] || [];
-      heading.textContent = category.title;
-      var todo = rowsIn.filter(function (r) { return status(r).key !== 'good'; }).length;
-      countLine.textContent = plural(rowsIn.length, 'check') + (todo ? ' · ' + todo + ' to do' : ' · all ready');
-      panel.append(list(rowsIn));
+      var category = (audit.categories || []).find(function (c) { return c.key === activeCategory; }) || {};
+      rows = byCategory[activeCategory] || [];
+      var todo = rows.filter(function (r) { return status(r).key !== 'good'; }).length;
+      heading.textContent = category.title || 'Every check';
+      countLine.textContent = plural(rows.length, 'check') + (todo ? ' · ' + todo + ' to do' : ' · all ready');
     }
+    panel.append(rows.length
+      ? el('div', { className: 'np3-check-list' }, rows.map(checkRow))
+      : el('p', { className: 'np3-empty', text: query ? 'No ' + NP + ' checks match this search.' : 'Nothing here right now.' }));
     listRoot.append(panel);
   }
 
   function render() {
     if (!audit) return;
-    var byCategory = {};
     var seen = {};
-    unique = [];
-    (audit.categories || []).forEach(function (c) { byCategory[c.key] = []; });
-    (audit.rows || []).forEach(function (row) {
-      (byCategory[row.category_key] = byCategory[row.category_key] || []).push(row);
-      if (!seen[row.control_id]) { seen[row.control_id] = true; unique.push(row); }
+    unique = (audit.rows || []).filter(function (row) {
+      if (seen[row.control_id]) return false;
+      seen[row.control_id] = true;
+      return true;
     });
-    if (!activeCategory || !byCategory[activeCategory]) activeCategory = (audit.categories || [])[0] && audit.categories[0].key;
-    renderFacts();
-    renderCore();
-    renderQueue();
-    renderPack();
-    renderSections(byCategory);
-    renderList(byCategory);
-    prep.replaceChildren.apply(prep, (audit.preparation_items || []).map(function (t) { return el('li', { text: t }); }));
+    if (VIEW === 'summary') {
+      renderFacts();
+      renderCore();
+      renderQueue();
+      prep.replaceChildren.apply(prep, (audit.preparation_items || []).map(function (t) { return el('li', { text: t }); }));
+    } else {
+      renderChecks();
+    }
     root.setAttribute('aria-busy', 'false');
   }
 
-  search.addEventListener('input', function () { query = search.value.trim().toLowerCase(); render(); });
-  setStyle(readStyle());
+  if (search) search.addEventListener('input', function () { query = search.value.trim().toLowerCase(); if (query) activeFilter = 'all'; renderChecks(); });
   fetch('/api/compliant/np3-audit', { credentials: 'include', headers: { Accept: 'application/json' } }).then(function (response) {
     if (!response.ok) throw new Error('Could not load the ' + NP + ' register');
     return response.json();

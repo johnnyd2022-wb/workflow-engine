@@ -88,7 +88,7 @@
   // MPI's cards end on "Show": what the verifier will ask to see. It leads the check.
   function verifierAsks(check) {
     var plan = check.evidence_playbook || {};
-    var section = card(null, 'What your verifier will ask to see', 'np3-asks');
+    var section = card('About this check', 'What your verifier will ask to see', 'np3-asks');
     var list = document.createElement('ul');
     list.className = 'np3-evidence-checklist';
     (plan.proof || []).forEach(function (item) { list.appendChild(text('li', item)); });
@@ -121,7 +121,9 @@
     var evidence = check.derived_evidence || [];
     var connections = (check.evidence_playbook || {}).core_connections || [];
     if (!evidence.length && !connections.length) return null;
-    var section = card(null, 'Linked from Production', 'np3-side-card');
+    var section = document.createElement('div');
+    section.className = 'np3-evidence-block';
+    section.appendChild(text('h3', 'From Production', 'np3-card__sub'));
     var list = document.createElement('ul');
     list.className = 'np3-connected-evidence';
     evidence.forEach(function (item) {
@@ -156,7 +158,7 @@
   function schedule(check) {
     if (root.dataset.canManage !== '1') return null;
     var section = document.createElement('details');
-    section.className = 'workspace-card np3-card np3-side-card np3-check-settings';
+    section.className = 'workspace-card np3-card np3-check-settings';
     section.appendChild(text('summary', 'Review reminder: ' + ({ 1: 'every month', 3: 'every 3 months', 6: 'every 6 months', 12: 'every year' }[Number(check.default_review_interval_months || 6)] || 'every 6 months')));
     section.appendChild(text(
       'p',
@@ -209,7 +211,7 @@
   }
 
   function reviewForm(check) {
-    var section = card(null, 'Sign off a review', 'np3-check-review');
+    var section = card('Record evidence', 'Sign off a review', 'np3-check-review');
     section.appendChild(text(
       'p',
       'Say how this requirement is met here and point to the records. It sets the next review date.',
@@ -409,14 +411,12 @@
     return person ? person.name : value;
   }
 
-  // The built-in register: add an entry first (it's why you came), then what's been logged.
-  function logBook(check, staff) {
+  // The built-in register's form: where a check has a log, recording is adding an entry.
+  function logForm(check, staff) {
     var template = check.log_template;
     if (!template) return null;
-    var section = card('Built-in register', template.title, 'np3-logbook');
+    var section = card('Record evidence', 'Add to the ' + template.title.charAt(0).toLowerCase() + template.title.slice(1), 'np3-record');
     section.appendChild(text('p', template.description, 'np3-card__intro'));
-
-    var entries = check.log_entries || [];
     var matrix = check.training_matrix;
     var personNames = (matrix ? matrix.people.slice() : []);
     (staff || []).forEach(function (person) {
@@ -424,7 +424,6 @@
         personNames.push(person.name);
       }
     });
-
     var form = document.createElement('form');
     form.className = 'np3-logbook__form';
     form.setAttribute('hx-boost', 'false');
@@ -464,24 +463,31 @@
       }
     });
     section.appendChild(form);
+    return section;
+  }
 
-    if (matrix) {
-      section.appendChild(text('h3', 'Training register', 'np3-card__sub'));
-      section.appendChild(trainingTable(matrix));
-      return section;
+  // Every logged entry, newest first: the evidence a log check builds up. The latest few show;
+  // the rest are one click away, so recording more stays near the top.
+  var SHOWN = 3;
+  function logEntries(check, staff) {
+    var template = check.log_template;
+    var entries = check.log_entries || [];
+    var wrap = document.createElement('div');
+    wrap.className = 'np3-evidence-block';
+    if (check.training_matrix) {
+      wrap.appendChild(text('h3', 'Training register', 'np3-card__sub'));
+      wrap.appendChild(trainingTable(check.training_matrix));
+      return wrap;
     }
-    section.appendChild(text('h3', entries.length ? plural(entries.length, 'entry', 'entries') : 'No entries yet', 'np3-card__sub'));
-    if (!entries.length) {
-      section.appendChild(text('p', 'The first entry starts this check’s audit trail.', 'np3-card__intro'));
-      return section;
-    }
+    wrap.appendChild(text('h3', entries.length ? template.title + ' · ' + plural(entries.length, 'entry', 'entries') : template.title + ' · no entries yet', 'np3-card__sub'));
+    if (!entries.length) return wrap;
     var list = document.createElement('ol');
     list.className = 'np3-entries';
     entries.forEach(function (entry, index) {
       var eventDate = entry.event_date ? shortDate(entry.event_date) : (entry.created_at ? shortDate(String(entry.created_at).slice(0, 10)) : 'Date unavailable');
       var item = document.createElement('li');
       item.className = 'np3-entry' + (entry.status === 'open' ? ' np3-entry--open' : '');
-      if (index >= 12) item.hidden = true;
+      if (index >= SHOWN) item.hidden = true;
       var head = document.createElement('div');
       head.className = 'np3-entry__head';
       head.appendChild(text('strong', eventDate));
@@ -500,8 +506,8 @@
       if (entryFiles) item.appendChild(entryFiles);
       list.appendChild(item);
     });
-    section.appendChild(list);
-    if (entries.length > 12) {
+    wrap.appendChild(list);
+    if (entries.length > SHOWN) {
       var more = document.createElement('button');
       more.type = 'button';
       more.className = 'np3-link';
@@ -510,9 +516,9 @@
         list.querySelectorAll('li[hidden]').forEach(function (li) { li.hidden = false; });
         more.remove();
       });
-      section.appendChild(more);
+      wrap.appendChild(more);
     }
-    return section;
+    return wrap;
   }
 
   function history(check, staff) {
@@ -550,18 +556,23 @@
     return section;
   }
 
-  // The newest proof, so "is this current?" is answered without scrolling the history.
-  function latestProof(check) {
-    var latest = (check.history || [])[0];
-    var section = card(null, 'Latest proof', 'np3-side-card np3-latest');
-    if (!latest) {
-      section.appendChild(text('p', 'Nothing yet. A sign-off or log entry here becomes the proof your verifier sees.', 'np3-card__intro'));
-      return section;
-    }
-    section.appendChild(text('strong', latest.title, 'np3-latest__title'));
-    section.appendChild(text('p', (latest.created_at ? shortDate(String(latest.created_at).slice(0, 10)) : '') + ' · ' + (latest.signed_off_by || 'Former team member'), 'np3-latest__meta'));
-    var files = fileLinks(latest.files);
+  // What there is to show today: the newest proof, the log, and what Production already records.
+  function evidence(check, staff) {
+    var section = card(null, 'Evidence we have', 'np3-evidence');
+    var events = check.history || [];
+    var latest = events[0];
+    var facts = document.createElement('dl');
+    facts.className = 'np3-evidence__facts';
+    function fact(label, value) { facts.appendChild(text('dt', label)); facts.appendChild(text('dd', value)); }
+    fact('Latest', latest ? latest.title + ' · ' + shortDate(String(latest.created_at).slice(0, 10)) + ' · ' + (latest.signed_off_by || 'Former team member') : 'Nothing recorded yet');
+    fact('Records', plural(events.length, 'record'));
+    fact('Next review', check.review_due_date ? shortDate(check.review_due_date) : 'Set by the next sign-off');
+    section.appendChild(facts);
+    var files = latest ? fileLinks(latest.files) : null;
     if (files) section.appendChild(files);
+    if (check.log_template) section.appendChild(logEntries(check, staff));
+    var linked = connectedEvidence(check);
+    if (linked) section.appendChild(linked);
     return section;
   }
 
@@ -590,30 +601,24 @@
       : lastLog ? 'Last logged ' + shortDate(lastLog.event_date || String(lastLog.created_at).slice(0, 10))
       : 'Nothing recorded yet';
 
-    // Read what the verifier asks for, record it (the register where the check has one, else a
-    // sign-off; the other sits behind a disclosure), then the trail. The side column answers
-    // "is this current?" and holds the links and the reminder setting.
+    // One column, in reading order: what the check is and what the verifier will ask for, the
+    // evidence there is, a place to record more (the log where the check has one, else a
+    // sign-off, the other behind a disclosure), the sign-off history, then the reminder.
     var workspace = root.querySelector('[data-np3-check-workspace]');
     clear(workspace);
-    var main = document.createElement('div');
-    main.className = 'np3-check-workspace__primary';
-    main.appendChild(verifierAsks(check));
-    var log = logBook(check, staff);
-    if (log) {
-      main.appendChild(log);
+    var record = logForm(check, staff);
+    var pieces = [verifierAsks(check), evidence(check, staff)];
+    if (record) {
       var other = document.createElement('details');
       other.className = 'np3-alt';
       other.appendChild(text('summary', 'Sign off a review instead'));
       other.appendChild(reviewForm(check));
-      main.appendChild(other);
+      pieces.push(record, other);
     } else {
-      main.appendChild(reviewForm(check));
+      pieces.push(reviewForm(check));
     }
-    main.appendChild(history(check, staff));
-    var side = document.createElement('aside');
-    side.className = 'np3-check-workspace__side';
-    [latestProof(check), connectedEvidence(check), schedule(check)].forEach(function (piece) { if (piece) side.appendChild(piece); });
-    workspace.append(main, side);
+    pieces.push(history(check, staff), schedule(check));
+    pieces.forEach(function (piece) { if (piece) workspace.appendChild(piece); });
   }
 
   async function load() {

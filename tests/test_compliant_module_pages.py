@@ -132,8 +132,8 @@ def test_compliant_navigation_is_boosted_but_downloads_are_not():
         ROOT / "app" / "ui" / "templates" / "shared" / "section_tabs.html"
     ).read_text(encoding="utf-8")
     audit = (
-        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_audit.html"
-    ).read_text(encoding="utf-8")
+        ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "_np3_header.html"
+    ).read_text(encoding="utf-8")  # the downloads sit in the food safety pages' shared header
     # The Flask app's Jinja root is app/ui/templates.  Guard the template it actually
     # renders, rather than the separately served /ui/shared asset directory.
     sidebar = (ROOT / "app" / "ui" / "templates" / "shared" / "sidebar-v2.html").read_text(encoding="utf-8")

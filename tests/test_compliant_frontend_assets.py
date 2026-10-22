@@ -47,7 +47,7 @@ def test_np3_register_counts_each_check_once_and_links_to_its_page():
     )
 
     assert "/api/compliant/np3-audit" in script
-    assert "unique.push(row)" in script  # a check in two sections is one check
+    assert "if (seen[row.control_id]) return false;" in script  # a check in two sections is one check
     assert "np3-check" in script and "/compliant/nz-alcohol/np3-audit/check/" in script
     assert "guided_steps" in script
     assert "data-np3-filter" in script

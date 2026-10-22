@@ -12,10 +12,11 @@
       <p class="workspace-caption" data-np3-check-summary></p>
       <p class="np3-check-status"><span class="np3-tag" data-np3-check-state>Loading</span> <span data-np3-check-next-review></span></p>
     </div>
-    <div class="workspace-header__actions">
-      <a class="workspace-button" href="/compliant/nz-alcohol/food-safety">All {{ programme_short }} checks</a>
-    </div>
   </header>
+  <nav class="np3-views" aria-label="{{ programme_short }} food safety">
+    <a href="/compliant/nz-alcohol/food-safety">Summary</a>
+    <a href="/compliant/nz-alcohol/food-safety/checks" aria-current="page">Checks</a>
+  </nav>
   <p class="compliant-error" data-np3-check-error hidden></p>
   <section class="np3-check-workspace" data-np3-check-workspace></section>
 </main>

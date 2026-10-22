@@ -79,6 +79,14 @@ PAGES: tuple[Page, ...] = (
         "/compliant/nz-alcohol/np3-audit",
         "compliant",
     ),
+    Page(
+        "/compliant/nz-alcohol/food-safety/checks",
+        "compliance",
+        "np3",
+        "Checks",
+        None,  # the Food safety tab already leads the trail
+        "compliant",
+    ),
     Page("/compliant/nz-alcohol/customs", "compliance", "customs", "Customs", None, "compliant"),
     Page(
         "/compliant/nz-alcohol/customs/stock",

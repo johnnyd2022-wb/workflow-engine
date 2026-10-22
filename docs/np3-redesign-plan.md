@@ -51,7 +51,19 @@ The check page:
 - MPI's own list of verification failure reasons;
 - the allergen card's record details.
 
-## Three directions for the register
+## The pick, and the split into Summary and Checks
+
+**Chosen (22 Oct 2026): Style 1, Checks.** The founder then asked for room to breathe, as on Customs. The register is now two pages behind tabs:
+- **Summary**: the five readiness facts first, then verification, then Needs doing.
+- **Checks**: search, readiness chips, sections and the list.
+
+Each check opens its own page: what the check is (what the verifier will ask to see), the evidence we have, recording more, then the sign-off history.
+
+Why the other two lost:
+- Rhythm: the 12-month strip helps with routines that slip, but it shows every check at once, too much at a glance.
+- Verifier pack: its five-topic cards duplicate the register; the Summary's facts and Needs doing answer "am I ready?" sooner.
+
+## Three directions for the register (as presented)
 
 | | Style 1: Checks | Style 2: Rhythm | Style 3: Verifier pack |
 |---|---|---|---|
