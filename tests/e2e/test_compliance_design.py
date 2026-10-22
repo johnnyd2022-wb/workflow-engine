@@ -99,7 +99,7 @@ def test_all_returned_actions_expand_and_primary_opens_mapping(compliance_page):
     # The tab-row primary is the everyday job, not a copy of the suggestion: the framework most in need of evidence.
     expect(page.locator("[data-compliance-primary]")).to_have_text("Review evidence")
     expect(page.locator("[data-compliance-primary]")).to_have_attribute(
-        "href", "/compliant/nz-alcohol/food-safety?filter=attention"
+        "href", "/compliant/nz-alcohol/food-safety/checks?filter=attention"
     )
     page.locator("[data-more-actions] > summary").click()
     expect(page.locator("[data-priority-actions] > li")).to_have_count(len(overview["priority_actions"]) - 1)
@@ -269,7 +269,7 @@ def test_primary_action_matches_production_row_and_hides_during_reload(complianc
     primary = page.locator("[data-compliance-primary]")
     secondary = page.locator(".compliance-header-actions").get_by_role("link", name="Premises", exact=True)
     expect(primary).to_have_text("Review evidence")
-    expect(primary).to_have_attribute("href", "/compliant/nz-alcohol/food-safety?filter=attention")
+    expect(primary).to_have_attribute("href", "/compliant/nz-alcohol/food-safety/checks?filter=attention")
     expect(page.locator(".workspace-button--primary:visible")).to_have_count(1)
     p = primary.bounding_box()
     s = secondary.bounding_box()
