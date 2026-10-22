@@ -1421,6 +1421,45 @@ def test_reverting_a_revert_closes_the_items_again(history_repo):
     assert set(fi.merged_commit_closures()) == {"aaaa1111"}
 
 
+def test_reverting_a_merge_undoes_the_fixes_it_brought_in(history_repo):
+    """The trailer is on the fix commit on its branch; `git revert -m 1 <merge>` names only
+    the merge, whose own message has none. The merge's side must count as reverted too."""
+    _commit(history_repo, "chore: base", "base")
+    _git(history_repo, "checkout", "-q", "-b", "fix-branch")
+    _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _git(history_repo, "checkout", "-q", "main")
+    _commit(history_repo, "fix: elsewhere\n\nFindings-Index: bbbb2222\n", "elsewhere")
+    _git(history_repo, "merge", "--no-ff", "-q", "-m", "Merge branch 'fix-branch'", "fix-branch")
+    _git(history_repo, "revert", "--no-edit", "-m", "1", "HEAD")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"bbbb2222"}  # only what the merge brought in
+
+
+def test_revert_detection_does_not_depend_on_the_users_grep_flavour(history_repo):
+    """`git log --grep` follows grep.patternType, and under extended or perl the interval
+    `\\{40\\}` is a literal, so reverts would silently stop being seen."""
+    fixed = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _git(history_repo, "revert", "--no-edit", fixed)
+    _git(history_repo, "config", "grep.patternType", "extended")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {}
+
+
+def test_one_revert_naming_several_commits_cancels_each(history_repo):
+    first = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    second = _commit(history_repo, "fix: y\n\nFindings-Index: bbbb2222\n", "y")
+    _commit(
+        history_repo,
+        f"Revert both\n\nThis reverts commit {second}.\nThis reverts commit {first}.\n",
+        "both",
+    )
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {}
+
+
 def test_a_revert_that_names_no_commit_cancels_nothing(history_repo):
     """GitLab's Revert button writes "This reverts merge request !N". With no sha to match,
     the closure stands rather than being guessed away; the docstring states the limit."""
