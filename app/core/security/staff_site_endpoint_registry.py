@@ -78,6 +78,7 @@ ENDPOINT_COVERAGE = {
     ("compliant.compliant_pages.nz_alcohol_customs_settings", "GET"): "blocked",
     ("compliant.compliant_pages.nz_alcohol_dashboard", "GET"): "blocked",
     ("compliant.compliant_pages.nz_alcohol_food_safety", "GET"): "blocked",
+    ("compliant.compliant_pages.nz_alcohol_food_safety_checks", "GET"): "blocked",
     ("compliant.compliant_pages.nz_alcohol_np3_audit", "GET"): "blocked",
     ("compliant.compliant_pages.nz_alcohol_np3_audit_check", "GET"): "blocked",
     ("compliant.compliant_tools.tools_catalogue", "GET"): "blocked",

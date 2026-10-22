@@ -215,7 +215,8 @@ def test_np2_and_customs_links_boot_their_destination_scripts(compliance_page):
     _open(page)
     page.get_by_role("link", name="Open NP2", exact=True).click()
     expect(page.locator("[data-np3-audit-root]")).to_have_attribute("aria-busy", "false")
-    expect(page.locator("[data-np3-categories]")).not_to_be_empty()
+    # The food safety page is now a summary; the register of checks is on its Checks tab.
+    expect(page.locator("[data-np3-health-cards]")).not_to_be_empty()
     _open(page)
     page.get_by_role("link", name="Open Customs", exact=True).click()
     expect(page.locator("[data-compliant-root]")).to_have_attribute("aria-busy", "false")

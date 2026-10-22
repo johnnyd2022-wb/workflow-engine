@@ -108,7 +108,22 @@ def nz_alcohol_food_safety():
     context = _nz_alcohol_template_context()
     programme = context["food_control_programme"]
     if programme in {"np1", "np2", "np3"}:  # one verification workspace for every programme (plan 2.4b)
-        return render_template("compliant/np3_audit.html", **_programme_labels(programme), **context)
+        return render_template(
+            "compliant/np3_audit.html", **_programme_labels(programme), np3_view="summary", **context
+        )
+    return redirect("/compliant/nz-alcohol/configuration", code=302)
+
+
+@page_bp.route("/compliant/nz-alcohol/food-safety/checks", methods=["GET"])
+@requires_auth
+def nz_alcohol_food_safety_checks():
+    """Every check of the programme, by section, with search and readiness filters."""
+    context = _nz_alcohol_template_context()
+    programme = context["food_control_programme"]
+    if programme in {"np1", "np2", "np3"}:
+        return render_template(
+            "compliant/np3_checks.html", **_programme_labels(programme), np3_view="checks", **context
+        )
     return redirect("/compliant/nz-alcohol/configuration", code=302)
 
 
@@ -119,7 +134,7 @@ def nz_alcohol_np3_audit_check(control_id: str):
     programme = context["food_control_programme"]
     if programme not in {"np1", "np2", "np3"}:
         return redirect("/compliant/nz-alcohol/food-safety", code=302)
-    return render_template("compliant/np3_check.html", **_programme_labels(programme), **context)
+    return render_template("compliant/np3_check.html", **_programme_labels(programme), np3_view="checks", **context)
 
 
 def _programme_labels(programme: str) -> dict:

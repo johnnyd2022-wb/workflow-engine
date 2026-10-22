@@ -40,23 +40,17 @@ def test_compliant_dashboard_hydrates_live_views_in_parallel_without_hiding_part
     assert "setSubmitting(form, true)" in script
 
 
-def test_np3_audit_keeps_evidence_in_the_expanded_check():
+def test_np3_register_counts_each_check_once_and_links_to_its_page():
+    """Behaviour is in tests/e2e/compliant-platform/test_np3_pages.py; this pins the contract."""
     script = (_REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js").read_text(
         encoding="utf-8"
     )
 
-    assert "np3-evidence-options" in script
-    assert "np3-category-tabs" in script
-    assert "data-np3-check-search" in script
-    assert "matchesSearch" in script
-    assert "Search results" in script
-    assert "np3-health-card" in script
-    assert "np3-health-progress" in script
-    assert "np3-health-progress__counts" in script
-    assert "require evidence" in script
-    assert "np3-category-tab__evidence-needed" in script
-    assert "openControlDetail" not in script
-    assert "rowsByCategory" in script
+    assert "/api/compliant/np3-audit" in script
+    assert "if (seen[row.control_id]) return false;" in script  # a check in two sections is one check
+    assert "np3-check" in script and "/compliant/nz-alcohol/np3-audit/check/" in script
+    assert "guided_steps" in script
+    assert "data-np3-filter" in script
 
 
 def test_core_renders_module_defined_system_finding_contracts_without_module_branches():
@@ -82,7 +76,7 @@ def test_core_hub_consolidates_findings_inside_its_system_issues_health_bar():
     assert "system_alerts" in system_status
 
 
-def test_np3_audit_has_a_dedicated_check_workspace_with_tailored_evidence_fields():
+def test_np3_check_page_leads_with_what_the_verifier_asks_and_records_against_the_check():
     check_page = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_check.html"
     ).read_text(encoding="utf-8")
@@ -91,14 +85,13 @@ def test_np3_audit_has_a_dedicated_check_workspace_with_tailored_evidence_fields
     )
 
     assert "data-np3-check-root" in check_page
+    assert "data-can-manage" in check_page  # the reminder setting is for people who can change it
     assert "evidence_playbook" in check_script
-    assert "/settings" in check_script
+    assert "What your verifier will ask to see" in check_script
     assert "evidence_fields" in check_script
-    assert "np3-field__help" in check_script
-    assert "What to collect for this check" in check_script
-    assert "np3-check-workspace__primary" in check_script
+    assert "/settings" in check_script
     assert "/logs" in check_script
-    assert "BUILT-IN REGISTER" in check_script
+    assert "/attestations" in check_script
 
 
 def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quiet():
@@ -111,13 +104,6 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     dashboard_script = (
         _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "compliant.js"
     ).read_text(encoding="utf-8")
-    audit_script = (_REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "static" / "np3-audit.js").read_text(
-        encoding="utf-8"
-    )
-    audit = (
-        _REPO_ROOT / "app" / "features" / "compliant" / "frontend" / "templates" / "compliant" / "np3_audit.html"
-    ).read_text(encoding="utf-8")
-
     assert "data-evidence-control-heading" not in dashboard
     assert "data-evidence-control-heading" in customs_workspace
     assert "review_interval_months" in customs_workspace
@@ -132,24 +118,6 @@ def test_compliant_evidence_ui_is_control_scoped_and_keeps_passing_sections_quie
     assert "need attention" in dashboard_script
     assert "overdue" in dashboard_script
     assert "compliantSurface" in dashboard_script
-    assert "activeCategory" in audit_script
-    assert "np3-evidence-options" in audit_script
-    assert "data-np3-control-detail" not in audit
-    assert "{{ programme_short }}" in audit  # NP1, NP2 or NP3 (plan 2.4b); the sub-nav tab carries the label too
-    assert "np3-overview-panels" in audit
-    assert audit.index("np3-overview-panels") < audit.index("np3-audit-layout")
-    assert (
-        audit.index("data-np3-health-progress")
-        < audit.index("data-np3-core-evidence")
-        < audit.index("np3-audit-layout")
-    )
-    assert audit.index("np3-audit-rail") < audit.index("np3-audit-prep") < audit.index("np3-audit-content")
-    assert "data-np3-health-progress" in audit
-    assert "AUDIT PREP" in audit
-    assert "np3-rail-register" in audit
-    assert "np3-check-search" in audit
-    assert "data-np3-disclaimer" not in audit
-    assert "This checklist reflects the verification-confirmation topics" not in audit
 
 
 def test_core_overview_keeps_system_issues_out_of_competing_alert_cards():

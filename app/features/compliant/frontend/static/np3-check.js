@@ -77,68 +77,55 @@
     return list;
   }
 
-  function card(eyebrow, heading, className) {
+  function card(label, heading, className) {
     var section = document.createElement('section');
-    section.className = 'np3-detail-card' + (className ? ' ' + className : '');
-    section.appendChild(text('p', eyebrow, 'compliant-eyebrow'));
+    section.className = 'workspace-card np3-card' + (className ? ' ' + className : '');
+    if (label) section.appendChild(text('p', label, 'np3-card__label'));
     section.appendChild(text('h2', heading));
     return section;
   }
 
-  function guidance(check) {
+  // MPI's cards end on "Show": what the verifier will ask to see. It leads the check.
+  function verifierAsks(check) {
     var plan = check.evidence_playbook || {};
-    var section = card('OFFICIAL GUIDANCE', plan.section || 'National Programme 3 Guidance');
-    section.appendChild(text(
-      'p',
-      'This check is mapped to the named MPI card' + (plan.page ? ', page ' + plan.page : '') +
-        '. The evidence plan below turns that card into a short, reviewable checklist.'
-    ));
-
+    var section = card('About this check', 'What your verifier will ask to see', 'np3-asks');
+    var list = document.createElement('ul');
+    list.className = 'np3-evidence-checklist';
+    (plan.proof || []).forEach(function (item) { list.appendChild(text('li', item)); });
+    if (!list.children.length) list.appendChild(text('li', 'The records that show this requirement is met, with who did it and when.'));
+    section.appendChild(list);
+    var more = document.createElement('details');
+    more.className = 'np3-official-guidance';
+    more.appendChild(text('summary', 'Guidance notes' + (plan.section ? ' · ' + plan.section + (plan.page ? ', page ' + plan.page : '') : '')));
+    var drawer = document.createElement('div');
+    drawer.className = 'np3-guidance-drawer';
+    if ((plan.reference_notes || []).length) {
+      var notes = document.createElement('ul');
+      notes.className = 'np3-evidence-checklist';
+      (plan.reference_notes || []).forEach(function (note) { notes.appendChild(text('li', note)); });
+      drawer.appendChild(notes);
+    }
     var link = document.createElement('a');
     link.className = 'np3-inline-link';
     link.href = check.guidance_url;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.textContent = 'Open “' + (check.source_reference || plan.section || NP + ' guidance') + '” in the official ' + NP + ' guidance ↗';
-    section.appendChild(link);
-
-    var show = document.createElement('details');
-    show.className = 'np3-official-guidance';
-    show.appendChild(text('summary', 'What to collect for this check'));
-    var drawer = document.createElement('div');
-    drawer.className = 'np3-guidance-drawer';
-    drawer.appendChild(text('p', 'At verification, be ready to show:'));
-    var list = document.createElement('ul');
-    list.className = 'np3-evidence-checklist';
-    (plan.proof || []).forEach(function (item) { list.appendChild(text('li', item)); });
-    drawer.appendChild(list);
-    if ((plan.reference_notes || []).length) {
-      drawer.appendChild(text('p', 'Important guidance notes:'));
-      var notes = document.createElement('ul');
-      notes.className = 'np3-evidence-checklist';
-      (plan.reference_notes || []).forEach(function (note) { notes.appendChild(text('li', note)); });
-      drawer.appendChild(notes);
-    }
-    show.appendChild(drawer);
-    section.appendChild(show);
+    drawer.appendChild(link);
+    more.appendChild(drawer);
+    section.appendChild(more);
     return section;
   }
 
   function connectedEvidence(check) {
-    var section = card('CONNECTED EVIDENCE', 'What Production can already show');
     var evidence = check.derived_evidence || [];
-    var titles = check.evidence_titles || [];
     var connections = (check.evidence_playbook || {}).core_connections || [];
-    if (!evidence.length && !titles.length && !connections.length) {
-      section.appendChild(text(
-        'p',
-        'There is no linked Production evidence for this check yet. That is normal for policy and people controls; record the tailored evidence in the review below.'
-      ));
-      return section;
-    }
+    if (!evidence.length && !connections.length) return null;
+    var section = document.createElement('div');
+    section.className = 'np3-evidence-block';
+    section.appendChild(text('h3', 'From Production', 'np3-card__sub'));
     var list = document.createElement('ul');
     list.className = 'np3-connected-evidence';
-    titles.forEach(function (item) { list.appendChild(text('li', item)); });
     evidence.forEach(function (item) {
       var line = text('li', item.detail + ' ');
       if (item.workspace_url) {
@@ -169,7 +156,10 @@
   }
 
   function schedule(check) {
-    var section = card('CHECK SETTINGS', 'Review reminder', 'np3-check-settings');
+    if (root.dataset.canManage !== '1') return null;
+    var section = document.createElement('details');
+    section.className = 'workspace-card np3-card np3-check-settings';
+    section.appendChild(text('summary', 'Review reminder: ' + ({ 1: 'every month', 3: 'every 3 months', 6: 'every 6 months', 12: 'every year' }[Number(check.default_review_interval_months || 6)] || 'every 6 months')));
     section.appendChild(text(
       'p',
       'This setting applies to future sign-offs for this one check and overrides the default cadence in NZ Alcohol configuration.'
@@ -214,19 +204,21 @@
     var label = document.createElement('label');
     label.className = 'np3-field';
     label.appendChild(text('span', labelText, 'np3-field__label'));
-    label.appendChild(text('small', help, 'np3-field__help'));
+    if (help) label.appendChild(text('small', help, 'np3-field__help'));
     if (example) label.appendChild(text('small', 'Example: ' + example, 'np3-field__example'));
     label.appendChild(control);
     return label;
   }
 
   function reviewForm(check) {
-    var section = card('SIGN OFF THIS CHECK', 'Record the evidence you reviewed', 'np3-check-review');
+    var section = card('Record evidence', 'Sign off a review', 'np3-check-review');
     section.appendChild(text(
       'p',
-      'Use the fields below to leave an auditor a concise, specific trail. The guidance and examples stay visible while you write.'
+      'Say how this requirement is met here and point to the records. It sets the next review date.',
+      'np3-card__intro'
     ));
     var form = document.createElement('form');
+    form.setAttribute('hx-boost', 'false');
     var how = document.createElement('textarea');
     how.required = true;
     how.rows = 5;
@@ -285,6 +277,7 @@
 
     var submit = document.createElement('button');
     submit.type = 'submit';
+    submit.className = 'workspace-button workspace-button--primary';
     submit.textContent = 'Sign off this review';
     form.appendChild(submit);
     form.addEventListener('submit', async function (event) {
@@ -403,72 +396,48 @@
     return wrap;
   }
 
-  function logBook(check, staff) {
+  function fieldLabel(fields, key) {
+    var definition = (fields || []).find(function (field) { return field.key === key; });
+    return definition ? definition.label : key.replace(/_/g, ' ');
+  }
+  // A select's stored value ("action-required") read back as its label ("Yes, action required").
+  function optionLabel(fields, key, value) {
+    var definition = (fields || []).find(function (field) { return field.key === key; });
+    var match = definition && (definition.options || []).find(function (option) { return option[0] === value; });
+    return match ? match[1] : value;
+  }
+  function personName(staff, value) {
+    var person = (staff || []).find(function (candidate) { return candidate.id === value; });
+    return person ? person.name : value;
+  }
+
+  // The built-in register's form: where a check has a log, recording is adding an entry.
+  function logForm(check, staff) {
     var template = check.log_template;
     if (!template) return null;
-    var section = card('BUILT-IN REGISTER', template.title, 'np3-logbook');
-    section.appendChild(text('p', template.description));
-
-    var entries = check.log_entries || [];
+    var section = card('Record evidence', 'Add to the ' + template.title.charAt(0).toLowerCase() + template.title.slice(1), 'np3-record');
+    section.appendChild(text('p', template.description, 'np3-card__intro'));
     var matrix = check.training_matrix;
-    var register = document.createElement('details');
-    register.className = 'np3-logbook__entries';
-    register.open = !!entries.length;
-    register.appendChild(text('summary', 'Saved entries (' + entries.length + ')'));
-    var registerBody = document.createElement('div');
-    registerBody.className = 'np3-logbook__entries-body';
-    if (!entries.length) {
-      registerBody.appendChild(text('p', 'No entries yet. Add the first record below; it becomes part of this check’s audit trail.'));
-    } else {
-      var list = document.createElement('ol');
-      entries.slice(0, 12).forEach(function (entry) {
-        var eventDate = entry.event_date || (entry.created_at ? new Date(entry.created_at).toLocaleDateString() : 'Date unavailable');
-        var item = text('li', eventDate + (entry.status === 'open' ? ' · follow-up open' : ' · recorded'));
-        Object.keys(entry.fields || {}).forEach(function (key) {
-          var definition = (template.fields || []).find(function (field) { return field.key === key; });
-          var value = entry.fields[key];
-          if (key === 'employee_user_id') {
-            var person = (staff || []).find(function (candidate) { return candidate.id === value; });
-            value = person ? person.name : value;
-          }
-          item.appendChild(text('small', (definition ? definition.label : key.replace(/_/g, ' ')) + ': ' + value));
-        });
-        var entryFiles = fileLinks(entry.files);
-        if (entryFiles) item.appendChild(entryFiles);
-        list.appendChild(item);
-      });
-      registerBody.appendChild(list);
-    }
-    register.appendChild(registerBody);
-    if (matrix) section.appendChild(trainingTable(matrix));
-    else section.appendChild(register);
-
-    // Suggest people already on the register, plus team members with a real name.
     var personNames = (matrix ? matrix.people.slice() : []);
     (staff || []).forEach(function (person) {
       if (person.name && person.name.indexOf('@') === -1 && personNames.indexOf(person.name) === -1) {
         personNames.push(person.name);
       }
     });
-
     var form = document.createElement('form');
     form.className = 'np3-logbook__form';
+    form.setAttribute('hx-boost', 'false');
     var controls = {};
     (template.fields || []).forEach(function (field) {
       var input = logInput(field, staff, personNames);
-      var help = field.required ? 'Required for this record.' : 'Optional supporting detail.';
-      form.appendChild(reviewField(field.label, help, '', input));
+      form.appendChild(reviewField(field.label + (field.required ? '' : ' (optional)'), '', '', input));
       controls[field.key] = input;
     });
     var logFiles = fileInput();
-    form.appendChild(reviewField(
-      'Attach files (optional)',
-      'PDF, PNG or JPEG, up to 10MB each. They are kept with this entry and included in the evidence PDF.',
-      '',
-      logFiles
-    ));
+    form.appendChild(reviewField('Attach files (optional)', 'PDF, PNG or JPEG, up to 10MB each.', '', logFiles));
     var submit = document.createElement('button');
     submit.type = 'submit';
+    submit.className = 'workspace-button workspace-button--primary';
     submit.textContent = 'Add log entry';
     form.appendChild(submit);
     form.addEventListener('submit', async function (event) {
@@ -497,23 +466,88 @@
     return section;
   }
 
-  function history(check) {
-    var section = card('AUDIT TRAIL', 'Records and review history');
-    var events = check.history || [];
+  // Every logged entry, newest first: the evidence a log check builds up. The latest few show;
+  // the rest are one click away, so recording more stays near the top.
+  var SHOWN = 3;
+  function logEntries(check, staff) {
+    var template = check.log_template;
+    var entries = check.log_entries || [];
+    var wrap = document.createElement('div');
+    wrap.className = 'np3-evidence-block';
+    if (check.training_matrix) {
+      wrap.appendChild(text('h3', 'Training register', 'np3-card__sub'));
+      wrap.appendChild(trainingTable(check.training_matrix));
+      return wrap;
+    }
+    wrap.appendChild(text('h3', entries.length ? template.title + ' · ' + plural(entries.length, 'entry', 'entries') : template.title + ' · no entries yet', 'np3-card__sub'));
+    if (!entries.length) return wrap;
+    var list = document.createElement('ol');
+    list.className = 'np3-entries';
+    entries.forEach(function (entry, index) {
+      var eventDate = entry.event_date ? shortDate(entry.event_date) : (entry.created_at ? shortDate(String(entry.created_at).slice(0, 10)) : 'Date unavailable');
+      var item = document.createElement('li');
+      item.className = 'np3-entry' + (entry.status === 'open' ? ' np3-entry--open' : '');
+      if (index >= SHOWN) item.hidden = true;
+      var head = document.createElement('div');
+      head.className = 'np3-entry__head';
+      head.appendChild(text('strong', eventDate));
+      head.appendChild(text('span', entry.status === 'open' ? 'Follow-up open' : 'Recorded' + (entry.employee_name ? ' by ' + entry.employee_name : ''), 'np3-tag np3-tag--' + (entry.status === 'open' ? 'bad' : 'good')));
+      item.appendChild(head);
+      var details = document.createElement('dl');
+      details.className = 'np3-entry__fields';
+      Object.keys(entry.fields || {}).forEach(function (key) {
+        if ((template.fields || []).some(function (f) { return f.key === key && f.type === 'date'; }) && entry.fields[key] === entry.event_date) return;
+        var value = key === 'employee_user_id' ? personName(staff, entry.fields[key]) : optionLabel(template.fields, key, entry.fields[key]);
+        details.appendChild(text('dt', fieldLabel(template.fields, key)));
+        details.appendChild(text('dd', value));
+      });
+      item.appendChild(details);
+      var entryFiles = fileLinks(entry.files);
+      if (entryFiles) item.appendChild(entryFiles);
+      list.appendChild(item);
+    });
+    wrap.appendChild(list);
+    if (entries.length > SHOWN) {
+      var more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'np3-link';
+      more.textContent = 'Show all ' + entries.length + ' entries';
+      more.addEventListener('click', function () {
+        list.querySelectorAll('li[hidden]').forEach(function (li) { li.hidden = false; });
+        more.remove();
+      });
+      wrap.appendChild(more);
+    }
+    return wrap;
+  }
+
+  function history(check, staff) {
+    var section = card(null, 'History', 'np3-history');
+    // Log entries are listed in the register above; the history is the sign-offs.
+    var events = (check.history || []).filter(function (event) { return !(check.log_template && event.log_entry); });
     if (!events.length) {
-      section.appendChild(text('p', 'No evidence has been signed off for this check yet.'));
+      section.appendChild(text('p', check.log_template ? 'No reviews signed off yet: the log entries above are the record.' : 'Nothing recorded for this check yet.', 'np3-card__intro'));
       return section;
     }
+    var fields = ((check.evidence_playbook || {}).fields || []).concat((check.log_template || {}).fields || []);
     var list = document.createElement('ol');
     list.className = 'np3-full-history';
     events.forEach(function (event) {
-      var date = event.created_at ? new Date(event.created_at).toLocaleDateString() : 'Date unavailable';
-      var item = text('li', date + ' · ' + (event.signed_off_by || 'Former team member') + ' · ' + event.title);
+      var item = document.createElement('li');
+      var when = event.created_at ? shortDate(String(event.created_at).slice(0, 10)) : 'Date unavailable';
+      item.appendChild(text('strong', event.title));
+      item.appendChild(text('span', when + ' · ' + (event.signed_off_by || 'Former team member') + (event.due_date ? ' · next review ' + shortDate(event.due_date) : ''), 'np3-full-history__meta'));
       if (event.how_we_meet) item.appendChild(text('p', event.how_we_meet));
-      Object.keys(event.evidence_fields || {}).forEach(function (key) {
-        item.appendChild(text('small', key.replace(/_/g, ' ') + ': ' + event.evidence_fields[key]));
-      });
-      if (event.due_date) item.appendChild(text('small', 'Next review: ' + event.due_date));
+      var values = event.evidence_fields || {};
+      if (Object.keys(values).length) {
+        var dl = document.createElement('dl');
+        dl.className = 'np3-entry__fields';
+        Object.keys(values).forEach(function (key) {
+          dl.appendChild(text('dt', fieldLabel(fields, key)));
+          dl.appendChild(text('dd', key === 'employee_user_id' ? personName(staff, values[key]) : values[key]));
+        });
+        item.appendChild(dl);
+      }
       var eventFiles = fileLinks(event.files);
       if (eventFiles) item.appendChild(eventFiles);
       list.appendChild(item);
@@ -522,36 +556,69 @@
     return section;
   }
 
+  // What there is to show today: the newest proof, the log, and what Production already records.
+  function evidence(check, staff) {
+    var section = card(null, 'Evidence we have', 'np3-evidence');
+    var events = check.history || [];
+    var latest = events[0];
+    var facts = document.createElement('dl');
+    facts.className = 'np3-evidence__facts';
+    function fact(label, value) { facts.appendChild(text('dt', label)); facts.appendChild(text('dd', value)); }
+    fact('Latest', latest ? latest.title + ' · ' + shortDate(String(latest.created_at).slice(0, 10)) + ' · ' + (latest.signed_off_by || 'Former team member') : 'Nothing recorded yet');
+    fact('Records', plural(events.length, 'record'));
+    fact('Next review', check.review_due_date ? shortDate(check.review_due_date) : 'Set by the next sign-off');
+    section.appendChild(facts);
+    var files = latest ? fileLinks(latest.files) : null;
+    if (files) section.appendChild(files);
+    if (check.log_template) section.appendChild(logEntries(check, staff));
+    var linked = connectedEvidence(check);
+    if (linked) section.appendChild(linked);
+    return section;
+  }
+
+  function plural(n, word, many) { return n + ' ' + (n === 1 ? word : (many || word + 's')); }
+
   function render(payload) {
     var check = payload.check;
+    var staff = payload.available_staff || [];
     root.querySelector('[data-np3-check-title]').textContent = check.topic;
     var leaf = document.querySelector('[data-breadcrumb-leaf]');
     if (leaf) leaf.textContent = check.topic;
     root.querySelector('[data-np3-check-summary]').textContent = check.requirement_summary;
-    root.querySelector('[data-np3-check-state]').textContent = check.guidance_update_required
-      ? 'Guidance update required'
-      : check.state === 'ready' ? 'Evidence current' : 'Evidence needed';
-    var latest = (check.history || [])[0];
-    root.querySelector('[data-np3-check-next-review]').textContent = latest && latest.due_date
-      ? 'Next review: ' + latest.due_date : 'No signed review yet';
+    var stateEl = root.querySelector('[data-np3-check-state]');
+    var overdue = check.review_due_date && check.review_due_date < new Date().toISOString().slice(0, 10);
+    var state = check.open_remediation ? ['bad', 'Follow-up open']
+      : overdue ? ['bad', 'Review overdue']
+      : check.guidance_update_required ? ['warn', 'Guidance changed']
+      : check.state === 'ready' ? ['good', 'Evidence current'] : ['warn', 'Needs evidence'];
+    stateEl.className = 'np3-tag np3-tag--' + state[0];
+    stateEl.textContent = state[1];
+    var attested = (check.history || []).find(function (event) { return event.record_type === 'attestation'; });
+    var lastLog = (check.log_entries || [])[0];
+    root.querySelector('[data-np3-check-next-review]').textContent = check.review_due_date
+      ? (overdue ? 'Review was due ' : 'Next review ') + shortDate(check.review_due_date)
+      : attested ? 'Signed off ' + shortDate(String(attested.created_at).slice(0, 10))
+      : lastLog ? 'Last logged ' + shortDate(lastLog.event_date || String(lastLog.created_at).slice(0, 10))
+      : 'Nothing recorded yet';
 
-    // Top to bottom: guidance and the review reminder side by side (read this before you act),
-    // then one full-width place to act (sign off, plus the built-in register when this check has
-    // one), then the supporting Core evidence, then the full audit trail.
+    // One column, in reading order: what the check is and what the verifier will ask for, the
+    // evidence there is, a place to record more (the log where the check has one, else a
+    // sign-off, the other behind a disclosure), the sign-off history, then the reminder.
     var workspace = root.querySelector('[data-np3-check-workspace]');
     clear(workspace);
-    var topRow = document.createElement('div');
-    topRow.className = 'np3-check-top-row';
-    topRow.appendChild(guidance(check));
-    topRow.appendChild(schedule(check));
-
-    var primary = document.createElement('div');
-    primary.className = 'np3-check-workspace__primary';
-    primary.appendChild(reviewForm(check));
-    var log = logBook(check, payload.available_staff || []);
-    if (log) primary.appendChild(log);
-
-    workspace.append(topRow, primary, connectedEvidence(check), history(check));
+    var record = logForm(check, staff);
+    var pieces = [verifierAsks(check), evidence(check, staff)];
+    if (record) {
+      var other = document.createElement('details');
+      other.className = 'np3-alt';
+      other.appendChild(text('summary', 'Sign off a review instead'));
+      other.appendChild(reviewForm(check));
+      pieces.push(record, other);
+    } else {
+      pieces.push(reviewForm(check));
+    }
+    pieces.push(history(check, staff), schedule(check));
+    pieces.forEach(function (piece) { if (piece) workspace.appendChild(piece); });
   }
 
   async function load() {

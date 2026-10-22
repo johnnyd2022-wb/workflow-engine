@@ -1,0 +1,21 @@
+{# The food safety pages share one header: the programme, its guidance and downloads, and two views. #}
+<header class="workspace-header np3-header">
+  <div>
+    <h1>{{ programme_short }} food safety</h1>
+    <p class="workspace-caption">{{ programme_label }}: what to record next, and the proof for your verifier.</p>
+  </div>
+  <div class="workspace-header__actions">
+    <a class="workspace-button" href="{{ guidance_url }}" target="_blank" rel="noopener noreferrer">MPI {{ programme_short }} guidance ↗</a>
+    <details class="np3-menu">
+      <summary class="workspace-button">Download</summary>
+      <div class="np3-menu__body">
+        <a href="/api/compliant/np3-audit?format=pdf" hx-boost="false">Evidence pack (.pdf)</a>
+        <a href="/api/compliant/np3-audit?format=csv" hx-boost="false">Register (.csv)</a>
+      </div>
+    </details>
+  </div>
+</header>
+<nav class="np3-views" aria-label="{{ programme_short }} food safety">
+  <a href="/compliant/nz-alcohol/food-safety"{% if np3_view == 'summary' %} aria-current="page"{% endif %}>Summary</a>
+  <a href="/compliant/nz-alcohol/food-safety/checks"{% if np3_view == 'checks' %} aria-current="page"{% endif %}>Checks</a>
+</nav>

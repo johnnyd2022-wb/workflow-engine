@@ -66,6 +66,7 @@ SEED_KINDS = (
     "customers",
     "suppliers",
     "excise",
+    "np3",
 )
 
 
@@ -567,6 +568,169 @@ def _seed_compliance(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_np3(db, org_id, inv) -> None:
+    """NP3 food safety evidence in the shape a working distillery has after a year: most
+    checks signed off (some overdue, some due within the month, a fifth never done), cleaning,
+    pest and receiving logs with one follow-up still open, a training register, and an
+    acceptable verification nine months ago with one corrective action outstanding."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.user import User
+    from app.features.compliant.models import ComplianceProfile
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+    from app.features.compliant.modules.nz_alcohol import verification
+    from app.features.compliant.modules.nz_alcohol.np3_audit import NP3_AUDIT_CATEGORIES, np3_log_template
+
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None:
+        raise ValueError("np3 requires the compliance seed")
+    user = db.query(User).filter(User.org_id == org_id).first()
+    user.first_name, user.last_name = "Jordan", "Lee"  # a name, not an email, on every record
+    today = date.today()
+
+    def at(day: date) -> datetime:
+        return datetime.combine(day, datetime.min.time(), tzinfo=UTC).replace(hour=9)
+
+    def add(control_id, record_type, status, title, created, due=None, details=None, period=None):
+        db.add(
+            ComplianceRecord(
+                org_id=org_id,
+                framework_slug="np3-food-control",
+                control_id=control_id,
+                record_type=record_type,
+                status=status,
+                title=title,
+                period_start=period,
+                due_date=due,
+                source_refs=[],
+                details=details or {},
+                created_by_user_id=user.id,
+                owner_user_id=user.id if record_type != "attestation" else None,
+                created_at=at(created),
+                updated_at=at(created),
+            )
+        )
+
+    seen = []
+    for _section, controls in NP3_AUDIT_CATEGORIES:
+        for control_id, title in controls:
+            if control_id not in [c for c, _t in seen]:
+                seen.append((control_id, title))
+    for number, (control_id, title) in enumerate(seen):
+        kind = number % 5
+        if kind == 0:
+            continue  # never signed off
+        signed = today - timedelta(days={1: 215, 2: 160}.get(kind, 30 + number * 3))
+        due = {1: today - timedelta(days=20 + number), 2: today + timedelta(days=9 + number % 14)}.get(
+            kind, today + timedelta(days=120 + number * 2)
+        )
+        add(
+            control_id,
+            "attestation",
+            "complete",
+            f"NP3 review: {title}",
+            signed,
+            due,
+            {
+                "how_we_meet": f"{title}: checked against our written routine and the records kept on the shared drive.",
+                "review_interval_months": 6,
+                "np3_guidance_version": "2025-v2",
+                "attestation_confirmed": True,
+                "evidence_fields": {},
+            },
+        )
+
+    def log_fields(control_id, day, follow_up=False):
+        template = np3_log_template(control_id)
+        fields = {}
+        for field in template["fields"]:
+            kind = field.get("type")
+            if kind == "date":
+                fields[field["key"]] = day.isoformat()
+            elif kind == "select":
+                options = [o[0] for o in field.get("options", ())]
+                pick = "action-required" if follow_up and "action-required" in options else options[0]
+                fields[field["key"]] = pick
+            elif kind == "user":
+                fields[field["key"]] = str(user.id)
+            elif kind == "person":
+                fields[field["key"]] = ("Aroha Ngata", "Jordan Lee", "Sam Patel")[day.day % 3]
+            elif field.get("required") or field["key"] in ("corrective_action", "cause_and_action", "notes"):
+                key = field["key"]
+                fields[key] = {
+                    "corrective_action": "Bait station B2 replaced; floor drain resealed.",
+                    "cause_and_action": "Seal on the cold store door split; replacement ordered.",
+                }.get(key) or next(
+                    (
+                        value
+                        for word, value in (
+                            ("area", ("Bottling line", "Still room floor", "Botanicals store")[day.day % 3]),
+                            ("equipment", ("Bottling line", "Still room floor", "Botanicals store")[day.day % 3]),
+                            ("method", "Hot water rinse, then food-grade sanitiser at label strength"),
+                            ("supplier", ("Moore Wilson's", "Davis Trading", "Hawke's Bay Botanicals")[day.day % 3]),
+                            (
+                                "product",
+                                ("Juniper berries 5 kg", "Neutral spirit 200 L", "Glass 700 mL x 600")[day.day % 3],
+                            ),
+                            ("pest", "Rodent bait stations B1-B4 checked"),
+                            ("location", "Bait stations B1-B4"),
+                            ("finding", "No activity"),
+                            ("temperature", "4.2 °C"),
+                        )
+                        if word in key
+                    ),
+                    "Checked by the duty manager",
+                )
+        return template, fields
+
+    for control_id, days in (
+        ("cleaning-and-hygiene", (3, 10, 17, 24, 38, 52)),
+        ("pest-animal-control", (6, 36, 66)),
+        ("receiving-food", (2, 9, 23, 41)),
+        ("staff-competency", (14, 120)),
+    ):
+        for position, back in enumerate(days):
+            day = today - timedelta(days=back)
+            follow_up = control_id == "pest-animal-control" and position == 0
+            template, fields = log_fields(control_id, day, follow_up)
+            add(
+                control_id,
+                template["record_type"],
+                "open" if follow_up else "complete",
+                f"NP3 log: {template['title']}",
+                day,
+                day + timedelta(days=30) if follow_up else None,
+                {"np3_log_type": template["key"], "log_fields": fields, "np3_guidance_version": "2025-v2"},
+                day,
+            )
+    db.commit()
+
+    visited = today - timedelta(days=270)
+    verification.record(
+        db,
+        org_id,
+        profile,
+        {
+            "verified_on": visited.isoformat(),
+            "verifier_name": "Sam Rivers",
+            "verifier_agency": "Hutt City Council",
+            "report_reference": "FV-2026-0142",
+            "outcome": "acceptable",
+            "initial": True,
+            "actions": [
+                {
+                    "description": "Add the cold store to the daily temperature log",
+                    "due_on": (visited + timedelta(days=60)).isoformat(),
+                    "owner_user_id": str(user.id),
+                }
+            ],
+        },
+        user.id,
+        today,
+    )
+    db.commit()
+
+
 def _seed_excise(db, org_id, inv) -> None:
     """Sales -> Excise: the lineage gin and a limoncello set up for excise (pack size, ABV,
     Customs product type), mapped from Xero lines across the sales seed's months, with one
@@ -950,6 +1114,7 @@ def _seed_stocktake(db, org_id, inv) -> None:
         return db.query(StocktakeLine).filter(StocktakeLine.stocktake_id == stocktake.id).all()
 
     user = db.query(User).filter(User.org_id == org_id).first()
+    user.first_name, user.last_name = "Jordan", "Lee"  # a name, not an email, on every record
     today = date.today()
 
     earlier = stocktake_service.start_stocktake(db, org_id, today - timedelta(days=97), "scheduled", None, user.id)
@@ -1091,6 +1256,7 @@ def cmd_seed(args) -> int:
             "production": _seed_production,
             "sales": _seed_sales,
             "excise": _seed_excise,
+            "np3": _seed_np3,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "board": _seed_board,
