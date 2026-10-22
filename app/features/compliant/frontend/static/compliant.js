@@ -116,9 +116,9 @@
       card.appendChild(textElement('p', health.currentControls + ' / ' + health.totalControls + ' NP3 checks with current evidence', 'compliant-framework-summary__coverage'));
       var metrics = document.createElement('div'); metrics.className = 'compliant-framework-summary__metrics';
       var np3 = framework.slug === 'np3-food-control';
-      metrics.appendChild(moduleMetric(health.evidenceReady, np3 ? 'checks with current evidence' : 'evidence ready', 'ready', np3 ? '/compliant/nz-alcohol/food-safety?filter=ok' : null));
-      metrics.appendChild(moduleMetric(health.needsAttention, np3 ? 'checks to review' : 'need attention', 'attention', np3 ? '/compliant/nz-alcohol/food-safety?filter=attention' : null));
-      metrics.appendChild(moduleMetric(health.overdue, 'overdue', 'overdue', np3 ? '/compliant/nz-alcohol/food-safety?filter=overdue' : null));
+      metrics.appendChild(moduleMetric(health.evidenceReady, np3 ? 'checks with current evidence' : 'evidence ready', 'ready', np3 ? '/compliant/nz-alcohol/food-safety/checks?filter=ok' : null));
+      metrics.appendChild(moduleMetric(health.needsAttention, np3 ? 'checks to review' : 'need attention', 'attention', np3 ? '/compliant/nz-alcohol/food-safety/checks?filter=attention' : null));
+      metrics.appendChild(moduleMetric(health.overdue, 'overdue', 'overdue', np3 ? '/compliant/nz-alcohol/food-safety/checks?filter=overdue' : null));
       card.appendChild(metrics);
       // Only these two have a workspace: NP3 evidence is per-check, Customs keeps the generic
       // record form. Any other framework in the catalogue has no capture page yet.
