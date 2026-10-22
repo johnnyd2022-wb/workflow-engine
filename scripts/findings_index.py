@@ -401,6 +401,8 @@ PATCH_APPLIED_RE = re.compile(r"\bpatch:\s*(?!not applied|none|n/a|not yet|pendi
 # script reads it back on the next sweep. That round trip is how the loop learns its own
 # work landed without anyone updating the index by hand.
 TRAILER_RE = re.compile(r"^\s*Findings-Index:\s*(?P<ids>[0-9a-f, ]+)\s*$", re.I | re.M)
+# What `git revert` writes into the body of the commit it makes: the full sha of the commit it undoes.
+REVERTS_COMMIT_RE = re.compile(r"^This reverts commit ([0-9a-f]{40})\b", re.M)
 
 # ---------------------------------------------------------------------------
 # priority
@@ -1092,23 +1094,26 @@ def merged_commit_closures(ref: str = "origin/main") -> dict[str, str]:
 
     History never ages out and a revert does not remove a trailer, so `sweep()` applies
     these closures to an item only when it first sees it, never to a record it already
-    holds. A human who reopens or `wont-fix`es an item (or a fix that was reverted) is not
-    overridden on the next sweep; only a worktree with no memory of the item takes history
-    at its word. The trailer therefore belongs on the commit that fixes the item, and only
-    for items that commit really fixes.
+    holds. That protects a record the store holds; the daily run starts with an empty
+    store, so it does not protect a human's reopen or `wont-fix` across days (that needs a
+    disposition in the tree, see the findings-sweep skill). A commit that a later
+    `git revert` undid ("This reverts commit <sha>.") is dropped, so its items are listed
+    again; a revert of that revert counts the fix again. A revert made some other way (the
+    GitLab "Revert" button writes "This reverts merge request !N", which names no commit)
+    is not seen. The trailer belongs on the commit that fixes the item, and only for items
+    that commit really fixes.
     """
+    log = ["git", "-C", str(REPO_ROOT), "log", ref]
     try:
         proc = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(REPO_ROOT),
-                "log",
-                ref,
-                "--regexp-ignore-case",
-                "--grep=^[[:space:]]*Findings-Index:",
-                "--format=%H%x1f%B%x1e",
-            ],
+            [*log, "--regexp-ignore-case", "--grep=^[[:space:]]*Findings-Index:", "--format=%H%x1f%B%x1e"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        reverts = subprocess.run(
+            [*log, "--grep=^This reverts commit [0-9a-f]\\{40\\}", "--format=%H%x1f%B%x1e"],
             capture_output=True,
             text=True,
             timeout=60,
@@ -1119,10 +1124,20 @@ def merged_commit_closures(ref: str = "origin/main") -> dict[str, str]:
     if proc.returncode != 0:
         return {}
 
+    # Newest first, so a revert is met before the revert that undoes it: a revert that has
+    # itself been reverted no longer cancels anything.
+    reverted: set[str] = set()
+    if reverts.returncode == 0:
+        for entry in reverts.stdout.split("\x1e"):
+            revert_sha, _, body = entry.strip().partition("\x1f")
+            target = REVERTS_COMMIT_RE.search(body)
+            if revert_sha and target and revert_sha not in reverted:
+                reverted.add(target.group(1))
+
     closures: dict[str, str] = {}
     for entry in proc.stdout.split("\x1e"):
         sha, _, body = entry.strip().partition("\x1f")
-        if not sha:
+        if not sha or sha in reverted:
             continue
         for match in TRAILER_RE.finditer(body):
             for raw_id in match.group("ids").split(","):

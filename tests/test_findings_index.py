@@ -1401,6 +1401,36 @@ def test_commit_closures_need_the_trailer_on_its_own_line(history_repo):
     assert fi.merged_commit_closures() == {}
 
 
+def test_a_fix_that_was_reverted_no_longer_closes_its_items(history_repo):
+    """A revert does not remove the trailer, so without this the item stays closed in every
+    fresh-store run although the fix is gone from the tree."""
+    fixed = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _commit(history_repo, "fix: y\n\nFindings-Index: bbbb2222\n", "y")
+    _git(history_repo, "revert", "--no-edit", fixed)
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"bbbb2222"}  # the revert took aaaa1111 only
+
+
+def test_reverting_a_revert_closes_the_items_again(history_repo):
+    fixed = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _git(history_repo, "revert", "--no-edit", fixed)
+    _git(history_repo, "revert", "--no-edit", "HEAD")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"aaaa1111"}
+
+
+def test_a_revert_that_names_no_commit_cancels_nothing(history_repo):
+    """GitLab's Revert button writes "This reverts merge request !N". With no sha to match,
+    the closure stands rather than being guessed away; the docstring states the limit."""
+    _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _commit(history_repo, 'Revert "fix: x"\n\nThis reverts merge request !123\n', "revert")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"aaaa1111"}
+
+
 def test_commit_closures_are_empty_without_origin_main(history_repo):
     """No remote ref (a bare clone, a CI checkout): no evidence of any merge, not an error."""
     _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
