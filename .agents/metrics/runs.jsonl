@@ -221,3 +221,4 @@
 {"duration_s": null, "findings": 19, "notes": null, "ref": "feat/customs-v2-design", "run_type": "interactive", "scope": "customs-v2", "skill": "page-design", "ts": "2026-10-21T09:17:47+00:00", "verdict": "patched"}
 {"duration_s": null, "findings": 21, "notes": null, "ref": "feat/np3-design", "run_type": "interactive", "scope": "np3", "skill": "page-design", "ts": "2026-10-21T09:23:46+00:00", "verdict": "findings-open"}
 {"duration_s": null, "findings": 25, "notes": null, "ref": "feat/np3-design", "run_type": "interactive", "scope": "np3", "skill": "page-design", "ts": "2026-10-22T08:59:53+00:00", "verdict": "patched"}
+{"duration_s": null, "findings": 11, "notes": null, "ref": "feat/customs-records-design", "run_type": "interactive", "scope": "customs-records", "skill": "page-design", "ts": "2026-10-22T19:02:55+00:00", "verdict": "findings-open"}
