@@ -84,9 +84,9 @@
         bar.appendChild(progress);
         body.appendChild(bar);
         var metrics = el('div', null, 'compliance-framework-metrics');
-        metrics.appendChild(metric(values.ready, 'current', name ? href + '?filter=ok' : null));
-        metrics.appendChild(metric(values.attention, 'to review', name ? href + '?filter=attention' : null));
-        metrics.appendChild(metric(values.overdue, 'overdue', name ? href + '?filter=overdue' : null));
+        metrics.appendChild(metric(values.ready, 'current', name ? href + '/checks?filter=ok' : null));
+        metrics.appendChild(metric(values.attention, 'to review', name ? href + '/checks?filter=attention' : null));
+        metrics.appendChild(metric(values.overdue, 'overdue', name ? href + '/checks?filter=overdue' : null));
         body.appendChild(metrics);
         disclosure.appendChild(body);
         card.appendChild(disclosure);
@@ -156,7 +156,7 @@
         .sort(function (a, b) { return b.values.overdue - a.values.overdue || b.values.attention - a.values.attention; })[0];
       if (!target) return;
       var href = destination(target.framework);
-      if (programme(target.framework) && target.values.attention) href += target.values.overdue ? '?filter=overdue' : '?filter=attention';
+      if (programme(target.framework) && target.values.attention) href += target.values.overdue ? '/checks?filter=overdue' : '/checks?filter=attention';
       primary.textContent = 'Review evidence';
       primary.href = href;
       primary.hidden = false;
