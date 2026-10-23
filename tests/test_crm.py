@@ -2344,7 +2344,10 @@ class TestCustomersPageXeroButtons:
         client = self._client_as(db, org, "sales")
 
         assert client.get("/crm/configuration").status_code in (302, 403)  # dashboard redirect in a browser
-        for path, marker in (("/crm", "Xero products needing a mapping"), ("/crm/matching", "Re-run matching")):
+        for path, marker in (
+            ("/crm", "Xero products needing a mapping"),
+            ("/crm/matching", 'id="crm-page-title">Batch matching</h1>'),
+        ):
             resp = client.get(path)
             page = resp.get_data(as_text=True)
             assert resp.status_code == 200 and marker in page, path  # the page itself rendered for them

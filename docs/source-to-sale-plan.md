@@ -254,6 +254,11 @@ want it, and never produce a recall list that can't be trusted.
     match (stock goes back to the old batch). Page: CRM → Batch matching (`/crm/matching`).
     Source Map marks sales "pre-sold" / "awaiting review". For d, lines FIFO can't fill
     still count as `insufficient_stock` in the summary; their queue is 3.3.
+    Changed after !338 (findings-sweep, 2026-10-24): choosing a batch and re-running matching
+    move stock, so they need `inventory.adjust` as well as `sales.record`. The Sales role can
+    review and confirm but not pick. Creating or authorising an invoice still consumes stock
+    through the sync. The reasoning and the open call on that are in
+    `.agents/reports/crm/security-tenant-audit.md` (F1) and `review.md` (O1).
 
 - [x] **1.2 Whole bottles, with partial fills going to Library stock.** *Critical · M* (!336)
   - Evidence: nothing stops a finished lot holding 78.5 bottles, and FIFO
