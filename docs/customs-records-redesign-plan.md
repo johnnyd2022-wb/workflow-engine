@@ -122,4 +122,9 @@ All three styles below live in that view.
 
 ## Outcome
 
-Built as planned; five screenshot passes (`~/.cache/workflow-engine-ui-shots/records/01`–`05`), the last empty for all three styles. Awaiting the pick.
+**Style 1, Checks and a page each, was chosen** (founder, 2026-10-23). Six screenshot passes; the final one, on Style 1 alone, was clean.
+
+- Style 2 (side sheet) lost: it repeats the check page in less room, and a sheet is the least established of the three patterns.
+- Style 3 (timeline) lost: it answers "what did we show, and when?" but makes each check's status less visible, and that status is the page's job.
+
+The switch, the sheet, the chips, the timeline feed and their CONCEPT ONLY test are deleted.
