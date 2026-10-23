@@ -392,6 +392,11 @@ TEMPLATE_RE = re.compile(r"<[a-z][\w :|-]*>|\[[a-z-]+\|[a-z-]+(?:\|[a-z-]+)*\]",
 # `.agents/reports/<slug>/review.md` do not start with `/`, so they are still rejected.
 ROUTE_SPAN_RE = re.compile(r"`/[^`\s]*`")
 
+# A bullet made only of `[file.py:12](path/file.py:12)` links is the "Evidence:" list under a
+# finding, not a finding: the claim is the paragraph above it. Indexed on their own, four
+# such lines from one audit's F1 became worklist items titled with a bare file name.
+LOCATION_LINK_RE = re.compile(r"\[[\w./-]+\.\w+(?::\d+(?:-\d+)?)?\]\([^)\s]+\)")
+
 # `patch: not applied` keeps an item open; `patch: <commit sha / diff summary>` means it
 # already shipped. Read only when a disposition line is present, so ordinary prose using
 # the word "patch" cannot accidentally close an item.
@@ -830,6 +835,9 @@ def _item_from_bullet(body: str, rel: str, line_no: int, kind: str) -> Item | No
         body = checkbox.group("rest").strip()
 
     if RESOLVED_MARKERS.search(body):
+        return None
+
+    if not LOCATION_LINK_RE.sub("", body).strip(" ,;&.-—"):
         return None
 
     # Format-spec placeholder, not a finding.
