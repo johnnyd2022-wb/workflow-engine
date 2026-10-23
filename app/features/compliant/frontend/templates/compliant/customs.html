@@ -3,7 +3,7 @@
 {% block body_class %}compliant-page{% endblock %}
 {% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
 {% block content %}
-<main class="max-content workspace-overview workspace-page customs-page" data-compliant-root data-compliant-surface="customs" aria-busy="true">
+<main class="max-content workspace-overview workspace-page customs-page" data-compliant-root aria-busy="true">
   {% set customs_caption = "This period's excise entry, ready to copy into Trade Single Window, and the records Customs can ask to see." %}
   {% include "compliant/_customs_header.html" %}
 
@@ -18,38 +18,12 @@
     <aside class="customs-position" data-customs-position aria-label="Where things stand with Customs"></aside>
   </div>
 
-  <details class="workspace-card customs-records" id="customs-records" data-record-target data-customs-records>
-    <summary class="customs-records__summary">
-      <span class="customs-records__title">Records for Customs</span>
-      <span class="customs-records__hint" data-customs-records-hint>What Customs can ask to see</span>
-    </summary>
-    <div class="customs-records__body">
-      <div class="customs-controls" data-customs-controls></div>
-      <h3 class="customs-records__sub">Latest records</h3>
-      <div class="customs-record-cards" data-recent-records data-records-layout="cards">No records yet.</div>
-      <details class="customs-add-record" data-add-record>
-        <summary class="workspace-button">Add a record</summary>
-        <div class="customs-add-record__body">
-          <h3 data-evidence-control-heading>Record evidence for a Customs control.</h3>
-          <p class="excise-hint" data-evidence-control-summary></p>
-          <p data-capture-guidance class="excise-hint"></p>
-          <form data-record-form hx-boost="false">
-            <input type="hidden" name="framework_slug" value="customs-alcohol">
-            <label>Control <select name="control_id" required data-control-select></select></label>
-            <label>Record type <select name="record_type"><option value="attestation">Attestation</option><option value="reading">Reading / sample</option><option value="lodgement">Lodgement</option><option value="competency">Training / competency</option><option value="incident">Incident / corrective action</option></select></label><label>Status <select name="status"><option value="complete">Complete</option><option value="open">Open</option><option value="failed">Failed</option></select></label>
-            <label class="span-2">Title <input name="title" required maxlength="255" placeholder="What does this record prove?"></label><label>Period start <input name="period_start" type="date"></label><label>Period end <input name="period_end" type="date"></label><label>Due date <input name="due_date" type="date"></label><label>Review again <select name="review_interval_months"><option value="">No recurring review</option><option value="1">Every month</option><option value="3">Every 3 months</option><option value="6">Every 6 months</option><option value="12">Every year</option></select></label>
-            <label>Measured value <input name="measured_value" type="number" step="0.0001"></label><label>Limit <input name="limit_value" type="number" step="0.0001"></label><label data-declared-lal-field hidden>Declared LAL <input name="declared_litres_of_alcohol" type="number" min="0" step="0.0001" placeholder="Filed litres of alcohol"></label>
-            <label class="span-2">Evidence reference <input name="evidence_reference" maxlength="1024" placeholder="File location, certificate number, or signed record reference"></label>
-            <fieldset class="span-2"><legend>Production records</legend><p>Select the executions, movements, steps, or files that prove this record.</p>
-              <div class="core-source-search"><label>Type <select data-core-source-kind><option value="file">Evidence files</option><option value="execution-step">Completed steps</option><option value="execution">Executions</option><option value="movement">Inventory movements</option></select></label><label>Find by name <input type="search" data-core-source-query maxlength="100" placeholder="Search Production records"></label><button type="button" data-core-source-search>Find records</button></div>
-              <div data-core-source-picker class="core-source-picker"></div><button type="button" data-core-source-more hidden>Show more records</button><div data-core-source-selected class="core-source-selected" aria-live="polite"></div>
-            </fieldset>
-            <button type="submit" class="workspace-button workspace-button--primary">Add evidence record</button>
-          </form>
-        </div>
-      </details>
-    </div>
-  </details>
+  {# Records live on their own view; the entry page only says how they stand. #}
+  <a class="workspace-card customs-records-link" href="/compliant/nz-alcohol/customs/records" data-customs-records-link>
+    <span class="customs-records-link__title">Records for Customs</span>
+    <span class="customs-records-link__hint" data-customs-records-hint>What Customs can ask to see</span>
+    <span class="customs-records-link__go">Open records →</span>
+  </a>
 </main>
 {% endblock %}
-{% block scripts %}<script src="/compliant/static/customs-common.js"></script><script src="/compliant/static/compliant.js"></script><script src="/compliant/static/excise.js"></script>{% endblock %}
+{% block scripts %}<script src="/compliant/static/customs-common.js"></script><script src="/compliant/static/excise.js"></script>{% endblock %}

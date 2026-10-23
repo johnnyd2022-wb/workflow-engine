@@ -125,7 +125,7 @@ def test_lands_on_the_oldest_unlodged_period_with_the_customs_entry(browser, app
         "href", "https://www.tsw.govt.nz/external/application/login/app.html"
     )
     # Records for Customs sit folded at the bottom; setup lives on its own pages.
-    expect(page.locator("[data-customs-records]")).not_to_have_attribute("open", "")
+    expect(page.locator("[data-customs-records-link]")).to_have_attribute("href", PAGE + "/records")
     expect(page.locator("[data-excise-products]")).to_have_count(0)
     assert_clean_page(page)
     page.context.close()
@@ -158,10 +158,11 @@ def test_recording_a_period_as_lodged_locks_it_and_files_the_record(browser, app
     expect(page.locator(".excise-period--active")).to_contain_text("Lodged")
     expect(page.locator("#excise-entry-ref")).to_have_count(0)
     # The lodgement is its own evidence: the "entry lodged" check is current without typing.
-    page.locator("[data-customs-records] > summary").click()
-    lodged = page.locator(".customs-control", has_text="entry lodged")
+    page.locator("[data-customs-records-link]").click()
+    lodged = page.locator(".customs-rec-check[data-control-id='period-lodgement']")
     expect(lodged.locator(".customs-chip")).to_have_text("Current")
-    expect(page.locator(".customs-record").first).to_contain_text("Ref EX-E2E-1")
+    lodged.click()
+    expect(page.locator(".customs-rec-row").first).to_contain_text("Ref EX-E2E-1")
     assert_clean_page(page)
     page.context.close()
 
@@ -170,17 +171,6 @@ def test_a_period_link_opens_that_period(browser, app_url, excise_org):
     start = _months_back(1)
     page = _open(browser, app_url, excise_org, query=f"?period={start.isoformat()}")
     expect(page.locator(".customs-entry-head h3")).to_have_text(start.strftime("%B %Y"))
-    page.context.close()
-
-
-def test_records_open_as_one_card_per_customs_check(browser, app_url, excise_org):
-    page = _open(browser, app_url, excise_org)
-    page.locator("[data-customs-records] > summary").click()
-    expect(page.locator(".customs-control")).to_have_count(5)
-    page.get_by_role("button", name="Add evidence for Movement evidence kept").click()
-    expect(page.locator("[data-record-form]")).to_be_visible()
-    expect(page.locator("[data-control-select]")).to_have_value("movement-evidence")
-    assert_clean_page(page)
     page.context.close()
 
 
@@ -227,7 +217,12 @@ def test_the_entry_page_fits_each_width(browser, app_url, excise_org, viewport):
     phone = viewport["width"] < 721
     expect(page.locator(".customs-summary" if phone else ".customs-tiles")).to_be_visible()
     expect(page.locator(".customs-tiles" if phone else ".customs-summary")).to_be_hidden()
-    for region in ("[data-excise-periods]", "[data-excise-draft]", "[data-customs-position]", "[data-customs-records]"):
+    for region in (
+        "[data-excise-periods]",
+        "[data-excise-draft]",
+        "[data-customs-position]",
+        "[data-customs-records-link]",
+    ):
         expect(page.locator(region)).to_have_count(1)
     expect(page.get_by_role("button", name="Record as lodged")).to_be_visible()
     overflow = page.evaluate("() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth")

@@ -75,6 +75,8 @@ ENDPOINT_COVERAGE = {
     ("compliant.compliant_pages.nz_alcohol_configuration", "GET"): "blocked",
     ("compliant.compliant_pages.nz_alcohol_customs_workspace", "GET"): "blocked",
     ("compliant.compliant_pages.nz_alcohol_customs_stock", "GET"): "blocked",
+    ("compliant.compliant_pages.nz_alcohol_customs_records", "GET"): "blocked",
+    ("compliant.compliant_pages.nz_alcohol_customs_record_check", "GET"): "blocked",
     ("compliant.compliant_pages.nz_alcohol_customs_settings", "GET"): "blocked",
     ("compliant.compliant_pages.nz_alcohol_dashboard", "GET"): "blocked",
     ("compliant.compliant_pages.nz_alcohol_food_safety", "GET"): "blocked",

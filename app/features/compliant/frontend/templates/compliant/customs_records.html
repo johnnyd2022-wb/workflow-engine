@@ -1,0 +1,22 @@
+{% extends "shared/base_spa.html" %}
+{% block title %}Records for Customs — NZ Alcohol{% endblock %}
+{% block body_class %}compliant-page{% endblock %}
+{% block head_extras %}<link rel="stylesheet" href="/compliant/static/compliant.css"><link rel="stylesheet" href="/compliant/static/customs.css">{% endblock %}
+{% block content %}
+<main class="max-content workspace-overview workspace-page customs-page customs-records-page" data-customs-records-root data-compliant-root aria-busy="true">
+  {% set customs_caption = "What Customs can ask to see, whether the proof is current, and adding more." %}
+  {% include "compliant/_customs_header.html" %}
+
+  <section class="workspace-card customs-card customs-rec" aria-labelledby="customs-rec-title">
+    <div class="customs-card__head">
+      <div>
+        <h2 id="customs-rec-title">Records for Customs</h2>
+        <p class="workspace-caption" data-records-summary>Loading…</p>
+      </div>
+    </div>
+    <div class="customs-rec__list" data-records-checks></div>
+  </section>
+
+</main>
+{% endblock %}
+{% block scripts %}<script src="/compliant/static/customs-common.js"></script><script src="/compliant/static/customs-records.js"></script>{% endblock %}

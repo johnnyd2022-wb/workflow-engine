@@ -349,7 +349,18 @@
     catch (err) { fail(err.message); }
   }
 
-  Promise.all([loadPeriods(), loadPosition()]).catch(function (err) { fail(err.message); }).finally(function () {
+  // The one line about Records for Customs: how many of its checks have current proof.
+  async function loadRecordsHint() {
+    var hint = page.querySelector('[data-customs-records-hint]');
+    if (!hint) return;
+    var overview = await api('GET', '/api/compliant/overview');
+    var fw = (overview.frameworks || []).find(function (f) { return f.slug === 'customs-alcohol'; });
+    if (!fw) return;
+    var current = fw.controls.filter(function (c) { return c.state === 'compliant'; }).length;
+    hint.textContent = current + ' of ' + fw.controls.length + ' checks have current proof';
+  }
+
+  Promise.all([loadPeriods(), loadPosition(), loadRecordsHint()]).catch(function (err) { fail(err.message); }).finally(function () {
     // The "next due" fact reads the periods, which may land after the position.
     if (state.position) renderPosition(state.position);
     page.setAttribute('aria-busy', 'false');
