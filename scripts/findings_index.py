@@ -401,6 +401,8 @@ PATCH_APPLIED_RE = re.compile(r"\bpatch:\s*(?!not applied|none|n/a|not yet|pendi
 # script reads it back on the next sweep. That round trip is how the loop learns its own
 # work landed without anyone updating the index by hand.
 TRAILER_RE = re.compile(r"^\s*Findings-Index:\s*(?P<ids>[0-9a-f, ]+)\s*$", re.I | re.M)
+# What `git revert` writes into the body of the commit it makes: the full sha of each commit it undoes.
+REVERTS_COMMIT_RE = re.compile(r"^This reverts commit ([0-9a-f]{40})\b", re.M)
 
 # ---------------------------------------------------------------------------
 # priority
@@ -1076,6 +1078,99 @@ def merged_mr_closures(since_days: int) -> tuple[dict[str, str], list[str]]:
     return closures, seen
 
 
+def _commits_brought_in_by(commit: str) -> set[str]:
+    """``commit`` itself and, when it is a merge, the commits it merged in.
+
+    A trailer sits on the fix commit on its branch, not on the merge commit that landed it,
+    and `git revert -m 1 <merge>` names only the merge. A plain commit, a root commit, or a
+    failed lookup yields just ``commit``.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "rev-list", f"{commit}^1..{commit}"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {commit}
+    return {commit, *(proc.stdout.split() if proc.returncode == 0 else [])}
+
+
+def merged_commit_closures(ref: str = "origin/main") -> dict[str, str]:
+    """Map item-id -> "commit <sha>" for every `Findings-Index:` trailer reachable from ``ref``.
+
+    The second source of merge closures, beside the MR descriptions. The index is a
+    gitignored per-worktree file and the daily run starts in a fresh worktree, so nothing
+    remembers what already shipped, and the MR window (`merged_lookback_days`) forgets
+    after two days: an item fixed last week, whose audit-report bullet nobody edited,
+    would be listed as outstanding in every run from then on. Commit history is
+    permanent, local, and needs no glab.
+
+    Only ``ref`` counts, never HEAD. A trailer on this run's own unmerged commit is a
+    claim about a merge that has not happened, and `done` is reserved for the merge.
+    A missing ref (no remote, a bare checkout) is "no evidence", not an error.
+
+    History never ages out and a revert does not remove a trailer, so `sweep()` applies
+    these closures to an item only when it first sees it, never to a record it already
+    holds. That protects a record the store holds; the daily run starts with an empty
+    store, so it does not protect a human's reopen or `wont-fix` across days (that needs a
+    disposition in the tree, see the findings-sweep skill). A commit that a later
+    `git revert` undid ("This reverts commit <sha>.") is dropped, so its items are listed
+    again, and so is every commit a reverted merge brought in (`git revert -m 1 <merge>`
+    names the merge, whose own message carries no trailer). A revert of that revert counts
+    the fix again. A revert made some other way is not seen: the GitLab "Revert" button
+    writes "This reverts merge request !N", which names no commit. The trailer belongs on
+    the commit that fixes the item, and only for items that commit really fixes.
+    """
+    log = ["git", "-C", str(REPO_ROOT), "log", ref, "--topo-order"]
+    try:
+        proc = subprocess.run(
+            [*log, "--regexp-ignore-case", "--grep=^[[:space:]]*Findings-Index:", "--format=%H%x1f%B%x1e"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        reverts = subprocess.run(
+            # --basic-regexp: `\{40\}` is a literal under grep.patternType=extended or perl.
+            [*log, "--basic-regexp", "--grep=^This reverts commit [0-9a-f]\\{40\\}", "--format=%H%x1f%B%x1e"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    if proc.returncode != 0:
+        return {}
+
+    # Newest first (--topo-order: a child before its parents, whatever the clocks say), so a
+    # revert is met before the revert that undoes it: a revert that has itself been reverted
+    # no longer cancels anything.
+    reverted: set[str] = set()
+    if reverts.returncode == 0:
+        for entry in reverts.stdout.split("\x1e"):
+            revert_sha, _, body = entry.strip().partition("\x1f")
+            if not revert_sha or revert_sha in reverted:
+                continue
+            for target in REVERTS_COMMIT_RE.findall(body):
+                reverted |= _commits_brought_in_by(target)
+
+    closures: dict[str, str] = {}
+    for entry in proc.stdout.split("\x1e"):
+        sha, _, body = entry.strip().partition("\x1f")
+        if not sha or sha in reverted:
+            continue
+        for match in TRAILER_RE.finditer(body):
+            for raw_id in match.group("ids").split(","):
+                item_id = raw_id.strip().lower()
+                if item_id:
+                    closures.setdefault(item_id, f"commit {sha[:8]}")  # newest commit first
+    return closures
+
+
 # ---------------------------------------------------------------------------
 # human-recorded suppression, read from finding_history.py
 # ---------------------------------------------------------------------------
@@ -1310,6 +1405,9 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
     for item in [*(i for p in (docs or []) for i in parse_doc(p)), *(markers or [])]:
         found.setdefault(item.id, item)
 
+    # History is local, so it is read even under --no-remote. It only ever closes an item
+    # at birth (step 2), never one the store already holds: see merged_commit_closures.
+    history_closures = merged_commit_closures()
     closures: dict[str, str] = {}
     merged_seen: list[str] = []
     if not skip_remote:
@@ -1324,6 +1422,9 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
         "new": 0,
         "reopened": 0,
         "closed_by_merge": 0,
+        # Items first seen already shipped: this worktree never held them, so closing them
+        # is not news. Kept apart from closed_by_merge, which means "merged since last seen".
+        "already_shipped": 0,
         "gone": 0,
         "suppressed": 0,
         "unchanged": 0,
@@ -1351,8 +1452,17 @@ def sweep(*, dry_run: bool = False, skip_remote: bool = False) -> dict[str, Any]
     for item_id, item in found.items():
         record = records.get(item_id)
         if record is None:
-            records[item_id] = item.to_new_record()
-            stats["new"] += 1
+            record = records[item_id] = item.to_new_record()
+            # The store is per-worktree and the daily run starts with it empty, so step 1
+            # never sees a record for something that shipped before this worktree existed.
+            # Close it at birth, or yesterday's merged fix is listed as today's new work.
+            ref = closures.get(item_id) or history_closures.get(item_id)  # the MR's "!N" is the better pointer
+            if ref:
+                record["mr"] = ref
+                _note(record, "done", f"merged in {ref}", explicit=True)
+                stats["already_shipped"] += 1
+            else:
+                stats["new"] += 1
             continue
 
         record["last_seen"] = today()
@@ -1528,7 +1638,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     stats, budget = result["stats"], result["budget"]
     print(f"swept {result['total']} tracked item(s), {result['open']} open")
     print(
-        "  new {new}, reopened {reopened}, closed-by-merge {closed_by_merge}, "
+        "  new {new}, reopened {reopened}, closed-by-merge {closed_by_merge}, already-shipped {already_shipped}, "
         "gone {gone}, suppressed {suppressed}, unchanged {unchanged}".format(**stats)
     )
     unscanned = [name for name, ok in result["sources_scanned"].items() if not ok]

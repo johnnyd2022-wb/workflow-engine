@@ -75,7 +75,11 @@ before writing tests rather than re-deriving this by hand. Legend:
 | Pages render clean | ✅ | test_pages_render |
 | Xero auth redirect well-formed (state/CSRF) | ✅ | test_crm_flow |
 | Customers API auth-gated + org-scoped | ✅ | test_crm_flow |
-| Customer / invoice CRUD | 🟡 unit-covered (`tests/test_crm.py::TestCRMInvoiceCreation`); no e2e browser flow yet |
+| Add / edit a customer, send it to Xero | ✅ | test_crm_contact_sync_ui |
+| New Invoice form: draft, authorised, no-line check, Xero refusal and Xero unreachable | ✅ | test_crm_invoice_ui |
+| Invoice row: Authorise a draft (and not an authorised row), Authorise failing | ✅ | test_crm_invoice_ui |
+| Invoice row: View opens the online invoice in a `noopener,noreferrer` tab; View failing opens nothing | ✅ | test_crm_invoice_ui |
+| Invoice row: Download saves `<number>.pdf`; a draft is told to authorise first | ✅ | test_crm_invoice_ui |
 | **Cross-cutting** | | |
 | Security headers, cookie flags, CSRF rejection | ✅ | test_security_headers |
 | 21 authenticated pages render clean | ✅ | test_pages_render |
@@ -92,12 +96,6 @@ before writing tests rather than re-deriving this by hand. Legend:
   scan could never decode (read from the code on 2026-10-13, not reproduced in a browser).
   A test needs a stubbed `BarcodeDetector`; whether the fallback should be vendored or the CSP
   widened is a product and security call.
-- **CRM customer / invoice CRUD (e2e)** — customers are sourced from Xero sync, not a
-  create endpoint, so the only write path is invoice creation. Now covered at the
-  unit/service level (`tests/test_crm.py::TestCRMInvoiceCreation`, stubbing
-  `XeroAPIClient.create_invoice` — never touches a real tenant), including the
-  cross-tenant case. A browser-driven e2e flow through `test_crm_flow.py` remains
-  deferred; this row tracks that narrower gap now.
 - **Full process-wizard click-through** — the wizard is many SPA fragments. Creation is
   driven through the real browser session's API (exercising auth, CSRF, org-scope, and
   the business logic) and verified in the UI; clicking every fragment is a higher-

@@ -160,6 +160,16 @@ the MR ready for review.
 Findings-Index: 09d144c1, 1ced5f93
 ```
 
+Put the same line in the body of the commit that fixes those items, too, and only for
+items that commit really fixes. The index is rebuilt from an empty store every day, and the
+MR window (`merged_lookback_days`) is two days: the commit trailer, read from `origin/main`'s
+history, is what keeps a fix that merged last week from being listed as new work. It closes
+an item only the first time a worktree sees it, and the daily run is always a new worktree,
+so it does not stop a closure coming back each day. A fix undone by `git revert` (the
+commit, or a merge with `-m 1`) stops closing its items. The GitLab Revert button writes no
+commit id, so it is not seen: if you take a fix back out that way, or any other, edit the
+finding's source so it is open again, because the trailer will keep closing it.
+
 This is not decoration — it is the entire feedback path. The next sweep reads that
 trailer out of the merged MR and closes those items. **No trailer means the work merges
 and the index never learns**, so the items sit `mr-open` forever and eventually get
@@ -186,7 +196,7 @@ Write `.agents/reports/findings-sweep/<date>.md`:
 ```markdown
 # FINDINGS SWEEP: <date>
 budget: <n> items (<why, quoted from the budget line>)
-index: <total> tracked, <open> open  (<new> new, <closed> closed by merge, <gone>, <regressed>)
+index: <total> tracked, <open> open  (<new> new, <closed> closed by merge, <shipped> already shipped, <gone>, <regressed>)
 picked: <id> <title> [P0/security]
 grader: codex/gpt-5.6-sol (high) | subagent fallback — <which, and why>
 verdict: shipped | partial | stood-down | blocked

@@ -164,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     log(
         f"swept: {swept.get('total')} tracked, {swept.get('open')} open "
         f"(new {stats.get('new')}, merged-closed {stats.get('closed_by_merge')}, "
+        f"already-shipped {stats.get('already_shipped')}, "
         f"gone {stats.get('gone')}, reopened {stats.get('reopened')})"
     )
 

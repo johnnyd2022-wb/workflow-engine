@@ -27,7 +27,9 @@ SHOTS = os.environ.get("CRM_SHOTS_DIR")
 
 @pytest.fixture()
 def xero(monkeypatch):
-    return FakeXero().install(monkeypatch)
+    fake = FakeXero().install(monkeypatch)
+    yield fake
+    assert fake.unfaked == [], "the app reached for Xero somewhere this test did not fake"
 
 
 @pytest.fixture()
@@ -86,7 +88,7 @@ def _shot(page, name):
         page.screenshot(path=os.path.join(SHOTS, name + ".png"), full_page=True)
 
 
-def test_add_a_customer_that_stays_in_bize(sales_page, db, org, xero):
+def test_add_a_customer_that_stays_in_bize(xero, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
     page.goto("https://crm.test/crm/customers")
@@ -120,7 +122,7 @@ def test_add_a_customer_that_stays_in_bize(sales_page, db, org, xero):
     assert [fields["name"] for fields, _ in xero.created] == ["Kererū Botanicals"]
 
 
-def test_editing_a_xero_customer_warns_with_the_changes_before_sending(sales_page, db, org, xero):
+def test_editing_a_xero_customer_warns_with_the_changes_before_sending(xero, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
     contact = _xero_contact(db, org.id)
@@ -146,7 +148,7 @@ def test_editing_a_xero_customer_warns_with_the_changes_before_sending(sales_pag
     assert contact.phone_number == "04 555 0222"
 
 
-def test_a_failed_send_shows_why_and_try_again_sends_it(sales_page, db, org, xero):
+def test_a_failed_send_shows_why_and_try_again_sends_it(xero, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
     contact = _xero_contact(db, org.id)
@@ -169,7 +171,7 @@ def test_a_failed_send_shows_why_and_try_again_sends_it(sales_page, db, org, xer
     expect(row.get_by_text("Not sent to Xero")).to_be_hidden()
 
 
-def test_the_sales_default_sends_waiting_customers(sales_page, db, org, xero):
+def test_the_sales_default_sends_waiting_customers(xero, sales_page, db, org):
     page = sales_page
     _connect(db, org.id)
     db.add(XeroContact(org_id=org.id, source="bize", name="Waiting Ltd", is_customer=True, is_supplier=False))
@@ -190,7 +192,7 @@ def test_the_sales_default_sends_waiting_customers(sales_page, db, org, xero):
     expect(page.get_by_role("dialog", name="New customer").get_by_role("checkbox")).to_be_checked()
 
 
-def test_editing_an_address_shows_it_in_the_warning_and_sends_both(sales_page, db, org, xero):
+def test_editing_an_address_shows_it_in_the_warning_and_sends_both(xero, sales_page, db, org):
     from tests.test_crm_contact_sync import XERO_ADDRESSES
 
     page = sales_page

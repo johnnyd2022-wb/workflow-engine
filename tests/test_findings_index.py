@@ -46,6 +46,7 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setattr(fi, "scan_code_markers", lambda: [])
     monkeypatch.setattr(fi, "scan_open_mrs", lambda: [])
     monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({}, []))
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {})
     monkeypatch.setattr(fi, "suppressed_ids", lambda items: {})
     monkeypatch.setattr(fi, "compute_budget", lambda cfg=None: {"items": 2, "why": "test", "quota": None})
     return tmp_path
@@ -1110,6 +1111,114 @@ def test_merge_closure_survives_a_sweep_that_still_finds_the_text(store, monkeyp
     assert result["stats"]["reopened"] == 0
 
 
+def test_merge_closure_applies_to_an_item_first_seen_after_it_merged(store, monkeypatch):
+    """The index lives in a gitignored, per-worktree file, and the daily run starts in a
+    fresh worktree: the store is EMPTY when the sweep begins, so the fix's item has no
+    record yet when its trailer is read. Every other closure test sweeps the item once
+    first, which is the one situation the timer never produces. Without this, a finding
+    that shipped yesterday is listed as brand-new work today."""
+    item = make_item(detail="a finding fixed and merged before this worktree existed")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({item.id: "!142"}, ["!142"]))
+
+    result = fi.sweep()  # first sweep this store has ever run
+
+    record = result["store"]["items"][item.id]
+    assert record["status"] == "done"
+    assert record["mr"] == "!142"
+    assert result["stats"]["already_shipped"] == 1
+    assert result["stats"]["closed_by_merge"] == 0, "that counts merges since last seen, and none was"
+    assert result["stats"]["new"] == 0, "a shipped item is not new work"
+    assert fi.rank(result["store"]["items"]) == []
+    assert result["open"] == 0
+
+    # Sticky: the report bullet is never edited out, so the next sweep finds the same text.
+    again = fi.sweep()
+    assert again["store"]["items"][item.id]["status"] == "done"
+    assert again["stats"]["reopened"] == 0
+
+
+def test_a_closure_for_an_item_nobody_found_makes_no_record(store, monkeypatch):
+    """A trailer naming an id whose text is gone from the tree must not mint a phantom
+    record: there is nothing to close."""
+    monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({"deadbeef": "!7"}, ["!7"]))
+    result = fi.sweep()
+    assert result["store"]["items"] == {}
+    assert result["stats"]["closed_by_merge"] == result["stats"]["already_shipped"] == 0
+
+
+def test_a_trailer_in_main_history_closes_an_item_the_mr_window_no_longer_covers(store, monkeypatch):
+    """`merged_lookback_days` is two days. An item fixed last week and still described in
+    an unedited audit report would otherwise come back as outstanding in every fresh
+    worktree. The trailer is also on the commit, and history never ages out."""
+    item = make_item(detail="a finding fixed a week ago, its report bullet never edited")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit 86eedfe5"})
+
+    result = fi.sweep()
+
+    record = result["store"]["items"][item.id]
+    assert record["status"] == "done"
+    assert record["mr"] == "commit 86eedfe5"
+    assert result["open"] == 0
+    assert result["stats"]["already_shipped"] == 1
+
+
+def test_history_is_read_even_when_the_remote_is_skipped(store, monkeypatch):
+    """`--no-remote` means no glab. Git history is local, so a degraded sweep still knows
+    what shipped instead of re-listing it."""
+    item = make_item(detail="a finding fixed on main, swept with glab unavailable")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit 86eedfe5"})
+
+    result = fi.sweep(skip_remote=True)
+
+    assert result["store"]["items"][item.id]["status"] == "done"
+
+
+@pytest.mark.parametrize("status", ["outstanding", "wont-fix", "suppressed"])
+def test_history_never_overrides_a_record_the_store_already_holds(store, monkeypatch, status):
+    """History does not age out and a revert does not remove a trailer. If it re-applied to
+    records already held, a human who reopened an item (its fix was reverted) or declined it
+    would be overridden by the next sweep, for ever. It only speaks for what it first sees."""
+    item = make_item(detail="a finding whose merged fix was later reverted by hand")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+    held = fi.load_store()
+    held["items"][item.id]["status"] = status
+    fi.save_store(held)
+
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit 86eedfe5"})
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == status
+    assert result["stats"]["already_shipped"] == result["stats"]["closed_by_merge"] == 0
+
+
+def test_an_mr_trailer_still_closes_a_record_the_store_already_holds(store, monkeypatch):
+    """The MR window is the live path -- the fix merged since this store last saw the item --
+    and it keeps closing existing records, as before. Only history is birth-only."""
+    item = make_item(detail="a finding an MR closes while the store holds it")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    fi.sweep()
+    monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({item.id: "!142"}, ["!142"]))
+
+    result = fi.sweep()
+
+    assert result["store"]["items"][item.id]["status"] == "done"
+    assert result["stats"]["closed_by_merge"] == 1
+
+
+def test_an_mr_reference_wins_over_a_commit_reference(store, monkeypatch):
+    """Both sources can name the same item (the MR description and the commit carry the
+    same trailer). The MR number is the more useful pointer, so it is the one kept."""
+    item = make_item(detail="named by both the merged MR and its commit")
+    monkeypatch.setattr(fi, "scan_code_markers", lambda: [item])
+    monkeypatch.setattr(fi, "merged_mr_closures", lambda days: ({item.id: "!547"}, ["!547"]))
+    monkeypatch.setattr(fi, "merged_commit_closures", lambda: {item.id: "commit 86eedfe5"})
+    assert fi.sweep()["store"]["items"][item.id]["mr"] == "!547"
+
+
 def test_merge_closure_wins_over_the_disappearance_pass(store, monkeypatch):
     """Order matters: an item whose text is gone BECAUSE it was fixed must read 'done',
     never 'gone'. Getting this backwards would log real shipped work as vanished."""
@@ -1207,6 +1316,165 @@ def test_suppressed_item_stays_off_the_worklist(store, monkeypatch):
     monkeypatch.setattr(fi, "suppressed_ids", lambda items: {item.id: "accepted risk"})
     result = fi.sweep()
     assert fi.rank(result["store"]["items"]) == []
+
+
+# --- trailers read from merged history --------------------------------------------------
+# These run real git against a throwaway repo (no network, never the working repo): the
+# property under test -- "only what is on origin/main counts" -- is a git fact, and a
+# stubbed `subprocess` would only prove the stub.
+
+
+def _git(repo, *args):
+    import subprocess
+
+    return subprocess.run(
+        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.test", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _commit(repo, message, name):
+    (repo / name).write_text(name, encoding="utf-8")
+    _git(repo, "add", name)
+    _git(repo, "commit", "-q", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+@pytest.fixture
+def history_repo(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    monkeypatch.setattr(fi, "REPO_ROOT", repo)
+    return repo
+
+
+def test_commit_closures_read_every_trailer_on_origin_main(history_repo):
+    shipped = _commit(history_repo, "fix: one\n\nBody.\n\nFindings-Index: aaaa1111, bbbb2222\n", "one")
+    _commit(history_repo, "fix: two\n\nFindings-Index: cccc3333\n", "two")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    closures = fi.merged_commit_closures()
+
+    assert set(closures) == {"aaaa1111", "bbbb2222", "cccc3333"}
+    assert closures["aaaa1111"] == f"commit {shipped[:8]}"
+
+
+def test_the_newest_commit_is_the_one_named(history_repo):
+    _commit(history_repo, "fix: first attempt\n\nFindings-Index: aaaa1111\n", "first")
+    newest = _commit(history_repo, "fix: the real fix\n\nFindings-Index: aaaa1111\n", "second")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {"aaaa1111": f"commit {newest[:8]}"}
+
+
+@pytest.mark.parametrize("line", ["findings-index: ffff6666", "  Findings-Index: ffff6666", "FINDINGS-INDEX: FFFF6666"])
+def test_commit_closures_accept_every_trailer_form_the_mr_reader_accepts(history_repo, line):
+    """The MR path matches the trailer case-insensitively with leading whitespace; a commit
+    written the same way must not be silently missed by the git filter in front of it."""
+    _commit(history_repo, f"fix: x\n\n{line}\n", "x")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"ffff6666"}
+
+
+def test_commit_closures_ignore_a_trailer_that_has_not_merged(history_repo):
+    """The skill is never authorised to merge, so it must never *claim* a merge. A trailer
+    on this run's own unmerged commit would otherwise close its items before anyone has
+    reviewed the MR -- the exact thing `done` is reserved to mean."""
+    _commit(history_repo, "fix: merged\n\nFindings-Index: aaaa1111\n", "merged")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    _git(history_repo, "checkout", "-q", "-b", "chore/findings-sweep")
+    _commit(history_repo, "fix: mine, not merged\n\nFindings-Index: dddd4444\n", "mine")
+
+    assert set(fi.merged_commit_closures()) == {"aaaa1111"}
+
+
+def test_commit_closures_need_the_trailer_on_its_own_line(history_repo):
+    """Prose that merely mentions the trailer (a commit explaining the mechanism) is not
+    a closure."""
+    _commit(history_repo, "docs: how it works\n\nWe write a Findings-Index: eeee5555 line per MR.\n", "prose")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {}
+
+
+def test_a_fix_that_was_reverted_no_longer_closes_its_items(history_repo):
+    """A revert does not remove the trailer, so without this the item stays closed in every
+    fresh-store run although the fix is gone from the tree."""
+    fixed = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _commit(history_repo, "fix: y\n\nFindings-Index: bbbb2222\n", "y")
+    _git(history_repo, "revert", "--no-edit", fixed)
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"bbbb2222"}  # the revert took aaaa1111 only
+
+
+def test_reverting_a_revert_closes_the_items_again(history_repo):
+    fixed = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _git(history_repo, "revert", "--no-edit", fixed)
+    _git(history_repo, "revert", "--no-edit", "HEAD")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"aaaa1111"}
+
+
+def test_reverting_a_merge_undoes_the_fixes_it_brought_in(history_repo):
+    """The trailer is on the fix commit on its branch; `git revert -m 1 <merge>` names only
+    the merge, whose own message has none. The merge's side must count as reverted too."""
+    _commit(history_repo, "chore: base", "base")
+    _git(history_repo, "checkout", "-q", "-b", "fix-branch")
+    _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _git(history_repo, "checkout", "-q", "main")
+    _commit(history_repo, "fix: elsewhere\n\nFindings-Index: bbbb2222\n", "elsewhere")
+    _git(history_repo, "merge", "--no-ff", "-q", "-m", "Merge branch 'fix-branch'", "fix-branch")
+    _git(history_repo, "revert", "--no-edit", "-m", "1", "HEAD")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"bbbb2222"}  # only what the merge brought in
+
+
+def test_revert_detection_does_not_depend_on_the_users_grep_flavour(history_repo):
+    """`git log --grep` follows grep.patternType, and under extended or perl the interval
+    `\\{40\\}` is a literal, so reverts would silently stop being seen."""
+    fixed = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _git(history_repo, "revert", "--no-edit", fixed)
+    _git(history_repo, "config", "grep.patternType", "extended")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {}
+
+
+def test_one_revert_naming_several_commits_cancels_each(history_repo):
+    first = _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    second = _commit(history_repo, "fix: y\n\nFindings-Index: bbbb2222\n", "y")
+    _commit(
+        history_repo,
+        f"Revert both\n\nThis reverts commit {second}.\nThis reverts commit {first}.\n",
+        "both",
+    )
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert fi.merged_commit_closures() == {}
+
+
+def test_a_revert_that_names_no_commit_cancels_nothing(history_repo):
+    """GitLab's Revert button writes "This reverts merge request !N". With no sha to match,
+    the closure stands rather than being guessed away; the docstring states the limit."""
+    _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+    _commit(history_repo, 'Revert "fix: x"\n\nThis reverts merge request !123\n', "revert")
+    _git(history_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    assert set(fi.merged_commit_closures()) == {"aaaa1111"}
+
+
+def test_commit_closures_are_empty_without_origin_main(history_repo):
+    """No remote ref (a bare clone, a CI checkout): no evidence of any merge, not an error."""
+    _commit(history_repo, "fix: x\n\nFindings-Index: aaaa1111\n", "x")
+
+    assert fi.merged_commit_closures() == {}
 
 
 # --- absence is only evidence if we actually looked -------------------------------------

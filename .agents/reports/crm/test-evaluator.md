@@ -8,13 +8,13 @@ Batch: 24 added tests across five files. Result: 21 valid, 3 invalid.
 1. [tests/test_crm.py:2063](tests/test_crm.py:2063) — `test_a_partly_failed_sync_says_it_did_not_finish` does
  not create a partial sync. Contacts return an empty list and invoices fail, leaving both synced counts at zero. Under [xero_sync_service.py:39](/home/johnny/event-factory/.local/worktrees/workflow-engine/fd35062c-96bf-46ab-b43f-cf220f652d97/b
 b71aa65-9423-4aa8-96d0-78c7b1d34cd8/app/features/crm/services/xero_sync_service.py:39), `partial` is therefore false and the route takes the 502 path. The test also omits a status assertion, so it does not protect the required partial-success
-200 behavior. Sync at least one record and assert status 200, retained counts, `ok: false`, and the displayable error.
+200 behavior. Sync at least one record and assert status 200, retained counts, `ok: false`, and the displayable error. Resolved in round 2 (2026-10-18), still true on 2026-10-21: the test imports one contact, forces the invoice failure and asserts 200, `ok: false`, `contacts_synced == 1` and the error text (`tests/test_crm.py:2270`).
 
 2. [tests/test_crm.py:1999](tests/test_crm.py:1999) — the control claims assignment to a colleague, but `user
-` is the same account used by `app_client`. An implementation that only permits self-assignment would pass. Create a second active user in the same organisation and assign the task to that user.
+` is the same account used by `app_client`. An implementation that only permits self-assignment would pass. Create a second active user in the same organisation and assign the task to that user. Resolved in round 2 (2026-10-18), still true on 2026-10-21: the test creates a distinct same-org colleague and assigns to them (`tests/test_crm.py:2201`).
 
 3. [tests/test_crm.py:2116](tests/test_crm.py:2116) — the configuration-link test never proves the Sales user
- can access `/crm` and `/crm/matching`. If both source pages regress to 403 or an empty response, the absence checks pass for the wrong reason. Assert status 200 and a page-specific marker before asserting the links are absent.
+ can access `/crm` and `/crm/matching`. If both source pages regress to 403 or an empty response, the absence checks pass for the wrong reason. Assert status 200 and a page-specific marker before asserting the links are absent. Resolved in round 2 (2026-10-18), still true on 2026-10-21: each source page must return 200 and contain its marker first (`tests/test_crm.py:2341`).
 
 ## Per-test grading
 
