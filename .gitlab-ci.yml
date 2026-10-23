@@ -30,7 +30,7 @@ variables:
   # jobs would otherwise install on every run. The tag is `scripts/ci_image_tag.py`'s hash
   # of the image's inputs; `ci_image_current` warns when it falls behind, and main builds
   # any tag that is missing. A stale tag only costs time: every job still runs `uv sync`.
-  CI_IMAGE_TAG: "19fdc0b9a3353346"
+  CI_IMAGE_TAG: "ecef450eb6a06449"
 
 # Each step is skipped when the pre-built image already provides it (CI_PREBUILT is set
 # inside that image), and still works on a bare python image.
