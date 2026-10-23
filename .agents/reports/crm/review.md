@@ -64,10 +64,10 @@ re-derived by the Codex tenant audit, which agreed with it on every row.
 | `/api/crm/invoices/<invoice_id>/view-url` | GET | `get_invoice_view_url` | sales.view | yes — (id, org) |
 | `/api/crm/line-item-descriptions` | GET | `get_org_line_item_descriptions` | sales.view | yes |
 | `/api/crm/matching` | GET | `get_matching_queue` | sales.view | yes |
-| `/api/crm/matching/assign` | POST | `assign_matching_line` | sales.record | yes — invoice, site, inventory item scoped; see open O1 (permission) |
+| `/api/crm/matching/assign` | POST | `assign_matching_line` | sales.record + inventory.adjust (route check) | yes — invoice, site, inventory item scoped; see open O1 (permission) |
 | `/api/crm/matching/candidates` | GET | `get_matching_candidates` | sales.view | yes — `site_id` resolved against the org |
 | `/api/crm/matching/confirm` | POST | `confirm_matching_line` | sales.record | yes — allocation filtered by org |
-| `/api/crm/matching/run` | POST | `run_matching` | sales.record | yes; see open O1 (permission) |
+| `/api/crm/matching/run` | POST | `run_matching` | sales.record + inventory.adjust (route check) | yes; see open O1 (permission) |
 | `/api/crm/notes/<note_id>` | DELETE | `delete_note` | sales.record | yes |
 | `/api/crm/notes/<note_id>` | PUT | `update_note` | sales.record | yes |
 | `/api/crm/overview` | GET | `crm_overview` | sales.view | yes |
@@ -202,6 +202,10 @@ written after the main-swap run above; each was seen failing before its template
   `inventory.adjust`. Either sales-driven stock depletion is part of `sales.record` (then
   the permission text should say so), or these routes need `inventory.adjust` too, which
   would stop Sales users matching batches. That is the founder's call, not a patch.
+  Since findings-sweep 2026-10-24 (an unattended proposal for the founder to confirm or reverse):
+  `/matching/assign` and `/matching/run` also require `inventory.adjust`, and Sales keeps review and
+  confirm. Still the founder's call: creating or authorising an invoice and the Xero sync reach the
+  same whole-org `reconcile_org`, so `sales.record` can still cause `/run`'s stock effect that way.
 - **O2 — Low: `biz_e_source_output_id` on product mappings is not checked against the
   org's outputs.** (Codex F2) Rows are written under the caller's org and every downstream
   inventory query is org-filtered, so nothing crosses tenants. A foreign or unknown id only
