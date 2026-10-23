@@ -1,6 +1,6 @@
 // Customs → Records: for each thing Customs can ask to see, is the proof current, and adding
 // more. The server works out each check's state (/api/compliant/overview) and validates every
-// record; this page lays them out. One check view serves the check's own page and the sheet.
+// record; this page lays them out: a row per check, and a page per check.
 (function () {
   'use strict';
 
@@ -45,7 +45,7 @@
     var el = U.el, api = U.api, fmtDate = U.fmtDate;
     var fail = U.failer(page);
     var isList = page.hasAttribute('data-customs-records-root');
-    var state = { controls: [], records: [], chip: 'all' };
+    var state = { controls: [], records: [] };
 
     function name(id) { return NAMES[id] || String(id || '').replace(/-/g, ' '); }
     function status(control) {
@@ -66,8 +66,8 @@
     function tag(st) { return el('span', { className: 'customs-chip customs-chip--' + ({ good: 'complete', bad: 'failed', warn: 'open' }[st.key]), text: st.text }); }
 
     // One record as a row: what it is, for which period, and the reference Customs would ask for.
-    function recordRow(r, withCheck) {
-      var meta = [withCheck ? name(r.control_id) : null, TYPES[r.record_type] || r.record_type, periodText(r), r.evidence_reference ? 'Ref ' + r.evidence_reference : null,
+    function recordRow(r) {
+      var meta = [TYPES[r.record_type] || r.record_type, periodText(r), r.evidence_reference ? 'Ref ' + r.evidence_reference : null,
         (r.source_refs || []).length ? U.plural(r.source_refs.length, 'production record') + ' linked' : null].filter(Boolean).join(' · ');
       return el('li', { className: 'customs-rec-row' }, [
         el('div', { className: 'customs-rec-row__main' }, [el('strong', { text: r.title }), el('span', { text: meta })]),
@@ -206,7 +206,7 @@
       evidence.append(facts);
       var record = el('section', { className: 'workspace-card customs-card' }, [el('h2', { text: 'Record evidence' }), evidenceForm(control, onSaved)]);
       var history = el('section', { className: 'workspace-card customs-card' }, [el('h2', { text: 'History' })]);
-      history.append(mine.length ? el('ul', { className: 'customs-rec-list' }, mine.map(function (r) { return recordRow(r, false); })) : el('p', { className: 'excise-hint', text: 'Nothing recorded for this check yet.' }));
+      history.append(mine.length ? el('ul', { className: 'customs-rec-list' }, mine.map(recordRow)) : el('p', { className: 'excise-hint', text: 'Nothing recorded for this check yet.' }));
       return [about, evidence, record, history];
     }
 
@@ -233,78 +233,19 @@
       return;
     }
 
-    // --- the Records view ------------------------------------------------------------------------
-    // CONCEPT ONLY: three layouts behind one switch; removed once one is picked.
-    function readStyle() {
-      var q = new URLSearchParams(window.location.search).get('style');
-      if (q === '1' || q === '2' || q === '3') return q;
-      try { var s = window.localStorage.getItem('customs.records.style'); if (s === '1' || s === '2' || s === '3') return s; } catch (_) {}
-      return '1';
-    }
-    function style() { return page.getAttribute('data-records-style') || '1'; }
-    function setStyle(s) {
-      page.setAttribute('data-records-style', s);
-      try { window.localStorage.setItem('customs.records.style', s); } catch (_) {}
-      page.querySelectorAll('[data-records-style-pick] [data-style]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-style') === s)); });
-      render();
-    }
-    page.querySelectorAll('[data-records-style-pick] [data-style]').forEach(function (b) { b.addEventListener('click', function () { setStyle(b.getAttribute('data-style')); }); });
-
+    // --- the Records view: one row per check, each opening its own page --------------------------
     var checksEl = page.querySelector('[data-records-checks]');
-    var feedEl = page.querySelector('[data-records-feed]');
-    var chipsEl = page.querySelector('[data-records-chips]');
     var summaryEl = page.querySelector('[data-records-summary]');
-    var sheet = page.querySelector('[data-records-sheet]');
-    var sheetBody = page.querySelector('[data-records-sheet-body]');
-    var sheetTitle = page.querySelector('[data-records-sheet-title]');
-    var lastFocus = null;
-
-    function openSheet(control) {
-      lastFocus = document.activeElement;
-      sheetBody.replaceChildren();
-      if (control) {
-        sheetTitle.textContent = name(control.control_id);
-        checkView(control, refresh).forEach(function (card) { sheetBody.append(card); });
-      } else {
-        // Style 3: which check is this evidence for?
-        sheetTitle.textContent = 'Record evidence';
-        sheetBody.append(el('p', { className: 'workspace-caption', text: 'Which check is this evidence for?' }));
-        var list = el('div', { className: 'customs-rec-pick' });
-        state.controls.forEach(function (c) {
-          var b = el('button', { type: 'button', className: 'customs-rec-check' }, [el('strong', { text: name(c.control_id) }), tag(status(c))]);
-          b.addEventListener('click', function () { openSheet(c); });
-          list.append(b);
-        });
-        sheetBody.append(list);
-      }
-      sheet.hidden = false;
-      document.body.classList.add('customs-sheet-open');
-      var first = sheet.querySelector('.customs-sheet__close');
-      if (first) first.focus();
-    }
-    function closeSheet() {
-      sheet.hidden = true;
-      document.body.classList.remove('customs-sheet-open');
-      if (lastFocus && lastFocus.focus) lastFocus.focus();
-    }
-    sheet.querySelectorAll('[data-records-sheet-close]').forEach(function (b) { b.addEventListener('click', closeSheet); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
-    page.querySelector('[data-records-add]').addEventListener('click', function () { openSheet(null); });
 
     function checkRow(control) {
-      var st = status(control);
       var mine = recordsFor(control.control_id);
       var latest = mine[0];
       var line = latest ? 'Latest: ' + latest.title + ' · ' + added(latest) : (control.reason || 'Nothing recorded yet');
-      var kids = [
+      return el('a', { className: 'customs-rec-check', href: BASE + '/' + encodeURIComponent(control.control_id), 'data-control-id': control.control_id }, [
         el('span', { className: 'customs-rec-check__main' }, [el('strong', { text: name(control.control_id) }), el('span', { text: line })]),
         el('span', { className: 'customs-rec-check__count', text: AUTOMATIC[control.control_id] && !mine.length ? 'Automatic' : U.plural(mine.length, 'record') }),
-        tag(st),
-      ];
-      if (style() === '1') return el('a', { className: 'customs-rec-check', href: BASE + '/' + encodeURIComponent(control.control_id), 'data-control-id': control.control_id }, kids);
-      var b = el('button', { type: 'button', className: 'customs-rec-check', 'data-control-id': control.control_id }, kids);
-      b.addEventListener('click', function () { openSheet(control); });
-      return b;
+        tag(status(control)),
+      ]);
     }
 
     function render() {
@@ -316,37 +257,9 @@
       var current = state.controls.filter(function (c) { return c.state === 'compliant'; }).length;
       summaryEl.textContent = current + ' of ' + state.controls.length + ' checks have current proof · ' + U.plural(state.records.length, 'record') + ' kept';
       checksEl.replaceChildren.apply(checksEl, state.controls.map(checkRow));
-      // Style 3: every record, month by month, filtered by check.
-      chipsEl.replaceChildren();
-      [['all', 'All checks']].concat(state.controls.map(function (c) { return [c.control_id, name(c.control_id)]; })).forEach(function (c) {
-        var on = state.chip === c[0];
-        var b = el('button', { type: 'button', className: 'customs-rec-chip' + (on ? ' is-active' : ''), 'aria-pressed': String(on), text: c[1] });
-        b.addEventListener('click', function () { state.chip = c[0]; render(); });
-        chipsEl.append(b);
-      });
-      feedEl.replaceChildren();
-      var shown = state.records.filter(function (r) { return state.chip === 'all' || r.control_id === state.chip; });
-      if (!shown.length) { feedEl.append(el('p', { className: 'customs-empty', text: 'No records for this check yet.' })); return; }
-      var month = null, list = null;
-      shown.forEach(function (r) {
-        var m = r.created_at ? new Date(r.created_at).toLocaleDateString('en-NZ', { month: 'long', year: 'numeric' }) : 'Undated';
-        if (m !== month) { month = m; feedEl.append(el('h3', { className: 'customs-rec-month', text: m })); list = el('ul', { className: 'customs-rec-list' }); feedEl.append(list); }
-        list.append(recordRow(r, true));
-      });
     }
 
-    async function refresh() {
-      await load();
-      render();
-      if (!sheet.hidden) {
-        var open = sheetTitle.textContent;
-        var control = state.controls.find(function (c) { return name(c.control_id) === open; });
-        if (control) openSheet(control);
-      }
-    }
-
-    setStyle(readStyle());
-    refresh().catch(function (err) { fail(err.message); }).finally(function () { page.setAttribute('aria-busy', 'false'); });
+    load().then(render).catch(function (err) { fail(err.message); }).finally(function () { page.setAttribute('aria-busy', 'false'); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

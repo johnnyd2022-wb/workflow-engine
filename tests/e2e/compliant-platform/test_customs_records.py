@@ -91,26 +91,19 @@ def test_the_old_evidence_address_opens_records(browser, app_url, customs_org):
     page.context.close()
 
 
-# CONCEPT ONLY: the three Records layouts at each width; deleted with the losing styles.
-@pytest.mark.parametrize("style", ["1", "2", "3"])
+@pytest.mark.parametrize("path", [RECORDS, RECORDS + "/reconciliation"], ids=["records", "check"])
 @pytest.mark.parametrize(
     "viewport",
     [{"width": 390, "height": 844}, {"width": 1440, "height": 900}, {"width": 1920, "height": 1080}],
     ids=["phone", "laptop", "wall"],
 )
-def test_concept_layouts_fit_without_sideways_scroll(browser, app_url, customs_org, style, viewport):
-    page = _open(browser, app_url, customs_org, path=RECORDS + f"?style={style}", viewport=viewport)
-    expect(page.locator(f'[data-records-style="{style}"]')).to_have_count(1)
-    if style == "3":
-        page.locator("[data-records-add]").click()
-        page.locator(".customs-rec-pick .customs-rec-check").first.click()
-    elif style == "2":
-        page.locator(".customs-rec-check").first.click()
-    if style != "1":
-        expect(page.locator("[data-records-sheet]")).to_be_visible()
+def test_records_and_a_check_fit_without_sideways_scroll(browser, app_url, customs_org, path, viewport):
+    ready = READY if path == RECORDS else CHECK_READY
+    page = _open(browser, app_url, customs_org, path=path, ready=ready, viewport=viewport)
+    if path == RECORDS:
+        expect(page.locator(".customs-rec-check")).to_have_count(5)
+    else:
         expect(page.locator(".customs-rec-form")).to_be_visible()
-        page.keyboard.press("Escape")
-        expect(page.locator("[data-records-sheet]")).to_be_hidden()
     overflow = page.evaluate("() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth")
-    assert overflow <= 1, f"style {style} scrolls sideways by {overflow}px at {viewport['width']}px"
+    assert overflow <= 1, f"{path} scrolls sideways by {overflow}px at {viewport['width']}px"
     page.context.close()
