@@ -1429,6 +1429,8 @@ def cmd_purge(_args) -> int:
 
         db.query(InventoryMovement).filter(InventoryMovement.org_id == org_id).delete(synchronize_session=False)
         db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
+        # The people seed gives some people a custom role, which blocks deleting the role.
+        db.query(User).filter(User.org_id == org_id).update({User.custom_role_id: None}, synchronize_session=False)
         db.commit()
         purge_org(db, org_id, user_id)
         # The tasks seed adds a second person to the org.
