@@ -67,6 +67,7 @@ SEED_KINDS = (
     "suppliers",
     "excise",
     "np3",
+    "people",
 )
 
 
@@ -1287,6 +1288,50 @@ def _seed_board(db, org_id, inv) -> None:
         db.commit()
 
 
+def _seed_people(db, org_id, inv) -> None:
+    """A small team for People and roles: each built-in role, an auditor with an end date, an
+    invite waiting, someone who left, and a custom role two of them hold."""
+    from datetime import timedelta
+
+    from app.core.db.models.org_role import OrgRole
+    from app.core.db.models.user import UserRole
+    from app.core.security.people import issue_invite
+    from app.core.utils.time import utc_now
+    from tests.factories import UserFactory
+
+    cellar = OrgRole(
+        org_id=org_id,
+        name="Cellar door",
+        description="Sells at the cellar door and sees stock, nothing else.",
+        base_role="sales",
+        permissions=["sales.view", "inventory.view"],
+        site_access_mode="all",
+    )
+    db.add(cellar)
+    db.flush()
+    run = uuid.uuid4().hex[:6]
+    team = [
+        ("Aroha", "Wilson", UserRole.ADMIN, {"two_factor_enabled": True}),
+        ("Sam", "Ngata", UserRole.MEMBER, {"two_factor_enabled": True}),
+        ("Mere", "Tane", UserRole.PRODUCTION, {}),
+        ("Priya", "Shah", UserRole.COMPLIANCE, {"two_factor_enabled": True}),
+        ("Tom", "Baker", UserRole.SALES, {"custom_role_id": cellar.id}),
+        ("Lena", "Ford", UserRole.SALES, {"custom_role_id": cellar.id}),
+        ("Grace", "Hill", UserRole.AUDITOR, {"access_expires_at": utc_now() + timedelta(days=21)}),
+    ]
+    for first, last, role, extra in team:
+        user = UserFactory(org_id=org_id, email=f"{first.lower()}.{run}@example.test", role=role)
+        user.first_name, user.last_name = first, last
+        for key, value in extra.items():
+            setattr(user, key, value)
+    invited = UserFactory(org_id=org_id, email=f"kiri.{run}@example.test", role=UserRole.PRODUCTION, is_active=False)
+    invited.first_name, invited.last_name = "Kiri", "Moana"
+    issue_invite(invited)
+    left = UserFactory(org_id=org_id, email=f"dan.{run}@example.test", role=UserRole.PRODUCTION, is_active=False)
+    left.first_name, left.last_name = "Dan", "Cole"
+    db.commit()
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -1332,6 +1377,7 @@ def cmd_seed(args) -> int:
             "contracts": _seed_contracts,
             "customers": _seed_customers,
             "suppliers": _seed_suppliers,
+            "people": _seed_people,
         }[kind](db, org.id, inv)
         say(f"seeded {kind}")
     say(f"org {org.name!r}, sign-in {user.email}")
@@ -1385,7 +1431,8 @@ def cmd_purge(_args) -> int:
         db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
         db.commit()
         purge_org(db, org_id, user_id)
-        db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+        # The tasks seed adds a second person to the org.
+        db.query(User).filter(User.org_id == org_id).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
         db.commit()
     STATE.unlink()

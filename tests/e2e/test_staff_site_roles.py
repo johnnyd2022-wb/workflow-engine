@@ -46,7 +46,7 @@ def test_prepare_selected_role_and_assignment_remains_closed(browser, site_roles
         page.goto(url + "/core/people")
         root = page.locator("[data-custom-roles]")
         expect(root).to_be_visible()
-        page.locator(".people-custom-role-new summary").click()
+        page.get_by_role("button", name="New role").click()
         form = page.locator("[data-custom-role-form]")
         name = "Browser selected " + str(uuid4())
         form.locator('[name="name"]').fill(name)
