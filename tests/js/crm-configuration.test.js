@@ -185,3 +185,30 @@ test('a clean sync leaves no error', async () => {
   await page.doSync();
   assert.equal(page.error, null);
 });
+
+// Each Save on Sales settings used to send the whole form; one section's Save now sends the saved
+// settings with only that section's draft on top.
+test('saving one section leaves another section\'s unsaved draft out of the request', async () => {
+  const { page, calls } = makePage();
+  ['matching', 'revenue', 'tasks'].forEach((name) => page.resetDraft(name));
+  page.draft.revenue.target = '42000';
+  page.draft.tasks.archive_days = 14;
+
+  assert.equal(await page.saveSection('tasks'), true);
+
+  assert.equal(calls.traceConfig.length, 1);
+  assert.equal(calls.traceConfig[0].task_done_archive_days, 14);
+  assert.equal(calls.traceConfig[0].revenue_baseline_target_mtd, null);
+  assert.equal(page.draft.revenue.target, '42000');
+  assert.deepEqual([...page.dirtySections], ['revenue']);
+});
+
+test('discarding a section puts its draft back to what is saved', () => {
+  const { page } = makePage();
+  page.resetDraft('tasks');
+  page.draft.tasks.archive_days = 30;
+  assert.equal(page.isDirty('tasks'), true);
+  page.discard('tasks');
+  assert.equal(page.isDirty('tasks'), false);
+  assert.equal(page.draft.tasks.archive_days, 7);
+});

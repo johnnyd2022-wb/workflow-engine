@@ -183,6 +183,9 @@ def test_the_sales_default_sends_waiting_customers(xero, sales_page, db, org):
     page.goto("https://crm.test/crm/configuration")
     toggle = page.locator("[data-sync-default]")
     toggle.check()
+    # Sales settings saves each section with its own Save, so ticking alone sends nothing yet.
+    assert xero.created == []
+    page.locator("#customers").get_by_role("button", name="Save").click()
     expect(page.locator("[data-sync-default-result]")).to_have_text("On. 1 waiting customer sent to Xero.")
     _shot(page, "settings")
     assert [fields["name"] for fields, _ in xero.created] == ["Waiting Ltd"]
