@@ -67,6 +67,7 @@ SEED_KINDS = (
     "suppliers",
     "excise",
     "np3",
+    "licensing",
 )
 
 
@@ -731,6 +732,241 @@ def _seed_np3(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_licensing(db, org_id, inv) -> None:
+    """A distillery's liquor licensing a year in: an off-licence with remote sales whose
+    renewal falls due within the month, a special licence for a market with no manager named
+    yet, an on-licence that ended, three managers (one due to renew, one gone), checks with
+    evidence in every state, and an incident and refusal log."""
+    from datetime import UTC, datetime, time
+
+    from app.core.db.models.user import User
+    from app.features.compliant.models import ComplianceProfile
+    from app.features.compliant.models.compliance_record import ComplianceRecord
+    from app.features.compliant.models.licensing import LicensingLogEntry, LiquorLicence, ManagerCertificate
+    from app.features.compliant.modules.nz_alcohol.licensing import RENEWAL_WORKING_DAYS
+    from app.features.compliant.modules.nz_alcohol.nz_calendar import working_days_before
+
+    profile = db.query(ComplianceProfile).filter(ComplianceProfile.org_id == org_id).one_or_none()
+    if profile is None:
+        raise ValueError("licensing requires the compliance seed")
+    profile.settings = {**(profile.settings or {}), "liquor_licence_types": ["off", "special"]}
+    user = db.query(User).filter(User.org_id == org_id).first()
+    user.first_name, user.last_name = "Jordan", "Lee"
+    today = date.today()
+    # Expiry placed so the last day to file the renewal is about three weeks away.
+    expires = today + timedelta(days=50)
+    while working_days_before(expires, RENEWAL_WORKING_DAYS) > today + timedelta(days=21):
+        expires -= timedelta(days=1)
+    db.add_all(
+        [
+            LiquorLicence(
+                org_id=org_id,
+                kind="off",
+                licence_number="31/OFF/112/2023",
+                issuing_dlc="Hutt City DLC",
+                premises="Unit 4, 12 Gracefield Road, Lower Hutt",
+                endorsements=["s40_remote_sales"],
+                issued_on=expires - timedelta(days=3 * 365),
+                expires_on=expires,
+                annual_fee_due_on=today + timedelta(days=64),
+                sale_hours="Mon-Sun 7am-11pm",
+                delivery_hours_start=time(7),
+                delivery_hours_end=time(23),
+                conditions="No sale or supply to anyone under 18. Drinking water available at tastings.",
+                created_by_user_id=user.id,
+            ),
+            LiquorLicence(
+                org_id=org_id,
+                kind="special",
+                licence_number="31/SP/208/2026",
+                issuing_dlc="Wellington DLC",
+                event_name="Harbourside Market tasting stand",
+                event_starts_on=today + timedelta(days=12),
+                event_ends_on=today + timedelta(days=13),
+                sale_hours="Sat-Sun 9am-2pm",
+                conditions="Tastings of 15 ml or less; food available at the stand.",
+                created_by_user_id=user.id,
+            ),
+            LiquorLicence(
+                org_id=org_id,
+                kind="on",
+                licence_number="31/ON/044/2021",
+                issuing_dlc="Hutt City DLC",
+                premises="Cellar door bar, 12 Gracefield Road",
+                issued_on=today - timedelta(days=4 * 365),
+                expires_on=today - timedelta(days=200),
+                status="ended",
+                created_by_user_id=user.id,
+            ),
+        ]
+    )
+    for name, number, expires_on, active, holder in (
+        ("Jordan Lee", "31/CERT/0912/2024", today + timedelta(days=430), True, user.id),
+        ("Sam Ngata", "31/CERT/1187/2023", today + timedelta(days=38), True, None),
+        ("Priya Shah", "31/CERT/0456/2022", today - timedelta(days=90), False, None),
+    ):
+        db.add(
+            ManagerCertificate(
+                org_id=org_id,
+                user_id=holder,
+                holder_name=name,
+                certificate_number=number,
+                issuing_dlc="Hutt City DLC",
+                issued_on=expires_on - timedelta(days=2 * 365),
+                expires_on=expires_on,
+                active=active,
+            )
+        )
+
+    def at(day: date, hour: int = 9) -> datetime:
+        return datetime.combine(day, datetime.min.time(), tzinfo=UTC).replace(hour=hour)
+
+    for control_id, title, evidence, recorded, due in (
+        (
+            "licence-conditions",
+            "Licence conditions and how we meet them",
+            "Drive / Licensing / Conditions 2026.pdf",
+            today - timedelta(days=120),
+            today + timedelta(days=245),
+        ),
+        (
+            "licence-displayed",
+            "Licence and duty manager sign at the cellar door",
+            "Photo: cellar-door-sign.jpg",
+            today - timedelta(days=340),
+            today + timedelta(days=25),
+        ),
+        (
+            "responsibility-policy",
+            "Host responsibility policy, signed",
+            "Drive / Licensing / Host responsibility policy.pdf",
+            today - timedelta(days=200),
+            today + timedelta(days=165),
+        ),
+        (
+            "remote-seller-website",
+            "Website shows licence, R18 notice and age check",
+            "Screenshot: checkout-age-gate.png",
+            today - timedelta(days=400),
+            today - timedelta(days=35),
+        ),
+    ):
+        db.add(
+            ComplianceRecord(
+                org_id=org_id,
+                framework_slug="liquor-licence",
+                control_id=control_id,
+                record_type="attestation",
+                status="complete",
+                title=title,
+                evidence_reference=evidence,
+                due_date=due,
+                source_refs=[],
+                details={},
+                created_by_user_id=user.id,
+                created_at=at(recorded),
+                updated_at=at(recorded),
+            )
+        )
+    for kind, days_ago, where, staff, what, action, ref in (
+        (
+            "id_refusal",
+            3,
+            "Cellar door",
+            "Sam Ngata",
+            "Customer couldn't show ID; looked under 25.",
+            "Declined the sale and offered a tasting of the non-alcoholic tonic.",
+            None,
+        ),
+        (
+            "id_refusal",
+            11,
+            "Online order",
+            "Jordan Lee",
+            "Courier returned an R18 parcel: no ID at the door.",
+            "Parcel held at the depot; customer collected with ID.",
+            "Order 4471",
+        ),
+        (
+            "intoxication_refusal",
+            26,
+            "Harbourside Market",
+            "Sam Ngata",
+            "Visitor at the stand showed signs of intoxication.",
+            "Declined a tasting; pointed to water and food stalls.",
+            None,
+        ),
+        (
+            "incident",
+            58,
+            "Cellar door",
+            "Jordan Lee",
+            "A bottle broke on the shop floor during a tasting.",
+            "Area cleared and mopped; no one hurt.",
+            None,
+        ),
+        (
+            "controlled_purchase",
+            140,
+            "Cellar door",
+            "Priya Shah",
+            "Police controlled purchase operation: the minor was asked for ID and refused service.",
+            "Passed. Letter from Police filed.",
+            "CPO-2026-118",
+        ),
+        (
+            "id_refusal",
+            170,
+            "Cellar door",
+            "Sam Ngata",
+            "Group of four; one couldn't show ID.",
+            "Served the three with ID only after checking all four.",
+            None,
+        ),
+        (
+            "id_refusal",
+            205,
+            "Online order",
+            "Jordan Lee",
+            "Date of birth at checkout was under 18.",
+            "Order cancelled and refunded.",
+            "Order 3982",
+        ),
+        (
+            "incident",
+            240,
+            "Harbourside Market",
+            "Priya Shah",
+            "Stand gazebo blew over in the wind.",
+            "Packed down early; no one hurt.",
+            None,
+        ),
+        (
+            "intoxication_refusal",
+            300,
+            "Cellar door",
+            "Priya Shah",
+            "Customer arrived from a nearby bar, unsteady.",
+            "Declined service; called them a taxi.",
+            None,
+        ),
+    ):
+        db.add(
+            LicensingLogEntry(
+                org_id=org_id,
+                kind=kind,
+                occurred_at=at(today - timedelta(days=days_ago), 2),  # mid-afternoon in NZ
+                location=where,
+                description=what,
+                action_taken=action,
+                staff_name=staff,
+                reference=ref,
+                created_by_user_id=user.id,
+            )
+        )
+    db.commit()
+
+
 def _seed_excise(db, org_id, inv) -> None:
     """Sales -> Excise: the lineage gin and a limoncello set up for excise (pack size, ABV,
     Customs product type), mapped from Xero lines across the sales seed's months, with one
@@ -1326,6 +1562,7 @@ def cmd_seed(args) -> int:
             "sales": _seed_sales,
             "excise": _seed_excise,
             "np3": _seed_np3,
+            "licensing": _seed_licensing,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "board": _seed_board,
