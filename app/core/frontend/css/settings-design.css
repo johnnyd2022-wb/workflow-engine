@@ -3,9 +3,12 @@
 #page-content .settings-overview { max-width: 1280px; }
 #page-content .settings-overview .workspace-header { margin-bottom: 24px; }
 #page-content .settings-overview .page-title { font-size: 28px; }
-.settings-nav { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--ui-border); margin-bottom: 24px; }
-#page-content .settings-nav a { padding: 12px 16px; color: var(--ui-text-muted); font-size: .875rem; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; }
-#page-content .settings-nav a[aria-current] { color: var(--ui-accent); border-color: var(--ui-accent); }
+/* The Settings tab row sits above, so the categories are the house's view switch (as on Customs). */
+.settings-nav { display: flex; gap: 4px; margin: 4px 0 24px; padding: 4px; width: fit-content; max-width: 100%; border: 1px solid var(--ui-border); border-radius: 999px; background: var(--ui-surface); }
+#page-content .settings-nav a { padding: 7px 16px; border-radius: 999px; color: var(--ui-text-muted); font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+#page-content .settings-nav a:hover { color: var(--ui-text); }
+#page-content .settings-nav a[aria-current] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #0f766e); }
+html[data-spa-theme="dark"] #page-content .settings-nav a[aria-current] { background: rgba(45, 212, 191, .14); color: #5eead4; }
 .settings-group { min-width: 0; }
 .settings-group[hidden], .settings-overview [hidden] { display: none !important; }
 /* The tab names the category on screen; the heading stays for screen readers and the outline. */
@@ -31,8 +34,8 @@ html[data-spa-theme="dark"] #page-content.page-content .settings-overview .works
 .settings-load-status { color: var(--ui-text-muted); margin-bottom: 16px; }
 @media (max-width: 640px) {
   /* On a phone the tabs are one row that scrolls sideways, not two rows. */
-  .settings-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  #page-content .settings-nav a { padding: 10px 8px; font-size: .8rem; white-space: nowrap; flex: 0 0 auto; }
+  .settings-nav { width: 100%; overflow-x: auto; scrollbar-width: none; }
+  #page-content .settings-nav a { flex: 1 1 auto; padding: 7px 10px; font-size: 13px; text-align: center; }
   #settings-account .settings-section-list { display: block; }
   #page-content .settings-overview .settings-card { padding: 18px; }
 }

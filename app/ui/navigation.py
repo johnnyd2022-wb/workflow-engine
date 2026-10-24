@@ -62,7 +62,11 @@ def breadcrumbs(path: str, leaf: str | None = None, extra: list[dict] | None = N
         or (
             tab is not None
             and tab.path == path
-            and tab.key in {group[0] for group in WORKSPACE_TAB_GROUPS.get(section, ())}
+            # A section without groups shows every tab, so each tab's page is in the row.
+            and (
+                section not in WORKSPACE_TAB_GROUPS
+                or tab.key in {group[0] for group in WORKSPACE_TAB_GROUPS[section]}
+            )
         )
     ):
         return []

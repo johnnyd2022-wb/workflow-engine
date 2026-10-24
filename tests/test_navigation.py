@@ -172,6 +172,9 @@ def test_a_tab_page_has_no_trail_and_so_no_back_arrow():
     assert breadcrumbs("/core/dashboard") == []
     assert breadcrumbs("/compliant") == []
     assert breadcrumbs("/compliant/nz-alcohol/customs") == []
+    # Settings shows all its tabs in one row (plan 2.5), so each is a tab page.
+    assert breadcrumbs("/core/people") == []
+    assert breadcrumbs("/core/tasks/configuration") == []
 
 
 def test_registered_child_pages_list_their_tab_and_parents():
@@ -187,7 +190,6 @@ def test_registered_child_pages_list_their_tab_and_parents():
         ("Add inventory manually", None),
     ]
     assert _trail("/core/go-live") == [("Home", "/core/dashboard"), ("Go live", None)]
-    assert _trail("/core/people") == [("Settings", "/core/settings"), ("People and roles", None)]
 
 
 def test_a_detail_page_hangs_off_its_registered_ancestor():
