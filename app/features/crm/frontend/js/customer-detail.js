@@ -12,6 +12,14 @@ function crmCustomerDetail(contactId) {
   return {
     contactId,
     activeTab: 'overview',
+    cdStyle: '1',
+    feedFilter: 'all',
+    feedFilters: [
+      { key: 'all', label: 'Everything' },
+      { key: 'invoice', label: 'Invoices' },
+      { key: 'note', label: 'Notes' },
+      { key: 'task', label: 'Tasks' },
+    ],
     customer: null,
     invoices: [],
     invoicePage: 1,
@@ -98,6 +106,11 @@ function crmCustomerDetail(contactId) {
     savingMapping: false,
 
     async init() {
+      // CONCEPT ONLY: ?style=1|2|3, then the last one picked, then Style 1.
+      const asked = new URLSearchParams(window.location.search || '').get('style');
+      let kept = null;
+      try { kept = window.localStorage.getItem('customer-detail-style'); } catch (_) { /* private mode */ }
+      this.cdStyle = ['1', '2', '3'].includes(asked) ? asked : (['1', '2', '3'].includes(kept) ? kept : '1');
       this.loading = true;
       this.error = null;
       try {
@@ -121,6 +134,116 @@ function crmCustomerDetail(contactId) {
         await this.$nextTick();
         this.drawCustomerAnalyticsCharts();
       }
+    },
+
+    // CONCEPT ONLY
+    setCdStyle(style) {
+      this.cdStyle = style;
+      try { window.localStorage.setItem('customer-detail-style', style); } catch (_) { /* private mode */ }
+      this.$nextTick(() => this.drawCustomerAnalyticsCharts());
+    },
+
+    // ── What the header and facts say ───────────────────────────
+    get contactPerson() {
+      const name = `${this.customer?.first_name || ''} ${this.customer?.last_name || ''}`.trim();
+      return name && name !== this.customer?.name ? name : '';
+    },
+
+    get lastOrder() {
+      return this.invoices.find((inv) => inv.date && inv.status !== 'VOIDED' && inv.status !== 'DELETED') || null;
+    },
+
+    get openTasks() {
+      return this.tasks.filter((t) => t.status === 'pending' || t.status === 'in_progress');
+    },
+
+    get overdueTasks() {
+      return this.openTasks.filter((t) => t.due_date && this.daysUntil(t.due_date) < 0).length;
+    },
+
+    get nextTaskWords() {
+      if (!this.openTasks.length) return 'Nothing to follow up';
+      if (this.overdueTasks) return `${this.overdueTasks} overdue`;
+      const next = this.openTasks.filter((t) => t.due_date).sort((a, b) => (a.due_date < b.due_date ? -1 : 1))[0];
+      return next ? `Next: ${next.title} · ${this.dueWords(next).toLowerCase()}` : 'None has a due date';
+    },
+
+    get rangeWords() {
+      if (!this.analyticsDateFrom || !this.analyticsDateTo) return 'Choose dates';
+      return `${this.formatDate(this.analyticsDateFrom)} to ${this.formatDate(this.analyticsDateTo)}`;
+    },
+
+    daysUntil(iso) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      return Math.round((new Date(`${String(iso).slice(0, 10)}T00:00:00`) - today) / 86400000);
+    },
+
+    agoWords(iso) {
+      const n = -this.daysUntil(iso);
+      if (n <= 0) return 'Today';
+      if (n === 1) return 'Yesterday';
+      if (n < 60) return `${n} days ago`;
+      return `${Math.round(n / 30)} months ago`;
+    },
+
+    dueWords(task) {
+      if (!task.due_date) return 'No date';
+      if (task.status === 'completed') return 'Done';
+      if (task.status === 'cancelled') return 'Cancelled';
+      const n = this.daysUntil(task.due_date);
+      if (n < 0) return n === -1 ? '1 day overdue' : `${-n} days overdue`;
+      if (n === 0) return 'Today';
+      if (n === 1) return 'Tomorrow';
+      return this.formatDate(task.due_date);
+    },
+
+    // Style 3: invoices, notes and tasks in one list, newest first.
+    get activity() {
+      const items = [];
+      const statusWords = { AUTHORISED: 'Awaiting payment', PAID: 'Paid', DRAFT: 'Draft', SUBMITTED: 'Awaiting approval', VOIDED: 'Voided' };
+      this.invoices.forEach((inv) => {
+        const owed = inv.status === 'AUTHORISED' && inv.due_date && this.daysUntil(inv.due_date) < 0 ? ' · overdue' : '';
+        items.push({
+          key: `i-${inv.id}`, kind: 'invoice', icon: '$', when: inv.date || '',
+          title: `Invoice ${inv.invoice_number || ''}`.trim(),
+          meta: `${this.formatDate(inv.date)} · ${statusWords[inv.status] || inv.status}${owed}`,
+          side: this.formatCurrency(inv.total, inv.currency_code),
+          open: () => this.viewInvoice(inv),
+        });
+      });
+      this.notes.forEach((note) => {
+        items.push({
+          key: `n-${note.id}`, kind: 'note', icon: '✎', when: note.created_at || '', text: note.content,
+          meta: this.formatNoteDate(note.created_at), side: '',
+        });
+      });
+      this.tasks.forEach((task) => {
+        const done = task.status === 'completed' || task.status === 'cancelled';
+        if (!done) return; // open tasks are under "Coming up"
+        items.push({
+          key: `t-${task.id}`, kind: 'task', icon: done ? '✓' : '○',
+          when: (done ? task.completed_at || task.updated_at : task.due_date) || task.created_at || '',
+          title: task.title,
+          meta: [done ? (task.status === 'completed' ? 'Done' : 'Cancelled') : this.dueWords(task), task.assigned_to_user_id ? this.assigneeName(task.assigned_to_user_id) : ''].filter(Boolean).join(' · '),
+          side: '',
+          open: () => this.openTaskEdit(task),
+        });
+      });
+      return items
+        .filter((item) => this.feedFilter === 'all' || item.kind === this.feedFilter)
+        .sort((a, b) => (String(a.when) < String(b.when) ? 1 : -1));
+    },
+
+    get upcoming() {
+      if (this.feedFilter !== 'all' && this.feedFilter !== 'task') return [];
+      return this.openTasks.slice()
+        .sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')))
+        .map((task) => ({
+          key: `u-${task.id}`, title: task.title,
+          late: !!task.due_date && this.daysUntil(task.due_date) < 0,
+          meta: [this.dueWords(task), task.status === 'in_progress' ? 'In progress' : '', task.assigned_to_user_id ? this.assigneeName(task.assigned_to_user_id) : ''].filter(Boolean).join(' · '),
+          open: () => this.openTaskEdit(task),
+        }));
     },
 
     get hasSalesTerms() {
@@ -271,9 +394,11 @@ function crmCustomerDetail(contactId) {
     },
 
     // ── Tasks ────────────────────────────────────────────────────
+    // Open work first, soonest due first; finished work after it.
     get filteredTasks() {
-      if (!this.taskStatusFilter) return this.tasks;
-      return this.tasks.filter(t => t.status === this.taskStatusFilter);
+      const shown = this.taskStatusFilter ? this.tasks.filter(t => t.status === this.taskStatusFilter) : this.tasks;
+      const open = (t) => (t.status === 'pending' || t.status === 'in_progress' ? 0 : 1);
+      return shown.slice().sort((a, b) => open(a) - open(b) || String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')));
     },
 
     taskStatusClass(status) {
@@ -875,6 +1000,13 @@ function crmCustomerDetail(contactId) {
     },
 
     drawSimpleBars(canvas, rows, opts = {}) {
+      // Colours from the page's tokens, so the labels stay readable in the dark theme.
+      const css = getComputedStyle(canvas);
+      const theme = {
+        accent: css.getPropertyValue('--ui-accent').trim() || '#0d9488',
+        text: css.getPropertyValue('--ui-text').trim() || '#0f172a',
+        muted: css.getPropertyValue('--ui-text-muted').trim() || '#6b7280',
+      };
       if (!canvas || !rows.length) return;
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.parentElement.getBoundingClientRect();
@@ -894,7 +1026,7 @@ function crmCustomerDetail(contactId) {
       const gap = rows.length > 6 ? 6 : 10;
       const barW = Math.max(10, (chartW - gap * (rows.length - 1)) / Math.max(rows.length, 1));
       ctx.font = '11px -apple-system, system-ui, sans-serif';
-      ctx.fillStyle = '#6b7280';
+      ctx.fillStyle = theme.muted;
       ctx.textAlign = 'right';
       for (let i = 0; i <= 4; i++) {
         const y = pad.top + chartH - (i / 4) * chartH;
@@ -910,9 +1042,9 @@ function crmCustomerDetail(contactId) {
         const x = pad.left + idx * (barW + gap);
         const barH = (row.value / maxVal) * chartH;
         const y = pad.top + chartH - barH;
-        ctx.fillStyle = '#2DD4BF';
+        ctx.fillStyle = theme.accent;
         ctx.fillRect(x, y, barW, barH);
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = theme.text;
         ctx.textAlign = 'center';
         ctx.font = '10px -apple-system, system-ui, sans-serif';
         this.drawWrappedXAxisLabel(
@@ -925,7 +1057,7 @@ function crmCustomerDetail(contactId) {
           Math.max(2, Number(opts.maxLabelLines || 2)),
         );
         if (opts.showValueLabels) {
-          ctx.fillStyle = '#0f172a';
+          ctx.fillStyle = theme.text;
           ctx.font = '10px -apple-system, system-ui, sans-serif';
           ctx.fillText(this.formatCurrency(row.value || 0, 'NZD'), x + (barW / 2), Math.max(pad.top + 10, y - 6));
         }

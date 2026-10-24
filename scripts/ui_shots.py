@@ -67,6 +67,7 @@ SEED_KINDS = (
     "suppliers",
     "excise",
     "np3",
+    "customer",
 )
 
 
@@ -418,6 +419,93 @@ def _seed_sales(db, org_id, inv) -> None:
                 status=status,
                 priority=priority,
                 due_date=today + timedelta(days=due),
+            )
+        )
+    db.commit()
+
+
+def _seed_customer(db, org_id, inv) -> None:
+    """One customer as a sales rep knows them after a year: contact details and addresses,
+    a 20th-of-the-month payment term, notes from calls and tastings, and follow-ups open
+    and done. Uses the customer with the most invoices from the lineage and sales seeds."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import func
+
+    from app.core.db.models.user import User
+    from app.features.crm.models.crm_note import CRMNote
+    from app.features.crm.models.crm_task import CRMTask
+    from app.features.crm.models.xero_contact import XeroContact
+    from app.features.crm.models.xero_invoice import XeroInvoice
+
+    top = (
+        db.query(XeroInvoice.contact_id, func.count(XeroInvoice.id))
+        .filter(XeroInvoice.org_id == org_id)
+        .group_by(XeroInvoice.contact_id)
+        .order_by(func.count(XeroInvoice.id).desc())
+        .first()
+    )
+    if top is None:
+        raise ValueError("customer requires the lineage and sales seeds for invoices")
+    contact = db.get(XeroContact, top[0])
+    user = db.query(User).filter(User.org_id == org_id).first()
+    user.first_name, user.last_name = "Jordan", "Lee"
+    contact.first_name, contact.last_name = "Aroha", "Wilson"
+    contact.email_address, contact.phone_number = "aroha@moorewilsons.example", "04 385 6952"
+    contact.contact_status = "ACTIVE"
+    contact.payment_terms = {"sales": {"day": 20, "type": "OFFOLLOWINGMONTH"}}
+    contact.addresses = [
+        {
+            "type": "POBOX",
+            "line1": "PO Box 3210",
+            "city": "Wellington",
+            "postal_code": "6140",
+            "country": "New Zealand",
+        },
+        {
+            "type": "STREET",
+            "line1": "15 Ellice Street",
+            "line2": "Mount Victoria",
+            "city": "Wellington",
+            "postal_code": "6011",
+            "country": "New Zealand",
+        },
+    ]
+    now = datetime.now(UTC)
+    for days, text in (
+        (2, "Called Aroha: summer order likely to double last year's. Wants the Navy Strength in 500 ml."),
+        (16, "Tasting with the shop team went well; they'll put the gin in the front fridge."),
+        (41, "Pays on the 20th of the month after. Prefers invoices emailed to accounts@."),
+        (90, "First order. Met at the Harbourside Market."),
+    ):
+        db.add(
+            CRMNote(
+                org_id=org_id,
+                contact_id=contact.id,
+                content=text,
+                created_by_user_id=user.id,
+                created_at=now - timedelta(days=days),
+                updated_at=now - timedelta(days=days),
+            )
+        )
+    today = date.today()
+    for title, status, priority, due, done in (
+        ("Send the summer price list", "pending", "high", 1, None),
+        ("Drop off a Navy Strength sample", "in_progress", "medium", 4, None),
+        ("Check the front-fridge placement", "pending", "low", 12, None),
+        ("Book the staff tasting", "completed", "medium", -14, 15),
+    ):
+        db.add(
+            CRMTask(
+                org_id=org_id,
+                contact_id=contact.id,
+                title=title,
+                status=status,
+                priority=priority,
+                due_date=today + timedelta(days=due),
+                assigned_to_user_id=user.id,
+                created_by_user_id=user.id,
+                completed_at=now - timedelta(days=done) if done else None,
             )
         )
     db.commit()
@@ -1326,6 +1414,7 @@ def cmd_seed(args) -> int:
             "sales": _seed_sales,
             "excise": _seed_excise,
             "np3": _seed_np3,
+            "customer": _seed_customer,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "board": _seed_board,
