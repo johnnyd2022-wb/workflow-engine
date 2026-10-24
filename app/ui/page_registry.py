@@ -121,7 +121,14 @@ PAGES: tuple[Page, ...] = (
         "compliant",
     ),
     Page("/compliant/nz-alcohol/licensing", "compliance", "licensing", "Licensing", None, "compliant"),
-    Page("/compliant/nz-alcohol/premises", "compliance", "premises", "Premises", None, "compliant"),
+    Page(
+        "/compliant/nz-alcohol/premises",
+        "compliance",
+        "customs",
+        "Customs licences and areas",
+        "/compliant/nz-alcohol/customs",
+        "compliant",
+    ),
     Page(
         "/compliant/nz-alcohol/food-registrations",
         "compliance",
@@ -197,7 +204,6 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         Tab("np3", "Food safety", "/compliant/nz-alcohol/np3-audit", ("compliance.view",), when="food_safety"),
         Tab("customs", "Customs", "/compliant/nz-alcohol/customs", ("compliance.view",)),
         Tab("licensing", "Licensing", "/compliant/nz-alcohol/licensing", ("compliance.view",), when="licensing"),
-        Tab("premises", "Premises", "/compliant/nz-alcohol/premises", ("compliance.view",)),
         Tab(
             "food-registrations",
             "Food registrations",
@@ -233,7 +239,7 @@ WORKSPACE_TAB_GROUPS = {
         ("inventory", "suppliers"),
     ),
     "compliance": (
-        ("overview", "premises", "tools", "configuration"),
+        ("overview", "tools", "configuration"),
         ("np3", "food-registrations"),
         ("customs",),
         ("licensing",),

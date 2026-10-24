@@ -67,6 +67,7 @@ SEED_KINDS = (
     "suppliers",
     "excise",
     "np3",
+    "premises",
 )
 
 
@@ -731,6 +732,105 @@ def _seed_np3(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_premises(db, org_id, inv) -> None:
+    """Customs licences and the areas they cover, the way a distillery with a bond store has
+    them: a manufacturing-area licence over the still house and bottling room, an off-site
+    storage licence over the bond store, an older licence that has ended, and a cellar door
+    shop that sits outside any licensed area."""
+    from app.core.db.models.organisation import Organisation
+    from app.core.db.models.site import Site
+    from app.core.db.models.stock_location import StockLocation
+    from app.features.compliant.modules.nz_alcohol import premises
+
+    today = date.today()
+    org = db.get(Organisation, org_id)
+    org.multiple_sites_enabled = org.multiple_site_operations_enabled = True  # the bond store is a second site
+    db.flush()
+    distillery = db.query(Site).filter(Site.org_id == org_id, Site.is_default.is_(True)).one_or_none()
+    if distillery is None:
+        distillery = Site(org_id=org_id, name="Gracefield distillery", is_default=True)
+        db.add(distillery)
+    distillery.name, distillery.address = "Gracefield distillery", "Unit 4, 12 Gracefield Road, Lower Hutt"
+    bond = Site(org_id=org_id, name="Seaview bond store", address="31 Hutt Park Road, Seaview", kind="storage")
+    db.add(bond)
+    db.flush()
+    places = {}
+    for site, name, inside in (
+        (distillery, "Still house", True),
+        (distillery, "Bottling room", True),
+        (distillery, "Cellar door shop", False),
+        (bond, "Bay 1", True),
+        (bond, "Bay 2", True),
+    ):
+        place = StockLocation(org_id=org_id, site_id=site.id, name=name, inside_licensed_area=inside)
+        db.add(place)
+        places[name] = place
+    db.flush()
+    lma = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-LMA-2291",
+            "name": "Gracefield distillery manufacturing area",
+            "kind": "lma",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=700)).isoformat(),
+            "valid_until": None,
+            "evidence_reference": "Customs approval letter, 3 Nov 2024",
+        },
+    )
+    oss = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-OSS-0418",
+            "name": "Seaview off-site storage",
+            "kind": "oss",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=200)).isoformat(),
+            "valid_until": (today + timedelta(days=45)).isoformat(),
+            "evidence_reference": "Customs approval letter, 18 Apr 2026",
+        },
+    )
+    old = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-OSS-0112",
+            "name": "Petone shared bond (ended)",
+            "kind": "oss",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=900)).isoformat(),
+            "valid_until": (today - timedelta(days=210)).isoformat(),
+            "evidence_reference": "Surrender acknowledgement, Mar 2026",
+        },
+    )
+    db.flush()
+    for licence, site, place, start, end, evidence in (
+        (lma, distillery, "Still house", 700, None, "Approved site plan rev B"),
+        (lma, distillery, "Bottling room", 400, None, "Variation approved, Sep 2025"),
+        (oss, bond, "Bay 1", 200, 45, "OSS plan, bays 1-2"),
+        (oss, bond, "Bay 2", 200, 45, "OSS plan, bays 1-2"),
+        (old, bond, None, 800, 210, "Shared bond floor plan"),
+    ):
+        premises.add_coverage(
+            db,
+            org_id,
+            {
+                "licence_id": str(licence.id),
+                "site_id": str(site.id),
+                "location_id": str(places[place].id) if place else None,
+                "valid_from": (today - timedelta(days=start)).isoformat(),
+                "valid_until": (today + timedelta(days=end) if end == 45 else today - timedelta(days=end)).isoformat()
+                if end
+                else None,
+                "evidence_reference": evidence,
+            },
+        )
+        db.flush()
+    db.commit()
+
+
 def _seed_excise(db, org_id, inv) -> None:
     """Sales -> Excise: the lineage gin and a limoncello set up for excise (pack size, ABV,
     Customs product type), mapped from Xero lines across the sales seed's months, with one
@@ -1326,6 +1426,7 @@ def cmd_seed(args) -> int:
             "sales": _seed_sales,
             "excise": _seed_excise,
             "np3": _seed_np3,
+            "premises": _seed_premises,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "board": _seed_board,
