@@ -275,7 +275,7 @@ def test_primary_action_starts_a_new_task(browser, app_url, workspace_user):
         expect(page.get_by_role("link", name="Open tasks", exact=True)).to_have_count(0)
         page.locator(".sales-header-actions").get_by_role("link", name="New task", exact=True).click()
         expect(page).to_have_url(re.compile(r"/crm/tasks\?new=1$"))
-        expect(page.locator(".crm-task-sheet__title")).to_have_text("New Task")
+        expect(page.locator(".crm-task-sheet__title")).to_have_text("New task")
         expect(page.locator(".crm-task-sheet__title")).to_be_visible()
     finally:
         context.close()

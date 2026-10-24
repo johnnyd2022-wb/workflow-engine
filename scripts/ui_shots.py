@@ -67,6 +67,7 @@ SEED_KINDS = (
     "suppliers",
     "excise",
     "np3",
+    "tasks",
 )
 
 
@@ -418,6 +419,77 @@ def _seed_sales(db, org_id, inv) -> None:
                 status=status,
                 priority=priority,
                 due_date=today + timedelta(days=due),
+            )
+        )
+    db.commit()
+
+
+def _seed_tasks(db, org_id, inv) -> None:
+    """A sales team's task list on an ordinary week: two people, a dozen open follow-ups
+    (two overdue, three due today, some next week, some with no date), a custom lane for
+    tasks waiting on the customer, and what was finished or dropped in the last fortnight."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.task_board_lane import TaskBoardLane
+    from app.core.db.models.user import User, UserRole
+    from app.features.crm.models.crm_task import CRMTask
+    from app.features.crm.models.xero_contact import XeroContact
+    from tests.factories import UserFactory
+
+    contacts = db.query(XeroContact).filter(XeroContact.org_id == org_id).order_by(XeroContact.name).all()
+    if not contacts:
+        raise ValueError("tasks requires the lineage seed for customer contacts")
+    owner = db.query(User).filter(User.org_id == org_id).first()
+    owner.first_name, owner.last_name = "Jordan", "Lee"
+    sam = UserFactory(
+        org_id=org_id,
+        email=owner.email.replace("@", "-sam@"),
+        first_name="Sam",
+        last_name="Ngata",
+        role=UserRole.SALES,
+    )
+    db.flush()
+    waiting = TaskBoardLane(org_id=org_id, board="crm", title="Waiting on customer", position=0)
+    db.add(waiting)
+    db.flush()
+    today = date.today()
+    now = datetime.now(UTC)
+    rows = (
+        # title, status, priority, due (days from today, None = no date), who, lane, finished days ago
+        ("Call about the reorder that went quiet", "pending", "high", -3, owner, None, None),
+        ("Chase the unpaid October invoice", "pending", "high", -1, sam, None, None),
+        ("Drop off tasting kit", "pending", "medium", 0, sam, None, None),
+        ("Confirm Christmas order quantities", "in_progress", "high", 0, owner, None, None),
+        ("Send updated wholesale price list", "pending", "low", 0, None, None, None),
+        ("Book a staff tasting for the new gin", "pending", "medium", 2, owner, None, None),
+        ("Quote for corporate gift packs", "in_progress", "medium", 3, sam, None, None),
+        ("Follow up the cocktail menu listing", "pending", "medium", 6, None, None, None),
+        ("Check shelf placement after the reset", "pending", "low", 9, sam, None, None),
+        ("Ask for a Summer feature in the newsletter", "pending", "low", None, None, None, None),
+        ("Waiting on signed credit application", "pending", "medium", 4, owner, waiting, None),
+        ("Waiting on their December delivery dates", "in_progress", "medium", 1, sam, waiting, None),
+        ("Delivered the sample case", "completed", "medium", -2, sam, None, 2),
+        ("Agreed the summer promotion", "completed", "high", -4, owner, None, 4),
+        ("Set up the new account in Xero", "completed", "low", -6, owner, None, 6),
+        ("Old price list follow-up", "cancelled", "low", -5, None, None, 1),
+    )
+    for number, (title, status, priority, due, who, lane, finished) in enumerate(rows):
+        done_at = now - timedelta(days=finished) if finished is not None else None
+        db.add(
+            CRMTask(
+                org_id=org_id,
+                contact_id=contacts[number % len(contacts)].id if number % 4 != 3 else None,
+                title=title,
+                description="Notes from the last call." if number % 3 == 0 else None,
+                status=status,
+                priority=priority,
+                due_date=today + timedelta(days=due) if due is not None else None,
+                assigned_to_user_id=who.id if who else None,
+                created_by_user_id=owner.id,
+                board_lane_id=lane.id if lane else None,
+                completed_at=done_at if status == "completed" else None,
+                created_at=now - timedelta(days=14 - number % 10),
+                updated_at=done_at or now - timedelta(days=number % 5),
             )
         )
     db.commit()
@@ -1326,6 +1398,7 @@ def cmd_seed(args) -> int:
             "sales": _seed_sales,
             "excise": _seed_excise,
             "np3": _seed_np3,
+            "tasks": _seed_tasks,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
             "board": _seed_board,
@@ -1385,7 +1458,8 @@ def cmd_purge(_args) -> int:
         db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
         db.commit()
         purge_org(db, org_id, user_id)
-        db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+        # The tasks seed adds a second person to the org.
+        db.query(User).filter(User.org_id == org_id).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
         db.commit()
     STATE.unlink()
