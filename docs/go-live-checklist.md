@@ -43,10 +43,10 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 
 | | ID | Item | Type | Notes |
 |---|---|---|---|---|
-| ☑ | GL-A01 | One server-side password policy (min and max) across signup, invite and change; long input gives a 400, not a 500 | Fix | |
-| ☑ | GL-A02 | A password change signs out every other session | Fix | |
-| ☑ | GL-A03 | `password_reset: true` on login must not clear an account lock | Fix | |
-| ☐ | GL-A04 | Forgotten-password recovery | Decide + Founder | Self-service needs an email sender, which the app doesn't have. Until then, a visible "Locked out? Contact us" route (Fix) |
+| ☑ | GL-A01 | One server-side password policy (min and max) across signup, invite and change; long input gives a 400, not a 500 | Fix | !571 |
+| ☑ | GL-A02 | A password change signs out every other session | Fix | !571 |
+| ☑ | GL-A03 | `password_reset: true` on login must not clear an account lock | Fix | !571 |
+| ◐ | GL-A04 | Forgotten-password recovery | Decide + Founder | Interim help line on the sign-in form in !572. Self-service needs an email sender, which the app doesn't have. Until then, a visible "Locked out? Contact us" route (Fix) |
 | ☐ | GL-A05 | One observed independent pilot per sector | Founder | Not code |
 
 ### Product and operations (P1)
@@ -56,9 +56,9 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☐ | GL-P01 | Returns, credit notes and physical stock | Decide | Importing credit notes is a fix; how a return shows on stock and duty is a design choice |
 | ☐ | GL-P02 | Quality hold and release on a lot | Decide | |
 | ☐ | GL-P03 | Recall case: scope, contacts, acknowledgements, recovered quantities, closure | Decide | Pairs with GL-P02 |
-| ☐ | GL-P04 | Customs deadlines count NZ public holidays | Fix | Licensing already has an NZ working-day calendar; excise doesn't use it |
+| ☑ | GL-P04 | Customs deadlines count NZ public holidays | Fix | !572. Licensing already has an NZ working-day calendar; excise doesn't use it |
 | ☐ | GL-P05 | Say which excise figure is the estimate and which is the filing draft | Decide | |
-| ☐ | GL-P06 | Warn when the built-in duty rates are past their review date | Fix | |
+| ☑ | GL-P06 | Warn when the built-in duty rates are past their review date | Fix | !572 |
 | ☐ | GL-P07 | Advertise only the multi-site and planning flows that are on | Discuss | |
 | ☐ | GL-P08 | Contract producer: one end-to-end test of the case described | Fix | |
 | ☐ | GL-P09 | Guided first-day setup | Decide | The highest-impact design item |
@@ -73,10 +73,10 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☐ | GL-U01 | Dialogs: focus moves in, stays in, Escape closes, focus returns to the button | Fix | One shared helper for every custom dialog |
 | ☐ | GL-U02a | Tabs marked `role="tab"` get arrow keys and their panels | Fix | |
 | ☐ | GL-U02b | One name for each place (Customs vs Excise, the two Tasks) | Decide | |
-| ☐ | GL-U02c | Dangerous actions say their effect on stock, sales and filed periods | Fix | An audit of confirmation texts |
+| ☑ | GL-U02c | Dangerous actions say their effect on stock, sales and filed periods | Fix | !572: deleting a workflow or step silently deleted its batches; now refused, and the delete confirmations state the effect. An audit of confirmation texts |
 | ☐ | GL-U03 | Interrupted saves: no false "Saved", the form kept, retry without duplicates, sign in again without losing it | Fix | Production steps, receiving, counts and evidence first |
 | ☐ | GL-U04 | Whole-job audit: empty, error, no permission, expired session, phone, dark, 200% zoom | Fix | Screenshot sweep with fixes |
-| ☐ | GL-U05 | NZ alcohol examples instead of "e.g., Steel Rods" | Fix | |
+| ☑ | GL-U05 | NZ alcohol examples instead of "e.g., Steel Rods" | Fix | !572 |
 
 ### Conversion (P1)
 
@@ -97,7 +97,7 @@ Status: ☐ open · ◐ in progress · ☑ done (with the MR).
 | ☐ | GL-S02 | Every background and raw-SQL path names its org | Fix | |
 | ☐ | GL-S03 | Untrusted-input rendering, attachments, link protocols | Fix | |
 | ☐ | GL-S04 | Session replay and error reports never capture tokens, contacts or recipes | Fix | Tests on the masking |
-| ☐ | GL-S05 | Abuse and revocation across invite, portal, auditor expiry and deactivation | Fix | Follows GL-A02 |
+| ◐ | GL-S05 | Abuse and revocation across invite, portal, auditor expiry and deactivation | Fix | !571: deactivation, role change and password change reach open sessions (expiry, invites and the portal were already tested). Follows GL-A02 |
 
 ### To go over together
 

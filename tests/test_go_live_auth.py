@@ -111,3 +111,31 @@ def test_a_client_flag_cannot_clear_an_account_lock(account, db):  # noqa: F811
         assert resp.status_code in (401, 429), flag
     db.expire_all()
     assert db.query(User).filter(User.email == account["email"]).one().account_locked_until is not None
+
+
+# --- GL-S05: revocation reaches sessions that are already open ----------------------------
+
+
+def _user(db, email):
+    db.expire_all()
+    return db.query(User).filter(User.email == email).one()
+
+
+def test_deactivating_someone_ends_their_open_session(account, db):  # noqa: F811
+    assert account["client"].get("/auth/session-timeout").status_code == 200
+    _user(db, account["email"]).is_active = False
+    db.commit()
+    assert account["client"].get("/auth/session-timeout").status_code == 401
+    # And they can't sign straight back in.
+    fresh = account["make_client"]()
+    assert fresh.post("/auth/login", json={"email": account["email"], "password": PASSWORD}).status_code in (401, 403)
+
+
+def test_a_role_change_applies_on_the_next_request(account, db):  # noqa: F811
+    from app.core.db.models.user import UserRole
+
+    client = account["client"]
+    assert client.post("/api/core/executions", json={}).status_code != 403
+    _user(db, account["email"]).role = UserRole.AUDITOR
+    db.commit()
+    assert client.post("/api/core/executions", json={}).status_code == 403
