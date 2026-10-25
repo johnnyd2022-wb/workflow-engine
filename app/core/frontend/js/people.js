@@ -58,12 +58,11 @@
     if (!root || root.dataset.peopleBound === '1') return;
     root.dataset.peopleBound = '1';
 
-    var state = { people: [], roles: [], me: null, selected: null };
+    var state = { people: [], roles: [], me: null };
     var rolesState = null;
     var rows = $(root, '[data-people-rows]');
     var roleList = $(root, '[data-people-role-guide]');
     var message = $(root, '[data-people-message]');
-    var panel = $(root, '[data-people-panel]');
     var dialog = document.querySelector('[data-people-dialog]');
     var form = $(dialog, '[data-people-form]');
     var formError = $(dialog, '[data-people-form-error]');
@@ -148,10 +147,8 @@
     function personRow(p) {
       var isMe = state.me && p.id === state.me.id;
       var li = el('li', { className: 'pp-person pp-person--' + p.status, 'data-person-id': p.id });
-      if (state.selected === p.id) li.classList.add('is-selected');
       var who = el('div', { className: 'pp-who' });
-      var name = el('button', { type: 'button', className: 'pp-name', text: p.display_name, 'aria-label': 'Open ' + p.display_name });
-      name.addEventListener('click', function () { select(p.id); });
+      var name = el('span', { className: 'pp-name', text: p.display_name });
       who.append(name);
       if (isMe) who.append(el('span', { className: 'pp-you', text: 'You' }));
       if (p.display_name !== p.email) who.append(el('span', { className: 'pp-email', text: p.email }));
@@ -183,34 +180,7 @@
       if (count('expired')) parts.push(plural(count('expired'), 'auditor finished', 'auditors finished'));
       if (count('deactivated')) parts.push(count('deactivated') + ' deactivated');
       $(root, '[data-people-summary]').textContent = parts.join(' · ');
-      renderPanel();
       renderRoles();
-    }
-
-    // CONCEPT ONLY: Style 3's panel. The other layouts edit in the row.
-    function select(id) {
-      state.selected = id;
-      rows.querySelectorAll('.pp-person').forEach(function (row) { row.classList.toggle('is-selected', row.dataset.personId === id); });
-      renderPanel();
-    }
-
-    function renderPanel() {
-      var p = state.people.find(function (x) { return x.id === state.selected; });
-      panel.hidden = !p;
-      if (!p) return;
-      var isMe = state.me && p.id === state.me.id;
-      $(panel, '[data-panel-name]').textContent = p.display_name + (isMe ? ' (you)' : '');
-      $(panel, '[data-panel-email]').textContent = p.email;
-      var body = $(panel, '[data-panel-body]');
-      var guide = state.roles.find(function (r) { return r.value === p.role; });
-      var list = el('dl', { className: 'pp-facts' });
-      function fact(term, value) { list.append(el('div', {}, [el('dt', { text: term }), el('dd', {}, [value])])); }
-      var roleField = el('div', { className: 'pp-panel-role' }, [roleControl(p, isMe)]);
-      if (guide) roleField.append(el('p', { className: 'pp-hint', text: guide.description }));
-      fact('Role', roleField);
-      fact('Status', el('span', { className: 'pp-status pp-status--' + p.status, text: statusWords(p) }));
-      if (p.status !== 'invited') fact('Two-factor sign-in', document.createTextNode(p.two_factor_enabled ? 'On' : 'Off'));
-      body.replaceChildren(list, actionButtons(p, isMe));
     }
 
     // --- roles ---------------------------------------------------------------------------------
@@ -518,30 +488,16 @@
       } catch (err) { roleError.textContent = err.message; roleError.hidden = false; }
     });
 
-    // --- layout switch (CONCEPT ONLY: deleted with the two layouts not picked) ----------------
-    function setStyle(style) {
-      root.dataset.ppStyle = style;
-      root.querySelectorAll('[data-pp-style-pick]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.ppStylePick === style)); });
-      try { window.localStorage.setItem('people-style', style); } catch (_) { /* a convenience only */ }
-    }
     function setView(view) {
       root.dataset.ppView = view;
       root.querySelectorAll('[data-pp-view]').forEach(function (a) {
         if (a.dataset.ppView === view) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
       });
     }
-    root.querySelectorAll('[data-pp-style-pick]').forEach(function (b) { b.addEventListener('click', function () { setStyle(b.dataset.ppStylePick); }); });
     root.querySelectorAll('[data-pp-view]').forEach(function (a) {
       a.addEventListener('click', function (event) { event.preventDefault(); setView(a.dataset.ppView); history.replaceState(null, '', '#' + a.dataset.ppView); });
     });
-    $(panel, '[data-panel-close]').addEventListener('click', function () { select(null); });
-    (function () {
-      var wanted = new URLSearchParams(window.location.search).get('style');
-      var kept = null;
-      try { kept = window.localStorage.getItem('people-style'); } catch (_) { /* storage blocked */ }
-      setStyle(['1', '2', '3'].includes(wanted) ? wanted : (['1', '2', '3'].includes(kept) ? kept : '1'));
-      setView(window.location.hash === '#roles' ? 'roles' : 'people');
-    })();
+    setView(window.location.hash === '#roles' ? 'roles' : 'people');
 
     load();
   }

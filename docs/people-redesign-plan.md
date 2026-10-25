@@ -56,3 +56,9 @@ Observed in `00-before`, on main `bf069927`:
 - `tests/e2e/test_people_page.py`, routed into the Flask test client: a failed load leaves nothing to act on; a custom role is edited in a dialog; deleting asks twice; CONCEPT ONLY: Style 3's panel, Style 2's switch, and each layout fits at phone, laptop and wall widths.
 - `test_staff_site_roles.py` (e2e) opens "New role" instead of the disclosure.
 - Shots: laptop, phone, wall and dark, with a team of ten (every role, an auditor, an invite, someone deactivated, a custom role); a person open; both dialogs; a failed load; arriving by the Settings tab.
+
+## Approved implementation — 25 Oct 2026
+
+Style 2 (People | Roles) is the approved design for !565. The experimental layout selector and the discarded layouts have been removed.
+
+Validation: 9 browser cases passed, covering the page actions and responsive layouts. Security scan of the changed app files passed.

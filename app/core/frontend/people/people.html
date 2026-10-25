@@ -10,7 +10,7 @@
 
 {% block content %}
   <link rel="stylesheet" href="{{ url_for('core.serve_core_css', filename='people.css') }}">
-  <div class="max-content workspace-overview pp-page" data-people-root data-pp-style="1" aria-busy="true">
+  <div class="max-content workspace-overview pp-page" data-people-root aria-busy="true">
     <header class="workspace-header pp-header">
       <div>
         <h1>People and roles</h1>
@@ -21,21 +21,12 @@
       </div>
     </header>
 
-    {# CONCEPT ONLY: the layout switch. Deleted with the two layouts not picked. #}
-    <div class="pp-style-pick" role="group" aria-label="Layout concepts">
-      <span>Concept</span>
-      <button type="button" data-pp-style-pick="1" aria-pressed="true">1 · List</button>
-      <button type="button" data-pp-style-pick="2" aria-pressed="false">2 · People | Roles</button>
-      <button type="button" data-pp-style-pick="3" aria-pressed="false">3 · Person panel</button>
-    </div>
 
     <div class="pp-message" data-people-message hidden role="status"></div>
     <div class="pp-message pp-message--error pp-load-error" data-people-load-error role="alert" hidden>
       <span data-people-load-text></span>
       <button type="button" class="workspace-button" data-people-retry>Try again</button>
     </div>
-
-    {# CONCEPT ONLY: Style 2 shows one of the two at a time. #}
     <nav class="pp-views" aria-label="People and roles">
       <a href="#people" data-pp-view="people" aria-current="page">People</a>
       <a href="#roles" data-pp-view="roles">Roles</a>
@@ -50,17 +41,6 @@
         <ul class="pp-list" data-people-rows><li class="pp-empty">Loading…</li></ul>
       </section>
 
-      {# CONCEPT ONLY: Style 3's panel for the chosen person. #}
-      <aside class="pp-card pp-panel" data-people-panel aria-labelledby="pp-panel-title" hidden>
-        <div class="pp-panel__head">
-          <div>
-            <h2 id="pp-panel-title" data-panel-name></h2>
-            <p data-panel-email></p>
-          </div>
-          <button type="button" class="pp-close" data-panel-close aria-label="Close">&times;</button>
-        </div>
-        <div data-panel-body></div>
-      </aside>
     </div>
 
     <section class="pp-card pp-roles" data-people-loaded id="roles" data-pp-section="roles" data-custom-roles aria-labelledby="pp-roles-title">

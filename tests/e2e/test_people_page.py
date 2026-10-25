@@ -1,5 +1,5 @@
 """People and roles in a browser: a failed load leaves nothing to act on, custom roles open in a
-dialog and delete only when asked twice, and (CONCEPT ONLY) each layout's fit.
+dialog and delete only when asked twice, and the page's fit.
 
 Requests are routed into the Flask test client (see test_crm_contact_sync_ui).
 """
@@ -38,9 +38,9 @@ def cellar(db, org):  # noqa: F811
     return role
 
 
-def _open(page, style="1", width=1440, hash_=""):
+def _open(page, width=1440, hash_=""):
     page.set_viewport_size({"width": width, "height": 900})
-    page.goto(f"{PAGE}?style={style}{hash_}")
+    page.goto(f"{PAGE}{hash_}")
     page.locator(READY).wait_for()
 
 
@@ -59,6 +59,7 @@ def test_people_that_did_not_load_leave_nothing_to_act_on(sales_page):  # noqa: 
 
 def test_a_custom_role_is_edited_in_a_dialog(sales_page, cellar, client):  # noqa: F811
     _open(sales_page)
+    sales_page.get_by_role("navigation", name="People and roles").get_by_role("link", name="Roles").click()
     roles = sales_page.locator("#roles")
     expect(roles.locator(".pp-role-row")).to_have_count(7)
     roles.get_by_role("button", name="Edit Cellar door").click()
@@ -75,6 +76,7 @@ def test_a_custom_role_is_edited_in_a_dialog(sales_page, cellar, client):  # noq
 def test_deleting_a_role_asks_twice_in_place(sales_page, cellar, client):  # noqa: F811
     # It used window.confirm, which some browsers block.
     _open(sales_page)
+    sales_page.get_by_role("navigation", name="People and roles").get_by_role("link", name="Roles").click()
     sales_page.get_by_role("button", name="Edit Cellar door").click()
     delete = sales_page.get_by_role("dialog").locator("[data-role-delete]")
     delete.click()
@@ -84,27 +86,16 @@ def test_deleting_a_role_asks_twice_in_place(sales_page, cellar, client):  # noq
     expect(sales_page.locator("#roles")).not_to_contain_text("Cellar door")
 
 
-# CONCEPT ONLY: the rest are deleted with the two layouts not picked.
-def test_person_panel_opens_for_the_person_chosen(sales_page, user):  # noqa: F811
-    _open(sales_page, style="3")
-    panel = sales_page.locator("[data-people-panel]")
-    expect(panel).to_be_hidden()
-    sales_page.locator(".pp-person .pp-name").first.click()
-    expect(panel).to_be_visible()
-    expect(panel.locator("[data-panel-email]")).to_have_text(user.email)
-
-
 def test_people_and_roles_show_one_at_a_time(sales_page):  # noqa: F811
-    _open(sales_page, style="2")
+    _open(sales_page)
     expect(sales_page.locator("#roles")).to_be_hidden()
     sales_page.get_by_role("navigation", name="People and roles").get_by_role("link", name="Roles").click()
     expect(sales_page.locator("#roles")).to_be_visible()
     expect(sales_page.locator("#people")).to_be_hidden()
 
 
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_layout_fits_without_sideways_scroll(sales_page, cellar, style, width):  # noqa: F811
-    _open(sales_page, style=style, width=width)
+def test_the_page_fits_without_sideways_scroll(sales_page, cellar, width):  # noqa: F811
+    _open(sales_page, width=width)
     assert sales_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     expect(sales_page.locator("#people .pp-person")).to_have_count(1)

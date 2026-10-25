@@ -44,6 +44,7 @@ def test_prepare_selected_role_and_assignment_remains_closed(browser, site_roles
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(url + "/core/people")
+        page.get_by_role("navigation", name="People and roles").get_by_role("link", name="Roles").click()
         root = page.locator("[data-custom-roles]")
         expect(root).to_be_visible()
         page.get_by_role("button", name="New role").click()
@@ -54,7 +55,7 @@ def test_prepare_selected_role_and_assignment_remains_closed(browser, site_roles
         form.locator(f'[data-custom-role-sites] input[value="{site_id}"]').check()
         form.get_by_role("button", name="Create role").click()
         expect(root.locator("[data-custom-role-list]")).to_contain_text(name)
-        assert page.url.endswith("/core/people")
+        assert page.url.endswith("/core/people#roles")
         data = context.request.get(url + "/org/roles").json()
         role = next(r for r in data["custom_roles"] if r["name"] == name)
         assert role["site_access_mode"] == "selected" and role["site_ids"] == [str(site_id)] and not role["assignable"]

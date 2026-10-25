@@ -1,4 +1,4 @@
-/* People and roles: Style 1 a list, Style 2 People | Roles one at a time, Style 3 a person panel. */
+/* People and roles: switch between people and role management. */
 #page-content .pp-page { display: flex; flex-direction: column; gap: 20px; padding-bottom: 64px; }
 #page-content .pp-page .workspace-header { margin-bottom: 0; }
 #page-content .pp-page [hidden] { display: none !important; }
@@ -75,50 +75,14 @@
 .pp-message { padding: 12px 16px; border-radius: 10px; font-size: 14px; }
 .pp-message--error { border: 1px solid #fecdca; background: #fef3f2; color: #b42318; }
 
-/* Style 3's panel, and Style 2's switch: off by default */
-#page-content .pp-panel, #page-content .pp-views { display: none !important; }
-#page-content .pp-panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-#page-content .pp-panel__head h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--ui-text, #172033); overflow-wrap: anywhere; }
-#page-content .pp-panel__head p { margin: 4px 0 0; font-size: 14px; color: var(--ui-text-muted, #64748b); overflow-wrap: anywhere; }
-#page-content .pp-close { width: 36px; height: 36px; border: 0; border-radius: 8px; background: none; box-shadow: none; color: var(--ui-text-muted, #64748b); font-size: 22px; cursor: pointer; }
-#page-content .pp-close:hover { background: var(--ui-surface-subtle, #f1f5f9); }
-#page-content .pp-facts { display: flex; flex-direction: column; margin: 20px 0; }
-#page-content .pp-facts > div { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--ui-border, #e2e8f0); }
-#page-content .pp-facts > div:first-child { border-top: 0; padding-top: 0; }
-#page-content .pp-facts dt { font-size: 13px; color: var(--ui-text-muted, #64748b); }
-#page-content .pp-facts dd { display: flex; flex-direction: column; gap: 6px; margin: 0; font-size: 15px; color: var(--ui-text, #172033); }
-#page-content .pp-panel .pp-actions { justify-content: flex-start; }
-
-/* CONCEPT ONLY: the layout switch */
-#page-content .pp-style-pick { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; align-self: flex-start; padding: 4px; border: 1px dashed var(--ui-border, #cbd5e1); border-radius: 10px; }
-#page-content .pp-style-pick span { padding: 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ui-text-muted, #64748b); }
-#page-content .pp-style-pick button { min-height: 32px; padding: 4px 12px; border: 0; border-radius: 7px; background: transparent; box-shadow: none; color: var(--ui-text-muted, #64748b); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
-#page-content .pp-style-pick button[aria-pressed="true"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
-
-/* CONCEPT ONLY: Style 2, People | Roles. The house view switch shows one of the two. */
-#page-content [data-pp-style="2"] .pp-views { display: flex !important; gap: 4px; align-self: flex-start; padding: 4px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 999px; background: var(--ui-surface, #fff); }
-#page-content [data-pp-style="2"] .pp-views a { padding: 7px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--ui-text-muted, #64748b); text-decoration: none; }
-#page-content [data-pp-style="2"] .pp-views a[aria-current="page"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
-#page-content [data-pp-style="2"][data-pp-view="people"] .pp-roles, #page-content [data-pp-style="2"][data-pp-view="roles"] .pp-layout { display: none; }
-#page-content [data-pp-style="2"] .pp-card { padding: 0; border: 0; background: transparent; }
-#page-content [data-pp-style="2"] .pp-list { padding: 8px 24px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); }
-#page-content [data-pp-style="2"] .pp-list > li:first-child { padding-top: 14px; }
-
-/* CONCEPT ONLY: Style 3, a short list and a panel for the person chosen. */
-#page-content [data-pp-style="3"] .pp-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
-#page-content [data-pp-style="3"] .pp-layout:has(.pp-panel:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); }
-#page-content [data-pp-style="3"] .pp-panel:not([hidden]) { display: block !important; position: sticky; top: 72px; }
-#page-content [data-pp-style="3"] .pp-person { grid-template-columns: 40px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); padding: 12px 10px; margin: 0 -10px; border-radius: 10px; cursor: pointer; }
-#page-content [data-pp-style="3"] .pp-person:first-child { padding-top: 12px; }
-#page-content [data-pp-style="3"] .pp-person:hover { background: var(--ui-surface-subtle, #f8fafc); }
-#page-content [data-pp-style="3"] .pp-person.is-selected { background: var(--ui-accent-soft, #f0fdfa); }
-#page-content [data-pp-style="3"] .pp-person .pp-role, #page-content [data-pp-style="3"] .pp-person .pp-2fa, #page-content [data-pp-style="3"] .pp-person .pp-actions { display: none; }
-#page-content [data-pp-style="3"] .pp-person .pp-role-text { display: block; }
-#page-content [data-pp-style="3"] .pp-name { cursor: pointer; }
-#page-content [data-pp-style="3"] .pp-name::after { content: ""; position: absolute; inset: 0; }
-#page-content [data-pp-style="3"] .pp-person { position: relative; }
-#page-content [data-pp-style="3"] .pp-name:focus-visible { outline: none; }
-#page-content [data-pp-style="3"] .pp-person:has(.pp-name:focus-visible) { outline: 3px solid var(--ui-accent, #0d9488); outline-offset: 2px; }
+/* People and Roles: one section at a time. */
+#page-content .pp-page .pp-views { display: flex !important; gap: 4px; align-self: flex-start; padding: 4px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 999px; background: var(--ui-surface, #fff); }
+#page-content .pp-page .pp-views a { padding: 7px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--ui-text-muted, #64748b); text-decoration: none; }
+#page-content .pp-page .pp-views a[aria-current="page"] { background: var(--ui-accent-soft, #ccfbf1); color: var(--ui-accent-strong, #115e59); }
+#page-content .pp-page[data-pp-view="people"] .pp-roles, #page-content .pp-page[data-pp-view="roles"] .pp-layout { display: none; }
+#page-content .pp-page .pp-card { padding: 0; border: 0; background: transparent; }
+#page-content .pp-page .pp-list { padding: 8px 24px; border: 1px solid var(--ui-border, #e2e8f0); border-radius: 12px; background: var(--ui-surface, #fff); }
+#page-content .pp-page .pp-list > li:first-child { padding-top: 14px; }
 
 html[data-spa-theme="dark"] #page-content .pp-status { color: #75e0a7; }
 html[data-spa-theme="dark"] #page-content .pp-status--invited { color: #fdb022; }
@@ -134,10 +98,6 @@ html[data-spa-theme="dark"] #page-content .pp-message--error, html[data-spa-them
   #page-content .pp-person .pp-status { grid-column: 2; }
   #page-content .pp-person .pp-2fa { grid-column: 3; }
   #page-content .pp-person .pp-actions { grid-column: 2 / -1; justify-content: flex-start; }
-  #page-content [data-pp-style="3"] .pp-layout:has(.pp-panel:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
-  #page-content [data-pp-style="3"] .pp-panel:not([hidden]) { position: static; order: -1; }
-  #page-content [data-pp-style="3"] .pp-person { grid-template-columns: 40px minmax(0, 1fr) auto; }
-  #page-content [data-pp-style="3"] .pp-person .pp-status { grid-column: 2 / -1; }
 }
 @media (max-width: 720px) {
   #page-content .pp-card { padding: 20px; }
@@ -148,7 +108,5 @@ html[data-spa-theme="dark"] #page-content .pp-message--error, html[data-spa-them
   #page-content .pp-role-row .pp-holders { grid-column: 1; grid-row: 2; font-size: 13px; color: var(--ui-text-muted, #64748b); }
   #page-content .pp-role-row .pp-link, #page-content .pp-role-row .pp-builtin { grid-column: 2; grid-row: 1 / span 2; }
   .pp-row2 { grid-template-columns: 1fr; }
-  #page-content [data-pp-style="2"] .pp-list { padding: 4px 16px; }
-  #page-content [data-pp-style="3"] .pp-person { grid-template-columns: 36px minmax(0, 1fr); }
-  #page-content [data-pp-style="3"] .pp-person .pp-role-text, #page-content [data-pp-style="3"] .pp-person .pp-status { grid-column: 2; }
+  #page-content .pp-page .pp-list { padding: 4px 16px; }
 }
