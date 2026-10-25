@@ -68,7 +68,10 @@ SEED_KINDS = (
     "excise",
     "np3",
     "licensing",
+    "premises",
+    "tasks",
     "customer",
+    "people",
 )
 
 
@@ -1524,6 +1527,176 @@ def _seed_board(db, org_id, inv) -> None:
         db.commit()
 
 
+def _seed_premises(db, org_id, inv) -> None:
+    """Customs licences and the areas they cover, the way a distillery with a bond store has
+    them: a manufacturing-area licence over the still house and bottling room, an off-site
+    storage licence over the bond store, an older licence that has ended, and a cellar door
+    shop that sits outside any licensed area."""
+    from app.core.db.models.organisation import Organisation
+    from app.core.db.models.site import Site
+    from app.core.db.models.stock_location import StockLocation
+    from app.features.compliant.modules.nz_alcohol import premises
+
+    today = date.today()
+    org = db.get(Organisation, org_id)
+    org.multiple_sites_enabled = org.multiple_site_operations_enabled = True  # the bond store is a second site
+    db.flush()
+    distillery = db.query(Site).filter(Site.org_id == org_id, Site.is_default.is_(True)).one_or_none()
+    if distillery is None:
+        distillery = Site(org_id=org_id, name="Gracefield distillery", is_default=True)
+        db.add(distillery)
+    distillery.name, distillery.address = "Gracefield distillery", "Unit 4, 12 Gracefield Road, Lower Hutt"
+    bond = Site(org_id=org_id, name="Seaview bond store", address="31 Hutt Park Road, Seaview", kind="storage")
+    db.add(bond)
+    db.flush()
+    places = {}
+    for site, name, inside in (
+        (distillery, "Still house", True),
+        (distillery, "Bottling room", True),
+        (distillery, "Cellar door shop", False),
+        (bond, "Bay 1", True),
+        (bond, "Bay 2", True),
+    ):
+        place = StockLocation(org_id=org_id, site_id=site.id, name=name, inside_licensed_area=inside)
+        db.add(place)
+        places[name] = place
+    db.flush()
+    lma = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-LMA-2291",
+            "name": "Gracefield distillery manufacturing area",
+            "kind": "lma",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=700)).isoformat(),
+            "valid_until": None,
+            "evidence_reference": "Customs approval letter, 3 Nov 2024",
+        },
+    )
+    oss = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-OSS-0418",
+            "name": "Seaview off-site storage",
+            "kind": "oss",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=200)).isoformat(),
+            "valid_until": (today + timedelta(days=45)).isoformat(),
+            "evidence_reference": "Customs approval letter, 18 Apr 2026",
+        },
+    )
+    old = premises.add_licence(
+        db,
+        org_id,
+        {
+            "number": "CCA-OSS-0112",
+            "name": "Petone shared bond (ended)",
+            "kind": "oss",
+            "legal_entity_reference": "NZBN 9429049999011",
+            "valid_from": (today - timedelta(days=900)).isoformat(),
+            "valid_until": (today - timedelta(days=210)).isoformat(),
+            "evidence_reference": "Surrender acknowledgement, Mar 2026",
+        },
+    )
+    db.flush()
+    for licence, site, place, start, end, evidence in (
+        (lma, distillery, "Still house", 700, None, "Approved site plan rev B"),
+        (lma, distillery, "Bottling room", 400, None, "Variation approved, Sep 2025"),
+        (oss, bond, "Bay 1", 200, 45, "OSS plan, bays 1-2"),
+        (oss, bond, "Bay 2", 200, 45, "OSS plan, bays 1-2"),
+        (old, bond, None, 800, 210, "Shared bond floor plan"),
+    ):
+        premises.add_coverage(
+            db,
+            org_id,
+            {
+                "licence_id": str(licence.id),
+                "site_id": str(site.id),
+                "location_id": str(places[place].id) if place else None,
+                "valid_from": (today - timedelta(days=start)).isoformat(),
+                "valid_until": (today + timedelta(days=end) if end == 45 else today - timedelta(days=end)).isoformat()
+                if end
+                else None,
+                "evidence_reference": evidence,
+            },
+        )
+        db.flush()
+    db.commit()
+
+
+def _seed_tasks(db, org_id, inv) -> None:
+    """A sales team's task list on an ordinary week: two people, a dozen open follow-ups
+    (two overdue, three due today, some next week, some with no date), a custom lane for
+    tasks waiting on the customer, and what was finished or dropped in the last fortnight."""
+    from datetime import UTC, datetime
+
+    from app.core.db.models.task_board_lane import TaskBoardLane
+    from app.core.db.models.user import User, UserRole
+    from app.features.crm.models.crm_task import CRMTask
+    from app.features.crm.models.xero_contact import XeroContact
+    from tests.factories import UserFactory
+
+    contacts = db.query(XeroContact).filter(XeroContact.org_id == org_id).order_by(XeroContact.name).all()
+    if not contacts:
+        raise ValueError("tasks requires the lineage seed for customer contacts")
+    owner = db.query(User).filter(User.org_id == org_id).first()
+    owner.first_name, owner.last_name = "Jordan", "Lee"
+    sam = UserFactory(
+        org_id=org_id,
+        email=owner.email.replace("@", "-sam@"),
+        first_name="Sam",
+        last_name="Ngata",
+        role=UserRole.SALES,
+    )
+    db.flush()
+    waiting = TaskBoardLane(org_id=org_id, board="crm", title="Waiting on customer", position=0)
+    db.add(waiting)
+    db.flush()
+    today = date.today()
+    now = datetime.now(UTC)
+    rows = (
+        # title, status, priority, due (days from today, None = no date), who, lane, finished days ago
+        ("Call about the reorder that went quiet", "pending", "high", -3, owner, None, None),
+        ("Chase the unpaid October invoice", "pending", "high", -1, sam, None, None),
+        ("Drop off tasting kit", "pending", "medium", 0, sam, None, None),
+        ("Confirm Christmas order quantities", "in_progress", "high", 0, owner, None, None),
+        ("Send updated wholesale price list", "pending", "low", 0, None, None, None),
+        ("Book a staff tasting for the new gin", "pending", "medium", 2, owner, None, None),
+        ("Quote for corporate gift packs", "in_progress", "medium", 3, sam, None, None),
+        ("Follow up the cocktail menu listing", "pending", "medium", 6, None, None, None),
+        ("Check shelf placement after the reset", "pending", "low", 9, sam, None, None),
+        ("Ask for a Summer feature in the newsletter", "pending", "low", None, None, None, None),
+        ("Waiting on signed credit application", "pending", "medium", 4, owner, waiting, None),
+        ("Waiting on their December delivery dates", "in_progress", "medium", 1, sam, waiting, None),
+        ("Delivered the sample case", "completed", "medium", -2, sam, None, 2),
+        ("Agreed the summer promotion", "completed", "high", -4, owner, None, 4),
+        ("Set up the new account in Xero", "completed", "low", -6, owner, None, 6),
+        ("Old price list follow-up", "cancelled", "low", -5, None, None, 1),
+    )
+    for number, (title, status, priority, due, who, lane, finished) in enumerate(rows):
+        done_at = now - timedelta(days=finished) if finished is not None else None
+        db.add(
+            CRMTask(
+                org_id=org_id,
+                contact_id=contacts[number % len(contacts)].id if number % 4 != 3 else None,
+                title=title,
+                description="Notes from the last call." if number % 3 == 0 else None,
+                status=status,
+                priority=priority,
+                due_date=today + timedelta(days=due) if due is not None else None,
+                assigned_to_user_id=who.id if who else None,
+                created_by_user_id=owner.id,
+                board_lane_id=lane.id if lane else None,
+                completed_at=done_at if status == "completed" else None,
+                created_at=now - timedelta(days=14 - number % 10),
+                updated_at=done_at or now - timedelta(days=number % 5),
+            )
+        )
+    db.commit()
+
+
 def _seed_customer(db, org_id, inv) -> None:
     """One customer as a sales rep knows them after a year: contact details and addresses,
     a 20th-of-the-month payment term, notes from calls and tastings, and follow-ups open
@@ -1611,6 +1784,50 @@ def _seed_customer(db, org_id, inv) -> None:
     db.commit()
 
 
+def _seed_people(db, org_id, inv) -> None:
+    """A small team for People and roles: each built-in role, an auditor with an end date, an
+    invite waiting, someone who left, and a custom role two of them hold."""
+    from datetime import timedelta
+
+    from app.core.db.models.org_role import OrgRole
+    from app.core.db.models.user import UserRole
+    from app.core.security.people import issue_invite
+    from app.core.utils.time import utc_now
+    from tests.factories import UserFactory
+
+    cellar = OrgRole(
+        org_id=org_id,
+        name="Cellar door",
+        description="Sells at the cellar door and sees stock, nothing else.",
+        base_role="sales",
+        permissions=["sales.view", "inventory.view"],
+        site_access_mode="all",
+    )
+    db.add(cellar)
+    db.flush()
+    run = uuid.uuid4().hex[:6]
+    team = [
+        ("Aroha", "Wilson", UserRole.ADMIN, {"two_factor_enabled": True}),
+        ("Sam", "Ngata", UserRole.MEMBER, {"two_factor_enabled": True}),
+        ("Mere", "Tane", UserRole.PRODUCTION, {}),
+        ("Priya", "Shah", UserRole.COMPLIANCE, {"two_factor_enabled": True}),
+        ("Tom", "Baker", UserRole.SALES, {"custom_role_id": cellar.id}),
+        ("Lena", "Ford", UserRole.SALES, {"custom_role_id": cellar.id}),
+        ("Grace", "Hill", UserRole.AUDITOR, {"access_expires_at": utc_now() + timedelta(days=21)}),
+    ]
+    for first, last, role, extra in team:
+        user = UserFactory(org_id=org_id, email=f"{first.lower()}.{run}@example.test", role=role)
+        user.first_name, user.last_name = first, last
+        for key, value in extra.items():
+            setattr(user, key, value)
+    invited = UserFactory(org_id=org_id, email=f"kiri.{run}@example.test", role=UserRole.PRODUCTION, is_active=False)
+    invited.first_name, invited.last_name = "Kiri", "Moana"
+    issue_invite(invited)
+    left = UserFactory(org_id=org_id, email=f"dan.{run}@example.test", role=UserRole.PRODUCTION, is_active=False)
+    left.first_name, left.last_name = "Dan", "Cole"
+    db.commit()
+
+
 def cmd_seed(args) -> int:
     _require_local()
     if STATE.exists():
@@ -1650,7 +1867,10 @@ def cmd_seed(args) -> int:
             "sales": _seed_sales,
             "excise": _seed_excise,
             "np3": _seed_np3,
+            "people": _seed_people,
             "customer": _seed_customer,
+            "tasks": _seed_tasks,
+            "premises": _seed_premises,
             "licensing": _seed_licensing,
             "stocktake": _seed_stocktake,
             "planner": _seed_planner,
@@ -1710,8 +1930,11 @@ def cmd_purge(_args) -> int:
         db.query(InventoryMovement).filter(InventoryMovement.org_id == org_id).delete(synchronize_session=False)
         db.query(InventoryWastage).filter(InventoryWastage.org_id == org_id).delete(synchronize_session=False)
         db.commit()
+        # Synthetic users may hold a seeded custom role; release it before purging.
+        db.query(User).filter(User.org_id == org_id).update({User.custom_role_id: None}, synchronize_session=False)
+        db.commit()
         purge_org(db, org_id, user_id)
-        db.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+        db.query(User).filter(User.org_id == org_id).delete(synchronize_session=False)
         db.query(Organisation).filter(Organisation.id == org_id).delete(synchronize_session=False)
         db.commit()
     STATE.unlink()
