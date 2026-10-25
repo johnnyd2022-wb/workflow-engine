@@ -42,6 +42,8 @@ allowed_mime_types = application/pdf, application/msword, application/vnd.openxm
 [email]
 sender_email = your-email@example.com
 receiver_email = production-email@example.com
+# Shown on the sign-in form for a forgotten password or a locked account (GL-A04).
+support_email = support@biz-e.app
 
 [features]
 invoice_button_enabled = true

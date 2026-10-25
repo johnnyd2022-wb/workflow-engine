@@ -138,7 +138,10 @@ def create_app():
 
     @app.context_processor
     def _inject_google_sign_in():
-        return {"google_sign_in_enabled": app.config.get("GOOGLE_SIGN_IN_ENABLED", False)}
+        return {
+            "google_sign_in_enabled": app.config.get("GOOGLE_SIGN_IN_ENABLED", False),
+            "support_email": config.support_email,
+        }
 
     app.register_blueprint(org_bp)
     app.register_blueprint(people_pages)
