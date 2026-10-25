@@ -227,6 +227,7 @@ def _do_upsert(
                 last_event_type= :last_event_type,
                 last_actor     = :last_actor,
                 updated_at     = :updated_at
+            WHERE entity_event_summaries.org_id = EXCLUDED.org_id
             """
         ),
         {
@@ -262,10 +263,11 @@ def _json_dumps(obj) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _load_existing_summary(session: Session, entity_id: UUID) -> dict:
+def _load_existing_summary(session: Session, event: EntityEvent) -> dict:
+    # Raw SQL skips the ORM's tenant filter, so name the org explicitly (GL-S02).
     row = session.execute(
-        text("SELECT summary FROM entity_event_summaries WHERE entity_id = :eid"),
-        {"eid": str(entity_id)},
+        text("SELECT summary FROM entity_event_summaries WHERE entity_id = :eid AND org_id = :org"),
+        {"eid": str(event.entity_id), "org": str(event.org_id)},
     ).fetchone()
     if row and row[0]:
         return dict(row[0])
@@ -278,7 +280,7 @@ def _load_existing_summary(session: Session, entity_id: UUID) -> dict:
 
 
 def _update_inventory_summary(session: Session, event: EntityEvent) -> None:
-    existing = _load_existing_summary(session, event.entity_id)
+    existing = _load_existing_summary(session, event)
     p = event.payload or {}
 
     if event.event_type == "inventory_item.created":
@@ -357,7 +359,7 @@ def _inventory_status_hint(summary: dict) -> str:
 
 
 def _update_execution_summary(session: Session, event: EntityEvent) -> None:
-    existing = _load_existing_summary(session, event.entity_id)
+    existing = _load_existing_summary(session, event)
     p = event.payload or {}
 
     if event.event_type == "execution.created":
@@ -401,7 +403,7 @@ def _update_execution_summary(session: Session, event: EntityEvent) -> None:
 
 
 def _update_process_summary(session: Session, event: EntityEvent) -> None:
-    existing = _load_existing_summary(session, event.entity_id)
+    existing = _load_existing_summary(session, event)
     p = event.payload or {}
 
     if event.event_type == "process.created":
@@ -465,7 +467,7 @@ def _update_process_summary(session: Session, event: EntityEvent) -> None:
 
 
 def _update_user_summary(session: Session, event: EntityEvent) -> None:
-    existing = _load_existing_summary(session, event.entity_id)
+    existing = _load_existing_summary(session, event)
     p = event.payload or {}
 
     if event.event_type == "user.created":
@@ -494,7 +496,7 @@ def _update_user_summary(session: Session, event: EntityEvent) -> None:
 
 
 def _update_org_summary(session: Session, event: EntityEvent) -> None:
-    existing = _load_existing_summary(session, event.entity_id)
+    existing = _load_existing_summary(session, event)
     p = event.payload or {}
     summary = dict(existing)
     summary["name"] = p.get("name", existing.get("name"))
