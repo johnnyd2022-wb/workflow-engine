@@ -88,7 +88,8 @@ function crmTasks() {
     async init() {
       this.me = this.$el.dataset.me || '';
       // A direct view link takes priority over the remembered choice; Board is the default.
-      const asked = new URLSearchParams(window.location.search || '').get('style');
+      const params = new URLSearchParams(window.location.search || '');
+      const asked = ({ board: '1', list: '2', week: '3' })[params.get('view')] || params.get('style');
       let kept = null;
       try { kept = window.localStorage.getItem(STYLE_KEY); } catch (_) { /* private mode */ }
       this.style = ['1', '2', '3'].includes(asked) ? asked : (['1', '2', '3'].includes(kept) ? kept : '1');
@@ -101,6 +102,10 @@ function crmTasks() {
       if (!['1', '2', '3'].includes(style)) return;
       this.style = style;
       try { window.localStorage.setItem(STYLE_KEY, style); } catch (_) { /* private mode */ }
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', ({ '1': 'board', '2': 'list', '3': 'week' })[style]);
+      url.searchParams.delete('style');
+      window.history.replaceState(window.history.state, '', url);
     },
 
     async loadOperators() {

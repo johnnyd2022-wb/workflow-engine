@@ -84,3 +84,7 @@ results were vendor posts, cited as such. Things 3's own documentation didn't co
 Board, List and Week as permanent user-selectable views is the approved design for !559. All three views stay available through a permanent View toggle. The choice is remembered in the browser; changing views preserves filters and edits.
 
 Validation: 39 Sales Tasks and Sales design browser cases passed, including switching views, remembering the selection, preserving filters, New Zealand due dates, custom lanes and completing tasks.
+
+The selected view also updates `?view=board|list|week` without navigating, so reloading or sharing the page keeps that view. Legacy `?style=1|2|3` links still open their corresponding view.
+
+View-link follow-up validation: 2 focused browser cases passed, JavaScript syntax and Semgrep auto scan passed.

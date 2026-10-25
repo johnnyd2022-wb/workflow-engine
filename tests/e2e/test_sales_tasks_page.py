@@ -168,3 +168,21 @@ def test_view_switch_remembers_choice_and_preserves_filters(browser, app_url, sa
         expect(switch.get_by_role("button", name="Week", exact=True)).to_have_attribute("aria-pressed", "true")
     finally:
         context.close()
+
+
+def test_switching_from_a_view_link_updates_the_link_and_survives_reload(browser, app_url, sales_user):
+    context, page = _page(browser, app_url, sales_user)
+    try:
+        _task(page, "Linked task", days=0)
+        _open(page, "1")
+        switch = page.get_by_role("group", name="Task view")
+        switch.get_by_role("button", name="Week", exact=True).click()
+        assert "view=week" in page.url and "style=" not in page.url
+        page.reload()
+        page.locator(READY).wait_for()
+        expect(page.locator(".tasks-week")).to_be_visible()
+        page.goto(TASKS + "?view=list")
+        page.locator(READY).wait_for()
+        expect(page.locator(".tasks-list")).to_be_visible()
+    finally:
+        context.close()

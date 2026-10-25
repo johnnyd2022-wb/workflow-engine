@@ -7,3 +7,5 @@ screenshots: ~/.cache/workflow-engine-ui-shots/sales-tasks/00-before, 01–05
 tests: 39 Sales Tasks and Sales design browser cases passed; all views retained as product features
 follow-ups: the same double x-init on Configuration, Analytics, Batch matching, Customer detail and Excise
 verdict: patched — founder-approved layout applied
+
+View-link follow-up: 2 focused browser tests passed for remembered filters, reload after a legacy style link, and named direct view links.
