@@ -61,3 +61,9 @@ Read 25 October 2026. The research decides the structure only. The house style d
 
 - `tests/e2e/test_compliance_settings_page.py`, routed into the Flask test client: a section saves only itself and keeps a check's review interval; choosing a licence shows the Licensing tab; a failed load can't be saved over; the visit section follows the programme; CONCEPT ONLY: Style 3 changes in place, Style 2's bar saves every changed section, each layout fits at phone, laptop and wall widths.
 - Shots: laptop, phone, wall and dark, busy (visit booked, licence, council) and quiet; editing; no national programme; saved; the save bar; arriving from the Compliance overview; a failed load.
+
+## Approved implementation — 25 Oct 2026
+
+Style 1 (Cards) is the approved design for !564. The experimental layout selector and the discarded layouts have been removed.
+
+Validation: 7 browser cases passed, covering the page actions and responsive layouts. Security scan of the changed app files passed.

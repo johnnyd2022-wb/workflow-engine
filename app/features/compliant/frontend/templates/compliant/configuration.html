@@ -9,19 +9,17 @@
             <h2 id="cs-{{ name }}-title">{{ title }}</h2>
             <p>{{ intro }}</p>
           </div>
-          <button type="button" class="workspace-button cs-change" data-cs-change aria-label="{{ change_label }}">Change</button>
         </div>
       </div>
 {% endmacro %}
 {% macro section_actions() %}
           <div class="cs-actions">
             <button type="submit" class="workspace-button cs-save">Save</button>
-            <button type="button" class="workspace-button cs-cancel" data-cs-cancel>Cancel</button>
           </div>
           <p class="cs-section-error" role="alert" data-cs-error hidden></p>
 {% endmacro %}
 {% block content %}
-<main class="max-content workspace-overview compliance-settings" data-compliant-configuration-root data-cs-style="1" aria-busy="true">
+<main class="max-content workspace-overview compliance-settings" data-compliant-configuration-root aria-busy="true">
   <header class="workspace-header cs-header">
     <div>
       <h1>Compliance settings</h1>
@@ -29,13 +27,6 @@
     </div>
   </header>
 
-  {# CONCEPT ONLY: the layout switch. Deleted with the two layouts not picked. #}
-  <div class="cs-style-pick" role="group" aria-label="Layout concepts">
-    <span>Concept</span>
-    <button type="button" data-cs-style-pick="1" aria-pressed="true">1 · Cards</button>
-    <button type="button" data-cs-style-pick="2" aria-pressed="false">2 · Side by side</button>
-    <button type="button" data-cs-style-pick="3" aria-pressed="false">3 · Read first</button>
-  </div>
 
   <div class="cs-load-error" role="alert" data-configuration-error hidden>
     <span data-cs-load-message></span>
@@ -46,7 +37,6 @@
     <section class="cs-section" id="workspace" data-cs-section="workspace" aria-labelledby="cs-workspace-title">
 {{ section_head("workspace", "NZ Alcohol compliance", "Turns the Compliance workspace on for this organisation, with only the checks the choices below call for.", "Change whether NZ Alcohol compliance is on") }}
       <div class="cs-body">
-        <dl class="cs-rows cs-read" data-cs-read></dl>
         <form class="cs-form" data-cs-form hx-boost="false">
           <label class="cs-check">
             <input type="checkbox" name="enabled">
@@ -61,7 +51,6 @@
     <section class="cs-section" id="products" data-cs-section="products" aria-labelledby="cs-products-title">
 {{ section_head("products", "What leaves your site", "Shows wine-specific requirements only to wineries, and keeps duties you don't have out of the way.", "Change what leaves your site") }}
       <div class="cs-body">
-        <dl class="cs-rows cs-read" data-cs-read></dl>
         <form class="cs-form" data-cs-form hx-boost="false">
           <fieldset class="cs-chips">
             <legend>Products</legend>
@@ -81,7 +70,6 @@
     <section class="cs-section" id="food-safety" data-cs-section="food" aria-labelledby="cs-food-title">
 {{ section_head("food", "Food safety programme", "Which national programme you're registered under, how often each signed check is reviewed, and what Production asks for.", "Change the food safety programme") }}
       <div class="cs-body">
-        <dl class="cs-rows cs-read" data-cs-read></dl>
         <form class="cs-form" data-cs-form hx-boost="false">
           <label class="cs-field">
             <span>Programme</span>
@@ -124,7 +112,6 @@
     <section class="cs-section" id="visit" data-cs-section="visit" aria-labelledby="cs-visit-title" data-cs-np-section>
 {{ section_head("visit", "Next verification visit", "When your verifier is coming. It clears itself once the visit is recorded.", "Change the next verification visit") }}
       <div class="cs-body">
-        <dl class="cs-rows cs-read" data-cs-read></dl>
         <form class="cs-form" data-cs-form hx-boost="false">
           <div class="cs-field-row">
             <label class="cs-field cs-field--short"><span>Date</span><input type="date" name="np3_verification_date" id="cs-visit-date"></label>
@@ -140,7 +127,6 @@
     <section class="cs-section" id="licence" data-cs-section="licence" aria-labelledby="cs-licence-title">
 {{ section_head("licence", "Liquor licence", "The licence or application this site trades under. Choosing a kind turns on the Licensing tab.", "Change the liquor licence") }}
       <div class="cs-body">
-        <dl class="cs-rows cs-read" data-cs-read></dl>
         <form class="cs-form" data-cs-form hx-boost="false">
           <fieldset class="cs-chips">
             <legend>Kind of licence</legend>
@@ -162,7 +148,6 @@
     <section class="cs-section" id="trade-waste" data-cs-section="tradeWaste" aria-labelledby="cs-tradeWaste-title">
 {{ section_head("tradeWaste", "Trade waste", "Choosing a council loads its current trade-waste headings and source link into Compliance. It doesn't submit anything or say trade waste applies.", "Change trade waste") }}
       <div class="cs-body">
-        <dl class="cs-rows cs-read" data-cs-read></dl>
         <form class="cs-form" data-cs-form hx-boost="false">
           <label class="cs-field">
             <span>Council catalogue</span>
@@ -181,7 +166,6 @@
     <section class="cs-section" id="evidence" data-cs-section="evidence" aria-labelledby="cs-evidence-title">
 {{ section_head("evidence", "Evidence records", "Whether every evidence record has to point at the batch or step it came from.", "Change evidence records") }}
       <div class="cs-body">
-        <dl class="cs-rows cs-read" data-cs-read></dl>
         <form class="cs-form" data-cs-form hx-boost="false">
           <label class="cs-check">
             <input type="checkbox" name="require_core_source_refs">
@@ -196,7 +180,6 @@
     <section class="cs-section" id="abv" data-cs-section="abv" aria-labelledby="cs-abv-title" data-abv-rules>
 {{ section_head("abv", "ABV on alcohol products", "Tick each workflow's final product that is alcohol. Its final step then asks for the batch's ABV and can't be completed without it.", "Change which products need an ABV") }}
       <div class="cs-body">
-        <dl class="cs-rows cs-read" data-cs-read></dl>
         <form class="cs-form" data-cs-form hx-boost="false">
           <ul class="cs-abv-list" data-abv-candidates><li class="cs-empty">Loading workflows…</li></ul>
           <div class="cs-phrase">
@@ -215,14 +198,6 @@
     </section>
   </div>
 
-  {# CONCEPT ONLY: Style 2's one save bar for every section. #}
-  <div class="cs-savebar" role="region" aria-label="Unsaved changes" data-cs-savebar hidden>
-    <span data-cs-savebar-text>Unsaved changes</span>
-    <div class="cs-savebar__actions">
-      <button type="button" class="workspace-button" data-cs-discard-all>Discard</button>
-      <button type="button" class="workspace-button workspace-button--primary" data-cs-save-all>Save changes</button>
-    </div>
-  </div>
 </main>
 {% endblock %}
 {% block scripts %}<script src="/compliant/static/configuration.js" defer></script>{% endblock %}

@@ -1,6 +1,6 @@
 """Compliance settings in a browser: a Save per section that saves only that section, keys set
 elsewhere kept, the Licensing tab following the licence, a failed load that hides the settings,
-and (CONCEPT ONLY) each layout's fit.
+and the page's fit.
 
 Requests are routed into the Flask test client (see test_customs_premises_browser).
 """
@@ -47,7 +47,7 @@ def _open(browser, client, width=1440, style="1"):
         route.fulfill(status=response.status_code, body=response.data, headers={"Content-Type": response.content_type})
 
     page.route("**/*", proxy)
-    page.goto(f"https://{HOST}/compliant/nz-alcohol/configuration?style={style}")
+    page.goto(f"https://{HOST}/compliant/nz-alcohol/configuration")
     page.locator(READY).wait_for()
     return page
 
@@ -134,47 +134,11 @@ def test_the_visit_section_follows_the_programme(clients, browser):  # noqa: F81
         page.close()
 
 
-# CONCEPT ONLY: the rest are deleted with the two layouts not picked.
-def test_read_first_shows_the_value_and_changes_it_in_place(clients, browser):  # noqa: F811
-    _, client, _, _ = clients
-    _set_up(client)
-    page = _open(browser, client, style="3")
-    try:
-        products = page.locator("#products")
-        expect(products.locator(".cs-read")).to_contain_text("Spirits")
-        products.get_by_role("button", name="Change what leaves your site").click()
-        products.get_by_label("Beer").check()
-        products.get_by_role("button", name="Save").click()
-        expect(products.locator(".cs-read")).to_contain_text("Spirits, Beer")
-        expect(products.get_by_label("Beer")).to_be_hidden()
-    finally:
-        page.close()
-
-
-def test_side_by_side_saves_every_changed_section_from_one_bar(clients, browser):  # noqa: F811
-    _, client, _, _ = clients
-    _set_up(client)
-    page = _open(browser, client, style="2")
-    try:
-        bar = page.get_by_role("region", name="Unsaved changes")
-        expect(bar).to_be_hidden()
-        page.locator("#products").get_by_label("Cider").check()
-        page.locator("#evidence input[name='require_core_source_refs']").check()
-        expect(bar).to_contain_text("Unsaved changes to what leaves your site and evidence records")
-        bar.get_by_role("button", name="Save changes").click()
-        expect(bar).to_be_hidden()
-        settings = _settings(client)
-        assert (settings["alcohol_product_types"], settings["require_core_source_refs"]) == (["cider", "spirits"], True)
-    finally:
-        page.close()
-
-
-@pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
-def test_each_layout_fits_without_sideways_scroll(clients, browser, style, width):  # noqa: F811
+def test_the_page_fits_without_sideways_scroll(clients, browser, width):  # noqa: F811
     _, client, _, _ = clients
     _set_up(client)
-    page = _open(browser, client, width=width, style=style)
+    page = _open(browser, client, width=width)
     try:
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         for section in ("#workspace", "#products", "#food-safety", "#visit", "#licence", "#trade-waste", "#abv"):
