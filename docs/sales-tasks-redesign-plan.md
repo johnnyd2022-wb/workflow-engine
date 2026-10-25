@@ -78,3 +78,9 @@ results were vendor posts, cited as such. Things 3's own documentation didn't co
 - **Screenshots:** every style at laptop (first screen and full page), phone, wall and dark;
   search; one person with finished shown; filtered to nothing; the drawer for an edit and a
   new task; next week; a custom lane on a phone; arriving by the tab; and a task ticked done.
+
+## Approved implementation — 25 Oct 2026
+
+Board, List and Week as permanent user-selectable views is the approved design for !559. All three views stay available through a permanent View toggle. The choice is remembered in the browser; changing views preserves filters and edits.
+
+Validation: 39 Sales Tasks and Sales design browser cases passed, including switching views, remembering the selection, preserving filters, New Zealand due dates, custom lanes and completing tasks.

@@ -20,12 +20,12 @@
     <button type="button" class="workspace-button workspace-button--primary" data-new-task @click="openCreate()">New task</button>
   </header>
 
-  {# CONCEPT ONLY: the layout switch, deleted with the two styles not picked. #}
-  <div class="tasks-style-pick" role="group" aria-label="Layout (concept)">
-    <span>Concept</span>
-    <button type="button" data-style-pick="1" :aria-pressed="style === '1' ? 'true' : 'false'" @click="setStyle('1')">1 · Board</button>
-    <button type="button" data-style-pick="2" :aria-pressed="style === '2' ? 'true' : 'false'" @click="setStyle('2')">2 · Due list</button>
-    <button type="button" data-style-pick="3" :aria-pressed="style === '3' ? 'true' : 'false'" @click="setStyle('3')">3 · Week</button>
+  {# The same follow-ups in three views; the choice is remembered in this browser. #}
+  <div class="tasks-view-switch" role="group" aria-label="Task view">
+    <span>View</span>
+    <button type="button" data-style-pick="1" :aria-pressed="style === '1' ? 'true' : 'false'" @click="setStyle('1')">Board</button>
+    <button type="button" data-style-pick="2" :aria-pressed="style === '2' ? 'true' : 'false'" @click="setStyle('2')">List</button>
+    <button type="button" data-style-pick="3" :aria-pressed="style === '3' ? 'true' : 'false'" @click="setStyle('3')">Week</button>
   </div>
 
   <div x-show="error" class="tasks-error" role="alert" x-cloak>

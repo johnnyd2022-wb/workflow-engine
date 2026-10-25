@@ -1,5 +1,5 @@
 """Sales → Tasks in a browser: due dates on the local day, one load, lanes once, ticking a task
-done, and (CONCEPT ONLY) each layout at phone, laptop and wall widths."""
+done, and each view at phone, laptop and wall widths."""
 
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -122,7 +122,7 @@ def test_new_task_opens_from_the_header_and_from_the_overview_link(browser, app_
         context.close()
 
 
-# CONCEPT ONLY: deleted with the two layouts not picked.
+# Each supported view must fit at every target width.
 @pytest.mark.parametrize("style", ["1", "2", "3"])
 @pytest.mark.parametrize("width", [390, 1440, 1920], ids=["phone", "laptop", "wall"])
 def test_each_layout_fits_without_sideways_scroll(browser, app_url, sales_user, style, width):
@@ -140,5 +140,31 @@ def test_each_layout_fits_without_sideways_scroll(browser, app_url, sales_user, 
         region = {"1": ".tasks-board", "2": ".tasks-list", "3": ".tasks-week"}[style]
         expect(page.locator(region)).to_be_visible()
         expect(page.get_by_text("Call about the reorder").first).to_be_visible()
+    finally:
+        context.close()
+
+
+def test_view_switch_remembers_choice_and_preserves_filters(browser, app_url, sales_user):
+    context, page = _page(browser, app_url, sales_user)
+    try:
+        _task(page, "Keep the reorder", days=0)
+        _task(page, "Other work", days=0)
+        page.goto(TASKS)
+        page.locator(READY).wait_for()
+        switch = page.get_by_role("group", name="Task view")
+        expect(switch.get_by_role("button", name="Board", exact=True)).to_have_attribute("aria-pressed", "true")
+        page.get_by_role("searchbox", name="Search tasks").fill("Keep")
+        for label, region in (("List", ".tasks-list"), ("Week", ".tasks-week"), ("Board", ".tasks-board")):
+            switch.get_by_role("button", name=label, exact=True).click()
+            expect(switch.get_by_role("button", name=label, exact=True)).to_have_attribute("aria-pressed", "true")
+            expect(page.locator(region)).to_be_visible()
+            expect(page.get_by_role("searchbox", name="Search tasks")).to_have_value("Keep")
+            expect(page.locator(region)).to_contain_text("Keep the reorder")
+            expect(page.locator(region)).not_to_contain_text("Other work")
+        switch.get_by_role("button", name="Week", exact=True).click()
+        page.reload()
+        page.locator(READY).wait_for()
+        expect(page.locator(".tasks-week")).to_be_visible()
+        expect(switch.get_by_role("button", name="Week", exact=True)).to_have_attribute("aria-pressed", "true")
     finally:
         context.close()

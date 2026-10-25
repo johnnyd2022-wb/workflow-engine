@@ -87,7 +87,7 @@ function crmTasks() {
     // request went out twice).
     async init() {
       this.me = this.$el.dataset.me || '';
-      // CONCEPT ONLY: ?style=1|2|3, then the last one picked, then Style 1.
+      // A direct view link takes priority over the remembered choice; Board is the default.
       const asked = new URLSearchParams(window.location.search || '').get('style');
       let kept = null;
       try { kept = window.localStorage.getItem(STYLE_KEY); } catch (_) { /* private mode */ }
@@ -96,8 +96,9 @@ function crmTasks() {
       this.openTaskFromQueryString();
     },
 
-    // CONCEPT ONLY
+    // Switching views keeps the current filters, tasks and unsaved drawer fields.
     setStyle(style) {
+      if (!['1', '2', '3'].includes(style)) return;
       this.style = style;
       try { window.localStorage.setItem(STYLE_KEY, style); } catch (_) { /* private mode */ }
     },
