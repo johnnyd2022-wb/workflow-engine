@@ -211,8 +211,7 @@ def core():
 @core_bp.route("/core/integrations", methods=["GET"])
 @requires_auth
 def integrations():
-    if _product_available("crm"):
-        return redirect("/crm/configuration")
+    # Plan 2.5: Xero lives here, under Settings, rather than redirecting into Sales settings.
     return render_template("integrations/integrations.html", active_page="integrations")
 
 

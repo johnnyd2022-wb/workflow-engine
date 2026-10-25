@@ -377,34 +377,29 @@ def test_settings_groups_account_security_and_organisation_in_cards(browser, app
     try:
         page.goto("/core/settings")
         expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
-        sites = page.get_by_role("region", name="Manage sites", exact=True)
-        people = page.get_by_role("region", name="People and roles", exact=True)
-        # Organisation is its own category: its cards appear once its tab is chosen.
-        tabs_nav = page.get_by_role("navigation", name="Settings sections", exact=True)
-        tabs_nav.get_by_role("link", name="Organisation", exact=True).click()
-        expect(sites.get_by_role("link", name="View sites", exact=True)).to_have_attribute("href", "/core/sites")
-        expect(people.get_by_role("link", name="Manage people", exact=True)).to_have_attribute("href", "/core/people")
-        assert sites.bounding_box()["y"] < people.bounding_box()["y"]
-        tabs_nav.get_by_role("link", name="My account", exact=True).click()
+        # Plan 2.5: sites and people are Settings tabs now, not cards in an Organisation category.
+        row = page.get_by_role("tablist", name="Settings pages")
+        expect(row.get_by_role("tab")).to_have_text(["Account", "People", "Sites", "Integrations", "Tasks"])
+        expect(row.get_by_role("tab", name="Sites", exact=True)).to_have_attribute("href", "/core/sites")
+        expect(row.get_by_role("tab", name="People", exact=True)).to_have_attribute("href", "/core/people")
         headings = page.locator(".settings-overview .workspace-card h2").all_inner_texts()
-        expected = ["Account information", "Manage sites", "People and roles", "Password"]
-        expected += ["Two-factor authentication", "Session settings"]
+        expected = ["Account information", "Password", "Two-factor authentication", "Session settings"]
         assert [heading for heading in headings if heading in expected] == expected
         assert headings[-1] == "Appearance"
         assert "Notification preferences" not in headings
-        # One category at a time, under the underlined tab row the other sections use.
-        tabs = page.get_by_role("navigation", name="Settings sections", exact=True)
-        expect(tabs.get_by_role("link")).to_have_text(
-            ["My account", "Organisation", "Security and sign-in", "Preferences"]
-        )
+        assert "Manage sites" not in headings
+        # One category at a time, under the Settings tab row.
+        categories = page.get_by_role("navigation", name="Account sections", exact=True)
+        expect(categories.get_by_role("link")).to_have_text(["Profile", "Security and sign-in", "Preferences"])
         expect(page.locator("[data-settings-group]:visible")).to_have_count(1)
         account = page.locator('[data-settings-group="account"]').bounding_box()
-        assert tabs.bounding_box()["y"] + tabs.bounding_box()["height"] <= account["y"]
+        assert row.bounding_box()["y"] + row.bounding_box()["height"] <= categories.bounding_box()["y"]
+        assert categories.bounding_box()["y"] + categories.bounding_box()["height"] <= account["y"]
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         _capture(page, "settings-layout", width)
         page.evaluate("localStorage.setItem('spa-theme', 'dark')")
-        page.goto("/core/settings#settings-organisation")
-        expect(sites).to_be_visible()
+        page.goto("/core/settings#settings-security")
+        expect(page.get_by_role("heading", name="Two-factor authentication", exact=True)).to_be_visible()
         _capture(page, "settings-layout-dark", width)
         page.evaluate("localStorage.removeItem('spa-theme')")
     finally:

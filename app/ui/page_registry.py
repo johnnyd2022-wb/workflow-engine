@@ -220,6 +220,15 @@ SECTION_TABS: dict[str, tuple[Tab, ...]] = {
         # Secondary workspace action; plan 2.5 moves Xero into Settings > Integrations.
         Tab("configuration", "Configuration", "/crm/configuration", ("sales.manage",)),
     ),
+    # Plan 2.5: one row for your account and the organisation's setup. Sales and Compliance
+    # settings stay in their own sections, beside the work they configure.
+    "settings": (
+        Tab("account", "Account", "/core/settings"),
+        Tab("people", "People", "/core/people", ("users.manage",)),
+        Tab("sites", "Sites", "/core/sites", ("settings.manage",)),
+        Tab("integrations", "Integrations", "/core/integrations", ("sales.manage",)),
+        Tab("section-settings", "Tasks", "/core/tasks/configuration", ("production.view",)),
+    ),
 }
 
 # Four primary destinations per workspace. Secondary pages retain their registry
